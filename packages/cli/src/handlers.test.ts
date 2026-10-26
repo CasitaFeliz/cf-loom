@@ -3943,6 +3943,78 @@ describe('cf-loom generate: linked folders and other runs', () => {
   });
 });
 
+describe('cf-loom generate --json', () => {
+  test('lists the Handlers it moved, the files it wrote and the files it deleted, as its lines name them', () => {
+    const project = aProject(
+      withLayout(aService(), "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+    );
+    cfLoom(project, 'generate');
+    implement(project, 'src/http/orders/create-order.handler.ts', 'create');
+    write(project, withLayout({}, "{ endpoint: 'src/api/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate', '--json');
+
+    expect(ran.status).toBe(0);
+    expect(JSON.parse(ran.stdout)).toMatchObject({
+      format: 1,
+      status: 0,
+      moved: expect.arrayContaining([
+        {
+          from: 'src/http/orders/create-order.handler.ts',
+          to: 'src/api/orders/create-order.handler.ts',
+        },
+      ]),
+      wrote: expect.arrayContaining(['contract.snapshot.json']),
+      deleted: [],
+    });
+    expect(ran.stdout.split('\n')).toHaveLength(2);
+  });
+
+  test.skipIf(isRoot)(
+    'keeps the Handlers it moved beside the error when a write then fails',
+    () => {
+      const project = aProject(
+        withLayout(aService(), "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"),
+      );
+      cfLoom(project, 'generate');
+      implement(project, 'src/http/orders/create-order.handler.ts', 'create');
+      write(project, withLayout({}, "{ endpoint: 'src/api/{group}/{name}.handler.ts' }"));
+      chmodSync(project, 0o555);
+
+      let ran: ReturnType<typeof cfLoom>;
+      try {
+        ran = cfLoom(project, 'generate', '--json');
+      } finally {
+        chmodSync(project, 0o755);
+      }
+
+      const [line] = ran.stderr.split('\n');
+      const moved = {
+        from: 'src/http/orders/create-order.handler.ts',
+        to: 'src/api/orders/create-order.handler.ts',
+      };
+      expect(JSON.parse(ran.stdout)).toEqual({
+        format: 1,
+        status: 3,
+        errors: [line],
+        moved: expect.arrayContaining([moved]),
+      });
+      expect(ran.status).toBe(3);
+    },
+  );
+
+  test('a failure is the errors document, with its lines on stderr', () => {
+    const project = aProject(aService());
+    write(project, { 'contract.snapshot.json': '<<<<<<< HEAD\n' });
+
+    const ran = cfLoom(project, 'generate', '--json');
+
+    const [line] = ran.stderr.split('\n');
+    expect(ran.status).toBe(3);
+    expect(JSON.parse(ran.stdout)).toEqual({ format: 1, status: 3, errors: [line] });
+  });
+});
+
 describe('cf-loom generate and verify: what the file system holds', () => {
   test.skipIf(isRoot)(
     'a regenerated file that cannot be read fails verify in one line (skipped as root)',

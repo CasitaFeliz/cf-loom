@@ -31,9 +31,8 @@ export type Exit = {
 export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
 /** A command that did what was asked, with the lines that say what it did and the document that says it. */
-export function done(lines: readonly string[], document?: Document): Exit {
-  const exit: Exit = { status: 0, stdout: lines, stderr: [] };
-  return document === undefined ? exit : { ...exit, document };
+export function done(lines: readonly string[], document: Document): Exit {
+  return { status: 0, stdout: lines, stderr: [], document };
 }
 
 /** A command whose check failed: a Change refused, a broken rule, or a generated file that differs. */

@@ -5847,6 +5847,214 @@ describe.concurrent('cf-loom check and publish derive one version', {
   });
 });
 
+/** The one document `--json` printed: a single line of stdout, parsed. */
+function documentOf(ran: { readonly stdout: string }): Record<string, unknown> {
+  const lines = ran.stdout.split('\n');
+  expect(lines).toHaveLength(2);
+  expect(lines[1]).toBe('');
+  return JSON.parse(lines[0] ?? '');
+}
+
+describe('cf-loom --json on every command', () => {
+  const generatedProject = () => {
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+    cfLoom(project, 'generate');
+    return project;
+  };
+
+  test('init lists what it created, and what it updated in a .gitattributes it finds', () => {
+    const fresh = aProject();
+    const attributed = aProject({ '.gitattributes': '* text=auto\n' });
+
+    const created = cfLoom(fresh, 'init', '--json');
+    const updated = cfLoom(attributed, 'init', '--json');
+
+    expect(documentOf(created)).toEqual({
+      format: 1,
+      status: 0,
+      created: ['src/contract/index.ts', '.gitattributes'],
+      updated: [],
+    });
+    expect(documentOf(updated)).toEqual({
+      format: 1,
+      status: 0,
+      created: ['src/contract/index.ts'],
+      updated: ['.gitattributes'],
+    });
+  });
+
+  test('verify lists the files it found up to date', () => {
+    const project = generatedProject();
+
+    const ran = cfLoom(project, 'verify', '--json');
+
+    const lines = cfLoom(project, 'verify').stdout.split('\n').filter(Boolean);
+    const upToDate = lines.map((line) => line.replace(/ is up to date$/, ''));
+    expect(documentOf(ran)).toEqual({ format: 1, status: 0, upToDate });
+  });
+
+  test('package names the folder it wrote', () => {
+    const project = generatedProject();
+
+    const ran = cfLoom(project, 'package', '--json', '--out', 'out');
+
+    expect(documentOf(ran)).toEqual({ format: 1, status: 0, wrote: 'out' });
+    expect(existsSync(join(project, 'out/package.json'))).toBe(true);
+  });
+
+  test.for(['openapi', 'asyncapi'] as const)(
+    '%s prints its document on one line, where it prints it indented without --json',
+    (command) => {
+      const project = generatedProject();
+
+      const json = cfLoom(project, command, '--json');
+      const flagless = cfLoom(project, command);
+
+      expect(documentOf(json)).toEqual({
+        format: 1,
+        status: 0,
+        document: JSON.parse(flagless.stdout),
+      });
+      expect(flagless.stdout.split('\n').length).toBeGreaterThan(2);
+    },
+  );
+
+  test('--help and help <command> print the usage as a document', () => {
+    const project = aProject();
+
+    const all = cfLoom(project, '--help', '--json');
+    const one = cfLoom(project, 'help', 'check', '--json');
+
+    expect(documentOf(all)).toEqual({
+      format: 1,
+      status: 0,
+      usage,
+    });
+    expect(documentOf(one)).toEqual({
+      format: 1,
+      status: 0,
+      usage: 'Usage: cf-loom check [--json] [--prerelease] [--against <version|dist-tag>]',
+    });
+  });
+
+  test('--version prints the CLI’s name, version and Snapshot format as a document', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, '--version', '--json');
+
+    expect(documentOf(ran)).toEqual({
+      format: 1,
+      status: 0,
+      name: '@cf-loom/cli',
+      version: cliVersion,
+      snapshotFormat: 1,
+    });
+  });
+
+  test.for([
+    'init',
+    'generate',
+    'verify',
+    'package',
+    'check',
+    'broker-plan',
+    'openapi',
+    'asyncapi',
+    'publish',
+  ])('%s is not refused --json', (command) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, command, '--json');
+
+    expect(ran.stderr).not.toContain('take --json');
+    expect(documentOf(ran)).toMatchObject({ format: 1, status: ran.status });
+  });
+});
+
+describe('cf-loom --json prints exactly one document, whatever the exit', () => {
+  const staleProject = () => aProject({ 'cf-loom.config.ts': config, ...aRoot() });
+  const brokenJson = () =>
+    aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'contract.snapshot.json': '<<<<<<< HEAD\n',
+    });
+  const offline = ['generate', 'verify', 'package', 'broker-plan', 'openapi', 'asyncapi'] as const;
+  const registered = ['check', 'publish'] as const;
+
+  test.for(offline)('%s on success', (command) => {
+    const project = staleProject();
+    if (command !== 'generate') {
+      cfLoom(project, 'generate');
+    }
+
+    const ran = cfLoom(project, command, '--json');
+
+    expect(documentOf(ran)).toMatchObject({ format: 1, status: 0 });
+    expect(ran.status).toBe(0);
+    expect(ran.stderr).toBe('');
+  });
+
+  test.for([...offline.filter((command) => command !== 'generate'), ...registered])(
+    '%s on a Snapshot out of date, exit 1',
+    (command) => {
+      const project = staleProject();
+
+      const ran = cfLoom(project, command, '--json');
+
+      const errors = ran.stderr.split('\n').filter(Boolean);
+      expect(ran.status).toBe(1);
+      expect(documentOf(ran)).toEqual({ format: 1, status: 1, errors });
+    },
+  );
+
+  test.for([...offline.filter((command) => command !== 'verify'), ...registered])(
+    '%s on a Snapshot that is no JSON, exit 3',
+    (command) => {
+      const project = brokenJson();
+
+      const ran = cfLoom(project, command, '--json');
+
+      const [line] = ran.stderr.split('\n');
+      expect(ran.status).toBe(3);
+      expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
+    },
+  );
+
+  test.for([
+    'init',
+    'generate',
+    'verify',
+    'package',
+    'check',
+    'broker-plan',
+    'openapi',
+    'asyncapi',
+    'publish',
+  ])('%s called wrongly', (command) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, command, 'now', 'then', '--json');
+
+    const [line] = ran.stderr.split('\n');
+    expect(ran.status).toBe(3);
+    expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
+  });
+});
+
+describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeout }, () => {
+  test('check on a Breaking Change, exit 2, and publish --dry-run on success', async ({ lab }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const checked = await checkedAgainst(lab, changed, '--json');
+    const dry = await publishedAgainst(lab, changed, '--json', '--dry-run');
+
+    expect(documentOf(checked.ran)).toMatchObject({ format: 1, status: 2 });
+    expect(checked.ran.status).toBe(2);
+    expect(documentOf(dry.ran)).toMatchObject({ format: 1, status: 0, published: false });
+  });
+});
+
 describe('cf-loom', () => {
   test('an unknown command is a usage error', () => {
     const project = aProject();
@@ -5870,15 +6078,6 @@ describe('cf-loom', () => {
       stdout: '',
       stderr: `Unknown option: --verbose. ${usage}\n`,
     });
-  });
-
-  test('only check, broker-plan and publish take --json', () => {
-    const project = aProject();
-
-    const ran = cfLoom(project, 'generate', '--json');
-
-    const line = `Only check, broker-plan and publish take --json. ${usage}`;
-    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
   });
 
   test('only check takes --against', () => {

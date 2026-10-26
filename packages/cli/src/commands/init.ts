@@ -52,18 +52,21 @@ export function init({ cwd }: Run, kind: RootKind): Exit {
   if (failure !== undefined) {
     return toolingError(`init cannot write: ${failure}`);
   }
-  return done(writtenLinesOf(planned));
+  return writtenExitOf(planned);
 }
 
-function writtenLinesOf({ root, attributes }: Planned): readonly string[] {
-  const created = [`Created ${root.path}`];
-  if (attributes === undefined) {
-    return created;
+/** The files `init` created and the one it updated, as its lines and its document both say them. */
+function writtenExitOf({ root, attributes }: Planned): Exit {
+  const created = [root.path];
+  const updated: string[] = [];
+  if (attributes !== undefined) {
+    (attributes.original === undefined ? created : updated).push(gitAttributesFile);
   }
-  return [
-    ...created,
-    `${attributes.original === undefined ? 'Created' : 'Updated'} ${gitAttributesFile}`,
+  const lines = [
+    ...created.map((path) => `Created ${path}`),
+    ...updated.map((path) => `Updated ${path}`),
   ];
+  return done(lines, { created, updated });
 }
 
 /** What `init` would write, or the first target that stops it. */

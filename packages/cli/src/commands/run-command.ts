@@ -84,7 +84,7 @@ function askedAboutOf({ help, version, positionals }: Called): Exit | undefined 
 
 /** The usage error of an option given to a command that does not take it. */
 function misplacedOptionIn(
-  { out, prefix, against, output, force, prerelease, dryRun }: Called,
+  { out, prefix, against, force, prerelease, dryRun }: Called,
   command: string | undefined,
 ): Exit | undefined {
   if (out !== undefined && command !== 'package') {
@@ -95,9 +95,6 @@ function misplacedOptionIn(
   }
   if (prefix !== undefined && command !== 'broker-plan' && command !== 'asyncapi') {
     return usageError('Only broker-plan and asyncapi take --prefix');
-  }
-  if (output === 'json' && !['check', 'broker-plan', 'publish'].includes(command ?? '')) {
-    return usageError('Only check, broker-plan and publish take --json');
   }
   if (dryRun && command !== 'publish') {
     return usageError('Only publish takes --dry-run');
