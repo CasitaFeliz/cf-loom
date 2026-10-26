@@ -1,7 +1,7 @@
 import type { ServiceContract } from '@cf-loom/contract';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
-import type { Broker, BrokerService } from '../broker/index.ts';
+import type { Broker } from '../broker/index.ts';
 import {
   type BrokerTroubleHook,
   type ConsumedHandlers,
@@ -11,7 +11,7 @@ import {
   troubleTellOf,
 } from '../consuming/index.ts';
 import { type CommandSender, type EventPublisher, publishOf, sendOf } from '../sending/index.ts';
-import { type Subjects, subjectsOf } from '../subjects/index.ts';
+import { brokerServiceOf, subjectsOf } from '../subjects/index.ts';
 import type { CloseOptions } from './closed.ts';
 import { MessagingLife } from './life.ts';
 
@@ -64,13 +64,5 @@ export async function messaging<const C extends ServiceContract>(
         tellTrouble,
       ),
     close: (options?: CloseOptions) => life.close(options),
-  };
-}
-
-function brokerServiceOf(subjects: Subjects): BrokerService {
-  const versions = [...subjects.published, ...subjects.sent];
-  return {
-    stream: subjects.stream,
-    subjects: versions.map((version) => version.subject),
   };
 }

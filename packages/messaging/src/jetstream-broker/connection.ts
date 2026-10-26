@@ -76,7 +76,7 @@ export async function drainOrClose(natsConnection: NatsConnection): Promise<Ende
   }
 }
 
-/** The error `close()` and `apply` reject with when the drain was not answered, NATS's error as `cause` when it gave one. */
+/** The error `close()` and `applyBrokerPlan` reject with when the drain was not answered, NATS's error as `cause` when it gave one. */
 export function unansweredDrainError(cause: unknown): Error {
   return new Error('NATS did not answer the drain, so the connection was closed without it', {
     cause,
