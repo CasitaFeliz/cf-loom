@@ -74,7 +74,7 @@ export function siteLocationOf(site: Site, steps: readonly Step[]): string {
   return path === null ? siteTextOf(site) : `${siteTextOf(site)} ${path}`;
 }
 
-/** The text `siteLocationOf` gives a place `below` steps under another, from the text of that place. */
+/** The text `siteLocationOf` gives a place `below` steps under another, from that one's text. */
 export function locationBelowOf(text: string, place: Place, below: readonly Step[]): string {
   if (below.length === 0) {
     return text;
