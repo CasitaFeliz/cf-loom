@@ -13,10 +13,13 @@ import {
 } from '../index.ts';
 import {
   type CodeSnapshot,
+  type EndpointPath,
   type EndpointSnapshot,
   type EventSnapshot,
+  endpointPathOf,
   exportedSnapshotOf,
   type GuardSnapshot,
+  matchOf,
   type ObjectNode,
   type PublishedServiceSnapshot,
   type ResolvedDefinitions,
@@ -675,6 +678,28 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
     expect(cut.shadowing).toStrictEqual({ 'GET /payments/first': { lifecycle: 'retired' } });
   });
 
+  test('on every URL an exported Endpoint matches, the winner among the exported and shadowing Endpoints is the winner among all declared ones', () => {
+    const mismatches: string[] = [];
+
+    for (const declared of declaredSetsOf(smallPaths, 4)) {
+      const endpoints = Object.fromEntries(
+        declared.map(([identity, visibility]) => [identity, anEndpointEntry({ visibility })]),
+      );
+      const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+      const all = declared.map(([identity]) => endpointPathOf(identity));
+      const exported = all.filter(({ identity }) => identity in cut.endpoints);
+      const carried = all.filter(({ identity }) => identity in cut.shadowing);
+      for (const url of smallUrls) {
+        const reachable = winnerAmong(exported, url) !== undefined;
+        if (reachable && winnerAmong([...exported, ...carried], url) !== winnerAmong(all, url)) {
+          mismatches.push(`${url} among ${declared.map(([id, vis]) => `${id} ${vis}`).join(', ')}`);
+        }
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+  });
+
   test('the Endpoints carried keep the Snapshot’s order', () => {
     const endpoints = {
       'GET /payments/{}': exportedParam,
@@ -687,6 +712,40 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
     expect(Object.keys(cut.shadowing)).toEqual(['GET /payments/zeta', 'GET /payments/alpha']);
   });
 });
+
+/** Every path of one or two segments over two literals and a param, as an Endpoint's identity spells it. */
+const smallPaths = ['a', 'b', '{}'].flatMap((first) => [
+  `GET /${first}`,
+  ...['a', 'b', '{}'].map((second) => `GET /${first}/${second}`),
+]);
+
+/** Every concrete URL of one or two segments over the two literals and a third text. */
+const smallUrls = ['a', 'b', 'c'].flatMap((first) => [
+  `/${first}`,
+  ...['a', 'b', 'c'].map((second) => `/${first}/${second}`),
+]);
+
+/** Each subset of `identities` up to `size`, every member either exported or Private. */
+function declaredSetsOf(
+  identities: readonly string[],
+  size: number,
+): readonly (readonly (readonly [string, 'public' | 'private'])[])[] {
+  const [first, ...rest] = identities;
+  if (first === undefined || size === 0) {
+    return [[]];
+  }
+  const without = declaredSetsOf(rest, size);
+  const withFirst = declaredSetsOf(rest, size - 1);
+  const exportedFirst = withFirst.map((others) => [[first, 'public'] as const, ...others]);
+  const privateFirst = withFirst.map((others) => [[first, 'private'] as const, ...others]);
+  return [...without, ...exportedFirst, ...privateFirst];
+}
+
+/** The identity of the Endpoint that wins a GET of `url` among `endpoints`, or none. */
+function winnerAmong(endpoints: readonly EndpointPath[], url: string): string | undefined {
+  const match = matchOf(endpoints, new Request(`http://payments.test${url}`));
+  return match.kind === 'matched' ? match.matched.identity : undefined;
+}
 
 /** A Service with a Public Endpoint behind a Guard and a Private one with a code of its own. */
 function declaredSnapshot(): ServiceSnapshot {

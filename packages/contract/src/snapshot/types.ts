@@ -150,7 +150,7 @@ export type ShadowingSnapshot = Pick<EndpointSnapshot, 'lifecycle'>;
  * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints and Events
  * that are not Retired, with the Guards, codes and defs they reach, so no Private Element's shapes
  * reach a browser. Its `shadowing` keys, by identity, the declared Endpoints it does not export that
- * win a URL an exported one matches, so a fake routes as `serve` does.
+ * win a URL an exported one matches, so a fake routes a request an exported one matches as `serve` does.
  */
 export type ExportedSnapshot = Pick<
   ServiceSnapshot,

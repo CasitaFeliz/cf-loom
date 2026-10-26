@@ -54,7 +54,7 @@ export function exportedSnapshotOf(
 
 /**
  * The declared Endpoints a Contract Package does not export that win a URL an exported one matches,
- * by identity and lifecycle, so a fake routes to them as `serve` does; a tombstone declares none.
+ * by identity and lifecycle, so a fake picks the winner of a URL an exported one matches as `serve` does; a tombstone declares none.
  */
 function shadowingOf(
   declared: ByKey<EndpointSnapshot | EndpointTombstone>,

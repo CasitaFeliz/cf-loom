@@ -245,6 +245,54 @@ describe('fakeProvider and serve answer alike', () => {
     expect(await fromFake.text()).toBe(await fromServe.text());
   });
 
+  test.each(['/p/a/b', '/p/q/b'])(
+    'a request to %s, which an exported Endpoint matches, is answered with the bytes serve sends for it',
+    async (path) => {
+      const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+      const first = defineEndpoint({
+        ...base,
+        name: 'getFirst',
+        path: '/p/:x/b',
+        visibility: 'internal',
+        input: { params: z.object({ x: z.string() }) },
+      });
+      const retired = defineEndpoint({
+        ...base,
+        name: 'getRetired',
+        path: '/p/a/:y',
+        visibility: 'internal',
+        lifecycle: 'retired',
+        input: { params: z.object({ y: z.string() }) },
+      });
+      const hidden = defineEndpoint({
+        ...base,
+        name: 'getHidden',
+        path: '/p/a/c',
+        visibility: 'private',
+      });
+      const endpoints = [first, retired, hidden] as const;
+      const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
+      const root = defineService({ name: 'payments-service', groups: [group] });
+      const handlers = {
+        getFirst: handle(first, () => success()),
+        getHidden: handle(hidden, () => success()),
+      };
+      const providing = serve(root, { endpoints: handlers, guards: {} });
+      const provider = contractPackageOf({ getFirst: first }, endpoints);
+      const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getFirst] });
+      const paths = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
+      paths.on('getFirst').otherwise((r) => r.success());
+      const url = `http://payments.test${path}`;
+
+      const fromServe = await providing(new Request(url));
+      const fromFake = await paths.fetch(new Request(url));
+
+      expect(fromFake.status).toBe(fromServe.status);
+      expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+      expect(await fromFake.text()).toBe(await fromServe.text());
+    },
+  );
+
   test.each([
     ['a Success with its headers', '/payments/pay-1', {}],
     ['a Standard Rejection', '/payments/missing', {}],

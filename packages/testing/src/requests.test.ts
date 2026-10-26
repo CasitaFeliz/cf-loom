@@ -177,6 +177,44 @@ function fakeBesides(latest: ReturnType<typeof latestPayment>) {
   return { fake, taken };
 }
 
+/**
+ * A fake over a Provider that exports `GET /p/:x/b` and also declares a Retired `GET /p/a/:y`,
+ * which `shadowing` lists, and a live Private `GET /p/a/c`, which it does not.
+ */
+function fakeOverPaths() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const first = defineEndpoint({
+    ...base,
+    name: 'getFirst',
+    path: '/p/:x/b',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const retired = defineEndpoint({
+    ...base,
+    name: 'getRetired',
+    path: '/p/a/:y',
+    visibility: 'internal',
+    lifecycle: 'retired',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const hidden = defineEndpoint({
+    ...base,
+    name: 'getHidden',
+    path: '/p/a/c',
+    visibility: 'private',
+  });
+  const provider = contractPackageOf({ getFirst: first }, [first, retired, hidden]);
+  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getFirst] });
+  const fake = fakeProvider(dependency);
+  const taken = { getFirst: 0 };
+  fake.on('getFirst').otherwise((builder) => {
+    taken.getFirst += 1;
+    return builder.success();
+  });
+  return { fake, taken };
+}
+
 function captureInit(body: string, contentType = 'application/json'): RequestInit {
   return { method: 'POST', headers: { 'content-type': contentType }, body };
 }
@@ -430,6 +468,35 @@ describe('fakeProvider: requests', () => {
       expect(taken.getPayment).toBe(0);
     },
   );
+
+  test.each([
+    ['a live Private Endpoint takes', '/p/a/c'],
+    ['only a Retired Endpoint shadowing lists would take', '/p/a/z'],
+  ])(
+    'a request no exported Endpoint matches, which %s, is the mistake of matching none',
+    async (_, path) => {
+      const { fake, taken } = fakeOverPaths();
+
+      const answering = fake.fetch(new Request(`https://payments-service.test${path}`));
+
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        `payments-service: no Endpoint it exports is GET ${path} under /`,
+      );
+      expect(taken.getFirst).toBe(0);
+    },
+  );
+
+  test('a request an exported Endpoint matches and a shadowing Retired one wins is answered RETIRED', async () => {
+    const { fake, taken } = fakeOverPaths();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/p/a/b'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getFirst).toBe(0);
+  });
 
   test('a request a Private Endpoint wins is a mistake naming it, and takes no step', async () => {
     const { fake, taken } = fakeBesides(

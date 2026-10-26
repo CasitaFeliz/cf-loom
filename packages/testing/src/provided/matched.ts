@@ -1,7 +1,12 @@
 import { basePathOf } from '@cf-loom/client/internal';
 import { allowedMethodsOf, matchOf, type TextSource } from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
-import type { FakedProvider, ListedEndpoint, RoutedEndpoint } from './provided.ts';
+import type {
+  ExportedEndpoint,
+  FakedProvider,
+  ListedEndpoint,
+  ShadowingEndpoint,
+} from './provided.ts';
 
 /**
  * A request that reached a listed Endpoint, with where its text comes from and the other methods
@@ -18,10 +23,11 @@ export type ListedMatch = {
 export type Matched = ListedMatch | { readonly kind: 'retired' };
 
 /**
- * The Endpoint a request reaches: its path, under the base URL's path, matched against every
- * Endpoint the Provider routes; any other origin is the fake's too. A path outside the base URL,
- * one no routed Endpoint matches, its method included, one an unlisted Endpoint takes, or one a
- * live Endpoint the Provider does not export wins, is the test's mistake.
+ * The Endpoint a request reaches: its path, under the base URL's path, matched against the
+ * Endpoints the Provider exports, any other origin included, then its winner taken among every
+ * declared one. A path outside the base URL, one no exported Endpoint matches, its method
+ * included, one an unlisted Endpoint wins, or one a live Endpoint the Provider does not export
+ * wins, is the test's mistake.
  */
 export function matchedOf(faked: FakedProvider, request: Request): Matched {
   const url = new URL(request.url);
@@ -29,7 +35,7 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
   const routedUrl = new URL(url);
   routedUrl.pathname = path;
   const routed = new Request(routedUrl, { method: request.method, headers: request.headers });
-  const match = matchOf(faked.routed, routed);
+  const match = matchOf(faked.exported, routed);
   const unmatched = `no Endpoint it exports is ${request.method} ${path} under ${basePathOf(faked.base)}/`;
   switch (match.kind) {
     case 'none':
@@ -38,18 +44,26 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
       const what = `${unmatched}; that path takes ${match.allowed.join(', ')}`;
       throw mistakeOf({ provider: faked.provider, what });
     }
-    case 'matched': {
-      const { matched } = match;
-      const reached = `${request.method} ${path}`;
-      if (matched.kind === 'shadowing') {
-        return shadowedMatchOf(faked, matched, reached);
-      }
-      const listed = listedOf(faked, matched, reached);
-      const allowed = allowedMethodsOf(faked.routed, routed);
-      const otherMethods = allowed.filter((method) => method !== request.method);
-      return { kind: 'listed', listed, source: match.source, otherMethods };
-    }
+    case 'matched':
+      return winnerOf(faked, routed);
   }
+}
+
+/** What a request an exported Endpoint matches reaches: the declared Endpoint that wins it, as `serve` routes it. */
+function winnerOf(faked: FakedProvider, routed: Request): Matched {
+  const reached = `${routed.method} ${new URL(routed.url).pathname}`;
+  const winner = matchOf(faked.declared, routed);
+  if (winner.kind !== 'matched') {
+    throw new Error(`${reached} matches an exported Endpoint and no declared one: a bug.`);
+  }
+  const { matched } = winner;
+  if (matched.kind === 'shadowing') {
+    return shadowedMatchOf(faked, matched, reached);
+  }
+  const listed = listedOf(faked, matched, reached);
+  const allowed = allowedMethodsOf(faked.declared, routed);
+  const otherMethods = allowed.filter((method) => method !== routed.method);
+  return { kind: 'listed', listed, source: winner.source, otherMethods };
 }
 
 /**
@@ -58,7 +72,7 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
  */
 function shadowedMatchOf(
   faked: FakedProvider,
-  shadowing: Extract<RoutedEndpoint, { readonly kind: 'shadowing' }>,
+  shadowing: ShadowingEndpoint,
   reached: string,
 ): Matched {
   if (shadowing.lifecycle === 'retired') {
@@ -68,10 +82,10 @@ function shadowedMatchOf(
   throw mistakeOf({ provider: faked.provider, what });
 }
 
-/** The listed Endpoint an exported match is, or the test's mistake when the Dependency lists none. */
+/** The listed Endpoint an exported winner is, or the test's mistake when the Dependency lists none. */
 function listedOf(
   faked: FakedProvider,
-  exported: Extract<RoutedEndpoint, { readonly kind: 'exported' }>,
+  exported: ExportedEndpoint,
   reached: string,
 ): ListedEndpoint {
   if (exported.listed === undefined) {
