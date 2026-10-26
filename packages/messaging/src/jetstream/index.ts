@@ -5,8 +5,8 @@ export type {
   BrokerPlanStream,
   DurableConsumerLimits,
   Duration,
-  JetStreamBroker,
   JetStreamBrokerOptions,
+  JetStreamConnecting,
   StreamLimits,
 } from '../jetstream-broker/index.ts';
-export { jetstream } from '../jetstream-broker/index.ts';
+export { applyBrokerPlan, jetstream } from '../jetstream-broker/index.ts';

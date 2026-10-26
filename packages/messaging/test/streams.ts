@@ -11,7 +11,7 @@ import { connect } from '@nats-io/transport-node';
 /** A stream as a test arranges it. */
 export type ArrangedStream = { readonly name: string; readonly subjects: readonly string[] };
 
-/** Creates a stream as a test arranges it, with the NATS client and not through `apply`, and the NATS settings given over NATS's defaults. */
+/** Creates a stream as a test arranges it, with the NATS client and not through `applyBrokerPlan`, and the NATS settings given over NATS's defaults. */
 export async function arrangeStream(
   url: string,
   stream: ArrangedStream,
