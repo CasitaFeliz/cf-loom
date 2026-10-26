@@ -15,7 +15,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
 - A Snapshot's JSON nests at most 256 levels, the outermost object being the first; `generate` fails on a Contract whose Snapshot would nest deeper, so every Snapshot it writes reads back.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id`, and `enum.values` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a union's `options`, since zod's union returns the first option that parses, a Qualifier's list) keep it.
-- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; `publish` compares it with the Baseline's (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the version in every `origin` are in it, so adopting a newer version changes the hash even when no shape changed.
+- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
 
 ## Top level
 
