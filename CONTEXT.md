@@ -99,7 +99,7 @@ A technical failure that no Endpoint, Guard or Message declares, produced by a H
 _Avoid_: error, server error, operation failure
 
 **Reserved code**:
-A code cf-loom's runtime answers outside the Contract, as a Fault that carries it, one of those listed in [Over HTTP](ARCHITECTURE.md#over-http). No Contract or Definitions Package declares one, and no Handler produces one.
+A code cf-loom's runtime answers outside the Contract, as a Fault that carries it; [Over HTTP](ARCHITECTURE.md#over-http) lists them. No Contract or Definitions Package declares one, and no Handler produces one.
 _Avoid_: the Caller's Fault, error code, reserved Fault
 
 **Envelope**:
@@ -133,19 +133,19 @@ The id the calling code derives from the fact and gives every Message one `publi
 _Avoid_: correlation id, event id
 
 **Broker**:
-The message system a Service's messaging runs on, through an adapter: it holds the Services' streams and durable consumers, and delivers Messages at least once.
+The message system a Service's messaging runs on, through an adapter: it holds the Services' Streams and Durable consumers, and delivers Messages at least once.
 _Avoid_: bus, queue, message bus
 
 **Stream**:
-What the Broker stores Messages in: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the stream of the Service whose Event it takes.
+What the Broker stores Messages in: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the Stream of the Service whose Event it takes.
 _Avoid_: topic, queue, log
 
 **Durable consumer**:
-The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
+The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
 _Avoid_: subscriber, queue group, cursor
 
 **Broker prefix**:
-An optional kebab-case name in front of every subject, stream and durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it; it is no part of a Contract or a Snapshot.
+An optional kebab-case name in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it; it is no part of a Contract or a Snapshot.
 _Avoid_: namespace, environment, prefix (alone)
 
 **Broker message id**:
@@ -213,7 +213,7 @@ One way a value broke its part of the Contract: the part and path, cf-loom's cod
 _Avoid_: error, violation
 
 **Plan**:
-A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan, the streams and durable consumers a Service needs on the Broker. The organization decides how to apply it.
+A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan, the Streams and Durable consumers a Service needs on the Broker. The organization decides how to apply it.
 _Avoid_: manifest, deployment config
 
 **EventPublisher**:
