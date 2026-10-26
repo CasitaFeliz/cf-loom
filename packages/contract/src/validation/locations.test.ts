@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { pingedV1 } from '../../test/ping-package.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
@@ -213,3 +214,38 @@ describe('failure lines: Standard Rejections and the Snapshot', () => {
     );
   });
 });
+
+describe('failure lines: shared refused schemas, drawn at random', () => {
+  const refusedSchemas = [() => z.string().default('a'), () => z.date(), () => z.any()] as const;
+
+  test.for([1, 2, 3, 4, 5, 6, 7, 8])(
+    'draw %i: one line for each refused schema reached, whatever the order of declaration',
+    (seed) => {
+      const next = seededNext(seed);
+      const schemas = refusedSchemas.flatMap((make) =>
+        next() < 0.7 ? [make()] : [make(), make()],
+      );
+      const count = 1 + Math.floor(next() * 5);
+      const endpoints = Array.from({ length: count }, (_, index) => {
+        const chosen = schemas.filter(() => next() < 0.5);
+        const fields = Object.fromEntries(chosen.map((schema, at) => [`v${at}`, schema]));
+        return oneAnEndpoint(`e${index}`, `GET /e${index}`, {
+          success: { status: 200, body: z.object(fields) },
+        });
+      });
+      const reached = new Set(endpoints.flatMap(reachedSchemasOf));
+
+      const forward = linesOf(serviceOf(...endpoints));
+      const backward = linesOf(serviceOf(...[...endpoints].reverse()));
+
+      expect(forward).toHaveLength(reached.size);
+      expect([...backward].sort()).toEqual([...forward].sort());
+    },
+  );
+});
+
+/** The refused schemas an Endpoint's Success body holds. */
+function reachedSchemasOf(endpoint: Endpoint): readonly unknown[] {
+  const body: unknown = endpoint.success.body;
+  return body instanceof z.ZodObject ? Object.values(body.shape) : [];
+}

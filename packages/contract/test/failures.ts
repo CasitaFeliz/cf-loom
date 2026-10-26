@@ -1,3 +1,4 @@
+import { expect } from 'vitest';
 import {
   authorPathOf,
   type Failure,
@@ -7,12 +8,17 @@ import {
   type walkSchemas,
 } from '../src/internal/index.ts';
 
+/** A segment of a Snapshot path, which no failure names: `fields.` and `variants.` steps, an Element under its Group. */
+const snapshotSegment =
+  /(^|[ .])(fields|variants|options)\.|^groups\.[^ ]+\.(endpoints|events|commands|subscriptions)\./;
+
 /**
  * A failure as a test compares it: where it sits as a line names it, `endpoints.GET /orders
  * (listOrders) success.status`, and what it says, without the declaration it sits in.
  */
 export function summaryOf(failure: Failure) {
   const location = siteLocationOf(failure.site, failure.steps);
+  expect(location).not.toMatch(snapshotSegment);
   switch (failure.kind) {
     case 'declaration':
       return { kind: failure.kind, location, rule: failure.rule, message: failure.message };
