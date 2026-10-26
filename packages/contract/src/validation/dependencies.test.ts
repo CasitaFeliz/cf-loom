@@ -196,6 +196,19 @@ describe('validateRoot: a Service’s Dependencies', () => {
     );
   });
 
+  test('a Contract’s own Endpoint beside a Provider’s fails only at its place, never as a second Provider', () => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [getPayment, getReceipt] });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed(
+        '(root) dependencies[0].endpoints[1]',
+        'dependency-selection',
+        "A Dependency lists Endpoints a Provider's Contract Package exports: getReceipt is no Provider's",
+      ),
+    );
+  });
+
   test('a Private Endpoint fails at its place in the Dependency, naming its Provider', () => {
     const paymentsDependency = dependencyAsWritten({ endpoints: [getPayment, healthCheck] });
     const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
