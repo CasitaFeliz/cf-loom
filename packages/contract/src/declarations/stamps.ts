@@ -1,4 +1,4 @@
-/** An instant as `generate` stamps `deprecatedAt`: ISO 8601 in UTC, to the second. */
+/** An instant as a `deprecatedAt` is written: ISO 8601 in UTC, to the second. */
 export function stampOf(instant: number): string {
   return new Date(instant).toISOString().replace(/\.\d+Z$/, 'Z');
 }
@@ -8,7 +8,7 @@ export function isStampable(instant: number): boolean {
   return !Number.isNaN(new Date(instant).getTime());
 }
 
-/** Whether a value is a stamp `generate` could have written: one that reads back as itself. */
+/** Whether a value is an instant written as `stampOf` writes one: it reads back as itself. */
 export function isStamp(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value)) {
     return false;

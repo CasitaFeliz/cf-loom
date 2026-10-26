@@ -767,6 +767,19 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
     ]);
   });
 
+  test('retiring a Deprecated Endpoint, whose deprecatedAt goes with its lifecycle, gives retired alone', () => {
+    const deprecated = anEndpoint({
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-01-01T00:00:00Z',
+    });
+    const baseline = aBaseline({ endpoints: { [identity]: deprecated } });
+    const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
+
+    const { changes } = compatibilityReportOf(baseline, proposed);
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
+  });
+
   test('a Retired Endpoint left as it is gives no Change', () => {
     const baseline = aBaseline({ endpoints: { [identity]: retired() } });
     const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
