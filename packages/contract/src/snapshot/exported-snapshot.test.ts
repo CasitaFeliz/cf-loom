@@ -637,11 +637,7 @@ function serviceSnapshotOf(
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const snapshot = snapshotOf(validated, {
-    generator: 'test',
-    committed: undefined,
-    now: 0,
-  });
+  const snapshot = snapshotOf(validated, { generator: 'test' });
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }

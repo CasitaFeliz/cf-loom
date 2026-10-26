@@ -675,7 +675,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused.status).toBe(3);
     expect(refused.stdout).toBe('');
     expect(refused.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 

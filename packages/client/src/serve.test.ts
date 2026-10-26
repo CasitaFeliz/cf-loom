@@ -72,6 +72,7 @@ const createOrder = defineEndpoint({
   visibility: 'public',
   description: 'A new order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   input: { body: z.object({ quantity: z.int() }) },
   success: { status: 201, body: z.object({ quantity: z.int() }) },
 });
@@ -133,7 +134,7 @@ function contractPackageOf<
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test' };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
@@ -210,7 +211,6 @@ const handlers = {
     ),
   },
   guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
-  deprecatedAt: { createOrder: '2026-10-17T09:30:00Z' },
 };
 
 const server = nodeHttp(
@@ -264,9 +264,7 @@ async function outcomesOfEndpointWith(method: Method) {
       ? reject(orderLocked, { lockedAt: '2026-10-18T10:00:00Z' })
       : fault({ committed: 'no', retryable: true }),
   );
-  const probeServer = nodeHttp(
-    serve(service, { endpoints: { probe: answering }, guards: {}, deprecatedAt: {} }),
-  );
+  const probeServer = nodeHttp(serve(service, { endpoints: { probe: answering }, guards: {} }));
   await new Promise<void>((resolve) => probeServer.listen(0, '127.0.0.1', resolve));
   try {
     const probeUrl = `http://127.0.0.1:${(probeServer.address() as AddressInfo).port}/`;

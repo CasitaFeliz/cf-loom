@@ -39,7 +39,7 @@ export function describedDifferencesOf(
 
 /**
  * An Endpoint's Neutral differences: of one Retired now, whether it declares otherwise; else its
- * description, Group, then Attachments, which no shape rule compares.
+ * description, Group, Attachments, which no shape rule compares, then a moved `deprecatedAt`.
  */
 export function endpointNeutralOf(
   pair: Pair<EndpointSnapshot>,
@@ -53,7 +53,23 @@ export function endpointNeutralOf(
   const attachments: readonly Difference[] = differ(baseline.guards, proposed.guards)
     ? [{ kind: 'attachments-changed' }]
     : [];
-  return [...describedDifferencesOf(baseline, proposed), ...attachments];
+  return [
+    ...describedDifferencesOf(baseline, proposed),
+    ...attachments,
+    ...deprecationMovedOf(baseline, proposed),
+  ];
+}
+
+/** A Deprecated Endpoint on both sides whose `deprecatedAt` moved. */
+function deprecationMovedOf(
+  baseline: EndpointSnapshot,
+  proposed: EndpointSnapshot,
+): readonly Difference[] {
+  const { deprecatedAt: from } = baseline;
+  const { deprecatedAt: to } = proposed;
+  return from === undefined || to === undefined || from === to
+    ? []
+    : [{ kind: 'deprecation-moved', from, to }];
 }
 
 /**
@@ -162,7 +178,7 @@ function nodeKeyOf(node: SchemaNode | null, defs: Defs): string {
   return canonicalJson([node, reachedKeyOf(node === null ? [] : [node], defs)]);
 }
 
-/** What the Baseline records of an Element's history, which a declaration does not carry. */
+/** What moves with an Element's lifecycle, which the lifecycle's own Change already reports. */
 const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'] as const satisfies readonly (
   | keyof EndpointSnapshot
   | keyof MessageTombstone

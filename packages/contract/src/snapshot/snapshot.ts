@@ -52,7 +52,7 @@ function serviceSnapshotOf(
     generator: context.generator,
     standardRejections,
     defs: schemas.defs,
-    endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
+    endpoints: endpointSnapshotsOf(declarations.endpoints, sources),
     events: eventSnapshotsOf(declarations.events, sources),
     commands: commandSnapshotsOf(declarations.commands, sources),
     guards: guardSnapshotsOf(declarations.guards, sources),

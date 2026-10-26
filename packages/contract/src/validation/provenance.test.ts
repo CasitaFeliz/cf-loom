@@ -24,7 +24,7 @@ import {
   validateRoot,
 } from '../internal/index.ts';
 
-const context = { generator: 'test', committed: undefined, now: 0 };
+const context = { generator: 'test' };
 
 /** A Service whose one Endpoint attaches the Guards, answers the Rejections and returns the body given. */
 function aService(

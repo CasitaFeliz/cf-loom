@@ -64,7 +64,7 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
+ * committed file only its bytes and, for `verify` and `package`, its generator.
  */
 export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
@@ -77,11 +77,7 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
     return committed;
   }
   const parsed = committed.kind === 'json' ? committed.parsed : undefined;
-  const context: SnapshotContext = {
-    generator: generatorOf(generator, parsed),
-    committed: parsed,
-    now: run.now,
-  };
+  const context: SnapshotContext = { generator: generatorOf(generator, parsed) };
   const declared = declaredOf(project, context);
   if (declared.kind !== 'declared') {
     return declared;

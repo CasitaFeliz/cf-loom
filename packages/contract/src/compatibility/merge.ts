@@ -17,8 +17,8 @@ import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts
 
 /**
  * The published Snapshot `publish` writes at a version: the declared Snapshot with the Baseline's
- * history merged in (`retiredIn`, tombstones, removed codes and removed Subscriptions) and its
- * `deprecatedAt` kept, in canonical order.
+ * history merged in (`retiredIn`, tombstones, removed codes and removed Subscriptions), in
+ * canonical order.
  */
 export function publishedSnapshotOf(
   baseline: PublishedServiceSnapshot | undefined,

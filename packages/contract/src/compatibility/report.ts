@@ -125,6 +125,8 @@ export type Difference =
   | { readonly kind: 'rejection-added'; readonly code: string }
   /** A code an Endpoint or a Guard no longer answers. */
   | { readonly kind: 'rejection-removed'; readonly code: string }
+  /** A Deprecated Endpoint's `deprecatedAt` moved: its `Deprecation` header names another instant. */
+  | { readonly kind: 'deprecation-moved'; readonly from: string; readonly to: string }
   /** An Endpoint's, Message Version's, Guard's or Subscription's description changed. */
   | { readonly kind: 'description-changed' }
   /** An Endpoint, Message Version or Subscription moved to another Group. */

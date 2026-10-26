@@ -380,6 +380,34 @@ describe('defineEndpoint header names', () => {
   });
 });
 
+describe('defineEndpoint lifecycle', () => {
+  const deprecatedAt = '2026-11-01T00:00:00Z';
+
+  test('a Deprecated Endpoint declares the instant it is Deprecated as of', () => {
+    const endpoint = defineEndpoint({ ...listOrders, lifecycle: 'deprecated', deprecatedAt });
+
+    expect(endpoint.deprecatedAt).toBe(deprecatedAt);
+  });
+
+  test('a Deprecated Endpoint without deprecatedAt is a type error', () => {
+    // @ts-expect-error a Deprecated Endpoint declares deprecatedAt
+    const declare = () => defineEndpoint({ ...listOrders, lifecycle: 'deprecated' });
+
+    expect(declare).not.toThrow();
+  });
+
+  test.each([
+    ['an Endpoint with no lifecycle', {}],
+    ['an Active Endpoint', { lifecycle: 'active' }],
+    ['a Retired Endpoint', { lifecycle: 'retired' }],
+  ] as const)('deprecatedAt on %s is a type error', (_name, lifecycle) => {
+    // @ts-expect-error only a Deprecated Endpoint declares deprecatedAt
+    const declare = () => defineEndpoint({ ...listOrders, ...lifecycle, deprecatedAt });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineEndpoint fields', () => {
   test('an undeclared field is a type error', () => {
     // @ts-expect-error group is not a field of an Endpoint

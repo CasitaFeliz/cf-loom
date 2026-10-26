@@ -36,6 +36,7 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     visibility: 'internal',
     description: 'One payment',
     lifecycle: 'deprecated',
+    deprecatedAt: '1970-01-01T00:00:00Z',
     input: { params: z.object({ paymentId: z.string().min(3) }) },
     success: {
       status: 200,
@@ -77,7 +78,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
+  const context = { generator: 'test' };
   const snapshot = snapshotOf(validated, context);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
@@ -147,7 +148,6 @@ const served = serve(
       capturePayment: handle(capturePayment, () => success()),
     },
     guards: {},
-    deprecatedAt: { getPayment: '1970-01-01T00:00:00Z' },
   },
   {
     onServiceFault: (serviceFault) => {
@@ -325,7 +325,6 @@ const servedRefund = serve(
   {
     endpoints: { refundPayment: handle(refundPayment, () => success()) },
     guards: { merchant: handle(merchant, () => admit()), region: handle(region, () => admit()) },
-    deprecatedAt: {},
   },
 );
 

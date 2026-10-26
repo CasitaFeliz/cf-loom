@@ -37,14 +37,8 @@ export function endpointsMerged(
   proposed: ByKey<EndpointSnapshot>,
   version: string,
 ): ByKey<PublishedEndpoint> {
-  const declared = Object.fromEntries(
-    Object.entries(proposed).map(([identity, endpoint]) => [
-      identity,
-      withBaselineDeprecation(endpoint, baseline?.[identity]),
-    ]),
-  );
   const tombstones = carriedForward(baseline, proposed, endpointTombstoneOf);
-  return { ...tombstones, ...stampedElements(declared, baseline, version) };
+  return { ...tombstones, ...stampedElements(proposed, baseline, version) };
 }
 
 /** The Message Versions of one kind a Snapshot publishes at a version, as its Endpoints are. */
@@ -55,18 +49,6 @@ export function messagesMerged<Declared extends DeclaredElement>(
 ): ByKey<PublishedElement<Declared> | MessageTombstone> {
   const tombstones = carriedForward(baseline, proposed, messageTombstoneOf);
   return { ...tombstones, ...stampedElements(proposed, baseline, version) };
-}
-
-/** A Deprecated Endpoint keeps the instant the Baseline first saw it Deprecated. */
-function withBaselineDeprecation(
-  endpoint: EndpointSnapshot,
-  baseline: PublishedEndpoint | undefined,
-): EndpointSnapshot {
-  const deprecatedAt =
-    baseline !== undefined && isDeclared(baseline) ? baseline.deprecatedAt : undefined;
-  return endpoint.lifecycle === 'deprecated' && deprecatedAt !== undefined
-    ? { ...endpoint, deprecatedAt }
-    : endpoint;
 }
 
 /** A Retired Element is published with the version that first published it Retired. */

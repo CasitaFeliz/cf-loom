@@ -1,15 +1,9 @@
 import type { ResolvedDefinitions, ValidatedSchemas } from '../validation/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 
-/**
- * What a declared Snapshot is built with besides the valid Root: the CLI that writes it, the
- * committed Snapshot's content, and the clock that stamps `deprecatedAt`, so the same inputs always
- * give the same Snapshot.
- */
+/** What a declared Snapshot is built with besides the valid Root: the CLI that writes it. */
 export type SnapshotContext = {
   readonly generator: string;
-  readonly committed: unknown;
-  readonly now: number;
 };
 
 /** What every entry of a Snapshot reads besides its own declaration. */

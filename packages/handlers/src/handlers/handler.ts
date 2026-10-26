@@ -84,8 +84,8 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
 
 /**
  * The runtime shape of every Handler map, which the startup checks of `serve` and `consume` read,
- * whatever the map's type: each Handler known by the Element it was written for, the `readers`
- * and each Deprecated Endpoint's `deprecatedAt`; `HandlerMapOf` is what they take by type.
+ * whatever the map's type: each Handler known by the Element it was written for, and the
+ * `readers`; `HandlerMapOf` is what they take by type.
  */
 export type HandlerMap = {
   readonly endpoints: Readonly<Record<string, { readonly element: Endpoint }>>;
@@ -93,7 +93,6 @@ export type HandlerMap = {
   readonly commands: Readonly<Record<string, { readonly element: Command }>>;
   readonly subscriptions: Readonly<Record<string, { readonly element: Subscription }>>;
   readonly readers: Readers;
-  readonly deprecatedAt: Readonly<Record<string, string>>;
 };
 
 /** The Handler of one Guard: calling it validates what it is given and answers what `serve` would. */

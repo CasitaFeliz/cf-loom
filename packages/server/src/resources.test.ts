@@ -118,7 +118,6 @@ const handlers = {
   commands: { chargeCardV1: chargeCardHandler },
   subscriptions: {},
   readers,
-  deprecatedAt: {},
 };
 
 function getOrderRequest(key: string): Request {
@@ -181,7 +180,6 @@ describe('serve: Resources', () => {
     const bare = {
       endpoints: { getOrder: handle.stub(getOrder), health: healthHandler },
       guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
-      deprecatedAt: {},
     };
 
     const served = [serve(contract, bare), serve(contract, bare, { maxBodyBytes: 1 })];
@@ -193,7 +191,6 @@ describe('serve: Resources', () => {
     const stubs = {
       endpoints: { getOrder: handle.stub(getOrder), health: handle.stub(health) },
       guards: { apiKey: handle.stub(apiKey) },
-      deprecatedAt: {},
     };
 
     const http = serve(contract, stubs, { resources: { orders } });

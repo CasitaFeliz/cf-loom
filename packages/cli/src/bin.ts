@@ -123,7 +123,7 @@ async function exitOf(
   const { called } = read;
   try {
     const printing = called.output === 'json' ? silent : progress;
-    const run = { cwd: process.cwd(), now: Date.now(), env: process.env, progress: printing };
+    const run = { cwd: process.cwd(), env: process.env, progress: printing };
     return printedExitOf(await runCommand(called, run), called.output);
   } catch (e) {
     return printedExitOf(crashedExitOf(e), called.output);

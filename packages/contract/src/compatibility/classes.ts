@@ -27,6 +27,7 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
       return isConsumption(site) ? neutral : breakingClassificationOf(site);
     case 'reactivated':
     case 'tombstoned':
+    case 'deprecation-moved':
     case 'description-changed':
     case 'group-changed':
     case 'attachments-changed':

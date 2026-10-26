@@ -1,6 +1,6 @@
 import type { ExportsOf, FileExport } from '../loading/index.ts';
 import { type BuiltProject, snapshotFile } from '../project/index.ts';
-import { deprecationStampsOf, handlerMapTextOf, readersTextOf } from '../service-code/index.ts';
+import { handlerMapTextOf, readersTextOf } from '../service-code/index.ts';
 import type { GeneratedFile } from '../writing/index.ts';
 import type { PlacedService } from './handler-files.ts';
 import { messageExportsOf } from './message-exports.ts';
@@ -42,10 +42,9 @@ export function serviceFilesOf(service: PlacedService, exportsOf: ExportsOf): Se
 
 function handlerMapFileOf(service: PlacedService): GeneratedFile {
   const { handlerMap, readers } = service.project.layout;
-  const stamps = deprecationStampsOf(service.snapshot);
   const { rootFile: path, rootExportName: name } = service.project;
   const root: FileExport = { kind: 'file', path, name };
   const where = { file: handlerMap, readersFile: readers, root };
-  const text = handlerMapTextOf(service.handlerPaths, stamps, where);
+  const text = handlerMapTextOf(service.handlerPaths, where);
   return { path: handlerMap, text, written: 'always' };
 }

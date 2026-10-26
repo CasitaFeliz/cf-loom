@@ -526,7 +526,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran.status).toBe(3);
     expect(ran.stdout).toBe('');
     expect(ran.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 

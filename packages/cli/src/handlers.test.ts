@@ -284,6 +284,7 @@ function anEndpoint({
     `  visibility: '${visibility}',`,
     `  description: '${name}',`,
     `  lifecycle: '${lifecycle}',`,
+    ...(lifecycle === 'deprecated' ? ["  deprecatedAt: '2026-10-17T09:30:00Z',"] : []),
     `  guards: ${guards},`,
     '  success: { status: 200, body: z.object({ id: z.string() }) },',
     '});',
@@ -653,27 +654,19 @@ describe('cf-loom generate: the Handler map', () => {
         '  commands: {},',
         '  subscriptions: {},',
         '  readers,',
-        '  deprecatedAt: {},',
         '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
   });
 
-  test('the Handler map carries each live Deprecated Endpoint’s deprecatedAt, from the Snapshot', () => {
+  test('the Handler map of a Service with a Deprecated Endpoint holds no deprecatedAt', () => {
     const project = aProject(withDeprecatedCreateOrder());
 
     cfLoom(project, 'generate');
 
-    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-    const stamp: string = snapshot.endpoints['POST /orders'].deprecatedAt;
-    expect(read(project, 'src/handlers.generated.ts')).toContain(
-      lines([
-        '  deprecatedAt: {',
-        `    createOrder: '${stamp}',`,
-        '  },',
-        '} satisfies HandlerMapOf<typeof contract>;',
-      ]),
-    );
+    const map = read(project, 'src/handlers.generated.ts');
+    expect(map).toContain(lines(['  readers,', '} satisfies HandlerMapOf<typeof contract>;']));
+    expect(map).not.toContain('deprecatedAt');
   });
 
   test('readers.generated.ts pairs nothing while the Service declares no Message', () => {
@@ -755,7 +748,6 @@ describe('cf-loom generate: the Handler map', () => {
         '    notifyOnSettled: notifyOnSettledSubscriptionHandler,',
         '  },',
         '  readers,',
-        '  deprecatedAt: {},',
         '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
@@ -1348,7 +1340,6 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
         '  commands: {},',
         '  subscriptions: {},',
         '  readers,',
-        '  deprecatedAt: {},',
         '} satisfies HandlerMapOf<typeof contract>;',
       ]),
     );
@@ -2538,7 +2529,7 @@ describe('cf-loom generate: what it refuses', () => {
       ...service,
       [listOrders]: (service[listOrders] ?? '').replace(
         "lifecycle: 'retired'",
-        "lifecycle: 'deprecated'",
+        "lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z'",
       ),
     });
     cfLoom(project, 'generate');
@@ -3488,22 +3479,6 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
     expect(ran.stderr).toContain(
       'src/handlers.generated.ts was edited or is out of date: run cf-loom generate\n',
     );
-  });
-
-  test('verify exits 1 when a deprecatedAt in the Snapshot no longer matches the map', () => {
-    const project = aProject(withDeprecatedCreateOrder());
-    cfLoom(project, 'generate');
-    edit(project, 'contract.snapshot.json', (text) =>
-      text.replace(/"deprecatedAt": "[^"]+"/, '"deprecatedAt": "2020-01-02T03:04:05Z"'),
-    );
-
-    const ran = cfLoom(project, 'verify');
-
-    expect(ran).toEqual({
-      status: 1,
-      stdout: '',
-      stderr: 'src/handlers.generated.ts was edited or is out of date: run cf-loom generate\n',
-    });
   });
 
   test('verify exits 1 when a Handler file the map imports is missing', () => {

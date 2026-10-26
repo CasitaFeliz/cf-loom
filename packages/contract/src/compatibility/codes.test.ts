@@ -645,7 +645,7 @@ function generatedCodeOf(code: string): CodeSnapshot {
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: '@cf-loom/cli@2.1.0', committed: undefined, now: 0 };
+  const context = { generator: '@cf-loom/cli@2.1.0' };
   const snapshot = snapshotOf(validated, context);
   const generated = snapshot.kind === 'service' ? snapshot.codes[code] : undefined;
   if (generated === undefined) {

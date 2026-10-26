@@ -244,6 +244,39 @@ describe('compatibilityReportOf, an Endpoint’s Neutral Changes', () => {
     ]);
   });
 
+  test('moving the deprecatedAt of a Deprecated Endpoint gives one Neutral deprecation-moved with both instants', () => {
+    const from = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' });
+
+    const changes = endpointChangesOf(from, to);
+
+    const difference = {
+      kind: 'deprecation-moved',
+      from: '2026-01-01T00:00:00Z',
+      to: '2026-06-01T00:00:00Z',
+    } as const;
+    expect(changes).toEqual([neutral(endpointSite(), difference)]);
+  });
+
+  test('a Deprecated Endpoint left as it is gives no Change', () => {
+    const deprecated = anEndpoint({
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-01-01T00:00:00Z',
+    });
+
+    const changes = endpointChangesOf(deprecated, deprecated);
+
+    expect(changes).toEqual([]);
+  });
+
+  test('deprecating an Endpoint at an instant gives deprecated alone', () => {
+    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+
+    const changes = endpointChangesOf(anEndpoint(), to);
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['deprecated']);
+  });
+
   test('a Neutral Change on a Private Endpoint is still Neutral, on its Private site', () => {
     const from = anEndpoint({ visibility: 'private' });
     const to = anEndpoint({ visibility: 'private', description: 'Reads one order' });
@@ -664,6 +697,19 @@ describe('compatibilityReportOf, every Neutral Change', () => {
       aBaseline({ endpoints: { [identity]: anEndpoint() } }),
       aProposed({
         endpoints: { [identity]: anEndpoint({ description: 'Reworded', group: 'archive' }) },
+      }),
+    ],
+    [
+      'a Deprecated Endpoint’s deprecatedAt',
+      aBaseline({
+        endpoints: {
+          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' }),
+        },
+      }),
+      aProposed({
+        endpoints: {
+          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
+        },
       }),
     ],
     [

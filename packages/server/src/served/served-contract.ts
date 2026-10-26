@@ -11,7 +11,6 @@ import {
 import {
   checkedTextPartsOf,
   contractOf,
-  deprecatedAtOf,
   endpointHandlerOf,
   guardHandlerOf,
   type ServedHandlers,
@@ -108,6 +107,6 @@ function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedE
       ...attached,
       handler: guardHandlerOf(handlers, attached.guard),
     })),
-    deprecatedAt: deprecatedAtOf(handlers, endpoint),
+    deprecatedAt: endpoint.deprecatedAt,
   };
 }

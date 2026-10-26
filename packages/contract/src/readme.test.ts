@@ -240,6 +240,24 @@ describe('the README’s Event and Command examples', () => {
     expect(chargeCardV1).not.toHaveProperty('visibility');
   });
 
+  test('a Deprecated Endpoint states the instant it is Deprecated as of', () => {
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Every order',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-11-01T00:00:00Z',
+      success: { status: 200, body: z.array(z.object({ orderId: z.uuid() })) },
+    });
+
+    expect(listOrders).toMatchObject({
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-11-01T00:00:00Z',
+    });
+  });
+
   test('a Deprecated Event version sits beside the Active one', () => {
     expect(orderCreatedV1.lifecycle).toBe('deprecated');
     expect(orderCreatedV2).not.toHaveProperty('lifecycle');

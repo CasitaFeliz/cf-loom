@@ -98,6 +98,8 @@ function aGetOrder(
 
 const getOrder = aGetOrder([orderLocked, notFound]);
 
+const stampedAt = '2026-10-17T09:30:00Z';
+
 const editOrder = defineEndpoint({
   name: 'editOrder',
   method: 'PATCH',
@@ -105,6 +107,7 @@ const editOrder = defineEndpoint({
   visibility: 'internal',
   description: 'Edits one line',
   lifecycle: 'deprecated',
+  deprecatedAt: stampedAt,
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
     params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
@@ -221,15 +224,8 @@ const contract = defineService({
   dependencies: [paymentsDependency],
 });
 
-const stampedAt = '2026-10-17T09:30:00Z';
-
 function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
-  return {
-    generator: '@cf-loom/cli@2.1.0',
-    committed: undefined,
-    now: Date.parse('2026-10-18T12:00:00.750Z'),
-    ...overrides,
-  };
+  return { generator: '@cf-loom/cli@2.1.0', ...overrides };
 }
 
 /** The Snapshot of a Root, beside the Definitions Packages installed, `@org/definitions` by default. */
@@ -996,47 +992,35 @@ describe('snapshotOf: Messages and Subscriptions', () => {
 });
 
 describe('snapshotOf: deprecatedAt', () => {
-  test('a Deprecated Endpoint keeps the deprecatedAt of the committed Snapshot', () => {
-    const committed = {
-      endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stampedAt } },
-    };
-
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
+  test('a Deprecated Endpoint carries the deprecatedAt its declaration states', () => {
+    const snapshot = serviceSnapshot();
 
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(stampedAt);
   });
 
-  test('an Endpoint first seen Deprecated is stamped with the clock, to the second', () => {
-    const snapshot = serviceSnapshot();
+  test('a future deprecatedAt is carried as declared', () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'public',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const root = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [scheduled] })],
+    });
 
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-      '2026-10-18T12:00:00Z',
-    );
+    const snapshot = serviceSnapshot(root, aContext(), []);
+
+    expect(snapshot.endpoints['GET /scheduled']?.deprecatedAt).toBe('2999-01-01T00:00:00Z');
   });
 
-  test.each([
-    '2026-10-17T09:30:00.000Z',
-    '2026-10-17T09:30:00+00:00',
-    '2026-02-30T09:30:00Z',
-    'yesterday',
-    1760693400,
-  ])(
-    'a committed deprecatedAt that is no UTC instant to the second, %s, is stamped again',
-    (stamp) => {
-      const committed = { endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stamp } } };
-
-      const snapshot = serviceSnapshot(contract, aContext({ committed }));
-
-      expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-        '2026-10-18T12:00:00Z',
-      );
-    },
-  );
-
-  test('an Active Endpoint carries no deprecatedAt, whatever the committed Snapshot says', () => {
-    const committed = { endpoints: { 'GET /orders/{}': { deprecatedAt: stampedAt } } };
-
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
+  test('an Active Endpoint carries no deprecatedAt', () => {
+    const snapshot = serviceSnapshot();
 
     expect(snapshot.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
   });

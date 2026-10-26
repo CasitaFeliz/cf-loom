@@ -323,7 +323,7 @@ describe('publishedSnapshotOf', () => {
     expect(published.events).toEqual({});
   });
 
-  test('a Deprecated Endpoint keeps the Baseline’s deprecatedAt', () => {
+  test('a Deprecated Endpoint is published with the deprecatedAt its declaration states, not the Baseline’s', () => {
     const baseline = aBaseline({
       endpoints: {
         'GET /orders/{}': aLive(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' }), 'deprecated'),
@@ -341,7 +341,7 @@ describe('publishedSnapshotOf', () => {
     const published = publishedSnapshotOf(baseline, proposed, '3.5.0');
 
     expect(published.endpoints['GET /orders/{}']).toEqual(
-      anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
+      anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
     );
   });
 
@@ -510,7 +510,7 @@ describe('publishedSnapshotOf', () => {
     const proposed = aProposed({
       endpoints: {
         'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }),
-        'POST /orders': { ...deprecated, deprecatedAt: '2026-10-20T10:00:00Z' },
+        'POST /orders': deprecated,
       },
     });
 

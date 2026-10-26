@@ -219,6 +219,7 @@ const service: Readonly<Record<string, string>> = {
     "  visibility: 'internal',",
     "  description: 'Every order',",
     "  lifecycle: 'deprecated',",
+    "  deprecatedAt: '2026-10-17T09:30:00Z',",
     '  input: { query: z.object({ page: z.number().optional() }) },',
     '  success: { status: 200, body: z.object({ ids: z.array(z.uuid()) }) },',
     '});',
@@ -572,6 +573,7 @@ function aServiceOfDeprecatedEndpoints(
       "  visibility: 'public',",
       `  description: ${JSON.stringify(description)},`,
       "  lifecycle: 'deprecated',",
+      "  deprecatedAt: '2026-10-17T09:30:00Z',",
       '  success: { status: 200, body: z.object({}) },',
       '});',
     ].join('\n'),
@@ -740,6 +742,18 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     expect(read(project, `${defaultOut}/src/endpoints/get-order.ts`)).toContain(
       'total: z.object({ amount: z.int(), currency: z.string() })',
     );
+  });
+
+  test('a Deprecated Endpoint’s file declares its lifecycle with the instant its declaration states', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    const out = join(project, defaultOut);
+    expect(read(out, 'src/endpoints/list-orders.ts')).toContain(
+      ["  lifecycle: 'deprecated',", "  deprecatedAt: '2026-10-17T09:30:00Z',"].join('\n'),
+    );
+    expect(read(out, 'src/endpoints/get-order.ts')).not.toContain('deprecatedAt');
   });
 
   test('an Event’s file declares it with providedEvent: its Provider, its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
@@ -939,7 +953,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
   test('the files are a function of the canonical Snapshot, whatever order the Contract declares', () => {
     const active = (service['src/contract/index.ts'] ?? '').replace(
-      "  lifecycle: 'deprecated',\n",
+      "  lifecycle: 'deprecated',\n  deprecatedAt: '2026-10-17T09:30:00Z',\n",
       '',
     );
     const swapped = active
@@ -1818,7 +1832,7 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
     const ran = cfLoom(project, 'package');
 
     expect(ran.status).toBe(3);
-    expect(ran.stderr).toMatch(/: restore it or delete it, then run cf-loom generate\n$/);
+    expect(ran.stderr).toMatch(/: run cf-loom generate\n$/);
   });
 
   test('a committed contract.snapshot.json that is out of date stops package', () => {

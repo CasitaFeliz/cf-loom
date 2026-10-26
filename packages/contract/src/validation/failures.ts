@@ -25,6 +25,7 @@ export type Rule =
   | 'method'
   | 'visibility'
   | 'lifecycle'
+  | 'deprecated-at'
   | 'success-status'
   | 'success-body'
   | 'input-body'

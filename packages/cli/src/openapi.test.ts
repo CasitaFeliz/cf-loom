@@ -195,6 +195,7 @@ const orders = [
   "  visibility: 'public',",
   "  description: 'Deletes an order',",
   "  lifecycle: 'deprecated',",
+  "  deprecatedAt: '2026-10-17T09:30:00Z',",
   '  input: { params: z.object({ orderId: z.uuid() }) },',
   '  success: { status: 204 },',
   '  rejections: [orderLocked],',
@@ -1367,7 +1368,7 @@ describe('cf-loom openapi: what it refuses', () => {
     expect(refused.status).toBe(3);
     expect(refused.stdout).toBe('');
     expect(refused.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 

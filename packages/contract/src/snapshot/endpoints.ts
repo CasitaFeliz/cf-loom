@@ -13,7 +13,6 @@ import {
 } from '../written/index.ts';
 import { codeOfStandard, sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
-import { deprecationOf, type Stamping } from './deprecation.ts';
 import { inputOf, textPartOf } from './input.ts';
 import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './types.ts';
 
@@ -21,16 +20,23 @@ import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './ty
 export function endpointSnapshotsOf(
   endpoints: readonly LocatedEndpoint[],
   sources: SnapshotSources,
-  stamping: Stamping,
 ): Readonly<Record<string, EndpointSnapshot>> {
   const entries = endpoints.map(({ endpoint, group }) => {
     const identity = identityOf(endpoint.method, endpoint.path);
     const lifecycle = lifecycleOf(endpoint);
-    const deprecation = deprecationOf({ identity, lifecycle }, stamping);
-    const snapshot = { ...endpointOf(endpoint, group.name, sources), lifecycle, ...deprecation };
+    const snapshot = {
+      ...endpointOf(endpoint, group.name, sources),
+      lifecycle,
+      ...instantOf(endpoint),
+    };
     return [identity, snapshot] as const;
   });
   return Object.fromEntries(entries);
+}
+
+/** The instant a Deprecated Endpoint declares it is Deprecated as of; none for any other. */
+function instantOf({ deprecatedAt }: Endpoint): { readonly deprecatedAt?: string } {
+  return deprecatedAt === undefined ? {} : { deprecatedAt };
 }
 
 function endpointOf(

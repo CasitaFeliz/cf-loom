@@ -36,6 +36,7 @@ const findOrder = defineEndpoint({
   visibility: 'public',
   description: 'Finds an order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 204 },
 });
 
@@ -67,7 +68,6 @@ const handlers = {
     findOrder: handle(findOrder, () => success()),
   },
   guards: { apiKey: handle(apiKey, () => admit()) },
-  deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
 };
 
 describe('serve: what it checks before the first request', () => {
@@ -133,6 +133,7 @@ describe('serve: what it checks before the first request', () => {
       visibility: 'public',
       description: 'Finds an order',
       lifecycle: 'deprecated',
+      deprecatedAt: '2026-10-17T09:30:00Z',
       success: { status: 204 },
     });
     const copied = {
@@ -158,57 +159,6 @@ describe('serve: what it checks before the first request', () => {
     );
   });
 
-  test('a Deprecated Endpoint without its deprecatedAt throws, since the map is stale', () => {
-    const stale = { ...handlers, deprecatedAt: {} };
-
-    const serving = () => serve(contract, stale);
-
-    expect(serving).toThrow(
-      'deprecatedAt.findOrder is missing or not an instant in the Handler map: run cf-loom generate',
-    );
-  });
-
-  test.each([
-    'Oct 17 2026',
-    '2026-10-17',
-    '2026-10-17T09:30:00.000Z',
-    '2026-10-17T09:30:00+02:00',
-    'yesterday',
-  ])('a deprecatedAt that is not a stamp generate writes, %s, throws', (stamp) => {
-    const loose = { ...handlers, deprecatedAt: { findOrder: stamp } };
-
-    const serving = () => serve(contract, loose);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
-  });
-
-  test('a map with no deprecatedAt at all throws the same, never a TypeError', () => {
-    const { deprecatedAt: _stamps, ...withoutStamps } = handlers;
-
-    const serving = () => serve(contract, withoutStamps as never);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
-  });
-
-  test('a stamp for an Active Endpoint or a name the Contract lacks is ignored', () => {
-    const extra = {
-      ...handlers,
-      deprecatedAt: { ...handlers.deprecatedAt, getOrder: 'junk', other: 'junk' },
-    };
-
-    const http = serve(contract, extra);
-
-    expect(typeof http).toBe('function');
-  });
-
-  test('a stamp the map only inherits is no stamp', () => {
-    const inherited = { ...handlers, deprecatedAt: Object.create(handlers.deprecatedAt) };
-
-    const serving = () => serve(contract, inherited);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
-  });
-
   test.each([
     [
       'params that are not exactly the path’s names',
@@ -227,7 +177,7 @@ describe('serve: what it checks before the first request', () => {
       'header-names',
     ],
   ])('an Endpoint with %s throws, as generate words it', (_case, written, rule) => {
-    const odd: Endpoint = defineEndpoint({
+    const odd = defineEndpoint({
       name: 'odd',
       method: 'GET',
       path: '/odd',
@@ -235,7 +185,7 @@ describe('serve: what it checks before the first request', () => {
       description: 'An odd one',
       success: { status: 204 },
       ...(written as object),
-    } as never);
+    } as never) as Endpoint;
     const withOdd = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
@@ -245,7 +195,6 @@ describe('serve: what it checks before the first request', () => {
       serve(withOdd, {
         endpoints: { odd: handle(odd, () => success()) },
         guards: {},
-        deprecatedAt: {},
       });
 
     expect(serving).toThrow(` ${rule}: `);
@@ -276,7 +225,6 @@ describe('serve: what it checks before the first request', () => {
       serve(withListed, {
         endpoints: { listed: handle(listed, () => success()) },
         guards: { tenant: handle(tenant, () => admit()) },
-        deprecatedAt: {},
       });
 
     expect(serving).toThrow(' input-conflict: ');
@@ -320,7 +268,6 @@ describe('serve: what it checks before the first request', () => {
       serve(withLookup, {
         endpoints: { lookup: handle(lookup, () => success()) },
         guards: {},
-        deprecatedAt: {},
       });
 
     expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-a-schema');
@@ -345,7 +292,6 @@ describe('serve: what it checks before the first request', () => {
       serve(withSince, {
         endpoints: { since: handle(since, () => success()) },
         guards: {},
-        deprecatedAt: {},
       });
 
     expect(serving).toThrow(
@@ -372,7 +318,6 @@ describe('serve: what it checks before the first request', () => {
       serve(withLookup, {
         endpoints: { lookup: handle(lookup, () => success()) },
         guards: {},
-        deprecatedAt: {},
       });
 
     expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-an-object-schema');

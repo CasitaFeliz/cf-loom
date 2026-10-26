@@ -1,5 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { methods, successStatuses, visibilities } from '../declarations/index.ts';
+import { isStamp, methods, successStatuses, visibilities } from '../declarations/index.ts';
 import {
   isMissing,
   isWithoutValue,
@@ -28,9 +28,25 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
         closed,
       ),
     ),
+    ...deprecationFailures(located),
     ...successFailures(located),
     ...inputBodyFailures(located),
   ];
+}
+
+/** An Endpoint declares `deprecatedAt` exactly when it is Deprecated, a UTC instant to the second. */
+function deprecationFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
+  const deprecatedAt: unknown = endpoint.deprecatedAt;
+  const where = [...at, 'deprecatedAt'];
+  if (endpoint.lifecycle !== 'deprecated') {
+    const message = 'Only a Deprecated Endpoint declares deprecatedAt';
+    return isMissing(deprecatedAt) ? [] : [failure(where, 'deprecated-at', message)];
+  }
+  const isNoInstant =
+    isMissing(deprecatedAt) || (typeof deprecatedAt === 'string' && !isStamp(deprecatedAt));
+  const message =
+    'A Deprecated Endpoint’s deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z';
+  return isNoInstant ? [failure(where, 'deprecated-at', message)] : [];
 }
 
 /** A Success declares an allowed status; 204 answers no body, every other status one. */

@@ -332,7 +332,7 @@ describe('validateRoot and snapshotOf: a valid Root’s Snapshot says what its E
         return;
       }
       expect(validated.kind).toBe('valid');
-      const context = { generator: 'test', committed: undefined, now: 0 };
+      const context = { generator: 'test' };
       const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
       const written = snapshot?.kind === 'service' ? snapshot.codes[code] : undefined;
       const [only] = named;

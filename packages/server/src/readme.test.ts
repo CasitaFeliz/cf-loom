@@ -66,7 +66,6 @@ const handlers = {
   guards: { apiKey: handle(apiKey, () => reject(notFound) as never) },
   commands: {},
   subscriptions: {},
-  deprecatedAt: {},
 };
 
 const resources: Resources = { orders: { nameOf: (orderId) => orderId } };
@@ -155,7 +154,6 @@ describe('the READMEs', () => {
       guards: {},
       commands: {},
       subscriptions: {},
-      deprecatedAt: {},
     };
 
     const http = serve(notes, noteHandlers, { maxBodyBytes: 1_048_576 });

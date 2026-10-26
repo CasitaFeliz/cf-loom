@@ -731,7 +731,6 @@ describe('HandlerMap', () => {
       commands: { chargeCardV1: handle.stub(chargeCard) },
       subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
       readers,
-      deprecatedAt: {},
     };
 
     const map: HandlerMap = generated;
@@ -748,7 +747,6 @@ describe('HandlerMap', () => {
       commands: { chargeCardV1: handle.stub(getOrder) },
       subscriptions: {},
       readers,
-      deprecatedAt: {},
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
@@ -762,7 +760,6 @@ describe('HandlerMap', () => {
       commands: {},
       subscriptions: {},
       readers: readersOf({ commands: {}, subscriptions: {} }),
-      deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
     };
 
     const map: HandlerMap = generated;
@@ -778,7 +775,6 @@ describe('HandlerMap', () => {
       commands: {},
       subscriptions: {},
       readers,
-      deprecatedAt: {},
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
@@ -791,7 +787,6 @@ describe('HandlerMap', () => {
       guards: {},
       commands: {},
       subscriptions: {},
-      deprecatedAt: {},
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
@@ -808,7 +803,6 @@ describe('HandlerMap', () => {
         commands: { chargeCardV1: { element: getOrder, reader: statusReader } },
         subscriptions: {},
       },
-      deprecatedAt: {},
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
