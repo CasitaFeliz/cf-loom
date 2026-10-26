@@ -10,28 +10,31 @@ import type {
   Unidentified,
 } from './validate.ts';
 
+/** An imported package and the imported packages of its kind that its files import, directly or through any package. */
+export type Reaching<Package> = PackageIdentity & { readonly reaches: readonly Package[] };
+
 /**
- * Which Definitions Package a value belongs to: the one exporting it that reaches none of the
+ * Which installed package a declaration belongs to: the one exporting it that reaches none of the
  * others exporting it, found when its package.json names it, unidentified when it does not.
  */
-export type Provenance =
-  | { readonly kind: 'found'; readonly package: ResolvedDefinitions }
-  | {
-      readonly kind: 'unidentified';
-      readonly package: Exclude<ImportedDefinitions, ResolvedDefinitions>;
-    }
+export type Provenance<Package extends Reaching<Package> = ImportedDefinitions> =
+  | { readonly kind: 'found'; readonly package: Package & { readonly kind: 'identified' } }
+  | { readonly kind: 'unidentified'; readonly package: Package & Unidentified }
   | { readonly kind: 'none' }
-  | {
-      readonly kind: 'ambiguous';
-      readonly packages: readonly [ImportedDefinitions, ImportedDefinitions];
-    };
+  | { readonly kind: 'ambiguous'; readonly packages: readonly [Package, Package] };
 
 /** The Definitions Package `value` belongs to among those imported, by identity over each package's exports. */
 export function definitionsPackageOf(
   packages: readonly ImportedDefinitions[],
   value: unknown,
 ): Provenance {
-  const exporting = packages.filter(({ exports }) => Object.values(exports).includes(value));
+  return originAmong(packages.filter(({ exports }) => Object.values(exports).includes(value)));
+}
+
+/** The one package among those exporting a declaration that imports it from none of the others, however many export it. */
+export function originAmong<Package extends Reaching<Package>>(
+  exporting: readonly Package[],
+): Provenance<Package> {
   if (exporting.length === 0) {
     return { kind: 'none' };
   }
@@ -47,20 +50,32 @@ export function definitionsPackageOf(
   return { kind: 'ambiguous', packages: [one, two] };
 }
 
-/** The one package a value belongs to, as its package.json lets an origin name it or not. */
-function originOf(origin: ImportedDefinitions): Provenance {
-  switch (origin.kind) {
-    case 'identified':
-      return { kind: 'found', package: origin };
-    case 'unnamed':
-    case 'unversioned':
-      return { kind: 'unidentified', package: origin };
+/** The one package a declaration belongs to, as its package.json lets an origin name it or not. */
+function originOf<Package extends Reaching<Package>>(origin: Package): Provenance<Package> {
+  if (isIdentified(origin)) {
+    return { kind: 'found', package: origin };
   }
+  if (isUnidentified(origin)) {
+    return { kind: 'unidentified', package: origin };
+  }
+  throw new Error('A package is identified or it is not: a bug.');
 }
 
-function reachesAnother(
-  imported: ImportedDefinitions,
-  exporting: readonly ImportedDefinitions[],
+function isIdentified<Package extends PackageIdentity>(
+  imported: Package,
+): imported is Package & { readonly kind: 'identified' } {
+  return imported.kind === 'identified';
+}
+
+function isUnidentified<Package extends PackageIdentity>(
+  imported: Package,
+): imported is Package & Unidentified {
+  return imported.kind === 'unnamed' || imported.kind === 'unversioned';
+}
+
+function reachesAnother<Package extends Reaching<Package>>(
+  imported: Package,
+  exporting: readonly Package[],
 ): boolean {
   return exporting.some((other) => other !== imported && imported.reaches.includes(other));
 }

@@ -122,7 +122,6 @@ const getPayment = providedEndpoint('payments-service', {
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: { getPayment },
   events: {
     paymentSettledV1: providedEvent('payments-service', {
@@ -153,7 +152,6 @@ const paymentsDependency = defineDependency({
 
 const orders = {
   name: 'orders-service',
-  version: '3.4.0',
   endpoints: {
     getOrder: providedEndpoint('orders-service', getOrder),
     createOrder: providedEndpoint('orders-service', createOrder),

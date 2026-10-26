@@ -6,3 +6,5 @@ export type { FirstListing } from './package-versions.ts';
 export { unchangedSince } from './package-versions.ts';
 export type { Publishing } from './publish.ts';
 export { packedPathsOf, publishFolder } from './publish.ts';
+export type { DependencyVersion, UnlistedVersions, UsedVersions } from './unlisted-versions.ts';
+export { unlistedVersionLinesOf } from './unlisted-versions.ts';

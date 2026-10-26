@@ -39,7 +39,7 @@ export function contractPackageFilesOf(
   if (snapshot.kind === 'application') {
     return packageFiles;
   }
-  return [...packageFiles, tsconfigOf(), ...serviceSourcesOf(snapshot, packaging.version)];
+  return [...packageFiles, tsconfigOf(), ...serviceSourcesOf(snapshot)];
 }
 
 /**
@@ -48,7 +48,6 @@ export function contractPackageFilesOf(
  */
 function serviceSourcesOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
-  version: string,
 ): readonly PackageFile[] {
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
@@ -59,7 +58,7 @@ function serviceSourcesOf(
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
   return [
-    serviceEntryOf({ name: snapshot.name, version, endpoints, events, defUses }),
+    serviceEntryOf({ name: snapshot.name, endpoints, events, defUses }),
     exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),

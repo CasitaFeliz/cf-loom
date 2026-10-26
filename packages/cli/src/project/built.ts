@@ -114,10 +114,12 @@ function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
 
 /** The Root validated: the walk runs the user's schemas, whose getters may throw. */
 function validatedOf(declaring: DeclaredRoot): ValidatedRoot | Tooling {
-  const { directory, packageName, root, rootExports, rootFile, packages } = declaring;
+  const { directory, packageName, root, rootExports, rootFile } = declaring;
+  const { packages, contractPackages } = declaring;
   const rootPackage: RootPackage = {
     packageName: packageJsonNameOf(packageName),
     packages,
+    contractPackages,
     rootExports,
   };
   try {

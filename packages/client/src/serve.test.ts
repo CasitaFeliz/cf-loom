@@ -143,7 +143,6 @@ function contractPackageOf<
   const provided = providedEndpointsOf(name, endpoints);
   return {
     name,
-    version: '1.0.0',
     endpoints: provided,
     events: {},
     standardRejections,

@@ -1,6 +1,7 @@
 import { isLive } from '../declarations/index.ts';
-import { reachedDefsOf, type SchemaNode } from '../walker/index.ts';
+import { reachedDefsOf } from '../walker/index.ts';
 import { reachedCodesOf } from '../written/index.ts';
+import { codeNodesOf, endpointNodesOf, guardNodesOf } from './nodes.ts';
 import { isDeclaredRejection, type ListedRejection, ownRejectionsOf } from './own-rejections.ts';
 import {
   type EndpointTombstone,
@@ -9,14 +10,7 @@ import {
   type PublishedServiceSnapshot,
 } from './published.ts';
 import { reachedGuardNamesOf } from './reached-guards.ts';
-import type {
-  ByKey,
-  CodeSnapshot,
-  EndpointSnapshot,
-  ExportedSnapshot,
-  GuardSnapshot,
-  ServiceSnapshot,
-} from './types.ts';
+import type { ByKey, EndpointSnapshot, ExportedSnapshot, ServiceSnapshot } from './types.ts';
 
 /**
  * The Snapshot a Service's Contract Package exports, from its declared or published Snapshot: its
@@ -73,23 +67,6 @@ function isKeyedExported<Declared extends Exportable>(
 /** The codes an Endpoint lists itself, the Standard not-found Rejection left out. */
 function declaredCodesOf(listed: readonly ListedRejection[]): readonly string[] {
   return listed.filter(isDeclaredRejection).map(({ code }) => code);
-}
-
-function endpointNodesOf({ input, success }: EndpointSnapshot): readonly SchemaNode[] {
-  const { params, query, headers, body } = input;
-  return [params, query, headers, body, success.headers, success.body].filter(isNode);
-}
-
-function guardNodesOf({ demands, context, qualifier }: GuardSnapshot): readonly SchemaNode[] {
-  return [demands.headers, demands.query, context, qualifier].filter(isNode);
-}
-
-function codeNodesOf({ body }: CodeSnapshot): readonly SchemaNode[] {
-  return [body].filter(isNode);
-}
-
-function isNode(node: SchemaNode | null): node is SchemaNode {
-  return node !== null;
 }
 
 /** The entries of a Snapshot map whose keys are kept, in the map's order. */

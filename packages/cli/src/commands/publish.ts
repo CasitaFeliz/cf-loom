@@ -14,7 +14,8 @@ export type PublishOptions = DeriveOptions & { readonly dryRun: boolean };
 
 /**
  * Publishes the package of the committed Snapshot through the organization's npm: checked against
- * its Baseline, failing on a refused Change, at the version its Changes and peer ranges derive,
+ * its Baseline, failing on a version the registry does not list that the Contract is declared
+ * against, then on a refused Change, at the version its Changes and peer ranges derive,
  * with the Baseline's history merged in; it never waits on a Breaking Change Approval. A dry run
  * stages and builds the package and stops before `npm publish`.
  */
@@ -25,6 +26,9 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
   }
   const checked = derivedCheckedOf(prepared, options);
   run.progress(comparedLinesOf(checked));
+  if (prepared.unlisted.length > 0) {
+    return { status: 3, stdout: [], stderr: prepared.unlisted };
+  }
   const { derivation } = checked;
   switch (derivation.kind) {
     case 'refused': {

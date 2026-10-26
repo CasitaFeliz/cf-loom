@@ -21,7 +21,7 @@ A named set of its Contract's own Endpoints, Events, Commands and Subscriptions,
 _Avoid_: router, family, tag, module
 
 **Contract Package**:
-The published artifact that carries exactly one Contract: its Public and Internal Elements, each a Provided Element, and its Snapshot, which also records its Dependencies. Versioned with semantic versioning.
+The published artifact that carries exactly one Contract: its Public and Internal Elements, each a Provided Element, and its Snapshot, which also records its Dependencies. Versioned with semantic versioning, its version being its package.json's.
 _Avoid_: schemas package, public package (Visibility is not about the registry)
 
 **Definitions Package**:

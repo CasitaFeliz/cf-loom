@@ -48,13 +48,13 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
 }
 
 /** What a Contract Package's `contract` holds, as far as a Dependency reads it. */
-function isContractPackage(provider: unknown): provider is ContractPackage {
+export function isContractPackage(provider: unknown): provider is ContractPackage {
   if (!isPlainObject(provider)) {
     return false;
   }
-  const { name, version, endpoints, events, standardRejections, exportedSnapshot } = provider;
+  const { name, endpoints, events, standardRejections, exportedSnapshot } = provider;
   const maps = [endpoints, events, standardRejections, exportedSnapshot];
-  return typeof name === 'string' && typeof version === 'string' && maps.every(isPlainObject);
+  return typeof name === 'string' && maps.every(isPlainObject);
 }
 
 function selectedOf({ at, dependency }: LocatedDependency): readonly Selected[] {

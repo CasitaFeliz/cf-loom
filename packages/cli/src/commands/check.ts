@@ -11,15 +11,17 @@ export type CheckOptions = { readonly against: string | undefined; readonly prer
 
 /**
  * Runs the Compatibility Check of the committed Snapshot against its Baseline and prints every
- * Change with its class and Verdict, and the version `publish` would take; it only reports, and the
- * organization enforces any Approval.
+ * Change with its class and Verdict, and the version `publish` would take, and on stderr each
+ * version it is declared against that the registry does not list, which `publish` refuses; it only
+ * reports, and the organization enforces any Approval.
  */
 export async function check(run: Run, { against, prerelease }: CheckOptions): Promise<Exit> {
   const prepared = await preparedOf(run, against);
   if (prepared.kind === 'stopped') {
     return prepared.exit;
   }
-  return exitOf(derivedCheckedOf(prepared, { force: false, prerelease }));
+  const exit = exitOf(derivedCheckedOf(prepared, { force: false, prerelease }));
+  return { ...exit, stderr: [...exit.stderr, ...prepared.unlisted] };
 }
 
 /** How `check` ends: a version that would not be above the Baseline is a tooling error, as it is for `publish`; else the Changes decide. */

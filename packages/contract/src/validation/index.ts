@@ -1,4 +1,5 @@
 export { oneOf } from './closed-values.ts';
+export { isContractPackage } from './dependencies.ts';
 export { exportNamesOf } from './export-names.ts';
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';
@@ -14,8 +15,10 @@ export {
   packageLabelOf,
 } from './provenance.ts';
 export type {
+  ImportedContractPackage,
   ImportedDefinitions,
   PackageIdentity,
+  ResolvedContractPackage,
   ResolvedDefinitions,
   RootPackage,
   Unidentified,
@@ -24,6 +27,11 @@ export type {
   ValidRoot,
 } from './validate.ts';
 export { validateRoot } from './validate.ts';
-export type { ValidatedCode, ValidatedGuard, ValidatedSubscription } from './validated.ts';
+export type {
+  ValidatedCode,
+  ValidatedDependency,
+  ValidatedGuard,
+  ValidatedSubscription,
+} from './validated.ts';
 export type { TextPartNodes } from './walked-text-parts.ts';
 export { walkedTextPartsOf } from './walked-text-parts.ts';

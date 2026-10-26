@@ -51,6 +51,7 @@ export type Rule =
   | 'dependency-selection'
   | 'application-dependency'
   | 'dependency-provider'
+  | 'dependency-package'
   | 'unused-dependency'
   | 'message-version'
   | 'duplicate-message-identity'

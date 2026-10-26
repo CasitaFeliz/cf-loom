@@ -97,7 +97,6 @@ const ping = providedEndpoint('ping-service', {
 
 const pingService = {
   name: 'ping-service',
-  version: '1.0.0',
   endpoints: { ping },
   events: { pinged },
   standardRejections: {

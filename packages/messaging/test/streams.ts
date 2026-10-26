@@ -71,10 +71,19 @@ export async function arrangePlanOf(
   }
 }
 
+/** The Snapshot of a Service's Contract, each Provider of its Dependencies installed as a Contract Package at 1.0.0. */
 function serviceSnapshotOf(contract: ServiceContract) {
+  const contractPackages = (contract.dependencies ?? []).map(({ provider }) => ({
+    kind: 'identified' as const,
+    packageName: `@org/contract-${provider.name}`,
+    version: '1.0.0',
+    contract: provider,
+    reaches: [],
+  }));
   const validated = validateRoot(contract, {
     packageName: contract.name,
     packages: [],
+    contractPackages,
     rootExports: {},
   });
   if (validated.kind !== 'valid') {

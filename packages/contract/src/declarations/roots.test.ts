@@ -59,7 +59,6 @@ const auditOnSettled = defineSubscription({
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: {
     getPayment: providedEndpoint('payments-service', getPayment),
     refundPayment: providedEndpoint('payments-service', refundPayment),

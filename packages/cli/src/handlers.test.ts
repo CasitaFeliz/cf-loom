@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
-import { payments } from '../test/payments-package.ts';
+import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 
 const cliDir = join(import.meta.dirname, '..');
 const packagesDir = join(cliDir, '..');
@@ -486,7 +486,7 @@ const messages = lines([
 const subscriptions = lines([
   "import { defineSubscription } from '@cf-loom/contract';",
   "import { orderCreatedV2 } from './messages.ts';",
-  "import { paymentSettledV1 } from './payments.ts';",
+  `import { paymentSettledV1 } from '${paymentsSpecifier}';`,
   '',
   'export const notifyOnSettled = defineSubscription({',
   "  name: 'notifyOnSettled',",
@@ -540,7 +540,7 @@ function aMessagingRoot({
         '  orderPurgedV1,',
         '  refundCardV1,',
         "} from './messages.ts';",
-        "import { paymentSettledV1, payments } from './payments.ts';",
+        `import { paymentSettledV1, payments } from '${paymentsSpecifier}';`,
         "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
       ]).trimEnd(),
     )
@@ -578,7 +578,7 @@ function aMessagingService(lists: MessagingLists = {}): Readonly<Record<string, 
   return {
     ...aService(),
     'src/contract/messages.ts': messages,
-    'src/contract/payments.ts': payments,
+    ...installedPayments(),
     'src/contract/subscriptions.ts': subscriptions,
     'src/contract/index.ts': aMessagingRoot(lists),
   };
@@ -895,7 +895,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
       project,
       lines([
         probeImportOf('generated', 'src/readers.generated.ts'),
-        probeImportOf('payments', 'src/contract/payments.ts'),
+        probeImportOf('payments', `node_modules/${paymentsSpecifier}/index.js`),
         'const { notifyOnSettled } = generated.readers.subscriptions;',
         'console.log(JSON.stringify([',
         "  notifyOnSettled.element.name === 'notifyOnSettled',",
@@ -4333,7 +4333,7 @@ const archiveFile = lines([
 ]);
 
 /** `payments`, the Provider's Contract Package, also exporting an Endpoint, `getPayment`. */
-const paymentsWithEndpoint = payments
+const paymentsWithEndpoint = paymentsSource
   .replace(
     'export const payments = {',
     [
@@ -4361,7 +4361,7 @@ function withProviderEndpoint(
 ): Readonly<Record<string, string>> {
   return {
     ...service,
-    'src/contract/payments.ts': paymentsWithEndpoint,
+    ...installedPayments({ source: paymentsWithEndpoint }),
     'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
       .replace(
         'import { paymentSettledV1, payments }',
@@ -4534,7 +4534,7 @@ describe('cf-loom generate and verify: a declaration the Root does not reach', (
     const project = aProject({
       ...aMessagingService(),
       'src/contract/provider-events.ts': lines([
-        importOf('{ paymentSettledV1 }', './payments.ts'),
+        importOf('{ paymentSettledV1 }', paymentsSpecifier),
         'export { paymentSettledV1 };',
       ]),
     });
@@ -4555,9 +4555,9 @@ describe('cf-loom generate and verify: a declaration the Root does not reach', (
   test('a Provider’s Event and Endpoint that a file under src/contract re-exports are not reported, with no Dependency on the Provider', () => {
     const project = aProject({
       ...aService(),
-      'src/contract/payments.ts': paymentsWithEndpoint,
+      ...installedPayments({ source: paymentsWithEndpoint }),
       'src/contract/provider-elements.ts': lines([
-        importOf('{ getPayment, paymentSettledV1 }', './payments.ts'),
+        importOf('{ getPayment, paymentSettledV1 }', paymentsSpecifier),
         'export { getPayment, paymentSettledV1 };',
       ]),
     });

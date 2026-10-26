@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage } from '../../test/root-package.ts';
+import {
+  anInstalledContract,
+  anUnidentifiedContract,
+  aRootPackage,
+} from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -59,7 +63,6 @@ const paymentSettledV1 = providedEvent('payments-service', {
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: { getPayment, refundPayment },
   events: { paymentSettledV1 },
   standardRejections: {
@@ -144,8 +147,11 @@ describe('validateRoot: a Service’s Dependencies', () => {
         dependencyAsWritten({ provider: mirror }),
       ],
     });
+    const installed = anInstalledContract(payments);
+    const mirrored = anInstalledContract(mirror, { reaches: [installed] });
+    const contractPackages = [installed, mirrored];
 
-    expect(validateInPackage(contract)).toEqual(
+    expect(validateRoot(contract, aRootPackage(contract, { contractPackages }))).toEqual(
       failed(
         ['dependencies', 'mirror-service'],
         'unused-dependency',
@@ -369,15 +375,6 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
         message: "A Dependency's provider is the contract a Contract Package exports",
       },
     },
-    {
-      what: 'a provider whose version is no string',
-      declaration: { provider: { ...payments, version: 5 }, endpoints: [getPayment] },
-      line: {
-        at: ['dependencies', 'payments-service'],
-        rule: 'dependency-provider',
-        message: "A Dependency's provider is the contract a Contract Package exports",
-      },
-    },
   ])('$what fails with one line', ({ declaration, line }) => {
     const dependency = dependencyAsWritten(declaration);
     const contract = defineService({ name: 'orders-service', dependencies: [dependency] });
@@ -487,3 +484,113 @@ describe('validateRoot: an Application’s Dependencies', () => {
 });
 
 const publicDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+
+describe('validateRoot: the installed Contract Package of a Dependency', () => {
+  const ordersWithPayments = defineService({
+    name: 'orders-service',
+    dependencies: [defineDependency({ provider: payments, endpoints: [getPayment] })],
+  });
+  const contractName = `A Dependency's provider is an installed Contract Package's contract`;
+
+  function validatedAmong(contractPackages: ReturnType<typeof aRootPackage>['contractPackages']) {
+    return validateRoot(ordersWithPayments, aRootPackage(ordersWithPayments, { contractPackages }));
+  }
+
+  test('a Dependency whose Provider no installed package exports fails, naming the Provider', () => {
+    const validated = validatedAmong([]);
+
+    expect(validated).toEqual(
+      failed(
+        ['dependencies', 'payments-service'],
+        'dependency-package',
+        `${contractName}: no installed package exports payments-service's Elements`,
+      ),
+    );
+  });
+
+  test('a Dependency whose Provider another package’s contract exports does not count that package', () => {
+    const other = { ...payments, name: 'other-service', endpoints: {}, events: {} };
+
+    const validated = validatedAmong([anInstalledContract(other)]);
+
+    expect(validated.kind).toBe('invalid');
+  });
+
+  test('a Provider exported by a package whose package.json has no version fails, naming it', () => {
+    const unversioned = anUnidentifiedContract(
+      { kind: 'unversioned', packageName: '@org/contract-payments-service' },
+      payments,
+    );
+
+    const validated = validatedAmong([unversioned]);
+
+    expect(validated).toEqual(
+      failed(
+        ['dependencies', 'payments-service'],
+        'dependency-package',
+        "A Dependency's Contract Package has a name and a version: @org/contract-payments-service has no version in its package.json",
+      ),
+    );
+  });
+
+  test('a Provider exported by a package whose package.json has no name fails, naming its path', () => {
+    const unnamed = anUnidentifiedContract(
+      { kind: 'unnamed', manifest: 'node_modules/contract-payments/package.json' },
+      payments,
+    );
+
+    const validated = validatedAmong([unnamed]);
+
+    expect(validated).toEqual(
+      failed(
+        ['dependencies', 'payments-service'],
+        'dependency-package',
+        "A Dependency's Contract Package has a name and a version: node_modules/contract-payments/package.json has no name",
+      ),
+    );
+  });
+
+  test('a Provider exported by two packages, neither importing it from the other, fails, naming both', () => {
+    const first = anInstalledContract(payments, { packageName: '@org/contract-payments-service' });
+    const second = anInstalledContract(payments, { packageName: '@org/payments-mirror' });
+
+    const validated = validatedAmong([first, second]);
+
+    expect(validated).toEqual(
+      failed(
+        ['dependencies', 'payments-service'],
+        'dependency-package',
+        "A Dependency's Contract Package is one package: payments-service's Elements are exported by both @org/contract-payments-service and @org/payments-mirror, and neither imports them from the other",
+      ),
+    );
+  });
+
+  test('a package that re-exports the contract of another is passed over for the one it imports it from', () => {
+    const original = anInstalledContract(payments);
+    const wrapper = anInstalledContract(payments, {
+      packageName: '@org/payments-wrapper',
+      reaches: [original],
+    });
+
+    const validated = validatedAmong([wrapper, original]);
+
+    expect(validated.kind).toBe('valid');
+  });
+
+  test('an Application’s Dependency needs its Provider installed too', () => {
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [defineDependency({ provider: payments, endpoints: [getPayment] })],
+    });
+
+    const validated = validateRoot(
+      application,
+      aRootPackage(application, { contractPackages: [] }),
+    );
+
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [{ at: ['dependencies', 'payments-service'], rule: 'dependency-package' }],
+    });
+  });
+});

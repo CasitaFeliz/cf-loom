@@ -898,36 +898,82 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
   });
 
-  test('the entry marks a Deprecated Event’s key @deprecated with its description, and an Active Event’s key not', () => {
+  test('the entry marks a Deprecated Event’s key @deprecated with its description in the type of contract, and an Active Event’s key not', () => {
     const project = aProject(service);
 
     packageIn(project);
 
     expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
       [
-        '  events: {',
+        '  readonly events: {',
         '    /** @deprecated An order was placed */',
-        '    orderPlacedV1: orderPlacedEventV1,',
-        '    orderPlacedV2: orderPlacedEventV2,',
-        '  },',
+        '    readonly orderPlacedV1: typeof orderPlacedEventV1;',
+        '    readonly orderPlacedV2: typeof orderPlacedEventV2;',
+        '  };',
       ].join('\n'),
     );
   });
 
-  test('the entry marks a Deprecated Endpoint’s key @deprecated with its description, and an Active Endpoint’s key not', () => {
+  test('the entry marks a Deprecated Endpoint’s key @deprecated with its description in the type of contract, and an Active Endpoint’s key not', () => {
     const project = aProject(service);
 
     packageIn(project);
 
     expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
       [
-        '  endpoints: {',
-        '    getOrder: getOrderEndpoint,',
+        '  readonly endpoints: {',
+        '    readonly getOrder: typeof getOrderEndpoint;',
         '    /** @deprecated Every order */',
-        '    listOrders: listOrdersEndpoint,',
-        '  },',
+        '    readonly listOrders: typeof listOrdersEndpoint;',
+        '  };',
       ].join('\n'),
     );
+  });
+
+  test('the entry declares contract with a type that names each Element by typeof and keeps the Service’s name literal', () => {
+    const project = aProject(service);
+
+    packageIn(project);
+
+    expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
+      [
+        'export const contract: {',
+        "  readonly name: 'orders-service';",
+        '  readonly endpoints: {',
+        '    readonly getOrder: typeof getOrderEndpoint;',
+        '    /** @deprecated Every order */',
+        '    readonly listOrders: typeof listOrdersEndpoint;',
+        '  };',
+        '  readonly events: {',
+        '    /** @deprecated An order was placed */',
+        '    readonly orderPlacedV1: typeof orderPlacedEventV1;',
+        '    readonly orderPlacedV2: typeof orderPlacedEventV2;',
+        '  };',
+        '  readonly standardRejections: typeof standardRejections;',
+        '  readonly exportedSnapshot: unknown;',
+        '} = {',
+        "  name: 'orders-service' as const,",
+        '  endpoints: {',
+        '    getOrder: getOrderEndpoint,',
+        '    listOrders: listOrdersEndpoint,',
+        '  },',
+        '  events: {',
+        '    orderPlacedV1: orderPlacedEventV1,',
+        '    orderPlacedV2: orderPlacedEventV2,',
+        '  },',
+        '  standardRejections,',
+        '  exportedSnapshot,',
+        '} satisfies loom.ContractPackage;',
+      ].join('\n'),
+    );
+  });
+
+  test('a Service exporting no Event types events as {}', () => {
+    const project = aProject(withDeclarations([], ''));
+
+    packageIn(project);
+
+    expect(read(project, `${defaultOut}/src/index.ts`)).toContain('\n  readonly events: {};\n');
   });
 
   test('a description of several lines is written one comment line each, with `*/` in it unable to close the comment', () => {
@@ -939,14 +985,14 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
     expect(read(project, `${defaultOut}/src/index.ts`)).toContain(
       [
-        '  endpoints: {',
+        '  readonly endpoints: {',
         '    /**',
         '     * @deprecated First line',
         '     * Second *\\/ line',
         '     * Third',
         '     */',
-        '    e0: e0Endpoint,',
-        '  },',
+        '    readonly e0: typeof e0Endpoint;',
+        '  };',
       ].join('\n'),
     );
   });
@@ -1047,7 +1093,6 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(Object.keys(built)).toEqual(['contract']);
     expect(built.contract).toMatchObject({
       name: 'orders-service',
-      version: '0.0.0',
       standardRejections: {
         invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
         notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -1058,6 +1103,19 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(Object.keys(built.contract.events)).toEqual(['orderPlacedV1', 'orderPlacedV2']);
     expect(built.contract.endpoints.listOrders.lifecycle).toBe('deprecated');
     expect(built.contract.endpoints.getOrder.lifecycle).toBeUndefined();
+    expect(built.contract).not.toHaveProperty('version');
+  });
+
+  test('its declarations name the Service’s name as a literal and each Element by typeof, with no Element’s type written out', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+
+    const declarations = read(out, 'dist/index.d.ts');
+
+    expect(declarations).toContain("readonly name: 'orders-service';");
+    expect(declarations).toContain('readonly getOrder: typeof getOrderEndpoint;');
+    expect(declarations).not.toContain('loom.Endpoint<');
+    expect(declarations).not.toContain('Endpoint<{');
   });
 
   test('a Consumer imports snapshot.json and package.json by name, which the exports name', () => {
@@ -1137,7 +1195,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       .map((line) => line.trim());
 
     const lineBefore = (key: string) =>
-      declarations[declarations.findIndex((line) => line.startsWith(`${key}:`)) - 1];
+      declarations[declarations.findIndex((line) => line.startsWith(`readonly ${key}:`)) - 1];
     expect(lineBefore('listOrders')).toBe('/** @deprecated Every order */');
     expect(lineBefore('orderPlacedV1')).toBe('/** @deprecated An order was placed */');
     expect(lineBefore('getOrder')).not.toContain('@deprecated');
@@ -1163,7 +1221,8 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     const entry = read(out, 'src/index.ts');
     expect(entry.split('*/')).toHaveLength(descriptions.length + 1);
     const keys = descriptions.map((_, index) => `e${index}`);
-    const unclosed = keys.filter((key) => !entry.includes(`*/\n    ${key}: ${key}Endpoint,\n`));
+    const typed = (key: string) => `*/\n    readonly ${key}: typeof ${key}Endpoint;\n`;
+    const unclosed = keys.filter((key) => !entry.includes(typed(key)));
     expect(unclosed).toEqual([]);
   });
 
@@ -1217,6 +1276,21 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
       },
     });
+  });
+
+  test('a Consumer is against the version its installed copy of the package has', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const manifest = JSON.parse(read(out, 'package.json'));
+    write(out, { 'package.json': JSON.stringify({ ...manifest, version: '3.2.1' }) });
+    const consumer = anApplicationConsumer();
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+
+    const ran = cfLoom(consumer, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(consumer, 'contract.snapshot.json'));
+    expect(snapshot.dependencies['orders-service'].against).toBe('3.2.1');
   });
 
   test('a Consumer Service subscribes to its Event through a Dependency, type-checks and generates', () => {

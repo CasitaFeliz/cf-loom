@@ -85,7 +85,6 @@ const getPayment = providedEndpoint('payments-service', {
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: { getPayment },
   events: {},
   standardRejections: {

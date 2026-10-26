@@ -1,10 +1,11 @@
-import type { Definitions, Root } from '../declarations/index.ts';
+import type { ContractPackage, Definitions, Root } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
 import { openCompositionsOf, walkMeetingSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from '../written/index.ts';
 import { codeOnceFailures } from './code-once.ts';
 import { exportFailures } from './definitions.ts';
 import { dependencyFailures } from './dependencies.ts';
+import { dependencyPackageFailures } from './dependency-packages.ts';
 import { endpointFailures } from './endpoints.ts';
 import type { DeclarationFailure, Failure } from './failures.ts';
 import { fieldFailures } from './fields.ts';
@@ -68,13 +69,32 @@ export type ImportedDefinitions = PackageIdentity & {
 export type ResolvedDefinitions = Extract<ImportedDefinitions, { readonly kind: 'identified' }>;
 
 /**
- * The package a Root sits in: its package.json name, scope included; every Definitions Package its
- * files import, as Node resolved them, named by their package.json or not; and what the Root file
- * exports beside the Root, by name, which a Definitions Package's members are.
+ * A Contract Package the Root's files import, as Node resolved it: who its package.json says it
+ * is, the `contract` its module exports, and the other imported Contract Packages its files
+ * import, directly or through any package, which says which of two exporters of one Element
+ * imports it from the other.
+ */
+export type ImportedContractPackage = PackageIdentity & {
+  readonly contract: ContractPackage;
+  readonly reaches: readonly ImportedContractPackage[];
+};
+
+/** An imported Contract Package whose package.json names it, the only kind a Dependency can record the version of. */
+export type ResolvedContractPackage = Extract<
+  ImportedContractPackage,
+  { readonly kind: 'identified' }
+>;
+
+/**
+ * The package a Root sits in: its package.json name, scope included; every Definitions Package and
+ * every Contract Package its files import, as Node resolved them, named by their package.json or
+ * not; and what the Root file exports beside the Root, by name, which a Definitions Package's
+ * members are.
  */
 export type RootPackage = {
   readonly packageName: string;
   readonly packages: readonly ImportedDefinitions[];
+  readonly contractPackages: readonly ImportedContractPackage[];
   readonly rootExports: Readonly<Record<string, unknown>>;
 };
 
@@ -99,7 +119,7 @@ export type ValidRoot = Extract<ValidatedRoot, { readonly kind: 'valid' }>;
  * types state.
  */
 export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoot {
-  const { packages, rootExports } = rootPackage;
+  const { packages, contractPackages, rootExports } = rootPackage;
   const declarations = declarationsOf(root, rootExports);
   const slots = schemaSlotsOf(declarations);
   const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
@@ -109,6 +129,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
     ...packageNameFailures(root, rootPackage.packageName),
     ...exportFailures(declarations, rootExports),
     ...provenanceFailures(declarations, packages, walked.met),
+    ...dependencyPackageFailures(declarations, contractPackages),
     ...codeOnceFailures(declarations, packages),
     ...slots.failures,
     ...schemaFailures(declarations, nodes),

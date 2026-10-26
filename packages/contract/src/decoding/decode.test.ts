@@ -2194,7 +2194,6 @@ function declaredSnapshot() {
   });
   const payments = {
     name: 'payments-service',
-    version: '5.1.0',
     endpoints: {},
     events: { paymentSettledV1 },
     standardRejections: {

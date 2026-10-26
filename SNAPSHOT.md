@@ -177,7 +177,7 @@ Every code that ever existed in the Contract stays here, with the status and bod
 
 - A Subscription records the Group that lists it.
 - A removed Subscription stays as a tombstone that keeps its Event and drops its Group and description, so its name is never reused (see [Subscriptions](COMPATIBILITY.md#subscriptions)); its `removedIn` is the version that first published it removed, a prerelease included.
-- A Dependency records the Provider's Contract Package version it was declared against, and each Endpoint's identity together with its name. The Events a Service receives from a Provider are recorded once, by its Subscriptions, each `event` naming the Provider before the Event's identity.
+- A Dependency records, as `against`, the version in the package.json of the installed Contract Package that exports its Provider's Elements, found as a Definitions Package is, by identity among the packages the Root's files import (a declaration that belongs to a package whose package.json has no name or no version fails validation, `dependency-package`, and so does one that no installed package exports, or that two do and neither imports it from the other), and each Endpoint's identity together with its name. The Events a Service receives from a Provider are recorded once, by its Subscriptions, each `event` naming the Provider before the Event's identity.
 
 ## Lifecycle and tombstones
 

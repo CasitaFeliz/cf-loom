@@ -22,7 +22,7 @@ import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
-import { payments } from '../test/payments-package.ts';
+import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
 import { entriesOf } from '../test/tarball.ts';
@@ -2532,6 +2532,82 @@ describe('cf-loom generate: the package a module belongs to', () => {
   });
 });
 
+describe('cf-loom generate: the Contract Package a Dependency is against', () => {
+  const dependencyPackageLine = (what: string) =>
+    `dependencies.payments-service dependency-package: ${what}\n`;
+
+  test('a Dependency is against the version in the package.json of the installed package', () => {
+    const project = aProject({ ...aSubscribingRoot(), ...installedPayments({ version: '7.4.2' }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.dependencies['payments-service'].against).toBe('7.4.2');
+  });
+
+  test('a Dependency on a Provider the project holds in a file of its own, installed from no package, exits 1', () => {
+    const own = aSubscribingRoot();
+    const files = {
+      ...own,
+      'src/contract/index.ts': (own['src/contract/index.ts'] ?? '').replace(
+        `'${paymentsSpecifier}'`,
+        "'./payments.ts'",
+      ),
+      'src/contract/payments.ts': paymentsSource,
+    };
+    const project = aProject(files);
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: dependencyPackageLine(
+        "A Dependency's provider is an installed Contract Package's contract: no installed package exports payments-service's Elements",
+      ),
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
+  test('a Contract Package whose package.json has no version exits 1, naming the package', () => {
+    const project = aProject({ ...aSubscribingRoot(), ...installedPayments({ version: null }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: dependencyPackageLine(
+        `A Dependency's Contract Package has a name and a version: ${paymentsSpecifier} has no version in its package.json`,
+      ),
+    });
+  });
+
+  test('a Contract Package its package.json does not name exits 1, naming the package.json', () => {
+    const files = aSubscribingRoot();
+    const project = aProject({
+      ...files,
+      ...installedPayments(),
+      [`node_modules/${paymentsSpecifier}/package.json`]: JSON.stringify({
+        version: '5.1.0',
+        type: 'module',
+        exports: './index.js',
+      }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: dependencyPackageLine(
+        `A Dependency's Contract Package has a name and a version: node_modules/${paymentsSpecifier}/package.json has no name`,
+      ),
+    });
+  });
+});
+
 describe('cf-loom verify', () => {
   test('verify exits 0 when contract.snapshot.json is up to date', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
@@ -2699,13 +2775,16 @@ function aMessagingRoot({
   return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
 }
 
-/** `aRoot` also subscribing, as `notifyOnSettled`, to `PaymentSettled@1` of its Dependency `payments-service`. */
-function aSubscribingRoot(): Files {
-  const root = aRoot();
+/** `aRoot` also subscribing, as `notifyOnSettled`, to `PaymentSettled@1` of its Dependency `payments-service`, installed at the version given. */
+function aSubscribingRoot(
+  options: Parameters<typeof aRoot>[0] = {},
+  paymentsVersion = '5.1.0',
+): Files {
+  const root = aRoot(options);
   const index = [
     "import { defineService, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
     "import { ping } from './ping.endpoint.ts';",
-    "import { payments } from './payments.ts';",
+    `import { payments } from '${paymentsSpecifier}';`,
     '',
     'export const notifyOnSettled = defineSubscription({',
     "  name: 'notifyOnSettled',",
@@ -2722,7 +2801,11 @@ function aSubscribingRoot(): Files {
     '});',
     '',
   ].join('\n');
-  return { ...root, 'src/contract/index.ts': index, 'src/contract/payments.ts': payments };
+  return {
+    ...root,
+    ...installedPayments({ version: paymentsVersion }),
+    'src/contract/index.ts': index,
+  };
 }
 
 /** The Definitions Package `@org/definitions`, whose Root declares nothing. */
@@ -2791,6 +2874,40 @@ function publishedAs(
 
 function servedAs(packageName: string, ...versions: readonly ServedVersion[]): RegistryOptions {
   return { packages: { [packageName]: { versions } } };
+}
+
+/** What a registry serves when it serves every package of each of the options. */
+function servedTogether(...served: readonly RegistryOptions[]): RegistryOptions {
+  return { packages: Object.assign({}, ...served.map(({ packages }) => packages)) };
+}
+
+/** The package of payments-service, with the versions it lists. */
+function paymentsListing(...versions: readonly string[]): RegistryOptions {
+  return servedAs(paymentsSpecifier, ...versions.map((version) => aVersion(version)));
+}
+
+/** The package `@org/definitions`, with the versions it lists. */
+function definitionsListing(...versions: readonly string[]): RegistryOptions {
+  return servedAs('@org/definitions', ...versions.map((version) => aVersion(version)));
+}
+
+/** What `check` and `publish` print of a Dependency against a version the registry does not list. */
+const paymentsUnlisted = (version: string) =>
+  `dependencies.payments-service is against ${paymentsSpecifier}@${version}, which the registry does not list: install a published version`;
+
+/** What `check` and `publish` print of a Definitions Package version a Contract's origins name that the registry does not list. */
+const definitionsUnlisted = (version: string) =>
+  `@org/definitions@${version}, which the Contract uses, is not listed by the registry: install a published version`;
+
+/** The project, generated, that depends on payments-service and takes its Standard Rejections from `@org/definitions` at 4.2.0. */
+async function aProjectOfBothVersions(lab: Lab, payments = '5.1.0'): Promise<string> {
+  const project = await aGeneratedProject(lab, {
+    ...aSubscribingRoot({}, payments),
+    ...installedDefinitions('node_modules'),
+  });
+  takeStandardRejections(project);
+  await generateIn(lab, project);
+  return project;
 }
 
 /** A served version whose package.json declares the peer ranges given, as published by a project that installed other versions. */
@@ -3048,6 +3165,48 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       ].join('\n'),
       stderr: '',
     });
+  });
+
+  test('check prints a version the registry does not list on stderr and exits by its Changes, in lines and in --json', async ({
+    lab,
+  }) => {
+    const project = await aProjectOfBothVersions(lab, '0.0.0');
+    const served = paymentsListing('5.1.0');
+
+    const lines = await checkedAgainst(lab, { project, served });
+    const json = await checkedAgainst(lab, { project, served }, '--json');
+
+    const unlisted = [paymentsUnlisted('0.0.0'), definitionsUnlisted('4.2.0')];
+    expect(lines.ran).toMatchObject({ status: 0, stderr: `${unlisted.join('\n')}\n` });
+    expect(json.ran).toMatchObject({ status: 0, stderr: `${unlisted.join('\n')}\n` });
+    expect(JSON.parse(json.ran.stdout)).toMatchObject({ status: 0 });
+  });
+
+  test('check exits 2 on a Breaking Change that needs an Approval, and still prints a version the registry does not list', async ({
+    lab,
+  }) => {
+    const before = aSubscribingRoot({ body: 'z.object({ ok: z.boolean(), extra: z.string() })' });
+    const changed = await aChangedProject(lab, { before, after: aSubscribingRoot() });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.status).toBe(2);
+    expect(ran.stderr).toBe(
+      [
+        '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it',
+        paymentsUnlisted('5.1.0'),
+        '',
+      ].join('\n'),
+    );
+  });
+
+  test('check prints nothing of versions the registry lists', async ({ lab }) => {
+    const project = await aProjectOfBothVersions(lab);
+    const served = servedTogether(paymentsListing('5.1.0', '5.2.0'), definitionsListing('4.2.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('a package npm cannot find has no Baseline: check names the registry and the npm user, and exits 0', async ({
@@ -4687,6 +4846,75 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(registry.requests).toEqual([]);
   });
 
+  test('a Dependency against a version the registry does not list exits 3 and puts nothing', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aSubscribingRoot({}, '0.0.0'));
+    const served = paymentsListing('5.1.0');
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('0.0.0')}\n` });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package version an origin names that the registry does not list exits 3 and puts nothing', async ({
+    lab,
+  }) => {
+    const project = await aProjectOfBothVersions(lab);
+    const served = paymentsListing('5.1.0');
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    expect(ran).toMatchObject({ status: 3, stderr: `${definitionsUnlisted('4.2.0')}\n` });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('versions the registry does not list exit 3 although a Change is refused', async ({
+    lab,
+  }) => {
+    const before = aSubscribingRoot();
+    const after = aSubscribingRoot({ lifecycle: 'retired' });
+    const changed = await aChangedProject(lab, { before, after });
+
+    const { ran, registry } = await publishedAgainst(lab, changed);
+
+    expect(ran.stdout).toContain('retired-before-deprecated: Breaking, refused');
+    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('5.1.0')}\n` });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a dry run exits 3 on a version the registry does not list too', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aSubscribingRoot({}, '0.0.0'));
+
+    const { ran } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('0.0.0')}\n` });
+  });
+
+  test('a Provider package the registry does not know is a version it does not list, not a login to check', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aSubscribingRoot());
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('5.1.0')}\n` });
+    expect(registry.requests.filter(({ path }) => path === '/-/whoami')).toHaveLength(1);
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('versions the registry lists publish as before', async ({ lab }) => {
+    const project = await aProjectOfBothVersions(lab);
+    const served = servedTogether(paymentsListing('5.1.0'), definitionsListing('4.2.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(registry)).toHaveLength(1);
+  });
+
   test('a Service never published whose Message Versions leave a gap publishes nothing and exits 1', async ({
     lab,
   }) => {
@@ -5227,7 +5455,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
-  test('the published package.json carries the version, the peers as carets and cfLoom with the hash of the published Snapshot, and the built entry carries the version', async ({
+  test('the published package.json carries the version, the CLI’s peers and cfLoom with the hash of the published Snapshot', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
@@ -5256,7 +5484,6 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       cfLoom: cfLoomMetadata,
     });
     expect(registry.published[0]?.manifest).toMatchObject({ cfLoom: cfLoomMetadata });
-    expect(files['dist/index.js']).toMatch(/version: ['"]1\.0\.0['"]/);
   });
 
   test('cfLoom.dependencies leaves out the Event of a Subscription the published Snapshot keeps as removed', async ({
@@ -5270,7 +5497,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       event: 'payments-service:PaymentRefunded@1',
     };
     const baseline = { subscriptions: { ...subscriptions, legacySync: removed } };
-    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0', baseline));
+    const served = servedTogether(
+      servedAs(ordersPackage, publishedAs(project, '1.0.0', baseline)),
+      paymentsListing('5.1.0'),
+    );
 
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
@@ -5390,7 +5620,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       ...aBuiltDefinitions({ name: '@other/definitions' }, { source }),
     };
     const project = await aGeneratedProject(lab, files);
-    const registry = await lab.aRegistry({});
+    const registry = await lab.aRegistry(definitionsListing('4.2.0'));
     const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
 
     const ran = await cfLoomWith(project, env, 'publish');
