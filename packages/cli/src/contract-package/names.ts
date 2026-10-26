@@ -7,7 +7,7 @@ import {
   stringLiteralOf,
 } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
-import { declaredFiles } from './paths.ts';
+import { declaredFolders } from './paths.ts';
 
 /** An Element the package exports, which its Provider's name marks: an Endpoint by name, an Event's Message Version by name and version. */
 export type ProvidedDeclaration =
@@ -25,7 +25,7 @@ export type PackagedDeclaration =
 
 /** The file of a declaration in the package, its name in kebab-case. */
 export function fileOf(declared: PackagedDeclaration): string {
-  const { folder } = declaredFiles[declared.kind];
+  const folder = declaredFolders[declared.kind];
   switch (declared.kind) {
     case 'endpoint':
     case 'guard':

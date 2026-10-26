@@ -1,5 +1,4 @@
 export { handlerLocalOf, pairingNameOf } from './code-names.ts';
-export { isWrittenByGenerate } from './generated-header.ts';
 export type { DeclarationHandled, Handled, MessageHandled } from './handled.ts';
 export { retiredHandledOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';

@@ -14,11 +14,11 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import {
   builtFolder,
   isPackageManifest,
-  isPackagePath,
   type PackageFile,
   packagePaths,
 } from '../contract-package/index.ts';
 import { oneLineOf } from '../loading/index.ts';
+import { isWrittenBy } from '../source-text/index.ts';
 
 /** What sits where the package is to be written. */
 type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
@@ -94,11 +94,12 @@ function isLink(target: string): boolean {
 }
 
 /**
- * A folder `package` wrote: outside the folders it keeps, every file is one `package` writes,
- * and its package.json is one `package` wrote.
+ * A folder some cf-loom `package` wrote: its package.json carries `cfLoom`, and outside the
+ * folders it keeps every file is one `package` writes, as its own marks tell, whichever path this
+ * cf-loom would give it.
  */
 function isPreviousOutput(target: string): boolean {
-  if (!filesOutsideKeptOf(target).every(isPackagePath)) {
+  if (!filesOutsideKeptOf(target).every((path) => isWrittenByPackage(target, path))) {
     return false;
   }
   const manifestPath = join(target, packagePaths.manifest);
@@ -110,6 +111,16 @@ function isPreviousOutput(target: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Whether `package` wrote a file: one of the three it writes as JSON, or a module that starts with its header. */
+function isWrittenByPackage(target: string, path: string): boolean {
+  const asJson: readonly string[] = [
+    packagePaths.manifest,
+    packagePaths.snapshot,
+    packagePaths.tsconfig,
+  ];
+  return asJson.includes(path) || isWrittenBy('package', readFileSync(join(target, path), 'utf8'));
 }
 
 /** Every file of a folder outside the folders a previous output keeps, by its path in it. */

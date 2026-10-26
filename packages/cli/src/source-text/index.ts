@@ -14,6 +14,7 @@ export {
   defaultImportsOf,
   headerOf,
   importSpecifierOf,
+  isWrittenBy,
   moduleTextOf,
   namedImportOf,
   namespaceImportOf,

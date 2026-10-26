@@ -3,11 +3,8 @@ import { join } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
 import { generatedEnding, layoutFolder } from '../config/index.ts';
 import { filesUnder, insideContractOf, oneLineOf, realPathOf } from '../loading/index.ts';
-import {
-  type HandlerPath,
-  isWrittenByGenerate,
-  recordedHandlersOf,
-} from '../service-code/index.ts';
+import { type HandlerPath, recordedHandlersOf } from '../service-code/index.ts';
+import { isWrittenBy } from '../source-text/index.ts';
 import type { PlacedService } from './handler-files.ts';
 import { type Move, placementOf } from './placement.ts';
 
@@ -76,7 +73,7 @@ function writtenFilesOf(directory: string, files: readonly string[]): WrittenFil
   for (const path of files) {
     try {
       const text = readFileSync(join(directory, path), 'utf8');
-      if (isWrittenByGenerate(text)) {
+      if (isWrittenBy('generate', text)) {
         written.push({ path, text });
       }
     } catch (e) {
