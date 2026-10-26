@@ -495,7 +495,7 @@ function cycleLinesOf(lines: readonly string[]): readonly string[] {
   return lines.filter((line) => line.includes(unnamedCycle)).sort();
 }
 
-/** `cycle` holding `second`, which holds the def `def` before `cycle` again; `def` reaches back to `cycle`. */
+/** `cycle` holding `second`, which holds the def `def` before `cycle` again; `def` holds a date and reaches back to `cycle`. */
 function cycleThroughDef() {
   const cycle: z.ZodType = z.object({
     get b() {
@@ -512,6 +512,7 @@ function cycleThroughDef() {
   });
   const def: z.ZodType = z
     .object({
+      when: z.date(),
       get back() {
         return cycle;
       },

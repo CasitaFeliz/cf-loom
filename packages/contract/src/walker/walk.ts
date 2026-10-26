@@ -64,7 +64,8 @@ type WalkState = {
 /**
  * Walks every schema of one Snapshot at once, since recursion ids are unique and `defs` shared
  * across it; every construct that is not allowed is reported where it was written, and a cycle's
- * failure comes back at each place the cycle is met.
+ * failure comes back at each place the cycle is met. Each declaration walks a cycle no id names
+ * afresh, since it has no identity to share.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
   const { located: walkedLocations, defs, memoOf } = walkMeetingSchemas(located, originOf);
