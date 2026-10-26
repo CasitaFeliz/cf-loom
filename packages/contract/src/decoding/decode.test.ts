@@ -1169,7 +1169,7 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    describe('an Element is read by the form its lifecycle selects, so the key that breaks it is named', () => {
+    describe('an Element is read as declared or as a tombstone by its Group, a declared one by its lifecycle, so the key that breaks it is named', () => {
       const deprecatedAt = '2026-10-17T09:30:00Z';
       const elements = [
         {
@@ -1212,6 +1212,35 @@ describe('decodeSnapshot', () => {
       const everyField = everyForm.flatMap((placed) =>
         Object.keys(placed.element).map((field) => ({ ...placed, field })),
       );
+
+      const declaredForms = elements.flatMap(({ kind, map, identity, forms }) => [
+        { kind, form: 'active', map, identity, element: forms.active },
+        { kind, form: 'deprecated', map, identity, element: forms.deprecated },
+      ]);
+
+      test.each(declaredForms)(
+        'the $form form of a published $kind without its Group is read as a tombstone, as the format defines',
+        ({ map, identity, element }) => {
+          const { group: _group, ...tombstoneLike } = element;
+
+          const result = serviceWith({ [map]: { [identity]: tombstoneLike } });
+
+          expect(result).toEqual(malformedAt([map, identity, 'lifecycle'], 'is not "retired"'));
+        },
+      );
+
+      test('a Retired Endpoint without its Group is read as a tombstone, so its first other key is named', () => {
+        const { group: _group, ...tombstoneLike } = retiredEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': tombstoneLike } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is a key its format does not define',
+          ),
+        );
+      });
 
       test('a published Endpoint with a visibility that is no Visibility is malformed at the visibility', () => {
         const endpoint = { ...anEndpoint, visibility: 'nope' };
@@ -1382,7 +1411,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['subscriptions', 'notifyOnPlaced']);
     });
 
-    describe('a Subscription is read as declared or as a tombstone, so the key that breaks it is named', () => {
+    describe('a Subscription is read as declared or as a tombstone by its Group, so the key that breaks it is named', () => {
       const event = 'orders-service:OrderPlaced@1';
       const declared = { group: 'orders', description: 'Receives it', event };
       const removed = { event, removedIn: '3.2.0' };
@@ -1447,6 +1476,14 @@ describe('decodeSnapshot', () => {
         const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
 
         expect(result).toEqual(malformedAt(at(key), reason));
+      });
+
+      test('a declared Subscription without its Group is read as a tombstone, as the format defines', () => {
+        const { group: _group, ...tombstoneLike } = declared;
+
+        const result = serviceWith({ subscriptions: { notifyOnPlaced: tombstoneLike } });
+
+        expect(result).toEqual(malformedAt(at('removedIn'), 'is missing'));
       });
 
       test.for([null, 42, 'notifyOnPlaced', []])(

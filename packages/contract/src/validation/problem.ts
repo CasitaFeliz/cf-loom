@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { $ZodIssue } from 'zod/v4/core';
 import type { Path } from '../walker/index.ts';
+import { isAbsentAt } from '../written/index.ts';
 import { locationOf } from './failures.ts';
 import { issueWordsOf } from './issue-words.ts';
 
@@ -12,22 +13,10 @@ export type Read<Output> =
   | { readonly kind: 'read'; readonly value: Output }
   | { readonly kind: 'refused'; readonly problems: readonly [Problem, ...Problem[]] };
 
-/** What the input holds at a path, counting only keys it has itself: undefined when it holds none. */
-function valueAtPath(input: unknown, path: readonly PropertyKey[]): unknown {
-  let value = input;
-  for (const step of path) {
-    if (typeof value !== 'object' || value === null || !Object.hasOwn(value, step)) {
-      return undefined;
-    }
-    value = Reflect.get(value, step);
-  }
-  return value;
-}
-
 /** Absence is a fact about the input, so it is worded before any message a schema wrote. */
 function problemOf(issue: $ZodIssue, input: unknown): Problem {
   const at: Path = issue.path.map((step) => (typeof step === 'symbol' ? String(step) : step));
-  const reason = valueAtPath(input, issue.path) === undefined ? 'is missing' : issue.message;
+  const reason = isAbsentAt(input, issue.path) ? 'is missing' : issue.message;
   if (issue.code === 'unrecognized_keys') {
     return { at: [...at, issue.keys[0] ?? ''], reason };
   }

@@ -273,6 +273,7 @@ export {
   eventServiceOf,
   eventsOf,
   inputParts,
+  isAbsentAt,
   isInputPart,
   isListable,
   isPlainObject,

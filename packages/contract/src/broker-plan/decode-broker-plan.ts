@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { $ZodRawIssue } from 'zod/v4/core';
 import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
@@ -10,14 +9,7 @@ export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
 
-/** The broker plan calls a string a text. */
-function wrongText(reason: string) {
-  return {
-    error: (issue: $ZodRawIssue) => (issue.code === 'invalid_type' ? reason : undefined),
-  };
-}
-
-const text = z.string(wrongText('is not a text'));
+const text = z.string('is not a text');
 const stream = z.strictObject({
   service: text,
   subjects: z.array(text).min(1, 'holds no subject'),
@@ -25,7 +17,7 @@ const stream = z.strictObject({
 const consumer = z.strictObject({ service: text, stream: text, subject: text });
 const plan = z.strictObject({
   prefix: z
-    .string(wrongText('is not a text or null'))
+    .string('is not a text or null')
     .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
     .nullable(),
   streams: z.record(z.string(), stream),
