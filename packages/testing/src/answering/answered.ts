@@ -13,7 +13,7 @@ import {
   upperSnakeCase,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
-import { type ListedEndpoint, type Matched, whoOf } from '../provided/index.ts';
+import { type ListedEndpoint, type ListedMatch, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
 import {
   declaredRejectionResponseOf,
@@ -31,7 +31,7 @@ const unsendable = 'the scripted answer cannot be sent';
  * A scripted answer as the Provider would send it, a network failure thrown as `fetch` throws it;
  * whatever throws while an answer is read is the test's mistake.
  */
-export function responseOf(answer: Answer, { listed, otherMethods }: Matched): Response {
+export function responseOf(answer: Answer, { listed, otherMethods }: ListedMatch): Response {
   switch (answer.kind) {
     case 'success':
       return builtOf(listed, unsendable, () => scriptedSuccessResponseOf(answer.success, listed));

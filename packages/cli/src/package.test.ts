@@ -1256,6 +1256,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
         // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
         ORDER_LOCKED: snapshot.codes.ORDER_LOCKED,
       },
+      shadowing: {},
     });
     const names = Object.values(exported.endpoints).map((endpoint) =>
       Reflect.get(Object(endpoint), 'name'),

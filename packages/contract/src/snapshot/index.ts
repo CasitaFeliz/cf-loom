@@ -44,6 +44,7 @@ export type {
   GroupSnapshot,
   GuardSnapshot,
   ServiceSnapshot,
+  ShadowingSnapshot,
   Snapshot,
   SnapshotFormat,
   SubscriptionSnapshot,

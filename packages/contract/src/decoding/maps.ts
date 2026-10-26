@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { readEndpointIdentity } from '../written/index.ts';
+import { notEndpointIdentity } from './texts.ts';
 
 /** Zod's record drops a `__proto__` key without a word, so a Snapshot that holds one is refused first. */
 const withoutProtoKey = z.unknown().superRefine((input, ctx) => {
@@ -14,6 +16,17 @@ const withoutProtoKey = z.unknown().superRefine((input, ctx) => {
 /** A map of a Snapshot by key, of which every key survives being read. */
 export function byKey<Value extends z.core.$ZodType>(value: Value) {
   return z.pipe(withoutProtoKey, z.record(z.string(), value));
+}
+
+/** A map of a Snapshot by Endpoint identity: a key that is none is refused where it stands. */
+export function byEndpointIdentity<Value extends z.core.$ZodType>(value: Value) {
+  return byKey(value).superRefine((entries, ctx) => {
+    for (const key of Object.keys(entries)) {
+      if (readEndpointIdentity(key) === undefined) {
+        ctx.addIssue({ code: 'custom', message: notEndpointIdentity, path: [key] });
+      }
+    }
+  });
 }
 
 /**

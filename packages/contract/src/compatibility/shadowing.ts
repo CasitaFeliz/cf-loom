@@ -5,13 +5,16 @@ import {
   type ServiceSnapshot,
 } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-import { type Matchable, matchedOf, textAcceptanceOf } from '../wire/index.ts';
-import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
+import {
+  type EndpointPath,
+  endpointPathOf,
+  matchedOf,
+  sharedUrlOf,
+  textAcceptanceOf,
+  unmatchedText,
+} from '../wire/index.ts';
 import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
-
-/** A declared Endpoint as routing reads it: its identity, method and path segments. */
-export type EndpointPath = Matchable & { readonly identity: string };
 
 /**
  * The Endpoints each side routes, Retired ones still declared included, and those the Baseline
@@ -23,9 +26,6 @@ export type EndpointPaths = {
   readonly added: readonly EndpointPath[];
 };
 
-/** A segment text no literal spells, so only a param matches it. */
-const unmatchedText = '{}';
-
 /** Both sides' declared Endpoints as routing reads them, segments from each identity. */
 export function endpointPathsOf(
   baseline: PublishedServiceSnapshot,
@@ -33,8 +33,8 @@ export function endpointPathsOf(
 ): EndpointPaths {
   const before = Object.entries(baseline.endpoints)
     .filter(([, endpoint]) => isDeclared(endpoint))
-    .map(([identity]) => pathOf(identity));
-  const after = Object.keys(proposed.endpoints).map((identity) => pathOf(identity));
+    .map(([identity]) => endpointPathOf(identity));
+  const after = Object.keys(proposed.endpoints).map((identity) => endpointPathOf(identity));
   const declaredBefore = new Set(before.map(({ identity }) => identity));
   const added = after.filter(({ identity }) => !declaredBefore.has(identity));
   return { baseline: before, proposed: after, added };
@@ -53,7 +53,7 @@ export function shadowingDifferencesOf(
     return [];
   }
   const sides = [compared.baseline, compared.proposed] as const;
-  const kept: KeptPath = { ...pathOf(pair.identity), sides };
+  const kept: KeptPath = { ...endpointPathOf(pair.identity), sides };
   const takers = new Set<string>();
   for (const added of paths.added) {
     const taker = takerOf(kept, added, paths);
@@ -74,7 +74,7 @@ type KeptPath = EndpointPath & {
  * the URL both it and the added Endpoint match, when the kept Endpoint's params may take it.
  */
 function takerOf(kept: KeptPath, added: EndpointPath, paths: EndpointPaths): string | undefined {
-  const texts = overlapOf(kept, added);
+  const texts = sharedUrlOf(kept, added);
   if (
     texts === undefined ||
     !kept.sides.some((side) => mayTake(side, kept, texts)) ||
@@ -84,25 +84,6 @@ function takerOf(kept: KeptPath, added: EndpointPath, paths: EndpointPaths): str
   }
   const winner = matchedOf(paths.proposed, kept.method, texts)?.identity;
   return winner === kept.identity ? undefined : winner;
-}
-
-/**
- * The segment texts of a URL two Endpoints both match, a literal where either has one and
- * `unmatchedText` where both have a param, or `undefined` when they share no URL.
- */
-function overlapOf(kept: EndpointPath, added: EndpointPath): readonly string[] | undefined {
-  if (kept.method !== added.method || kept.segments.length !== added.segments.length) {
-    return undefined;
-  }
-  const texts: string[] = [];
-  for (const [index, segment] of kept.segments.entries()) {
-    const text = textAt(segment, added.segments[index]);
-    if (text === undefined) {
-      return undefined;
-    }
-    texts.push(text);
-  }
-  return texts;
 }
 
 /**
@@ -122,15 +103,4 @@ function paramMayTake(side: EndpointSnapshot, index: number, text: string): bool
   const name = side.params[index];
   const field = name !== undefined && Object.hasOwn(fields, name) ? fields[name] : undefined;
   return field === undefined || textAcceptanceOf(field.schema, text) !== 'refused';
-}
-
-function textAt(kept: PathSegment, added: PathSegment | undefined): string | undefined {
-  if (kept.kind === 'literal') {
-    return added?.kind === 'literal' && added.text !== kept.text ? undefined : kept.text;
-  }
-  return added?.kind === 'literal' ? added.text : unmatchedText;
-}
-
-function pathOf(identity: string): EndpointPath {
-  return { identity, ...endpointSegmentsOf(identity) };
 }

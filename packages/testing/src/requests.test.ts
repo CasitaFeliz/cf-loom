@@ -6,7 +6,12 @@ import {
   defineService,
   type Endpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import {
+  exportedSnapshotOf,
+  reservedResponseOf,
+  snapshotOf,
+  validateRoot,
+} from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -72,6 +77,18 @@ function latestPayment(fields: {
   });
 }
 
+/** A Private `latestPayment` that is Deprecated, which a Private Endpoint may be and stays live. */
+const deprecatedLatestPayment = defineEndpoint({
+  name: 'getLatestPayment',
+  method: 'GET',
+  path: '/payments/latest',
+  visibility: 'private',
+  description: 'The latest payment',
+  lifecycle: 'deprecated',
+  deprecatedAt: '2026-11-01T00:00:00Z',
+  success: { status: 200, body: z.object({ id: z.string() }) },
+});
+
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
 function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
@@ -129,6 +146,13 @@ function withoutField(contractPackage: typeof payments, identity: string, field:
   return { ...contractPackage, exportedSnapshot };
 }
 
+/** The Provider's Contract Package with `entry` under `key` of its exported Snapshot's `map`. */
+function withKey(map: 'endpoints' | 'shadowing', key: string, entry: unknown): Carrying {
+  const exportedSnapshot = structuredClone(payments.exportedSnapshot);
+  Reflect.set(exportedSnapshot[map], key, entry);
+  return { ...payments, exportedSnapshot };
+}
+
 const paymentsDependency = defineDependency({
   provider: payments,
   endpoints: [payments.endpoints.getPayment, payments.endpoints.capturePayment],
@@ -147,6 +171,58 @@ function countingFake(options: { readonly baseUrl?: string } = {}) {
   fake.on('capturePayment').otherwise((builder, { params, body }) => {
     taken.capturePayment += 1;
     return builder.success({ id: params.paymentId, amount: body.amount });
+  });
+  return { fake, taken };
+}
+
+/** A fake of `getPayment` whose Provider also declares `latest`, which its Contract Package does not export. */
+function fakeBesides(latest: Endpoint) {
+  const declared = [getPayment, capturePayment, getSummary, latest];
+  const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
+  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
+  const fake = fakeProvider(dependency);
+  const taken = { getPayment: 0 };
+  fake.on('getPayment').otherwise((builder, { params }) => {
+    taken.getPayment += 1;
+    return builder.success({ id: params.paymentId });
+  });
+  return { fake, taken };
+}
+
+/**
+ * A fake over a Provider that exports `GET /p/:x/b` and also declares a Retired `GET /p/a/:y`,
+ * which `shadowing` lists, and a live Private `GET /p/a/c`, which it does not.
+ */
+function fakeOverPaths() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const first = defineEndpoint({
+    ...base,
+    name: 'getFirst',
+    path: '/p/:x/b',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const retired = defineEndpoint({
+    ...base,
+    name: 'getRetired',
+    path: '/p/a/:y',
+    visibility: 'internal',
+    lifecycle: 'retired',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const hidden = defineEndpoint({
+    ...base,
+    name: 'getHidden',
+    path: '/p/a/c',
+    visibility: 'private',
+  });
+  const provider = contractPackageOf({ getFirst: first }, [first, retired, hidden]);
+  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getFirst] });
+  const fake = fakeProvider(dependency);
+  const taken = { getFirst: 0 };
+  fake.on('getFirst').otherwise((builder) => {
+    taken.getFirst += 1;
+    return builder.success();
   });
   return { fake, taken };
 }
@@ -387,28 +463,70 @@ describe('fakeProvider: requests', () => {
     expect(taken.getPayment).toBe(0);
   });
 
-  test.each([
-    ['Private', latestPayment({ visibility: 'private', lifecycle: 'active' })],
-    ['Retired', latestPayment({ visibility: 'internal', lifecycle: 'retired' })],
-  ])(
-    'a %s Endpoint whose literal would beat a listed param never takes a request: the param does',
-    async (_, latest) => {
-      const declared = [getPayment, capturePayment, getSummary, latest];
-      const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const dependency = defineDependency({
-        provider: provider,
-        endpoints: [provider.endpoints.getPayment],
-      });
-      const fake = fakeProvider(dependency);
-      fake
-        .on('getPayment')
-        .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
+  test.each(['private', 'internal'] as const)(
+    'a request a Retired %s Endpoint wins is answered RETIRED as serve answers it, and takes no step',
+    async (visibility) => {
+      const { fake, taken } = fakeBesides(latestPayment({ visibility, lifecycle: 'retired' }));
 
       const response = await fake.fetch(
         new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
       );
 
-      expect(await response.json()).toEqual({ id: 'latest' });
+      const retired = reservedResponseOf('RETIRED');
+      expect(response.status).toBe(retired.status);
+      expect(response.headers.get('content-type')).toBe(retired.headers.get('content-type'));
+      expect(await response.text()).toBe(await retired.text());
+      expect(response.headers.has('deprecation')).toBe(false);
+      expect(taken.getPayment).toBe(0);
+    },
+  );
+
+  test.each([
+    ['a live Private Endpoint takes', '/p/a/c'],
+    ['only a Retired Endpoint shadowing lists would take', '/p/a/z'],
+  ])(
+    'a request no exported Endpoint matches, which %s, is the mistake of matching none',
+    async (_, path) => {
+      const { fake, taken } = fakeOverPaths();
+
+      const answering = fake.fetch(new Request(`https://payments-service.test${path}`));
+
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        `payments-service: no Endpoint it exports is GET ${path} under /`,
+      );
+      expect(taken.getFirst).toBe(0);
+    },
+  );
+
+  test('a request an exported Endpoint matches and a shadowing Retired one wins is answered RETIRED', async () => {
+    const { fake, taken } = fakeOverPaths();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/p/a/b'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getFirst).toBe(0);
+  });
+
+  test.each([
+    ['Active', latestPayment({ visibility: 'private', lifecycle: 'active' })],
+    ['Deprecated', deprecatedLatestPayment],
+  ])(
+    'a request a %s Private Endpoint wins is a mistake naming it, and takes no step',
+    async (_, latest) => {
+      const { fake, taken } = fakeBesides(latest);
+
+      const answering = fake.fetch(
+        new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+      );
+
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        'payments-service: the Provider does not export GET /payments/latest, which GET /payments/latest reaches',
+      );
+      expect(taken.getPayment).toBe(0);
     },
   );
 
@@ -445,6 +563,22 @@ describe('fakeProvider: requests', () => {
       provider: withoutField(payments, 'GET /payments/{}', 'name'),
       refusal:
         "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
+    },
+    {
+      given: 'with a shadowing key that is no Endpoint’s identity',
+      provider: withKey('shadowing', 'garbage', { lifecycle: 'retired' }),
+      refusal:
+        "payments-service's exported Snapshot is malformed: shadowing.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
+    },
+    {
+      given: 'with an endpoints key that is no Endpoint’s identity',
+      provider: withKey(
+        'endpoints',
+        'garbage',
+        payments.exportedSnapshot.endpoints['GET /payments/{}'],
+      ),
+      refusal:
+        "payments-service's exported Snapshot is malformed: endpoints.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
     },
   ])(
     'a Contract Package $given is a bug, refused when the fake is created',

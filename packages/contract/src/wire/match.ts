@@ -1,9 +1,12 @@
-import type { PathSegment } from '../written/index.ts';
+import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
 import type { TextSource } from './text-parts.ts';
 import { isSegmentText, segmentTextOf } from './url-text.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
+
+/** A declared Endpoint as routing reads it: its identity, method and path segments. */
+export type EndpointPath = Matchable & { readonly identity: string };
 
 /**
  * The declared Endpoint a request matched, with where its text comes from; the methods its path
@@ -113,4 +116,38 @@ function paramsOf(
     }
   }
   return Object.fromEntries(params);
+}
+
+/** A segment text no literal spells, so only a param matches it. */
+export const unmatchedText = '{}';
+
+/**
+ * The segment texts of a URL two Endpoints both match, a literal where either has one and
+ * `unmatchedText` where both have a param, or `undefined` when they share no URL.
+ */
+export function sharedUrlOf(left: Matchable, right: Matchable): readonly string[] | undefined {
+  if (left.method !== right.method || left.segments.length !== right.segments.length) {
+    return undefined;
+  }
+  const texts: string[] = [];
+  for (const [index, segment] of left.segments.entries()) {
+    const text = sharedTextAt(segment, right.segments[index]);
+    if (text === undefined) {
+      return undefined;
+    }
+    texts.push(text);
+  }
+  return texts;
+}
+
+function sharedTextAt(left: PathSegment, right: PathSegment | undefined): string | undefined {
+  if (left.kind === 'literal') {
+    return right?.kind === 'literal' && right.text !== left.text ? undefined : left.text;
+  }
+  return right?.kind === 'literal' ? right.text : unmatchedText;
+}
+
+/** An Endpoint's identity as routing reads it, a `{}` as a param. */
+export function endpointPathOf(identity: string): EndpointPath {
+  return { identity, ...endpointSegmentsOf(identity) };
 }

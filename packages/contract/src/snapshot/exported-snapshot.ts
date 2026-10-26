@@ -1,5 +1,6 @@
 import { isLive } from '../declarations/index.ts';
 import { reachedDefsOf } from '../walker/index.ts';
+import { type EndpointPath, endpointPathOf, matchedOf, sharedUrlOf } from '../wire/index.ts';
 import { reachedCodesOf } from '../written/index.ts';
 import { codeNodesOf, endpointNodesOf, guardNodesOf } from './nodes.ts';
 import { isDeclaredRejection, type ListedRejection, ownRejectionsOf } from './own-rejections.ts';
@@ -10,12 +11,19 @@ import {
   type PublishedServiceSnapshot,
 } from './published.ts';
 import { reachedGuardNamesOf } from './reached-guards.ts';
-import type { ByKey, EndpointSnapshot, ExportedSnapshot, ServiceSnapshot } from './types.ts';
+import type {
+  ByKey,
+  EndpointSnapshot,
+  ExportedSnapshot,
+  ServiceSnapshot,
+  ShadowingSnapshot,
+} from './types.ts';
 
 /**
  * The Snapshot a Service's Contract Package exports, from its declared or published Snapshot: its
  * Public and Internal Endpoints and its Internal Events that are not Retired, and the Guards, codes
- * and recursive defs they reach, keyed and ordered as in the Snapshot.
+ * and recursive defs they reach, keyed and ordered as in the Snapshot, and the declared Endpoints
+ * it does not export that win a URL an exported one matches.
  */
 export function exportedSnapshotOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
@@ -40,7 +48,48 @@ export function exportedSnapshotOf(
     ...Object.values(codes).flatMap(codeNodesOf),
   ];
   const defs = keptOf(snapshot.defs, new Set(reachedDefsOf(nodes, snapshot.defs)));
-  return { format: snapshot.format, defs, endpoints, events, guards, codes };
+  const shadowing = shadowingOf(snapshot.endpoints, endpoints);
+  return { format: snapshot.format, defs, endpoints, events, guards, codes, shadowing };
+}
+
+/**
+ * The declared Endpoints a Contract Package does not export that win a URL an exported one
+ * matches, by identity and lifecycle, so a fake picks that winner as `serve` does; a tombstone
+ * declares none.
+ */
+function shadowingOf(
+  declared: ByKey<EndpointSnapshot | EndpointTombstone>,
+  exported: ByKey<EndpointSnapshot>,
+): ByKey<ShadowingSnapshot> {
+  const entries = Object.entries(declared).filter(isKeyedDeclared);
+  const routed = entries.map(([identity]) => endpointPathOf(identity));
+  const exportedRoutes = Object.keys(exported).map(endpointPathOf);
+  const unexported = entries.filter(([identity]) => !Object.hasOwn(exported, identity));
+  const carried = unexported.filter(([identity]) => {
+    return winsAnExportedUrl(endpointPathOf(identity), exportedRoutes, routed);
+  });
+  return Object.fromEntries(carried.map(([identity, { lifecycle }]) => [identity, { lifecycle }]));
+}
+
+/** Whether routing picks the candidate at a URL an exported Endpoint shares with it. */
+function winsAnExportedUrl(
+  candidate: EndpointPath,
+  exported: readonly EndpointPath[],
+  declared: readonly EndpointPath[],
+): boolean {
+  return exported.some((route) => {
+    const texts = sharedUrlOf(route, candidate);
+    if (texts === undefined) {
+      return false;
+    }
+    return matchedOf(declared, candidate.method, texts)?.identity === candidate.identity;
+  });
+}
+
+function isKeyedDeclared(
+  keyed: [string, EndpointSnapshot | EndpointTombstone],
+): keyed is [string, EndpointSnapshot] {
+  return isDeclared<EndpointSnapshot>(keyed[1]);
 }
 
 /** What a Contract Package needs of an Element to export it. */

@@ -44,5 +44,13 @@ export const pingService = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
+  exportedSnapshot: {
+    format: 1,
+    defs: {},
+    endpoints: {},
+    events: {},
+    guards: {},
+    codes: {},
+    shadowing: {},
+  },
 } as const satisfies ContractPackage;

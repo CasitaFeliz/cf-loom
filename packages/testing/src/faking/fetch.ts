@@ -4,6 +4,7 @@ import {
   type Reading,
   readingOf,
   receivedBodyOf,
+  reservedResponseOf,
   textPartsOf,
   withDeprecation,
 } from '@cf-loom/contract/internal';
@@ -12,7 +13,7 @@ import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import {
   type FakedProvider,
   type ListedEndpoint,
-  type Matched,
+  type ListedMatch,
   matchedOf,
   whoOf,
 } from '../provided/index.ts';
@@ -85,16 +86,24 @@ async function withMistakesRecorded(
 
 /**
  * One request top to bottom: matched to a listed Endpoint, then answered, with `Deprecation` when
- * that Endpoint is Deprecated, whatever it answers.
+ * that Endpoint is Deprecated, whatever it answers; one a Retired Endpoint wins is answered
+ * `RETIRED`, as `serve` does.
  */
 async function fakeResponseOf(faking: Faking, request: Request): Promise<Response> {
   const matched = matchedOf(faking.faked, request);
+  if (matched.kind === 'retired') {
+    return reservedResponseOf('RETIRED');
+  }
   const response = await answeredOf(faking, matched, request);
   return withDeprecation(response, matched.listed.deprecatedAt);
 }
 
 /** A request read as its Provider reads it and answered by the invalid-input Rejection, or its step. */
-async function answeredOf(faking: Faking, matched: Matched, request: Request): Promise<Response> {
+async function answeredOf(
+  faking: Faking,
+  matched: ListedMatch,
+  request: Request,
+): Promise<Response> {
   const taken = await takenOf(faking, matched, request);
   if (taken.kind === 'answered') {
     return taken.response;
@@ -117,7 +126,7 @@ type Taken =
  * every request that arrived before it took its own, and its call recorded; the step runs after,
  * so a slow step holds no other back. One aborted before it takes its step records nothing.
  */
-async function takenOf(faking: Faking, matched: Matched, request: Request): Promise<Taken> {
+async function takenOf(faking: Faking, matched: ListedMatch, request: Request): Promise<Taken> {
   const { listed } = matched;
   const { signal } = request;
   const slot = faking.calls.arrived(listed.name);
@@ -146,7 +155,7 @@ async function takenOf(faking: Faking, matched: Matched, request: Request): Prom
 }
 
 /** A request read as its Provider reads it, every Guard admitting: a step answers for them. */
-function readingOfRequest({ listed, source }: Matched, request: Request): Promise<Reading> {
+function readingOfRequest({ listed, source }: ListedMatch, request: Request): Promise<Reading> {
   return readingOf(listed.endpoint, {
     textOf: () => textPartsOf(listed.nodes, source),
     body: () => receivedBodyOf(request),
