@@ -24,7 +24,7 @@ export function providerOf(value: unknown): string | undefined {
   return typeof provider === 'string' ? provider : undefined;
 }
 
-/** The exported Snapshot cut a Provided Endpoint carries, as written; none for an Endpoint no Contract Package exports. */
+/** The exported Snapshot cut a Provided Endpoint carries, as written; none for any other Endpoint. */
 export function carriedCutOf(endpoint: Endpoint): unknown {
   return Reflect.get(endpoint, exportedMark);
 }

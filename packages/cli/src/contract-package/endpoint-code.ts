@@ -40,7 +40,7 @@ export function endpointModuleOf(
     body: [
       providedOpeningOf(packaged, snapshot.name),
       ...endpointBodyOf(exported, rejections, needs),
-      ...closingLinesOf(exportedCutOf(snapshot, exported.id)),
+      closingLineOf(exportedCutOf(snapshot, exported.id)),
     ],
     siblings: [...guards, ...declared],
     needs,
@@ -69,9 +69,9 @@ function endpointBodyOf(
   ];
 }
 
-/** The close of the declaration and the cut passed beside it, typed `unknown` since the cf-loom that reads it reads it by the format it names. */
-function closingLinesOf(cut: ExportedSnapshot): readonly string[] {
-  return [`}, ${jsonLiteralOf(cut, 'indented')});`];
+/** The close of the declaration, with the Endpoint's cut passed beside it. */
+function closingLineOf(cut: ExportedSnapshot): string {
+  return `}, ${jsonLiteralOf(cut, 'indented')});`;
 }
 
 /** An Endpoint's Input as the author declared it: its text parts only when they declare something. */
