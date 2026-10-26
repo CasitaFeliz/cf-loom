@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import type { Origin, OriginOf, Path } from '../walker/index.ts';
+import type { Origin, OriginOf, Place } from '../walker/index.ts';
 import type { Declarations } from '../written/index.ts';
 import { exportNamesOf } from './export-names.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -118,9 +118,9 @@ export function schemaOriginsOf(packages: readonly ImportedDefinitions[]): Origi
 export function provenanceFailures(
   { guards, codes }: Declarations,
   packages: readonly ImportedDefinitions[],
-  met: ReadonlyMap<core.$ZodType, Path>,
+  met: ReadonlyMap<core.$ZodType, Place>,
 ): readonly DeclarationFailure[] {
-  const declared: { readonly at: Path; readonly declaration: unknown }[] = [
+  const declared: { readonly at: Place; readonly declaration: unknown }[] = [
     ...guards.map(({ at, guard }) => ({ at, declaration: guard })),
     ...codes.map(({ at, rejections: [first] }) => ({ at, declaration: first.rejection })),
     ...[...met].map(([schema, at]) => ({ at, declaration: schema })),
@@ -131,7 +131,7 @@ export function provenanceFailures(
 }
 
 /** The failure a declaration's provenance is, when no one Definitions Package can be named for it. */
-function failureAt(at: Path, provenance: Provenance): DeclarationFailure | undefined {
+function failureAt(at: Place, provenance: Provenance): DeclarationFailure | undefined {
   switch (provenance.kind) {
     case 'none':
       return undefined;
@@ -143,7 +143,7 @@ function failureAt(at: Path, provenance: Provenance): DeclarationFailure | undef
 }
 
 /** The failure of an origin package whose package.json lacks a name or a version; none when it has both. */
-function identityFailureAt(at: Path, origin: ImportedDefinitions): DeclarationFailure | undefined {
+function identityFailureAt(at: Place, origin: ImportedDefinitions): DeclarationFailure | undefined {
   switch (origin.kind) {
     case 'identified':
       return undefined;
@@ -158,7 +158,7 @@ function isFailure(found: DeclarationFailure | undefined): found is DeclarationF
 }
 
 function ambiguousFailureAt(
-  at: Path,
+  at: Place,
   [first, second]: readonly [ImportedDefinitions, ImportedDefinitions],
 ): DeclarationFailure {
   const both = `exported by both ${packageLabelOf(first)} and ${packageLabelOf(second)}`;
@@ -166,7 +166,7 @@ function ambiguousFailureAt(
   return failure(at, 'definitions-ambiguous', message);
 }
 
-function unidentifiedFailureAt(at: Path, identity: Unidentified): DeclarationFailure {
+function unidentifiedFailureAt(at: Place, identity: Unidentified): DeclarationFailure {
   const message = `A Definitions Package a declaration comes from has a name and a version: ${identityLineOf(identity)}`;
   return failure(at, 'definitions-unidentified', message);
 }

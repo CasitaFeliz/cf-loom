@@ -1,22 +1,32 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { reachedDefsOf, type SchemaNode, walkSchemas } from '../internal/index.ts';
+import { refusalsOf } from '../../test/failures.ts';
+import { reachedDefsOf, type SchemaNode, siteTextOf, walkSchemas } from '../internal/index.ts';
+
+/** The place of a schema walked on its own: the export of the name given, with no steps. */
+function placeAt(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
 
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  return refusalsOf(walkSchemas([{ at: placeAt('body'), schema }], () => undefined));
 }
 
-function walkedAt(at: readonly (string | number)[], value: unknown) {
-  return { at, walked: { kind: 'walked', value } };
+function walkedTo(value: unknown) {
+  return { kind: 'walked', value };
 }
 
-function refusedAt(
-  at: readonly (string | number)[],
-  failures: readonly { readonly at: readonly (string | number)[]; readonly construct: string }[],
-) {
+function refused(failures: readonly { readonly at: string; readonly construct: string }[]) {
   const named = failures.map((failure) => ({ kind: 'not-allowed', ...failure }));
-  return { at, walked: { kind: 'not-allowed', failures: named } };
+  return { kind: 'not-allowed', failures: named };
+}
+
+/** The site each refusal of each walked schema sits at, so a refusal shared by two locations is told where it sits. */
+function refusalSitesOf({ located }: ReturnType<typeof walkSchemas>) {
+  return located.map(({ walked }) =>
+    walked.kind === 'walked' ? [] : walked.failures.map(({ site }) => siteTextOf(site)),
+  );
 }
 
 const unnamedCycle = { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' };
@@ -47,7 +57,7 @@ describe('walkSchemas: recursion', () => {
       .meta({ id: 'category' });
 
     expect(walkBody(category)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
+      located: [walkedTo({ type: 'ref', name: 'category' })],
       defs: { category: categoryDef },
     });
   });
@@ -59,7 +69,7 @@ describe('walkSchemas: recursion', () => {
       .meta({ id: 'category' });
 
     expect(walkBody(category)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
+      located: [walkedTo({ type: 'ref', name: 'category' })],
       defs: { category: categoryDef },
     });
   });
@@ -77,7 +87,7 @@ describe('walkSchemas: recursion', () => {
     const child = { type: 'ref', name: 'category', description: 'A child' };
 
     expect(walkBody(category)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'category' })],
+      located: [walkedTo({ type: 'ref', name: 'category' })],
       defs: {
         category: {
           ...categoryDef,
@@ -98,7 +108,7 @@ describe('walkSchemas: recursion', () => {
     const outer: z.ZodType<Node> = z.lazy(() => inner).meta({ id: 'outer' });
 
     expect(walkBody(outer)).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'outer' })],
+      located: [walkedTo({ type: 'ref', name: 'outer' })],
       defs: {
         inner: {
           type: 'object',
@@ -126,7 +136,7 @@ describe('walkSchemas: recursion', () => {
 
       expect(written.defs['tree']?.nullable).toBeUndefined();
       expect(written.located).toEqual([
-        walkedAt(['body'], {
+        walkedTo({
           type: 'object',
           fields: {
             root: { required: true, schema: { type: 'ref', name: 'tree', nullable: true } },
@@ -198,9 +208,7 @@ describe('walkSchemas: recursion', () => {
       const written = walkBody(z.object({ root: schema }));
 
       expect(written).toEqual({
-        located: [
-          refusedAt(['body'], [{ at: ['body', 'fields', 'root'], ...nullableDefOf('tree') }]),
-        ],
+        located: [refused([{ at: 'root', ...nullableDefOf('tree') }])],
         defs: {},
       });
     });
@@ -229,9 +237,7 @@ describe('walkSchemas: recursion', () => {
         const written = walkBody(z.object({ root: schema }));
 
         expect(written).toEqual({
-          located: [
-            refusedAt(['body'], [{ at: ['body', 'fields', 'root'], ...nullableDefOf(id) }]),
-          ],
+          located: [refused([{ at: 'root', ...nullableDefOf(id) }])],
           defs: {},
         });
       },
@@ -253,7 +259,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(node);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+        located: [refused([{ at: '', ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -265,7 +271,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(schema);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+        located: [refused([{ at: '', ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -281,7 +287,7 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(schema);
 
         expect(walked).toEqual({
-          located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+          located: [refused([{ at: '', ...nodelessCycle }])],
           defs: {},
         });
       });
@@ -289,17 +295,18 @@ describe('walkSchemas: recursion', () => {
       test('used at two locations, the other id of the cycle is the same failure at both', () => {
         const walked = walkSchemas(
           [
-            { at: ['body'], schema: first },
-            { at: ['success'], schema: second },
+            { at: placeAt('body'), schema: first },
+            { at: placeAt('success'), schema: second },
           ],
           () => undefined,
         );
 
-        const failure = { at: ['body'], ...nodelessCycle };
-        expect(walked).toEqual({
-          located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+        const failure = { at: '', ...nodelessCycle };
+        expect(refusalsOf(walked)).toEqual({
+          located: [refused([failure]), refused([failure])],
           defs: {},
         });
+        expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
       });
     });
 
@@ -310,7 +317,7 @@ describe('walkSchemas: recursion', () => {
       const walked = walkBody(entry);
 
       expect(walked).toEqual({
-        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+        located: [refused([{ at: '', ...nodelessCycle }])],
         defs: {},
       });
     });
@@ -320,17 +327,18 @@ describe('walkSchemas: recursion', () => {
 
       const walked = walkSchemas(
         [
-          { at: ['body'], schema: node },
-          { at: ['success'], schema: z.array(node) },
+          { at: placeAt('body'), schema: node },
+          { at: placeAt('success'), schema: z.array(node) },
         ],
         () => undefined,
       );
 
-      const failure = { at: ['body'], ...nodelessCycle };
-      expect(walked).toEqual({
-        located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+      const failure = { at: '', ...nodelessCycle };
+      expect(refusalsOf(walked)).toEqual({
+        located: [refused([failure]), refused([failure])],
         defs: {},
       });
+      expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
       const [first, second] = walked.located;
       const failuresOf = (location: typeof first) =>
         location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
@@ -345,16 +353,13 @@ describe('walkSchemas: recursion', () => {
 
       expect(walked).toEqual({
         located: [
-          refusedAt(
-            ['body'],
-            [
-              {
-                at: ['body', 'variants', 0],
-                construct: 'a discriminated union variant that is not an object',
-              },
-              { at: ['body', 'variants', 0], ...unnamedCycle },
-            ],
-          ),
+          refused([
+            {
+              at: '<|0>',
+              construct: 'a discriminated union variant that is not an object',
+            },
+            { at: '<|0>', ...unnamedCycle },
+          ]),
         ],
         defs: {},
       });
@@ -372,20 +377,18 @@ describe('walkSchemas: recursion', () => {
 
       const walked = walkSchemas(
         [
-          { at: ['body'], schema: taken },
-          { at: ['success'], schema: category },
+          { at: placeAt('body'), schema: taken },
+          { at: placeAt('success'), schema: category },
         ],
         () => undefined,
       );
 
-      const duplicate = { at: ['success'], construct: 'two schemas with .meta({ id: "shared" })' };
-      expect(walked).toEqual({
-        located: [
-          refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }]),
-          refusedAt(['success'], [duplicate]),
-        ],
+      const duplicate = { at: '', construct: 'two schemas with .meta({ id: "shared" })' };
+      expect(refusalsOf(walked)).toEqual({
+        located: [refused([{ at: '', ...nodelessCycle }]), refused([duplicate])],
         defs: {},
       });
+      expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
     });
 
     test('a def dropped with one failure keeps it when a later failure drops the group around it', () => {
@@ -410,23 +413,24 @@ describe('walkSchemas: recursion', () => {
 
       const walked = walkSchemas(
         [
-          { at: ['body'], schema: root },
-          { at: ['success'], schema: held },
+          { at: placeAt('body'), schema: root },
+          { at: placeAt('success'), schema: held },
         ],
         () => undefined,
       );
 
-      const cycle = { at: ['body', 'fields', 'next'], ...nodelessCycle };
-      const date = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
-      expect(walked).toEqual({
-        located: [refusedAt(['body'], [cycle, date]), refusedAt(['success'], [cycle])],
+      const cycle = { at: 'next', ...nodelessCycle };
+      const date = { at: 'placedAt', ...dateRefused };
+      expect(refusalsOf(walked)).toEqual({
+        located: [refused([cycle, date]), refused([cycle])],
         defs: {},
       });
+      expect(refusalSitesOf(walked)).toEqual([['exports.body', 'exports.body'], ['exports.body']]);
     });
 
     describe('with unions and intersections on the cycle', () => {
       const refusedAtBody = {
-        located: [refusedAt(['body'], [{ at: ['body'], ...nodelessCycle }])],
+        located: [refused([{ at: '', ...nodelessCycle }])],
         defs: {},
       };
       const anObject = z.object({ a: z.string() });
@@ -537,7 +541,7 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(innerId);
 
         expect(walked).toEqual({
-          located: [refusedAt(['body'], [{ at: ['body', 'options', 0], ...nodelessCycle }])],
+          located: [refused([{ at: '<|0>', ...nodelessCycle }])],
           defs: {},
         });
       });
@@ -560,17 +564,18 @@ describe('walkSchemas: recursion', () => {
         test('used at a second location is the same failure there, with no def', () => {
           const walked = walkSchemas(
             [
-              { at: ['body'], schema: numbered },
-              { at: ['success'], schema: holder },
+              { at: placeAt('body'), schema: numbered },
+              { at: placeAt('success'), schema: holder },
             ],
             () => undefined,
           );
 
-          const failure = { at: ['body'], ...nodelessCycle };
-          expect(walked).toEqual({
-            located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+          const failure = { at: '', ...nodelessCycle };
+          expect(refusalsOf(walked)).toEqual({
+            located: [refused([failure]), refused([failure])],
             defs: {},
           });
+          expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
           const [first, second] = walked.located;
           const failuresOf = (location: typeof first) =>
             location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
@@ -601,7 +606,7 @@ describe('walkSchemas: recursion', () => {
 
     test('a union whose recursive option is an array of itself is a def', () => {
       expect(walkBody(listing)).toEqual({
-        located: [walkedAt(['body'], { type: 'ref', name: 'listing' })],
+        located: [walkedTo({ type: 'ref', name: 'listing' })],
         defs: {
           listing: {
             type: 'union',
@@ -616,7 +621,7 @@ describe('walkSchemas: recursion', () => {
 
     test('recursion through a required field alone is still a def', () => {
       expect(walkBody(itself)).toEqual({
-        located: [walkedAt(['body'], { type: 'ref', name: 'itself' })],
+        located: [walkedTo({ type: 'ref', name: 'itself' })],
         defs: {
           itself: {
             type: 'object',
@@ -628,7 +633,7 @@ describe('walkSchemas: recursion', () => {
 
     test('a record of itself is still a def', () => {
       expect(walkBody(recorded)).toEqual({
-        located: [walkedAt(['body'], { type: 'ref', name: 'recorded' })],
+        located: [walkedTo({ type: 'ref', name: 'recorded' })],
         defs: {
           recorded: {
             type: 'record',
@@ -641,7 +646,7 @@ describe('walkSchemas: recursion', () => {
 
     test('a tuple of itself is still a def', () => {
       expect(walkBody(tupled)).toEqual({
-        located: [walkedAt(['body'], { type: 'ref', name: 'tupled' })],
+        located: [walkedTo({ type: 'ref', name: 'tupled' })],
         defs: { tupled: { type: 'tuple', items: [{ type: 'ref', name: 'tupled' }] } },
       });
     });
@@ -660,17 +665,18 @@ describe('walkSchemas: recursion', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: outer },
-        { at: ['success'], schema: inner },
+        { at: placeAt('body'), schema: outer },
+        { at: placeAt('success'), schema: inner },
       ],
       () => undefined,
     );
 
-    const failure = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
-    expect(walked).toEqual({
-      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+    const failure = { at: 'placedAt', ...dateRefused };
+    expect(refusalsOf(walked)).toEqual({
+      located: [refused([failure]), refused([failure])],
       defs: {},
     });
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
     const [first, second] = walked.located;
     const failuresOf = (location: typeof first) =>
       location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
@@ -698,8 +704,8 @@ describe('walkSchemas: recursion', () => {
     let asked = 0;
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: steps[0]! },
-        { at: ['success'], schema: steps[1]! },
+        { at: placeAt('body'), schema: steps[0]! },
+        { at: placeAt('success'), schema: steps[1]! },
       ],
       () => {
         asked++;
@@ -707,11 +713,12 @@ describe('walkSchemas: recursion', () => {
       },
     );
 
-    const failure = { at: ['body', 'fields', 'placedAt'], ...dateRefused };
-    expect(walked).toEqual({
-      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+    const failure = { at: 'placedAt', ...dateRefused };
+    expect(refusalsOf(walked)).toEqual({
+      located: [refused([failure]), refused([failure])],
       defs: {},
     });
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
     expect(asked).toBe(13);
   });
 
@@ -727,16 +734,16 @@ describe('walkSchemas: recursion', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: category },
-        { at: ['success'], schema: z.array(category) },
+        { at: placeAt('body'), schema: category },
+        { at: placeAt('success'), schema: z.array(category) },
       ],
       () => undefined,
     );
 
-    expect(walked).toEqual({
+    expect(refusalsOf(walked)).toEqual({
       located: [
-        walkedAt(['body'], { type: 'ref', name: 'category' }),
-        walkedAt(['success'], { type: 'array', items: { type: 'ref', name: 'category' } }),
+        walkedTo({ type: 'ref', name: 'category' }),
+        walkedTo({ type: 'array', items: { type: 'ref', name: 'category' } }),
       ],
       defs: { category: categoryDef },
     });
@@ -750,9 +757,7 @@ describe('walkSchemas: recursion', () => {
     });
 
     expect(walkBody(category)).toEqual({
-      located: [
-        refusedAt(['body'], [{ at: ['body', 'fields', 'children', 'items'], ...unnamedCycle }]),
-      ],
+      located: [refused([{ at: 'children[]', ...unnamedCycle }])],
       defs: {},
     });
   });
@@ -766,17 +771,18 @@ describe('walkSchemas: recursion', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: category },
-        { at: ['success'], schema: z.array(category) },
+        { at: placeAt('body'), schema: category },
+        { at: placeAt('success'), schema: z.array(category) },
       ],
       () => undefined,
     );
 
-    const failure = { at: ['body', 'fields', 'children', 'items'], ...unnamedCycle };
-    expect(walked).toEqual({
-      located: [refusedAt(['body'], [failure]), refusedAt(['success'], [failure])],
+    const failure = { at: 'children[]', ...unnamedCycle };
+    expect(refusalsOf(walked)).toEqual({
+      located: [refused([failure]), refused([failure])],
       defs: {},
     });
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
     const [first, second] = walked.located;
     const failuresOf = (location: typeof first) =>
       location?.walked.kind === 'not-allowed' ? location.walked.failures : [];
@@ -801,19 +807,16 @@ describe('walkSchemas: recursion', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: category },
-        { at: ['success'], schema: folder },
+        { at: placeAt('body'), schema: category },
+        { at: placeAt('success'), schema: folder },
       ],
       () => undefined,
     );
 
-    expect(walked).toEqual({
+    expect(refusalsOf(walked)).toEqual({
       located: [
-        walkedAt(['body'], { type: 'ref', name: 'node' }),
-        refusedAt(
-          ['success'],
-          [{ at: ['success'], construct: 'two schemas with .meta({ id: "node" })' }],
-        ),
+        walkedTo({ type: 'ref', name: 'node' }),
+        refused([{ at: '', construct: 'two schemas with .meta({ id: "node" })' }]),
       ],
       defs: {
         node: {
@@ -827,6 +830,7 @@ describe('walkSchemas: recursion', () => {
         },
       },
     });
+    expect(refusalSitesOf(walked)).toEqual([[], ['exports.success']]);
   });
 
   describe('a refusal never stops the walk', () => {
@@ -863,7 +867,7 @@ describe('walkSchemas: recursion', () => {
           .meta({ id: 'tree' });
 
         expect(walkBody(tree)).toEqual({
-          located: [refusedAt(['body'], [{ at: ['body', 'fields', 'children'], construct }])],
+          located: [refused([{ at: 'children', construct }])],
           defs: {},
         });
       },
@@ -877,10 +881,10 @@ describe('walkSchemas: recursion', () => {
         .meta({ id: 'tree' });
 
       const failure = {
-        at: ['body', 'fields', '__proto__'],
+        at: '__proto__',
         construct: 'a field named __proto__ (zod drops it when parsing)',
       };
-      expect(walkBody(tree)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+      expect(walkBody(tree)).toEqual({ located: [refused([failure])], defs: {} });
     });
 
     test('a two-member cycle broken by .catch() reports .catch() alone', () => {
@@ -900,10 +904,10 @@ describe('walkSchemas: recursion', () => {
         .meta({ id: 'child' });
 
       const failure = {
-        at: ['body', 'fields', 'child', 'fields', 'parent'],
+        at: 'child.parent',
         construct: '.catch()',
       };
-      expect(walkBody(parent)).toEqual({ located: [refusedAt(['body'], [failure])], defs: {} });
+      expect(walkBody(parent)).toEqual({ located: [refused([failure])], defs: {} });
     });
   });
 
@@ -923,14 +927,14 @@ describe('walkSchemas: recursion', () => {
     };
 
     function wrapperFailure(construct: string) {
-      return { at: ['body', 'fields', 'next'], construct, instead: wrapperIdInstead };
+      return { at: 'next', construct, instead: wrapperIdInstead };
     }
 
     test('an id on .optional() fails, and the schema inside is walked', () => {
       const order = z.object({ next: leaf.optional().meta({ id: 'next' }) });
 
       expect(walkBody(order)).toEqual({
-        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        located: [refused([wrapperFailure('.meta({ id }) on .optional()')])],
         defs: { leaf: leafDef },
       });
     });
@@ -939,7 +943,7 @@ describe('walkSchemas: recursion', () => {
       const order = z.object({ next: leaf.optional().nonoptional().meta({ id: 'next' }) });
 
       expect(walkBody(order)).toEqual({
-        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .nonoptional()')])],
+        located: [refused([wrapperFailure('.meta({ id }) on .nonoptional()')])],
         defs: { leaf: leafDef },
       });
     });
@@ -948,7 +952,7 @@ describe('walkSchemas: recursion', () => {
       const order = z.object({ next: leaf.optional().meta({ id: 'next' }).nonoptional() });
 
       expect(walkBody(order)).toEqual({
-        located: [refusedAt(['body'], [wrapperFailure('.meta({ id }) on .optional()')])],
+        located: [refused([wrapperFailure('.meta({ id }) on .optional()')])],
         defs: { leaf: leafDef },
       });
     });
@@ -958,13 +962,10 @@ describe('walkSchemas: recursion', () => {
 
       expect(walkBody(order)).toEqual({
         located: [
-          refusedAt(
-            ['body'],
-            [
-              { at: ['body', 'fields', 'next'], construct: '.meta({ title })' },
-              wrapperFailure('.meta({ id }) on .optional()'),
-            ],
-          ),
+          refused([
+            { at: 'next', construct: '.meta({ title })' },
+            wrapperFailure('.meta({ id }) on .optional()'),
+          ]),
         ],
         defs: { leaf: leafDef },
       });
@@ -979,13 +980,10 @@ describe('walkSchemas: recursion', () => {
 
       expect(walkBody(node)).toEqual({
         located: [
-          refusedAt(
-            ['body'],
-            [
-              wrapperFailure('.meta({ id }) on .optional()'),
-              { at: ['body', 'fields', 'next'], ...unnamedCycle },
-            ],
-          ),
+          refused([
+            wrapperFailure('.meta({ id }) on .optional()'),
+            { at: 'next', ...unnamedCycle },
+          ]),
         ],
         defs: {},
       });
@@ -1010,12 +1008,12 @@ describe('walkSchemas: recursion', () => {
         const walked = walkBody(recursiveWith(id));
 
         const [location] = walked.located;
-        expect(location?.walked).toMatchObject({
+        expect(location).toMatchObject({
           kind: 'not-allowed',
           failures: expect.arrayContaining([
             {
               kind: 'not-allowed',
-              at: ['body'],
+              at: '',
               construct: `.meta({ id: ${JSON.stringify(id)} })`,
               instead: 'a camelCase name',
             },
@@ -1040,7 +1038,7 @@ describe('walkSchemas: recursion', () => {
   });
 
   describe('an id on a schema that lies on no cycle', () => {
-    function acyclicAt(at: readonly (string | number)[], id: string) {
+    function acyclicAt(at: string, id: string) {
       return {
         at,
         construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that lies on no cycle`,
@@ -1057,15 +1055,7 @@ describe('walkSchemas: recursion', () => {
       });
 
       expect(walkBody(order)).toEqual({
-        located: [
-          refusedAt(
-            ['body'],
-            [
-              acyclicAt(['body', 'fields', 'paid'], 'money'),
-              acyclicAt(['body', 'fields', 'due'], 'money'),
-            ],
-          ),
-        ],
+        located: [refused([acyclicAt('paid', 'money'), acyclicAt('due', 'money')])],
         defs: {},
       });
     });
@@ -1074,15 +1064,7 @@ describe('walkSchemas: recursion', () => {
       const order = z.object({ paid: money, due: money });
 
       expect(walkBody(order)).toEqual({
-        located: [
-          refusedAt(
-            ['body'],
-            [
-              acyclicAt(['body', 'fields', 'paid'], 'money'),
-              acyclicAt(['body', 'fields', 'due'], 'money'),
-            ],
-          ),
-        ],
+        located: [refused([acyclicAt('paid', 'money'), acyclicAt('due', 'money')])],
         defs: {},
       });
     });
@@ -1090,11 +1072,8 @@ describe('walkSchemas: recursion', () => {
     test('it fails with what else is not allowed in the schema', () => {
       const dated = z.object({ at: z.date() }).meta({ id: 'dated' });
 
-      const failures = [
-        acyclicAt(['body'], 'dated'),
-        { at: ['body', 'fields', 'at'], ...dateRefused },
-      ];
-      expect(walkBody(dated)).toEqual({ located: [refusedAt(['body'], failures)], defs: {} });
+      const failures = [acyclicAt('', 'dated'), { at: 'at', ...dateRefused }];
+      expect(walkBody(dated)).toEqual({ located: [refused(failures)], defs: {} });
     });
 
     test('it fails beside a recursive schema that has the same id', () => {
@@ -1108,16 +1087,17 @@ describe('walkSchemas: recursion', () => {
 
       const walked = walkSchemas(
         [
-          { at: ['body'], schema: node },
-          { at: ['success'], schema: z.string().meta({ id: 'node' }) },
+          { at: placeAt('body'), schema: node },
+          { at: placeAt('success'), schema: z.string().meta({ id: 'node' }) },
         ],
         () => undefined,
       );
 
-      expect(walked.located).toEqual([
-        walkedAt(['body'], { type: 'ref', name: 'node' }),
-        refusedAt(['success'], [acyclicAt(['success'], 'node')]),
+      expect(refusalsOf(walked).located).toEqual([
+        walkedTo({ type: 'ref', name: 'node' }),
+        refused([acyclicAt('', 'node')]),
       ]);
+      expect(refusalSitesOf(walked)).toEqual([[], ['exports.success']]);
       expect(Object.keys(walked.defs)).toEqual(['node']);
     });
 
@@ -1133,8 +1113,8 @@ describe('walkSchemas: recursion', () => {
 
       const walked = walkBody(tree);
 
-      const failure = acyclicAt(['body', 'fields', 'label'], 'label');
-      expect(walked.located).toEqual([refusedAt(['body'], [failure])]);
+      const failure = acyclicAt('label', 'label');
+      expect(walked.located).toEqual([refused([failure])]);
     });
 
     test('it fails on an alias outside the cycle it points at, and the cycle is still a def', () => {
@@ -1147,9 +1127,9 @@ describe('walkSchemas: recursion', () => {
         .meta({ id: 'tree' });
       const alias = z.lazy(() => tree).meta({ id: 'alias' });
 
-      const walked = walkSchemas([{ at: ['body'], schema: alias }], () => undefined);
+      const walked = walkSchemas([{ at: placeAt('body'), schema: alias }], () => undefined);
 
-      expect(walked.located).toEqual([refusedAt(['body'], [acyclicAt(['body'], 'alias')])]);
+      expect(refusalsOf(walked).located).toEqual([refused([acyclicAt('', 'alias')])]);
       expect(Object.keys(walked.defs)).toEqual(['tree']);
     });
   });
@@ -1177,35 +1157,32 @@ describe('walkSchemas: recursion', () => {
       fields: { teams: { required: true, schema: { type: 'array', items: teamNode } } },
     } as const;
     const expected = {
-      located: [
-        walkedAt(['team'], teamNode),
-        walkedAt(['department'], { type: 'ref', name: 'department' }),
-      ],
+      located: [walkedTo(teamNode), walkedTo({ type: 'ref', name: 'department' })],
       defs: { department: departmentDef },
     };
 
     test('entering at the schema without the id gives the def and refs', () => {
       const walked = walkSchemas(
         [
-          { at: ['team'], schema: team },
-          { at: ['department'], schema: department },
+          { at: placeAt('team'), schema: team },
+          { at: placeAt('department'), schema: department },
         ],
         () => undefined,
       );
 
-      expect(walked).toEqual(expected);
+      expect(refusalsOf(walked)).toEqual(expected);
     });
 
     test('entering at the schema with the id gives the same nodes and defs', () => {
       const walked = walkSchemas(
         [
-          { at: ['department'], schema: department },
-          { at: ['team'], schema: team },
+          { at: placeAt('department'), schema: department },
+          { at: placeAt('team'), schema: team },
         ],
         () => undefined,
       );
 
-      expect(walked).toEqual({ ...expected, located: [...expected.located].reverse() });
+      expect(refusalsOf(walked)).toEqual({ ...expected, located: [...expected.located].reverse() });
     });
   });
 
@@ -1222,11 +1199,11 @@ describe('walkSchemas: recursion', () => {
     });
 
     test.each([
-      ['department', department, ['body', 'fields', 'teams', 'items', 'fields', 'department']],
-      ['team', team, ['body', 'fields', 'department', 'fields', 'teams', 'items']],
+      ['department', department, 'teams[].department'],
+      ['team', team, 'department.teams[]'],
     ])('entered at the %s, the cycle fails', (_name, schema, at) => {
       expect(walkBody(schema)).toEqual({
-        located: [refusedAt(['body'], [{ at, ...unnamedCycle }])],
+        located: [refused([{ at, ...unnamedCycle }])],
         defs: {},
       });
     });
@@ -1248,8 +1225,11 @@ describe('walkSchemas: recursion', () => {
       })
       .meta({ id: 'team' });
 
-    const fromTeam = walkSchemas([{ at: ['body'], schema: team }], () => undefined);
-    const fromDepartment = walkSchemas([{ at: ['body'], schema: department }], () => undefined);
+    const fromTeam = walkSchemas([{ at: placeAt('body'), schema: team }], () => undefined);
+    const fromDepartment = walkSchemas(
+      [{ at: placeAt('body'), schema: department }],
+      () => undefined,
+    );
 
     const departmentDef = {
       type: 'object',
@@ -1262,12 +1242,12 @@ describe('walkSchemas: recursion', () => {
       fields: { department: { required: true, schema: { type: 'ref', name: 'department' } } },
     };
     const defs = { department: departmentDef, team: teamDef };
-    expect(fromTeam).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'team' })],
+    expect(refusalsOf(fromTeam)).toEqual({
+      located: [walkedTo({ type: 'ref', name: 'team' })],
       defs,
     });
-    expect(fromDepartment).toEqual({
-      located: [walkedAt(['body'], { type: 'ref', name: 'department' })],
+    expect(refusalsOf(fromDepartment)).toEqual({
+      located: [walkedTo({ type: 'ref', name: 'department' })],
       defs,
     });
   });
@@ -1286,7 +1266,7 @@ describe('walkSchemas: recursion', () => {
       schemas.push(z.object(shape));
     }
 
-    const walked = walkSchemas([{ at: ['body'], schema: schemas[0]! }], () => undefined);
+    const walked = walkSchemas([{ at: placeAt('body'), schema: schemas[0]! }], () => undefined);
 
     const [body] = walked.located;
     const failures = body?.walked.kind === 'not-allowed' ? body.walked.failures : [];
@@ -1330,17 +1310,14 @@ describe('walkSchemas: recursion', () => {
     test('entering at the union, the variant is a ref to its def', () => {
       const walked = walkSchemas(
         [
-          { at: ['tree'], schema: tree },
-          { at: ['branch'], schema: branch },
+          { at: placeAt('tree'), schema: tree },
+          { at: placeAt('branch'), schema: branch },
         ],
         () => undefined,
       );
 
-      expect(walked).toEqual({
-        located: [
-          walkedAt(['tree'], treeNode),
-          walkedAt(['branch'], { type: 'ref', name: 'branch' }),
-        ],
+      expect(refusalsOf(walked)).toEqual({
+        located: [walkedTo(treeNode), walkedTo({ type: 'ref', name: 'branch' })],
         defs: { branch: branchDef },
       });
     });
@@ -1348,17 +1325,14 @@ describe('walkSchemas: recursion', () => {
     test('entering at the variant gives the same nodes and defs', () => {
       const walked = walkSchemas(
         [
-          { at: ['branch'], schema: branch },
-          { at: ['tree'], schema: tree },
+          { at: placeAt('branch'), schema: branch },
+          { at: placeAt('tree'), schema: tree },
         ],
         () => undefined,
       );
 
-      expect(walked).toEqual({
-        located: [
-          walkedAt(['branch'], { type: 'ref', name: 'branch' }),
-          walkedAt(['tree'], treeNode),
-        ],
+      expect(refusalsOf(walked)).toEqual({
+        located: [walkedTo({ type: 'ref', name: 'branch' }), walkedTo(treeNode)],
         defs: { branch: branchDef },
       });
     });
@@ -1393,21 +1367,25 @@ describe('walkSchemas: recursion', () => {
     test('a ring of three defs behind a written def gives the same defs in either order', () => {
       const orderFirst = walkSchemas(
         [
-          { at: ['order'], schema: order },
-          { at: ['customer'], schema: customer },
+          { at: placeAt('order'), schema: order },
+          { at: placeAt('customer'), schema: customer },
         ],
         () => undefined,
       );
       const customerFirst = walkSchemas(
         [
-          { at: ['customer'], schema: customer },
-          { at: ['order'], schema: order },
+          { at: placeAt('customer'), schema: customer },
+          { at: placeAt('order'), schema: order },
         ],
         () => undefined,
       );
 
+      const inOrderFirst = refusalsOf(orderFirst);
       expect(Object.keys(orderFirst.defs).sort()).toEqual(['address', 'customer', 'order']);
-      expect(customerFirst).toEqual({ ...orderFirst, located: [...orderFirst.located].reverse() });
+      expect(refusalsOf(customerFirst)).toEqual({
+        ...inOrderFirst,
+        located: [...inOrderFirst.located].reverse(),
+      });
     });
 
     const first: z.ZodType = z
@@ -1434,7 +1412,7 @@ describe('walkSchemas: recursion', () => {
         return first;
       },
     });
-    const fromFirst = walkSchemas([{ at: ['body'], schema: first }], () => undefined);
+    const fromFirst = walkSchemas([{ at: placeAt('body'), schema: first }], () => undefined);
 
     test.each([
       ['second', second],
@@ -1443,7 +1421,7 @@ describe('walkSchemas: recursion', () => {
     ])(
       'a ring of four with two ids entered at the %s schema gives the same defs',
       (_name, schema) => {
-        const walked = walkSchemas([{ at: ['body'], schema }], () => undefined);
+        const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
 
         expect(Object.keys(fromFirst.defs).sort()).toEqual(['first', 'third']);
         expect(walked.defs).toEqual(fromFirst.defs);
@@ -1465,7 +1443,7 @@ describe('walkSchemas: recursion', () => {
     }
 
     const started = performance.now();
-    const walked = walkSchemas([{ at: ['body'], schema: ring[0]! }], () => undefined);
+    const walked = walkSchemas([{ at: placeAt('body'), schema: ring[0]! }], () => undefined);
     const elapsed = performance.now() - started;
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
@@ -1489,7 +1467,7 @@ describe('walkSchemas: recursion', () => {
     }
 
     const started = performance.now();
-    const walked = walkSchemas([{ at: ['body'], schema: steps[0]! }], () => undefined);
+    const walked = walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
     const elapsed = performance.now() - started;
 
     expect(walked.located[0]?.walked).toMatchObject({

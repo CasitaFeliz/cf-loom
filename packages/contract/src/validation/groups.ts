@@ -65,13 +65,15 @@ function membershipFailures<Field extends GroupedField>(
   const { noun, labelOf } = memberships[field];
   const firstGroupOf = new Map<unknown, Group>();
   const failures: DeclarationFailure[] = [];
-  for (const listed of groups.flatMap((group) => listingsOf(group, field))) {
-    const first = firstGroupOf.get(listed.declaration);
-    if (first !== undefined) {
-      const message = `${noun} belongs to exactly one Group: ${labelOf(listed)} is also in ${textOf(first.name)}`;
-      failures.push(failure(listed.at, 'group-membership', message));
+  for (const { at, group } of groups) {
+    for (const listed of listingsOf({ at, group }, field)) {
+      const first = firstGroupOf.get(listed.declaration);
+      if (first !== undefined) {
+        const message = `${noun} belongs to exactly one Group: ${labelOf(listed)} is also in ${textOf(first.name)}`;
+        failures.push(failure(at, 'group-membership', message));
+      }
+      firstGroupOf.set(listed.declaration, first ?? group);
     }
-    firstGroupOf.set(listed.declaration, first ?? listed.group);
   }
   return failures;
 }
@@ -86,7 +88,7 @@ function providedFailures<Field extends GroupedField>(
     providedListingsOf(group, field).map((listed) => {
       const provider = providerOf(listed.declaration);
       const message = `A Group lists the Contract's own Elements: ${labelOf(listed)} is ${provider}'s`;
-      return failure(listed.at, 'provided-element', message);
+      return failure(group.at, 'provided-element', message);
     }),
   );
 }

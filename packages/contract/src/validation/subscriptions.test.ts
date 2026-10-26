@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { pingedV1, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -87,7 +88,9 @@ function validateSubscriptions(
     groups: [ordersGroup],
     dependencies: [defineDependency({ provider })],
   });
-  return validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' }));
+  return summarized(
+    validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' })),
+  );
 }
 
 const notifyOnSettled = defineSubscription({
@@ -96,8 +99,8 @@ const notifyOnSettled = defineSubscription({
   event: payments.events.paymentSettledV1,
 });
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: Subscriptions', () => {
@@ -136,7 +139,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'auditOrders', 'event'],
+        'subscriptions.auditOrders event',
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: OrderCreated@1",
       ),
@@ -161,7 +164,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onShipped', 'event'],
+        'subscriptions.onShipped event',
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Shipped@1",
       ),
@@ -186,7 +189,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onFailed', 'event'],
+        'subscriptions.onFailed event',
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: PaymentFailed@1",
       ),
@@ -204,7 +207,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onPinged', 'event'],
+        'subscriptions.onPinged event',
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
       ),
@@ -231,7 +234,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onPinged', 'event'],
+        'subscriptions.onPinged event',
         'subscription-event',
         "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
       ),
@@ -260,7 +263,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onRefunded', 'event'],
+        'subscriptions.onRefunded event',
         'subscription-event',
         "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
       ),
@@ -290,7 +293,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onRefunded', 'event'],
+        'subscriptions.onRefunded event',
         'subscription-event',
         "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
       ),
@@ -303,11 +306,7 @@ describe('validateRoot: Subscriptions', () => {
     const result = validateSubscriptions([notifyOnSettled, notAnEvent]);
 
     expect(result).toEqual(
-      failed(
-        ['groups', 'orders', 'subscriptions', 'onSomething', 'event'],
-        'not-a-declaration',
-        'event is not an Event',
-      ),
+      failed('subscriptions.onSomething event', 'not-a-declaration', 'event is not an Event'),
     );
   });
 
@@ -324,7 +323,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onCharge', 'event'],
+        'subscriptions.onCharge event',
         'not-a-declaration',
         'A Subscription receives an Event; a Command is handled by its CommandHandler',
       ),
@@ -342,7 +341,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'charge-on-created', 'name'],
+        'subscriptions.charge-on-created name',
         'name-grammar',
         'A Subscription name is camelCase words: "charge-on-created"',
       ),
@@ -370,9 +369,7 @@ describe('validateRoot: Subscriptions', () => {
 
     const result = validateSubscriptions([named]);
 
-    expect(result).toEqual(
-      failed(['groups', 'orders', 'subscriptions', name, 'name'], 'name-grammar', message),
-    );
+    expect(result).toEqual(failed(`subscriptions.${name} name`, 'name-grammar', message));
   });
 
   test('two Subscriptions with one name fail', () => {
@@ -386,7 +383,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'notifyOnSettled', 'name'],
+        'subscriptions.notifyOnSettled name',
         'duplicate-subscription-name',
         'A Subscription name is unique in the Service: "notifyOnSettled"',
       ),
@@ -408,7 +405,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'auditOrders', 'event'],
+        'subscriptions.auditOrders event',
         'retired-event-subscribed',
         "A Subscription's Event is not Retired: OrderCreated@1",
       ),
@@ -442,11 +439,7 @@ describe('validateRoot: Subscriptions', () => {
     const result = validateSubscriptions([notifyOnSettled, withoutEvent]);
 
     expect(result).toEqual(
-      failed(
-        ['groups', 'orders', 'subscriptions', 'onNothing', 'event'],
-        'required-field',
-        'event is a required field',
-      ),
+      failed('subscriptions.onNothing event', 'required-field', 'event is a required field'),
     );
   });
 
@@ -460,7 +453,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onNothing', 'description'],
+        'subscriptions.onNothing description',
         'required-field',
         'description is a required string',
       ),
@@ -482,7 +475,7 @@ describe('validateRoot: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'subscriptions', 'onCreated', 'filter'],
+        'subscriptions.onCreated filter',
         'undeclared-field',
         'filter is not a declared field',
       ),

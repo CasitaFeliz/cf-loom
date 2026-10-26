@@ -1,7 +1,7 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
 import { isDeclaration, isGuard } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { fieldStep, indexStep, inFields, inside, type Place } from '../walker/index.ts';
 import {
   attachedGuardOf,
   isPlainObject,
@@ -18,7 +18,7 @@ import type { Nodes } from './schemas.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
 type Listed = {
-  readonly at: Path;
+  readonly at: Place;
   readonly attachment: Attachment;
   readonly guard: Guard | undefined;
 };
@@ -37,7 +37,11 @@ export function guardFailures({ at, guard }: LocatedGuard): readonly Declaration
   }
   const refused = (['params', 'body'] as const).filter((part) => demands[part] !== undefined);
   return refused.map((part) =>
-    failure([...at, 'demands', part], 'guard-demands', 'A Guard demands only headers and query'),
+    failure(
+      inFields(at, 'demands', part),
+      'guard-demands',
+      'A Guard demands only headers and query',
+    ),
   );
 }
 
@@ -61,7 +65,7 @@ export function attachmentFailures({
 }
 
 /** What names no Guard is no Attachment, unless it is an object whose `guard` the field rule reports. */
-function noAttachmentFailures(at: Path, attachment: unknown): readonly DeclarationFailure[] {
+function noAttachmentFailures(at: Place, attachment: unknown): readonly DeclarationFailure[] {
   const judgedByFields =
     isPlainObject(attachment) && !isDeclaration(attachment) && isWithoutValue(attachment['guard']);
   if (judgedByFields) {
@@ -80,9 +84,9 @@ export function qualifierFailures(
     .flatMap((qualified) => valueFailures(qualified, nodes));
 }
 
-function listedOf(at: Path, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
+function listedOf(at: Place, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
   return listOf(endpoint.guards).map((attachment, index) => ({
-    at: [...at, 'guards', index],
+    at: inside(at, fieldStep('guards'), indexStep(index)),
     attachment,
     guard: attachedGuardOf(attachment),
   }));
@@ -100,7 +104,7 @@ function valueFailures(
   if (guard.qualifier === undefined || !isWalked || isWithoutValue(attachment.qualifier)) {
     return [];
   }
-  const qualifierAt = [...at, 'qualifier'];
+  const qualifierAt = inFields(at, 'qualifier');
   const parsed = safeParse(guard.qualifier, attachment.qualifier);
   if (!parsed.success) {
     const message = `${textOf(guard.name)} takes a Qualifier its schema accepts`;

@@ -7,6 +7,7 @@ import {
   type Root,
   reaches,
 } from '../declarations/index.ts';
+import { inFields } from '../walker/index.ts';
 import {
   type Declarations,
   eventSourceOf,
@@ -34,7 +35,7 @@ function eventFailures(
   root: Root,
 ): readonly DeclarationFailure[] {
   const event: unknown = subscription.event;
-  const eventAt = [...at, 'event'];
+  const eventAt = inFields(at, 'event');
   if (isWithoutValue(event)) {
     return [];
   }
@@ -66,7 +67,7 @@ function nameFailures(
   const nameOf = (located: LocatedSubscription) => textOf(located.subscription.name);
   return repeated(subscriptions, nameOf).map((located) =>
     failure(
-      [...located.at, 'name'],
+      inFields(located.at, 'name'),
       'duplicate-subscription-name',
       `A Subscription name is unique in the Service: ${writtenTextOf(located.subscription.name)}`,
     ),

@@ -4,6 +4,7 @@ import {
   isStandardRejection,
   notImplementedStatus,
 } from '../declarations/index.ts';
+import { fieldStep, indexStep, inFields, inside } from '../walker/index.ts';
 import {
   isWithoutValue,
   type LocatedEndpoint,
@@ -29,10 +30,12 @@ export function standardStatusFailures({
     const message = `The not-implemented Rejection's status is ${notImplementedStatus}: ${writtenTextOf(status)}`;
     return status === notImplementedStatus
       ? []
-      : [failure([...at, 'status'], 'rejection-status', message)];
+      : [failure(inFields(at, 'status'), 'rejection-status', message)];
   }
   const message = `A Rejection's status is 4xx: ${writtenTextOf(status)}`;
-  return isRejectionStatus(status) ? [] : [failure([...at, 'status'], 'rejection-status', message)];
+  return isRejectionStatus(status)
+    ? []
+    : [failure(inFields(at, 'status'), 'rejection-status', message)];
 }
 
 /** The invalid-input and not-implemented Rejections are added to every Endpoint, so none lists them. */
@@ -48,7 +51,7 @@ export function listedStandardFailures({
   const added = listed.filter(({ name }) => addedNames.includes(name));
   return added.map(({ name, index }) =>
     failure(
-      [...at, 'rejections', index],
+      inside(at, fieldStep('rejections'), indexStep(index)),
       'standard-rejection-listed',
       `${textOf(name)} is added to every Endpoint without listing it`,
     ),
@@ -64,7 +67,7 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
   const standard = listed.filter(({ name }) => name !== undefined);
   return standard.map(({ name, index }) =>
     failure(
-      [...at, 'rejections', index],
+      inside(at, fieldStep('rejections'), indexStep(index)),
       'standard-rejection-on-guard',
       `A Guard lists declared Rejections only: ${textOf(name)}`,
     ),

@@ -1,12 +1,14 @@
 import type { $ZodType } from 'zod/v4/core';
-import type {
-  LocatedSchema,
-  NotAllowed,
-  ObjectNode,
-  Path,
-  SchemaNode,
-  WalkedLocation,
-  WalkedSchemas,
+import {
+  type LocatedSchema,
+  type NotAllowed,
+  type ObjectNode,
+  type Place,
+  placeNameOf,
+  placeOf,
+  type SchemaNode,
+  type WalkedLocation,
+  type WalkedSchemas,
 } from '../walker/index.ts';
 import {
   type Declarations,
@@ -21,7 +23,6 @@ import {
   type ObjectPart,
   type Part,
   slotAt,
-  textOf,
   writtenAt,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
@@ -32,7 +33,7 @@ import { type DeclarationFailure, failure } from './failures.ts';
  * owns its own slot.
  */
 export type Slot = {
-  readonly at: Path;
+  readonly at: Place;
   readonly owner: unknown;
   readonly part: Part;
   readonly value: unknown;
@@ -84,9 +85,7 @@ export function schemaSlotsAmong(slots: readonly Slot[]): SchemaSlots {
   const filled = slots.filter(isFilled);
   const failures = filled
     .filter((slot) => !holdsSchema(slot))
-    .map((slot) =>
-      failure(slot.at, 'not-a-schema', `${textOf(slot.at.at(-1))} is not a zod schema`),
-    );
+    .map((slot) => failure(slot.at, 'not-a-schema', `${placeNameOf(slot.at)} is not a zod schema`));
   return { slots: filled.filter(holdsSchema), failures };
 }
 
@@ -164,7 +163,7 @@ function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
 function sharedSlots({ ownMembers = [] }: Declarations): readonly Slot[] {
   return ownMembers.filter(isSchemaMember).map(({ name, value }) => ({
-    at: ['exports', name],
+    at: placeOf({ kind: 'export', name }, value),
     owner: value,
     part: 'schema' as const,
     value,
@@ -180,7 +179,7 @@ function messageSlots({ events, commands }: Declarations): readonly Slot[] {
 }
 
 function slot(
-  { at, owner }: { readonly at: Path; readonly owner: unknown },
+  { at, owner }: { readonly at: Place; readonly owner: unknown },
   part: Exclude<Part, 'schema'>,
   value: unknown,
 ): Slot {

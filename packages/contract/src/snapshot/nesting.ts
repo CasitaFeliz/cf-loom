@@ -1,16 +1,57 @@
-import type { NotAllowed, Path } from '../walker/index.ts';
+import type { NotAllowedFailure } from '../validation/index.ts';
+import type { Path, Site } from '../walker/index.ts';
+import { ownOf } from '../written/index.ts';
 
 /** The deepest JSON nesting a Snapshot may hold, so whatever `generate` writes the decoder reads back. */
 export const snapshotNestingLimit = 256;
 
-/** A Snapshot `generate` would write nested deeper than the decoder reads back, refused at that path. */
-export function nestingFailureOf(snapshot: unknown): NotAllowed | undefined {
+/**
+ * A Snapshot `generate` would write nested deeper than the decoder reads back, refused at the
+ * Element the too-deep value sits in, since the inner path is no author's term.
+ */
+export function nestingFailureOf(snapshot: unknown): NotAllowedFailure | undefined {
   const at = tooDeepPathOf(snapshot);
   if (at === undefined) {
     return undefined;
   }
   const construct = `JSON nested deeper than the ${snapshotNestingLimit} levels a Snapshot holds`;
-  return { kind: 'not-allowed', at, construct };
+  const site = siteOfPath(snapshot, at);
+  return {
+    kind: 'not-allowed',
+    site,
+    steps: [],
+    construct,
+    declaration: undefined,
+    alsoIn: [],
+    origin: undefined,
+  };
+}
+
+/** The Element a path into a Snapshot leads into: its top-level entry, by the key it sits under. */
+function siteOfPath(snapshot: unknown, [section, key]: Path): Site {
+  if (typeof key !== 'string') {
+    return { kind: 'root' };
+  }
+  switch (section) {
+    case 'endpoints': {
+      const name = ownOf(ownOf(ownOf(snapshot, 'endpoints'), key), 'name');
+      return { kind: 'endpoint', identity: key, name: typeof name === 'string' ? name : key };
+    }
+    case 'events':
+      return { kind: 'event', identity: key };
+    case 'commands':
+      return { kind: 'command', identity: key };
+    case 'codes':
+      return { kind: 'code', code: key };
+    case 'guards':
+      return { kind: 'guard', name: key };
+    case 'exports':
+      return { kind: 'export', name: key };
+    case 'defs':
+      return { kind: 'def', name: key };
+    default:
+      return { kind: 'root' };
+  }
 }
 
 /** A JSON object or array, and where it sits, at its depth of nesting. */

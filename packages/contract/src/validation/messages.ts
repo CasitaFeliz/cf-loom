@@ -5,7 +5,7 @@ import {
   messageBodyRefusal,
   messageVersionRefusal,
 } from '../declarations/index.ts';
-import type { SchemaNode } from '../walker/index.ts';
+import { inFields, type SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -50,10 +50,13 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
   return [
     ...messages.flatMap(versionFailures),
     ...declarations.events.flatMap(({ at, event }) =>
-      closedValueFailures({ at: [...at, 'visibility'], value: event.visibility }, eventVisibility),
+      closedValueFailures(
+        { at: inFields(at, 'visibility'), value: event.visibility },
+        eventVisibility,
+      ),
     ),
     ...messages.flatMap(({ at, message }) =>
-      closedValueFailures({ at: [...at, 'lifecycle'], value: message.lifecycle }, lifecycle),
+      closedValueFailures({ at: inFields(at, 'lifecycle'), value: message.lifecycle }, lifecycle),
     ),
     ...identityFailures(events),
     ...identityFailures(commands),
@@ -100,7 +103,7 @@ function versionFailures({ at, message }: LocatedMessage): readonly DeclarationF
     return [];
   }
   const text = `${messageVersionRefusal}: ${writtenTextOf(version)}`;
-  return [failure([...at, 'version'], 'message-version', text)];
+  return [failure(inFields(at, 'version'), 'message-version', text)];
 }
 
 /** Whether a Message Version is named by a string; any other name already fails as a field. */
@@ -120,7 +123,7 @@ function identityOf({ message }: LocatedMessage): string {
 function identityFailures(messages: readonly LocatedMessage[]): readonly DeclarationFailure[] {
   return repeated(messages.filter(isIdentified), identityOf).map((located) =>
     failure(
-      [...located.at, 'version'],
+      inFields(located.at, 'version'),
       'duplicate-message-identity',
       `A Message Version is identified by its name and version, once: ${identityOf(located)}`,
     ),
@@ -139,7 +142,7 @@ function kindFailures(
   const firsts = shared.filter((located) => !repeats.has(located));
   return firsts.map(({ at, message }) =>
     failure(
-      [...at, 'name'],
+      inFields(at, 'name'),
       'message-kind',
       `A Message name belongs to one kind: ${message.name} is an Event and a Command`,
     ),
@@ -154,7 +157,7 @@ function activeCommandFailures(commands: readonly LocatedMessage[]): readonly De
   const versions = active.filter((located) => !repeatedIdentities.has(located));
   return repeated(versions, ({ message }) => message.name).map(({ at, message }) =>
     failure(
-      [...at, 'lifecycle'],
+      inFields(at, 'lifecycle'),
       'command-active-versions',
       `A Command has at most one Active version: ${message.name}`,
     ),

@@ -2,30 +2,42 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { openEnum } from '../index.ts';
 import { walkSchemas } from '../internal/index.ts';
 
+type Located = Parameters<typeof walkSchemas>[0];
+type Place = Located[number]['at'];
+
+function exportAt(name: string): Place {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] };
+}
+
+const bodyAt = exportAt('body');
+const successAt = exportAt('success');
+
+function walkBodyRaw(schema: core.$ZodType) {
+  return walkSchemas([{ at: bodyAt, schema }], () => undefined);
+}
+
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  return refusalsOf(walkBodyRaw(schema));
 }
 
 function refused(construct: string, instead?: string) {
-  return refusedAt(['body'], construct, instead);
+  return refusedAt('', construct, instead);
 }
 
-function refusedAt(at: readonly (string | number)[], construct: string, instead?: string) {
+function refusedAt(at: string, construct: string, instead?: string) {
   return refusedAll([failureAt(at, construct, instead)]);
 }
 
-function failureAt(at: readonly (string | number)[], construct: string, instead?: string) {
+function failureAt(at: string, construct: string, instead?: string) {
   return { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
 }
 
 function refusedAll(failures: readonly ReturnType<typeof failureAt>[]) {
-  return {
-    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
-    defs: {},
-  };
+  return { located: [{ kind: 'not-allowed', failures }], defs: {} };
 }
 
 const mutating = '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()';
@@ -42,52 +54,33 @@ const looseObject = 'z.looseObject() or .passthrough()';
 
 describe('walkSchemas: the Not allowed list', () => {
   test('.nonoptional() outside an object field fails, and so does the .optional() inside it', () => {
-    const failures = [
-      { kind: 'not-allowed', at: ['body'], construct: '.nonoptional()' },
-      { kind: 'not-allowed', at: ['body'], construct: '.optional()' },
-    ];
+    const failures = [failureAt('', '.nonoptional()'), failureAt('', '.optional()')];
 
-    expect(walkBody(z.string().optional().nonoptional())).toEqual({
-      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
-      defs: {},
-    });
+    expect(walkBody(z.string().optional().nonoptional())).toEqual(refusedAll(failures));
   });
 
   test.each([
-    { name: '.default()', schema: z.array(z.date()).default([]), steps: [['items']] },
-    {
-      name: 'z.looseRecord()',
-      schema: z.looseRecord(z.string(), z.date()),
-      steps: [['value']],
-    },
-    { name: 'z.xor()', schema: z.xor([z.date(), z.string()]), steps: [['options', 0]] },
-    { name: 'z.map()', schema: z.map(z.date(), z.date()), steps: [['key'], ['value']] },
+    { name: '.default()', schema: z.array(z.date()).default([]), steps: ['[]'] },
+    { name: 'z.looseRecord()', schema: z.looseRecord(z.string(), z.date()), steps: ['{}'] },
+    { name: 'z.xor()', schema: z.xor([z.date(), z.string()]), steps: ['<|0>'] },
+    { name: 'z.map()', schema: z.map(z.date(), z.date()), steps: ['{key}', '{}'] },
     {
       name: 'z.function()',
       schema: z.function({ input: [z.date()], output: z.string() }),
-      steps: [['items', 0]],
+      steps: ['[0]'],
     },
   ])('what lies inside $name is reported beside it', ({ name, schema, steps }) => {
     const order = z.object({ when: schema });
 
-    const at = ['body', 'fields', 'when'];
-    const dates = steps.map((step) => ({
-      kind: 'not-allowed',
-      at: [...at, ...step],
-      construct: 'z.date()',
-      instead: 'z.iso.datetime()',
-    }));
-    const failures = [{ kind: 'not-allowed', at, construct: name }, ...dates];
-    expect(walkBody(order)).toEqual({
-      located: [{ at: ['body'], walked: { kind: 'not-allowed', failures } }],
-      defs: {},
-    });
+    const dates = steps.map((step) => failureAt(`when${step}`, 'z.date()', 'z.iso.datetime()'));
+    const failures = [failureAt('when', name), ...dates];
+    expect(walkBody(order)).toEqual(refusedAll(failures));
   });
 
   test('a refusal stacked on itself is reported once', () => {
     const order = z.object({ note: z.string().default('a').default('b') });
 
-    expect(walkBody(order)).toEqual(refusedAt(['body', 'fields', 'note'], '.default()'));
+    expect(walkBody(order)).toEqual(refusedAt('note', '.default()'));
   });
 
   test.each([
@@ -209,7 +202,7 @@ describe('walkSchemas: the Not allowed list', () => {
     [
       'a union with a z.null() option',
       z.union([z.string(), z.null()]),
-      refusedAt(['body', 'options', 1], 'z.null()', '.nullable()'),
+      refusedAt('<|1>', 'z.null()', '.nullable()'),
     ],
     ['z.undefined()', z.undefined(), refused('z.undefined()', '.nullable()')],
     ['z.literal(null)', z.literal(null), refused('z.literal(null)', '.nullable()')],
@@ -222,9 +215,9 @@ const isFilled = (value: unknown) => value !== '';
 const whenAlways = { when: () => true } as object;
 
 describe('walkSchemas: the checks of a schema whose node fails', () => {
-  const items = failureAt(['body', 'items'], 'z.date()', 'z.iso.datetime()');
-  const refine = failureAt(['body'], '.refine()');
-  const conditional = failureAt(['body'], 'a conditional check');
+  const items = failureAt('[]', 'z.date()', 'z.iso.datetime()');
+  const refine = failureAt('', '.refine()');
+  const conditional = failureAt('', 'a conditional check');
 
   test('a .refine() on an array whose items fail is reported beside the items', () => {
     const schema = z.array(z.date()).refine(isFilled);
@@ -235,7 +228,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
   test('a .refine() on a refused .default() is reported beside it', () => {
     const schema = z.array(z.string()).default([]).refine(isFilled);
 
-    expect(walkBody(schema)).toEqual(refusedAll([failureAt(['body'], '.default()'), refine]));
+    expect(walkBody(schema)).toEqual(refusedAll([failureAt('', '.default()'), refine]));
   });
 
   test.each([
@@ -244,11 +237,10 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
   ])(
     "a .refine() on a field's .%s() whose schema fails is reported at the field",
     (_name, field) => {
-      const at = ['body', 'fields', 'a'];
-      const date = failureAt(at, 'z.date()', 'z.iso.datetime()');
+      const date = failureAt('a', 'z.date()', 'z.iso.datetime()');
 
       expect(walkBody(z.object({ a: field }))).toEqual(
-        refusedAll([date, failureAt(at, '.refine()')]),
+        refusedAll([date, failureAt('a', '.refine()')]),
       );
     },
   );
@@ -262,7 +254,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
   test('a conditional check is reported beside two checks that set one bound', () => {
     const schema = z.string().check(z.minLength(1, whenAlways)).min(2).min(3);
 
-    const repeated = failureAt(['body'], 'two checks that set a lower bound');
+    const repeated = failureAt('', 'two checks that set a lower bound');
     expect(walkBody(schema)).toEqual(refusedAll([conditional, repeated]));
   });
 
@@ -284,30 +276,30 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
   test('a length check on a refused .default() of an array is not reported', () => {
     const schema = z.array(z.string()).default([]).check(z.minLength(1)).refine(isFilled);
 
-    expect(walkBody(schema)).toEqual(refusedAll([failureAt(['body'], '.default()'), refine]));
+    expect(walkBody(schema)).toEqual(refusedAll([failureAt('', '.default()'), refine]));
   });
 
   test('a length check on a refused .default() of a number is reported', () => {
     const schema: z.ZodType = z.number().default(0);
 
-    const length = failureAt(['body'], 'z.minLength()');
+    const length = failureAt('', 'z.minLength()');
     expect(walkBody(schema.check(z.minLength(1)))).toEqual(
-      refusedAll([failureAt(['body'], '.default()'), length]),
+      refusedAll([failureAt('', '.default()'), length]),
     );
   });
 
   test('a check on a lazy that reaches itself through .nullable() ends the walk', () => {
     const looping: z.ZodType = z.lazy(() => looping.nullable()).check(z.minLength(1));
 
-    const cycle = failureAt(['body'], 'a cycle without .meta({ id })', '.meta({ id })');
-    const length = failureAt(['body'], 'z.minLength()');
+    const cycle = failureAt('', 'a cycle without .meta({ id })', '.meta({ id })');
+    const length = failureAt('', 'z.minLength()');
     expect(walkBody(looping)).toEqual(refusedAll([cycle, length]));
   });
 
   test('a lazy that reaches itself before a .nullable() ends the walk', () => {
     const looping: z.ZodType = z.lazy(() => looping).nullable();
 
-    const cycle = failureAt(['body'], 'a cycle without .meta({ id })', '.meta({ id })');
+    const cycle = failureAt('', 'a cycle without .meta({ id })', '.meta({ id })');
     expect(walkBody(looping)).toEqual(refusedAll([cycle]));
   });
 });
@@ -315,12 +307,11 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
 describe('walkSchemas: every refused check is reported once wherever the node fails', () => {
   type Decorate = (schema: z.ZodType) => z.ZodType;
   type Failure = ReturnType<typeof failureAt>;
-  type Path = readonly (string | number)[];
 
   const asIs: Decorate = (schema) => schema;
-  const body: Path = ['body'];
-  const field: Path = ['body', 'fields', 'a'];
-  const cycle = (at: Path) => [failureAt(at, 'a cycle without .meta({ id })', '.meta({ id })')];
+  const body = '';
+  const field = 'a';
+  const cycle = (at: string) => [failureAt(at, 'a cycle without .meta({ id })', '.meta({ id })')];
 
   /** Where a length check on the inner schema is taken: a use of a cycle's schema is a `ref`. */
   type TakesLength = 'nowhere' | 'anywhere' | 'on itself alone';
@@ -329,19 +320,19 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'z.date()',
       make: (decorate: Decorate) => decorate(z.date()),
-      refusals: (at: Path) => [failureAt(at, 'z.date()', 'z.iso.datetime()')],
+      refusals: (at: string) => [failureAt(at, 'z.date()', 'z.iso.datetime()')],
       takesLength: 'nowhere' as TakesLength,
     },
     {
       name: 'a refused .default() of an array',
       make: (decorate: Decorate) => decorate(z.array(z.string()).default([])),
-      refusals: (at: Path) => [failureAt(at, '.default()')],
+      refusals: (at: string) => [failureAt(at, '.default()')],
       takesLength: 'anywhere' as TakesLength,
     },
     {
       name: 'a refused .default() of a number',
       make: (decorate: Decorate) => decorate(z.number().default(0)),
-      refusals: (at: Path) => [failureAt(at, '.default()')],
+      refusals: (at: string) => [failureAt(at, '.default()')],
       takesLength: 'nowhere' as TakesLength,
     },
     {
@@ -368,7 +359,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         const loop: z.ZodType = decorate(z.array(z.lazy(() => loop)));
         return loop;
       },
-      refusals: (at: Path) => cycle([...at, 'items']),
+      refusals: (at: string) => cycle(`${at}[]`),
       takesLength: 'on itself alone' as TakesLength,
     },
   ];
@@ -479,8 +470,8 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
 });
 
 describe('walkSchemas: the checks of a failed node are judged by the node it was building', () => {
-  const repeated = failureAt(['body'], 'two checks that set a lower bound');
-  const items = failureAt(['body', 'items'], 'z.date()', 'z.iso.datetime()');
+  const repeated = failureAt('', 'two checks that set a lower bound');
+  const items = failureAt('[]', 'z.date()', 'z.iso.datetime()');
 
   test.each<[string, z.ZodType]>([
     ['z.coerce.date()', z.coerce.date()],
@@ -489,7 +480,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     const type = name.replace('coerce.', '');
 
     expect(walkBody(schema)).toMatchObject(
-      refusedAll([failureAt(['body'], 'z.coerce.*'), expect.objectContaining({ construct: type })]),
+      refusedAll([failureAt('', 'z.coerce.*'), expect.objectContaining({ construct: type })]),
     );
   });
 
@@ -526,7 +517,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     const nullable: z.ZodType = z.string().refine(isFilled).min(1).nullable();
 
     expect(walkBody(nullable.check(z.minLength(2)))).toEqual(
-      refusedAll([failureAt(['body'], '.refine()'), repeated]),
+      refusedAll([failureAt('', '.refine()'), repeated]),
     );
   });
 
@@ -542,41 +533,40 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       const tree: z.ZodType = z.array(z.union([z.lazy(() => tree), leaf])).meta({ id: 'tree' });
       return tree;
     };
-    const length = (at: readonly (string | number)[]) => failureAt(at, 'z.minLength()');
-    const leafFailure = (at: readonly (string | number)[]) =>
-      failureAt([...at, 'items', 'options', 1], 'z.date()', 'z.iso.datetime()');
+    const length = (at: string) => failureAt(at, 'z.minLength()');
+    const leafFailure = (at: string) => failureAt(`${at}[]<|1>`, 'z.date()', 'z.iso.datetime()');
 
     const uses = [
       {
         name: 'through z.lazy()',
-        at: ['body'],
+        at: '',
         use: (tree: z.ZodType) => z.lazy(() => tree).check(z.minLength(1)),
         around: [] as ReturnType<typeof failureAt>[],
       },
       {
         name: 'through .nullable()',
-        at: ['body'],
+        at: '',
         use: (tree: z.ZodType) => tree.nullable().check(z.minLength(1)),
         around: [],
       },
       {
         name: "through a field's .optional()",
-        at: ['body', 'fields', 'a'],
+        at: 'a',
         use: (tree: z.ZodType) => z.object({ a: tree.optional().check(z.minLength(1)) }),
         around: [],
       },
       {
         name: 'through a refused .default()',
-        at: ['body'],
+        at: '',
         use: (tree: z.ZodType) => tree.default([]).check(z.minLength(1)),
-        around: [failureAt(['body'], '.default()')],
+        around: [failureAt('', '.default()')],
       },
     ];
 
     test.each(uses)('a length check on a use $name of a def is refused', ({ at, use, around }) => {
       const walked = walkBody(use(treeOf(z.string())));
 
-      expect(walked.located[0]?.walked).toEqual({
+      expect(walked.located[0]).toEqual({
         kind: 'not-allowed',
         failures: [...around, length(at)],
       });
@@ -587,7 +577,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       ({ at, use, around }) => {
         const walked = walkBody(use(treeOf(z.date())));
 
-        expect(walked.located[0]?.walked).toEqual({
+        expect(walked.located[0]).toEqual({
           kind: 'not-allowed',
           failures: [...around, leafFailure(at), length(at)],
         });
@@ -601,27 +591,23 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
         .refine(isFilled)
         .meta({ id: 'tree' });
 
-      expect(walkBody(tree)).toEqual(
-        refusedAll([leafFailure(['body']), failureAt(['body'], '.refine()')]),
-      );
+      expect(walkBody(tree)).toEqual(refusedAll([leafFailure(''), failureAt('', '.refine()')]));
     });
   });
 
   describe('a schema on a cycle no id names is judged as every schema of it would be with an id', () => {
     const unnamedCycle = 'a cycle without .meta({ id })';
-    type Located = Parameters<typeof walkSchemas>[0];
     type WalkedSchemas = ReturnType<typeof walkSchemas>;
+    type WalkedLocation = WalkedSchemas['located'][number];
 
-    const constructsAt = (walked: WalkedSchemas, at: string) => {
-      const location = walked.located.find((candidate) => candidate.at[0] === at);
-      return location?.walked.kind === 'not-allowed'
+    const constructsIn = (location: WalkedLocation | undefined) =>
+      location?.walked.kind === 'not-allowed'
         ? location.walked.failures.map((failure) => failure.construct)
         : [];
-    };
+    const constructsAt = (walked: WalkedSchemas, at: Place) =>
+      constructsIn(walked.located.find((candidate) => candidate.at === at));
     const constructsOf = (walked: WalkedSchemas) => [
-      ...new Set(
-        walked.located.flatMap((location) => constructsAt(walked, String(location.at[0]))),
-      ),
+      ...new Set(walked.located.flatMap((location) => constructsIn(location))),
     ];
 
     /** The two schemas of one cycle: the array that builds the node and the lazy standing for it. */
@@ -636,20 +622,20 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       {
         name: 'the other schema of the cycle walked first',
         locate: (other: z.ZodType, schema: z.ZodType): Located => [
-          { at: ['body'], schema: other },
-          { at: ['success'], schema },
+          { at: bodyAt, schema: other },
+          { at: successAt, schema },
         ],
       },
       {
         name: 'walked first',
         locate: (other: z.ZodType, schema: z.ZodType): Located => [
-          { at: ['success'], schema },
-          { at: ['body'], schema: other },
+          { at: successAt, schema },
+          { at: bodyAt, schema: other },
         ],
       },
       {
         name: 'walked alone',
-        locate: (_other: z.ZodType, schema: z.ZodType): Located => [{ at: ['success'], schema }],
+        locate: (_other: z.ZodType, schema: z.ZodType): Located => [{ at: successAt, schema }],
       },
     ];
 
@@ -705,7 +691,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
         const walked = walkSchemas(located, () => undefined);
 
-        expect(constructsAt(walked, 'success')).toEqual([
+        expect(constructsAt(walked, successAt)).toEqual([
           ...use.around,
           unnamedCycle,
           'z.minLength()',
@@ -766,7 +752,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
         const walked = walkSchemas(locate(loop, use), () => undefined);
 
-        expect(new Set(constructsAt(walked, 'success'))).toEqual(new Set(['z.date()']));
+        expect(new Set(constructsAt(walked, successAt))).toEqual(new Set(['z.date()']));
       },
     );
 
@@ -777,19 +763,19 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       };
       const useOf = (tree: z.ZodType) => z.lazy(() => tree).check(z.minLength(1));
 
-      const refusedId = walkBody(useOf(treeOf('Tree')));
+      const refusedId = walkBodyRaw(useOf(treeOf('Tree')));
 
-      expect(refusedId).toEqual(
+      expect(refusalsOf(refusedId)).toEqual(
         refusedAll([
-          failureAt(['body'], '.meta({ id: "Tree" })', 'a camelCase name'),
-          failureAt(['body', 'items'], unnamedCycle, '.meta({ id })'),
-          failureAt(['body'], 'z.minLength()'),
+          failureAt('', '.meta({ id: "Tree" })', 'a camelCase name'),
+          failureAt('[]', unnamedCycle, '.meta({ id })'),
+          failureAt('', 'z.minLength()'),
         ]),
       );
       expect(constructsOf(refusedId)).toEqual([
         '.meta({ id: "Tree" })',
         unnamedCycle,
-        ...constructsOf(walkBody(useOf(treeOf('tree')))),
+        ...constructsOf(walkBodyRaw(useOf(treeOf('tree')))),
       ]);
     });
   });
@@ -822,7 +808,7 @@ describe('walkSchemas: constraints that admit no value', () => {
     ['an array', z.array(z.string()).length(0)],
     ['a number', z.number().min(5).max(5)],
   ])('%s bounded at one value walks', (_name, schema) => {
-    expect(walkBody(schema).located[0]?.walked.kind).toBe('walked');
+    expect(walkBody(schema).located[0]?.kind).toBe('walked');
   });
 
   test.each<[string, z.ZodType]>([
@@ -844,10 +830,7 @@ describe('walkSchemas: constraints that admit no value', () => {
     const schema = z.array(z.date()).min(5).max(3);
 
     expect(walkBody(schema)).toEqual(
-      refusedAll([
-        failureAt(['body', 'items'], 'z.date()', 'z.iso.datetime()'),
-        failureAt(['body'], noValue),
-      ]),
+      refusedAll([failureAt('[]', 'z.date()', 'z.iso.datetime()'), failureAt('', noValue)]),
     );
   });
 
@@ -859,7 +842,7 @@ describe('walkSchemas: constraints that admit no value', () => {
       .refine((value) => value !== '');
 
     expect(walkBody(schema)).toEqual(
-      refusedAll([failureAt(['body'], '.refine()'), failureAt(['body'], noValue)]),
+      refusedAll([failureAt('', '.refine()'), failureAt('', noValue)]),
     );
   });
 });

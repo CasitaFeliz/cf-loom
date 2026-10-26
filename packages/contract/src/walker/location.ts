@@ -88,6 +88,15 @@ export type Place = {
   readonly steps: readonly Step[];
 };
 
+/** What a place is called in a sentence: the field it is at, else the name of its site. */
+export function placeNameOf({ site, steps }: Place): string {
+  const last = steps.at(-1);
+  if (last?.kind === 'field') {
+    return last.name;
+  }
+  return 'name' in site ? site.name : siteTextOf(site);
+}
+
 /** The place of a declaration itself, at its site, with no steps. */
 export function placeOf(site: Site, declaration: unknown): Place {
   return { site, declaration, steps: [] };

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineEndpoint,
@@ -15,7 +16,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const orderBody = z.object({ id: z.uuid() });
@@ -49,13 +50,8 @@ function castEndpoint(declaration: object): Endpoint {
   return defineEndpoint(declaration as never);
 }
 
-function failedAt(at: readonly string[], rule: string, message: string) {
-  return {
-    kind: 'invalid',
-    failures: [
-      { kind: 'declaration', at: ['groups', 'orders', 'endpoints', ...at], rule, message },
-    ],
-  };
+function failedAt(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () => {
@@ -75,7 +71,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
 
     expect(validated).toEqual(
       failedAt(
-        ['TRACE /orders', 'method'],
+        'endpoints.TRACE /orders (listOrders) method',
         'method',
         'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: "TRACE"',
       ),
@@ -89,7 +85,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
 
     expect(validated).toEqual(
       failedAt(
-        ['HEAD /orders', 'method'],
+        'endpoints.HEAD /orders (listOrders) method',
         'method',
         'A method is GET, POST, PUT, PATCH, DELETE or OPTIONS: "HEAD"',
       ),
@@ -103,7 +99,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
 
     expect(validated).toEqual(
       failedAt(
-        ['GET /orders', 'visibility'],
+        'endpoints.GET /orders (listOrders) visibility',
         'visibility',
         'A Visibility is public, internal or private: "protected"',
       ),
@@ -117,7 +113,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
 
     expect(validated).toEqual(
       failedAt(
-        ['GET /orders', 'lifecycle'],
+        'endpoints.GET /orders (listOrders) lifecycle',
         'lifecycle',
         'A lifecycle is active, deprecated or retired: "sunset"',
       ),
@@ -152,7 +148,9 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
   test('a Deprecated Endpoint without deprecatedAt fails', () => {
     const validated = validateEndpoint(castEndpoint({ ...listOrders, lifecycle: 'deprecated' }));
 
-    expect(validated).toEqual(failedAt(['GET /orders', 'deprecatedAt'], 'deprecated-at', instant));
+    expect(validated).toEqual(
+      failedAt('endpoints.GET /orders (listOrders) deprecatedAt', 'deprecated-at', instant),
+    );
   });
 
   test.each([
@@ -167,7 +165,9 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
 
     const validated = validateEndpoint(castEndpoint(deprecated));
 
-    expect(validated).toEqual(failedAt(['GET /orders', 'deprecatedAt'], 'deprecated-at', instant));
+    expect(validated).toEqual(
+      failedAt('endpoints.GET /orders (listOrders) deprecatedAt', 'deprecated-at', instant),
+    );
   });
 
   test('a deprecatedAt beside a lifecycle that is none fails the lifecycle rule alone', () => {
@@ -178,7 +178,7 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['GET /orders', 'lifecycle'],
+        'endpoints.GET /orders (listOrders) lifecycle',
         'lifecycle',
         'A lifecycle is active, deprecated or retired: "sunset"',
       ),
@@ -191,7 +191,11 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
     const validated = validateEndpoint(castEndpoint(deprecated));
 
     expect(validated).toEqual(
-      failedAt(['GET /orders', 'deprecatedAt'], 'not-a-string', 'deprecatedAt is a string'),
+      failedAt(
+        'endpoints.GET /orders (listOrders) deprecatedAt',
+        'not-a-string',
+        'deprecatedAt is a string',
+      ),
     );
   });
 
@@ -206,7 +210,7 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['GET /orders', 'deprecatedAt'],
+        'endpoints.GET /orders (listOrders) deprecatedAt',
         'deprecated-at',
         'Only a Deprecated Endpoint declares deprecatedAt',
       ),
@@ -224,7 +228,7 @@ describe('validateRoot: a Success’s status and body', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['POST /orders', 'success', 'status'],
+        'endpoints.POST /orders (createOrder) success.status',
         'success-status',
         'A Success status is 200, 201, 202, 203 or 204: 205',
       ),
@@ -245,7 +249,11 @@ describe('validateRoot: a Success’s status and body', () => {
     );
 
     expect(validated).toEqual(
-      failedAt(['POST /orders', 'success', 'body'], 'success-body', 'A 204 Success has no body'),
+      failedAt(
+        'endpoints.POST /orders (createOrder) success.body',
+        'success-body',
+        'A 204 Success has no body',
+      ),
     );
   });
 
@@ -255,7 +263,11 @@ describe('validateRoot: a Success’s status and body', () => {
     const validated = validateEndpoint(defineEndpoint({ ...createOrder, success: { status } }));
 
     expect(validated).toEqual(
-      failedAt(['POST /orders', 'success', 'body'], 'success-body', 'A 201 Success has a body'),
+      failedAt(
+        'endpoints.POST /orders (createOrder) success.body',
+        'success-body',
+        'A 201 Success has a body',
+      ),
     );
   });
 });
@@ -277,7 +289,11 @@ describe('validateRoot: an Input body', () => {
     );
 
     expect(validated).toEqual(
-      failedAt(['GET /orders', 'input', 'body'], 'input-body', 'A GET Endpoint takes no body'),
+      failedAt(
+        'endpoints.GET /orders (listOrders) input.body',
+        'input-body',
+        'A GET Endpoint takes no body',
+      ),
     );
   });
 });
@@ -315,31 +331,13 @@ describe('validateRoot: where Endpoints sit', () => {
       failures: [
         {
           kind: 'declaration',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'GET /orders/all',
-            'input',
-            'query',
-            'fields',
-            'page',
-          ],
+          location: 'endpoints.GET /orders/all (listOrders) input.query.page',
           rule: 'not-text',
           message: nonText,
         },
         {
           kind: 'declaration',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'GET /orders/{}',
-            'input',
-            'query',
-            'fields',
-            'page',
-          ],
+          location: 'endpoints.GET /orders/{} (listOrders) input.query.page',
           rule: 'not-text',
           message: nonText,
         },

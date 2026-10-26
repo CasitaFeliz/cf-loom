@@ -1,4 +1,4 @@
-import type { Path } from './nodes.ts';
+import type { Place } from './location.ts';
 import { type Failed, failed, type Outline } from './walked.ts';
 
 /** A construct as the Not allowed list writes it, and what the documents name instead. */
@@ -179,6 +179,6 @@ export function refusedStringFormat(format: string): Refused {
 }
 
 /** One failure, as the walk of a schema returns it, with the node the walk was building. */
-export function notAllowed(at: Path, construct: Refused, outline?: Outline): Failed {
-  return failed([{ kind: 'not-allowed', at, ...construct }], outline);
+export function notAllowed(at: Place, construct: Refused, outline?: Outline): Failed {
+  return failed([{ kind: 'not-allowed', ...at, ...construct }], outline);
 }

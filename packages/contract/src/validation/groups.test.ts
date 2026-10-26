@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { ping, pingedV1, pingKey, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -61,15 +62,15 @@ function aGroup(name: string, lists: Readonly<Record<string, unknown>>): Group {
 }
 
 function validateOrders(root: Root) {
-  return validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
+  return summarized(validateRoot(root, aRootPackage(root, { packageName: 'orders-service' })));
 }
 
 function validateGroups(groups: readonly Group[]) {
   return validateOrders(defineService({ name: 'orders-service', groups }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: what a Group lists', () => {
@@ -87,7 +88,7 @@ describe('validateRoot: what a Group lists', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders'],
+        'groups.orders',
         'empty-group',
         'A Group lists at least one Endpoint, Event, Command or Subscription',
       ),
@@ -99,7 +100,7 @@ describe('validateRoot: what a Group lists', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders'],
+        'groups.orders',
         'empty-group',
         'A Group lists at least one Endpoint, Event, Command or Subscription',
       ),
@@ -109,9 +110,7 @@ describe('validateRoot: what a Group lists', () => {
   test('a Group whose only field is no list fails as not-a-list alone', () => {
     const result = validateGroups([aGroup('orders', { events: {} })]);
 
-    expect(result).toEqual(
-      failed(['groups', 'orders', 'events'], 'not-a-list', 'events is a list'),
-    );
+    expect(result).toEqual(failed('groups.orders events', 'not-a-list', 'events is a list'));
   });
 
   test('an empty list beside a list that holds something validates', () => {
@@ -127,9 +126,7 @@ describe('validateRoot: what a Group lists', () => {
 
       const result = validateGroups([aGroup('orders', lists)]);
 
-      expect(result).toEqual(
-        failed(['groups', 'orders', field], 'not-a-list', `${field} is a list`),
-      );
+      expect(result).toEqual(failed(`groups.orders ${field}`, 'not-a-list', `${field} is a list`));
     },
   );
 
@@ -142,7 +139,7 @@ describe('validateRoot: what a Group lists', () => {
     const result = validateGroups([aGroup('orders', { [field]: [item] })]);
 
     expect(result).toEqual(
-      failed(['groups', 'orders', field, 0], 'not-a-declaration', `${field}.0 is not ${noun}`),
+      failed(`groups.orders ${field}[0]`, 'not-a-declaration', `${field}.0 is not ${noun}`),
     );
   });
 
@@ -153,7 +150,7 @@ describe('validateRoot: what a Group lists', () => {
       const root = defineService({ name: 'orders-service', groups, [field]: [] } as never);
 
       expect(validateOrders(root)).toEqual(
-        failed([field], 'undeclared-field', `${field} is not a declared field`),
+        failed(`(root) ${field}`, 'undeclared-field', `${field} is not a declared field`),
       );
     },
   );
@@ -168,7 +165,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'sales', 'endpoints', 'GET /orders'],
+        'groups.sales',
         'group-membership',
         'An Endpoint belongs to exactly one Group: listOrders is also in orders',
       ),
@@ -180,7 +177,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders'],
+        'groups.orders',
         'group-membership',
         'An Endpoint belongs to exactly one Group: listOrders is also in orders',
       ),
@@ -195,7 +192,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'billing', 'events', 'OrderCreated@2'],
+        'groups.billing',
         'group-membership',
         "An Event's Message Version belongs to exactly one Group: OrderCreated@2 is also in orders",
       ),
@@ -210,7 +207,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'billing', 'commands', 'ChargeCard@2'],
+        'groups.billing',
         'group-membership',
         "A Command's Message Version belongs to exactly one Group: ChargeCard@2 is also in orders",
       ),
@@ -225,7 +222,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'billing', 'subscriptions', 'notifyOnCreated'],
+        'groups.billing',
         'group-membership',
         'A Subscription belongs to exactly one Group: notifyOnCreated is also in orders',
       ),
@@ -237,7 +234,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
     expect(result).toEqual(
       failed(
-        ['groups', 'orders', 'events', 'OrderCreated@2'],
+        'groups.orders',
         'group-membership',
         "An Event's Message Version belongs to exactly one Group: OrderCreated@2 is also in orders",
       ),
@@ -274,13 +271,13 @@ function aContract(groups: readonly Group[], dependencies: 'none' | 'ping-servic
 }
 
 function validateBilling(contract: ServiceContract) {
-  return validateRoot(contract, aRootPackage(contract));
+  return summarized(validateRoot(contract, aRootPackage(contract)));
 }
 
-function providedElementFailure(field: 'endpoints' | 'events', key: string, label: string) {
+function providedElementFailure(label: string, group = 'billing') {
   return {
     kind: 'declaration',
-    at: ['groups', 'billing', field, key],
+    location: `groups.${group}`,
     rule: 'provided-element',
     message: `A Group lists the Contract's own Elements: ${label} is ping-service's`,
   };
@@ -296,7 +293,7 @@ describe('validateRoot: a Group lists the Contract’s own Elements', () => {
 
       expect(result).toEqual({
         kind: 'invalid',
-        failures: [providedElementFailure('events', 'Pinged@1', 'Pinged@1')],
+        failures: [providedElementFailure('Pinged@1')],
       });
     },
   );
@@ -310,7 +307,7 @@ describe('validateRoot: a Group lists the Contract’s own Elements', () => {
 
       expect(result).toEqual({
         kind: 'invalid',
-        failures: [providedElementFailure('endpoints', 'GET /ping', 'ping')],
+        failures: [providedElementFailure('ping')],
       });
     },
   );
@@ -332,7 +329,7 @@ describe('validateRoot: a Group lists the Contract’s own Elements', () => {
 
     expect(result).toEqual({
       kind: 'invalid',
-      failures: [providedElementFailure('endpoints', 'GET /ping', 'ping')],
+      failures: [providedElementFailure('ping')],
     });
   });
 
@@ -347,11 +344,8 @@ describe('validateRoot: a Group lists the Contract’s own Elements', () => {
     expect(result).toEqual({
       kind: 'invalid',
       failures: [
-        providedElementFailure('events', 'Pinged@1', 'Pinged@1'),
-        {
-          ...providedElementFailure('events', 'Pinged@1', 'Pinged@1'),
-          at: ['groups', 'audit', 'events', 'Pinged@1'],
-        },
+        providedElementFailure('Pinged@1', 'billing'),
+        providedElementFailure('Pinged@1', 'audit'),
       ],
     });
   });
@@ -381,10 +375,8 @@ describe('validateRoot: a Group lists the Contract’s own Elements', () => {
       const result = validateBilling(contract);
 
       const expected = [
-        ...(endpoint === 'provided'
-          ? [providedElementFailure('endpoints', 'GET /ping', 'ping')]
-          : []),
-        ...(event === 'provided' ? [providedElementFailure('events', 'Pinged@1', 'Pinged@1')] : []),
+        ...(endpoint === 'provided' ? [providedElementFailure('ping')] : []),
+        ...(event === 'provided' ? [providedElementFailure('Pinged@1')] : []),
       ];
       expect(result.kind === 'invalid' ? result.failures : []).toEqual(expected);
       expect(endpointsOf(contract)).toEqual(endpoint === 'own' ? [listOrders] : []);

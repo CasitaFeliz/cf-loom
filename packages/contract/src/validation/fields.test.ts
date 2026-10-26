@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Attachment,
@@ -19,7 +20,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -59,19 +60,19 @@ function validateEndpoint(endpoint: Endpoint) {
   return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function undeclared(at: readonly (string | number)[]) {
-  return failed(at, 'undeclared-field', `${String(at.at(-1))} is not a declared field`);
+function undeclared(location: string, field: string) {
+  return failed(location, 'undeclared-field', `${field} is not a declared field`);
 }
 
-function required(at: readonly (string | number)[], message: string) {
-  return failed(at, 'required-field', message);
+function required(location: string, message: string) {
+  return failed(location, 'required-field', message);
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
+const endpointAt = 'endpoints.GET /orders (listOrders)';
 
 describe('validateRoot: undeclared fields', () => {
   test('a Contract with only declared fields validates', () => {
@@ -90,13 +91,13 @@ describe('validateRoot: undeclared fields', () => {
   test('definitions on a Contract is an undeclared field: what it reaches says which Definitions Packages it uses', () => {
     const contract = defineService(withField({ name: 'orders-service' }, 'definitions'));
 
-    expect(validateInPackage(contract)).toEqual(undeclared(['definitions']));
+    expect(validateInPackage(contract)).toEqual(undeclared('(root) definitions', 'definitions'));
   });
 
   test('an undeclared field on a Contract fails', () => {
     const contract = defineService(withField({ name: 'orders-service' }, 'endpoints'));
 
-    expect(validateInPackage(contract)).toEqual(undeclared(['endpoints']));
+    expect(validateInPackage(contract)).toEqual(undeclared('(root) endpoints', 'endpoints'));
   });
 
   test('an undeclared field on an Application fails', () => {
@@ -104,20 +105,22 @@ describe('validateRoot: undeclared fields', () => {
       withField({ name: 'web-admin', dependencies: [] }, 'groups'),
     );
 
-    expect(validateInPackage(application)).toEqual(undeclared(['groups']));
+    expect(validateInPackage(application)).toEqual(undeclared('(root) groups', 'groups'));
   });
 
   test('an undeclared field on a Definitions Package fails', () => {
     const definitions = defineDefinitions(withField({}, 'endpoints'));
 
-    expect(validateInPackage(definitions)).toEqual(undeclared(['endpoints']));
+    expect(validateInPackage(definitions)).toEqual(undeclared('(root) endpoints', 'endpoints'));
   });
 
   test('an undeclared field on the Definitions Package a Contract takes its Standard Rejections from fails where it is named', () => {
     const definitions = defineDefinitions(withField({}, 'endpoints'));
     const contract = defineService({ name: 'orders-service', standardRejections: definitions });
 
-    expect(validateInPackage(contract)).toEqual(undeclared(['standardRejections', 'endpoints']));
+    expect(validateInPackage(contract)).toEqual(
+      undeclared('(root) standardRejections.endpoints', 'endpoints'),
+    );
   });
 
   test('an undeclared field on a Group fails', () => {
@@ -129,35 +132,35 @@ describe('validateRoot: undeclared fields', () => {
     );
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups: [group] }))).toEqual(
-      undeclared(['groups', 'orders', 'prefix']),
+      undeclared('groups.orders prefix', 'prefix'),
     );
   });
 
   test('an undeclared field on an Endpoint fails', () => {
     const endpoint = defineEndpoint(withField(listing, 'group'));
 
-    expect(validateEndpoint(endpoint)).toEqual(undeclared([...endpointAt, 'group']));
+    expect(validateEndpoint(endpoint)).toEqual(undeclared(`${endpointAt} group`, 'group'));
   });
 
   test('an undeclared field in an Endpoint’s input fails', () => {
     const input = { querry: z.object({ page: z.int() }) } as unknown as { query: z.ZodObject };
     const endpoint = defineEndpoint({ ...listing, input });
 
-    expect(validateEndpoint(endpoint)).toEqual(undeclared([...endpointAt, 'input', 'querry']));
+    expect(validateEndpoint(endpoint)).toEqual(undeclared(`${endpointAt} input.querry`, 'querry'));
   });
 
   test('an undeclared field in an Endpoint’s success fails', () => {
     const success = { ...listing.success, bdy: z.string() } as unknown as typeof listing.success;
     const endpoint = defineEndpoint({ ...listing, success });
 
-    expect(validateEndpoint(endpoint)).toEqual(undeclared([...endpointAt, 'success', 'bdy']));
+    expect(validateEndpoint(endpoint)).toEqual(undeclared(`${endpointAt} success.bdy`, 'bdy'));
   });
 
   test('an undeclared field on a Guard fails', () => {
     const guard = defineGuard(withField({ name: 'apiKey', description: 'A key' }, 'audience'));
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [guard] }))).toEqual(
-      undeclared(['guards', 'apiKey', 'audience']),
+      undeclared('guards.apiKey audience', 'audience'),
     );
   });
 
@@ -168,7 +171,7 @@ describe('validateRoot: undeclared fields', () => {
     const apiKey = defineGuard({ name: 'apiKey', description: 'A key', demands });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [apiKey] }))).toEqual(
-      undeclared(['guards', 'apiKey', 'demands', 'header']),
+      undeclared('guards.apiKey demands.header', 'header'),
     );
   });
 
@@ -178,7 +181,7 @@ describe('validateRoot: undeclared fields', () => {
     );
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      undeclared(['rejections', 'ORDER_LOCKED', 'detail']),
+      undeclared('codes.ORDER_LOCKED detail', 'detail'),
     );
   });
 
@@ -188,7 +191,7 @@ describe('validateRoot: undeclared fields', () => {
     ] as unknown as readonly Attachment[];
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards }))).toEqual(
-      undeclared([...endpointAt, 'guards', 0, 'reason']),
+      undeclared(`${endpointAt} guards[0].reason`, 'reason'),
     );
   });
 
@@ -198,7 +201,9 @@ describe('validateRoot: undeclared fields', () => {
     } as unknown as { notFound: { code: 'NOT_FOUND'; status: 404; message: 'Not found' } };
     const definitions = defineDefinitions({ standardRejections });
 
-    expect(validateInPackage(definitions)).toEqual(undeclared(['standardRejections', 'notFund']));
+    expect(validateInPackage(definitions)).toEqual(
+      undeclared('(root) standardRejections.notFund', 'notFund'),
+    );
   });
 
   test('a body on a Standard Rejection fails as an undeclared field', () => {
@@ -213,7 +218,7 @@ describe('validateRoot: undeclared fields', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      undeclared(['standardRejections', 'notFound', 'body']),
+      undeclared('standardRejections.notFound body', 'body'),
     );
   });
 });
@@ -222,14 +227,16 @@ describe('validateRoot: required fields', () => {
   test('a Root without a name fails', () => {
     const contract = defineService(withoutField({ name: 'orders-service' }, 'name'));
 
-    expect(validateInPackage(contract)).toEqual(required(['name'], 'name is a required string'));
+    expect(validateInPackage(contract)).toEqual(
+      required('(root) name', 'name is a required string'),
+    );
   });
 
   test('a name that is not a string fails once', () => {
     const contract = defineService({ name: 7 as unknown as string });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['name'], 'not-a-string', 'name is a string'),
+      failed('(root) name', 'not-a-string', 'name is a string'),
     );
   });
 
@@ -240,7 +247,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required([...endpointAt, 'success'], 'success is a required field'),
+      required(`${endpointAt} success`, 'success is a required field'),
     );
   });
 
@@ -252,7 +259,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint({ ...listing, success });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required([...endpointAt, 'success', 'status'], 'status is a required field'),
+      required(`${endpointAt} success.status`, 'status is a required field'),
     );
   });
 
@@ -264,7 +271,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      required(['rejections', 'ORDER_LOCKED', 'status'], 'status is a required field'),
+      required('codes.ORDER_LOCKED status', 'status is a required field'),
     );
   });
 
@@ -277,7 +284,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      failed(['rejections', 'ORDER_LOCKED', 'body'], 'not-a-schema', 'body is not a zod schema'),
+      failed('codes.ORDER_LOCKED body', 'not-a-schema', 'body is not a zod schema'),
     );
   });
 
@@ -292,7 +299,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      required(['standardRejections', 'notFound', 'status'], 'status is a required field'),
+      required('standardRejections.notFound status', 'status is a required field'),
     );
   });
 
@@ -305,7 +312,7 @@ describe('validateRoot: required fields', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
       failed(
-        ['rejections', 'ORDER_LOCKED', 'status'],
+        'codes.ORDER_LOCKED status',
         'rejection-status',
         "A Rejection's status is 4xx: an object",
       ),
@@ -319,7 +326,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateInPackage(application)).toEqual(
-      failed(['dependencies'], 'not-a-list', 'dependencies is a list'),
+      failed('(root) dependencies', 'not-a-list', 'dependencies is a list'),
     );
   });
 
@@ -327,7 +334,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint({ ...listing, lifecycle: null as unknown as 'active' });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed([...endpointAt, 'lifecycle'], 'not-a-string', 'lifecycle is a string'),
+      failed(`${endpointAt} lifecycle`, 'not-a-string', 'lifecycle is a string'),
     );
   });
 
@@ -335,7 +342,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint({ ...listing, guards: null as unknown as readonly never[] });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed([...endpointAt, 'guards'], 'not-a-list', 'guards is a list'),
+      failed(`${endpointAt} guards`, 'not-a-list', 'guards is a list'),
     );
   });
 
@@ -346,7 +353,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed([...endpointAt, 'input'], 'not-an-object', 'input is an object'),
+      failed(`${endpointAt} input`, 'not-an-object', 'input is an object'),
     );
   });
 
@@ -365,7 +372,7 @@ describe('validateRoot: required fields', () => {
     );
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups: [group] }))).toEqual(
-      required(['groups', 'orders', 'description'], 'description is a required string'),
+      required('groups.orders description', 'description is a required string'),
     );
   });
 
@@ -373,7 +380,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint(withoutField(listing, 'description'));
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required([...endpointAt, 'description'], 'description is a required string'),
+      required(`${endpointAt} description`, 'description is a required string'),
     );
   });
 
@@ -381,7 +388,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint(withoutField(listing, 'success'));
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required([...endpointAt, 'success'], 'success is a required field'),
+      required(`${endpointAt} success`, 'success is a required field'),
     );
   });
 
@@ -390,7 +397,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint({ ...listing, success });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required([...endpointAt, 'success', 'status'], 'status is a required field'),
+      required(`${endpointAt} success.status`, 'status is a required field'),
     );
   });
 
@@ -398,10 +405,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint(withoutField(listing, 'method'));
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required(
-        ['groups', 'orders', 'endpoints', 'undefined /orders', 'method'],
-        'method is a required string',
-      ),
+      required('endpoints.undefined /orders (listOrders) method', 'method is a required string'),
     );
   });
 
@@ -411,7 +415,7 @@ describe('validateRoot: required fields', () => {
     );
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [guard] }))).toEqual(
-      required(['guards', 'apiKey', 'description'], 'description is a required string'),
+      required('guards.apiKey description', 'description is a required string'),
     );
   });
 
@@ -421,7 +425,7 @@ describe('validateRoot: required fields', () => {
     );
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      required(['rejections', 'ORDER_LOCKED', 'message'], 'message is a required string'),
+      required('codes.ORDER_LOCKED message', 'message is a required string'),
     );
   });
 
@@ -436,7 +440,7 @@ describe('validateRoot: required fields', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      required(['standardRejections', 'notFound', 'code'], 'code is a required string'),
+      required('standardRejections.notFound code', 'code is a required string'),
     );
   });
 
@@ -444,7 +448,7 @@ describe('validateRoot: required fields', () => {
     const guards = [{ guard: quota }] as unknown as readonly Attachment[];
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards }))).toEqual(
-      required([...endpointAt, 'guards', 0, 'qualifier'], 'qualifier is a required field'),
+      required(`${endpointAt} guards[0].qualifier`, 'qualifier is a required field'),
     );
   });
 });
@@ -494,31 +498,32 @@ describe('validateRoot: a description or a message is never blank', () => {
     expect(validateInPackage(contractWithDescription('none', '')).kind).toBe('valid');
   });
 
-  const described: readonly (readonly [string, readonly (string | number)[]])[] = [
-    ['Endpoint', [...endpointAt, 'description']],
-    ['Guard', ['guards', 'quota', 'description']],
-    ['Group', ['groups', 'orders', 'description']],
-    ['Event', ['groups', 'orders', 'events', 'OrderCreated@1', 'description']],
-    ['Command', ['groups', 'orders', 'commands', 'ChargeCard@1', 'description']],
-    ['Subscription', ['groups', 'orders', 'subscriptions', 'notifyOnCreated', 'description']],
+  const described: readonly (readonly [string, string])[] = [
+    ['Endpoint', `${endpointAt} description`],
+    ['Guard', 'guards.quota description'],
+    ['Group', 'groups.orders description'],
+    ['Event', 'events.OrderCreated@1 description'],
+    ['Command', 'commands.ChargeCard@1 description'],
+    ['Subscription', 'subscriptions.notifyOnCreated description'],
   ];
 
-  test.each(blankTexts.flatMap((text) => described.map(([kind, at]) => [kind, text, at] as const)))(
-    '%s whose description is %j fails',
-    (kind, text, at) => {
-      const contract = contractWithDescription(kind.toLowerCase(), text);
+  test.each(
+    blankTexts.flatMap((text) =>
+      described.map(([kind, location]) => [kind, text, location] as const),
+    ),
+  )('%s whose description is %j fails', (kind, text, location) => {
+    const contract = contractWithDescription(kind.toLowerCase(), text);
 
-      expect(validateInPackage(contract)).toEqual(
-        failed(at, 'blank-text', 'A description is never blank'),
-      );
-    },
-  );
+    expect(validateInPackage(contract)).toEqual(
+      failed(location, 'blank-text', 'A description is never blank'),
+    );
+  });
 
   test.each(blankTexts)('a Rejection whose message is %j fails', (message) => {
     const rejection = defineRejection({ code: 'ORDER_LOCKED', status: 409, message });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      failed(['rejections', 'ORDER_LOCKED', 'message'], 'blank-text', 'A message is never blank'),
+      failed('codes.ORDER_LOCKED message', 'blank-text', 'A message is never blank'),
     );
   });
 
@@ -528,11 +533,7 @@ describe('validateRoot: a description or a message is never blank', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      failed(
-        ['standardRejections', 'notFound', 'message'],
-        'blank-text',
-        'A message is never blank',
-      ),
+      failed('standardRejections.notFound message', 'blank-text', 'A message is never blank'),
     );
   });
 });

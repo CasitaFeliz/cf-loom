@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized, summaryOf } from '../../test/failures.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   type Definitions,
@@ -51,13 +52,13 @@ function aService(
 
 function failuresOf(root: Root, packages: readonly ResolvedDefinitions[] = []) {
   const validated = validateRoot(root, aRootPackage(root, { packages }));
-  return validated.kind === 'invalid' ? validated.failures : [];
+  return validated.kind === 'invalid' ? validated.failures.map(summaryOf) : [];
 }
 
-function codeOnce(code: string, sources: string) {
+function codeOnce(code: string, sources: string, location = `codes.${code}`) {
   return {
     kind: 'declaration',
-    at: ['rejections', code],
+    location,
     rule: 'code-once',
     message: `A code is declared once: ${code} (${sources})`,
   };
@@ -193,7 +194,11 @@ describe('validateRoot: a code is declared once', () => {
     ]);
 
     expect(failures).toEqual([
-      codeOnce('BAD', 'the invalidInput Standard Rejection and the notFound Standard Rejection'),
+      codeOnce(
+        'BAD',
+        'the invalidInput Standard Rejection and the notFound Standard Rejection',
+        'standardRejections.invalidInput',
+      ),
     ]);
   });
 
@@ -201,7 +206,7 @@ describe('validateRoot: a code is declared once', () => {
     const root = defineDefinitions({});
     const rootExports = { first: locked('One'), second: locked('Two') };
 
-    const validated = validateRoot(root, aRootPackage(root, { rootExports }));
+    const validated = summarized(validateRoot(root, aRootPackage(root, { rootExports })));
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -324,7 +329,7 @@ describe('validateRoot and snapshotOf: a valid Root’s Snapshot says what its E
           ),
       );
 
-      const validated = validateRoot(root, aRootPackage(root, { packages }));
+      const validated = summarized(validateRoot(root, aRootPackage(root, { packages })));
 
       if (named.length > 1) {
         const line = named.map(({ source }) => sourceNames[source]).join(' and ');

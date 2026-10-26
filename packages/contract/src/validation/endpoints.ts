@@ -6,6 +6,7 @@ import {
   successStatuses,
   visibilities,
 } from '../declarations/index.ts';
+import { inFields } from '../walker/index.ts';
 import {
   isMissing,
   isWithoutValue,
@@ -30,7 +31,7 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
   return [
     ...closedValues.flatMap((closed) =>
       closedValueFailures(
-        { at: [...located.at, closed.field], value: located.endpoint[closed.field] },
+        { at: inFields(located.at, closed.field), value: located.endpoint[closed.field] },
         closed,
       ),
     ),
@@ -60,7 +61,7 @@ function instantFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     isMissing(deprecatedAt) || (typeof deprecatedAt === 'string' && !isUtcInstant(deprecatedAt));
   const message =
     "A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z";
-  return isNoInstant ? [failure([...at, 'deprecatedAt'], 'deprecated-at', message)] : [];
+  return isNoInstant ? [failure(inFields(at, 'deprecatedAt'), 'deprecated-at', message)] : [];
 }
 
 /** An Endpoint that is not Deprecated states no instant. */
@@ -71,7 +72,7 @@ function undeclaredInstantFailures({
   const message = 'Only a Deprecated Endpoint declares deprecatedAt';
   return isMissing(endpoint.deprecatedAt)
     ? []
-    : [failure([...at, 'deprecatedAt'], 'deprecated-at', message)];
+    : [failure(inFields(at, 'deprecatedAt'), 'deprecated-at', message)];
 }
 
 /** A Success declares an allowed status; 204 answers no body, every other status one. */
@@ -82,7 +83,7 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
   }
   if (!successStatuses.includes(success.status)) {
     const message = `A Success status is ${oneOf(successStatuses)}: ${writtenTextOf(success.status)}`;
-    return [failure([...at, 'success', 'status'], 'success-status', message)];
+    return [failure(inFields(at, 'success', 'status'), 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');
   if (success.status === 204) {

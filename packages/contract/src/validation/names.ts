@@ -1,4 +1,5 @@
 import { isLive, type Root } from '../declarations/index.ts';
+import { inFields, placeOf } from '../walker/index.ts';
 import {
   type Declarations,
   identityOf,
@@ -27,7 +28,7 @@ export function packageNameFailures(
   }
   const sides = `${writtenTextOf(root.name)} is written, package.json names ${writtenTextOf(unscoped)}`;
   const message = `A Root is named as its package.json, without the scope: ${sides}`;
-  return [failure(['name'], 'package-name', message)];
+  return [failure(inFields(placeOf({ kind: 'root' }, root), 'name'), 'package-name', message)];
 }
 
 /** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
@@ -44,7 +45,7 @@ export function uniquenessFailures(declarations: Declarations): readonly Declara
 function uniqueGroupNames({ groups }: Declarations): readonly DeclarationFailure[] {
   return repeated(groups, (located) => textOf(located.group.name)).map(({ at, group }) =>
     failure(
-      [...at, 'name'],
+      inFields(at, 'name'),
       'duplicate-group-name',
       `A Group name is unique in the Contract: ${writtenTextOf(group.name)}`,
     ),
@@ -55,7 +56,7 @@ function uniqueEndpointNames({ endpoints }: Declarations): readonly DeclarationF
   const active = endpoints.filter((located) => isLive(located.endpoint));
   return repeated(active, (located) => textOf(located.endpoint.name)).map(({ at, endpoint }) =>
     failure(
-      [...at, 'name'],
+      inFields(at, 'name'),
       'duplicate-endpoint-name',
       `An Endpoint name is unique among the Endpoints that are not Retired: ${writtenTextOf(endpoint.name)}`,
     ),
@@ -66,7 +67,7 @@ function uniqueEndpointIdentities({ endpoints }: Declarations): readonly Declara
   const identified = endpoints.filter((located) => isCanonicalPath(located.endpoint.path));
   return repeated(identified, identityOfEndpoint).map((located) =>
     failure(
-      [...located.at, 'path'],
+      inFields(located.at, 'path'),
       'duplicate-endpoint-identity',
       `An Endpoint is identified by its method and path, once: ${identityOfEndpoint(located)}`,
     ),
@@ -76,7 +77,7 @@ function uniqueEndpointIdentities({ endpoints }: Declarations): readonly Declara
 function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure[] {
   return repeated(guards, (located) => textOf(located.guard.name)).map(({ at, guard }) =>
     failure(
-      [...at, 'name'],
+      inFields(at, 'name'),
       'duplicate-guard-name',
       `A Guard name is unique across the Contract and its Definitions Packages: ${writtenTextOf(guard.name)}`,
     ),

@@ -1,5 +1,5 @@
 import { lifecycles } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import type { Place } from '../walker/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 
@@ -18,7 +18,7 @@ export const lifecycle: ClosedValue = {
 };
 
 /** A value as written and where it sits. */
-type WrittenValue = { readonly at: Path; readonly value: unknown };
+type WrittenValue = { readonly at: Place; readonly value: unknown };
 
 /** A string present is one of the allowed; an absent one or a non-string is the field rules' finding. */
 export function closedValueFailures(

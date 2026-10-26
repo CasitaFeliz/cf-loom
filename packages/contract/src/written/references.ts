@@ -1,5 +1,6 @@
 import type { Attachment, Endpoint, Guard } from '../declarations/index.ts';
 import { isEndpoint, isGuard, isRejection } from '../declarations/index.ts';
+import { placeOf } from '../walker/index.ts';
 import type { LocatedCode, LocatedEndpoint, LocatedGuard, LocatedRejection } from './located.ts';
 import { type Members, memberGuardsOf, memberRejectionsOf } from './members.ts';
 import { reachedGuardsOf } from './reach.ts';
@@ -78,7 +79,7 @@ export function rejectionsOf(
   const rejections = [...exported, ...ofGuards, ...ofEndpoints].filter(isRejection);
   const distinct = [...new Set(rejections)];
   return distinct.map((rejection) => ({
-    at: ['rejections', textOf(rejection.code)],
+    at: placeOf({ kind: 'code', code: textOf(rejection.code) }, rejection),
     rejection,
   }));
 }
@@ -100,5 +101,5 @@ export function codesOf(rejections: readonly LocatedRejection[]): readonly Locat
 }
 
 function locatedGuardOf(guard: Guard): LocatedGuard {
-  return { at: ['guards', textOf(guard.name)], guard };
+  return { at: placeOf({ kind: 'guard', name: textOf(guard.name) }, guard), guard };
 }

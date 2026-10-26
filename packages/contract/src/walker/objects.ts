@@ -2,9 +2,11 @@ import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
 import { inCanonicalJsonOrder } from './canonical-json.ts';
 import { catchallRefusalKeyOf } from './def-types.ts';
-import type { Field, ObjectNode, Path, SchemaNode, StringNode } from './nodes.ts';
+import { inside, type Place } from './location.ts';
+import type { Field, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
 import { shapeKey } from './shapes.ts';
+import { fieldStep, indexStep, keyStep, valueStep } from './steps.ts';
 import {
   allWalked,
   failed,
@@ -22,11 +24,11 @@ const protoKey = '__proto__';
 const inheritedKeys: ReadonlySet<string> = new Set(prototypeNames);
 
 /** An object: a Contract declares no strict object, and a catchall is refused. */
-export function walkObject(def: core.$ZodObjectDef, at: Path, walker: Walker): Walked {
+export function walkObject(def: core.$ZodObjectDef, at: Place, walker: Walker): Walked {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
   const fieldEntries = Object.entries(def.shape).map(([key, schema]) => {
-    const field = { at: [...at, 'fields', key], schema };
+    const field = { at: inside(at, fieldStep(key)), schema };
     const refusal = fieldNameRefusalOf(key);
     return refusal === undefined
       ? walkedEntry(key, walker.field(schema, field.at))
@@ -60,9 +62,9 @@ function refusedNameFailure(
  * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
  * object, which a Contract never declares.
  */
-export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): Walked {
-  const key = walker.schema(def.keyType, [...at, 'key']);
-  const value = walker.schema(def.valueType, [...at, 'value']);
+export function walkRecord(def: core.$ZodRecordDef, at: Place, walker: Walker): Walked {
+  const key = walker.schema(def.keyType, inside(at, keyStep));
+  const value = walker.schema(def.valueType, inside(at, valueStep));
   const record: Outline = { type: 'record' };
   if (def.mode === 'loose') {
     return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]), record);
@@ -84,10 +86,10 @@ export function walkRecord(def: core.$ZodRecordDef, at: Path, walker: Walker): W
  * One open object for an intersection of open objects whose shared keys agree, which fails
  * otherwise; any other intersection is `allOf`.
  */
-export function walkIntersection(def: core.$ZodIntersectionDef, at: Path, walker: Walker): Walked {
+export function walkIntersection(def: core.$ZodIntersectionDef, at: Place, walker: Walker): Walked {
   const items = allWalked([
-    walker.schema(def.left, [...at, 'items', 0]),
-    walker.schema(def.right, [...at, 'items', 1]),
+    walker.schema(def.left, inside(at, indexStep(0))),
+    walker.schema(def.right, inside(at, indexStep(1))),
   ]);
   if (items.kind === 'not-allowed') {
     return failed(items.failures, { type: 'allOf' });
@@ -127,7 +129,7 @@ function walkedEntry(key: string, field: Walked<Field>): Walked<[string, Field]>
   return field.kind === 'walked' ? walked([key, field.value]) : field;
 }
 
-function mergedObjects(left: ObjectNode, right: ObjectNode, at: Path): Walked {
+function mergedObjects(left: ObjectNode, right: ObjectNode, at: Place): Walked {
   const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
   const differs = shared.some((key) => !isSameField(left.fields[key], right.fields[key]));
   if (differs) {

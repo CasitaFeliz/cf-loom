@@ -22,7 +22,7 @@ export { formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
-export { inFields, inside, placeOf, siteLocationOf, siteTextOf } from './location.ts';
+export { inFields, inside, placeNameOf, placeOf, siteLocationOf, siteTextOf } from './location.ts';
 export type {
   EnumNode,
   Field,

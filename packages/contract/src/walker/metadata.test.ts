@@ -2,22 +2,26 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
+const bodyAt = {
+  site: { kind: 'export', name: 'body' },
+  declaration: undefined,
+  steps: [],
+} as const;
+
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  return refusalsOf(walkSchemas([{ at: bodyAt, schema }], () => undefined));
 }
 
 function walkedTo(node: SchemaNode) {
-  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+  return { located: [{ kind: 'walked', value: node }], defs: {} };
 }
 
-function refusedAt(at: readonly (string | number)[], construct: string, instead?: string) {
+function refusedAt(at: string, construct: string, instead?: string) {
   const failure = { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
-  return {
-    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
-    defs: {},
-  };
+  return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
 function cyclic(): Record<string, unknown> {
@@ -64,14 +68,12 @@ describe('walkSchemas: metadata', () => {
     ['a function', [() => 'Ada']],
   ])('examples holding %s fail', (_name, examples) => {
     expect(walkBody(z.string().meta({ examples }))).toEqual(
-      refusedAt(['body'], 'examples that are not JSON values'),
+      refusedAt('', 'examples that are not JSON values'),
     );
   });
 
   test('any other .meta() key fails', () => {
-    expect(walkBody(z.string().meta({ title: 'Name' }))).toEqual(
-      refusedAt(['body'], '.meta({ title })'),
-    );
+    expect(walkBody(z.string().meta({ title: 'Name' }))).toEqual(refusedAt('', '.meta({ title })'));
   });
 
   test.each(['123', '__proto__', 'tree-node', 'ñandú', 'Tree', ''])(
@@ -80,11 +82,7 @@ describe('walkSchemas: metadata', () => {
       const order = z.object({ money: z.string().meta({ id }) });
 
       expect(walkBody(order)).toEqual(
-        refusedAt(
-          ['body', 'fields', 'money'],
-          `.meta({ id: ${JSON.stringify(id)} })`,
-          'a camelCase name',
-        ),
+        refusedAt('money', `.meta({ id: ${JSON.stringify(id)} })`, 'a camelCase name'),
       );
     },
   );
@@ -93,9 +91,7 @@ describe('walkSchemas: metadata', () => {
     // @ts-expect-error zod types an id as a string
     const order = z.object({ money: z.string().meta({ id: 42 }) });
 
-    expect(walkBody(order)).toEqual(
-      refusedAt(['body', 'fields', 'money'], '.meta({ id }) that is not a string'),
-    );
+    expect(walkBody(order)).toEqual(refusedAt('money', '.meta({ id }) that is not a string'));
   });
 
   test('a description that is not a string fails', () => {
@@ -103,7 +99,7 @@ describe('walkSchemas: metadata', () => {
     const order = z.object({ note: z.string().meta({ description: 42 }) });
 
     expect(walkBody(order)).toEqual(
-      refusedAt(['body', 'fields', 'note'], '.meta({ description }) that is not a string'),
+      refusedAt('note', '.meta({ description }) that is not a string'),
     );
   });
 });
@@ -112,11 +108,11 @@ describe('walkSchemas: origin', () => {
   test('an origin returned by originOf is attached to the node', () => {
     const money = z.object({ amount: z.int() });
 
-    const walked = walkSchemas([{ at: ['body'], schema: z.array(money) }], (schema) =>
+    const walked = walkSchemas([{ at: bodyAt, schema: z.array(money) }], (schema) =>
       schema === money ? '@org/definitions@4.2.0#money' : undefined,
     );
 
-    expect(walked).toEqual(
+    expect(refusalsOf(walked)).toEqual(
       walkedTo({
         type: 'array',
         items: {
@@ -136,9 +132,7 @@ describe('walkSchemas: examples', () => {
       .min(0)
       .meta({ examples: [1, -5] });
 
-    expect(walkBody(schema)).toEqual(
-      refusedAt(['body'], 'an example the schema refuses (examples[1])'),
-    );
+    expect(walkBody(schema)).toEqual(refusedAt('', 'an example the schema refuses (examples[1])'));
   });
 
   test('examples the schema accepts walk and are kept', () => {
@@ -156,17 +150,13 @@ describe('walkSchemas: examples', () => {
       .meta({ examples: ['ab'] })
       .min(3);
 
-    expect(walkBody(schema)).toEqual(
-      refusedAt(['body'], 'an example the schema refuses (examples[0])'),
-    );
+    expect(walkBody(schema)).toEqual(refusedAt('', 'an example the schema refuses (examples[0])'));
   });
 
   test('a zod/mini example the schema refuses fails', () => {
     const schema = zm.string().check(zm.minLength(3), zm.meta({ examples: ['ab'] }));
 
-    expect(walkBody(schema)).toEqual(
-      refusedAt(['body'], 'an example the schema refuses (examples[0])'),
-    );
+    expect(walkBody(schema)).toEqual(refusedAt('', 'an example the schema refuses (examples[0])'));
   });
 
   test("examples on a field's .optional() are parsed by the optional", () => {
@@ -179,7 +169,7 @@ describe('walkSchemas: examples', () => {
     });
 
     expect(walkBody(order)).toEqual(
-      refusedAt(['body', 'fields', 'note'], 'an example the schema refuses (examples[0])'),
+      refusedAt('note', 'an example the schema refuses (examples[0])'),
     );
   });
 
@@ -196,7 +186,7 @@ describe('walkSchemas: examples', () => {
 
     const walked = walkBody(schema);
 
-    expect(walked).toEqual(refusedAt(['body'], '.refine()'));
+    expect(walked).toEqual(refusedAt('', '.refine()'));
     expect(calls).toBe(0);
   });
 });
@@ -228,9 +218,9 @@ describe('walkSchemas: every example a walked node carries parses', () => {
 
       const [located] = walkBody(schema).located;
 
-      if (located?.walked.kind === 'walked') {
+      if (located?.kind === 'walked') {
         walkedCount += 1;
-        for (const example of located.walked.value.examples ?? []) {
+        for (const example of located.value.examples ?? []) {
           expect(schema.safeParse(example).success, `draw ${draw}: ${example}`).toBe(true);
         }
       }

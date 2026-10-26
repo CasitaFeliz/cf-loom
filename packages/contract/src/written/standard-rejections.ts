@@ -5,7 +5,7 @@ import {
   standardRejectionDefaults,
   standardRejectionNames,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { type Place, placeOf } from '../walker/index.ts';
 import { type Declarations, declarationsOf, standardRejectionsDeclarerOf } from './declarations.ts';
 import type { LocatedStandardRejection } from './located.ts';
 import { textOf } from './written.ts';
@@ -16,7 +16,7 @@ import { textOf } from './written.ts';
  */
 export type ResolvedStandard = {
   readonly name: StandardRejectionName;
-  readonly at: Path;
+  readonly at: Place;
   readonly code: string;
   readonly status: number;
   readonly message: string;
@@ -38,7 +38,7 @@ export function resolvedStandards(
     const defaults = standardRejectionDefaults[name];
     return {
       name,
-      at: declared?.at ?? [...(declaring?.at ?? []), 'standardRejections', name],
+      at: declared?.at ?? placeOf({ kind: 'standard-rejection', name }, declaring?.definitions),
       code: textOf(declared?.declaration.code ?? defaults.code),
       status: declared?.declaration.status ?? defaults.status,
       message: textOf(declared?.declaration.message ?? defaults.message),

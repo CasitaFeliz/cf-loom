@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { summaryOf } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
@@ -126,7 +127,7 @@ function failuresOfListing(lists: Readonly<Record<string, readonly unknown[]>>) 
   const group = defineGroup(declaration as unknown as Parameters<typeof defineGroup>[0]);
   const root = defineService({ name: 'billing-service', groups: [group] });
   const validated = validateRoot(root, aRootPackage(root));
-  return validated.kind === 'invalid' ? validated.failures : [];
+  return validated.kind === 'invalid' ? validated.failures.map(summaryOf) : [];
 }
 
 describe('the provided-Element constructors', () => {
@@ -188,13 +189,13 @@ describe('a Provider’s Elements', () => {
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['groups', 'billing', 'endpoints', 'GET /ping'],
+        location: 'groups.billing',
         rule: 'provided-element',
         message: "A Group lists the Contract's own Elements: ping is ping-service's",
       },
       {
         kind: 'declaration',
-        at: ['groups', 'billing', 'events', 'Pinged@1'],
+        location: 'groups.billing',
         rule: 'provided-element',
         message: "A Group lists the Contract's own Elements: Pinged@1 is ping-service's",
       },

@@ -1,8 +1,9 @@
 import type * as core from 'zod/v4/core';
-import type { Field, NotAllowed, Path, SchemaNode } from './nodes.ts';
+import type { Place } from './location.ts';
+import type { Field, NotAllowed, SchemaNode } from './nodes.ts';
 
 /** A schema of a Snapshot, and where it sits in it. */
-export type LocatedSchema = { readonly at: Path; readonly schema: core.$ZodType };
+export type LocatedSchema = { readonly at: Place; readonly schema: core.$ZodType };
 
 /** Every construct that is not allowed in a schema: a failed walk names at least one. */
 export type Failures = readonly [NotAllowed, ...NotAllowed[]];
@@ -29,8 +30,8 @@ export type Walked<Value = SchemaNode> =
 
 /** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
 export type Walker = {
-  readonly schema: (schema: core.$ZodType, at: Path) => Walked;
-  readonly field: (schema: core.$ZodType, at: Path) => Walked<Field>;
+  readonly schema: (schema: core.$ZodType, at: Place) => Walked;
+  readonly field: (schema: core.$ZodType, at: Place) => Walked<Field>;
 };
 
 /** A walked value, as the walk of a schema returns it. */
@@ -83,8 +84,20 @@ export function distinctFailures(failures: Failures): Failures {
   return [first, ...distinctOthers];
 }
 
-function writtenKeyOf({ at, construct }: NotAllowed): string {
-  return JSON.stringify([at, construct]);
+function writtenKeyOf({ site, steps, construct }: NotAllowed): string {
+  return JSON.stringify([site, steps, construct]);
+}
+
+/** A failed walk with each failure changed, the node it was building kept. */
+export function withFailuresMapped(
+  failure: Failed,
+  change: (each: NotAllowed) => NotAllowed,
+): Failed {
+  const [first, ...others] = failure.failures;
+  const failures: Failures = [change(first), ...others.map(change)];
+  return failure.outline === undefined
+    ? { kind: 'not-allowed', failures }
+    : { ...failure, failures };
 }
 
 /** Every failure among walked values, each once, in order. */

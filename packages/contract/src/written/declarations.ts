@@ -1,7 +1,7 @@
 import type { Definitions, Dependency, Root } from '../declarations/index.ts';
 import { isDefinitions, isDependency, isServiceContract } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { groupedOf, groupsOf } from './grouped.ts';
+import { inFields, type Place, placeOf, type Site } from '../walker/index.ts';
+import { groupedOf, groupsOf, placedIn } from './grouped.ts';
 import type {
   LocatedCode,
   LocatedCommand,
@@ -27,7 +27,7 @@ export type Declarations = {
   readonly root: Root;
   /** What a Definitions Package's Root file exports that it shares; none for another Root. */
   readonly ownMembers: Members | undefined;
-  /** The Definitions Package a Contract names as `standardRejections`, at `['standardRejections']`; none for another Root. */
+  /** The Definitions Package a Contract names as `standardRejections`, at that field; none for another Root. */
   readonly standardRejectionsSource: NamedDefinitions | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
@@ -86,7 +86,9 @@ export function standardRejectionsDeclarerOf({
   root,
   standardRejectionsSource,
 }: Pick<Declarations, 'root' | 'standardRejectionsSource'>): NamedDefinitions | undefined {
-  return root.kind === 'definitions' ? { at: [], definitions: root } : standardRejectionsSource;
+  return root.kind === 'definitions'
+    ? { at: placeOf({ kind: 'root' }, root), definitions: root }
+    : standardRejectionsSource;
 }
 
 /** A Standard Rejection declaration as written, before the structure rule has judged it. */
@@ -95,13 +97,12 @@ type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & 
 };
 
 function standardRejectionsOf({
-  at,
   definitions,
 }: NamedDefinitions): readonly LocatedStandardRejection[] {
   const entries: readonly WrittenStandardRejection[] = entriesOf(
     definitions.standardRejections,
   ).map(([name, declaration]) => ({
-    at: [...at, 'standardRejections', name],
+    at: placeOf({ kind: 'standard-rejection', name }, definitions),
     name,
     declaration,
   }));
@@ -117,7 +118,10 @@ function isLocatedStandardRejection(
 
 function namedSourceOf(root: Root): NamedDefinitions | undefined {
   const definitions = standardRejectionsSourceOf(root);
-  return definitions === undefined ? undefined : { at: ['standardRejections'], definitions };
+  if (definitions === undefined) {
+    return undefined;
+  }
+  return { at: inFields(placeOf({ kind: 'root' }, root), 'standardRejections'), definitions };
 }
 
 /**
@@ -137,16 +141,18 @@ function dependenciesOf(root: Root): readonly LocatedDependency[] {
   if (root.kind === 'definitions') {
     return [];
   }
+  const holder = placeOf({ kind: 'root' }, root);
   const written = listOf(root.dependencies).map((dependency: unknown, index) => {
-    const at: Path = ['dependencies', providerNameOf(dependency) ?? index];
-    return { at, dependency };
+    const name = providerNameOf(dependency);
+    const site: Site | undefined = name === undefined ? undefined : { kind: 'dependency', name };
+    return { at: placedIn({ holder, field: 'dependencies', index }, dependency, site), dependency };
   });
   return written.filter(isLocatedDependency);
 }
 
 /** What sits where a Dependency belongs and is none is the structure rule's. */
 function isLocatedDependency(written: {
-  readonly at: Path;
+  readonly at: Place;
   readonly dependency: unknown;
 }): written is LocatedDependency {
   return isDependency(written.dependency);

@@ -9,6 +9,7 @@ import type {
   Subscription,
 } from '../declarations/index.ts';
 import { isGroup, providerOf } from '../declarations/index.ts';
+import { fieldStep, indexStep, inside, type Place, placeOf, type Site } from '../walker/index.ts';
 import {
   fieldListings,
   type GroupedDeclarations,
@@ -22,7 +23,7 @@ import type {
   LocatedGroup,
   LocatedSubscription,
 } from './located.ts';
-import { listOf, textOf } from './written.ts';
+import { listOf } from './written.ts';
 
 /** What a Root's Groups list, each declaration once, where first met, located under its Group. */
 export type Grouped = {
@@ -32,15 +33,44 @@ export type Grouped = {
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** A Root's Groups, each where it sits by name; only a Service's Contract has them. */
+/** A Root's Groups, each where it sits by name, else at the Root's list of Groups; only a Service's Contract has them. */
 export function groupsOf(root: Root): readonly LocatedGroup[] {
   if (root.kind !== 'service') {
     return [];
   }
-  return listOf(root.groups)
-    .filter(isGroup)
-    .map((group) => ({ at: ['groups', textOf(group.name)], group }));
+  const holder = placeOf({ kind: 'root' }, root);
+  const groups = listOf<unknown>(root.groups).map((group, index) => ({ group, index }));
+  return groups.filter(isListedGroup).map(({ group, index }) => ({
+    at: placedIn({ holder, field: 'groups', index }, group, groupSiteOf(group)),
+    group,
+  }));
 }
+
+function groupSiteOf(group: Group): Site | undefined {
+  return typeof group.name === 'string' ? { kind: 'group', name: group.name } : undefined;
+}
+
+function isListedGroup(listed: { readonly group: unknown }): listed is {
+  readonly group: Group;
+  readonly index: number;
+} {
+  return isGroup(listed.group);
+}
+
+/**
+ * Where a declaration sits: at its own site, else at the place that holds it, in the field of its
+ * list and at its position there, so a declaration with no name is still found.
+ */
+export function placedIn(listing: Listing, declaration: unknown, site: Site | undefined): Place {
+  if (site !== undefined) {
+    return placeOf(site, declaration);
+  }
+  const { holder, field, index } = listing;
+  return { ...inside(holder, fieldStep(field), indexStep(index)), declaration };
+}
+
+/** Where a declaration is written: the place whose field lists it, that field, and the position there. */
+export type Listing = { readonly holder: Place; readonly field: string; readonly index: number };
 
 /** Gathers what a Root's Groups list; a declaration listed twice is the Groups rule's to report. */
 export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
@@ -81,7 +111,7 @@ export function listingsOf<Field extends GroupedField>(
   located: LocatedGroup,
   field: Field,
 ): readonly Listed<Field>[] {
-  return locatedIn(located, field, fittingIn(located.group, field).filter(isOwn));
+  return locatedIn(located, field, fittingIn(located.group, field).filter(isOwnListing));
 }
 
 /** Every Provider's Element a Group lists in one field, in its order, located as `listingsOf` locates them. */
@@ -89,12 +119,16 @@ export function providedListingsOf<Field extends GroupedField>(
   located: LocatedGroup,
   field: Field,
 ): readonly Listed<Field>[] {
-  return locatedIn(located, field, fittingIn(located.group, field).filter(isProvided));
+  return locatedIn(located, field, fittingIn(located.group, field).filter(isProvidedListing));
 }
 
 /** Every own declaration a Group's lists hold, in field order; what fits no field is left out. */
 export function declarationsListedBy(group: Group): readonly unknown[] {
-  return groupedFields.flatMap((field) => fittingIn(group, field).filter(isOwn));
+  return groupedFields.flatMap((field) =>
+    fittingIn(group, field)
+      .filter(isOwnListing)
+      .map(({ declaration }) => declaration),
+  );
 }
 
 function isOwn(value: unknown): boolean {
@@ -105,21 +139,40 @@ function isProvided(value: unknown): boolean {
   return providerOf(value) !== undefined;
 }
 
+function isOwnListing({ declaration }: { readonly declaration: unknown }): boolean {
+  return isOwn(declaration);
+}
+
+function isProvidedListing({ declaration }: { readonly declaration: unknown }): boolean {
+  return isProvided(declaration);
+}
+
+/** A declaration of a Group's list and its position in the list as written. */
+type Fitting<Field extends GroupedField> = {
+  readonly declaration: GroupedDeclarations[Field];
+  readonly index: number;
+};
+
 function fittingIn<Field extends GroupedField>(
   group: Group,
   field: Field,
-): readonly GroupedDeclarations[Field][] {
-  return listOf(group[field]).filter(fieldListings[field].fits);
+): readonly Fitting<Field>[] {
+  const { fits } = fieldListings[field];
+  const written = listOf<unknown>(group[field]).map((declaration, index) => ({
+    declaration,
+    index,
+  }));
+  return written.filter((listed): listed is Fitting<Field> => fits(listed.declaration));
 }
 
 function locatedIn<Field extends GroupedField>(
   { at, group }: LocatedGroup,
   field: Field,
-  declarations: readonly GroupedDeclarations[Field][],
+  fitting: readonly Fitting<Field>[],
 ): readonly Listed<Field>[] {
-  const { keyOf } = fieldListings[field];
-  return declarations.map((declaration) => ({
-    at: [...at, field, keyOf(declaration)],
+  const { siteOf } = fieldListings[field];
+  return fitting.map(({ declaration, index }) => ({
+    at: placedIn({ holder: at, field, index }, declaration, siteOf(declaration)),
     declaration,
     group,
   }));

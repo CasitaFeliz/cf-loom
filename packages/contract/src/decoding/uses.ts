@@ -12,12 +12,15 @@ import {
   type SubscriptionSnapshot,
 } from '../snapshot/index.ts';
 import {
-  type LocatedNode,
   nodesWithin,
   type Path,
   type RefNode,
   type SchemaNode,
+  snapshotPathOf,
 } from '../walker/index.ts';
+
+/** A node and where it sits in the Snapshot. */
+type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, the code a
@@ -133,7 +136,13 @@ function declaredEndpointsOf(snapshot: Used): readonly Keyed<DeclaredEndpoint>[]
 }
 
 function refUsesOf(nodes: readonly LocatedNode[]): readonly Use[] {
-  const refs = nodes.flatMap(({ at, node }) => nodesWithin(node, at)).filter(isRefAt);
+  const within: readonly LocatedNode[] = nodes.flatMap(({ at, node }) =>
+    nodesWithin(node).map((inner) => ({
+      at: [...at, ...snapshotPathOf(inner.at)],
+      node: inner.node,
+    })),
+  );
+  const refs = within.filter(isRefAt);
   return refs.map(({ at, node }) => ({ kind: 'def', name: node.name, at }));
 }
 

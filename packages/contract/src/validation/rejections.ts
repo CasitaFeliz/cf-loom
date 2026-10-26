@@ -4,7 +4,7 @@ import {
   isReservedCode,
   isStandardRejection,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { fieldStep, indexStep, inFields, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -43,11 +43,11 @@ function statusFailures({ at, rejection }: LocatedRejection): readonly Declarati
     return [];
   }
   const message = `A Rejection's status is 4xx: ${writtenTextOf(rejection.status)}`;
-  return [failure([...at, 'status'], 'rejection-status', message)];
+  return [failure(inFields(at, 'status'), 'rejection-status', message)];
 }
 
 /** A list of Rejections names each once: a declared one by its code, a Standard one by its name. */
-function listedOnceFailures(at: Path, rejections: unknown): readonly DeclarationFailure[] {
+function listedOnceFailures(at: Place, rejections: unknown): readonly DeclarationFailure[] {
   const listed = listOf(rejections).map((rejection, index) => ({
     index,
     key: listedKeyOf(rejection),
@@ -56,7 +56,11 @@ function listedOnceFailures(at: Path, rejections: unknown): readonly Declaration
     (entry): entry is { index: number; key: string } => entry.key !== undefined,
   );
   return repeated(named, ({ key }) => key).map(({ index, key }) =>
-    failure([...at, 'rejections', index], 'rejection-once', `${key} is listed twice`),
+    failure(
+      inside(at, fieldStep('rejections'), indexStep(index)),
+      'rejection-once',
+      `${key} is listed twice`,
+    ),
   );
 }
 
@@ -67,10 +71,10 @@ function listedKeyOf(rejection: unknown): string | undefined {
   return isRejection(rejection) && typeof rejection.code === 'string' ? rejection.code : undefined;
 }
 
-function reservedFailures(at: Path, code: unknown): readonly DeclarationFailure[] {
+function reservedFailures(at: Place, code: unknown): readonly DeclarationFailure[] {
   if (!isReservedCode(code)) {
     return [];
   }
   const message = `A code cf-loom answers as a Fault is reserved: ${textOf(code)}`;
-  return [failure([...at, 'code'], 'reserved-code', message)];
+  return [failure(inFields(at, 'code'), 'reserved-code', message)];
 }

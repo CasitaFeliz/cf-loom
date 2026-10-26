@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import {
   anInstalledContract,
   anUnidentifiedContract,
@@ -21,7 +22,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const getPayment = providedEndpoint('payments-service', {
@@ -103,8 +104,8 @@ const messages = defineGroup({
   subscriptions: [notifyOnSettled],
 });
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: a Service’s Dependencies', () => {
@@ -138,7 +139,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'unused-dependency',
         "A Dependency is used: payments-service gives no Endpoint and no Subscription's Event",
       ),
@@ -159,9 +160,11 @@ describe('validateRoot: a Service’s Dependencies', () => {
     const mirrored = anInstalledContract(mirror, { reaches: [installed] });
     const contractPackages = [installed, mirrored];
 
-    expect(validateRoot(contract, aRootPackage(contract, { contractPackages }))).toEqual(
+    expect(
+      summarized(validateRoot(contract, aRootPackage(contract, { contractPackages }))),
+    ).toEqual(
       failed(
-        ['dependencies', 'mirror-service'],
+        'dependencies.mirror-service',
         'unused-dependency',
         "A Dependency is used: mirror-service gives no Endpoint and no Subscription's Event",
       ),
@@ -195,7 +198,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'orders-service'],
+        'dependencies.orders-service',
         'unused-dependency',
         "A Dependency is used: orders-service gives no Endpoint and no Subscription's Event",
       ),
@@ -208,7 +211,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 0],
+        'dependencies.payments-service endpoints[0]',
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: getReceipt is not one of them',
       ),
@@ -230,7 +233,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 0],
+        'dependencies.payments-service endpoints[0]',
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: healthCheck is private',
       ),
@@ -244,7 +247,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 1],
+        'dependencies.payments-service endpoints[1]',
         'not-a-declaration',
         'endpoints.1 is not an Endpoint',
       ),
@@ -261,7 +264,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'events'],
+        'dependencies.payments-service events',
         'undeclared-field',
         'events is not a declared field',
       ),
@@ -277,7 +280,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 2],
+        'dependencies.payments-service endpoints[2]',
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: getPayment is listed twice',
       ),
@@ -291,7 +294,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'duplicate-dependency',
         'A Contract lists one Dependency per Provider: "payments-service"',
       ),
@@ -305,7 +308,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'an Endpoint written undefined',
       declaration: { provider: payments, endpoints: [undefined] },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints', 0],
+        location: 'dependencies.payments-service endpoints[0]',
         rule: 'not-a-declaration',
         message: 'endpoints.0 is not an Endpoint',
       },
@@ -314,7 +317,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'endpoints written null',
       declaration: { provider: payments, endpoints: null },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints'],
+        location: 'dependencies.payments-service endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
@@ -324,7 +327,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       // biome-ignore lint/suspicious/noSparseArray: the hole is what the test writes
       declaration: { provider: payments, endpoints: [, getPayment] },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints', 0],
+        location: 'dependencies.payments-service endpoints[0]',
         rule: 'not-a-declaration',
         message: 'endpoints.0 is not an Endpoint',
       },
@@ -333,7 +336,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'endpoints written as a map by name',
       declaration: { provider: payments, endpoints: { whatever: getPayment } },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints'],
+        location: 'dependencies.payments-service endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
@@ -342,7 +345,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'endpoints written as an empty map',
       declaration: { provider: payments, endpoints: {} },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints'],
+        location: 'dependencies.payments-service endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
@@ -351,7 +354,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'an Endpoint written where the list belongs',
       declaration: { provider: payments, endpoints: getPayment },
       line: {
-        at: ['dependencies', 'payments-service', 'endpoints'],
+        location: 'dependencies.payments-service endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
@@ -360,7 +363,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'a provider left undefined',
       declaration: { provider: undefined, endpoints: [getPayment] },
       line: {
-        at: ['dependencies', 0],
+        location: '(root) dependencies[0]',
         rule: 'dependency-provider',
         message: "A Dependency's provider is the contract a Contract Package exports",
       },
@@ -369,7 +372,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'a provider without its exported Snapshot',
       declaration: { provider: { ...payments, exportedSnapshot: undefined } },
       line: {
-        at: ['dependencies', 'payments-service'],
+        location: 'dependencies.payments-service',
         rule: 'dependency-provider',
         message: "A Dependency's provider is the contract a Contract Package exports",
       },
@@ -378,7 +381,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       what: 'a provider whose name is no string',
       declaration: { provider: { ...payments, name: 5 }, endpoints: [getPayment] },
       line: {
-        at: ['dependencies', 0],
+        location: '(root) dependencies[0]',
         rule: 'dependency-provider',
         message: "A Dependency's provider is the contract a Contract Package exports",
       },
@@ -387,7 +390,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
     const dependency = dependencyAsWritten(declaration);
     const contract = defineService({ name: 'orders-service', dependencies: [dependency] });
 
-    expect(validateInPackage(contract)).toEqual(failed(line.at, line.rule, line.message));
+    expect(validateInPackage(contract)).toEqual(failed(line.location, line.rule, line.message));
   });
 });
 
@@ -401,8 +404,18 @@ describe('validateRoot: Dependencies whose providers have no name', () => {
     expect(validateInPackage(contract)).toEqual({
       kind: 'invalid',
       failures: [
-        { kind: 'declaration', at: ['dependencies', 0], rule: 'dependency-provider', message },
-        { kind: 'declaration', at: ['dependencies', 1], rule: 'dependency-provider', message },
+        {
+          kind: 'declaration',
+          location: '(root) dependencies[0]',
+          rule: 'dependency-provider',
+          message,
+        },
+        {
+          kind: 'declaration',
+          location: '(root) dependencies[1]',
+          rule: 'dependency-provider',
+          message,
+        },
       ],
     });
   });
@@ -429,7 +442,7 @@ describe('validateRoot: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 0],
+        'dependencies.payments-service endpoints[0]',
         'application-dependency',
         'An Application depends on Public Endpoints only: refundPayment is internal',
       ),
@@ -444,7 +457,7 @@ describe('validateRoot: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 0],
+        'dependencies.payments-service endpoints[0]',
         'application-dependency',
         'An Application depends on Public Endpoints only: refundPayment is internal',
       ),
@@ -467,7 +480,7 @@ describe('validateRoot: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application)).toEqual(
       failed(
-        ['dependencies', 'payments-service', 'endpoints', 0],
+        'dependencies.payments-service endpoints[0]',
         'dependency-selection',
         'A Dependency selects Elements its Provider exports: healthCheck is private',
       ),
@@ -483,7 +496,7 @@ describe('validateRoot: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application)).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'unused-dependency',
         "A Dependency is used: payments-service gives no Endpoint and no Subscription's Event",
       ),
@@ -501,7 +514,9 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
   const contractName = `A Dependency's provider is an installed Contract Package's contract`;
 
   function validatedAmong(contractPackages: ReturnType<typeof aRootPackage>['contractPackages']) {
-    return validateRoot(ordersWithPayments, aRootPackage(ordersWithPayments, { contractPackages }));
+    return summarized(
+      validateRoot(ordersWithPayments, aRootPackage(ordersWithPayments, { contractPackages })),
+    );
   }
 
   test('a Dependency whose Provider no installed package exports fails, naming the Provider', () => {
@@ -509,7 +524,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'dependency-package',
         `${contractName}: no installed package exports payments-service's Elements`,
       ),
@@ -523,7 +538,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'dependency-package',
         `${contractName}: no installed package exports payments-service's Elements`,
       ),
@@ -540,7 +555,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'dependency-package',
         "A Dependency's Contract Package has a name and a version: @org/contract-payments-service has no version in its package.json",
       ),
@@ -557,7 +572,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'dependency-package',
         "A Dependency's Contract Package has a name and a version: node_modules/contract-payments/package.json has no name",
       ),
@@ -572,7 +587,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        ['dependencies', 'payments-service'],
+        'dependencies.payments-service',
         'dependency-package',
         "A Dependency's Contract Package is one package: payments-service's Elements are exported by both @org/contract-payments-service and @org/payments-mirror, and neither imports them from the other",
       ),
@@ -597,14 +612,13 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
       dependencies: [defineDependency({ provider: payments, endpoints: [getPayment] })],
     });
 
-    const validated = validateRoot(
-      application,
-      aRootPackage(application, { contractPackages: [] }),
+    const validated = summarized(
+      validateRoot(application, aRootPackage(application, { contractPackages: [] })),
     );
 
     expect(validated).toMatchObject({
       kind: 'invalid',
-      failures: [{ at: ['dependencies', 'payments-service'], rule: 'dependency-package' }],
+      failures: [{ location: 'dependencies.payments-service', rule: 'dependency-package' }],
     });
   });
 });

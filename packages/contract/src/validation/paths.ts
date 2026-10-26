@@ -1,5 +1,5 @@
 import { camelCase, follows } from '../declarations/index.ts';
-import type { ObjectNode, Path } from '../walker/index.ts';
+import { inFields, type ObjectNode, type Place } from '../walker/index.ts';
 import {
   isPlainObject,
   type LocatedEndpoint,
@@ -8,14 +8,14 @@ import {
   segmentsOf,
   slotAt,
 } from '../written/index.ts';
-import { type DeclarationFailure, failure } from './failures.ts';
+import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 import type { Nodes } from './schemas.ts';
 
 const literalSegment = /^[a-z0-9-]+$/;
 
 /** Whether a declared path is already canonical, so its identity and its params can be read. */
 export function isCanonicalPath(path: unknown): path is string {
-  return typeof path === 'string' && canonicalPathFailures(path, []).length === 0;
+  return typeof path === 'string' && pathProblemsOf(path).length === 0;
 }
 
 /** A path that is not canonical fails, every way it breaks the grammar named. */
@@ -23,7 +23,7 @@ export function pathFailures({ at, endpoint }: LocatedEndpoint): readonly Declar
   if (typeof endpoint.path !== 'string') {
     return [];
   }
-  return canonicalPathFailures(endpoint.path, [...at, 'path']);
+  return canonicalPathFailures(endpoint.path, inFields(at, 'path'));
 }
 
 /**
@@ -65,63 +65,56 @@ export function paramsFailures(
     : [failure(paramsAt, 'exact-params', exact)];
 }
 
-function optionalParamFailures(params: ObjectNode, at: Path): readonly DeclarationFailure[] {
+function optionalParamFailures(params: ObjectNode, at: Place): readonly DeclarationFailure[] {
   const optional = Object.entries(params.fields).filter(([, field]) => !field.required);
   return optional.map(([name]) =>
-    failure(
-      [...at, 'fields', name],
-      'optional-path-param',
-      `A path param is never optional: ${name}`,
-    ),
+    failure(inFields(at, name), 'optional-path-param', `A path param is never optional: ${name}`),
   );
 }
 
-function canonicalPathFailures(path: string, at: Path): readonly DeclarationFailure[] {
+/** One way a path breaks the grammar: the rule it breaks and the sentence naming it. */
+type PathProblem = { readonly rule: Rule; readonly message: string };
+
+function canonicalPathFailures(path: string, at: Place): readonly DeclarationFailure[] {
+  return pathProblemsOf(path).map(({ rule, message }) => failure(at, rule, message));
+}
+
+function pathProblemsOf(path: string): readonly PathProblem[] {
   if (path === '/') {
     return [];
   }
-  const failures: DeclarationFailure[] = [];
+  const problems: PathProblem[] = [];
   if (!path.startsWith('/')) {
-    failures.push(failure(at, 'canonical-path', `A path starts with /: ${path}`));
+    problems.push({ rule: 'canonical-path', message: `A path starts with /: ${path}` });
   }
   if (path.endsWith('/')) {
-    failures.push(failure(at, 'canonical-path', `A path has no trailing slash: ${path}`));
+    problems.push({ rule: 'canonical-path', message: `A path has no trailing slash: ${path}` });
   }
   const segments = segmentsOf(path);
   for (const segment of segments) {
-    failures.push(...segmentFailures(segment, path, at));
+    problems.push(...segmentProblems(segment, path));
   }
-  failures.push(...duplicateParamFailures(segments, at));
-  return failures;
+  problems.push(...duplicateParamProblems(segments));
+  return problems;
 }
 
-function segmentFailures(segment: string, path: string, at: Path): readonly DeclarationFailure[] {
+function segmentProblems(segment: string, path: string): readonly PathProblem[] {
   if (segment === '') {
-    return [failure(at, 'canonical-path', `A path has no empty segment: ${path}`)];
+    return [{ rule: 'canonical-path', message: `A path has no empty segment: ${path}` }];
   }
   if (segment.startsWith(':')) {
-    return follows(camelCase, segment.slice(1))
-      ? []
-      : [failure(at, 'canonical-path', `A path param is written :camelCase: ${segment}`)];
+    const message = `A path param is written :camelCase: ${segment}`;
+    return follows(camelCase, segment.slice(1)) ? [] : [{ rule: 'canonical-path', message }];
   }
-  return literalSegment.test(segment)
-    ? []
-    : [
-        failure(
-          at,
-          'canonical-path',
-          `A path segment is lower-case letters, digits and dashes: ${segment}`,
-        ),
-      ];
+  const message = `A path segment is lower-case letters, digits and dashes: ${segment}`;
+  return literalSegment.test(segment) ? [] : [{ rule: 'canonical-path', message }];
 }
 
-function duplicateParamFailures(
-  segments: readonly string[],
-  at: Path,
-): readonly DeclarationFailure[] {
+function duplicateParamProblems(segments: readonly string[]): readonly PathProblem[] {
   const names = segments.filter((segment) => segment.startsWith(':'));
   const repeated = names.filter((name, index) => names.indexOf(name) !== index);
-  return [...new Set(repeated)].map((name) =>
-    failure(at, 'duplicate-path-param', `A path param appears once: ${name}`),
-  );
+  return [...new Set(repeated)].map((name) => ({
+    rule: 'duplicate-path-param',
+    message: `A path param appears once: ${name}`,
+  }));
 }

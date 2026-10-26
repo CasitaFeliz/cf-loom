@@ -1,4 +1,5 @@
-import { type Guard, isRejection, type Rejection } from '../declarations/index.ts';
+import { type Guard, isRejection, type Rejection, type Root } from '../declarations/index.ts';
+import { placeOf } from '../walker/index.ts';
 import {
   type Declarations,
   listOf,
@@ -23,18 +24,21 @@ export function exportFailures(
   const memberNames = new Set(ownMembers.map(({ name }) => name));
   const others = Object.keys(rootExports).filter((name) => !memberNames.has(name));
   return [
-    ...others.map((name) => otherExportFailure(name, rootExports[name] === root)),
+    ...others.map((name) => otherExportFailure(name, rootExports[name], root)),
     ...ownMembers.filter(({ name }) => name === '__proto__').map(protoFailure),
     ...unexportedFailures(ownMembers),
   ];
 }
 
-function otherExportFailure(name: string, isRoot: boolean): DeclarationFailure {
-  const at = ['exports', name];
+/** A value a Root file exports, under the name it exports it as. */
+type ExportedAs = { readonly name: string; readonly value: unknown };
+
+function otherExportFailure(name: string, value: unknown, root: Root): DeclarationFailure {
+  const at = placeOf({ kind: 'export', name }, value);
   if (name === '__proto__') {
-    return protoFailure({ name });
+    return protoFailure({ name, value });
   }
-  if (isRoot) {
+  if (value === root) {
     return failure(
       at,
       'definitions-export',
@@ -44,9 +48,9 @@ function otherExportFailure(name: string, isRoot: boolean): DeclarationFailure {
   return failure(at, 'definitions-export', `${exportsOnly}: ${name} is none of them`);
 }
 
-function protoFailure({ name }: { readonly name: string }): DeclarationFailure {
+function protoFailure({ name, value }: ExportedAs): DeclarationFailure {
   const message = `${exportsOnly}: nothing named __proto__, which no Snapshot can hold`;
-  return failure(['exports', name], 'definitions-export', message);
+  return failure(placeOf({ kind: 'export', name }, value), 'definitions-export', message);
 }
 
 /** Each Guard or Rejection an exported Guard reaches unexported, reported once, at the first export, in code point order, that reaches it. */
@@ -60,7 +64,13 @@ function unexportedFailures(members: Members): readonly DeclarationFailure[] {
       if (!reported.has(declaration)) {
         const label = 'code' in declaration ? declaration.code : declaration.name;
         const message = `${exportsReach}: ${textOf(label)}`;
-        failures.push(failure(['exports', member.name], 'definitions-unexported', message));
+        failures.push(
+          failure(
+            placeOf({ kind: 'export', name: member.name }, member.value),
+            'definitions-unexported',
+            message,
+          ),
+        );
       }
       reported.add(declaration);
     }

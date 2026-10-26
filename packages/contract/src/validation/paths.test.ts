@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { defineEndpoint, defineGroup, defineService, type Endpoint } from '../index.ts';
 import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listOrders = {
@@ -26,11 +27,11 @@ function validateEndpoint(endpoint: Endpoint) {
 
 /** A path failure of the Endpoint of that identity: a path that is not canonical still has one. */
 function failedPath(identity: string, message: string, rule = 'canonical-path') {
-  return failedAt(['groups', 'orders', 'endpoints', identity, 'path'], rule, message);
+  return failedAt(`endpoints.${identity} (listOrders) path`, rule, message);
 }
 
-function failedAt(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failedAt(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: canonical paths', () => {
@@ -55,7 +56,7 @@ describe('validateRoot: canonical paths', () => {
 
     expect(validated).toEqual(
       failedAt(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'],
+        'endpoints.GET /orders/{} (listOrders) input.params',
         'exact-params',
         "params declares exactly the path's :names: orderId",
       ),
@@ -182,25 +183,25 @@ describe('validateRoot: canonical paths', () => {
       }),
     );
 
-    const pathAt = ['groups', 'orders', 'endpoints', 'GET /Orders/{}', 'path'];
+    const pathAt = 'endpoints.GET /Orders/{} (listOrders) path';
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: pathAt,
+          location: pathAt,
           rule: 'canonical-path',
           message: 'A path starts with /: Orders/:id/',
         },
         {
           kind: 'declaration',
-          at: pathAt,
+          location: pathAt,
           rule: 'canonical-path',
           message: 'A path has no trailing slash: Orders/:id/',
         },
         {
           kind: 'declaration',
-          at: pathAt,
+          location: pathAt,
           rule: 'canonical-path',
           message: 'A path segment is lower-case letters, digits and dashes: Orders',
         },
@@ -210,7 +211,7 @@ describe('validateRoot: canonical paths', () => {
 });
 
 describe('validateRoot: params against the path', () => {
-  const paramsAt = ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'];
+  const paramsAt = 'endpoints.GET /orders/{} (listOrders) input.params';
 
   test('params with exactly the path’s :names validate', () => {
     const getOrder = defineEndpoint({
@@ -235,7 +236,7 @@ describe('validateRoot: params against the path', () => {
 
     expect(validateEndpoint(getItem)).toEqual(
       failedAt(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}/items/{}', 'input', 'params'],
+        'endpoints.GET /orders/{}/items/{} (listOrders) input.params',
         'exact-params',
         "params declares exactly the path's :names: orderId, itemId",
       ),
@@ -270,7 +271,7 @@ describe('validateRoot: params against the path', () => {
 
     expect(validateEndpoint(getOrder)).toEqual(
       failedAt(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'input', 'params'],
+        'endpoints.GET /orders (listOrders) input.params',
         'exact-params',
         'A path without :names takes no params',
       ),
@@ -286,7 +287,7 @@ describe('validateRoot: params against the path', () => {
 
     expect(validateEndpoint(getOrder)).toEqual(
       failedAt(
-        [...paramsAt, 'fields', 'orderId'],
+        `${paramsAt}.orderId`,
         'optional-path-param',
         'A path param is never optional: orderId',
       ),
@@ -314,7 +315,7 @@ describe('validateRoot: params against the path', () => {
 
     expect(validateEndpoint(getOrder)).toEqual(
       failedAt(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input'],
+        'endpoints.GET /orders/{} (listOrders) input',
         'not-an-object',
         'input is an object',
       ),

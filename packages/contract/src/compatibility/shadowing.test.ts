@@ -405,7 +405,15 @@ describe('compatibilityReportOf, shadowing agrees with what the author’s schem
   ];
 
   function nodeOf(schema: z.ZodType): SchemaNode {
-    const [located] = walkSchemas([{ at: ['param'], schema }], () => undefined).located;
+    const [located] = walkSchemas(
+      [
+        {
+          at: { site: { kind: 'export', name: 'param' }, declaration: undefined, steps: [] },
+          schema,
+        },
+      ],
+      () => undefined,
+    ).located;
     if (located?.walked.kind !== 'walked') {
       throw new Error('A drawn param schema walks.');
     }

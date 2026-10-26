@@ -4,7 +4,7 @@ import {
   standardRejectionNames,
 } from '../declarations/index.ts';
 import type { ResolvedDefinitions, ValidatedCode } from '../validation/index.ts';
-import { byCodePoint, type SchemaNode, walkSchemas } from '../walker/index.ts';
+import { byCodePoint, inFields, placeOf, type SchemaNode, walkSchemas } from '../walker/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
 import type { SnapshotSources } from './context.ts';
 import { textPartOf } from './input.ts';
@@ -82,7 +82,7 @@ function standardCodeOf(
 }
 
 function invalidInputNode(code: string): SchemaNode {
-  const at = ['codes', code, 'body'];
+  const at = inFields(placeOf({ kind: 'code', code }, undefined), 'body');
   const [located] = walkSchemas([{ at, schema: invalidInputBody }], () => undefined).located;
   if (located?.walked.kind !== 'walked') {
     throw new Error('cf-loom’s invalid-input body walks to a node: a bug.');

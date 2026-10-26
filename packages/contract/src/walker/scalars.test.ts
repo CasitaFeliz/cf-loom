@@ -3,22 +3,26 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { type SchemaNode, type StringFormat, walkSchemas } from '../internal/index.ts';
 
+const bodyAt = {
+  site: { kind: 'export', name: 'body' },
+  declaration: undefined,
+  steps: [],
+} as const;
+
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  return refusalsOf(walkSchemas([{ at: bodyAt, schema }], () => undefined));
 }
 
 function walkedTo(node: SchemaNode) {
-  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+  return { located: [{ kind: 'walked', value: node }], defs: {} };
 }
 
-function refusedAt(at: readonly (string | number)[], construct: string) {
+function refusedAt(at: string, construct: string) {
   const failure = { kind: 'not-allowed', at, construct };
-  return {
-    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
-    defs: {},
-  };
+  return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
 describe('walkSchemas: strings', () => {
@@ -99,9 +103,9 @@ describe('walkSchemas: strings', () => {
     ['z.currencyCode()', z.currencyCode(), 'currency_code'],
     ['z.hash()', z.hash('sha256'), 'sha256_hex'],
   ])('%s walked by the built package is its format', (_name, schema, format) => {
-    expect(built.walkSchemas([{ at: ['body'], schema }], () => undefined)).toEqual(
-      walkedTo({ type: 'string', format }),
-    );
+    const walked = built.walkSchemas([{ at: bodyAt, schema }], () => undefined);
+
+    expect(refusalsOf(walked)).toEqual(walkedTo({ type: 'string', format }));
   });
 
   test.each<[string, core.$ZodType, StringFormat]>([
@@ -117,7 +121,7 @@ describe('walkSchemas: strings', () => {
     const zodPattern = { pattern: z.regexes.hex } as object;
     const hex = z.stringFormat('hex', () => true, zodPattern);
 
-    expect(walkBody(hex)).toEqual(refusedAt(['body'], 'z.stringFormat("hex")'));
+    expect(walkBody(hex)).toEqual(refusedAt('', 'z.stringFormat("hex")'));
   });
 
   test.each<[string, core.$ZodType]>([
@@ -130,9 +134,9 @@ describe('walkSchemas: strings', () => {
   test('the built package walks a format like the source', () => {
     const placedAt = z.iso.datetime({ offset: true, precision: 3 });
 
-    const walked = built.walkSchemas([{ at: ['body'], schema: placedAt }], () => undefined);
+    const walked = built.walkSchemas([{ at: bodyAt, schema: placedAt }], () => undefined);
 
-    expect(walked).toEqual(walkBody(placedAt));
+    expect(refusalsOf(walked)).toEqual(walkBody(placedAt));
   });
 
   test('an option that differs from zod default is a format option', () => {

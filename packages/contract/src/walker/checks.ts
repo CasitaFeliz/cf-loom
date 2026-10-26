@@ -1,14 +1,15 @@
 import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
 import { type DeclaredCheck, isConditional, refusedCheck } from './check-defs.ts';
-import type { NotAllowed, NumberNode, Path, Regex, SchemaNode, StringNode } from './nodes.ts';
+import type { Place } from './location.ts';
+import type { NotAllowed, NumberNode, Regex, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, refused, refusedName, refusedRepeatedCheck } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
 import { failed, type Outline, outlineOf, type Walked, walked } from './walked.ts';
 
 type Constraint<Node> = Walked<Partial<Node>>;
 
-type ConstraintOf<Node> = (check: DeclaredCheck, at: Path) => Constraint<Node>;
+type ConstraintOf<Node> = (check: DeclaredCheck, at: Place) => Constraint<Node>;
 
 type Bounds = { readonly min?: number; readonly max?: number };
 
@@ -19,7 +20,7 @@ type Bounds = { readonly min?: number; readonly max?: number };
 export function constrain(
   walkedSchema: Walked,
   checks: readonly DeclaredCheck[],
-  at: Path,
+  at: Place,
 ): Walked {
   const outline = outlineOf(walkedSchema);
   const constraints = constraintsOf(constraintOfType(outline.type), checks, at);
@@ -38,9 +39,9 @@ export function constrain(
 }
 
 /** Why the constrained node admits no value, as its bounds alone say. */
-function emptinessFailuresOf(outline: Outline, at: Path): readonly NotAllowed[] {
+function emptinessFailuresOf(outline: Outline, at: Place): readonly NotAllowed[] {
   const refusal = emptyConstraintOf(outline);
-  return refusal === undefined ? [] : [{ kind: 'not-allowed', at, ...refusal }];
+  return refusal === undefined ? [] : [{ kind: 'not-allowed', ...at, ...refusal }];
 }
 
 /** The constraint a check sets on a node of each type; one that takes no check refuses them all. */
@@ -71,7 +72,7 @@ function constraintOfType(type: SchemaNode['type'] | undefined): ConstraintOf<ob
 function constraintsOf<Node>(
   constraintOf: ConstraintOf<Node>,
   checks: readonly DeclaredCheck[],
-  at: Path,
+  at: Place,
 ): readonly Constraint<Node>[] {
   return checks.map((check) =>
     isConditional(check) ? notAllowed(at, refused.conditionalCheck) : constraintOf(check, at),
@@ -96,7 +97,7 @@ function constrained<Node extends Outline>(
 function failuresOfConstraints(
   constraints: readonly Walked<object>[],
   nodeKeys: readonly string[],
-  at: Path,
+  at: Place,
 ): NotAllowed[] {
   const failures: NotAllowed[] = [];
   const taken = new Set(nodeKeys.map(slotOf));
@@ -106,12 +107,12 @@ function failuresOfConstraints(
       continue;
     }
     if (Object.values(constraint.value).some(isNonFinite)) {
-      failures.push({ kind: 'not-allowed', at, ...refused.nonFinite });
+      failures.push({ kind: 'not-allowed', ...at, ...refused.nonFinite });
     }
     const slots = Object.keys(constraint.value).map(slotOf);
     const repeated = slots.find((slot) => taken.has(slot));
     if (repeated !== undefined) {
-      failures.push({ kind: 'not-allowed', at, ...refusedRepeatedCheck(repeated) });
+      failures.push({ kind: 'not-allowed', ...at, ...refusedRepeatedCheck(repeated) });
     }
     for (const slot of slots) {
       taken.add(slot);
@@ -120,7 +121,7 @@ function failuresOfConstraints(
   return failures;
 }
 
-function stringConstraint(check: DeclaredCheck, at: Path): Constraint<StringNode> {
+function stringConstraint(check: DeclaredCheck, at: Place): Constraint<StringNode> {
   const { def } = check;
   if (def.check !== 'string_format') {
     return lengthConstraint(check, at);
@@ -131,7 +132,7 @@ function stringConstraint(check: DeclaredCheck, at: Path): Constraint<StringNode
   return formatOf(check, at);
 }
 
-function lengthConstraint({ def: check }: DeclaredCheck, at: Path): Constraint<Bounds> {
+function lengthConstraint({ def: check }: DeclaredCheck, at: Place): Constraint<Bounds> {
   switch (check.check) {
     case 'min_length':
       return walked({ min: check.minimum });
@@ -158,7 +159,7 @@ function lengthConstraint({ def: check }: DeclaredCheck, at: Path): Constraint<B
   }
 }
 
-function numberConstraint({ def: check }: DeclaredCheck, at: Path): Constraint<NumberNode> {
+function numberConstraint({ def: check }: DeclaredCheck, at: Place): Constraint<NumberNode> {
   switch (check.check) {
     case 'greater_than':
       return walked(
@@ -192,7 +193,7 @@ function numberConstraint({ def: check }: DeclaredCheck, at: Path): Constraint<N
   }
 }
 
-function refusedConstraint({ def }: DeclaredCheck, at: Path): Constraint<never> {
+function refusedConstraint({ def }: DeclaredCheck, at: Place): Constraint<never> {
   return notAllowed(at, refusedCheck(def));
 }
 

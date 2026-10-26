@@ -47,8 +47,7 @@ export function innerAnnotationFindingsOf(pair: NodePair, defs: BothDefs): reado
 }
 
 function innerNodesOf(node: SchemaNode, defs: Defs): readonly SchemaNode[] {
-  const reached = nodesReachedFrom([{ at: [], node }], defs);
-  return reached.slice(1).map((located) => located.node);
+  return nodesReachedFrom([node], defs).slice(1);
 }
 
 /** The annotations the nodes hold, each with the shape of its node, in an order that means nothing. */

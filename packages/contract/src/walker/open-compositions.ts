@@ -1,24 +1,31 @@
 import { type LocatedNode, nodesReachedFrom, nodesWithin } from './children.ts';
-import type { AllOfNode, NotAllowed, Path, SchemaNode, UnionNode } from './nodes.ts';
+import { inside, type Place, placeOf } from './location.ts';
+import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
 
+/** A schema's node and the place it sits in. */
+type PlacedNode = { readonly at: Place; readonly node: SchemaNode };
+
 /**
- * Every outermost `allOf` or `union` in the schemas, or in a def at `['defs', <id>]`, that reaches
- * an Open Enum: a reader of an intersection merges what each item read, and a reader of a union
- * takes the first option that parses, and neither can tell an Unknown case from a value another
- * part declares. Each def is judged once, where it is, whether or not the schemas using it walked.
+ * Every outermost `allOf` or `union` in the schemas, or in a def, that reaches an Open Enum: a
+ * reader of an intersection merges what each item read, and a reader of a union takes the first
+ * option that parses, and neither can tell an Unknown case from a value another part declares.
+ * Each def is judged once, where it is, whether or not the schemas using it walked.
  */
 export function openCompositionsOf(
-  schemas: readonly LocatedNode[],
+  schemas: readonly PlacedNode[],
   defs: Defs,
 ): readonly NotAllowed[] {
-  const located = [...schemas, ...Object.entries(defs).map(([id, def]) => defAt(id, def))];
+  const defNodes = Object.entries(defs).map(([name, def]) => defAt(name, def));
   const reported: NotAllowed[] = [];
-  for (const { at, node } of located.flatMap((schema) => nodesWithin(schema.node, schema.at))) {
-    const isInsideReported = reported.some((outer) => isInside(at, outer.at));
-    if (isComposition(node) && !isInsideReported && reachesOpen({ at, node }, defs)) {
-      reported.push({ kind: 'not-allowed', at, ...refusalOf(node) });
+  for (const { at, node: root } of [...schemas, ...defNodes]) {
+    for (const found of nodesWithin(root)) {
+      const place = inside(at, ...found.at);
+      const isInsideReported = reported.some((outer) => isInside(place, outer));
+      if (isComposition(found.node) && !isInsideReported && reachesOpen(found, defs)) {
+        reported.push({ kind: 'not-allowed', ...place, ...refusalOf(found.node) });
+      }
     }
   }
   return reported;
@@ -32,20 +39,29 @@ function refusalOf(composition: AllOfNode | UnionNode): Refused {
   return composition.type === 'allOf' ? refused.openIntersection : refused.openUnion;
 }
 
-function defAt(id: string, def: LocatedNode['node']): LocatedNode {
-  return { at: ['defs', id], node: def };
+function defAt(name: string, def: SchemaNode): PlacedNode {
+  return { at: placeOf({ kind: 'def', name }, undefined), node: def };
 }
 
-/** Whether a path lies under another, which the walk of nodes lists first. */
-function isInside(at: Path, outer: Path): boolean {
-  return outer.length < at.length && outer.every((step, index) => at[index] === step);
+/** Whether a place lies under another in the same declaration, which the walk of nodes lists first. */
+function isInside(place: Place, outer: Place): boolean {
+  const isSame = place.declaration === outer.declaration && sameSite(place, outer);
+  return (
+    isSame &&
+    outer.steps.length < place.steps.length &&
+    outer.steps.every((step, index) => JSON.stringify(step) === JSON.stringify(place.steps[index]))
+  );
+}
+
+function sameSite(place: Place, other: Place): boolean {
+  return JSON.stringify(place.site) === JSON.stringify(other.site);
 }
 
 /** Whether a node reaches an Open Enum, through `ref`s. */
-function reachesOpen(located: LocatedNode, defs: Defs): boolean {
-  return nodesReachedFrom([located], defs).some(isOpenEnum);
+function reachesOpen({ node }: LocatedNode, defs: Defs): boolean {
+  return nodesReachedFrom([node], defs).some(isOpenEnum);
 }
 
-function isOpenEnum({ node }: LocatedNode): boolean {
+function isOpenEnum(node: SchemaNode): boolean {
   return node.type === 'enum' && node.open;
 }

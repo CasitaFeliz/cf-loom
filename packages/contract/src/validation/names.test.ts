@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineApplication,
@@ -16,7 +17,7 @@ import { type Root, rootNameProblemOf, validateRoot } from '../internal/index.ts
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -48,8 +49,8 @@ function validateGroups(groups: readonly Group[]) {
   return validateInPackage(defineService({ name: 'orders-service', groups }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: name grammars', () => {
@@ -69,7 +70,7 @@ describe('validateRoot: name grammars', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['name'], 'name-grammar', 'A Service name is kebab-case: "OrdersService"'),
+      failed('(root) name', 'name-grammar', 'A Service name is kebab-case: "OrdersService"'),
     );
   });
 
@@ -80,13 +81,13 @@ describe('validateRoot: name grammars', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['name'], 'name-grammar', 'A Service name is kebab-case: "orders-service\\n"'),
+      failed('(root) name', 'name-grammar', 'A Service name is kebab-case: "orders-service\\n"'),
     );
   });
 
   test('a Group name that is not kebab-case fails', () => {
     expect(validateGroups([aGroup('Orders', [listOrders])])).toEqual(
-      failed(['groups', 'Orders', 'name'], 'name-grammar', 'A Group name is kebab-case: "Orders"'),
+      failed('groups.Orders name', 'name-grammar', 'A Group name is kebab-case: "Orders"'),
     );
   });
 
@@ -95,7 +96,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        'endpoints.GET /orders (list_orders) name',
         'name-grammar',
         'An Endpoint name is camelCase words: "list_orders"',
       ),
@@ -107,11 +108,7 @@ describe('validateRoot: name grammars', () => {
     const endpoint = defineEndpoint({ ...listing, guards: [apiKey] });
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
-      failed(
-        ['guards', 'ApiKey', 'name'],
-        'name-grammar',
-        'A Guard name is camelCase words: "ApiKey"',
-      ),
+      failed('guards.ApiKey name', 'name-grammar', 'A Guard name is camelCase words: "ApiKey"'),
     );
   });
 
@@ -128,7 +125,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        `endpoints.GET /orders (${name}) name`,
         'name-grammar',
         `An Endpoint name is camelCase words: "${name}"${hint}`,
       ),
@@ -141,7 +138,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['guards', 'useAPI', 'name'],
+        'guards.useAPI name',
         'name-grammar',
         'A Guard name is camelCase words: "useAPI" (write useApi)',
       ),
@@ -189,7 +186,7 @@ describe('validateRoot: name grammars', () => {
 
       expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
         failed(
-          ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+          `endpoints.GET /orders (${name}) name`,
           'name-grammar',
           `An Endpoint name is camelCase words and no reserved word: "${name}"`,
         ),
@@ -211,7 +208,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        `endpoints.GET /orders (${name}) name`,
         'name-grammar',
         `An Endpoint name is camelCase words and no reserved word: "${name}"`,
       ),
@@ -224,7 +221,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'name'],
+        'endpoints.GET /orders (toJSON) name',
         'name-grammar',
         'An Endpoint name is camelCase words and no reserved word: "toJSON" (write toJson)',
       ),
@@ -238,9 +235,7 @@ describe('validateRoot: name grammars', () => {
 
       expect(validateGroups([aGroup('orders', [endpoint])])).toMatchObject({
         kind: 'invalid',
-        failures: [
-          { at: ['groups', 'orders', 'endpoints', 'GET /orders', 'name'], rule: 'name-grammar' },
-        ],
+        failures: [{ location: `endpoints.GET /orders (${name}) name`, rule: 'name-grammar' }],
       });
     },
   );
@@ -261,9 +256,13 @@ describe('validateRoot: name grammars', () => {
       const definitions = defineDefinitions({});
       const rootExports = { guard };
 
-      expect(validateRoot(definitions, aRootPackage(definitions, { rootExports }))).toEqual(
+      const validated = summarized(
+        validateRoot(definitions, aRootPackage(definitions, { rootExports })),
+      );
+
+      expect(validated).toEqual(
         failed(
-          ['guards', name, 'name'],
+          `guards.${name} name`,
           'name-grammar',
           `A Guard name is camelCase words and no reserved word: "${name}"`,
         ),
@@ -287,7 +286,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(
       failed(
-        ['rejections', 'orderLocked', 'code'],
+        'codes.orderLocked code',
         'name-grammar',
         'A Rejection code is UPPER_SNAKE_CASE: "orderLocked"',
       ),
@@ -301,7 +300,7 @@ describe('validateRoot: name grammars', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notFound', 'code'],
+        'standardRejections.notFound code',
         'name-grammar',
         'A Rejection code is UPPER_SNAKE_CASE: "not-found"',
       ),
@@ -315,7 +314,7 @@ describe('validateRoot: unique names and identities', () => {
 
     expect(validateGroups([aGroup('orders', [listOrders, listAgain])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/latest', 'name'],
+        'endpoints.GET /orders/latest (listOrders) name',
         'duplicate-endpoint-name',
         'An Endpoint name is unique among the Endpoints that are not Retired: "listOrders"',
       ),
@@ -344,7 +343,7 @@ describe('validateRoot: unique names and identities', () => {
 
     expect(validateGroups([aGroup('orders', [getLatest, getOrder])])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'path'],
+        'endpoints.GET /orders/{} (getOrder) path',
         'duplicate-endpoint-identity',
         'An Endpoint is identified by its method and path, once: GET /orders/{}',
       ),
@@ -363,7 +362,7 @@ describe('validateRoot: unique names and identities', () => {
 
     expect(validateGroups([aGroup('orders', [first, second])])).toEqual(
       failed(
-        ['guards', 'apiKey', 'name'],
+        'guards.apiKey name',
         'duplicate-guard-name',
         'A Guard name is unique across the Contract and its Definitions Packages: "apiKey"',
       ),
@@ -401,7 +400,7 @@ describe('validateRoot: unique names and identities', () => {
 
     expect(validated).toEqual(
       failed(
-        ['guards', 'apiKey', 'name'],
+        'guards.apiKey name',
         'duplicate-guard-name',
         'A Guard name is unique across the Contract and its Definitions Packages: "apiKey"',
       ),
@@ -423,7 +422,7 @@ describe('validateRoot: Groups', () => {
       validateGroups([aGroup('orders', [listOrders]), aGroup('orders', [createOrder])]),
     ).toEqual(
       failed(
-        ['groups', 'orders', 'name'],
+        'groups.orders name',
         'duplicate-group-name',
         'A Group name is unique in the Contract: "orders"',
       ),
@@ -444,14 +443,16 @@ describe('validateRoot: the Root is named as its package', () => {
   });
 
   test.each(roots)('%s named otherwise fails package-name', (_, root) => {
-    const validated = validateRoot(root, aRootPackage(root, { packageName: 'billing-service' }));
+    const validated = summarized(
+      validateRoot(root, aRootPackage(root, { packageName: 'billing-service' })),
+    );
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['name'],
+          location: '(root) name',
           rule: 'package-name',
           message: `A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"`,
         },

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Attachment,
@@ -15,7 +16,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 /** What a Guard may demand, so a cast can put a part there the types refuse. */
@@ -61,11 +62,11 @@ function validateEndpoint(endpoint: Endpoint) {
   return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-const guardsAt = ['groups', 'orders', 'endpoints', 'GET /orders', 'guards'];
+const guardsAt = 'endpoints.GET /orders (listOrders) guards';
 
 describe('validateRoot: what a Guard demands', () => {
   test('a Guard demanding headers and query validates', () => {
@@ -84,7 +85,7 @@ describe('validateRoot: what a Guard demands', () => {
 
     expect(validateGuards([signed])).toEqual(
       failed(
-        ['guards', 'signed', 'demands', 'body'],
+        'guards.signed demands.body',
         'guard-demands',
         'A Guard demands only headers and query',
       ),
@@ -97,7 +98,7 @@ describe('validateRoot: what a Guard demands', () => {
 
     expect(validateGuards([tenant])).toEqual(
       failed(
-        ['guards', 'tenant', 'demands', 'params'],
+        'guards.tenant demands.params',
         'guard-demands',
         'A Guard demands only headers and query',
       ),
@@ -119,7 +120,7 @@ describe('validateRoot: the order of an Endpoint’s Guards', () => {
     ];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0], 'guard-order', 'permission requires userToken earlier in guards'),
+      failed(`${guardsAt}[0]`, 'guard-order', 'permission requires userToken earlier in guards'),
     );
   });
 
@@ -136,13 +137,13 @@ describe('validateRoot: the order of an Endpoint’s Guards', () => {
       failures: expect.arrayContaining([
         {
           kind: 'declaration',
-          at: [...guardsAt, 0],
+          location: `${guardsAt}[0]`,
           rule: 'guard-order',
           message: 'g0 requires g1 earlier in guards',
         },
         {
           kind: 'declaration',
-          at: ['guards', 'g1', 'demands', 'body'],
+          location: 'guards.g1 demands.body',
           rule: 'guard-demands',
           message: 'A Guard demands only headers and query',
         },
@@ -154,7 +155,7 @@ describe('validateRoot: the order of an Endpoint’s Guards', () => {
     const guards: readonly Attachment[] = [userToken, userToken];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 1], 'guard-once', 'userToken is listed twice'),
+      failed(`${guardsAt}[1]`, 'guard-once', 'userToken is listed twice'),
     );
   });
 
@@ -166,7 +167,7 @@ describe('validateRoot: the order of an Endpoint’s Guards', () => {
     ];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 2], 'guard-once', 'permission is listed twice'),
+      failed(`${guardsAt}[2]`, 'guard-once', 'permission is listed twice'),
     );
   });
 });
@@ -177,7 +178,7 @@ describe('validateRoot: bare and qualified Attachments', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 1],
+        `${guardsAt}[1]`,
         'attachment-needs-qualifier',
         'permission needs a qualifier: { guard, qualifier }',
       ),
@@ -188,7 +189,7 @@ describe('validateRoot: bare and qualified Attachments', () => {
     const guards: readonly Attachment[] = [{ guard: userToken, qualifier: 'anything' }];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0], 'attachment-takes-no-qualifier', 'userToken takes no qualifier'),
+      failed(`${guardsAt}[0]`, 'attachment-takes-no-qualifier', 'userToken takes no qualifier'),
     );
   });
 
@@ -197,7 +198,7 @@ describe('validateRoot: bare and qualified Attachments', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0],
+        `${guardsAt}[0]`,
         'not-an-attachment',
         'An Attachment is a Guard or { guard, qualifier }',
       ),
@@ -210,7 +211,7 @@ describe('validateRoot: Attachments written without a Guard or a Qualifier', () 
     const guards = [{ guard: null, qualifier: 'acme' }] as unknown as readonly Attachment[];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0, 'guard'], 'required-field', 'guard is a required field'),
+      failed(`${guardsAt}[0].guard`, 'required-field', 'guard is a required field'),
     );
   });
 
@@ -218,7 +219,7 @@ describe('validateRoot: Attachments written without a Guard or a Qualifier', () 
     const guards = [{ qualifier: 'acme' }] as unknown as readonly Attachment[];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0, 'guard'], 'required-field', 'guard is a required field'),
+      failed(`${guardsAt}[0].guard`, 'required-field', 'guard is a required field'),
     );
   });
 
@@ -227,7 +228,7 @@ describe('validateRoot: Attachments written without a Guard or a Qualifier', () 
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0],
+        `${guardsAt}[0]`,
         'not-an-attachment',
         'An Attachment is a Guard or { guard, qualifier }',
       ),
@@ -238,7 +239,7 @@ describe('validateRoot: Attachments written without a Guard or a Qualifier', () 
     const guards = [{ guard: quota, qualifier: null }] as unknown as readonly Attachment[];
 
     expect(validateGuards(guards)).toEqual(
-      failed([...guardsAt, 0, 'qualifier'], 'required-field', 'qualifier is a required field'),
+      failed(`${guardsAt}[0].qualifier`, 'required-field', 'qualifier is a required field'),
     );
   });
 });
@@ -253,7 +254,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-value',
         'quota takes a Qualifier its schema accepts',
       ),
@@ -265,7 +266,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 1, 'qualifier'],
+        `${guardsAt}[1].qualifier`,
         'qualifier-value',
         'permission takes a Qualifier its schema accepts',
       ),
@@ -279,7 +280,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
@@ -293,7 +294,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: burst.every',
       ),
@@ -312,7 +313,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
       ),
@@ -338,7 +339,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
     expect(accepted.kind).toBe('valid');
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: tenantId',
       ),
@@ -360,7 +361,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
@@ -386,7 +387,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
     expect(accepted.kind).toBe('valid');
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: extra',
       ),
@@ -408,7 +409,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: children.0.extra',
       ),
@@ -430,7 +431,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: scope',
       ),
@@ -466,7 +467,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: globex.extra',
       ),
@@ -485,7 +486,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: 1.extra',
       ),
@@ -499,7 +500,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 0, 'qualifier'],
+        `${guardsAt}[0].qualifier`,
         'qualifier-keys',
         'A Qualifier holds only the keys its schema keeps when zod parses it: constructor',
       ),
@@ -517,7 +518,13 @@ describe('validateRoot: a Qualifier against its schema', () => {
     expect(validateGuards(guards)).toEqual({
       kind: 'invalid',
       failures: [
-        { kind: 'not-allowed', at: ['guards', 'refined', 'qualifier'], construct: '.refine()' },
+        {
+          kind: 'not-allowed',
+          location: 'guards.refined qualifier',
+          construct: '.refine()',
+          alsoIn: [],
+          origin: undefined,
+        },
       ],
     });
   });
@@ -530,7 +537,7 @@ describe('validateRoot: Guards typed wider than their declarations', () => {
 
     expect(validateGuards(guards)).toEqual(
       failed(
-        [...guardsAt, 1],
+        `${guardsAt}[1]`,
         'attachment-needs-qualifier',
         'permission needs a qualifier: { guard, qualifier }',
       ),

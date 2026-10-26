@@ -161,7 +161,6 @@ export {
   failureLineOf,
   identityLineOf,
   isContractPackage,
-  locationOf,
   noVersionLineOf,
   oneOf,
   packageLabelOf,

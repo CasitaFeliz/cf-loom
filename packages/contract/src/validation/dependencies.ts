@@ -6,7 +6,7 @@ import {
   type Root,
   reaches,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
   eventSourceOf,
@@ -22,7 +22,7 @@ import { type DeclarationFailure, failure } from './failures.ts';
 const selection = 'A Dependency selects Elements its Provider exports';
 
 /** An Endpoint a Dependency lists and where it sits, by its position in the list. */
-type Selected = { readonly at: Path; readonly endpoint: Endpoint };
+type Selected = { readonly at: Place; readonly endpoint: Endpoint };
 
 /**
  * A Dependency holds a Contract Package and is used: it lists Endpoints, or a Subscription
@@ -59,13 +59,15 @@ export function isContractPackage(provider: unknown): provider is ContractPackag
 
 function selectedOf({ at, dependency }: LocatedDependency): readonly Selected[] {
   const listed = listOf<unknown>(dependency.endpoints).map((endpoint, index) => {
-    const listedAt: Path = [...at, 'endpoints', index];
-    return { at: listedAt, endpoint };
+    return { at: inside(at, fieldStep('endpoints'), indexStep(index)), endpoint };
   });
   return listed.filter(isSelected);
 }
 
-function isSelected(listed: { readonly at: Path; readonly endpoint: unknown }): listed is Selected {
+function isSelected(listed: {
+  readonly at: Place;
+  readonly endpoint: unknown;
+}): listed is Selected {
   return isEndpoint(listed.endpoint);
 }
 
@@ -86,7 +88,7 @@ function selectedFailures(
 }
 
 /** A Private Endpoint is nobody's to select; an Internal one is a Service's only, never an Application's. */
-function unreachableEndpointFailure(at: Path, endpoint: Endpoint): DeclarationFailure {
+function unreachableEndpointFailure(at: Place, endpoint: Endpoint): DeclarationFailure {
   const { name, visibility } = endpoint;
   if (visibility === 'private') {
     return failure(at, 'dependency-selection', `${selection}: ${name} is private`);

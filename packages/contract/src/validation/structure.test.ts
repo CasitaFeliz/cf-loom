@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Definitions,
@@ -18,7 +19,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -40,8 +41,8 @@ function validateEndpoint(endpoint: Endpoint) {
   return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
 describe('validateRoot: lists and their items', () => {
@@ -52,7 +53,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['groups'], 'not-a-list', 'groups is a list'),
+      failed('(root) groups', 'not-a-list', 'groups is a list'),
     );
   });
 
@@ -63,7 +64,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
+      failed('(root) groups[0]', 'not-a-declaration', 'groups.0 is not a Group'),
     );
   });
 
@@ -79,13 +80,13 @@ describe('validateRoot: lists and their items', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['standardRejections'],
+          location: '(root) standardRejections',
           rule: 'not-a-declaration',
           message: "A Contract's standardRejections is a Definitions Package's definitions",
         },
         {
           kind: 'declaration',
-          at: ['dependencies', 0],
+          location: '(root) dependencies[0]',
           rule: 'not-a-declaration',
           message: 'dependencies.0 is not a Dependency',
         },
@@ -101,11 +102,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups: [orders] }))).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 0],
-        'not-a-declaration',
-        'endpoints.0 is not an Endpoint',
-      ),
+      failed('groups.orders endpoints[0]', 'not-a-declaration', 'endpoints.0 is not an Endpoint'),
     );
   });
 
@@ -114,7 +111,7 @@ describe('validateRoot: lists and their items', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections }))).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'rejections', 0],
+        'endpoints.GET /orders (listOrders) rejections[0]',
         'not-a-declaration',
         'rejections.0 is not a Rejection',
       ),
@@ -129,7 +126,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
-      failed(['guards', 'tenant', 'guards', 0], 'not-a-declaration', 'guards.0 is not a Guard'),
+      failed('guards.tenant guards[0]', 'not-a-declaration', 'guards.0 is not a Guard'),
     );
   });
 
@@ -141,7 +138,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
-      failed(['guards', 'tenant', 'rejections'], 'not-a-list', 'rejections is a list'),
+      failed('guards.tenant rejections', 'not-a-list', 'rejections is a list'),
     );
   });
 
@@ -151,7 +148,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      failed(['standardRejections', 'notFound'], 'not-an-object', 'notFound is an object'),
+      failed('(root) standardRejections.notFound', 'not-an-object', 'notFound is an object'),
     );
   });
 
@@ -159,11 +156,7 @@ describe('validateRoot: lists and their items', () => {
     const endpoint = defineEndpoint({ ...listing, guards: anything<readonly Guard[]>('apiKey') });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards'],
-        'not-a-list',
-        'guards is a list',
-      ),
+      failed('endpoints.GET /orders (listOrders) guards', 'not-a-list', 'guards is a list'),
     );
   });
 
@@ -171,11 +164,7 @@ describe('validateRoot: lists and their items', () => {
     const endpoint = defineEndpoint({ ...listing, success: anything<typeof listing.success>('x') });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'success'],
-        'not-an-object',
-        'success is an object',
-      ),
+      failed('endpoints.GET /orders (listOrders) success', 'not-an-object', 'success is an object'),
     );
   });
 
@@ -183,11 +172,7 @@ describe('validateRoot: lists and their items', () => {
     const endpoint = defineEndpoint({ ...listing, input: anything<{ headers: z.ZodObject }>('x') });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'input'],
-        'not-an-object',
-        'input is an object',
-      ),
+      failed('endpoints.GET /orders (listOrders) input', 'not-an-object', 'input is an object'),
     );
   });
 
@@ -199,7 +184,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
-      failed(['guards', 'tenant', 'demands'], 'not-an-object', 'demands is an object'),
+      failed('guards.tenant demands', 'not-an-object', 'demands is an object'),
     );
   });
 
@@ -209,7 +194,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
+      failed('(root) standardRejections', 'not-an-object', 'standardRejections is an object'),
     );
   });
 
@@ -221,7 +206,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(definitions)).toEqual(
-      failed(['standardRejections'], 'not-an-object', 'standardRejections is an object'),
+      failed('(root) standardRejections', 'not-an-object', 'standardRejections is an object'),
     );
   });
 
@@ -234,7 +219,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups }))).toEqual(
-      failed(['groups', 0], 'not-a-declaration', 'groups.0 is not a Group'),
+      failed('(root) groups[0]', 'not-a-declaration', 'groups.0 is not a Group'),
     );
   });
 
@@ -264,13 +249,13 @@ describe('validateRoot: lists and their items', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 0],
+          location: 'groups.orders endpoints[0]',
           rule: 'not-a-declaration',
           message: 'endpoints.0 is not an Endpoint',
         },
         {
           kind: 'declaration',
-          at: ['groups', 'sales', 'endpoints', 0],
+          location: 'groups.sales endpoints[0]',
           rule: 'not-a-declaration',
           message: 'endpoints.0 is not an Endpoint',
         },
@@ -284,7 +269,7 @@ describe('validateRoot: lists and their items', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards }))).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards', 0],
+        'endpoints.GET /orders (listOrders) guards[0]',
         'not-an-attachment',
         'An Attachment is a Guard or { guard, qualifier }',
       ),
@@ -298,7 +283,7 @@ describe('validateRoot: lists and their items', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [locked] }))).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'guards', 0],
+        'endpoints.GET /orders (listOrders) guards[0]',
         'not-an-attachment',
         'An Attachment is a Guard or { guard, qualifier }',
       ),

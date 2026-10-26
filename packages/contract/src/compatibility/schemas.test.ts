@@ -1324,7 +1324,10 @@ describe('compatibilityReportOf, arrays, records and tuples', () => {
 });
 
 function walkedOf(schema: z.ZodType): SchemaNode {
-  const { located } = walkSchemas([{ at: [], schema }], () => undefined);
+  const { located } = walkSchemas(
+    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    () => undefined,
+  );
   const [first] = located;
   if (first?.walked.kind !== 'walked') {
     throw new Error('the schema must be allowed in a Contract');
