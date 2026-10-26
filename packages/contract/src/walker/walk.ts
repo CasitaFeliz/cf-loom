@@ -15,6 +15,7 @@ import { type Recursion, startRecursion } from './recursion.ts';
 import {
   type Composition,
   type LocatedSchema,
+  type Loop,
   type Memo,
   type Reached,
   type ReachedSchema,
@@ -41,6 +42,8 @@ export type WalkedSchemas = {
   readonly defs: Defs;
   /** The remembered schema each refusal was raised inside, so the fold tells it where that schema is reached. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
+  /** The schemas of the cycle each refusal of a cycle no id names was raised on. */
+  readonly loopOf: ReadonlyMap<NotAllowed, Loop>;
 };
 
 /** Every schema of a Snapshot walked, where the walk first met each schema, and the compositions it built. */
@@ -67,8 +70,8 @@ type WalkState = {
  * failure comes back at each place the cycle is met.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
-  const { located: walkedLocations, defs, memoOf } = walkMeetingSchemas(located, originOf);
-  return { located: walkedLocations, defs, memoOf };
+  const { located: walkedLocations, defs, memoOf, loopOf } = walkMeetingSchemas(located, originOf);
+  return { located: walkedLocations, defs, memoOf, loopOf };
 }
 
 /**
@@ -95,6 +98,7 @@ export function walkMeetingSchemas(
     located: walkedLocations,
     defs: recursion.defs(),
     memoOf: recursion.memoOf,
+    loopOf: recursion.loopOf,
     met: state.met,
     compositions,
   };

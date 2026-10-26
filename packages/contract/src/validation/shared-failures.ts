@@ -7,30 +7,41 @@ import {
   type Site,
   sameSite,
   siteTextOf,
+  type WalkedSchemas,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
+import { loopPlacesOf } from './loop-places.ts';
 import { byLocation, locationTextOf, type MemoPlaces, memoPlaces } from './memo-places.ts';
 
-/** A refusal told where the author reads it, and every site that reaches it. */
-type Told = { readonly refusal: NotAllowed; readonly at: Place; readonly sites: readonly Site[] };
+/**
+ * A refusal told where the author reads it, and every site that reaches it; `foldedBy` is what
+ * its tellings are folded across: the schema refused, or the one site a cycle is told at.
+ */
+type Told = {
+  readonly refusal: NotAllowed;
+  readonly at: Place;
+  readonly sites: readonly Site[];
+  readonly foldedBy: unknown;
+};
+
+/** What the walk remembers, so a refusal is told at the places that reach it. */
+type Remembered = Pick<WalkedSchemas, 'memoOf' | 'loopOf'>;
 
 /**
  * What the walk refused, as one line for each construct at each location: a refusal inside a
  * remembered schema is told from the first place that schema is reached, with every site that
  * reaches it; a schema several places reach is told once, at the first of them in code point
- * order, with the other sites.
+ * order, with the other sites; a cycle no id names is told at each site that meets it.
  */
 export function notAllowedFailuresOf(
   refusals: readonly NotAllowed[],
-  memoOf: ReadonlyMap<NotAllowed, Memo>,
+  remembered: Remembered,
 ): readonly NotAllowedFailure[] {
   const places = memoPlaces();
-  const told = [...new Set(refusals)].map((refusal) =>
-    toldOf(refusal, memoOf.get(refusal), places),
-  );
+  const told = [...new Set(refusals)].flatMap((refusal) => tellingsOf(refusal, remembered, places));
   const bySchema = groupedBy(
     told,
-    ({ refusal }) => refusal.schema,
+    ({ foldedBy }) => foldedBy,
     ({ refusal }) => refusal.construct,
   );
   const firsts = bySchema.map(firstOfGroup);
@@ -42,13 +53,28 @@ export function notAllowedFailuresOf(
   return byLine.map(firstOfGroup).map(failureOf);
 }
 
+/** A refused cycle no id names, told at each site that meets it; any other refusal, once. */
+function tellingsOf(refusal: NotAllowed, remembered: Remembered, places: MemoPlaces): Told[] {
+  const loop = remembered.loopOf.get(refusal);
+  if (loop === undefined) {
+    return [toldOf(refusal, remembered.memoOf.get(refusal), places)];
+  }
+  return loopPlacesOf(refusal, loop, places).map((at) => ({
+    refusal,
+    at,
+    sites: [at.site],
+    foldedBy: siteTextOf(at.site),
+  }));
+}
+
 /** A refusal told at its place, or, raised inside a remembered schema, from that schema's first place. */
 function toldOf(refusal: NotAllowed, memo: Memo | undefined, places: MemoPlaces): Told {
+  const foldedBy = refusal.schema;
   if (memo === undefined) {
-    return { refusal, at: refusal, sites: [refusal.site] };
+    return { refusal, at: refusal, sites: [refusal.site], foldedBy };
   }
   const at = movedFrom(refusal, memo.at, places.firstOf(memo));
-  return { refusal, at, sites: places.sitesOf(memo) };
+  return { refusal, at, sites: places.sitesOf(memo), foldedBy };
 }
 
 /** The items grouped by two keys, the groups in the order each was first met. */
@@ -86,7 +112,7 @@ function firstOfGroup(group: readonly Told[]): Told {
       sites.push(site);
     }
   }
-  return { refusal: first.refusal, at: first.at, sites };
+  return { ...first, sites };
 }
 
 function failureOf({ refusal, at, sites }: Told): NotAllowedFailure {

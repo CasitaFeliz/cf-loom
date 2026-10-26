@@ -136,7 +136,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
-    ...notAllowedFailuresOf(refusals, walked.memoOf),
+    ...notAllowedFailuresOf(refusals, walked),
   ];
   if (failures.length > 0) {
     return invalid(failures);

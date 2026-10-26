@@ -14,6 +14,7 @@ import {
   type Failed,
   failed,
   failuresOf,
+  type Loop,
   type Memo,
   type ReachedSchema,
   refusedBeside,
@@ -34,6 +35,7 @@ export type Recursion = {
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
+  readonly loopOf: ReadonlyMap<NotAllowed, Loop>;
 };
 
 /** A schema being walked, numbered in walk order, with the lowest number it reaches back to. */
@@ -69,6 +71,7 @@ export function startRecursion(compositions: readonly Composition[]): Recursion 
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
     memoOf: state.memos.memoOf,
+    loopOf: state.memos.loopOf,
   };
 }
 
@@ -145,6 +148,10 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
     state.reportedBySchema.set(ancestor.schema, failure);
   }
   state.memos.raised(failure.failures);
+  state.memos.looped(failure.failures[0], [
+    closing.schema,
+    ...cycle.slice(1).map(({ schema }) => schema),
+  ]);
   state.memos.reached(entering.schema, entering.at);
   return failure;
 }

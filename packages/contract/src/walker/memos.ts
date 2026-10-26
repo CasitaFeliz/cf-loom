@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { NotAllowed } from './nodes.ts';
-import type { Composition, Memo, Reach, Reached, ReachedSchema } from './walked.ts';
+import type { Composition, Loop, Memo, Reach, Reached, ReachedSchema } from './walked.ts';
 
 /** Where the walk's records stood when a schema was entered: what comes after was raised inside it. */
 export type Start = {
@@ -22,7 +22,19 @@ export type Memos = {
   readonly start: () => Start;
   /** A remembered schema's walk closed: it claims what was raised and reached during it, since `start`. */
   readonly close: (closed: ReachedSchema, start: Start) => void;
+  /** A cycle no id names refused, with its schemas from the one met again, all still being walked. */
+  readonly looped: (
+    refusal: NotAllowed,
+    members: readonly [core.$ZodType, ...core.$ZodType[]],
+  ) => void;
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
+  readonly loopOf: ReadonlyMap<NotAllowed, Loop>;
+};
+
+/** A refused cycle whose schemas' walks have not all closed. */
+type OpenLoop = {
+  readonly refusal: NotAllowed;
+  readonly members: readonly [core.$ZodType, ...core.$ZodType[]];
 };
 
 type State = {
@@ -30,6 +42,9 @@ type State = {
   /** The reaches of a schema whose walk has not closed yet, which its memo takes when it does. */
   readonly earlyReaches: Map<core.$ZodType, Reach[]>;
   readonly memoOf: Map<NotAllowed, Memo>;
+  /** The open loops by the schema met again, whose walk closes last. */
+  readonly openLoops: Map<core.$ZodType, OpenLoop[]>;
+  readonly loopOf: Map<NotAllowed, Loop>;
   readonly raised: NotAllowed[];
   readonly logged: Set<NotAllowed>;
   readonly reaches: Reach[];
@@ -42,6 +57,8 @@ export function startMemos(compositions: readonly Composition[]): Memos {
     memoBySchema: new Map(),
     earlyReaches: new Map(),
     memoOf: new Map(),
+    openLoops: new Map(),
+    loopOf: new Map(),
     raised: [],
     logged: new Set(),
     reaches: [],
@@ -56,7 +73,12 @@ export function startMemos(compositions: readonly Composition[]): Memos {
       reaches: state.reaches.length,
     }),
     close: (closed, start) => close(state, closed, start),
+    looped: (refusal, members) => {
+      const known = state.openLoops.get(members[0]) ?? [];
+      state.openLoops.set(members[0], [...known, { refusal, members }]);
+    },
     memoOf: state.memoOf,
+    loopOf: state.loopOf,
   };
 }
 
@@ -104,4 +126,26 @@ function close(state: State, closed: ReachedSchema, start: Start): void {
     }
   }
   reached(state, closed.schema, closed.at);
+  closeLoops(state, closed.schema);
+}
+
+/** The loops met again at a schema whose walk closed: every schema of them now has its memo. */
+function closeLoops(state: State, schema: core.$ZodType): void {
+  for (const { refusal, members } of state.openLoops.get(schema) ?? []) {
+    const [first, ...others] = members;
+    const loop: Loop = [
+      memoOfSchema(state, first),
+      ...others.map((member) => memoOfSchema(state, member)),
+    ];
+    state.loopOf.set(refusal, loop);
+  }
+  state.openLoops.delete(schema);
+}
+
+function memoOfSchema(state: State, schema: core.$ZodType): Memo {
+  const memo = state.memoBySchema.get(schema);
+  if (memo === undefined) {
+    throw new Error('Every schema of a refused cycle is remembered once its walk closes: a bug.');
+  }
+  return memo;
 }

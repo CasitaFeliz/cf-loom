@@ -85,7 +85,7 @@ describe('failure lines: a schema in a recursive def, reached from several sites
     ]);
   });
 
-  test('a cycle no id names is one line at the first site', () => {
+  test('a cycle no id names is a line at each site that meets it', () => {
     const category: z.ZodType = z.object({
       get children() {
         return z.array(category);
@@ -97,7 +97,8 @@ describe('failure lines: a schema in a recursive def, reached from several sites
     ];
 
     expect(linesOf(serviceWith(endpoints))).toEqual([
-      'endpoints.GET /a (alpha) success.body.l.c.children[] not allowed: a cycle without .meta({ id }) (use .meta({ id })) (also in endpoints.GET /z (zed))',
+      'endpoints.GET /z (zed) success.body.c.children[] not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
+      'endpoints.GET /a (alpha) success.body.l.c.children[] not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
     ]);
   });
 
@@ -400,50 +401,73 @@ describe('failure lines: a cycle of two schemas no id names', () => {
     },
   );
 
-  test('with its other schema at an Endpoint declared after, is told from the first site', () => {
-    const { first, second } = cycleOf('a first', 'deep');
-    const endpoints = [
-      answering('alpha', 'GET /a', first),
-      anEndpoint('beta', 'GET /b', { q: second }),
-    ];
+  test.for([
+    ['a', 'b'],
+    ['b', 'a'],
+  ] as const)(
+    'with its other schema at an Endpoint, declared %s first, tells the cycle where each meets it',
+    (order) => {
+      const { first, second } = cycleOf('a first', 'deep');
+      const endpoints = {
+        a: answering('alpha', 'GET /a', first),
+        b: anEndpoint('beta', 'GET /b', { q: second }),
+      };
 
-    const lines = linesOf(serviceWith(endpoints));
+      const lines = linesOf(serviceWith(order.map((key) => endpoints[key])));
 
-    expect(lines).toEqual([
-      `endpoints.GET /a (alpha) success.body.b.a ${unnamedCycle} (also in endpoints.GET /b (beta))`,
-      `endpoints.GET /a (alpha) success.body.b.d.e ${date} (also in endpoints.GET /b (beta))`,
-    ]);
-  });
+      expect([...lines].sort()).toEqual([
+        `endpoints.GET /a (alpha) success.body.b.a ${unnamedCycle}`,
+        `endpoints.GET /a (alpha) success.body.b.d.e ${date} (also in endpoints.GET /b (beta))`,
+        `endpoints.GET /b (beta) success.body.q.a.b ${unnamedCycle}`,
+      ]);
+    },
+  );
 
-  test('holding a def that reaches back, tells the cycle where it closes', () => {
-    const first: z.ZodType = z.object({
-      get b() {
-        return second;
-      },
-    });
-    const second: z.ZodType = z.object({
-      get a() {
-        return first;
-      },
-      get c() {
-        return held;
-      },
-    });
-    const held: z.ZodType = z
-      .object({
-        get back() {
-          return first;
+  test.for([
+    ['a first', 'b.a'],
+    ['the def first', 'b.a.b.a'],
+  ] as const)(
+    'holding a def that reaches back, its fields %s, tells the cycle where it closes',
+    ([order, path]) => {
+      const first: z.ZodType = z.object({
+        get b() {
+          return second;
         },
-        get kids() {
-          return z.array(held);
-        },
-      })
-      .meta({ id: 'c' });
+      });
+      const second: z.ZodType =
+        order === 'a first'
+          ? z.object({
+              get a() {
+                return first;
+              },
+              get c() {
+                return held;
+              },
+            })
+          : z.object({
+              get c() {
+                return held;
+              },
+              get a() {
+                return first;
+              },
+            });
+      const held: z.ZodType = z
+        .object({
+          get back() {
+            return first;
+          },
+          get kids() {
+            return z.array(held);
+          },
+        })
+        .meta({ id: 'c' });
 
-    const lines = linesOf(serviceWith([answering('alpha', 'GET /a', first)]));
+      const lines = linesOf(serviceWith([answering('alpha', 'GET /a', first)]));
 
-    expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.b.a ${unnamedCycle}`]);
-  });
+      expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.${path} ${unnamedCycle}`]);
+    },
+  );
 });
 
 type Next = () => number;
@@ -526,8 +550,8 @@ function anUnnamedCycle(): z.ZodType {
   return cycle;
 }
 
-/** A cycle of two schemas no id names, the second holding a leaf and itself again, entered at either. */
-function anUnnamedPair(next: Next): z.ZodType {
+/** A cycle of two schemas no id names, the second holding a leaf and itself again: both, for declarations to enter at either. */
+function anUnnamedPair(next: Next): readonly z.ZodType[] {
   const first: z.ZodType = z.object({
     get b() {
       return second;
@@ -542,7 +566,7 @@ function anUnnamedPair(next: Next): z.ZodType {
     },
     d: aLeaf(next),
   });
-  return next() < 0.5 ? first : second;
+  return [first, z.object({ q: second })];
 }
 
 /** What the declarations of a draw share: 1 to 3 schemas, each holding refused constructs. */
@@ -557,7 +581,6 @@ function poolOf(next: Next): readonly z.ZodType[] {
     () => aDef(idOf('u'), { k: anOpenUnion() }),
     () => aDef(idOf('s'), { k: z.set(z.set(aLeaf(next))) }),
     anUnnamedCycle,
-    () => anUnnamedPair(next),
     () => nestedDefs(next, idOf('n')),
     () => aMutualPair(next, idOf('m')),
     () => {
@@ -565,7 +588,8 @@ function poolOf(next: Next): readonly z.ZodType[] {
       return z.object({ p: def, q: def });
     },
   ];
-  return Array.from({ length: 1 + Math.floor(next() * 3) }, () => pickOf(next, makers)());
+  const drawn = Array.from({ length: 1 + Math.floor(next() * 3) }, () => pickOf(next, makers)());
+  return next() < 0.5 ? [...drawn, ...anUnnamedPair(next)] : drawn;
 }
 
 /** A body of a draw: a schema of the pool or one of its own, as is or wrapped. */
