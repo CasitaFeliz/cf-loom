@@ -12,8 +12,10 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
+  type DirectMeta,
   handle,
   isRejectionOf,
+  type MessageMeta,
   type ResourcesOf,
   readersOf,
   reject,
@@ -199,6 +201,21 @@ describe('the handlers README', () => {
       deliveryCount: 1,
       headers: {},
     });
+  });
+
+  test('DirectMeta types the meta a direct call takes, each part of MessageMeta optional', async () => {
+    const meta: DirectMeta = { factId: 'f-1', deliveryCount: 2 };
+
+    await notifyOnSettledHandler({ paymentId: 'pay-1', method: 'card' }, meta, { resources });
+
+    expectTypeOf<DirectMeta>().toEqualTypeOf<Partial<MessageMeta>>();
+    expectTypeOf<Parameters<typeof notifyOnSettledHandler>[1]>().toEqualTypeOf<
+      DirectMeta | undefined
+    >();
+    expect(sent.at(-1)).toEqual([
+      'pay-1',
+      { messageId: 'event.PaymentSettled.v1:f-1', factId: 'f-1', deliveryCount: 2, headers: {} },
+    ]);
   });
 
   test('the EndpointHandler example answers its Success', async () => {
