@@ -3,23 +3,17 @@ import type { Origin, OriginOf, Path } from '../walker/index.ts';
 import type { Declarations } from '../written/index.ts';
 import { exportNamesOf } from './export-names.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import type {
-  ImportedDefinitions,
-  PackageIdentity,
-  ResolvedDefinitions,
-  Unidentified,
-} from './validate.ts';
+import type { ImportedDefinitions, PackageIdentity, Unidentified } from './validate.ts';
 
-/** An imported package and the imported packages of its kind that its files import, directly or through any package. */
+/** An imported package with the imported packages of its kind that its files import, directly or through any package. */
 export type Reaching<Package> = PackageIdentity & { readonly reaches: readonly Package[] };
 
 /**
  * Which installed package a declaration belongs to: the one exporting it that reaches none of the
- * others exporting it, found when its package.json names it, unidentified when it does not.
+ * others exporting it, however its package.json names it, or none, or two with no one origin.
  */
 export type Provenance<Package extends Reaching<Package> = ImportedDefinitions> =
-  | { readonly kind: 'found'; readonly package: Package & { readonly kind: 'identified' } }
-  | { readonly kind: 'unidentified'; readonly package: Package & Unidentified }
+  | { readonly kind: 'origin'; readonly package: Package }
   | { readonly kind: 'none' }
   | { readonly kind: 'ambiguous'; readonly packages: readonly [Package, Package] };
 
@@ -41,36 +35,13 @@ export function originAmong<Package extends Reaching<Package>>(
   const origins = exporting.filter((imported) => !reachesAnother(imported, exporting));
   const [origin] = origins;
   if (origin !== undefined && origins.length === 1) {
-    return originOf(origin);
+    return { kind: 'origin', package: origin };
   }
   const [one, two] = origins.length > 1 ? origins : exporting;
   if (one === undefined || two === undefined) {
     throw new Error('Two exporters, neither found the origin: a bug.');
   }
   return { kind: 'ambiguous', packages: [one, two] };
-}
-
-/** The one package a declaration belongs to, as its package.json lets an origin name it or not. */
-function originOf<Package extends Reaching<Package>>(origin: Package): Provenance<Package> {
-  if (isIdentified(origin)) {
-    return { kind: 'found', package: origin };
-  }
-  if (isUnidentified(origin)) {
-    return { kind: 'unidentified', package: origin };
-  }
-  throw new Error('A package is identified or it is not: a bug.');
-}
-
-function isIdentified<Package extends PackageIdentity>(
-  imported: Package,
-): imported is Package & { readonly kind: 'identified' } {
-  return imported.kind === 'identified';
-}
-
-function isUnidentified<Package extends PackageIdentity>(
-  imported: Package,
-): imported is Package & Unidentified {
-  return imported.kind === 'unnamed' || imported.kind === 'unversioned';
 }
 
 function reachesAnother<Package extends Reaching<Package>>(
@@ -80,9 +51,22 @@ function reachesAnother<Package extends Reaching<Package>>(
   return exporting.some((other) => other !== imported && imported.reaches.includes(other));
 }
 
+/** A package at a version, as an origin names it. */
+export type OriginPackage = { readonly packageName: string; readonly version: string };
+
 /** An installed package as an origin names it: `<package>@<version>`. */
-export function originTextOf({ packageName, version }: ResolvedDefinitions): Origin {
+export function originTextOf({ packageName, version }: OriginPackage): Origin {
   return `${packageName}@${version}`;
+}
+
+/** The package an origin names, without the `#<name>` of a shared schema: `originTextOf` read back; none for `local` and `standard`. */
+export function originPackageOf(origin: string | undefined): OriginPackage | undefined {
+  const named = (origin ?? '').split('#', 1)[0] ?? '';
+  const at = named.lastIndexOf('@');
+  if (at <= 0) {
+    return undefined;
+  }
+  return { packageName: named.slice(0, at), version: named.slice(at + 1) };
 }
 
 /** A package as a line names it: its package.json name, or the package.json's path when it has none. */
@@ -119,7 +103,7 @@ export function identityLineOf(identity: Unidentified): string {
 export function schemaOriginsOf(packages: readonly ImportedDefinitions[]): OriginOf {
   return (schema) => {
     const provenance = definitionsPackageOf(packages, schema);
-    if (provenance.kind !== 'found') {
+    if (provenance.kind !== 'origin' || provenance.package.kind !== 'identified') {
       return undefined;
     }
     const [name] = exportNamesOf(provenance.package.exports, schema);
@@ -149,13 +133,23 @@ export function provenanceFailures(
 /** The failure a declaration's provenance is, when no one Definitions Package can be named for it. */
 function failureAt(at: Path, provenance: Provenance): DeclarationFailure | undefined {
   switch (provenance.kind) {
-    case 'found':
     case 'none':
       return undefined;
     case 'ambiguous':
       return ambiguousFailureAt(at, provenance.packages);
-    case 'unidentified':
-      return unidentifiedFailureAt(at, provenance.package);
+    case 'origin':
+      return identityFailureAt(at, provenance.package);
+  }
+}
+
+/** The failure of an origin package whose package.json lacks a name or a version; none when it has both. */
+function identityFailureAt(at: Path, origin: ImportedDefinitions): DeclarationFailure | undefined {
+  switch (origin.kind) {
+    case 'identified':
+      return undefined;
+    case 'unnamed':
+    case 'unversioned':
+      return unidentifiedFailureAt(at, origin);
   }
 }
 

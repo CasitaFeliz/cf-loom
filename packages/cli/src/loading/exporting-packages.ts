@@ -1,12 +1,8 @@
-import type { PackageIdentity } from '@cf-loom/contract/internal';
+import type { Reaching } from '@cf-loom/contract/internal';
 import type { ImportedPackage } from './imported-packages.ts';
 
 /** A value of one kind that an imported package exports, and the first of its modules that does. */
 export type Exporter<Value> = { readonly module: ImportedPackage; readonly value: Value };
-
-/** An imported package as its package.json names it, with what it exports of one kind, and the other packages with such exports that its files import. */
-export type Linked<Own extends object> = PackageIdentity &
-  Own & { readonly reaches: readonly Linked<Own>[] };
 
 /** Each value a predicate picks among the exports of the imported modules, once per package, with the first of the package's modules exporting it. */
 export function exportersOf<Value>(
@@ -29,18 +25,18 @@ export function exportersOf<Value>(
 }
 
 /**
- * The packages that export values of one kind, each as its package.json names it or not, with
- * what `ownOf` reads of its exporter and the other such packages its files import, directly or
- * through any package.
+ * The packages that export values of one kind, each as `packageOf` makes it from its exporter and
+ * the list of the other such packages its files import, directly or through any package, which
+ * this fills in.
  */
-export function linkedPackagesOf<Value, Own extends object>(
+export function linkedPackagesOf<Value, Package extends Reaching<Package>>(
   imported: readonly ImportedPackage[],
   exporters: readonly Exporter<Value>[],
-  ownOf: (exporter: Exporter<Value>) => Own,
-): readonly Linked<Own>[] {
+  packageOf: (exporter: Exporter<Value>, reaches: Package[]) => Package,
+): readonly Package[] {
   const found = exporters.map((exporter) => {
-    const reaches: Linked<Own>[] = [];
-    const linked: Linked<Own> = { ...exporter.module.identity, ...ownOf(exporter), reaches };
+    const reaches: Package[] = [];
+    const linked = packageOf(exporter, reaches);
     return { manifestPath: exporter.module.manifestPath, linked, reaches };
   });
   const reachableFromPackage = reachFrom(imported);

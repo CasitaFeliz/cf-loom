@@ -31,39 +31,34 @@ export type ContractSnapshot =
   | PublishedApplicationSnapshot;
 
 /**
- * The package.json: named as the project publishes, at its version, with `package.json` and
- * `snapshot.json` among its exports, and the `cfLoom` metadata: the hash and kind the check reads
- * without downloading the package, and its Dependencies. A Service's also exports its code, peers
- * on `zod` and `@cf-loom/contract` only, at the ranges the CLI declares; an Application's has no
- * code, so it has no peers.
+ * The package.json: named as the project publishes, at its version, with its code if it has any,
+ * the peer ranges it is given unless there are none, and the `cfLoom` metadata: the hash and kind
+ * the check reads without downloading the package, and its Dependencies.
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
   { name, version, peerRanges }: Packaging,
 ): PackageFile {
+  const peers = Object.keys(peerRanges).length === 0 ? {} : { peerDependencies: peerRanges };
   const cfLoom = cfLoomOf(snapshot);
-  switch (snapshot.kind) {
+  return manifestFileOf({ name, version, ...codeFieldsOf(snapshot.kind), ...peers, cfLoom });
+}
+
+/** What a package exports and ships: a Service's built code, and for every kind its `package.json` and `snapshot.json`. */
+function codeFieldsOf(kind: ContractSnapshot['kind']) {
+  switch (kind) {
     case 'service': {
       const code = { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` };
-      return manifestFileOf({
-        name,
-        version,
+      const exports = { '.': code, ...fileExports };
+      return {
         type: 'module',
-        exports: { '.': code, ...fileExports },
+        exports,
         files: [builtFolder, packagePaths.snapshot],
         sideEffects: false,
-        peerDependencies: peerRanges,
-        cfLoom,
-      });
+      };
     }
     case 'application':
-      return manifestFileOf({
-        name,
-        version,
-        exports: fileExports,
-        files: [packagePaths.snapshot],
-        cfLoom,
-      });
+      return { exports: fileExports, files: [packagePaths.snapshot] };
   }
 }
 

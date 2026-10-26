@@ -37,7 +37,8 @@ type DependencyDeclaration<Provider extends ContractPackage> = {
 
 /**
  * What a Contract uses of one Provider: its Contract Package, as imported, with its Standard
- * Rejections and the Elements it exports, and the Endpoints it calls, as listed. The Events it receives are its Subscriptions'.
+ * Rejections and the Elements it exports, and the Endpoints it calls, as listed. The Events it
+ * receives are its Subscriptions'.
  */
 export type Dependency<
   Provider extends ContractPackage = ContractPackage,

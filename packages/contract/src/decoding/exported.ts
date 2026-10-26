@@ -11,7 +11,7 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<ExportedSnapshot>>> 
 };
 
 /** The exported Snapshots already read, by the object a Contract Package carries, so each is read once. */
-const read = new WeakMap<object, ExportedSnapshot>();
+const decodedByCarried = new WeakMap<object, ExportedSnapshot>();
 
 /**
  * The exported Snapshot a Provider's Contract Package carries, read by the format it names, once
@@ -22,13 +22,14 @@ export function providedSnapshotOf(
   provider: Pick<ContractPackage, 'name' | 'exportedSnapshot'>,
 ): ExportedSnapshot {
   const { exportedSnapshot: carried } = provider;
-  const known = typeof carried === 'object' && carried !== null ? read.get(carried) : undefined;
+  const known =
+    typeof carried === 'object' && carried !== null ? decodedByCarried.get(carried) : undefined;
   if (known !== undefined) {
     return known;
   }
   const decoded = decodedFrom(provider.name, carried);
   if (typeof carried === 'object' && carried !== null) {
-    read.set(carried, decoded);
+    decodedByCarried.set(carried, decoded);
   }
   return decoded;
 }

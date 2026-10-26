@@ -513,7 +513,13 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     const validated = validatedAmong([anInstalledContract(other)]);
 
-    expect(validated.kind).toBe('invalid');
+    expect(validated).toEqual(
+      failed(
+        ['dependencies', 'payments-service'],
+        'dependency-package',
+        `${contractName}: no installed package exports payments-service's Elements`,
+      ),
+    );
   });
 
   test('a Provider exported by a package whose package.json has no version fails, naming it', () => {

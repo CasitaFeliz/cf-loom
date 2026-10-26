@@ -49,7 +49,7 @@ export function dependencyPackageFailures(
   return failures;
 }
 
-/** The failure of a Dependency whose package cannot be named; none when it can, or when its provider is no Contract Package, which another rule reports. */
+/** The failure of a Dependency whose package cannot be named; its provider being no Contract Package is another rule's. */
 function failureOf(
   { at, dependency }: LocatedDependency,
   packages: readonly ImportedContractPackage[],
@@ -68,16 +68,25 @@ function problemOf(
   provider: string,
 ): string | undefined {
   switch (provenance.kind) {
-    case 'found':
-      return undefined;
+    case 'origin':
+      return identityProblemOf(provenance.package);
     case 'none':
       return `A Dependency's provider is an installed Contract Package's contract: no installed package exports ${provider}'s Elements`;
-    case 'unidentified':
-      return `A Dependency's Contract Package has a name and a version: ${identityLineOf(provenance.package)}`;
     case 'ambiguous': {
       const [first, second] = provenance.packages.map(packageLabelOf);
       const both = `exported by both ${first} and ${second}, and neither imports them from the other`;
       return `A Dependency's Contract Package is one package: ${provider}'s Elements are ${both}`;
     }
+  }
+}
+
+/** What a package.json lacks to name the Contract Package, in a sentence; none when it names it. */
+function identityProblemOf(origin: ImportedContractPackage): string | undefined {
+  switch (origin.kind) {
+    case 'identified':
+      return undefined;
+    case 'unnamed':
+    case 'unversioned':
+      return `A Dependency's Contract Package has a name and a version: ${identityLineOf(origin)}`;
   }
 }

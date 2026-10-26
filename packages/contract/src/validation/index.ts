@@ -6,11 +6,12 @@ export { failureLineOf, locationOf } from './failures.ts';
 export { rootNameProblemOf } from './name-grammars.ts';
 export type { Problem, Read } from './problem.ts';
 export { problemLineOf, readWith } from './problem.ts';
-export type { Provenance } from './provenance.ts';
+export type { OriginPackage, Provenance, Reaching } from './provenance.ts';
 export {
   definitionsPackageOf,
   identityLineOf,
   noVersionLineOf,
+  originPackageOf,
   originTextOf,
   packageLabelOf,
 } from './provenance.ts';

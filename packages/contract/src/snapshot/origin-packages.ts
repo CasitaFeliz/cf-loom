@@ -1,9 +1,7 @@
+import { type OriginPackage, originPackageOf } from '../validation/index.ts';
 import { byCodePoint, nodesWithin, type SchemaNode } from '../walker/index.ts';
 import { codeNodesOf, endpointNodesOf, guardNodesOf } from './nodes.ts';
 import type { CodeSnapshot, ExportSnapshot, GuardSnapshot, Snapshot } from './types.ts';
-
-/** A package at a version, as an origin names it. */
-export type OriginPackage = { readonly packageName: string; readonly version: string };
 
 /**
  * Every package version the origins of a declared Snapshot name, each once, by package then
@@ -14,7 +12,7 @@ export function originPackagesOf(snapshot: Snapshot): readonly OriginPackage[] {
     .flatMap((node) => nodesWithin(node, []))
     .map(({ node }) => node.origin);
   const origins = [...nodeOrigins, ...declaringOrigins(snapshot).map(({ origin }) => origin)];
-  const packages = origins.map(packageOf).filter(isPackage);
+  const packages = origins.map(originPackageOf).filter(isPackage);
   const distinct = new Map(
     packages.map((named) => [`${named.packageName}@${named.version}`, named]),
   );
@@ -68,16 +66,6 @@ function isSharedSchema(
   exported: ExportSnapshot,
 ): exported is Extract<ExportSnapshot, { readonly kind: 'schema' }> {
   return exported.kind === 'schema';
-}
-
-/** The package an origin names, without the `#<name>` of a shared schema; none for `local` and `standard`. */
-function packageOf(origin: string | undefined): OriginPackage | undefined {
-  const named = (origin ?? '').split('#', 1)[0] ?? '';
-  const at = named.lastIndexOf('@');
-  if (at <= 0) {
-    return undefined;
-  }
-  return { packageName: named.slice(0, at), version: named.slice(at + 1) };
 }
 
 function isPackage(named: OriginPackage | undefined): named is OriginPackage {

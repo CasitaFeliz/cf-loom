@@ -10,8 +10,14 @@ import type { ImportedPackage } from './imported-packages.ts';
 export function definitionsPackagesOf(
   imported: readonly ImportedPackage[],
 ): readonly ImportedDefinitions[] {
-  return linkedPackagesOf(imported, exportersOf(imported, isDefinitions), ({ module, value }) => ({
-    definitions: value,
-    exports: module.exports,
-  }));
+  return linkedPackagesOf(
+    imported,
+    exportersOf(imported, isDefinitions),
+    ({ module, value }, reaches): ImportedDefinitions => ({
+      ...module.identity,
+      definitions: value,
+      exports: module.exports,
+      reaches,
+    }),
+  );
 }

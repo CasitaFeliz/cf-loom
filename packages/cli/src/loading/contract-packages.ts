@@ -10,7 +10,13 @@ import type { ImportedPackage } from './imported-packages.ts';
 export function contractPackagesOf(
   imported: readonly ImportedPackage[],
 ): readonly ImportedContractPackage[] {
-  return linkedPackagesOf(imported, exportersOf(imported, isContractPackage), ({ value }) => ({
-    contract: value,
-  }));
+  return linkedPackagesOf(
+    imported,
+    exportersOf(imported, isContractPackage),
+    ({ module, value }, reaches): ImportedContractPackage => ({
+      ...module.identity,
+      contract: value,
+      reaches,
+    }),
+  );
 }

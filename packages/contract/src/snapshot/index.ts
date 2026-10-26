@@ -5,7 +5,6 @@ export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
 export { nestingFailureOf, snapshotNestingLimit, tooDeepPathOf } from './nesting.ts';
-export type { OriginPackage } from './origin-packages.ts';
 export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';

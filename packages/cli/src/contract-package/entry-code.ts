@@ -36,10 +36,9 @@ type Keyed = {
 };
 
 /**
- * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
- * Rejections resolved and its exported Snapshot, checked against `ContractPackage` and declared
- * with a type that names each by `typeof`, so its declaration stays small and keeps the literal
- * name, which `satisfies` would widen without `as const`; and the types of its recursive defs, so a Consumer that emits declarations can name them.
+ * A Service's entry: `contract`, checked against `ContractPackage` and declared with a type that
+ * names each Element by `typeof`, so a Consumer's declaration stays small and keeps the literal
+ * name; and the types of its recursive defs, so a Consumer that emits declarations can name them.
  */
 export function serviceEntryOf(entry: ServiceEntry): PackageFile {
   const { name, defUses } = entry;

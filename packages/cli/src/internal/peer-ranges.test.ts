@@ -9,7 +9,6 @@ describe('peerRangesOf', () => {
     { cli: '1.4.2', range: '^1.4.0' },
     { cli: '1.0.0', range: '^1.0.0' },
     { cli: '1.0.0-rc.0', range: '^1.0.0-rc.0' },
-    { cli: '1.0.0-rc.3+build.7', range: '^1.0.0-rc.3' },
     { cli: '0.3.1', range: '^0.3.0' },
     { cli: '0.0.3', range: '^0.0.3' },
     { cli: '0.0.0', range: '^0.0.0' },

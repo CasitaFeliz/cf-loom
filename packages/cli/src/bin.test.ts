@@ -2546,6 +2546,31 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
     expect(snapshot.dependencies['payments-service'].against).toBe('7.4.2');
   });
 
+  test('a Dependency is against the package that exports the Provider’s contract, not the installed package that re-exports it', () => {
+    const own = aSubscribingRoot();
+    const wrapper = '@org/payments-wrapper';
+    const project = aProject({
+      ...own,
+      'src/contract/index.ts': (own['src/contract/index.ts'] ?? '').replace(
+        `'${paymentsSpecifier}'`,
+        `'${wrapper}'`,
+      ),
+      [`node_modules/${wrapper}/package.json`]: JSON.stringify({
+        name: wrapper,
+        version: '9.9.9',
+        type: 'module',
+        exports: './index.js',
+      }),
+      [`node_modules/${wrapper}/index.js`]: `export { payments } from '${paymentsSpecifier}';\n`,
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(snapshot.dependencies['payments-service'].against).toBe('5.1.0');
+  });
+
   test('a Dependency on a Provider the project holds in a file of its own, installed from no package, exits 1', () => {
     const own = aSubscribingRoot();
     const files = {
@@ -2855,7 +2880,6 @@ async function aGeneratedProject(lab: Lab, files: Files): Promise<string> {
   return project;
 }
 
-/** The peer ranges `publish` stamps on a package built with the zod and the contract the lab installs. */
 /** The peer ranges the CLI under test declares in every package it publishes. */
 const publishedPeers = peerRangesOf(cliVersion);
 
@@ -5631,6 +5655,25 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(leftBehindIn(project)).toEqual([]);
   });
 
+  test('a Definitions Package whose origin names another Definitions Package version the registry does not list exits 3 and puts nothing', async ({
+    lab,
+  }) => {
+    const source = aDefinitionsModule([anApiKey, "export { gone } from '@org/definitions';"]);
+    const files = {
+      ...installedDefinitions('node_modules'),
+      ...aBuiltDefinitions({ name: '@other/definitions' }, { source }),
+    };
+    const project = await aGeneratedProject(lab, files);
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 3, stderr: `${definitionsUnlisted('4.2.0')}\n` });
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
   test.for([
     [
       'still exports a schema removed from src',
@@ -5774,7 +5817,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
   });
 
-  test('a Definitions Package’s peers besides zod and @cf-loom/contract are published as written, and the two are set to carets', async ({
+  test('a Definitions Package’s peers besides zod and @cf-loom/contract are published as written, and the two are set to the CLI’s ranges', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer(anotherPeer)));
@@ -5822,7 +5865,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     });
   });
 
-  test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
+  test('a Definitions Package’s catalog: and workspace: peers are published set to the CLI’s ranges', async ({
     lab,
   }) => {
     const peerDependencies = { '@cf-loom/contract': 'workspace:^', zod: 'catalog:' };
@@ -6631,6 +6674,19 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
     expect(checked.ran.status).toBe(2);
     expect(documentOf(dry.ran)).toMatchObject({ format: 1, status: 0, published: false });
     expect(documentOf(dry.ran)).not.toHaveProperty('errors');
+  });
+
+  test('check on success carries the versions the registry does not list as errors, exit 0', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aSubscribingRoot({}, '0.0.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+    expect(ran.status).toBe(0);
+    const errors = ran.stderr.split('\n').filter(Boolean);
+    expect(errors).toEqual([paymentsUnlisted('0.0.0')]);
+    expect(documentOf(ran)).toMatchObject({ format: 1, status: 0, errors });
   });
 
   test('check on a refused Change, exit 1, says what stderr says', async ({ lab }) => {

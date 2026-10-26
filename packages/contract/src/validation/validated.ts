@@ -120,7 +120,10 @@ function validatedSubscriptionsOf({
 /** The Definitions Package a declaration belongs to, when exactly one does. */
 function foundIn(packages: readonly ImportedDefinitions[], declaration: unknown) {
   const provenance = definitionsPackageOf(packages, declaration);
-  return provenance.kind === 'found' ? provenance.package : undefined;
+  if (provenance.kind !== 'origin' || provenance.package.kind !== 'identified') {
+    return undefined;
+  }
+  return provenance.package;
 }
 
 /** A Dependency with the one installed package its Provider is; a valid Root's always has one. */
@@ -129,7 +132,7 @@ function validatedDependencyOf(
   contractPackages: readonly ImportedContractPackage[],
 ): ValidatedDependency {
   const provenance = contractPackageOf(contractPackages, located.dependency);
-  if (provenance.kind !== 'found') {
+  if (provenance.kind !== 'origin' || provenance.package.kind !== 'identified') {
     throw new Error('A valid Root depends on a Provider of no installed package: a bug.');
   }
   return { ...located, from: provenance.package };

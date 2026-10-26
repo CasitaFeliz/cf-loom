@@ -36,10 +36,8 @@ export function resolvePackages(
   }
   const provenance = definitionsPackageOf(packages, named);
   switch (provenance.kind) {
-    case 'found':
-      return { kind: 'resolved', packages, contractPackages };
-    case 'unidentified':
-      return failed(identityLineOf(provenance.package));
+    case 'origin':
+      return namedBy(provenance.package, { packages, contractPackages });
     case 'none': {
       const none = "standardRejections is exported by no package the Contract's files import";
       return failed(`${none}: name the definitions a Definitions Package exports`);
@@ -50,6 +48,20 @@ export function resolvePackages(
       const neither = 'and neither imports it from the other: import it from one package';
       return failed(`standardRejections is ${both}, ${neither}`);
     }
+  }
+}
+
+/** The packages once the one a Contract names as `standardRejections` has a name and a version, else why not. */
+function namedBy(
+  origin: ImportedDefinitions,
+  resolved: Omit<Extract<ResolvedPackages, { readonly kind: 'resolved' }>, 'kind'>,
+): ResolvedPackages {
+  switch (origin.kind) {
+    case 'identified':
+      return { kind: 'resolved', ...resolved };
+    case 'unnamed':
+    case 'unversioned':
+      return failed(identityLineOf(origin));
   }
 }
 

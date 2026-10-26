@@ -117,6 +117,35 @@ describe('providedSnapshotOf', () => {
     );
   });
 
+  test('a Retired Event is refused, since a Contract Package exports none', () => {
+    const damaged = changed((copy) => {
+      const events = copy['events'] as Record<string, Record<string, unknown>>;
+      const event = events['OrderPlaced@1'];
+      if (event === undefined) {
+        throw new Error('The fixture has no OrderPlaced@1');
+      }
+      event['lifecycle'] = 'retired';
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      `orders-service's exported Snapshot is malformed: events.OrderPlaced@1.lifecycle is none of "active", "deprecated"`,
+    );
+  });
+
+  test('a top-level key its format does not define is refused as malformed', () => {
+    const damaged = changed((copy) => {
+      copy['subscriptions'] = {};
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      "orders-service's exported Snapshot is malformed: subscriptions is a key its format does not define",
+    );
+  });
+
   test('a Deprecated Endpoint keeps its instant', () => {
     const read = providedSnapshotOf(providing);
 
