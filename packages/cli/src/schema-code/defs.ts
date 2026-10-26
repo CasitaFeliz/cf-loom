@@ -71,6 +71,6 @@ type DefNames = { readonly typeName: string; readonly mode: SchemaMode };
 function annotationOf(node: SchemaNode, { typeName, mode }: DefNames): string {
   const output =
     mode === 'declared' ? `z.ZodType<${typeName}, ${typeName}>` : `z.ZodType<${typeName}>`;
-  const isObject = node.type === 'object' && node.nullable !== true;
+  const isObject = node.type === 'object';
   return isObject ? `${output} & z.core.$ZodTypeDiscriminable` : output;
 }
