@@ -8,16 +8,16 @@ import type { Document } from './exit.ts';
  */
 export function checkedDocumentOf(checked: Checked): Document {
   const { packageName, against, changes, derivation } = checked;
-  const derived = derivation?.derived;
-  const published = derived?.kind === 'version' ? derived : null;
+  const derived = derivation.kind === 'derived' ? derivation : undefined;
+  const published = derived?.derived.kind === 'version' ? derived.derived : null;
   return {
     package: packageName,
     baseline: against.kind === 'baseline' ? against.version : null,
     stable: against.kind === 'baseline' ? (against.stable ?? null) : null,
     reason: against.kind === 'none' ? reasonOf(against.why) : null,
     changes,
-    peers: derivation?.peers ?? [],
-    bump: derivation?.bump ?? null,
+    peers: derived?.peers ?? [],
+    bump: derived?.bump ?? null,
     version: published?.version ?? null,
     tag: published?.tag ?? null,
   };

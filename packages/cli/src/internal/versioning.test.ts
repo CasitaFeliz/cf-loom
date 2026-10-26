@@ -237,3 +237,55 @@ describe('derivedVersionOf', () => {
     expect(derived).toMatchObject({ kind: 'version', tag: 'next' });
   });
 });
+
+describe('derivedVersionOf, why it takes the version', () => {
+  test.for([
+    ['a package with no Baseline', { kind: 'first-version' }, undefined],
+    ['a major against a stable Baseline', { kind: 'bump', bump: 'major' }, ['1.4.7'], 'major'],
+    [
+      'a patch against a prerelease Baseline',
+      { kind: 'bump', bump: 'patch' },
+      ['1.0.0-0'],
+      'patch',
+    ],
+  ] as const)('with %s, it is the %o', ([, why, versions, bump]) => {
+    const deriving =
+      versions === undefined
+        ? { baseline: undefined, versions: [], force: false, prerelease: false }
+        : derivingFrom(versions, bump);
+
+    expect(derivedVersionOf(deriving)).toMatchObject({ kind: 'version', why });
+  });
+
+  test('a prerelease Baseline with nothing changed is promoted', () => {
+    const derived = derivedVersionOf(derivingFrom(['1.0.0', '1.1.0-0'], 'unchanged'));
+
+    expect(derived).toMatchObject({ why: { kind: 'promotes', baseline: '1.1.0-0' } });
+  });
+
+  test('--force does not stop a prerelease Baseline from being promoted', () => {
+    const derived = derivedVersionOf(
+      derivingFrom(['1.0.0', '1.1.0-0'], 'unchanged', { force: true }),
+    );
+
+    expect(derived).toMatchObject({ version: '1.1.0', why: { kind: 'promotes' } });
+  });
+
+  test('--force over an unchanged stable Baseline is forced', () => {
+    const derived = derivedVersionOf(derivingFrom(['1.0.0'], 'unchanged', { force: true }));
+
+    expect(derived).toMatchObject({ version: '1.0.1', why: { kind: 'forced' } });
+  });
+
+  test('--force --prerelease over a prerelease Baseline is forced, never a promotion', () => {
+    const derived = derivedVersionOf(
+      derivingFrom(['1.0.0', '1.1.0-0'], 'unchanged', { force: true, prerelease: true }),
+    );
+
+    expect(derived).toMatchObject({
+      version: '1.1.0-1',
+      tag: 'next',
+      why: { kind: 'forced' },
+    });
+  });
+});

@@ -59,8 +59,10 @@ export function init({ cwd }: Run, kind: RootKind): Exit {
 function writtenExitOf({ root, attributes }: Planned): Exit {
   const created = [root.path];
   const updated: string[] = [];
-  if (attributes !== undefined) {
-    (attributes.original === undefined ? created : updated).push(gitAttributesFile);
+  if (attributes?.original !== undefined) {
+    updated.push(gitAttributesFile);
+  } else if (attributes !== undefined) {
+    created.push(gitAttributesFile);
   }
   const lines = [
     ...created.map((path) => `Created ${path}`),

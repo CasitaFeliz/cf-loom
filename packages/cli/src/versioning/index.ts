@@ -4,6 +4,7 @@ export type {
   DeriveOptions,
   Deriving,
   DistTag,
+  Why,
 } from './derived-version.ts';
 export { derivedVersionOf, firstStableOf } from './derived-version.ts';
 export type { ListedVersions } from './listed-versions.ts';

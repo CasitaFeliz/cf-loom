@@ -7,7 +7,7 @@ import {
 import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
-import type { Checked } from './checked.ts';
+import type { Compared } from './checked.ts';
 import { checkedChangeOf } from './checked-change.ts';
 import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
 
@@ -77,24 +77,18 @@ export async function comparisonOf(
 }
 
 /** What `check` reports of a comparison: the package, what it was compared with and every Change, before any version is derived from it. */
-export function checkedFrom(comparison: Comparison): Checked {
+export function comparedFrom(comparison: Comparison): Compared {
   switch (comparison.kind) {
     case 'no-baseline': {
       const { packageName, why } = comparison;
       const changes = comparison.changes.map(checkedChangeOf);
-      return {
-        kind: 'checked',
-        packageName,
-        against: { kind: 'none', why },
-        changes,
-        derivation: null,
-      };
+      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes };
     }
     case 'baseline': {
       const { packageName, snapshot, stable, chosen } = comparison.read;
       const against = { kind: 'baseline', version: snapshot.version, stable, chosen } as const;
       const changes = comparison.report.changes.map(checkedChangeOf);
-      return { kind: 'checked', packageName, against, changes, derivation: null };
+      return { kind: 'checked', packageName, against, changes };
     }
   }
 }

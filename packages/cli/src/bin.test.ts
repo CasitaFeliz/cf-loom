@@ -3537,6 +3537,9 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(JSON.parse(ran.stdout)).toEqual({
       format: 1,
       status: 2,
+      errors: [
+        '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it',
+      ],
       package: ordersPackage,
       baseline: '1.0.0',
       stable: '1.0.0',
@@ -5658,14 +5661,29 @@ describe.concurrent('cf-loom publish --dry-run', { timeout: publishTimeout }, ()
     expect(leftBehindIn(project)).toEqual([]);
   });
 
-  test('--force over an unchanged package derives the patch it would publish', async ({ lab }) => {
+  test('--force over an unchanged package derives the patch it would publish, and says it is forced', async ({
+    lab,
+  }) => {
     const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() });
 
     const { ran, registry } = await publishedAgainst(lab, changed, '--dry-run', '--force');
 
-    const would = `Would publish ${ordersPackage}@1.0.1 (patch): --dry-run stopped before npm publish`;
+    const would = `Would publish ${ordersPackage}@1.0.1 (forced): --dry-run stopped before npm publish`;
     expect(ran.stdout.split('\n').at(-2)).toBe(would);
     expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('--force --prerelease over a prerelease Baseline derives its next prerelease, never a promotion', async ({
+    lab,
+  }) => {
+    const roots = { before: aRoot(), after: aRoot() };
+    const changed = await aChangedProject(lab, roots, ['1.1.0-0']);
+
+    const args = ['--dry-run', '--force', '--prerelease'];
+    const { ran } = await publishedAgainst(lab, changed, ...args);
+
+    const would = `Would publish ${ordersPackage}@1.1.0-1 (forced): --dry-run stopped before npm publish`;
+    expect(ran.stdout.split('\n').at(-2)).toBe(would);
   });
 
   test('an unchanged package is nothing to publish, with or without --dry-run', async ({ lab }) => {
@@ -6142,9 +6160,28 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
     const checked = await checkedAgainst(lab, changed, '--json');
     const dry = await publishedAgainst(lab, changed, '--json', '--dry-run');
 
-    expect(documentOf(checked.ran)).toMatchObject({ format: 1, status: 2 });
+    const errors = checked.ran.stderr.split('\n').filter(Boolean);
+    expect(documentOf(checked.ran)).toMatchObject({ format: 1, status: 2, errors });
     expect(checked.ran.status).toBe(2);
     expect(documentOf(dry.ran)).toMatchObject({ format: 1, status: 0, published: false });
+    expect(documentOf(dry.ran)).not.toHaveProperty('errors');
+  });
+
+  test('check on a refused Change, exit 1, says what stderr says', async ({ lab }) => {
+    const changed = await aChangedProject(
+      lab,
+      {
+        before: aRoot({ lifecycle: 'active' }),
+        after: aRoot({ lifecycle: 'retired' }),
+      },
+      ['1.0.0-0'],
+    );
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    const errors = ran.stderr.split('\n').filter(Boolean);
+    expect(errors).toEqual([expect.stringContaining('refused')]);
+    expect(documentOf(ran)).toMatchObject({ format: 1, status: 1, errors });
   });
 });
 

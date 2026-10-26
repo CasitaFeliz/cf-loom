@@ -6,59 +6,58 @@ import {
   versionBumpOf,
 } from '@cf-loom/contract/internal';
 import { type Derived, type DeriveOptions, derivedVersionOf } from '../versioning/index.ts';
-import type { Checked } from './checked.ts';
-import { type Comparison, checkedFrom } from './comparison.ts';
+import type { Checked, Compared } from './checked.ts';
+import { type Comparison, comparedFrom } from './comparison.ts';
 import type { Prepared } from './prepared.ts';
 
 /**
- * What `check` and `publish` derive from a comparison: every peer range that moved, the bump the
- * Changes and the peers give, `null` when nothing moved, and the version it leads to.
+ * What `check` and `publish` derive from a comparison: the version, with every peer range that
+ * moved and the bump the Changes and the peers give, `null` when nothing moved; that a Change is
+ * refused, which no version follows; or that `--against` named the version compared with, which is
+ * not what `publish` would do.
  */
-export type Derivation = {
-  readonly peers: readonly PeerRangeMove[];
-  readonly bump: VersionBump | null;
-  readonly derived: Derived;
-};
+export type Derivation =
+  | {
+      readonly kind: 'derived';
+      readonly peers: readonly PeerRangeMove[];
+      readonly bump: VersionBump | null;
+      readonly derived: Derived;
+    }
+  | { readonly kind: 'refused' }
+  | { readonly kind: 'against' };
 
-/**
- * What `check` reports of a prepared comparison, with the version `publish` derives from it,
- * unless `--against` named the version compared with, or a Change is refused: neither is what
- * `publish` would do.
- */
+/** What `check` reports of a prepared comparison, with the version `publish` derives from it. */
 export function derivedCheckedOf(prepared: Prepared, options: DeriveOptions): Checked {
-  const { comparison, peerRanges } = prepared;
-  const checked = checkedFrom(comparison);
-  const derives = isPublishable(comparison) && checked.changes.every(isNotRefused);
-  return derives
-    ? { ...checked, derivation: derivationOf(comparison, peerRanges, options) }
-    : checked;
-}
-
-function isPublishable(comparison: Comparison): boolean {
-  return comparison.kind === 'no-baseline' || comparison.read.chosen !== 'against';
-}
-
-function isNotRefused({ verdict }: Checked['changes'][number]): boolean {
-  return verdict !== 'refused';
+  const compared = comparedFrom(prepared.comparison);
+  return { ...compared, derivation: derivationOf(prepared, compared, options) };
 }
 
 function derivationOf(
-  comparison: Comparison,
+  { comparison, peerRanges }: Prepared,
+  { changes }: Compared,
+  options: DeriveOptions,
+): Derivation {
+  if (changes.some(({ verdict }) => verdict === 'refused')) {
+    return { kind: 'refused' };
+  }
+  if (comparison.kind === 'no-baseline') {
+    const derived = derivedVersionOf({ baseline: undefined, versions: [], ...options });
+    return { kind: 'derived', peers: [], bump: null, derived };
+  }
+  return comparison.read.chosen === 'against'
+    ? { kind: 'against' }
+    : derivedAgainst(comparison, peerRanges, options);
+}
+
+function derivedAgainst(
+  { read, report }: Extract<Comparison, { kind: 'baseline' }>,
   proposed: PeerRanges,
   options: DeriveOptions,
 ): Derivation {
-  switch (comparison.kind) {
-    case 'no-baseline': {
-      const derived = derivedVersionOf({ baseline: undefined, versions: [], ...options });
-      return { peers: [], bump: null, derived };
-    }
-    case 'baseline': {
-      const { read, report } = comparison;
-      const moves = { baseline: read.peers, proposed };
-      const bump = versionBumpOf(report, moves);
-      const baseline = { version: read.snapshot.version, stable: read.stable, bump };
-      const derived = derivedVersionOf({ baseline, versions: read.versions, ...options });
-      return { peers: peerMovesOf(moves), bump: bump === 'unchanged' ? null : bump, derived };
-    }
-  }
+  const moves = { baseline: read.peers, proposed };
+  const bump = versionBumpOf(report, moves);
+  const baseline = { version: read.snapshot.version, stable: read.stable, bump };
+  const derived = derivedVersionOf({ baseline, versions: read.versions, ...options });
+  const peers = peerMovesOf(moves);
+  return { kind: 'derived', peers, bump: bump === 'unchanged' ? null : bump, derived };
 }

@@ -15,14 +15,16 @@ type Against =
     }
   | { readonly kind: 'none'; readonly why: NoBaseline };
 
-/** What `check` found, ready to print: the package, what it was compared with, every Change and the version `publish` would derive, if any. */
-export type Checked = {
+/** What `check` found before any version is derived: the package, what it was compared with and every Change. */
+export type Compared = {
   readonly kind: 'checked';
   readonly packageName: string;
   readonly against: Against;
   readonly changes: readonly CheckedChange[];
-  readonly derivation: Derivation | null;
 };
+
+/** What `check` found, ready to print: the comparison and what `publish` would derive from it. */
+export type Checked = Compared & { readonly derivation: Derivation };
 
 /** How `check` ends: done, the check failed or a Breaking Change Approval is needed, with what it says on stderr. */
 export type Ending = {

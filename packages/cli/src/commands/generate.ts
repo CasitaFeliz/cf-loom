@@ -103,6 +103,6 @@ function movedLinesOf(moves: readonly FileMove[]): readonly string[] {
 
 /** A write or a deletion that failed after the Handlers had moved: the moves stay on stdout and in the document, beside the error. */
 function stoppedAfterMoving(message: string, moves: readonly FileMove[]): Exit {
-  const document = { errors: [message], moved: movedOf(moves) };
+  const document = { moved: movedOf(moves) };
   return { ...toolingError(message), stdout: movedLinesOf(moves), document };
 }

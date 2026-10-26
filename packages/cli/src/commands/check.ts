@@ -24,9 +24,9 @@ export async function check(run: Run, { against, prerelease }: CheckOptions): Pr
 
 /** How `check` ends: a version that would not be above the Baseline is a tooling error, as it is for `publish`; else the Changes decide. */
 function exitOf(checked: Checked): Exit {
-  const derived = checked.derivation?.derived;
-  if (derived?.kind === 'not-above') {
-    const stderr = [notAboveOf(checked.packageName, derived)];
+  const { derivation } = checked;
+  if (derivation.kind === 'derived' && derivation.derived.kind === 'not-above') {
+    const stderr = [notAboveOf(checked.packageName, derivation.derived)];
     return { status: 3, stdout: comparedLinesOf(checked), stderr };
   }
   const { status, stderr } = endingOf(checked.changes);
