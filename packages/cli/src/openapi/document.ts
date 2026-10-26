@@ -1,5 +1,6 @@
 import { byCodePoint, type ServiceSnapshot } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
+import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { authorizationScheme } from './authorization.ts';
 import { envelopeComponentsOf } from './envelopes.ts';
 import type { OpenApiObject } from './objects.ts';
@@ -14,14 +15,11 @@ import {
   servedSchemesOf,
 } from './served.ts';
 
-/** A Group as an OpenAPI tag: its name and what it is for. */
-type Tag = { readonly name: string; readonly description: string };
-
 /** An OpenAPI 3.1 document as `cf-loom openapi` prints it: a JSON value. */
 export type OpenApiDocument = {
   readonly openapi: '3.1.1';
   readonly info: { readonly title: string; readonly version: string };
-  readonly tags: readonly Tag[];
+  readonly tags: readonly GroupTag[];
   readonly paths: Readonly<Record<string, Readonly<Record<string, OpenApiObject>>>>;
   readonly components: {
     readonly schemas: Readonly<Record<string, JsonSchema>>;
@@ -54,7 +52,10 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot, version: string): O
   const document: OpenApiDocument = {
     openapi: '3.1.1',
     info: { title: snapshot.name, version },
-    tags: tagsOf(listed, snapshot.groups),
+    tags: groupTagsOf(
+      snapshot.groups,
+      listed.map(({ endpoint }) => endpoint.group),
+    ),
     paths: pathsOf(endpoints),
     components: componentsOf({ ...defs, ...envelopes }, endpoints),
   };
@@ -70,18 +71,6 @@ function rejectionsOf(endpoints: readonly ServedEndpoint[]): readonly ServedReje
     }
   }
   return [...rejectionByCode.values()];
-}
-
-/** The Groups that list a written Endpoint, each once, in code point order, with its description. */
-function tagsOf(
-  listed: readonly ListedEndpoint[],
-  groups: ServiceSnapshot['groups'],
-): readonly Tag[] {
-  const listing = new Set(listed.map(({ endpoint }) => endpoint.group));
-  const tags = Object.entries(groups)
-    .filter(([name]) => listing.has(name))
-    .map(([name, { description }]) => ({ name, description }));
-  return tags.sort((left, right) => byCodePoint(left.name, right.name));
 }
 
 /** The path items in code point order of their template, each holding its OpenAPI operations by method. */

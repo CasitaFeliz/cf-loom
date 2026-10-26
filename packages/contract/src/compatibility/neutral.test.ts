@@ -372,6 +372,13 @@ describe('compatibilityReportOf, a Service’s Group', () => {
       visibility: 'private',
     },
     {
+      name: 'Private when the only Event it lists is Retired',
+      held: {
+        events: { 'OrderPlaced@1': anEvent({ lifecycle: 'retired', visibility: 'internal' }) },
+      },
+      visibility: 'private',
+    },
+    {
       name: 'only the Elements it lists, never those of another Group',
       held: {
         endpoints: {
@@ -393,6 +400,18 @@ describe('compatibilityReportOf, a Service’s Group', () => {
     expect(report.changes).toEqual([
       neutral(groupSite(visibility), { kind: 'description-changed' }),
     ]);
+  });
+
+  test('a Group’s site counts an Event that only the Baseline holds', () => {
+    const event = { events: { 'OrderPlaced@1': anEvent({ visibility: 'internal' }) } };
+    const endpoint = { endpoints: { [identity]: anEndpoint({ visibility: 'private' }) } };
+
+    const { changes } = compatibilityReportOf(
+      aBaseline({ ...endpoint, ...event }),
+      aProposed({ ...endpoint, groups: reworded }),
+    );
+
+    expect(changes.map(({ site }) => site)).toContainEqual(groupSite('internal'));
   });
 
   test('a Group’s site takes the widest Visibility of either Snapshot', () => {

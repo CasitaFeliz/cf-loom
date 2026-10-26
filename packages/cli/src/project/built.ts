@@ -53,7 +53,7 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, from its source and
- * its installed packages alone; the committed file is read only for its bytes.
+ * its installed packages alone; the committed file is read only for its bytes and its format.
  */
 export async function builtOf(run: Run): Promise<Built> {
   const read = await projectOf(run.cwd);

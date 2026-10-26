@@ -87,7 +87,7 @@ export type SubscriptionSnapshot = {
   readonly event: string;
 };
 
-/** A Group by its name: what it is for, which is all a Snapshot keeps of it; each Element it lists names it. */
+/** A Group by its name: what it is for, which is all a Snapshot keeps of it; each Element and Subscription it lists names it. */
 export type GroupSnapshot = { readonly description: string };
 
 /** What a Contract uses of one Provider: the version it relied on and the Endpoints it selects. */

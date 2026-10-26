@@ -10,8 +10,8 @@ type KeptGroup = Extract<
 
 /**
  * A Service's Groups by name in code point order, each Neutral: a kept Group's description. A
- * Group added or removed comes with the Change of the Elements it lists, which name it or no
- * longer do, so it has none of its own. A Group's site takes the widest Visibility of what it lists.
+ * Group added or removed comes with the Change of the Elements and Subscriptions it lists, which
+ * name it or no longer do, so it has none of its own. A Group's site takes the widest Visibility of what it lists.
  */
 export function groupDifferencesOf(
   baseline: PublishedServiceSnapshot,

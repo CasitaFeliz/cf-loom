@@ -98,7 +98,7 @@ function aGetOrder(
 
 const getOrder = aGetOrder([orderLocked, notFound]);
 
-const stampedAt = '2026-10-17T09:30:00Z';
+const deprecatedAt = '2026-10-17T09:30:00Z';
 
 const editOrder = defineEndpoint({
   name: 'editOrder',
@@ -107,7 +107,7 @@ const editOrder = defineEndpoint({
   visibility: 'internal',
   description: 'Edits one line',
   lifecycle: 'deprecated',
-  deprecatedAt: stampedAt,
+  deprecatedAt,
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
     params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
@@ -995,7 +995,7 @@ describe('snapshotOf: deprecatedAt', () => {
   test('a Deprecated Endpoint carries the deprecatedAt its declaration states', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(stampedAt);
+    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(deprecatedAt);
   });
 
   test('a future deprecatedAt is carried as declared', () => {
@@ -1176,12 +1176,14 @@ describe('canonicalTextOf', () => {
     ]);
   });
 
-  test('nested keys stay sorted by code point', () => {
-    const text = textOf(serviceSnapshot());
+  test('a nested object that holds a heading key keeps its keys sorted by code point', () => {
+    const written = JSON.parse(textOf(serviceSnapshot()));
 
-    const nested = text.slice(text.indexOf('"success": {'));
-    expect(nested.indexOf('"body"')).toBeLessThan(nested.indexOf('"headers"'));
-    expect(nested.indexOf('"headers"')).toBeLessThan(nested.indexOf('"status"'));
+    const endpointKeys = Object.keys(written.endpoints['GET /orders/{}']);
+
+    expect(Object.keys(written).slice(0, 3)).toEqual(['format', 'kind', 'name']);
+    expect(endpointKeys).toContain('name');
+    expect(endpointKeys).toEqual([...endpointKeys].sort());
   });
 
   test('the same Contract written in another order gives the same bytes', () => {

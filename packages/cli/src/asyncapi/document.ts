@@ -8,12 +8,10 @@ import {
   subjectOf,
 } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
+import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeaders, brokerHeadersName } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
-
-/** A Group as an AsyncAPI tag: its name and what it is for. */
-type Tag = { readonly name: string; readonly description: string };
 
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
@@ -21,7 +19,7 @@ export type AsyncApiDocument = {
   readonly info: {
     readonly title: string;
     readonly version: string;
-    readonly tags: readonly Tag[];
+    readonly tags: readonly GroupTag[];
   };
   readonly defaultContentType: string;
   readonly channels: Readonly<Record<string, AsyncApiObject>>;
@@ -46,7 +44,14 @@ export function asyncApiDocumentOf(
   );
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
-    info: { title: snapshot.name, version, tags: tagsOf(published, snapshot.groups) },
+    info: {
+      title: snapshot.name,
+      version,
+      tags: groupTagsOf(
+        snapshot.groups,
+        published.map(({ event }) => event.group),
+      ),
+    },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
@@ -68,18 +73,6 @@ function publishedVersionsOf(
       const subject = subjectOf(snapshot.name, { kind: 'event', name, version });
       return { identity, name, address: prefixedSubjectOf(prefix, subject), event };
     });
-}
-
-/** The Groups of the written Message Versions, each once, in code point order, with its description. */
-function tagsOf(
-  published: readonly PublishedVersion[],
-  groups: ServiceSnapshot['groups'],
-): readonly Tag[] {
-  const listing = new Set(published.map(({ event }) => event.group));
-  const tags = Object.entries(groups)
-    .filter(([name]) => listing.has(name))
-    .map(([name, { description }]) => ({ name, description }));
-  return tags.sort((left, right) => byCodePoint(left.name, right.name));
 }
 
 /** What each Message Version writes, by its identity, in the order given. */
