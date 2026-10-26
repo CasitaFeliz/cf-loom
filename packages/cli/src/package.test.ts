@@ -348,7 +348,7 @@ function withRejectionsOf(codes: readonly string[]): Readonly<Record<string, str
   return withDeclarations(declarations, `rejections: [${names.join(', ')}],`);
 }
 
-/** A Service as `withDeclarations` writes it, its root also listing the Events given. */
+/** A Service as `withDeclarations` writes it, its Root also listing the Events given. */
 function withEvents(
   declarations: readonly string[],
   events: string,
@@ -531,7 +531,7 @@ function wordOf(next: () => number, length: number): string {
 }
 
 /**
- * package.json names both a package.json and a root name accept, scoped and not: the longest one
+ * package.json names both a package.json and a Root name accept, scoped and not: the longest one
  * whose Contract Package's name npm still takes, then pseudo-random ones.
  */
 function projectNames(): readonly string[] {
@@ -543,7 +543,7 @@ function projectNames(): readonly string[] {
   return [`@s/${'n'.repeat(214 - '@s/contract-'.length)}`, ...random];
 }
 
-/** A Service project named `packageName` whose root declares nothing. */
+/** A Service project named `packageName` whose Root declares nothing. */
 function aServiceNamed(packageName: string): Readonly<Record<string, string>> {
   const name = packageName.split('/').at(-1);
   return {
@@ -1381,7 +1381,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     });
   });
 
-  test('cfLoom.dependencies is in canonical order, whatever order the root lists them in', () => {
+  test('cfLoom.dependencies is in canonical order, whatever order the Root lists them in', () => {
     const alpha = aProviderPackage('alpha-service');
     const beta = aProviderPackage('beta-service');
     const applicationOf = (listed: string) => {
@@ -2036,7 +2036,7 @@ describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => 
 });
 
 describe('cf-loom package: what it refuses', () => {
-  test('a Definitions Package root is refused before any Snapshot is looked at', () => {
+  test('a Definitions Package’s Root is refused before any Snapshot is looked at', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'cf-loom.config.ts': config,
@@ -2056,7 +2056,7 @@ describe('cf-loom package: what it refuses', () => {
     });
   });
 
-  test('a Definitions Package root is a tooling error', () => {
+  test('a Definitions Package’s Root is a tooling error', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
       'cf-loom.config.ts': config,
@@ -2162,7 +2162,7 @@ describe('cf-loom package: what it refuses', () => {
     expect(built).toEqual({ status: 0, stdout: '' });
   });
 
-  test('zod not installed beside the root is a tooling error', () => {
+  test('zod not installed beside the Root is a tooling error', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
       'cf-loom.config.ts': config,

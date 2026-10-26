@@ -512,10 +512,10 @@ function aCommand(body: core.$ZodType) {
   return defineCommand({ ...written, description: 'Charge' } as never);
 }
 
-/** What each Definitions root of a row exports beside it. */
+/** What each Definitions Package of a row exports beside it. */
 const exportedBy = new Map<unknown, Readonly<Record<string, unknown>>>();
 
-/** A Definitions root whose file exports the schemas given. */
+/** A Definitions Package whose Root file exports the schemas given. */
 function definitionsExporting(schemas: Readonly<Record<string, core.$ZodType>>) {
   const definitions = defineDefinitions({});
   exportedBy.set(definitions, schemas);
@@ -578,7 +578,7 @@ describe('validateRoot: a strict object fails wherever it sits', () => {
       ['rejections', 'DENIED', 'body'],
     ],
     [
-      'in a shared schema of a Definitions root',
+      'in a shared schema of a Definitions Package',
       () => definitionsExporting({ scope: strictObject() }),
       ['exports', 'scope'],
     ],
@@ -659,7 +659,7 @@ describe('validateRoot: a record keyed by an enum or literal fails wherever it s
       ['guards', 'gate', 'qualifier'],
     ],
     [
-      'in a shared schema of a Definitions root',
+      'in a shared schema of a Definitions Package',
       () => definitionsExporting({ totals: keyed() }),
       ['exports', 'totals'],
     ],

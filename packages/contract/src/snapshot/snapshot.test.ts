@@ -232,7 +232,7 @@ function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
   };
 }
 
-/** The Snapshot of a root, beside the Definitions Packages installed, `@org/definitions` by default. */
+/** The Snapshot of a Root, beside the Definitions Packages installed, `@org/definitions` by default. */
 function snapshotFor(
   root: Root,
   context: SnapshotContext = aContext(),

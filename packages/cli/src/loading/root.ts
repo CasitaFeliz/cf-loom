@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { byCodePoint, isRoot, type Root } from '@cf-loom/contract/internal';
+import { byCodePoint, exportNamesOf, isRoot, type Root } from '@cf-loom/contract/internal';
 import { type ImportedPackage, importedRootOf } from './imported-packages.ts';
 import { rootFiles, rootPlaces } from './roots.ts';
 
@@ -14,7 +14,7 @@ export type LoadedRoot =
   | {
       readonly kind: 'loaded';
       readonly root: Root;
-      readonly rootExport: string;
+      readonly rootExportName: string;
       readonly file: string;
       readonly exports: Readonly<Record<string, unknown>>;
       readonly imported: readonly ImportedPackage[];
@@ -44,8 +44,8 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (split.kind === 'failed') {
     return failed(`${file} ${split.reason}`);
   }
-  const { root, rootExport, exports } = split;
-  return { kind: 'loaded', root, rootExport, file, exports, imported: imported.imported };
+  const { root, rootExportName, exports } = split;
+  return { kind: 'loaded', root, rootExportName, file, exports, imported: imported.imported };
 }
 
 /** What a Root file exports: the Root, the name it exports it under, and everything else by name; or why it exports no one Root. */
@@ -53,7 +53,7 @@ export type SplitRoot =
   | {
       readonly kind: 'split';
       readonly root: Root;
-      readonly rootExport: string;
+      readonly rootExportName: string;
       readonly exports: Readonly<Record<string, unknown>>;
     }
   | { readonly kind: 'failed'; readonly reason: string };
@@ -81,21 +81,21 @@ export function splitRoot(exported: Readonly<Record<string, unknown>>): SplitRoo
     return { kind: 'failed', reason: `exports more than one Root: ${names.join(' and ')}` };
   }
   const { [first.name]: _root, ...exports } = exported;
-  return { kind: 'split', root: first.root, rootExport: first.name, exports };
+  return { kind: 'split', root: first.root, rootExportName: first.name, exports };
 }
 
 /** Each distinct Root among the exports with the first name it is exported under, in code point order of that name. */
 function rootsAmong(
   exported: Readonly<Record<string, unknown>>,
 ): readonly { readonly root: Root; readonly name: string }[] {
-  const names = new Map<Root, string>();
-  for (const name of Object.keys(exported).sort(byCodePoint)) {
-    const value = exported[name];
-    if (isRoot(value) && !names.has(value)) {
-      names.set(value, name);
+  const roots: { readonly root: Root; readonly name: string }[] = [];
+  for (const root of new Set(Object.values(exported).filter(isRoot))) {
+    const [name] = exportNamesOf(exported, root);
+    if (name !== undefined) {
+      roots.push({ root, name });
     }
   }
-  return [...names].map(([root, name]) => ({ root, name }));
+  return roots.sort((left, right) => byCodePoint(left.name, right.name));
 }
 
 function failed(message: string): LoadedRoot {

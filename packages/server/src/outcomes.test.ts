@@ -319,7 +319,7 @@ describe('serve: a Rejection', () => {
     });
   });
 
-  test('the invalid-input Rejection is the root’s, its issues with no received value', async () => {
+  test('the invalid-input Rejection is the Root’s, its issues with no received value', async () => {
     const { http } = serveWith(() =>
       success({ headers: { 'x-total': 3, etag: 'v1' }, body: order }),
     );

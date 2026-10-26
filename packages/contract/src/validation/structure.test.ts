@@ -16,7 +16,7 @@ import {
 } from '../index.ts';
 import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }
@@ -45,7 +45,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
 }
 
 describe('validateRoot: lists and their items', () => {
-  test('a root list that is not a list fails', () => {
+  test('a Root’s list that is not a list fails', () => {
     const contract = defineService({
       name: 'orders-service',
       groups: anything<readonly Group[]>('orders'),
@@ -305,7 +305,7 @@ describe('validateRoot: lists and their items', () => {
     );
   });
 
-  test('a malformed root is invalid without throwing', () => {
+  test('a malformed Root is invalid without throwing', () => {
     const contract = defineService({
       name: 'orders-service',
       groups: anything<readonly Group[]>([

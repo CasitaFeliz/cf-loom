@@ -549,7 +549,7 @@ describe('publisher.publish', () => {
     ]);
   });
 
-  test('a name the root does not publish throws at runtime', async () => {
+  test('a name the Root does not publish throws at runtime', async () => {
     const { publisher } = await opened();
 
     const publishing = publisher.publish('OrderShipped' as never, {} as never, fact);

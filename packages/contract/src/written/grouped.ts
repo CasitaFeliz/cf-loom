@@ -32,7 +32,7 @@ export type Grouped = {
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** A Root's Groups, each where it sits by name; only a Contract has them. */
+/** A Root's Groups, each where it sits by name; only a Service's Contract has them. */
 export function groupsOf(root: Root): readonly LocatedGroup[] {
   if (root.kind !== 'service') {
     return [];

@@ -147,7 +147,7 @@ describe('validateRoot: what a Group lists', () => {
   });
 
   test.each(['events', 'commands', 'subscriptions'])(
-    'a root that still lists %s fails as an undeclared field',
+    'a Root that still lists %s fails as an undeclared field',
     (field) => {
       const groups = [aGroup('orders', { endpoints: [listOrders] })];
       const root = defineService({ name: 'orders-service', groups, [field]: [] } as never);

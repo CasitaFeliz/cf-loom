@@ -11,7 +11,7 @@ import { listOf, textOf } from './written.ts';
 /**
  * Where a Contract takes an Event it subscribes to from: the Contract itself when one of its Groups
  * lists it, else the listed Dependency whose Contract Package exports that very Event; none when
- * neither does, or the Root is no Contract. Events are compared, never Contract Packages, since a
+ * neither does, or the Root is no Service's Contract. Events are compared, never Contract Packages, since a
  * Dependency holds a frozen copy of the one imported.
  */
 export function eventSourceOf(

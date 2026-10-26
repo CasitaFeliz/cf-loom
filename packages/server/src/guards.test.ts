@@ -295,7 +295,7 @@ describe('serve: Guards', () => {
     expect(received[0]?.signal.aborted).toBe(true);
   });
 
-  test('a GuardHandler stub answers the not-implemented code its root resolves', async () => {
+  test('a GuardHandler stub answers the not-implemented code its Root resolves', async () => {
     const definitions = defineDefinitions({
       standardRejections: {
         notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Coming soon' },

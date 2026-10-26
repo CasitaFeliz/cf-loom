@@ -651,7 +651,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshotLine}\n` });
   });
 
-  test('a root that breaks a rule fails asyncapi with generate’s lines', () => {
+  test('a Root that breaks a rule fails asyncapi with generate’s lines', () => {
     const project = aProject({
       ...theService,
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),

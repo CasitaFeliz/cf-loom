@@ -192,7 +192,7 @@ function subscriptionsFile(listed: readonly string[]): string {
   ]);
 }
 
-/** The names a root lists in one field, from the text of its list. */
+/** The names a Root lists in one field, from the text of its list. */
 function namesListed(list: string): readonly string[] {
   return list
     .slice(1, -1)
@@ -211,7 +211,7 @@ function messagesFile(listed: readonly string[]): string {
   return lines([kept.join('\n\n')]);
 }
 
-/** What a messaging root's Group lists, each as the text of one of `defineGroup`'s fields; an empty one is left out. */
+/** What a messaging Root's Group lists, each as the text of one of `defineGroup`'s fields; an empty one is left out. */
 type MessagingLists = {
   readonly events?: string;
   readonly commands?: string;
@@ -481,7 +481,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshotLine}\n` });
   });
 
-  test('a root that breaks a rule fails broker-plan with generate’s lines', () => {
+  test('a Root that breaks a rule fails broker-plan with generate’s lines', () => {
     const project = aProject({
       ...aMessagingService(),
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
@@ -497,7 +497,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     });
   });
 
-  test('a Dependency written as the types refuse fails with its line, never as a root that threw', () => {
+  test('a Dependency written as the types refuse fails with its line, never as a Root that threw', () => {
     const service = aMessagingService();
     const root = (service['src/contract/index.ts'] ?? '').replace(
       'defineDependency({ provider: payments })',

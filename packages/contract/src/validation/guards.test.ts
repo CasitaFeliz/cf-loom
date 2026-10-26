@@ -13,7 +13,7 @@ import {
 } from '../index.ts';
 import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }
@@ -689,7 +689,7 @@ function keysNamedBy(reported: KeysReported): readonly string[] {
   return reported.message.slice(reported.message.indexOf(': ') + 2).split(', ');
 }
 
-/** The paths a validated root names in its `qualifier-keys` failures. */
+/** The paths a validated Root names in its `qualifier-keys` failures. */
 function reportedKeysOf(validated: Validated): readonly string[] {
   if (validated.kind === 'valid') {
     return [];

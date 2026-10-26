@@ -12,7 +12,7 @@ import type {
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 
-/** A Group and where it sits in its root: `['groups', <name>]`. */
+/** A Group and where it sits in its Root: `['groups', <name>]`. */
 export type LocatedGroup = { readonly at: Path; readonly group: Group };
 
 /**
@@ -29,7 +29,7 @@ export type LocatedEndpoint = {
 /**
  * A Guard the Root reaches, where it sits by name, since Endpoints and other Guards only
  * reference it: an Endpoint attaches it, directly or through a Guard's `guards`, or a Definitions
- * Root exports it.
+ * Package exports it.
  */
 export type LocatedGuard = { readonly at: Path; readonly guard: Guard };
 

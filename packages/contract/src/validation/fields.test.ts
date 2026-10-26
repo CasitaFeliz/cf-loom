@@ -17,7 +17,7 @@ import {
 } from '../index.ts';
 import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }
@@ -219,7 +219,7 @@ describe('validateRoot: undeclared fields', () => {
 });
 
 describe('validateRoot: required fields', () => {
-  test('a root without a name fails', () => {
+  test('a Root without a name fails', () => {
     const contract = defineService(withoutField({ name: 'orders-service' }, 'name'));
 
     expect(validateInPackage(contract)).toEqual(required(['name'], 'name is a required string'));

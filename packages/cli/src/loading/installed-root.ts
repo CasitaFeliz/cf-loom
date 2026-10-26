@@ -28,11 +28,11 @@ export async function installedRootOf({
   if (split.kind === 'failed') {
     return { kind: 'failed', message: `its entry ${split.reason}` };
   }
-  const { root, rootExport, exports } = split;
+  const { root, rootExportName, exports } = split;
   return {
     kind: 'loaded',
     root,
-    rootExport,
+    rootExportName,
     file: packageName,
     exports,
     imported: imported.imported,

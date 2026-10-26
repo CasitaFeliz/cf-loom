@@ -43,7 +43,7 @@ const ping = defineEndpoint({
   success: { status: 200, body: z.object({ ok: z.boolean() }) },
 });
 
-/** The failures of a Definitions root whose file exports what is given beside it. */
+/** The failures of a Definitions Package whose Root file exports what is given beside it. */
 function failuresOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
   const validated = validateRoot(root, aRootPackage(root, { rootExports: exported }));

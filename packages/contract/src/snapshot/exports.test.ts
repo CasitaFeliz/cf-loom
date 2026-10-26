@@ -36,7 +36,7 @@ function nameOf(next: () => number): string {
   return Array.from({ length }, () => letters[Math.floor(next() * letters.length)]).join('');
 }
 
-/** The Snapshot of a Definitions root whose file exports what is given beside it. */
+/** The Snapshot of a Definitions Package whose Root file exports what is given beside it. */
 function definitionsSnapshotOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
   const rootPackage = aRootPackage(root, { rootExports: exported });
@@ -114,7 +114,7 @@ describe('snapshotOf: a Definitions Package’s exports', () => {
     expect(Object.keys(snapshot.guards)).toEqual(['apiKey']);
   });
 
-  test('the exports keys are the root file’s export names, each naming its value', () => {
+  test('the exports keys are the Root file’s export names, each naming its value', () => {
     const next = seededNext(179);
     for (let draw = 0; draw < 50; draw += 1) {
       const values = [

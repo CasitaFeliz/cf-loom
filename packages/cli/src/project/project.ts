@@ -23,7 +23,7 @@ export type Project = {
   readonly layout: ServiceLayout;
   readonly root: Root;
   /** The name the Root file exports the Root under, which the Handler map imports it by. */
-  readonly rootExport: string;
+  readonly rootExportName: string;
   /** Everything else the Root file exports, by name, which a Definitions Package shares. */
   readonly rootExports: Readonly<Record<string, unknown>>;
   /** Where the Root file sits, relative to the project, as messages name it. */
@@ -67,8 +67,8 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   }
   const { layout = defaultLayout } = config.config;
   const { imported } = loaded;
-  const { rootExport } = loaded;
-  const project = { ...declaring.declared, manifest, layout, imported, rootExport };
+  const { rootExportName } = loaded;
+  const project = { ...declaring.declared, manifest, layout, imported, rootExportName };
   return { kind: 'read', project };
 }
 

@@ -203,7 +203,7 @@ const ordersGroup = defineGroup({
 });
 
 describe('the README’s declaration examples', () => {
-  test('a Service root names its Standard Rejections’ package, lists its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
+  test('a Service’s Root names its Standard Rejections’ package, lists its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
     const contract = defineService({
       name: 'orders-service',
       standardRejections: definitions,

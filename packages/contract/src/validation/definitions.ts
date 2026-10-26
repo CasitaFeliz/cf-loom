@@ -9,7 +9,7 @@ import {
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /**
- * A Definitions Package's Root file exports what it shares and nothing else beside its root:
+ * A Definitions Package's Root file exports what it shares and nothing else beside its Root:
  * Guards, Rejections and zod schemas, among them every Guard and Rejection an exported Guard
  * reaches, since Services import them to attach and to reject.
  */

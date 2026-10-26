@@ -20,7 +20,7 @@ describe('standardRejectionsOf', () => {
     });
   });
 
-  test('a root listing no Definitions Package resolves to cf-loom’s defaults', () => {
+  test('a Root listing no Definitions Package resolves to cf-loom’s defaults', () => {
     const contract = defineService({ name: 'orders-service' });
 
     const standards = standardRejectionsOf(contract);

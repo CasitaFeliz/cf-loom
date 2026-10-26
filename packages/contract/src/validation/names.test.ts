@@ -14,7 +14,7 @@ import {
 } from '../index.ts';
 import { type Root, rootNameProblemOf, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }
@@ -420,7 +420,7 @@ describe('validateRoot: Groups', () => {
   });
 });
 
-describe('validateRoot: the root is named as its package', () => {
+describe('validateRoot: the Root is named as its package', () => {
   const roots = [
     ['a Contract', defineService({ name: 'orders-service', groups: [] })],
     ['an Application', defineApplication({ name: 'orders-service', dependencies: [] })],

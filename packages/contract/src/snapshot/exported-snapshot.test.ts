@@ -624,7 +624,7 @@ function eventsSnapshot(): ServiceSnapshot {
   return serviceSnapshotOf(root);
 }
 
-/** The Snapshot of a Service root, the Definitions Packages it lists given resolved. */
+/** The Snapshot of a Service's Root, the Definitions Packages it lists given resolved. */
 function serviceSnapshotOf(
   root: ReturnType<typeof defineService>,
   packages: readonly ResolvedDefinitions[] = [],

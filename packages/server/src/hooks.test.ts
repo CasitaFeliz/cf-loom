@@ -567,7 +567,7 @@ describe('serve: what the hooks receive beside the record', () => {
     expect(answered.map(({ method }) => method)).toEqual(['OPTIONS', 'HEAD']);
   });
 
-  test('a Rejection is recorded with the code its root resolves', async () => {
+  test('a Rejection is recorded with the code its Root resolves', async () => {
     const definitions = defineDefinitions({
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Nothing here' } },
     });
@@ -588,7 +588,7 @@ describe('serve: what the hooks receive beside the record', () => {
     expect(answered[0]?.code).toBe('MISSING');
   });
 
-  test('the invalid-input Rejection is recorded with the code its root resolves', async () => {
+  test('the invalid-input Rejection is recorded with the code its Root resolves', async () => {
     const definitions = defineDefinitions({
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },

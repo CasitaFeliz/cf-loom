@@ -4,7 +4,7 @@ import { aRootPackage } from '../../test/root-package.ts';
 import { defineEndpoint, defineGroup, defineService, type Endpoint } from '../index.ts';
 import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }

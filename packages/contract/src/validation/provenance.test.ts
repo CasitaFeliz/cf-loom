@@ -310,7 +310,7 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     });
   });
 
-  test('a Definitions root re-exporting another package’s Guard writes that package’s origin, and its own Guards stay local', () => {
+  test('a Definitions Package re-exporting another package’s Guard writes that package’s origin, and its own Guards stay local', () => {
     const p2 = aPackage('@p2/defs', { apiKey });
     const own = defineGuard({ name: 'own', description: 'Its own', guards: [apiKey] });
     const root = defineDefinitions({});

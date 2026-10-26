@@ -257,7 +257,7 @@ const pairs = sources.flatMap((first, index) =>
     ),
 );
 
-/** What one drawn source adds to a root: a Rejection its Endpoints list, an installed package, its Standard Rejections. */
+/** What one drawn source adds to a Root: a Rejection its Endpoints list, an installed package, its Standard Rejections. */
 type Added = {
   readonly listed: readonly (Rejection | StandardRejection)[];
   readonly packages: readonly ResolvedDefinitions[];
@@ -293,7 +293,7 @@ function addedBy(source: Source, reached: boolean, code: string): Added {
   }
 }
 
-/** A root where `code` is declared by the sources drawn, each reached or not, with its packages. */
+/** A Root where `code` is declared by the sources drawn, each reached or not, with its packages. */
 function rootWith(drawn: readonly { readonly source: Source; readonly reached: boolean }[]) {
   const code = drawn.some(({ source }) => source === 'default-standard') ? 'NOT_FOUND' : 'TAKEN';
   const added = drawn.map(({ source, reached }) => addedBy(source, reached, code));
@@ -304,7 +304,7 @@ function rootWith(drawn: readonly { readonly source: Source; readonly reached: b
   return { root: aService(endpoints, standardRejections), packages, code };
 }
 
-describe('validateRoot and snapshotOf: a valid root’s Snapshot says what its Endpoints answer', () => {
+describe('validateRoot and snapshotOf: a valid Root’s Snapshot says what its Endpoints answer', () => {
   test.each(pairs)(
     '$first (reached: $firstReached) and $second (reached: $secondReached)',
     ({ first, second, firstReached, secondReached }) => {

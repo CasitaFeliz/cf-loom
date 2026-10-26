@@ -20,7 +20,7 @@ import {
 } from '../index.ts';
 import { type Root, validateRoot, walkSchemas } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
+/** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
   return validateRoot(root, aRootPackage(root));
 }
@@ -132,7 +132,7 @@ describe('validateRoot', () => {
     expect(defs).toEqual({});
   });
 
-  test('a valid Contract carries what it reaches in the root’s order: Endpoints by identity, Guards and codes, Standard Rejections resolved', () => {
+  test('a valid Contract carries what it reaches in the Root’s order: Endpoints by identity, Guards and codes, Standard Rejections resolved', () => {
     const shared = defineGuard({
       name: 'shared',
       description: 'Exported, attached by no Endpoint',
@@ -722,7 +722,7 @@ describe('validateRoot: the README’s examples', () => {
     expect(validated.kind).toBe('valid');
   });
 
-  test('the same root validates to the same result twice', () => {
+  test('the same Root validates to the same result twice', () => {
     const first = validateInPackage(contract);
     const second = validateInPackage(contract);
 

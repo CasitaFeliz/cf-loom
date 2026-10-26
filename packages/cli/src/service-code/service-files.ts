@@ -1,5 +1,5 @@
 import { byCodePoint } from '@cf-loom/contract/internal';
-import type { ExportedAt } from '../loading/index.ts';
+import type { ExportedAt, FileExport } from '../loading/index.ts';
 import {
   defaultImportOf,
   headerOf,
@@ -23,7 +23,7 @@ const rootLocal = 'contract';
 type HandlerMapPlace = {
   readonly file: string;
   readonly readersFile: string;
-  readonly root: { readonly file: string; readonly exported: string };
+  readonly root: FileExport;
 };
 
 /**
@@ -45,8 +45,8 @@ export function handlerMapTextOf(
     specifier: readersSpecifier,
     line: namedImportOf([readersTable], readersSpecifier),
   };
-  const rootSpecifier = relativeSpecifierOf(file, root.file);
-  const rootImport = importSpecifierOf(root.exported, rootLocal);
+  const rootSpecifier = relativeSpecifierOf(file, root.path);
+  const rootImport = importSpecifierOf(root.name, rootLocal);
   const typeImports = [
     { specifier: rootSpecifier, line: typeImportOf([rootImport], rootSpecifier) },
     { specifier: handlersPackage, line: typeImportOf(['HandlerMapOf'], handlersPackage) },

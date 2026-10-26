@@ -118,7 +118,7 @@ describe('validateRoot: Subscriptions', () => {
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event the root does not list fails', () => {
+  test('a Subscription to an Event the Root does not list fails', () => {
     const audit = defineSubscription({
       name: 'auditOrders',
       description: 'Receives it',

@@ -97,12 +97,12 @@ const installedDefinitions: Readonly<Record<string, string>> = {
   ]),
 };
 
-/** A project around a root file. */
+/** A project around a Root file. */
 function aRootProject(root: readonly string[]): Readonly<Record<string, string>> {
   return { ...aContractProject(root), ...installedDefinitions };
 }
 
-/** The imports every fixture root starts with. */
+/** The imports every fixture Root starts with. */
 const rootImports = [
   'import {',
   '  defineService,',
@@ -1343,7 +1343,7 @@ describe('cf-loom openapi: what it refuses', () => {
     expect(refused).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshotLine}\n` });
   });
 
-  test('a root that breaks a rule fails openapi with generate’s lines', () => {
+  test('a Root that breaks a rule fails openapi with generate’s lines', () => {
     const project = aProject({
       ...theService,
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
