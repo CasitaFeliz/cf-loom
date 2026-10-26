@@ -23,8 +23,12 @@ export type DecodedSuccess = {
 /** Who answered a Rejection: the Provider, or the client alone when it refused the Input unsent. */
 export type RejectionSource = 'provider' | 'client';
 
-/** How a Rejection reached the Caller: the status it came with, and who answered it. */
-export type Arrival = { readonly status: number; readonly source: RejectionSource };
+/** How a Rejection reached the Caller: the status and headers it came with, and who answered it. */
+export type Arrival = {
+  readonly status: number;
+  readonly headers: Headers;
+  readonly source: RejectionSource;
+};
 
 /** A Rejection as decoded, before its Endpoint types it: one it answers, its body where its code declares one. */
 export type DecodedRejection = {
@@ -33,6 +37,7 @@ export type DecodedRejection = {
   readonly code: string;
   readonly status: number;
   readonly message: string;
+  readonly headers?: unknown;
   readonly body?: unknown;
 };
 
@@ -67,6 +72,11 @@ type Received<Code, Source extends RejectionSource> = {
   readonly message: string;
 };
 
+/** A declared Rejection's headers, present only where its code declares them. */
+type DeclaredHeadersOf<Answerable> = Answerable extends { readonly headers: infer Headers }
+  ? { readonly headers: Output<Headers> }
+  : Readonly<Record<never, never>>;
+
 /** A declared Rejection's body, present only where its code declares one. */
 type DeclaredBodyOf<Answerable> = Answerable extends { readonly body: infer Body }
   ? { readonly body: Output<Body> }
@@ -92,10 +102,10 @@ type KnownRejectionOf<
 }
   ? StandardRejectionOf<Name, Standards>
   : Answerable extends { readonly kind: 'rejection'; readonly code: infer Code }
-    ? Received<Code, 'provider'> & DeclaredBodyOf<Answerable>
+    ? Received<Code, 'provider'> & DeclaredHeadersOf<Answerable> & DeclaredBodyOf<Answerable>
     : never;
 
-/** The Rejections an Endpoint answers as a Caller receives them, each with the body its code declares. */
+/** The Rejections an Endpoint answers as a Caller receives them, each with the headers and body its code declares. */
 type EndpointRejection<
   Target extends Endpoint,
   Standards extends ProvidedStandardRejections,
@@ -107,7 +117,7 @@ export type ReceivedSuccess<D extends AnyDependency, Name extends ListedName<D>>
 
 /**
  * A Rejection the method `Name` answers, as a Caller receives it: its code, a Standard one the
- * Provider's, the status it arrived with, its message, and its body where its code declares one;
+ * Provider's, the status it arrived with, its message, and its headers and body where its code declares them;
  * `source` is `client` for the invalid-input Rejection the client answered without sending.
  */
 export type ReceivedRejection<D extends AnyDependency, Name extends ListedName<D>> =

@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import {
+  isRejection,
   isStandardRejection,
   type ProvidedStandardRejections,
   type StandardRejections,
@@ -55,4 +56,9 @@ export function rejectionBodyReaderOf(
     return schemaOf(rejection, 'body');
   }
   return rejection.name === 'invalidInput' ? standards.invalidInput.body : undefined;
+}
+
+/** The schema a Rejection's headers are read with: its declared one; a Standard Rejection declares none. */
+export function rejectionHeadersReaderOf(rejection: AnswerableRejection): core.$ZodType | undefined {
+  return isRejection(rejection) ? schemaOf(rejection, 'headers') : undefined;
 }

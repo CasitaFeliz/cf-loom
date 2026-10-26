@@ -8,7 +8,9 @@ import {
   type AnswerableRejection,
   answerableByCodeOf,
   type ExportedSnapshot,
+  exportedCodeOf,
   exportedEntryOf,
+  isRejection,
   type ObjectNode,
 } from '@cf-loom/contract/internal';
 
@@ -33,7 +35,8 @@ export type ListedEndpoint<D extends AnyDependency, Name> = Extract<
 
 /**
  * One listed Endpoint as the client calls it and reads its answers, prepared once: the header
- * names its Input declares, its Success headers' nodes, and its Rejections by their resolved code.
+ * names its Input declares, its Success headers' nodes, its Rejections by their resolved code, and
+ * the headers' nodes of each declared one.
  */
 export type CalledEndpoint = {
   readonly provider: string;
@@ -42,6 +45,7 @@ export type CalledEndpoint = {
   readonly inputHeaderNames: ReadonlySet<string>;
   readonly successHeaders: ObjectNode;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
+  readonly rejectionHeaders: ReadonlyMap<string, ObjectNode>;
   readonly standards: ProvidedStandardRejections;
 };
 
@@ -53,13 +57,28 @@ export function calledEndpointOf(
 ): CalledEndpoint {
   const entry = exportedEntryOf(provider.name, exported, endpoint);
   const standards = provider.standardRejections;
+  const rejectionsByCode = answerableByCodeOf(endpoint, standards);
   return {
     provider: provider.name,
     name: endpoint.name,
     endpoint,
     inputHeaderNames: new Set(Object.keys(entry.input.headers.fields)),
     successHeaders: entry.success.headers,
-    rejectionsByCode: answerableByCodeOf(endpoint, standards),
+    rejectionsByCode,
+    rejectionHeaders: rejectionHeadersOf(provider.name, exported, rejectionsByCode),
     standards,
   };
+}
+
+/** The headers' node of each declared code among the Rejections, from the exported Snapshot; a Standard Rejection has none. */
+function rejectionHeadersOf(
+  provider: string,
+  exported: ExportedSnapshot,
+  rejectionsByCode: ReadonlyMap<string, AnswerableRejection>,
+): ReadonlyMap<string, ObjectNode> {
+  const declared = [...rejectionsByCode].filter(([, rejection]) => isRejection(rejection));
+  const entries = declared.map(([code]): readonly [string, ObjectNode] => {
+    return [code, exportedCodeOf(provider, exported, code).headers];
+  });
+  return new Map(entries);
 }

@@ -114,6 +114,7 @@ export type {
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
+  exportedCodeOf,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,
@@ -252,6 +253,7 @@ export {
   receivedEnvelopeOf,
   receivedHeadersOf,
   rejectionBodyReaderOf,
+  rejectionHeadersReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,
