@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { globalRegistry, safeParse } from 'zod/v4/core';
 import { camelCase, follows } from '../declarations/index.ts';
 import { isJsonValue } from './canonical-json.ts';
-import type { Annotations, NotAllowed, Path, SchemaNode } from './nodes.ts';
+import type { Annotations, NotAllowed, SchemaNode } from './nodes.ts';
 import {
   notAllowed,
   type Refused,
@@ -12,7 +12,7 @@ import {
   refusedMetaKey,
   refusedNonCamelCaseId,
 } from './not-allowed.ts';
-import { failed, failuresOf, refusedBeside, type Walked, walked } from './walked.ts';
+import { failed, failuresOf, type Reached, refusedBeside, type Walked, walked } from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };
@@ -23,7 +23,7 @@ const allowedKeys: ReadonlySet<string> = new Set(['description', 'examples', 'id
  * The schema's own metadata, as its `.meta()` returns it, so zod and `zod/mini` read alike;
  * any key but `description`, `examples` and `id` fails.
  */
-export function metadataOf(schema: core.$ZodType, at: Path): Walked<Metadata> {
+export function metadataOf(schema: core.$ZodType, at: Reached): Walked<Metadata> {
   const meta = ownMetaOf(schema);
   const failures = metaFailures(meta, at);
   if (failures.length > 0) {
@@ -65,7 +65,7 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
  * A walked node whose examples its own schema accepts, each parsed by that schema; a schema that
  * failed to walk is never parsed, so no function of the author's runs.
  */
-export function withExamplesParsed(schema: core.$ZodType, result: Walked, at: Path): Walked {
+export function withExamplesParsed(schema: core.$ZodType, result: Walked, at: Reached): Walked {
   if (result.kind === 'not-allowed') {
     return result;
   }
@@ -81,7 +81,7 @@ function ownMetaOf(schema: core.$ZodType): Readonly<Record<string, unknown>> {
   return globalRegistry.get(schema) ?? {};
 }
 
-function metaFailures(meta: Readonly<Record<string, unknown>>, at: Path): readonly NotAllowed[] {
+function metaFailures(meta: Readonly<Record<string, unknown>>, at: Reached): readonly NotAllowed[] {
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
   const keyRefusals = unknownKeys.map(refusedMetaKey);

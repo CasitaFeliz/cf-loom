@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { defineEndpoint, defineEvent, defineGroup, defineService, openEnum } from '../index.ts';
 import { validateRoot } from '../internal/index.ts';
@@ -17,7 +18,7 @@ function validatedWithBody(body: core.$ZodType) {
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
   const root = defineService({ name: 'shapes-service', groups: [group] });
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 /** Validates a Contract whose one Endpoint takes the body given as its Input. */
@@ -33,7 +34,7 @@ function validatedWithInputBody(body: core.$ZodType) {
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo] });
   const root = defineService({ name: 'shapes-service', groups: [group] });
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 /** Validates a Contract whose one Event carries the body given. */
@@ -47,16 +48,17 @@ function validatedWithMessageBody(body: core.$ZodType) {
   });
   const group = defineGroup({ name: 'shapes', description: 'Shapes', events: [shaped] });
   const root = defineService({ name: 'shapes-service', groups: [group] });
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const refusal = {
   kind: 'not-allowed',
   construct: 'an intersection that is not of open objects reaching an openEnum()',
   instead: '.extend()',
+  alsoIn: [],
 };
 
-const bodyAt = ['groups', 'shapes', 'endpoints', 'GET /echo', 'success', 'body'];
+const bodyAt = 'endpoints.GET /echo (echo) success.body';
 
 describe('validateRoot: an intersection reaching an Open Enum', () => {
   test('an intersection of an object and a discriminated union is allowed', () => {
@@ -78,7 +80,7 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [{ ...refusal, at: [...bodyAt, 'fields', 'both'] }],
+      failures: [{ ...refusal, location: `${bodyAt}.both` }],
     });
   });
 
@@ -95,10 +97,10 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
+    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, location: bodyAt }] });
   });
 
-  test('an intersection inside a recursive def is not allowed once, where the def is', () => {
+  test('an intersection inside a recursive def is not allowed once, at the first place that reaches it', () => {
     const tree = z
       .object({
         both: z.intersection(z.object({ status: openEnum(['a']) }), z.record(z.string(), z.json())),
@@ -113,7 +115,7 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [{ ...refusal, at: ['defs', 'tree', 'fields', 'both'] }],
+      failures: [{ ...refusal, location: `${bodyAt}.first.both` }],
     });
   });
 
@@ -122,21 +124,38 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
       'an intersection',
       (inner: core.$ZodType) =>
         z.intersection(inner, z.union([z.object({ c: z.string() }), z.object({ d: z.string() })])),
+      [
+        ['union', '[0][0]'],
+        ['intersection', '[0]'],
+        ['intersection', ''],
+      ],
     ],
     [
       'a union in an intersection',
       (inner: core.$ZodType) =>
         z.intersection(z.union([inner, z.object({ e: z.string() })]), z.object({ f: z.string() })),
+      [
+        ['union', '[0]<|0>[0]'],
+        ['intersection', '[0]<|0>'],
+        ['union', '[0]'],
+        ['intersection', ''],
+      ],
     ],
   ])(
-    'an intersection reaching an Open Enum inside %s is reported once, at the outer one',
-    (_outer, outerOf) => {
+    'an intersection reaching an Open Enum inside %s is reported at every depth that reaches it',
+    (_outer, outerOf, inside) => {
       const options = z.union([z.object({ s: openEnum(['a']) }), z.object({ t: z.string() })]);
       const inner = z.intersection(options, z.object({ b: z.string() }));
 
       const validated = validatedWithBody(outerOf(inner));
 
-      expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
+      expect(validated).toEqual({
+        kind: 'invalid',
+        failures: inside.map(([kind, at]) => ({
+          ...(kind === 'union' ? unionRefusal : refusal),
+          location: `${bodyAt}${at}`,
+        })),
+      });
     },
   );
 
@@ -152,8 +171,10 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
-        { ...refusal, at: [...bodyAt, 'fields', 'a'] },
-        { ...refusal, at: [...bodyAt, 'fields', 'b'] },
+        { ...unionRefusal, location: `${bodyAt}.a[0]` },
+        { ...refusal, location: `${bodyAt}.a` },
+        { ...unionRefusal, location: `${bodyAt}.b[0]` },
+        { ...refusal, location: `${bodyAt}.b` },
       ],
     });
   });
@@ -170,13 +191,15 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
-        { ...refusal, at: [...bodyAt, 'fields', 'a'] },
-        { ...refusal, at: [...bodyAt, 'fields', 'b', 'fields', 'c'] },
+        { ...unionRefusal, location: `${bodyAt}.a[0]` },
+        { ...refusal, location: `${bodyAt}.a` },
+        { ...unionRefusal, location: `${bodyAt}.b.c[0]` },
+        { ...refusal, location: `${bodyAt}.b.c` },
       ],
     });
   });
 
-  test('an intersection in a def is judged even when the schema using it fails the walk', () => {
+  test('an intersection in a def is judged where it is used even when the schema using it fails the walk', () => {
     const tree = z
       .object({
         x: z.intersection(
@@ -193,8 +216,9 @@ describe('validateRoot: an intersection reaching an Open Enum', () => {
 
     expect(validated.kind === 'invalid' ? validated.failures : []).toEqual(
       expect.arrayContaining([
-        { ...refusal, at: ['defs', 'tree', 'fields', 'x'] },
-        expect.objectContaining({ at: [...bodyAt, 'fields', 'bad'] }),
+        { ...refusal, location: `${bodyAt}.t.x` },
+        { ...unionRefusal, location: `${bodyAt}.t.x[0]` },
+        expect.objectContaining({ location: `${bodyAt}.bad` }),
       ]),
     );
   });
@@ -223,9 +247,10 @@ const unionRefusal = {
   kind: 'not-allowed',
   construct: 'a z.union() reaching an openEnum()',
   instead: 'z.discriminatedUnion(), or one openEnum() of all the values',
+  alsoIn: [],
 };
 
-const inputBodyAt = ['groups', 'shapes', 'endpoints', 'POST /echo', 'input', 'body'];
+const inputBodyAt = 'endpoints.POST /echo (echo) input.body';
 
 describe('validateRoot: a plain union reaching an Open Enum', () => {
   test('an Open Enum option of a union is not allowed, at the union', () => {
@@ -233,15 +258,19 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...unionRefusal, at: bodyAt }] });
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...unionRefusal, location: bodyAt }],
+    });
   });
 
   test.each([
     [
       'an object option',
       z.union([z.object({ t: openEnum(['a']) }), z.object({ t: z.literal('b') })]),
+      [''],
     ],
-    ['an array option', z.union([z.array(openEnum(['a'])), z.string()])],
+    ['an array option', z.union([z.array(openEnum(['a'])), z.string()]), ['']],
     [
       'a discriminated union option',
       z.union([
@@ -251,12 +280,16 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
         ]),
         z.string(),
       ]),
+      [''],
     ],
-    ['a union option', z.union([z.union([openEnum(['a']), z.number()]), z.string()])],
-  ])('an Open Enum inside %s is reported once, at the outer union', (_place, body) => {
+    ['a union option', z.union([z.union([openEnum(['a']), z.number()]), z.string()]), ['<|0>', '']],
+  ])('an Open Enum inside %s is reported at every union that reaches it', (_place, body, at) => {
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...unionRefusal, at: bodyAt }] });
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: at.map((steps) => ({ ...unionRefusal, location: `${bodyAt}${steps}` })),
+    });
   });
 
   test('a union reaching an Open Enum through a recursive def is not allowed, at the union', () => {
@@ -272,10 +305,13 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...unionRefusal, at: bodyAt }] });
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...unionRefusal, location: bodyAt }],
+    });
   });
 
-  test('a union inside a recursive def is not allowed once, where the def is', () => {
+  test('a union inside a recursive def is not allowed once, at the first place that reaches it', () => {
     const tree = z
       .object({
         either: z.union([z.object({ status: openEnum(['a']) }), z.string()]),
@@ -290,26 +326,38 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [{ ...unionRefusal, at: ['defs', 'tree', 'fields', 'either'] }],
+      failures: [{ ...unionRefusal, location: `${bodyAt}.first.either` }],
     });
   });
 
-  test('a union inside an intersection is reported as the intersection', () => {
+  test('a union inside an intersection is reported with the intersection', () => {
     const either = z.union([z.object({ s: openEnum(['a']) }), z.object({ t: z.string() })]);
     const body = z.intersection(either, z.object({ b: z.string() }));
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at: bodyAt }] });
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: `${bodyAt}[0]` },
+        { ...refusal, location: bodyAt },
+      ],
+    });
   });
 
-  test('an intersection inside a union is reported as the union', () => {
+  test('an intersection inside a union is reported with the union', () => {
     const both = z.intersection(z.object({ s: openEnum(['a']) }), z.record(z.string(), z.json()));
     const body = z.union([both, z.object({ e: z.string() })]);
 
     const validated = validatedWithBody(body);
 
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...unionRefusal, at: bodyAt }] });
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...refusal, location: `${bodyAt}<|0>` },
+        { ...unionRefusal, location: bodyAt },
+      ],
+    });
   });
 
   test('two separate unions reaching an Open Enum are each reported', () => {
@@ -320,8 +368,8 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
-        { ...unionRefusal, at: [...bodyAt, 'fields', 'a'] },
-        { ...unionRefusal, at: [...bodyAt, 'fields', 'b'] },
+        { ...unionRefusal, location: `${bodyAt}.a` },
+        { ...unionRefusal, location: `${bodyAt}.b` },
       ],
     });
   });
@@ -333,7 +381,7 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
 
     expect(validated).toEqual({
       kind: 'invalid',
-      failures: [{ ...unionRefusal, at: inputBodyAt }],
+      failures: [{ ...unionRefusal, location: inputBodyAt }],
     });
   });
 
@@ -347,7 +395,7 @@ describe('validateRoot: a plain union reaching an Open Enum', () => {
       failures: [
         {
           ...unionRefusal,
-          at: ['groups', 'shapes', 'events', 'Shaped@1', 'body', 'fields', 'choice'],
+          location: 'events.Shaped@1 body.choice',
         },
       ],
     });

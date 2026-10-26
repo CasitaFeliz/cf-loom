@@ -2,7 +2,6 @@ import { z } from 'zod';
 import type { $ZodIssue } from 'zod/v4/core';
 import type { Path } from '../walker/index.ts';
 import { isAbsentAt } from '../written/index.ts';
-import { locationOf } from './failures.ts';
 import { issueWordsOf } from './issue-words.ts';
 
 /** One place where a decoded value breaks what its definition promises, and what it breaks. */
@@ -45,4 +44,9 @@ export function readWith<Schema extends z.core.$ZodType>(
 /** A problem on one line, where it sits first, as every tool that reports a decoded value words it. */
 export function problemLineOf(problem: Problem): string {
   return `${locationOf(problem.at)} ${problem.reason}`;
+}
+
+/** Where a decoded value breaks its definition, its keys joined by dots, `(root)` for none. */
+function locationOf(at: Path): string {
+  return at.length === 0 ? '(root)' : at.join('.');
 }

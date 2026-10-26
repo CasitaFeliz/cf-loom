@@ -1,4 +1,6 @@
+import type * as core from 'zod/v4/core';
 import type { StringFormat } from './format-schemas.ts';
+import type { Place } from './location.ts';
 
 /** Where a schema sits in the Snapshot, so a failure points at what the author wrote. */
 export type Path = readonly (string | number)[];
@@ -129,10 +131,15 @@ export type SchemaNode =
   | JsonNode
   | RefNode;
 
-/** A zod construct no node or check maps, where it was written, and what to use instead. */
-export type NotAllowed = {
+/**
+ * A zod construct no node or check maps, where it was written, and what to use instead, with the
+ * schema it sits in, so a construct reached from many places is told once, and the origin of the
+ * Definitions Package that declares that schema, or the nearest one around it.
+ */
+export type NotAllowed = Place & {
   readonly kind: 'not-allowed';
-  readonly at: Path;
   readonly construct: string;
   readonly instead?: string;
+  readonly schema: core.$ZodType;
+  readonly origin: Origin | undefined;
 };

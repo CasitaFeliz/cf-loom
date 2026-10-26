@@ -14,6 +14,7 @@ import {
   kebabCaseOf,
   type Root,
   type RootPackage,
+  type Site,
   validateRoot,
 } from '../internal/index.ts';
 
@@ -48,32 +49,35 @@ function isNameGrammar(broken: Failure): boolean {
   return broken.kind === 'declaration' && broken.rule === 'name-grammar';
 }
 
-/** The names whose `name-grammar` failure sits at `nameAt` of the location, a Message Version's `@1` cut. */
-function failingNames(
-  root: Root,
-  given: Partial<RootPackage>,
-  nameAt: number,
-): ReadonlySet<string> {
+/** The name a Guard or an Event sits at, an Event's Message Version `@1` cut. */
+function nameAt(site: Site): string {
+  if (site.kind === 'guard') {
+    return site.name;
+  }
+  if (site.kind === 'event') {
+    return site.identity.replace(/@1$/, '');
+  }
+  throw new Error(`a ${site.kind} site holds no name under test`);
+}
+
+/** The names whose `name-grammar` failure sits at their Guard or Event. */
+function failingNames(root: Root, given: Partial<RootPackage>): ReadonlySet<string> {
   const validated = validateRoot(root, aRootPackage(root, given));
   const failures = validated.kind === 'invalid' ? validated.failures : [];
   const grammar = failures.filter((broken) => isNameGrammar(broken));
-  return new Set(grammar.map(({ at }) => String(at[nameAt]).replace(/@1$/, '')));
+  return new Set(grammar.map(({ site }) => nameAt(site)));
 }
 
 /** The Guard names, out of the candidates, that the name grammar refuses. */
 const guardsPackage = defineDefinitions({});
-const refusedElementNames = failingNames(
-  guardsPackage,
-  {
-    rootExports: Object.fromEntries(
-      candidates.map((name, index) => [
-        `guard${index}`,
-        defineGuard({ name, description: 'A guard' }),
-      ]),
-    ),
-  },
-  1,
-);
+const refusedElementNames = failingNames(guardsPackage, {
+  rootExports: Object.fromEntries(
+    candidates.map((name, index) => [
+      `guard${index}`,
+      defineGuard({ name, description: 'A guard' }),
+    ]),
+  ),
+});
 
 /** The Message names, out of the candidates, that the name grammar refuses. */
 const refusedMessageNames = failingNames(
@@ -96,7 +100,6 @@ const refusedMessageNames = failingNames(
     ],
   }),
   { packageName: 'orders-service' },
-  3,
 );
 
 const elementNames = candidates.filter((name) => !refusedElementNames.has(name));

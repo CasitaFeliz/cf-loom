@@ -2,6 +2,7 @@ import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
+import { summarized } from '../../test/failures.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
@@ -18,11 +19,21 @@ import {
   openEnum,
   providedEndpoint,
 } from '../index.ts';
-import { type Root, validateRoot, walkSchemas } from '../internal/index.ts';
+import { type Root, type Site, validateRoot, walkSchemas } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
+}
+
+/** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
+function aPlace(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
+/** Where a declaration sits: at its site, with the declaration itself and no steps. */
+function sitting(site: Site, declaration: unknown) {
+  return { site, declaration, steps: [] };
 }
 
 function noOrigin() {
@@ -112,17 +123,11 @@ describe('validateRoot', () => {
   test('a valid Contract finds the walked node of each declaration’s part', () => {
     const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
     const located = [
-      {
-        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'],
-        schema: getOrder.input.params,
-      },
-      {
-        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'success', 'body'],
-        schema: getOrder.success.body,
-      },
-      { at: ['guards', 'apiKey', 'demands', 'headers'], schema: apiKey.demands.headers },
-      { at: ['guards', 'apiKey', 'context'], schema: apiKey.context },
-      { at: ['rejections', 'ORDER_LOCKED', 'body'], schema: orderLocked.body },
+      { at: aPlace('params'), schema: getOrder.input.params },
+      { at: aPlace('body'), schema: getOrder.success.body },
+      { at: aPlace('headers'), schema: apiKey.demands.headers },
+      { at: aPlace('context'), schema: apiKey.context },
+      { at: aPlace('lockedBody'), schema: orderLocked.body },
     ];
     const walked = walkSchemas(located, noOrigin);
 
@@ -161,25 +166,27 @@ describe('validateRoot', () => {
       root: contract,
       packageName: 'orders-service',
       ownMembers: undefined,
-      groups: [{ at: ['groups', 'orders'], group: ordersGroup }],
+      groups: [{ at: sitting({ kind: 'group', name: 'orders' }, ordersGroup), group: ordersGroup }],
       endpoints: [
         {
-          at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],
+          at: sitting({ kind: 'endpoint', identity: 'GET /orders/{}', name: 'getOrder' }, getOrder),
           endpoint: getOrder,
           group: ordersGroup,
         },
       ],
-      guards: [{ at: ['guards', 'apiKey'], guard: apiKey, from: installed }],
+      guards: [
+        { at: sitting({ kind: 'guard', name: 'apiKey' }, apiKey), guard: apiKey, from: installed },
+      ],
       codes: [
         {
           code: 'UNAUTHENTICATED',
-          at: ['rejections', 'UNAUTHENTICATED'],
+          at: sitting({ kind: 'code', code: 'UNAUTHENTICATED' }, unauthenticated),
           rejection: unauthenticated,
           from: undefined,
         },
         {
           code: 'ORDER_LOCKED',
-          at: ['rejections', 'ORDER_LOCKED'],
+          at: sitting({ kind: 'code', code: 'ORDER_LOCKED' }, orderLocked),
           rejection: orderLocked,
           from: undefined,
         },
@@ -187,7 +194,7 @@ describe('validateRoot', () => {
       standardRejections: [
         {
           name: 'invalidInput',
-          at: ['standardRejections', 'standardRejections', 'invalidInput'],
+          at: sitting({ kind: 'standard-rejection', name: 'invalidInput' }, definitions),
           code: 'INVALID_INPUT',
           status: 400,
           message: 'Invalid input',
@@ -195,19 +202,19 @@ describe('validateRoot', () => {
         },
         {
           name: 'notFound',
-          at: ['standardRejections', 'standardRejections', 'notFound'],
+          at: sitting({ kind: 'standard-rejection', name: 'notFound' }, definitions),
           code: 'MISSING',
           status: 404,
           message: 'Missing',
           declared: {
-            at: ['standardRejections', 'standardRejections', 'notFound'],
+            at: sitting({ kind: 'standard-rejection', name: 'notFound' }, definitions),
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
           },
         },
         {
           name: 'notImplemented',
-          at: ['standardRejections', 'standardRejections', 'notImplemented'],
+          at: sitting({ kind: 'standard-rejection', name: 'notImplemented' }, definitions),
           code: 'NOT_IMPLEMENTED',
           status: 501,
           message: 'Not implemented',
@@ -250,8 +257,8 @@ describe('validateRoot', () => {
       endpoints: [],
       guards: [{ guard: apiKey }],
       codes: [
-        { code: 'ORDER_LOCKED', rejection: orderLocked },
         { code: 'UNAUTHENTICATED', rejection: unauthenticated },
+        { code: 'ORDER_LOCKED', rejection: orderLocked },
       ],
     });
   });
@@ -294,7 +301,7 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -327,7 +334,7 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -358,7 +365,7 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'quota', 'qualifier'],
+          location: 'guards.quota qualifier',
           rule: 'not-a-schema',
           message: 'qualifier is not a zod schema',
         },
@@ -411,7 +418,7 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'quota', 'qualifier'],
+          location: 'guards.quota qualifier',
           rule: 'not-a-schema',
           message: 'qualifier is not a zod schema',
         },
@@ -435,19 +442,18 @@ describe('validateRoot', () => {
       defineService({ name: 'orders-service', groups: [orders] }),
     );
 
-    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: [...endpointAt, 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
         {
           kind: 'declaration',
-          at: [...endpointAt, 'success', 'body'],
+          location: 'endpoints.POST /orders (createOrder) success.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -459,10 +465,10 @@ describe('validateRoot', () => {
     const money = z.object({ amount: z.int(), currency: z.string() });
     const definitions = defineDefinitions({});
     const located = [
-      { at: ['guards', 'apiKey', 'demands', 'headers'], schema: apiKey.demands.headers },
-      { at: ['guards', 'apiKey', 'context'], schema: apiKey.context },
-      { at: ['rejections', 'ORDER_LOCKED', 'body'], schema: orderLocked.body },
-      { at: ['exports', 'money'], schema: money },
+      { at: aPlace('headers'), schema: apiKey.demands.headers },
+      { at: aPlace('context'), schema: apiKey.context },
+      { at: aPlace('lockedBody'), schema: orderLocked.body },
+      { at: aPlace('money'), schema: money },
     ];
     const walked = walkSchemas(located, noOrigin);
     const rootExports = { apiKey, money, unauthenticated, orderLocked };
@@ -501,18 +507,11 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'not-allowed',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'POST /orders',
-            'input',
-            'body',
-            'fields',
-            'placedAt',
-          ],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });
@@ -538,21 +537,22 @@ describe('validateRoot', () => {
       defineService({ name: 'orders-service', groups: [orders] }),
     );
 
-    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
+          location: 'endpoints.POST /orders (createOrder) input.headers.x-tenant',
           rule: 'not-text',
           message: 'A header travels as text: a string, number, boolean, literal or enum: x-tenant',
         },
         {
           kind: 'not-allowed',
-          at: [...endpointAt, 'input', 'body', 'fields', 'placedAt'],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });
@@ -581,24 +581,17 @@ describe('validateRoot', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'path'],
+          location: 'endpoints.POST /orders (createOrder) path',
           rule: 'canonical-path',
-          message: 'A path has no trailing slash: /orders/',
+          message: 'A path has no trailing slash: "/orders/"',
         },
         {
           kind: 'not-allowed',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'POST /orders',
-            'input',
-            'body',
-            'fields',
-            'placedAt',
-          ],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });

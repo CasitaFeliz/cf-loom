@@ -1,8 +1,8 @@
 export { oneOf } from './closed-values.ts';
 export { isContractPackage } from './dependencies.ts';
 export { exportNamesOf } from './export-names.ts';
-export type { Failure } from './failures.ts';
-export { failureLineOf, locationOf } from './failures.ts';
+export type { Failure, NotAllowedFailure } from './failures.ts';
+export { failureLineOf } from './failures.ts';
 export { rootNameProblemOf } from './name-grammars.ts';
 export type { Problem, Read } from './problem.ts';
 export { problemLineOf, readWith } from './problem.ts';

@@ -1,5 +1,12 @@
 import { reservedHeaderNames } from '../declarations/index.ts';
-import { type ObjectNode, type Path, type SchemaNode, shapeKey } from '../walker/index.ts';
+import {
+  inFields,
+  type ObjectNode,
+  type Place,
+  placeNameOf,
+  type SchemaNode,
+  shapeKey,
+} from '../walker/index.ts';
 import {
   attachedGuardsOf,
   isObjectPart,
@@ -59,7 +66,7 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
     return [];
   }
   const { at, node } = slot;
-  const name = textOf(at.at(-1));
+  const name = placeNameOf(at);
   if (node.type !== 'object') {
     return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
   }
@@ -75,12 +82,12 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
 /** A lower-case RFC 9110 token: the only header names a Contract declares. */
 const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 
-function headerNameFailures(at: Path, part: TextIn, name: string): readonly DeclarationFailure[] {
+function headerNameFailures(at: Place, part: TextIn, name: string): readonly DeclarationFailure[] {
   if (part !== 'headers') {
     return [];
   }
   const message = headerNameMessageOf(name);
-  return message === undefined ? [] : [failure([...at, 'fields', name], 'header-names', message)];
+  return message === undefined ? [] : [failure(inFields(at, name), 'header-names', message)];
 }
 
 /** What is wrong with a header name: its case, its characters, or a name the host owns. */
@@ -98,11 +105,11 @@ function headerNameMessageOf(name: string): string | undefined {
 }
 
 function fieldFailures(
-  { at, part }: { readonly at: Path; readonly part: TextIn },
+  { at, part }: { readonly at: Place; readonly part: TextIn },
   name: string,
   schema: SchemaNode,
 ): readonly DeclarationFailure[] {
-  const fieldAt = [...at, 'fields', name];
+  const fieldAt = inFields(at, name);
   const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
   if (schema.nullable === true || items.nullable === true) {
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
@@ -117,7 +124,7 @@ function fieldFailures(
 
 function partConflicts(
   sources: readonly { readonly owner: string; readonly node: SchemaNode | undefined }[],
-  { at, part }: { readonly at: Path; readonly part: 'headers' | 'query' },
+  { at, part }: { readonly at: Place; readonly part: 'headers' | 'query' },
 ): readonly DeclarationFailure[] {
   const declaredByName = new Map<string, Declared>();
   const failures: DeclarationFailure[] = [];

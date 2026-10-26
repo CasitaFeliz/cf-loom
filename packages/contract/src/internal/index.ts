@@ -17,7 +17,6 @@ export type {
   PeerRanges,
   Position,
   ShapeDifference,
-  Step,
   Verdict,
 } from '../compatibility/index.ts';
 export {
@@ -25,7 +24,6 @@ export {
   firstPublishChangesOf,
   peerMovesOf,
   publishedSnapshotOf,
-  snapshotPathOf,
   versionBumpOf,
   zodPeerRange,
 } from '../compatibility/index.ts';
@@ -163,7 +161,6 @@ export {
   failureLineOf,
   identityLineOf,
   isContractPackage,
-  locationOf,
   noVersionLineOf,
   oneOf,
   packageLabelOf,
@@ -186,17 +183,23 @@ export type {
   PipeRefusals,
   RefNode,
   SchemaNode,
+  Site,
+  Step,
   StringFormat,
   StringNode,
   TaggedNode,
   TupleNode,
 } from '../walker/index.ts';
 export {
+  authorPathOf,
   byCodePoint,
   hashPartsOf,
   isHashFormat,
   isJsonValue,
   reachedDefsOf,
+  siteTextOf,
+  snapshotPathOf,
+  tokenOf,
   walkSchemas,
 } from '../walker/index.ts';
 export type {

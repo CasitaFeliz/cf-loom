@@ -1,72 +1,80 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { walkSchemas } from '../internal/index.ts';
+import { refusalsOf } from '../../test/failures.ts';
+import { type Step, walkSchemas } from '../internal/index.ts';
+
+/** The steps down the named parts of an Endpoint, as the Check names them. */
+function partsOf(...names: readonly ('input' | 'success' | 'body')[]): readonly Step[] {
+  return names.map((name) => ({ kind: 'part', name }));
+}
 
 function noOrigin() {
   return undefined;
 }
 
-function walkedAt(at: readonly (string | number)[], value: unknown) {
-  return { at, walked: { kind: 'walked', value } };
+function exportAt(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
+function endpointAt(identity: string, name: string, steps: readonly Step[]) {
+  const site = { kind: 'endpoint', identity, name } as const;
+  return { site, declaration: undefined, steps };
+}
+
+function walkedAs(value: unknown) {
+  return { kind: 'walked', value };
 }
 
 describe('walkSchemas', () => {
   test('every location walks on its own: one that fails hides nothing of the others', () => {
     const order = z.object({ placedAt: z.date(), tags: z.array(z.string().trim()) });
-    const inputAt = ['endpoints', 'POST /orders', 'input', 'body'];
-    const successAt = ['endpoints', 'POST /orders', 'success', 'body'];
+    const inputAt = endpointAt('POST /orders', 'createOrder', partsOf('input', 'body'));
+    const successAt = endpointAt('POST /orders', 'createOrder', partsOf('success', 'body'));
+    const listedAt = endpointAt('GET /orders', 'listOrders', partsOf('success', 'body'));
 
     const walked = walkSchemas(
       [
         { at: inputAt, schema: order },
         { at: successAt, schema: z.any() },
-        { at: ['endpoints', 'GET /orders', 'success', 'body'], schema: z.array(z.uuid()) },
+        { at: listedAt, schema: z.array(z.uuid()) },
       ],
       noOrigin,
     );
 
-    expect(walked).toEqual({
+    expect(refusalsOf(walked)).toEqual({
       located: [
         {
-          at: inputAt,
-          walked: {
-            kind: 'not-allowed',
-            failures: [
-              {
-                kind: 'not-allowed',
-                at: [...inputAt, 'fields', 'placedAt'],
-                construct: 'z.date()',
-                instead: 'z.iso.datetime()',
-              },
-              {
-                kind: 'not-allowed',
-                at: [...inputAt, 'fields', 'tags', 'items'],
-                construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()',
-              },
-            ],
-          },
+          kind: 'not-allowed',
+          failures: [
+            {
+              kind: 'not-allowed',
+              at: 'input.body.placedAt',
+              construct: 'z.date()',
+              instead: 'z.iso.datetime()',
+            },
+            {
+              kind: 'not-allowed',
+              at: 'input.body.tags[]',
+              construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()',
+            },
+          ],
         },
         {
-          at: successAt,
-          walked: {
-            kind: 'not-allowed',
-            failures: [
-              {
-                kind: 'not-allowed',
-                at: successAt,
-                construct: 'z.any()',
-                instead: 'z.record() or z.json()',
-              },
-            ],
-          },
+          kind: 'not-allowed',
+          failures: [
+            {
+              kind: 'not-allowed',
+              at: 'success.body',
+              construct: 'z.any()',
+              instead: 'z.record() or z.json()',
+            },
+          ],
         },
-        walkedAt(['endpoints', 'GET /orders', 'success', 'body'], {
-          type: 'array',
-          items: { type: 'string', format: 'uuid' },
-        }),
+        walkedAs({ type: 'array', items: { type: 'string', format: 'uuid' } }),
       ],
       defs: {},
     });
+    expect(walked.located.map(({ at }) => at)).toEqual([inputAt, successAt, listedAt]);
   });
 
   test('the same schema at two locations walks to equal nodes', () => {
@@ -74,8 +82,8 @@ describe('walkSchemas', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['body'], schema: money },
-        { at: ['success'], schema: money },
+        { at: exportAt('body'), schema: money },
+        { at: exportAt('success'), schema: money },
       ],
       noOrigin,
     );
@@ -87,8 +95,8 @@ describe('walkSchemas', () => {
         currency: { required: true, schema: { type: 'enum', values: ['eur', 'usd'], open: false } },
       },
     };
-    expect(walked).toEqual({
-      located: [walkedAt(['body'], moneyNode), walkedAt(['success'], moneyNode)],
+    expect(refusalsOf(walked)).toEqual({
+      located: [walkedAs(moneyNode), walkedAs(moneyNode)],
       defs: {},
     });
   });
@@ -99,16 +107,16 @@ describe('walkSchemas', () => {
 
     const walked = walkSchemas(
       [
-        { at: ['status'], schema: status },
-        { at: ['code'], schema: code },
+        { at: exportAt('status'), schema: status },
+        { at: exportAt('code'), schema: code },
       ],
       noOrigin,
     );
 
-    expect(walked).toEqual({
+    expect(refusalsOf(walked)).toEqual({
       located: [
-        walkedAt(['status'], { type: 'enum', values: ['paid', 'pending', 'shipped'], open: false }),
-        walkedAt(['code'], {
+        walkedAs({ type: 'enum', values: ['paid', 'pending', 'shipped'], open: false }),
+        walkedAs({
           type: 'allOf',
           items: [
             { type: 'string', max: 8 },
@@ -125,7 +133,7 @@ describe('walkSchemas', () => {
     const [check] = name._zod.def.checks ?? [];
     Reflect.deleteProperty(check?._zod ?? {}, 'constr');
 
-    expect(() => walkSchemas([{ at: ['body'], schema: name }], noOrigin)).toThrow(
+    expect(() => walkSchemas([{ at: exportAt('body'), schema: name }], noOrigin)).toThrow(
       /newer than cf-loom supports/,
     );
   });

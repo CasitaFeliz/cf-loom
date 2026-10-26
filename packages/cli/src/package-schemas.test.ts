@@ -280,14 +280,17 @@ function read(value: unknown): Parsed {
   return echo.success.body.safeParse(value);
 }
 
+/** Where the walk is told a schema sits: a body of no declaration. */
+const bodyPlace = { site: { kind: 'root' }, declaration: undefined, steps: [] } as const;
+
 /** The node a schema walks back to, so a test compares it with the Snapshot's. */
 function walkedOf(schema: core.$ZodType): unknown {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined).located[0]?.walked;
+  return walkSchemas([{ at: bodyPlace, schema }], () => undefined).located[0]?.walked;
 }
 
 describe('cf-loom package: the schemas it writes', () => {
   test('the Input schema walks back to the Snapshot’s node and defs', () => {
-    const walked = walkSchemas([{ at: ['body'], schema: echo.input.body }], () => undefined);
+    const walked = walkSchemas([{ at: bodyPlace, schema: echo.input.body }], () => undefined);
 
     expect(walked.located[0]?.walked).toEqual({
       kind: 'walked',

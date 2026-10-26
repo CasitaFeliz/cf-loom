@@ -1,8 +1,9 @@
 import type * as core from 'zod/v4/core';
-import type { Field, NotAllowed, Path, SchemaNode } from './nodes.ts';
+import type { Place } from './location.ts';
+import type { AllOfNode, Field, NotAllowed, Origin, SchemaNode, UnionNode } from './nodes.ts';
 
 /** A schema of a Snapshot, and where it sits in it. */
-export type LocatedSchema = { readonly at: Path; readonly schema: core.$ZodType };
+export type LocatedSchema = { readonly at: Place; readonly schema: core.$ZodType };
 
 /** Every construct that is not allowed in a schema: a failed walk names at least one. */
 export type Failures = readonly [NotAllowed, ...NotAllowed[]];
@@ -27,10 +28,43 @@ export type Walked<Value = SchemaNode> =
   | { readonly kind: 'walked'; readonly value: Value }
   | Failed;
 
+/**
+ * Where the walk is: a place, the schema being walked there and the nearest origin of a
+ * Definitions Package around it, which a refusal there tells.
+ */
+export type Reached = Place & {
+  readonly schema: core.$ZodType;
+  readonly origin: Origin | undefined;
+};
+
+/** A place under a schema being walked, which passes its origin down to the schema entered there. */
+export type Under = Place & { readonly origin?: Origin | undefined };
+
+/** A schema the walk enters and the place it enters it at. */
+export type ReachedSchema = { readonly at: Reached; readonly schema: core.$ZodType };
+
+/**
+ * An `allOf` or a `union` node a walk built, and the refusal it is where it was built if the defs,
+ * once known, show it reaches an Open Enum.
+ */
+export type Composition = { readonly refusal: NotAllowed; readonly node: AllOfNode | UnionNode };
+
+/** One place a schema the walk remembers is entered, inside the walk of another remembered schema or of none. */
+export type Reach = { readonly at: Reached; within: Memo | undefined };
+
+/**
+ * A schema the walk entered once and answers from memory after: a def, a def that failed or a
+ * member of a cycle no id names. Where the walk entered it, and every place it is reached, that
+ * first place included; what was raised inside it sits under that first place.
+ */
+export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
+
 /** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
 export type Walker = {
-  readonly schema: (schema: core.$ZodType, at: Path) => Walked;
-  readonly field: (schema: core.$ZodType, at: Path) => Walked<Field>;
+  readonly schema: (schema: core.$ZodType, at: Under) => Walked;
+  readonly field: (schema: core.$ZodType, at: Under) => Walked<Field>;
+  /** The place a schema is entered at, which a refusal raised at the schema tells. */
+  readonly reach: (schema: core.$ZodType, at: Under) => Reached;
 };
 
 /** A walked value, as the walk of a schema returns it. */
@@ -46,9 +80,9 @@ export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonl
   return walked(list.filter(isWalked).map((success) => success.value));
 }
 
-/** A failed walk, from failures a caller already knows are there: none at all is a bug. */
+/** A failed walk, from failures a caller already knows are there, each once: none at all is a bug. */
 export function failed(failures: readonly NotAllowed[], outline?: Outline): Failed {
-  const [first, ...others] = failures;
+  const [first, ...others] = new Set(failures);
   if (first === undefined) {
     throw new Error('A failed walk must name the construct that is not allowed.');
   }
@@ -65,31 +99,9 @@ export function outlineOf(walkedSchema: Walked): Outline {
   return walkedSchema.kind === 'walked' ? walkedSchema.value : (walkedSchema.outline ?? {});
 }
 
-/**
- * Failures with each refusal once where it was written, as a failure reported for a cycle comes
- * back wherever it is met and a construct stacked on itself refuses itself again.
- */
-export function distinctFailures(failures: Failures): Failures {
-  const [first, ...others] = failures;
-  const written = new Set([writtenKeyOf(first)]);
-  const distinctOthers: NotAllowed[] = [];
-  for (const failure of others) {
-    const key = writtenKeyOf(failure);
-    if (!written.has(key)) {
-      written.add(key);
-      distinctOthers.push(failure);
-    }
-  }
-  return [first, ...distinctOthers];
-}
-
-function writtenKeyOf({ at, construct }: NotAllowed): string {
-  return JSON.stringify([at, construct]);
-}
-
-/** Every failure among walked values, each once, in order. */
+/** Every failure among walked values, in order. */
 export function failuresOf(list: readonly Walked<unknown>[]): readonly NotAllowed[] {
-  return [...new Set(list.filter(isNotAllowed).flatMap((failure) => failure.failures))];
+  return list.filter(isNotAllowed).flatMap((failure) => failure.failures);
 }
 
 function isWalked<Value>(

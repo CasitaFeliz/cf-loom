@@ -1,11 +1,11 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
 import type { Field, ObjectNode } from '../walker/index.ts';
+import { fieldStep, partsOf, type Step } from '../walker/index.ts';
 import { counterpartsOf } from './counterparts.ts';
 import { unconstrainedTypeOf } from './enums.ts';
 import type { BothDefs } from './findings.ts';
 import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
-import { fieldStep, partsOf, type Step } from './steps.ts';
 
 /** A query or headers object of the Baseline and the proposed one, with no field where none is declared. */
 export type TextParts = {

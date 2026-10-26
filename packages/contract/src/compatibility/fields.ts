@@ -1,7 +1,7 @@
 import type { Field } from '../walker/index.ts';
+import { fieldStep, type Step } from '../walker/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type Finding, found, inside, type NodePairOf } from './findings.ts';
-import { fieldStep, type Step } from './steps.ts';
 
 /** How two objects differ: each field, in code point order, added, removed, made required or optional, and its schema. */
 export function objectFindingsOf({ baseline, proposed }: NodePairOf<'object'>): readonly Finding[] {

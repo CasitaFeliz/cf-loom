@@ -6,7 +6,6 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { LocatedNode } from './children.ts';
 export {
   leadsBackWithNoNode,
   nodesReachedFrom,
@@ -21,6 +20,17 @@ export type { StringFormat } from './format-schemas.ts';
 export { formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
+export type { ChangedSite, Place, Site } from './location.ts';
+export {
+  inFields,
+  inside,
+  movedFrom,
+  placeNameOf,
+  placeOf,
+  sameSite,
+  siteLocationOf,
+  siteTextOf,
+} from './location.ts';
 export type {
   EnumNode,
   Field,
@@ -37,10 +47,25 @@ export type {
   TupleNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
+export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
-
+export type { PartName, Step } from './steps.ts';
+export {
+  authorPathOf,
+  fieldStep,
+  indexStep,
+  itemsStep,
+  keyStep,
+  optionStep,
+  partsOf,
+  restStep,
+  snapshotPathOf,
+  tokenOf,
+  valueStep,
+  variantStep,
+} from './steps.ts';
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
-export type { LocatedSchema } from './walked.ts';
+export type { LocatedSchema, Memo } from './walked.ts';

@@ -1,6 +1,4 @@
-import type { ChangeSite } from '@cf-loom/contract/internal';
 import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
-import { tokenOf } from './author-path.ts';
 import type { CheckedChange } from './checked-change.ts';
 import type { Derivation } from './derivation.ts';
 import type { ExitStatus } from './exit.ts';
@@ -44,35 +42,6 @@ export function endingOf(changes: readonly CheckedChange[]): Ending {
     return { status: 2, stderr: [`${need}: your review process enforces it`] };
   }
   return { status: 0, stderr: [] };
-}
-
-/**
- * Where a Change is: its Snapshot key, with an Endpoint's name, `endpoints.GET /orders/{} (getOrder)`
- * or `events.OrderCreated@2`.
- */
-export function siteOf(site: ChangeSite): string {
-  switch (site.kind) {
-    case 'endpoint':
-      return `endpoints.${site.identity} (${tokenOf(site.name)})`;
-    case 'event':
-      return `events.${site.identity}`;
-    case 'command':
-      return `commands.${site.identity}`;
-    case 'code':
-      return `codes.${tokenOf(site.code)}`;
-    case 'subscription':
-      return `subscriptions.${tokenOf(site.name)}`;
-    case 'dependency':
-      return `dependencies.${tokenOf(site.name)}`;
-    case 'export':
-      return `exports.${tokenOf(site.name)}`;
-    case 'guard':
-      return `guards.${tokenOf(site.name)}`;
-    case 'group':
-      return `groups.${tokenOf(site.name)}`;
-    case 'standard-rejection':
-      return `standardRejections.${site.name}`;
-  }
 }
 
 /** Why a package has no Baseline, naming the registry and the npm user when npm does not know it. */

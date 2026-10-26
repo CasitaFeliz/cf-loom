@@ -1,14 +1,25 @@
-import type { Path, RefNode, SchemaNode } from './nodes.ts';
+import type { RefNode, SchemaNode } from './nodes.ts';
+import {
+  fieldStep,
+  indexStep,
+  itemsStep,
+  keyStep,
+  optionStep,
+  restStep,
+  type Step,
+  valueStep,
+  variantStep,
+} from './steps.ts';
 import type { Defs } from './walk.ts';
 
-/** A node inside another, with the steps of the path that lead to it. */
-export type Child = { readonly steps: Path; readonly node: SchemaNode };
+/** A node inside another, with the steps that lead to it. */
+export type Child = { readonly steps: readonly Step[]; readonly node: SchemaNode };
 
-/** A node and where it sits. */
-export type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
+/** A node and the steps from the node the search began at. */
+export type NodeWithin = { readonly at: readonly Step[]; readonly node: SchemaNode };
 
-/** A node and every node inside it, each where it sits; a `ref` is not entered. */
-export function nodesWithin(node: SchemaNode, at: Path): readonly LocatedNode[] {
+/** A node and every node inside it, each with its steps from the node; a `ref` is not entered. */
+export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonly NodeWithin[] {
   const inside = childrenOf(node).flatMap(({ steps, node: child }) =>
     nodesWithin(child, [...at, ...steps]),
   );
@@ -16,28 +27,25 @@ export function nodesWithin(node: SchemaNode, at: Path): readonly LocatedNode[] 
 }
 
 /**
- * Every node within the located nodes and within each def they reach through `ref`s, directly or
- * through other defs; a def is added once, at `['defs', <id>]`.
+ * Every node within the given nodes and within each def they reach through `ref`s, directly or
+ * through other defs; a def is added once.
  */
-export function nodesReachedFrom(
-  located: readonly LocatedNode[],
-  defs: Defs,
-): readonly LocatedNode[] {
+export function nodesReachedFrom(nodes: readonly SchemaNode[], defs: Defs): readonly SchemaNode[] {
   const entered = new Set<string>();
-  function enter(name: string): readonly LocatedNode[] {
+  function enter(name: string): readonly SchemaNode[] {
     const def = defs[name];
     if (def === undefined || entered.has(name)) {
       return [];
     }
     entered.add(name);
-    return reachedFrom({ at: ['defs', name], node: def });
+    return reachedFrom(def);
   }
-  function reachedFrom({ at, node }: LocatedNode): readonly LocatedNode[] {
-    const within = nodesWithin(node, at);
-    const names = within.map((inner) => inner.node).filter(isRef);
+  function reachedFrom(node: SchemaNode): readonly SchemaNode[] {
+    const within = nodesWithin(node).map((inner) => inner.node);
+    const names = within.filter(isRef);
     return [...within, ...names.flatMap((ref) => enter(ref.name))];
   }
-  return located.flatMap(reachedFrom);
+  return nodes.flatMap(reachedFrom);
 }
 
 /**
@@ -45,10 +53,7 @@ export function nodesReachedFrom(
  * once; a name with no def is included, so a caller can tell it apart.
  */
 export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonly string[] {
-  const located = nodes.map((node): LocatedNode => ({ at: [], node }));
-  const refs = nodesReachedFrom(located, defs)
-    .map(({ node }) => node)
-    .filter(isRef);
+  const refs = nodesReachedFrom(nodes, defs).filter(isRef);
   return [...new Set(refs.map(({ name }) => name))];
 }
 
@@ -113,35 +118,35 @@ function isRef(node: SchemaNode): node is RefNode {
   return node.type === 'ref';
 }
 
-/** The nodes directly inside a node, each with the steps the walker's paths take to it. */
+/** The nodes directly inside a node, each with the steps to it. */
 export function childrenOf(node: SchemaNode): readonly Child[] {
   switch (node.type) {
     case 'object':
       return Object.entries(node.fields).map(([key, field]) => ({
-        steps: ['fields', key],
+        steps: [fieldStep(key)],
         node: field.schema,
       }));
     case 'record':
       return [
-        { steps: ['key'], node: node.key },
-        { steps: ['value'], node: node.value },
+        { steps: [keyStep], node: node.key },
+        { steps: [valueStep], node: node.value },
       ];
     case 'array':
-      return [{ steps: ['items'], node: node.items }];
+      return [{ steps: [itemsStep], node: node.items }];
     case 'tuple':
       return [
-        ...indexed('items', node.items),
-        ...(node.rest === undefined ? [] : [{ steps: ['rest'], node: node.rest }]),
+        ...node.items.map(indexed),
+        ...(node.rest === undefined ? [] : [{ steps: [restStep], node: node.rest }]),
       ];
     case 'union':
-      return indexed('options', node.options);
+      return node.options.map((option, index) => ({ steps: [optionStep(index)], node: option }));
     case 'tagged':
       return Object.entries(node.variants).map(([key, variant]) => ({
-        steps: ['variants', key],
+        steps: [variantStep(node.discriminator, key)],
         node: variant,
       }));
     case 'allOf':
-      return indexed('items', node.items);
+      return node.items.map(indexed);
     case 'string':
     case 'number':
     case 'boolean':
@@ -152,6 +157,6 @@ export function childrenOf(node: SchemaNode): readonly Child[] {
   }
 }
 
-function indexed(key: string, nodes: readonly SchemaNode[]): readonly Child[] {
-  return nodes.map((node, index) => ({ steps: [key, index], node }));
+function indexed(node: SchemaNode, index: number): Child {
+  return { steps: [indexStep(index)], node };
 }

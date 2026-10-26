@@ -1,3 +1,4 @@
+import type { Place } from '../walker/index.ts';
 import {
   type Declarations,
   type ResolvedStandard,
@@ -8,6 +9,9 @@ import { type DeclarationFailure, failure } from './failures.ts';
 import { definitionsPackageOf, originTextOf, packageLabelOf } from './provenance.ts';
 import type { ImportedDefinitions } from './validate.ts';
 
+/** Where a code is first declared, and where each of its declarations came from. */
+type Declared = { readonly at: Place; readonly named: readonly string[] };
+
 /**
  * A code is declared once: by one Rejection the Root reaches, or one Standard Rejection resolving
  * to it. A code with more fails once, naming every declaration by where it came from.
@@ -17,22 +21,19 @@ export function codeOnceFailures(
   packages: readonly ImportedDefinitions[],
 ): readonly DeclarationFailure[] {
   const standards = resolvedStandards(declarations);
-  const sourcesByCode = new Map<string, string[]>();
-  for (const { code, rejections } of declarations.codes) {
+  const declaredByCode = new Map<string, Declared>();
+  for (const { code, at, rejections } of declarations.codes) {
     const named = rejections.map(({ rejection }) => sourceOf(declarations, packages, rejection));
-    sourcesByCode.set(code, named);
+    declaredByCode.set(code, { at, named });
   }
   for (const standard of standards) {
-    const named = sourcesByCode.get(standard.code) ?? [];
-    sourcesByCode.set(standard.code, [...named, standardSourceOf(standard)]);
+    const known = declaredByCode.get(standard.code);
+    const named = [...(known?.named ?? []), standardSourceOf(standard)];
+    declaredByCode.set(standard.code, { at: known?.at ?? standard.at, named });
   }
-  const repeated = [...sourcesByCode].filter(([, named]) => named.length > 1);
-  return repeated.map(([code, named]) =>
-    failure(
-      ['rejections', code],
-      'code-once',
-      `A code is declared once: ${code} (${listOf(named)})`,
-    ),
+  const repeated = [...declaredByCode].filter(([, { named }]) => named.length > 1);
+  return repeated.map(([code, { at, named }]) =>
+    failure(at, 'code-once', `A code is declared once: ${code} (${listOf(named)})`),
   );
 }
 

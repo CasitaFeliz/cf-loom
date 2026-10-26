@@ -429,7 +429,7 @@ describe('cf-loom generate', () => {
 
     const ran = cfLoom(project, 'generate');
 
-    const at = 'groups.health.endpoints.GET /ping.success.body.fields';
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body';
     expect(ran).toEqual({
       status: 1,
       stdout: '',
@@ -446,12 +446,12 @@ describe('cf-loom generate', () => {
     [
       'a strict object',
       'z.object({ exact: z.strictObject({ a: z.string() }) })',
-      'fields.exact not allowed: z.strictObject() (use z.object(): objects are open)',
+      'exact not allowed: z.strictObject() (use z.object(): objects are open)',
     ],
     [
       'a record keyed by an enum in a Success',
       "z.object({ totals: z.record(z.enum(['eur']), z.number()) })",
-      'fields.totals not allowed: a z.record() or z.partialRecord() keyed by an enum or literal (use z.object() with the keys as fields)',
+      'totals not allowed: a z.record() or z.partialRecord() keyed by an enum or literal (use z.object() with the keys as fields)',
     ],
   ])('%s exits 1 in one line naming what to use', (_construct, body, line) => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
@@ -461,7 +461,7 @@ describe('cf-loom generate', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: `groups.health.endpoints.GET /ping.success.body.${line}\n`,
+      stderr: `src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.${line}\n`,
     });
   });
 
@@ -479,7 +479,7 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.health.endpoints.GET /ping.success.body not allowed: an intersection that is not of open objects reaching an openEnum() (use .extend())\n',
+        'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body not allowed: an intersection that is not of open objects reaching an openEnum() (use .extend())\n',
     });
   });
 
@@ -496,7 +496,7 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.health.endpoints.GET /ping.success.body not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)\n',
+        'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)\n',
     });
   });
 
@@ -510,7 +510,7 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.health.endpoints.GET /ping.success.body.fields.__proto__ not allowed: a field named __proto__ (zod drops it when parsing)\n',
+        'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.__proto__ not allowed: a field named __proto__ (zod drops it when parsing)\n',
     });
   });
 
@@ -526,7 +526,9 @@ describe('cf-loom generate', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^name name-grammar: .+\nname package-name: .+\n$/);
+    expect(ran.stderr).toMatch(
+      /^src\/contract\/index\.ts: \(root\) name name-grammar: .+\nsrc\/contract\/index\.ts: \(root\) name package-name: .+\n$/,
+    );
   });
 
   test('a project without cf-loom.config.ts generates with the default layout', () => {
@@ -646,7 +648,7 @@ describe('cf-loom generate', () => {
       status: 1,
       stdout: '',
       stderr:
-        "groups.health.endpoints.GET /ping.deprecatedAt deprecated-at: A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z\n",
+        "src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) deprecatedAt deprecated-at: A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z\n",
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -1003,7 +1005,63 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
+    });
+  });
+
+  test('a failure in an Endpoint names the file that exports the Endpoint in front of its line', () => {
+    const body = 'z.object({ at: z.date() })';
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(
+      'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.at not allowed: z.date() (use z.iso.datetime())\n',
+    );
+  });
+
+  test('a failure about what a Group lists names the file that exports the Group', () => {
+    const files = aRoot();
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...files,
+      'src/contract/health.group.ts': [
+        "import { defineGroup } from '@cf-loom/contract';",
+        '',
+        "export const health = defineGroup({ name: 'health', description: 'Health', endpoints: [] } as never);",
+        '',
+      ].join('\n'),
+      'src/contract/index.ts': [
+        "import { defineService } from '@cf-loom/contract';",
+        "import { health } from './health.group.ts';",
+        '',
+        "export const contract = defineService({ name: 'orders-service', groups: [health] });",
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.stderr).toBe(
+      'src/contract/health.group.ts: groups.health empty-group: A Group lists at least one Endpoint, Event, Command or Subscription\n',
+    );
+  });
+
+  test('a Contract file that throws on import leaves the failure lines, without files', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'src/contract/boom.ts': "throw new Error('boom');\n",
+      'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        '(root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
   });
 
@@ -1018,8 +1076,8 @@ describe('cf-loom generate: what it refuses', () => {
 
     expect(ran.status).toBe(1);
     expect(ran.stderr.split('\n')).toEqual([
-      'name package-name: A Root is named as its package.json, without the scope: billing-service',
-      'groups.health.endpoints.GET /ping.success.body.fields.at not allowed: z.date() (use z.iso.datetime())',
+      'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"',
+      'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.at not allowed: z.date() (use z.iso.datetime())',
       '',
     ]);
   });
@@ -1107,11 +1165,11 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test.for([
-    ['again', 'definitions'],
-    ['\uFF41', '\u{1D44E}'],
+    ['again', 'definitions', 'exports.definitions'],
+    ['\uFF41', '\u{1D44E}', 'exports."\u{1D44E}"'],
   ] as const)(
     'a Definitions Package’s Root file that exports its Definitions object as %s and %s fails definitions-export, naming the later name in code point order',
-    ([first, later]) => {
+    ([first, later, site]) => {
       const project = aProject({
         'cf-loom.config.ts': config,
         'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
@@ -1128,7 +1186,7 @@ describe('cf-loom generate: what it refuses', () => {
       expect(ran).toEqual({
         status: 1,
         stdout: '',
-        stderr: `exports.${later} definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: its definitions once, not as ${later}\n`,
+        stderr: `src/definitions/index.ts: ${site} definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: its definitions once, not as ${later}\n`,
       });
     },
   );
@@ -1451,14 +1509,14 @@ function aRootNestedIn(arrays: number): Files {
 const nestedBeyondArrays = 8;
 
 describe('cf-loom generate: how deep a Snapshot nests', () => {
-  test('a Contract whose Snapshot would nest past 256 levels fails generate, naming the path', () => {
+  test('a Contract whose Snapshot would nest past 256 levels fails generate, naming the Endpoint it sits in', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(260) });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toMatch(
-      /^endpoints\.GET \/ping\.success\.body\.fields\.a\.schema(\.items)+ not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n$/,
+      /^endpoints\.GET \/ping \(ping\) not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n$/,
     );
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -1593,7 +1651,9 @@ describe('cf-loom generate: a Definitions Package’s Root', () => {
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
-    expect(ran.stderr).toMatch(/^guards undeclared-field: [^\n]+\n$/);
+    expect(ran.stderr).toMatch(
+      /^src\/definitions\/index\.ts: \(root\) guards undeclared-field: [^\n]+\n$/,
+    );
   });
 
   test('a helper the Root file exports fails generate with one line, and nothing is written', () => {
@@ -1615,7 +1675,7 @@ describe('cf-loom generate: a Definitions Package’s Root', () => {
       status: 1,
       stdout: '',
       stderr:
-        "exports.isMoney definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: isMoney is none of them\n",
+        "src/definitions/index.ts: exports.isMoney definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: isMoney is none of them\n",
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -1640,7 +1700,7 @@ describe('cf-loom generate: a Definitions Package’s Root', () => {
       status: 1,
       stdout: '',
       stderr:
-        'exports.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
+        'src/definitions/index.ts: exports.money not allowed: .meta({ id: "money" }) on a schema that lies on no cycle (use .meta({ id }) only on a recursive schema)\n',
     });
   });
 });
@@ -2182,7 +2242,7 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
       status: 1,
       stdout: '',
       stderr:
-        'rejections.FORBIDDEN code-once: A code is declared once: FORBIDDEN (@org/auth-definitions@1.2.3 and @org/billing-definitions@1.2.3)\n',
+        'codes.FORBIDDEN code-once: A code is declared once: FORBIDDEN (@org/auth-definitions@1.2.3 and @org/billing-definitions@1.2.3)\n',
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -3084,7 +3144,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
     expect(registry.requests).toEqual([]);
   });
@@ -4866,7 +4926,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
     expect(registry.requests).toEqual([]);
   });

@@ -9,9 +9,13 @@ import { encodedValueOf, walkSchemas } from '../internal/index.ts';
 
 type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
 
+function aPlace() {
+  return { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+}
+
 /** Whether the walker reads a schema as an Open Enum: its enum node's `open`, none for any other node. */
 function openOf(schema: core.$ZodType): boolean | undefined {
-  const { located } = walkSchemas([{ at: ['body'], schema }], () => undefined);
+  const { located } = walkSchemas([{ at: aPlace(), schema }], () => undefined);
   const walked = located[0]?.walked;
   const node = walked?.kind === 'walked' ? walked.value : undefined;
   return node?.type === 'enum' ? node.open : undefined;

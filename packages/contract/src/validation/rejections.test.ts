@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
@@ -19,7 +20,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -43,9 +44,11 @@ function validateEndpoints(endpoints: readonly [Endpoint, ...Endpoint[]]) {
   return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
+
+const endpointAt = 'endpoints.GET /orders (listOrders)';
 
 describe('validateRoot: Rejection statuses', () => {
   test('a Rejection with a 4xx status validates', () => {
@@ -59,11 +62,16 @@ describe('validateRoot: Rejection statuses', () => {
     const failing = defineRejection({ code: 'UPSTREAM_DOWN', status, message: 'Down' });
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [failing] })])).toEqual(
-      failed(
-        ['rejections', 'UPSTREAM_DOWN', 'status'],
-        'rejection-status',
-        "A Rejection's status is 4xx: 500",
-      ),
+      failed('codes.UPSTREAM_DOWN status', 'rejection-status', "A Rejection's status is 4xx: 500"),
+    );
+  });
+
+  test('a Rejection status written as a string is quoted in the message', () => {
+    const status = '409' as unknown as RejectionStatus;
+    const failing = defineRejection({ code: 'ORDER_LOCKED', status, message: 'Locked' });
+
+    expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [failing] })])).toEqual(
+      failed('codes.ORDER_LOCKED status', 'rejection-status', `A Rejection's status is 4xx: "409"`),
     );
   });
 
@@ -75,7 +83,7 @@ describe('validateRoot: Rejection statuses', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notFound', 'status'],
+        'standardRejections.notFound status',
         'rejection-status',
         "A Rejection's status is 4xx: 200",
       ),
@@ -90,7 +98,7 @@ describe('validateRoot: Rejection statuses', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notImplemented', 'status'],
+        'standardRejections.notImplemented status',
         'rejection-status',
         "The not-implemented Rejection's status is 501: 500",
       ),
@@ -99,8 +107,6 @@ describe('validateRoot: Rejection statuses', () => {
 });
 
 describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () => {
-  const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
-
   test('an Endpoint listing one Rejection twice fails at the second listing, naming the code', () => {
     const rejections: readonly Rejection[] = [
       orderLocked,
@@ -111,7 +117,7 @@ describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () =>
     const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
 
     expect(validated).toEqual(
-      failed([...endpointAt, 'rejections', 2], 'rejection-once', 'ORDER_LOCKED is listed twice'),
+      failed(`${endpointAt} rejections[2]`, 'rejection-once', 'ORDER_LOCKED is listed twice'),
     );
   });
 
@@ -131,13 +137,13 @@ describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () =>
       failures: [
         {
           kind: 'declaration',
-          at: [...endpointAt, 'rejections', 1],
+          location: `${endpointAt} rejections[1]`,
           rule: 'rejection-once',
           message: 'ORDER_LOCKED is listed twice',
         },
         {
           kind: 'declaration',
-          at: ['rejections', 'ORDER_LOCKED'],
+          location: 'codes.ORDER_LOCKED',
           rule: 'code-once',
           message: 'A code is declared once: ORDER_LOCKED (the Contract, twice)',
         },
@@ -154,7 +160,7 @@ describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () =>
     const validated = validateEndpoints([defineEndpoint({ ...listing, rejections })]);
 
     expect(validated).toEqual(
-      failed([...endpointAt, 'rejections', 1], 'rejection-once', 'notFound is listed twice'),
+      failed(`${endpointAt} rejections[1]`, 'rejection-once', 'notFound is listed twice'),
     );
   });
 
@@ -165,11 +171,7 @@ describe('validateRoot: an Endpoint or a Guard lists each Rejection once', () =>
     const validated = validateEndpoints([defineEndpoint({ ...listing, guards: [tenant] })]);
 
     expect(validated).toEqual(
-      failed(
-        ['guards', 'tenant', 'rejections', 1],
-        'rejection-once',
-        'ORDER_LOCKED is listed twice',
-      ),
+      failed('guards.tenant rejections[1]', 'rejection-once', 'ORDER_LOCKED is listed twice'),
     );
   });
 
@@ -197,9 +199,9 @@ describe('validateRoot: reserved codes', () => {
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [reserved] })])).toEqual(
       failed(
-        ['rejections', code, 'code'],
+        `codes.${code} code`,
         'reserved-code',
-        `A code cf-loom answers as a Fault is reserved: ${code}`,
+        `A code cf-loom answers as a Fault is reserved: "${code}"`,
       ),
     );
   });
@@ -213,9 +215,9 @@ describe('validateRoot: reserved codes', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['standardRejections', 'notFound', 'code'],
+        'standardRejections.notFound code',
         'reserved-code',
-        'A code cf-loom answers as a Fault is reserved: NO_SUCH_ENDPOINT',
+        'A code cf-loom answers as a Fault is reserved: "NO_SUCH_ENDPOINT"',
       ),
     );
   });
@@ -233,7 +235,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections })])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'rejections', 0],
+        `${endpointAt} rejections[0]`,
         'standard-rejection-listed',
         'invalidInput is added to every Endpoint without listing it',
       ),
@@ -245,7 +247,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections })])).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders', 'rejections', 1],
+        `${endpointAt} rejections[1]`,
         'standard-rejection-listed',
         'notImplemented is added to every Endpoint without listing it',
       ),
@@ -258,7 +260,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateEndpoints([defineEndpoint({ ...listing, guards: [tenant] })])).toEqual(
       failed(
-        ['guards', 'tenant', 'rejections', 0],
+        'guards.tenant rejections[0]',
         'standard-rejection-on-guard',
         'A Guard lists declared Rejections only: notFound',
       ),
@@ -272,7 +274,7 @@ describe('validateRoot: Standard Rejections', () => {
       validateEndpoints([defineEndpoint({ ...listing, rejections: [notFoundAgain] })]),
     ).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND'],
+        'codes.NOT_FOUND',
         'code-once',
         'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
       ),
@@ -303,14 +305,14 @@ describe('validateRoot: Standard Rejections', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['rejections', 'BAD_REQUEST'],
+          location: 'codes.BAD_REQUEST',
           rule: 'code-once',
           message:
             'A code is declared once: BAD_REQUEST (the Contract and the invalidInput Standard Rejection)',
         },
         {
           kind: 'declaration',
-          at: ['rejections', 'NOT_FOUND'],
+          location: 'codes.NOT_FOUND',
           rule: 'code-once',
           message:
             'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
@@ -329,7 +331,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND'],
+        'standardRejections.invalidInput',
         'code-once',
         'A code is declared once: NOT_FOUND (the invalidInput Standard Rejection and the notFound Standard Rejection)',
       ),
@@ -347,7 +349,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        ['rejections', 'GONE'],
+        'standardRejections.notFound',
         'code-once',
         'A code is declared once: GONE (the notFound Standard Rejection and the notImplemented Standard Rejection)',
       ),
@@ -361,7 +363,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateInPackage(definitions)).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND'],
+        'standardRejections.invalidInput',
         'code-once',
         'A code is declared once: NOT_FOUND (the invalidInput Standard Rejection and the notFound Standard Rejection)',
       ),
@@ -373,7 +375,7 @@ describe('validateRoot: Standard Rejections', () => {
 
     expect(validateEndpoints([defineEndpoint({ ...listing, rejections: [missing] })])).toEqual(
       failed(
-        ['rejections', 'NOT_FOUND'],
+        'codes.NOT_FOUND',
         'code-once',
         'A code is declared once: NOT_FOUND (the Contract and the notFound Standard Rejection)',
       ),

@@ -12,6 +12,7 @@ import {
   schemaSlotsAmong,
   textSlotsOf,
 } from './schemas.ts';
+import { notAllowedFailuresOf } from './shared-failures.ts';
 import { conflictFailures, textPartFailures } from './text-only.ts';
 
 /** The walked parts of one Endpoint or Guard that travel as text, each an object of its fields. */
@@ -38,7 +39,7 @@ export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const nodes = nodesOf(slots, walked);
   const [first, ...others] = [
     ...notSchemas,
-    ...walked.located.flatMap(failuresAt),
+    ...notAllowedFailuresOf(walked.located.flatMap(failuresAt), walked.memoOf),
     ...textPartFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),

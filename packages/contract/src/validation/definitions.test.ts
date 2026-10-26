@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized, summaryOf } from '../../test/failures.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
@@ -47,7 +48,7 @@ const ping = defineEndpoint({
 function failuresOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
   const validated = validateRoot(root, aRootPackage(root, { rootExports: exported }));
-  return validated.kind === 'invalid' ? validated.failures : [];
+  return validated.kind === 'invalid' ? validated.failures.map(summaryOf) : [];
 }
 
 describe('validateRoot: a Definitions Package exports what its Guards reach', () => {
@@ -71,7 +72,7 @@ describe('validateRoot: a Definitions Package exports what its Guards reach', ()
       expect(failures).toEqual(
         unexported.map((guard) => ({
           kind: 'declaration',
-          at: ['exports', name],
+          location: `exports.${name}`,
           rule: 'definitions-unexported',
           message: `${unexportedMessage}: ${guard}`,
         })),
@@ -85,7 +86,7 @@ describe('validateRoot: a Definitions Package exports what its Guards reach', ()
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['exports', 'permission'],
+        location: 'exports.permission',
         rule: 'definitions-unexported',
         message: `${unexportedMessage}: UNAUTHENTICATED`,
       },
@@ -127,7 +128,7 @@ describe('validateRoot: a Definitions Package’s Root file exports only what it
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['exports', 'other'],
+        location: 'exports.other',
         rule: 'definitions-export',
         message: `${exportsOnly}: other is none of them`,
       },
@@ -138,14 +139,14 @@ describe('validateRoot: a Definitions Package’s Root file exports only what it
     const root = defineDefinitions({});
     const rootExports = { again: root };
 
-    const validated = validateRoot(root, aRootPackage(root, { rootExports }));
+    const validated = summarized(validateRoot(root, aRootPackage(root, { rootExports })));
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['exports', 'again'],
+          location: 'exports.again',
           rule: 'definitions-export',
           message: `${exportsOnly}: its definitions once, not as again`,
         },
@@ -164,7 +165,7 @@ describe('validateRoot: a Definitions Package’s Root file exports only what it
     expect(failures).toEqual([
       {
         kind: 'declaration',
-        at: ['exports', '__proto__'],
+        location: 'exports.__proto__',
         rule: 'definitions-export',
         message: `${exportsOnly}: nothing named __proto__, which no Snapshot can hold`,
       },

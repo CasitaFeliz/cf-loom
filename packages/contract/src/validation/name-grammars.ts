@@ -9,12 +9,12 @@ import {
   upperSnakeCase,
   wordsOf,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { type Declarations, textOf } from '../written/index.ts';
+import { inFields, type Place, placeOf } from '../walker/index.ts';
+import { type Declarations, textOf, writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
-type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
+type Named = { readonly at: Place; readonly value: unknown; readonly noun: string };
 
 /** Every name of a Root follows the grammar of its kind; a name that is no string is another rule's. */
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
@@ -43,20 +43,24 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   ];
 }
 
-function named<Located extends { readonly at: Path }>(
+function named<Located extends { readonly at: Place }>(
   list: readonly Located[],
   nameOf: (located: Located) => unknown,
   noun: string,
 ): readonly Named[] {
-  return list.map((located) => ({ at: [...located.at, 'name'], value: nameOf(located), noun }));
+  return list.map((located) => ({
+    at: inFields(located.at, 'name'),
+    value: nameOf(located),
+    noun,
+  }));
 }
 
-function codes<Located extends { readonly at: Path }>(
+function codes<Located extends { readonly at: Place }>(
   list: readonly Located[],
   codeOf: (located: Located) => unknown,
 ): readonly Named[] {
   return list.map((located) => ({
-    at: [...located.at, 'code'],
+    at: inFields(located.at, 'code'),
     value: codeOf(located),
     noun: 'A Rejection code',
   }));
@@ -69,7 +73,8 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
   return breaking.map(({ at, value, noun }) => {
     const text = textOf(value);
     const sentence = ruleSentenceOf(noun, grammar, text);
-    return failure(at, 'name-grammar', `${sentence}: ${text}${hintFor(grammar, text)}`);
+    const echoed = `${writtenTextOf(value)}${hintFor(grammar, text)}`;
+    return failure(at, 'name-grammar', `${sentence}: ${echoed}`);
   });
 }
 
@@ -87,6 +92,9 @@ function hintFor(grammar: Grammar, text: string): string {
 
 /** The grammar of a Service's and an Application's name, the one place it is named. */
 const rootNameGrammar = kebabCase;
+
+/** The kinds of Root that are named. */
+type RootNamedKind = 'service' | 'application';
 
 /** What a Service's and an Application's name is called in a sentence. */
 const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
@@ -115,14 +123,16 @@ export function rootNameProblemOf(kind: RootKind, name: string): string | undefi
 function rootNameFailures(root: Declarations['root']): readonly DeclarationFailure[] {
   switch (root.kind) {
     case 'service':
-      return grammarFailures(rootNamed('service', root.name), rootNameGrammar);
     case 'application':
-      return grammarFailures(rootNamed('application', root.name), rootNameGrammar);
+      return grammarFailures(rootNamed(root), rootNameGrammar);
     case 'definitions':
       return [];
   }
 }
 
-function rootNamed(kind: 'service' | 'application', value: unknown): readonly Named[] {
-  return [{ at: ['name'], value, noun: rootNouns[kind] }];
+function rootNamed(
+  root: Extract<Declarations['root'], { readonly kind: RootNamedKind }>,
+): readonly Named[] {
+  const at = inFields(placeOf({ kind: 'root' }, root), 'name');
+  return [{ at, value: root.name, noun: rootNouns[root.kind] }];
 }

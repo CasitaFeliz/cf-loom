@@ -493,7 +493,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
   });
 
@@ -510,8 +510,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr:
-        'dependencies.payments-service.endpoints.0 not-a-declaration: endpoints.0 is not an Endpoint\n',
+      stderr: 'dependencies.payments-service endpoints[0] not-a-declaration: is not an Endpoint\n',
     });
   });
 

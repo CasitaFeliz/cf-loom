@@ -7,9 +7,9 @@ import {
   type StringFormat,
 } from './format-schemas.ts';
 import { isHashFormat } from './hash-formats.ts';
-import type { Path, StringNode } from './nodes.ts';
+import type { StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
-import { type Walked, walked } from './walked.ts';
+import { type Reached, type Walked, walked } from './walked.ts';
 
 /** What the walker reads of a string format check, from zod and `zod/mini` alike. */
 type FormatDef = BuiltDef & {
@@ -40,7 +40,7 @@ const refusedByFormat: ReadonlyMap<string, Refused> = new Map<string, Refused>([
  * The `format` and `formatOptions` a string format check declares: only a format zod builds
  * itself, checked as zod checks it, with the options that differ from zod's default.
  */
-export function formatOf(check: DeclaredCheck, at: Path): Walked<Partial<StringNode>> {
+export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<StringNode>> {
   const def = check.def as unknown as FormatDef;
   const refusal = namedRefusalOf(def);
   if (refusal !== undefined) {
@@ -67,7 +67,7 @@ function namedRefusalOf(def: FormatDef): Refused | undefined {
 function builtFormatOf(
   check: DeclaredCheck,
   def: KnownFormatDef,
-  at: Path,
+  at: Reached,
 ): Walked<Partial<StringNode>> {
   if (def.fn !== undefined) {
     return notAllowed(at, refusedStringFormat(def.format));
@@ -90,7 +90,7 @@ function builtFormatOf(
  * source and flags, and by its check, whose source text must be zod's own test of a regex; one
  * checked by another function is the author's `z.stringFormat()`.
  */
-function regexFormatOf(def: KnownFormatDef, at: Path): Walked<Partial<StringNode>> {
+function regexFormatOf(def: KnownFormatDef, at: Reached): Walked<Partial<StringNode>> {
   const reference = referenceOf(def.format);
   if (def.pattern === undefined || String(def.fn) !== String(reference?.fn)) {
     return notAllowed(at, refusedStringFormat(def.format));

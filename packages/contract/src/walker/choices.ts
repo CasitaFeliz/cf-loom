@@ -2,28 +2,30 @@ import type * as core from 'zod/v4/core';
 import { isOpen } from '../open/index.ts';
 import { canonicalJson, inCanonicalJsonOrder, isJsonPrimitive } from './canonical-json.ts';
 import { innerOfLazy } from './lazy.ts';
+import { inside } from './location.ts';
 import type {
   EnumNode,
   JsonPrimitive,
   ObjectNode,
-  Path,
   RefNode,
   SchemaNode,
   TaggedNode,
 } from './nodes.ts';
 import { notAllowed, type Refused, refused } from './not-allowed.ts';
+import { optionStep, type Step, variantStep } from './steps.ts';
 import {
   allWalked,
   failed,
   failuresOf,
   type Outline,
+  type Reached,
   type Walked,
   type Walker,
   walked,
 } from './walked.ts';
 
 /** An enum of string values, open when `openEnum()` declared it or zod derived it from one. */
-export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
+export function walkEnum(schema: core.$ZodEnum, at: Reached): Walked {
   const values: readonly unknown[] = Object.values(schema._zod.def.entries);
   const strings = values.filter(isString);
   if (strings.length !== values.length) {
@@ -37,13 +39,13 @@ export function walkEnum(schema: core.$ZodEnum, at: Path): Walked {
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
-export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Walked {
+export function walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): Walked {
   const def = schema._zod.def;
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyUnion, { type: 'union' });
   }
   const options = allWalked(
-    def.options.map((option, index) => walker.schema(option, [...at, 'options', index])),
+    def.options.map((option, index) => walker.schema(option, inside(at, optionStep(index)))),
   );
   if (def.inclusive === false) {
     return failed(failuresOf([notAllowed(at, refused.xor), options]), { type: 'union' });
@@ -55,30 +57,36 @@ export function walkUnion(schema: core.$ZodUnion, at: Path, walker: Walker): Wal
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
-export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker: Walker): Walked {
+export function walkTagged(
+  schema: core.$ZodDiscriminatedUnion,
+  at: Reached,
+  walker: Walker,
+): Walked {
   const def = schema._zod.def;
   const tagged: Outline = { type: 'tagged' };
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyDiscriminatedUnion, tagged);
   }
+  const duplicate = hasDuplicateValue(def)
+    ? [notAllowed(at, refused.duplicateDiscriminatorValue)]
+    : [];
   const variants = allWalked(
     def.options.map((option, index) => {
-      const variantAt = [...at, 'variants', index];
+      const values = option._zod.propValues?.[def.discriminator];
+      const variantAt = walker.reach(
+        option,
+        inside(at, variantStepOf(def.discriminator, values, index)),
+      );
       const variant = walker.schema(option, variantAt);
       const refusal = variantRefusalOf(option, def.discriminator);
       if (refusal !== undefined) {
         return failed(failuresOf([notAllowed(variantAt, refusal), variant]));
       }
-      const values = option._zod.propValues?.[def.discriminator];
       return taggedVariant(variant, values, variantAt);
     }),
   );
-  if (variants.kind === 'not-allowed') {
-    return failed(variants.failures, tagged);
-  }
-  const keys = variants.value.map(([key]) => key);
-  if (new Set(keys).size !== keys.length) {
-    return notAllowed(at, refused.duplicateDiscriminatorValue, tagged);
+  if (variants.kind === 'not-allowed' || duplicate.length > 0) {
+    return failed(failuresOf([...duplicate, variants]), tagged);
   }
   return walked({
     type: 'tagged',
@@ -88,13 +96,41 @@ export function walkTagged(schema: core.$ZodDiscriminatedUnion, at: Path, walker
 }
 
 /**
+ * Whether two variants share a discriminator value, as zod reads each variant's values: judged
+ * before the variants are walked, so it is told beside what they refuse.
+ */
+function hasDuplicateValue({ options, discriminator }: core.$ZodDiscriminatedUnionDef): boolean {
+  const values = options.map((option) => [...(option._zod.propValues?.[discriminator] ?? [])]);
+  const keys = values.filter(isOneValue).map(([value]) => canonicalJson(value));
+  return new Set(keys).size !== keys.length;
+}
+
+function isOneValue(values: readonly unknown[]): values is [JsonPrimitive] {
+  return values.length === 1 && isJsonPrimitive(values[0]);
+}
+
+/** A variant is told by its discriminator's one literal, else by its position among the options. */
+function variantStepOf(
+  discriminator: string,
+  values: ReadonlySet<unknown> | undefined,
+  index: number,
+): Step {
+  const literals = [...(values ?? [])];
+  const [only] = literals;
+  if (literals.length === 1 && isJsonPrimitive(only)) {
+    return variantStep(discriminator, canonicalJson(only));
+  }
+  return optionStep(index);
+}
+
+/**
  * A variant keyed by its discriminator value, as zod itself reads it from the variant, so a
  * `ref` to an object def keys like the object.
  */
 function taggedVariant(
   variant: Walked,
   values: ReadonlySet<unknown> | undefined,
-  at: Path,
+  at: Reached,
 ): Walked<[string, TaggedNode['variants'][string]]> {
   if (variant.kind === 'not-allowed') {
     return variant;
@@ -134,7 +170,7 @@ function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
  * intersection, and is nullable when any of its literals is. Any other union keeps its options in
  * declared order, since zod's union returns the first option that parses.
  */
-function choiceOf(options: readonly SchemaNode[], at: Path): Walked {
+function choiceOf(options: readonly SchemaNode[], at: Reached): Walked {
   const literals = options.filter(isClosedEnum);
   if (literals.length !== options.length) {
     return walked({ type: 'union', options: [...options] });
@@ -151,7 +187,7 @@ function choiceOf(options: readonly SchemaNode[], at: Path): Walked {
 }
 
 /** A closed enum of literal values, each once, in canonical order; one without values is refused. */
-export function enumOf(values: readonly JsonPrimitive[], at: Path): Walked<EnumNode> {
+export function enumOf(values: readonly JsonPrimitive[], at: Reached): Walked<EnumNode> {
   if (values.length === 0) {
     return notAllowed(at, refused.emptyEnum, { type: 'enum' });
   }

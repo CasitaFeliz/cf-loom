@@ -1,10 +1,10 @@
 import type { EndpointSnapshot } from '../snapshot/index.ts';
+import { partsOf } from '../walker/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { answeredDifferencesOf, statusDifferencesOf } from './codes.ts';
 import type { BothDefs } from './findings.ts';
 import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
-import { partsOf } from './steps.ts';
 import {
   inputHeaderDifferencesOf,
   paramDifferencesOf,

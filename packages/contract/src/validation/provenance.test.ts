@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import {
   anInstalledPackage,
   anUnidentifiedPackage,
@@ -193,14 +194,14 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const base = anUnversionedPackage('@org/base', { apiKey });
     const org = aPackage('@org/definitions', { apiKey }, [base]);
 
-    const validated = validatedOf(aService({ guards: [apiKey] }), [org, base]);
+    const validated = summarized(validatedOf(aService({ guards: [apiKey] }), [org, base]));
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'apiKey'],
+          location: 'guards.apiKey',
           rule: 'definitions-unidentified',
           message:
             'A Definitions Package a declaration comes from has a name and a version: @org/base has no version in its package.json',
@@ -214,13 +215,13 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const other = anUnidentifiedPackage({ kind: 'unnamed', manifest }, { apiKey });
     const org = aPackage('@org/definitions', { apiKey });
 
-    const validated = validatedOf(aService({ guards: [apiKey] }), [org, other]);
+    const validated = summarized(validatedOf(aService({ guards: [apiKey] }), [org, other]));
 
     expect(validated).toMatchObject({
       kind: 'invalid',
       failures: [
         {
-          at: ['guards', 'apiKey'],
+          location: 'guards.apiKey',
           rule: 'definitions-ambiguous',
           message: `A declaration belongs to one Definitions Package: exported by both @org/definitions and ${manifest}, and neither imports it from the other`,
         },
@@ -232,14 +233,14 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const base = anUnversionedPackage('@org/base', { forbidden, money });
     const root = aService({ rejections: [forbidden], body: z.object({ total: money }) });
 
-    const validated = validatedOf(root, [base]);
+    const validated = summarized(validatedOf(root, [base]));
 
     expect(validated).toMatchObject({
       kind: 'invalid',
       failures: [
-        { at: ['rejections', 'FORBIDDEN'], rule: 'definitions-unidentified' },
+        { location: 'codes.FORBIDDEN', rule: 'definitions-unidentified' },
         {
-          at: ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields', 'total'],
+          location: 'endpoints.GET /ping (ping) success.body.total',
           rule: 'definitions-unidentified',
         },
       ],
@@ -250,12 +251,16 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const base = anUnversionedPackage('@org/base', { money });
     const root = aService({ body: z.object({ first: money, second: money }) });
 
-    const validated = validatedOf(root, [base]);
+    const validated = summarized(validatedOf(root, [base]));
 
-    const at = ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields'];
     expect(validated).toMatchObject({
       kind: 'invalid',
-      failures: [{ at: [...at, 'first'], rule: 'definitions-unidentified' }],
+      failures: [
+        {
+          location: 'endpoints.GET /ping (ping) success.body.first',
+          rule: 'definitions-unidentified',
+        },
+      ],
     });
     expect(validated.kind === 'invalid' && validated.failures).toHaveLength(1);
   });
@@ -275,14 +280,14 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const p2 = aPackage('@p2/defs', { apiKey }, [p1]);
     p1Reaches.push(p2);
 
-    const validated = validatedOf(aService({ guards: [apiKey] }), [p1, p2]);
+    const validated = summarized(validatedOf(aService({ guards: [apiKey] }), [p1, p2]));
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'apiKey'],
+          location: 'guards.apiKey',
           rule: 'definitions-ambiguous',
           message:
             'A declaration belongs to one Definitions Package: exported by both @p1/defs and @p2/defs, and neither imports it from the other',
@@ -295,13 +300,15 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     const p1 = aPackage('@p1/defs', { money });
     const p2 = aPackage('@p2/defs', { money });
 
-    const validated = validatedOf(aService({ body: z.object({ total: money }) }), [p1, p2]);
+    const validated = summarized(
+      validatedOf(aService({ body: z.object({ total: money }) }), [p1, p2]),
+    );
 
     expect(validated).toMatchObject({
       kind: 'invalid',
       failures: [
         {
-          at: ['groups', 'ping', 'endpoints', 'GET /ping', 'success', 'body', 'fields', 'total'],
+          location: 'endpoints.GET /ping (ping) success.body.total',
           rule: 'definitions-ambiguous',
         },
       ],

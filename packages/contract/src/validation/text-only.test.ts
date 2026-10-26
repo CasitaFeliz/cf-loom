@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineEndpoint,
@@ -15,7 +16,7 @@ import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
-  return validateRoot(root, aRootPackage(root));
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -47,11 +48,11 @@ function validateEndpoint(endpoint: Endpoint) {
   return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
+const endpointAt = 'endpoints.GET /orders (listOrders)';
 const text = 'travels as text: a string, number, boolean, literal or enum';
 
 describe('validateRoot: text-only headers, query and path params', () => {
@@ -83,11 +84,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-client'],
-        'not-text',
-        `A header ${text}: x-client`,
-      ),
+      failed(`${endpointAt} input.headers.x-client`, 'not-text', `A header ${text}: x-client`),
     );
   });
 
@@ -98,11 +95,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-tags'],
-        'not-text',
-        `A header ${text}: x-tags`,
-      ),
+      failed(`${endpointAt} input.headers.x-tags`, 'not-text', `A header ${text}: x-tags`),
     );
   });
 
@@ -113,11 +106,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        [...endpointAt, 'success', 'headers', 'fields', 'x-page'],
-        'not-text',
-        `A header ${text}: x-page`,
-      ),
+      failed(`${endpointAt} success.headers.x-page`, 'not-text', `A header ${text}: x-page`),
     );
   });
 
@@ -125,11 +114,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
     const rejection = aRejectionWith(z.object({ 'x-realm': z.object({ id: z.string() }) }));
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      failed(
-        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realm'],
-        'not-text',
-        `A header ${text}: x-realm`,
-      ),
+      failed('codes.UNAUTHENTICATED headers.x-realm', 'not-text', `A header ${text}: x-realm`),
     );
   });
 
@@ -137,11 +122,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
     const rejection = aRejectionWith(z.object({ 'x-realms': z.array(z.string()) }));
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
-      failed(
-        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realms'],
-        'not-text',
-        `A header ${text}: x-realms`,
-      ),
+      failed('codes.UNAUTHENTICATED headers.x-realms', 'not-text', `A header ${text}: x-realms`),
     );
   });
 
@@ -150,7 +131,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
       failed(
-        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'x-realm'],
+        'codes.UNAUTHENTICATED headers.x-realm',
         'nullable-text',
         'A header is never nullable: x-realm',
       ),
@@ -175,7 +156,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'filter'],
+        `${endpointAt} input.query.filter`,
         'not-text',
         `A query param ${text}, or a list of those: filter`,
       ),
@@ -190,7 +171,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'filters'],
+        `${endpointAt} input.query.filters`,
         'not-text',
         `A query param ${text}, or a list of those: filters`,
       ),
@@ -206,7 +187,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'endpoints.GET /orders/{} (listOrders) input.params.orderId',
         'not-text',
         `A path param ${text}: orderId`,
       ),
@@ -221,7 +202,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'page'],
+        `${endpointAt} input.query.page`,
         'nullable-text',
         'A query param is never nullable: page',
       ),
@@ -237,7 +218,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'endpoints.GET /orders/{} (listOrders) input.params.orderId',
         'nullable-text',
         'A path param is never nullable: orderId',
       ),
@@ -252,7 +233,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
+        `${endpointAt} input.headers.x-tenant`,
         'nullable-text',
         'A header is never nullable: x-tenant',
       ),
@@ -268,7 +249,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
       failed(
-        ['guards', 'signed', 'demands', 'headers', 'fields', 'x-signature'],
+        'guards.signed demands.headers.x-signature',
         'not-text',
         `A header ${text}: x-signature`,
       ),
@@ -280,7 +261,7 @@ describe('validateRoot: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers'],
+        `${endpointAt} input.headers`,
         'not-an-object-schema',
         'headers is an object of its fields',
       ),
@@ -293,7 +274,7 @@ describe('validateRoot: a text part that is itself nullable', () => {
     const headers = z.object({ 'x-tenant': z.string() }).nullable() as unknown as z.ZodObject;
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
-      failed([...endpointAt, 'input', 'headers'], 'nullable-text', 'headers is never nullable'),
+      failed(`${endpointAt} input.headers`, 'nullable-text', 'headers is never nullable'),
     );
   });
 
@@ -301,7 +282,7 @@ describe('validateRoot: a text part that is itself nullable', () => {
     const query = z.object({ page: z.int() }).nullable() as unknown as z.ZodObject;
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { query } }))).toEqual(
-      failed([...endpointAt, 'input', 'query'], 'nullable-text', 'query is never nullable'),
+      failed(`${endpointAt} input.query`, 'nullable-text', 'query is never nullable'),
     );
   });
 });
@@ -315,7 +296,7 @@ describe('validateRoot: header names', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'X-Tenant'],
+        `${endpointAt} input.headers.X-Tenant`,
         'header-names',
         'Header names are lower-case: X-Tenant',
       ),
@@ -330,7 +311,7 @@ describe('validateRoot: header names', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'success', 'headers', 'fields', 'Content-Location'],
+        `${endpointAt} success.headers.Content-Location`,
         'header-names',
         'Header names are lower-case: Content-Location',
       ),
@@ -342,7 +323,7 @@ describe('validateRoot: header names', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
       failed(
-        ['rejections', 'UNAUTHENTICATED', 'headers', 'fields', 'WWW-Authenticate'],
+        'codes.UNAUTHENTICATED headers.WWW-Authenticate',
         'header-names',
         'Header names are lower-case: WWW-Authenticate',
       ),
@@ -358,7 +339,7 @@ describe('validateRoot: header names', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [apiKey] }))).toEqual(
       failed(
-        ['guards', 'apiKey', 'demands', 'headers', 'fields', 'X-Api-Key'],
+        'guards.apiKey demands.headers.X-Api-Key',
         'header-names',
         'Header names are lower-case: X-Api-Key',
       ),
@@ -483,7 +464,7 @@ describe('validateRoot: one schema per header or query name on an Endpoint', () 
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers'],
+        `${endpointAt} input.headers`,
         'input-conflict',
         'A header has one schema across an Endpoint and its Guards: authorization differs between listOrders and userToken',
       ),
@@ -510,7 +491,7 @@ describe('validateRoot: one schema per header or query name on an Endpoint', () 
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query'],
+        `${endpointAt} input.query`,
         'input-conflict',
         'A query param has one schema across an Endpoint and its Guards: tenant differs between userToken and tenant',
       ),

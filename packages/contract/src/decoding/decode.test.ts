@@ -1685,6 +1685,24 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      ['a tuple item', { type: 'tuple', items: [aRef('missing')] }, ['defs', 'tree', 'items', 0]],
+      [
+        'a union option',
+        { type: 'union', options: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'options', 0],
+      ],
+      [
+        'an intersection’s item',
+        { type: 'allOf', items: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'items', 0],
+      ],
+    ])('a ref in %s to a def the Snapshot does not hold is malformed at the ref', (_, tree, at) => {
+      const result = serviceWith({ defs: { tree } });
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
       [
         'an Endpoint’s body',
         aService({
@@ -2409,6 +2427,11 @@ const formatOneFixture = `{
 }
 `;
 
+/** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
+function aPlace(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
 describe('walkSchemas and decodeSnapshot agree on bounds', () => {
   type Drawn = { readonly schema: z.ZodType; readonly node: SchemaNode; readonly empty: boolean };
 
@@ -2417,7 +2440,7 @@ describe('walkSchemas and decodeSnapshot agree on bounds', () => {
     for (let draw = 0; draw < 500; draw += 1) {
       const { schema, node, empty } = aBoundedDraw(next);
 
-      const [walked] = walkSchemas([{ at: ['body'], schema }], () => undefined).located;
+      const [walked] = walkSchemas([{ at: aPlace('body'), schema }], () => undefined).located;
       const decoded = serviceWith({ defs: { a: node } });
 
       const label = `draw ${draw}: ${JSON.stringify(node)}`;
@@ -2588,7 +2611,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
 
   test('an intersection of a schema with itself, as generate writes it, decodes', () => {
     const schema = z.intersection(z.string(), z.string());
-    const [located] = walkSchemas([{ at: ['defs', 'a'], schema }], () => undefined).located;
+    const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
     const node = located?.walked.kind === 'walked' ? located.walked.value : undefined;
     const published = aService({ defs: { a: node ?? { type: 'json' } } });
 
@@ -2600,7 +2623,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
 
   /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk or is nullable, which no def is. */
   function publishedHolding(committed: ServiceSnapshot, schema: z.ZodType) {
-    const walk = walkSchemas([{ at: ['defs', 'probe'], schema }], () => undefined);
+    const walk = walkSchemas([{ at: aPlace('probe'), schema }], () => undefined);
     const [located] = walk.located;
     if (located?.walked.kind !== 'walked' || located.walked.value.nullable === true) {
       return undefined;

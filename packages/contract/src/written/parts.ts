@@ -1,6 +1,6 @@
 import { $ZodType } from 'zod/v4/core';
 import type { Endpoint, Guard, IssueCode, inputIns, Rejection } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { inside, type Place, partsOf } from '../walker/index.ts';
 import { partOf } from './written.ts';
 
 /** A slot of a declaration that holds a schema, as the Snapshot names it. */
@@ -116,8 +116,8 @@ export function isObjectPart(part: Part): part is ObjectPart {
 }
 
 /** Where a part of a declaration sits: the one place that spells a schema's location. */
-export function slotAt(owner: Path, part: Exclude<Part, 'schema'>): Path {
-  return [...owner, ...fieldsOf(part)];
+export function slotAt(owner: Place, part: Exclude<Part, 'schema'>): Place {
+  return inside(owner, ...partsOf(...fieldsOf(part)));
 }
 
 /** What a declaration holds at a part, as written, whatever the types said. */

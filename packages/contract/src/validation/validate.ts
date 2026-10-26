@@ -1,6 +1,5 @@
 import type { ContractPackage, Definitions, Root } from '../declarations/index.ts';
-import type { SchemaNode } from '../walker/index.ts';
-import { openCompositionsOf, walkMeetingSchemas } from '../walker/index.ts';
+import { openCompositionsOf, type SchemaNode, walkMeetingSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from '../written/index.ts';
 import { codeOnceFailures } from './code-once.ts';
 import { exportFailures } from './definitions.ts';
@@ -26,6 +25,7 @@ import {
   nodesOf,
   schemaSlotsOf,
 } from './schemas.ts';
+import { notAllowedFailuresOf } from './shared-failures.ts';
 import { structureFailures } from './structure.ts';
 import { subscriptionFailures } from './subscriptions.ts';
 import { conflictFailures, textPartFailures } from './text-only.ts';
@@ -124,6 +124,8 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
   const slots = schemaSlotsOf(declarations);
   const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
   const nodes = nodesOf(slots.slots, walked);
+  const opened = openCompositionsOf(walked.compositions, walked.defs);
+  const refusals = [...opened, ...walked.located.flatMap(failuresAt)];
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
@@ -134,8 +136,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
-    ...openCompositionsOf(nodes.slots, nodes.defs),
-    ...new Set(walked.located.flatMap(failuresAt)),
+    ...notAllowedFailuresOf(refusals, walked.memoOf),
   ];
   if (failures.length > 0) {
     return invalid(failures);

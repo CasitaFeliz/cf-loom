@@ -1379,7 +1379,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       status: 1,
       stdout: '',
       stderr:
-        "groups.audits.events.OrderPlaced@1 provided-element: A Group lists the Contract's own Elements: OrderPlaced@1 is orders-service's\n",
+        "groups.audits provided-element: A Group lists the Contract's own Elements: OrderPlaced@1 is orders-service's\n",
     });
     expect(typeCheck(consumer).status).not.toBe(0);
   });

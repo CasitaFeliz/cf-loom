@@ -7,12 +7,12 @@ import {
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '../snapshot/index.ts';
+import { partsOf } from '../walker/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
 import { codeNeutralOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
-import { partsOf } from './steps.ts';
 import { textPartDifferencesOf } from './text-parts.ts';
 import { widestVisibilitiesOf } from './visibility.ts';
 

@@ -14,7 +14,8 @@ import {
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type FileComparison, fileComparisonOf } from '../writing/index.ts';
 import { type Committed, committedOf } from './committed.ts';
-import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
+import { fileOfIn } from './failure-files.ts';
+import { type Invalid, invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type DeclaredRoot, type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
@@ -66,6 +67,9 @@ export async function builtOf(run: Run): Promise<Built> {
     return committed;
   }
   const declared = declaredOf(project);
+  if (declared.kind === 'invalid') {
+    return { ...declared, fileOf: await fileOfIn(project) };
+  }
   if (declared.kind !== 'declared') {
     return declared;
   }
@@ -92,8 +96,9 @@ export function declaredOf(declaring: DeclaredRoot): Declared {
   const validated = validatedOf(declaring);
   switch (validated.kind) {
     case 'tooling':
-    case 'invalid':
       return validated;
+    case 'invalid':
+      return invalid(validated.failures);
     case 'valid': {
       const snapshot = canonicalSnapshotOf(snapshotOf(validated));
       const tooDeep = tooDeepOf(snapshot);
@@ -109,7 +114,7 @@ export function declaredOf(declaring: DeclaredRoot): Declared {
 /** A Snapshot nested deeper than the decoder reads back, as a broken rule at its deepest path. */
 function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
   const failure = nestingFailureOf(snapshot);
-  return failure === undefined ? undefined : { kind: 'invalid', failures: [failure] };
+  return failure === undefined ? undefined : invalid([failure]);
 }
 
 /** The Root validated: the walk runs the user's schemas, whose getters may throw. */

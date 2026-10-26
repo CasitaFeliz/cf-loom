@@ -298,7 +298,7 @@ describe('serve: what it checks before the first request', () => {
         guards: {},
       });
 
-    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-a-schema');
+    expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-a-schema');
   });
 
   test('a text part the walker refuses throws, as generate words it', () => {
@@ -322,9 +322,7 @@ describe('serve: what it checks before the first request', () => {
         guards: {},
       });
 
-    expect(serving).toThrow(
-      'groups.orders.endpoints.GET /since.input.query.fields.at not allowed: z.date()',
-    );
+    expect(serving).toThrow('endpoints.GET /since (since) input.query.at not allowed: z.date()');
   });
 
   test('a text part that is no object throws, as generate words it', () => {
@@ -348,6 +346,6 @@ describe('serve: what it checks before the first request', () => {
         guards: {},
       });
 
-    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-an-object-schema');
+    expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-an-object-schema');
   });
 });

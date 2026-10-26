@@ -1,4 +1,5 @@
 import type { ObjectNode, RefNode } from '../walker/index.ts';
+import { variantStep } from '../walker/index.ts';
 import { innerAnnotationFindingsOf } from './annotations.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import {
@@ -11,7 +12,6 @@ import {
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
 import type { ShapeDifference } from './shape-differences.ts';
-import { variantStep } from './steps.ts';
 
 /**
  * How two discriminated unions differ. Variants are matched by discriminator value alone, so a

@@ -99,7 +99,7 @@ export const ordersGroup = defineGroup({
 });
 ```
 
-A Group lists at least one Endpoint, Event, Command or Subscription; one that lists nothing, or an empty list, is a type error, and `generate` fails on a Group that lists nothing. A Group's name is unique in the Contract; a duplicate fails `generate`. A Group lists its Contract's own declarations: a Provided Element, taken from a Contract Package, is a type error in a Group, and `generate` fails on one with the line `groups.<group>.<field>.<key> provided-element`, naming its Provider.
+A Group lists at least one Endpoint, Event, Command or Subscription; one that lists nothing, or an empty list, is a type error, and `generate` fails on a Group that lists nothing. A Group's name is unique in the Contract; a duplicate fails `generate`. A Group lists its Contract's own declarations: a Provided Element, taken from a Contract Package, is a type error in a Group, and `generate` fails on one with a `provided-element` line at the Group, naming the Element and its Provider (see [Failures](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#failures) in the CLI README).
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
@@ -290,11 +290,11 @@ At runtime:
 
 ## Schemas
 
-A Contract's schemas are zod 4 schemas, `zod/mini` ones too; the range of `zod` that works is the `peerDependencies` of `@cf-loom/contract`. A Contract describes shapes and declarative constraints, never behavior (see [Shapes, not behavior](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#shapes-not-behavior) in ARCHITECTURE.md), so `generate` accepts the constructs of the first table below and writes the node each becomes (the node format is in [Schemas](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#schemas) in SNAPSHOT.md). It fails on any other, the constructs [Not allowed](#not-allowed), with a line for each, and what lies inside one is still checked and reported; the types of a declaration refuse most of them earlier, as a type error (see the start of this README):
+A Contract's schemas are zod 4 schemas, `zod/mini` ones too; the range of `zod` that works is the `peerDependencies` of `@cf-loom/contract`. A Contract describes shapes and declarative constraints, never behavior (see [Shapes, not behavior](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#shapes-not-behavior) in ARCHITECTURE.md), so `generate` accepts the constructs of the first table below and writes the node each becomes (the node format is in [Schemas](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#schemas) in SNAPSHOT.md). It fails on any other, the constructs [Not allowed](#not-allowed), with a line for each, naming the Endpoint or the Element it sits in and the field, as `<location>` does in the [Failures](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/cli/README.md#failures) of the CLI README, and what lies inside one is still checked and reported; the types of a declaration refuse most of them earlier, as a type error (see the start of this README):
 
 ```
-groups.orders.endpoints.GET /orders/{}.success.body.fields.placedAt not allowed: z.date() (use z.iso.datetime())
-groups.orders.endpoints.GET /orders/{}.success.body.fields.note not allowed: .default()
+endpoints.GET /orders/{} (getOrder) success.body.placedAt not allowed: z.date() (use z.iso.datetime())
+endpoints.GET /orders/{} (getOrder) success.body.note not allowed: .default()
 ```
 
 ### What a construct becomes

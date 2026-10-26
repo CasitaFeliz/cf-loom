@@ -1,7 +1,9 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
-import type { RefNode, SchemaNode } from './nodes.ts';
+import { type Memos, startMemos } from './memos.ts';
+import type { NotAllowed, RefNode, SchemaNode } from './nodes.ts';
 import {
+  isUnnamedCycle,
   notAllowed,
   refused,
   refusedAcyclicId,
@@ -9,16 +11,19 @@ import {
   refusedNullableDef,
 } from './not-allowed.ts';
 import {
+  type Composition,
   type Failed,
   failed,
-  type LocatedSchema,
+  failuresOf,
+  type Memo,
+  type ReachedSchema,
   refusedBeside,
   type Walked,
   walked,
 } from './walked.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
-export type Entering = LocatedSchema & { readonly id: string | undefined };
+export type Entering = ReachedSchema & { readonly id: string | undefined };
 
 /**
  * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
@@ -28,6 +33,10 @@ export type Entering = LocatedSchema & { readonly id: string | undefined };
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walked) => Walked;
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
+  /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
+  readonly forgetUnnamedCycles: () => void;
+  /** The remembered schema each refusal was raised inside, those of compositions included. */
+  readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
 
 /** A schema being walked, numbered in walk order, with the lowest number it reaches back to. */
@@ -43,11 +52,12 @@ type State = {
   readonly schemaById: Map<string, core.$ZodType>;
   readonly defById: Map<string, SchemaNode>;
   readonly reportedBySchema: Map<core.$ZodType, Failed>;
+  readonly memos: Memos;
   count: number;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
-export function startRecursion(): Recursion {
+export function startRecursion(compositions: readonly Composition[]): Recursion {
   const state: State = {
     ancestors: [],
     openDefs: [],
@@ -55,11 +65,14 @@ export function startRecursion(): Recursion {
     schemaById: new Map(),
     defById: new Map(),
     reportedBySchema: new Map(),
+    memos: startMemos(compositions),
     count: 0,
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
+    forgetUnnamedCycles: () => forgetUnnamedCycles(state),
+    memoOf: state.memos.memoOf,
   };
 }
 
@@ -71,11 +84,16 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   const index = state.count++;
   const ancestor: Ancestor = { ...entering, index, low: index, reached: false };
   state.ancestors.push(ancestor);
+  const start = state.memos.start();
   const node = walk();
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
   const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
+  state.memos.raised(failuresOf([result]));
+  if (isRemembered(state, ancestor.schema)) {
+    state.memos.close(ancestor, start);
+  }
   closeGroup(state, ancestor);
   return result;
 }
@@ -90,12 +108,18 @@ function refOf(state: State, entering: Entering): Walked | undefined {
   if (open !== undefined) {
     reachBack(state, open.low);
   }
+  state.memos.reached(entering.schema, entering.at);
   return walked({ type: 'ref', name });
 }
 
-/** The very failure already reported for a cycle the schema lies on. */
+/** The failure already reported for a cycle the schema lies on, as walked: the fold tells it at each place. */
 function reportedOf(state: State, entering: Entering): Walked | undefined {
-  return state.reportedBySchema.get(entering.schema);
+  const reported = state.reportedBySchema.get(entering.schema);
+  if (reported === undefined) {
+    return undefined;
+  }
+  state.memos.reached(entering.schema, entering.at);
+  return reported;
 }
 
 /**
@@ -114,16 +138,33 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   reachBack(state, closing.index);
   const cycle = state.ancestors.slice(closingIndex);
   if (entering.id !== undefined) {
+    state.memos.reached(entering.schema, entering.at);
     return walked({ type: 'ref', name: entering.id });
   }
-  if (cycle.some(hasId)) {
+  if (cycle.some((member) => member.id !== undefined)) {
     return undefined;
   }
   const failure = notAllowed(entering.at, refused.unnamedCycle);
   for (const ancestor of cycle) {
     state.reportedBySchema.set(ancestor.schema, failure);
   }
+  state.memos.raised(failure.failures);
+  state.memos.reached(entering.schema, entering.at);
   return failure;
+}
+
+function forgetUnnamedCycles(state: State): void {
+  for (const [schema, reported] of state.reportedBySchema) {
+    if (reported.failures.some(isUnnamedCycle)) {
+      state.reportedBySchema.delete(schema);
+      state.memos.forget(schema);
+    }
+  }
+}
+
+/** Whether the walk answers the schema from memory from now on: a def, or a failure kept for every use. */
+function isRemembered(state: State, schema: core.$ZodType): boolean {
+  return state.nameBySchema.has(schema) || state.reportedBySchema.has(schema);
 }
 
 /** The schema being walked now reaches back to the one numbered `low`, or lower. */
@@ -158,7 +199,7 @@ function offCycle(ancestor: Ancestor, node: Walked): Walked {
  */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
-    return onUnnamedCycle(state, ancestor) ? withoutOutline(node) : node;
+    return isRemembered(state, ancestor.schema) ? withoutOutline(node) : node;
   }
   const ref: RefNode = { type: 'ref', name: ancestor.id };
   if (node.kind === 'not-allowed') {
@@ -203,11 +244,6 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
   return failure;
 }
 
-/** Whether `metAgain` recorded the schema as lying on a cycle no id names. */
-function onUnnamedCycle(state: State, ancestor: Ancestor): boolean {
-  return state.reportedBySchema.has(ancestor.schema);
-}
-
 /**
  * A schema on a cycle no id names is judged as every schema of the cycle would be with an id: a
  * `ref` wherever it is used, which takes no check. So its walk was building no node for a use,
@@ -215,8 +251,4 @@ function onUnnamedCycle(state: State, ancestor: Ancestor): boolean {
  */
 function withoutOutline(node: Walked): Walked {
   return node.kind === 'not-allowed' ? failed(node.failures) : node;
-}
-
-function hasId(ancestor: Ancestor): boolean {
-  return ancestor.id !== undefined;
 }

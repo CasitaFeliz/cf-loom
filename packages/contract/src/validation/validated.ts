@@ -1,5 +1,5 @@
 import type { Root } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import type { Place } from '../walker/index.ts';
 import {
   type Declarations,
   eventServiceOf,
@@ -34,7 +34,7 @@ export type ValidatedGuard = LocatedGuard & { readonly from: ResolvedDefinitions
  */
 export type ValidatedCode = {
   readonly code: string;
-  readonly at: Path;
+  readonly at: Place;
   readonly rejection: LocatedRejection['rejection'];
   readonly from: ResolvedDefinitions | undefined;
 };
