@@ -2,7 +2,7 @@ import { nodesReachedFrom } from './children.ts';
 import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
-import type { Composition } from './walked.ts';
+import type { Composition, Reached } from './walked.ts';
 
 /**
  * Every `allOf` or `union` the walk built that reaches an Open Enum, at any depth: a reader of an
@@ -14,9 +14,12 @@ export function openCompositionsOf(
   compositions: readonly Composition[],
   defs: Defs,
 ): readonly NotAllowed[] {
-  return compositions
-    .filter(({ node }) => reachesOpen(node, defs))
-    .map(({ at, node }) => ({ kind: 'not-allowed', ...at, ...refusalOf(node) }));
+  return compositions.filter(({ node }) => reachesOpen(node, defs)).map(({ refusal }) => refusal);
+}
+
+/** A composition the walk built where it stands, with the refusal it is if it reaches an Open Enum. */
+export function compositionOf(at: Reached, node: AllOfNode | UnionNode): Composition {
+  return { refusal: { kind: 'not-allowed', ...at, ...refusalOf(node) }, node };
 }
 
 function refusalOf(composition: AllOfNode | UnionNode): Refused {

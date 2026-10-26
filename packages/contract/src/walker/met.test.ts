@@ -7,7 +7,7 @@ function placeAt(name: string) {
 }
 
 describe('walkMeetingSchemas: where each schema is met', () => {
-  test('a schema is met at every place it is reached', () => {
+  test('a schema is met where the walk first reaches it', () => {
     const shared = z.string();
     const schemas = [
       { at: placeAt('first'), schema: z.object({ a: shared, b: z.array(shared) }) },
@@ -16,15 +16,11 @@ describe('walkMeetingSchemas: where each schema is met', () => {
 
     const { met } = walkMeetingSchemas(schemas, () => undefined);
 
-    const sites = (met.get(shared) ?? []).map(({ site, steps }) => [site, steps.length]);
-    expect(sites).toEqual([
-      [{ kind: 'export', name: 'first' }, 1],
-      [{ kind: 'export', name: 'first' }, 2],
-      [{ kind: 'export', name: 'second' }, 0],
-    ]);
+    const place = met.get(shared);
+    expect([place?.site, place?.steps.length]).toEqual([{ kind: 'export', name: 'first' }, 1]);
   });
 
-  test('a def is met at every place it is reached, those the walk answers from memory included', () => {
+  test('a def is met where the walk first enters it', () => {
     const tree: z.ZodType = z
       .object({
         get children() {
@@ -33,16 +29,12 @@ describe('walkMeetingSchemas: where each schema is met', () => {
       })
       .meta({ id: 'tree' });
     const schemas = [
+      { at: placeAt('second'), schema: z.array(tree) },
       { at: placeAt('first'), schema: tree },
-      { at: placeAt('second'), schema: tree },
-      { at: placeAt('third'), schema: z.array(tree) },
     ];
 
     const { met } = walkMeetingSchemas(schemas, () => undefined);
 
-    const names = (met.get(tree) ?? []).map(({ site }) =>
-      site.kind === 'export' ? site.name : '',
-    );
-    expect(names).toEqual(['first', 'first', 'second', 'third']);
+    expect(met.get(tree)?.site).toEqual({ kind: 'export', name: 'second' });
   });
 });

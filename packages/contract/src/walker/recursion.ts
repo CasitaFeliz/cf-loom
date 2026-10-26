@@ -1,8 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
-import { type Compositions, kept, replayed, startCompositions } from './compositions.ts';
-import { movedFrom } from './location.ts';
-import type { RefNode, SchemaNode } from './nodes.ts';
+import { type Memos, startMemos } from './memos.ts';
+import type { NotAllowed, RefNode, SchemaNode } from './nodes.ts';
 import {
   notAllowed,
   refused,
@@ -14,7 +13,8 @@ import {
   type Composition,
   type Failed,
   failed,
-  type Reached,
+  failuresOf,
+  type Memo,
   type ReachedSchema,
   refusedBeside,
   type Walked,
@@ -24,9 +24,6 @@ import {
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
 export type Entering = ReachedSchema & { readonly id: string | undefined };
 
-/** What the walk of a schema reported, and where it was first entered, so later reaches say it at their own place. */
-type Reported = { readonly at: Reached; readonly failed: Failed };
-
 /**
  * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
  * strongly connected group of schemas is written once under `defs` and is a `ref` wherever it
@@ -35,6 +32,8 @@ type Reported = { readonly at: Reached; readonly failed: Failed };
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walked) => Walked;
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
+  /** The remembered schema each refusal was raised inside, those of compositions included. */
+  readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
 
 /** A schema being walked, numbered in walk order, with the lowest number it reaches back to. */
@@ -49,13 +48,13 @@ type State = {
   readonly nameBySchema: Map<core.$ZodType, string>;
   readonly schemaById: Map<string, core.$ZodType>;
   readonly defById: Map<string, SchemaNode>;
-  readonly reportedBySchema: Map<core.$ZodType, Reported>;
-  readonly compositions: Compositions;
+  readonly reportedBySchema: Map<core.$ZodType, Failed>;
+  readonly memos: Memos;
   count: number;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
-export function startRecursion(sink: Composition[]): Recursion {
+export function startRecursion(compositions: readonly Composition[]): Recursion {
   const state: State = {
     ancestors: [],
     openDefs: [],
@@ -63,12 +62,13 @@ export function startRecursion(sink: Composition[]): Recursion {
     schemaById: new Map(),
     defById: new Map(),
     reportedBySchema: new Map(),
-    compositions: startCompositions(sink),
+    memos: startMemos(compositions),
     count: 0,
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
+    memoOf: state.memos.memoOf,
   };
 }
 
@@ -80,13 +80,15 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   const index = state.count++;
   const ancestor: Ancestor = { ...entering, index, low: index, reached: false };
   state.ancestors.push(ancestor);
-  const start = state.compositions.built.length;
+  const start = state.memos.start();
   const node = walk();
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
   const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
-  keepCompositions(state, ancestor, start);
+  if (isRemembered(state, ancestor.schema)) {
+    state.memos.close(ancestor, failuresOf([result]), start);
+  }
   closeGroup(state, ancestor);
   return result;
 }
@@ -101,21 +103,18 @@ function refOf(state: State, entering: Entering): Walked | undefined {
   if (open !== undefined) {
     reachBack(state, open.low);
   }
-  replayed(state.compositions, entering);
+  state.memos.reached(entering, entering.at);
   return walked({ type: 'ref', name });
 }
 
-/** The failure already reported for a cycle the schema lies on, said at the place it is entered now. */
+/** The failure already reported for a cycle the schema lies on, as walked: the fold tells it at each place. */
 function reportedOf(state: State, entering: Entering): Walked | undefined {
   const reported = state.reportedBySchema.get(entering.schema);
   if (reported === undefined) {
     return undefined;
   }
-  replayed(state.compositions, entering);
-  const moved = reported.failed.failures.map((failure) =>
-    movedFrom(failure, reported.at, entering.at),
-  );
-  return failed(moved, reported.failed.outline);
+  state.memos.reached(entering, entering.at);
+  return reported;
 }
 
 /**
@@ -134,6 +133,7 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   reachBack(state, closing.index);
   const cycle = state.ancestors.slice(closingIndex);
   if (entering.id !== undefined) {
+    state.memos.reached(closing, entering.at);
     return walked({ type: 'ref', name: entering.id });
   }
   if (cycle.some((member) => member.id !== undefined)) {
@@ -141,9 +141,15 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   }
   const failure = notAllowed(entering.at, refused.unnamedCycle);
   for (const ancestor of cycle) {
-    state.reportedBySchema.set(ancestor.schema, { at: ancestor.at, failed: failure });
+    state.reportedBySchema.set(ancestor.schema, failure);
   }
+  state.memos.reached(closing, entering.at);
   return failure;
+}
+
+/** Whether the walk answers the schema from memory from now on: a def, or a failure kept for every use. */
+function isRemembered(state: State, schema: core.$ZodType): boolean {
+  return state.nameBySchema.has(schema) || state.reportedBySchema.has(schema);
 }
 
 /** The schema being walked now reaches back to the one numbered `low`, or lower. */
@@ -208,8 +214,7 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
  * later failure higher up does not record itself over the first.
  */
 function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walked {
-  const reported: Reported = { at: ancestor.at, failed: failure };
-  state.reportedBySchema.set(ancestor.schema, reported);
+  state.reportedBySchema.set(ancestor.schema, failure);
   const dropped = state.openDefs.filter((def) => def.index > ancestor.index);
   for (const { schema } of dropped) {
     const name = state.nameBySchema.get(schema);
@@ -217,7 +222,7 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
       state.defById.delete(name);
     }
     state.nameBySchema.delete(schema);
-    state.reportedBySchema.set(schema, reported);
+    state.reportedBySchema.set(schema, failure);
   }
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
@@ -236,13 +241,4 @@ function onUnnamedCycle(state: State, ancestor: Ancestor): boolean {
  */
 function withoutOutline(node: Walked): Walked {
   return node.kind === 'not-allowed' ? failed(node.failures) : node;
-}
-
-/** Keeps the compositions the walk of a schema built when a later reach of it will be answered from memory. */
-function keepCompositions(state: State, ancestor: Ancestor, start: number): void {
-  const isRemembered =
-    state.nameBySchema.has(ancestor.schema) || state.reportedBySchema.has(ancestor.schema);
-  if (isRemembered) {
-    kept(state.compositions, ancestor, state.compositions.built.slice(start));
-  }
 }

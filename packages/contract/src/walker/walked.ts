@@ -1,6 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { byCodePoint } from './canonical-json.ts';
-import { type Place, sameSite, siteLocationOf } from './location.ts';
+import type { Place } from './location.ts';
 import type { AllOfNode, Field, NotAllowed, Origin, SchemaNode, UnionNode } from './nodes.ts';
 
 /** A schema of a Snapshot, and where it sits in it. */
@@ -44,8 +43,21 @@ export type Under = Place & { readonly origin?: Origin | undefined };
 /** A schema the walk enters and the place it enters it at. */
 export type ReachedSchema = { readonly at: Reached; readonly schema: core.$ZodType };
 
-/** An `allOf` or a `union` node a walk built for a schema, and where: judged once the walk's defs are known. */
-export type Composition = { readonly at: Reached; readonly node: AllOfNode | UnionNode };
+/**
+ * An `allOf` or a `union` node a walk built, and the refusal it is where it was built if the defs,
+ * once known, show it reaches an Open Enum.
+ */
+export type Composition = { readonly refusal: NotAllowed; readonly node: AllOfNode | UnionNode };
+
+/** One place a schema the walk remembers is entered, inside the walk of another remembered schema or of none. */
+export type Reach = { readonly at: Reached; within: Memo | undefined };
+
+/**
+ * A schema the walk entered once and answers from memory after: a def, a def that failed or a
+ * member of a cycle no id names. Where the walk entered it, and every place it is reached, that
+ * first place included; what was raised inside it sits under that first place.
+ */
+export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
 
 /** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
 export type Walker = {
@@ -68,9 +80,9 @@ export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonl
   return walked(list.filter(isWalked).map((success) => success.value));
 }
 
-/** A failed walk, from failures a caller already knows are there: none at all is a bug. */
+/** A failed walk, from failures a caller already knows are there, each once: none at all is a bug. */
 export function failed(failures: readonly NotAllowed[], outline?: Outline): Failed {
-  const [first, ...others] = onePerSite(failures);
+  const [first, ...others] = new Set(failures);
   if (first === undefined) {
     throw new Error('A failed walk must name the construct that is not allowed.');
   }
@@ -85,39 +97,6 @@ export function refusedBeside(refusal: Failed, inner: Walked): Failed {
 /** The node a walk built, or the one it was building when it failed. */
 export function outlineOf(walkedSchema: Walked): Outline {
   return walkedSchema.kind === 'walked' ? walkedSchema.value : (walkedSchema.outline ?? {});
-}
-
-/**
- * One failure for each construct of each schema at each site, the first in code point order: a
- * schema reached by many paths adds no line for the others, and without this a def used twice by
- * each of many defs would be told once for every path.
- */
-function onePerSite(failures: readonly NotAllowed[]): readonly NotAllowed[] {
-  const kept: NotAllowed[] = [];
-  for (const failure of failures) {
-    const at = kept.findIndex((known) => isSameReach(known, failure));
-    const known = kept[at];
-    if (known === undefined) {
-      kept.push(failure);
-    } else if (byCodePoint(locationOf(failure), locationOf(known)) < 0) {
-      kept[at] = failure;
-    }
-  }
-  return kept;
-}
-
-/** Whether two failures say one thing: one construct of one schema, in one site of one declaration. */
-function isSameReach(left: NotAllowed, right: NotAllowed): boolean {
-  return (
-    left.schema === right.schema &&
-    left.construct === right.construct &&
-    left.declaration === right.declaration &&
-    sameSite(left.site, right.site)
-  );
-}
-
-function locationOf({ site, steps }: NotAllowed): string {
-  return siteLocationOf(site, steps);
 }
 
 /** Every failure among walked values, in order. */

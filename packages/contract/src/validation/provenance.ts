@@ -118,12 +118,12 @@ export function schemaOriginsOf(packages: readonly ImportedDefinitions[]): Origi
 export function provenanceFailures(
   { guards, codes }: Declarations,
   packages: readonly ImportedDefinitions[],
-  met: ReadonlyMap<core.$ZodType, readonly [Place, ...Place[]]>,
+  met: ReadonlyMap<core.$ZodType, Place>,
 ): readonly DeclarationFailure[] {
   const declared: { readonly at: Place; readonly declaration: unknown }[] = [
     ...guards.map(({ at, guard }) => ({ at, declaration: guard })),
     ...codes.map(({ at, rejections: [first] }) => ({ at, declaration: first.rejection })),
-    ...[...met].map(([schema, [at]]) => ({ at, declaration: schema })),
+    ...[...met].map(([schema, at]) => ({ at, declaration: schema })),
   ];
   return declared
     .map(({ at, declaration }) => failureAt(at, definitionsPackageOf(packages, declaration)))

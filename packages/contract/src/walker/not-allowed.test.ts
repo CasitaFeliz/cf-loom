@@ -77,10 +77,11 @@ describe('walkSchemas: the Not allowed list', () => {
     expect(walkBody(order)).toEqual(refusedAll(failures));
   });
 
-  test('a refusal stacked on itself is reported once', () => {
+  test('a refusal stacked on itself is raised by each schema that makes it, for the fold to tell once', () => {
     const order = z.object({ note: z.string().default('a').default('b') });
 
-    expect(walkBody(order)).toEqual(refusedAt('note', '.default()'));
+    const failures = [failureAt('note', '.default()'), failureAt('note', '.default()')];
+    expect(walkBody(order)).toEqual(refusedAll(failures));
   });
 
   test.each([
@@ -437,10 +438,6 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     },
   ];
 
-  function once(failures: readonly Failure[]): Failure[] {
-    return [...new Map(failures.map((failure) => [JSON.stringify(failure), failure])).values()];
-  }
-
   function takesLength(inner: Inner, place: (typeof places)[number]): boolean {
     return (
       inner.takesLength === 'anywhere' ||
@@ -453,13 +450,13 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       checked.map((checks) => ({
         name: `${checks.name} on ${inner.name} ${place.name}`,
         schema: place.build(inner, checks.apply),
-        failures: once([
+        failures: [
           ...place.surrounding,
           ...inner.refusals(place.at),
           ...checks
             .refusals(takesLength(inner, place))
             .map((construct) => failureAt(place.at, construct)),
-        ]),
+        ],
       })),
     ),
   );

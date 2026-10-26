@@ -8,12 +8,14 @@ import {
   metadataOf,
   withExamplesParsed,
 } from './metadata.ts';
-import type { Field, Origin, SchemaNode } from './nodes.ts';
+import type { Field, NotAllowed, Origin, SchemaNode } from './nodes.ts';
 import { notAllowed, refusedWrapperId } from './not-allowed.ts';
+import { compositionOf } from './open-compositions.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   type Composition,
   type LocatedSchema,
+  type Memo,
   type Reached,
   type ReachedSchema,
   refusedBeside,
@@ -37,11 +39,13 @@ export type WalkedLocation = { readonly at: Place; readonly walked: Walked };
 export type WalkedSchemas = {
   readonly located: readonly WalkedLocation[];
   readonly defs: Defs;
+  /** The remembered schema each refusal was raised inside, so the fold tells it where that schema is reached. */
+  readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
 
-/** Every schema of a Snapshot walked, every place the walk met each schema, and the compositions it built. */
+/** Every schema of a Snapshot walked, where the walk first met each schema, and the compositions it built. */
 export type MeetingWalk = WalkedSchemas & {
-  readonly met: ReadonlyMap<core.$ZodType, readonly [Place, ...Place[]]>;
+  readonly met: ReadonlyMap<core.$ZodType, Place>;
   readonly compositions: readonly Composition[];
 };
 
@@ -53,7 +57,7 @@ type WalkState = {
   readonly walker: Walker;
   readonly recursion: Recursion;
   readonly originOf: OriginOf;
-  readonly met: Map<core.$ZodType, [Place, ...Place[]]>;
+  readonly met: Map<core.$ZodType, Place>;
   readonly compositions: Composition[];
 };
 
@@ -63,12 +67,12 @@ type WalkState = {
  * failure comes back at each place the cycle is met.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
-  const { located: walkedLocations, defs } = walkMeetingSchemas(located, originOf);
-  return { located: walkedLocations, defs };
+  const { located: walkedLocations, defs, memoOf } = walkMeetingSchemas(located, originOf);
+  return { located: walkedLocations, defs, memoOf };
 }
 
 /**
- * Walks as `walkSchemas` does, and says every place it met each schema, so a rule can judge where
+ * Walks as `walkSchemas` does, and says where it first met each schema, so a rule can judge where
  * a schema came from, and which `allOf` and `union` nodes it built, where.
  */
 export function walkMeetingSchemas(
@@ -87,7 +91,13 @@ export function walkMeetingSchemas(
     at,
     walked: walker.schema(schema, at),
   }));
-  return { located: walkedLocations, defs: recursion.defs(), met: state.met, compositions };
+  return {
+    located: walkedLocations,
+    defs: recursion.defs(),
+    memoOf: recursion.memoOf,
+    met: state.met,
+    compositions,
+  };
 }
 
 /** The place a schema is entered at: the place given, the schema and its origin, else the nearest one around. */
@@ -102,8 +112,9 @@ function withOrigin(schema: core.$ZodType, at: Under, own: Origin | undefined): 
 function walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walked {
   const own = state.originOf(schema);
   const at = withOrigin(schema, under, own);
-  const known = state.met.get(schema);
-  state.met.set(schema, known === undefined ? [at] : [...known, at]);
+  if (!state.met.has(schema)) {
+    state.met.set(schema, at);
+  }
   const metadata = ownMetadata(schema, at, own);
   const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
   return state.recursion.within({ schema, at, id }, () => {
@@ -117,7 +128,7 @@ function walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walk
 /** A node the walk built that is an `allOf` or a `union`, which a rule judges once the defs are known. */
 function recordComposition(node: Walked, at: Reached, { compositions }: WalkState): void {
   if (node.kind === 'walked' && (node.value.type === 'allOf' || node.value.type === 'union')) {
-    compositions.push({ at, node: node.value });
+    compositions.push(compositionOf(at, node.value));
   }
 }
 

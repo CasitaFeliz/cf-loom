@@ -124,6 +124,8 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
   const slots = schemaSlotsOf(declarations);
   const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
   const nodes = nodesOf(slots.slots, walked);
+  const opened = openCompositionsOf(walked.compositions, walked.defs);
+  const refusals = [...opened, ...walked.located.flatMap(failuresAt)];
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),
@@ -134,10 +136,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
     ...slots.failures,
     ...schemaFailures(declarations, nodes),
     ...textPartFailures(nodes),
-    ...notAllowedFailuresOf([
-      ...openCompositionsOf(walked.compositions, walked.defs),
-      ...walked.located.flatMap(failuresAt),
-    ]),
+    ...notAllowedFailuresOf(refusals, walked.memoOf),
   ];
   if (failures.length > 0) {
     return invalid(failures);

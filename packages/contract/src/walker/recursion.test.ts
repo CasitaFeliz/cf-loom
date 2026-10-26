@@ -22,7 +22,7 @@ function refused(failures: readonly { readonly at: string; readonly construct: s
   return { kind: 'not-allowed', failures: named };
 }
 
-/** The site each refusal of each walked schema sits at, so a refusal shared by two locations is told where it sits. */
+/** The site each refusal of each walked schema sits at: a schema the walk remembers keeps the place it was first walked at. */
 function refusalSitesOf({ located }: ReturnType<typeof walkSchemas>) {
   return located.map(({ walked }) =>
     walked.kind === 'walked' ? [] : walked.failures.map(({ site }) => siteTextOf(site)),
@@ -292,7 +292,7 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
-      test('used at two locations, the other id of the cycle fails at each', () => {
+      test('used at two locations, the other id of the cycle is the failure walked at the first, at both', () => {
         const walked = walkSchemas(
           [
             { at: placeAt('body'), schema: first },
@@ -306,7 +306,7 @@ describe('walkSchemas: recursion', () => {
           located: [refused([failure]), refused([failure])],
           defs: {},
         });
-        expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+        expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
       });
     });
 
@@ -322,7 +322,7 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
-    test('a cycle used at two locations fails at each, where the cycle is met there', () => {
+    test('a cycle used at two locations is the failure walked at the first, at both', () => {
       const node: z.ZodType = z.lazy(() => node).meta({ id: 'node' });
 
       const walked = walkSchemas(
@@ -334,13 +334,10 @@ describe('walkSchemas: recursion', () => {
       );
 
       expect(refusalsOf(walked)).toEqual({
-        located: [
-          refused([{ at: '', ...nodelessCycle }]),
-          refused([{ at: '[]', ...nodelessCycle }]),
-        ],
+        located: [refused([{ at: '', ...nodelessCycle }]), refused([{ at: '', ...nodelessCycle }])],
         defs: {},
       });
-      expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+      expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
     });
 
     test('a z.lazy() of itself as a discriminated union variant fails and does not throw', () => {
@@ -420,13 +417,10 @@ describe('walkSchemas: recursion', () => {
       const cycle = { at: 'next', ...nodelessCycle };
       const date = { at: 'placedAt', ...dateRefused };
       expect(refusalsOf(walked)).toEqual({
-        located: [refused([cycle, date]), refused([{ ...cycle, at: '' }])],
+        located: [refused([cycle, date]), refused([cycle])],
         defs: {},
       });
-      expect(refusalSitesOf(walked)).toEqual([
-        ['exports.body', 'exports.body'],
-        ['exports.success'],
-      ]);
+      expect(refusalSitesOf(walked)).toEqual([['exports.body', 'exports.body'], ['exports.body']]);
     });
 
     describe('with unions and intersections on the cycle', () => {
@@ -562,7 +556,7 @@ describe('walkSchemas: recursion', () => {
           })
           .meta({ id: 'holder' });
 
-        test('used at a second location fails there too, with no def', () => {
+        test('used at a second location is the failure walked at the first, with no def', () => {
           const walked = walkSchemas(
             [
               { at: placeAt('body'), schema: numbered },
@@ -576,7 +570,7 @@ describe('walkSchemas: recursion', () => {
             located: [refused([failure]), refused([failure])],
             defs: {},
           });
-          expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+          expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
         });
       });
     });
@@ -673,7 +667,7 @@ describe('walkSchemas: recursion', () => {
       located: [refused([failure]), refused([failure])],
       defs: {},
     });
-    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
   });
 
   test('defs dropped with their group are not walked again by a later use', () => {
@@ -711,7 +705,7 @@ describe('walkSchemas: recursion', () => {
       located: [refused([failure]), refused([failure])],
       defs: {},
     });
-    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
     expect(asked).toBe(13);
   });
 
@@ -755,7 +749,7 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  test('a cycle without an id used at two locations fails at each', () => {
+  test('a cycle without an id used at two locations is the failure walked at the first, at both', () => {
     const category = z.object({
       get children() {
         return z.array(category);
@@ -773,11 +767,11 @@ describe('walkSchemas: recursion', () => {
     expect(refusalsOf(walked)).toEqual({
       located: [
         refused([{ at: 'children[]', ...unnamedCycle }]),
-        refused([{ at: '[].children[]', ...unnamedCycle }]),
+        refused([{ at: 'children[]', ...unnamedCycle }]),
       ],
       defs: {},
     });
-    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
+    expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
   });
 
   test('two cyclic schemas with one id fail', () => {
@@ -1051,11 +1045,11 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
-    test('one schema used at two fields fails once, at the first in code point order', () => {
+    test('one schema used at two fields fails at both', () => {
       const order = z.object({ paid: money, due: money });
 
       expect(walkBody(order)).toEqual({
-        located: [refused([acyclicAt('due', 'money')])],
+        located: [refused([acyclicAt('paid', 'money'), acyclicAt('due', 'money')])],
         defs: {},
       });
     });

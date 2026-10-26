@@ -24,6 +24,7 @@ export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
   inside,
+  movedFrom,
   placeNameOf,
   placeOf,
   sameSite,
@@ -67,4 +68,4 @@ export {
 
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
-export type { LocatedSchema } from './walked.ts';
+export type { LocatedSchema, Memo } from './walked.ts';

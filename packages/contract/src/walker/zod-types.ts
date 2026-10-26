@@ -124,7 +124,7 @@ function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
     case 'nonoptional':
     case 'promise':
     case 'success':
-      return refusedWrapper(refusal, at, walker.schema(def.innerType, at));
+      return refusedBeside(notAllowed(at, refusal), walker.schema(def.innerType, at));
     case 'map':
       return failed(
         failuresOf([
@@ -164,20 +164,6 @@ function unionNodeOf(schema: core.$ZodUnion, at: Reached, walker: Walker): Walke
     return walkTagged(schema as core.$ZodDiscriminatedUnion, at, walker);
   }
   return walkUnion(schema, at, walker);
-}
-
-/**
- * A refused wrapper around one schema, which stands for that schema's node: removing the wrapper
- * leaves its checks on the schema inside, so they are judged by it. A wrapper stacked on one that
- * is refused the same way, in the same place, is that one's refusal and adds none.
- */
-function refusedWrapper(refusal: Refused, at: Reached, inner: Walked): Walked {
-  const isStacked =
-    inner.kind === 'not-allowed' &&
-    inner.failures.some(
-      ({ construct, steps }) => construct === refusal.construct && steps.length === at.steps.length,
-    );
-  return isStacked ? inner : refusedBeside(notAllowed(at, refusal), inner);
 }
 
 /** A construct the walker refuses and the schemas it holds. */

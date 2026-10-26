@@ -1,75 +1,106 @@
-import type { $ZodType } from 'zod/v4/core';
 import {
   byCodePoint,
+  type Memo,
+  movedFrom,
   type NotAllowed,
+  type Place,
   type Site,
   sameSite,
-  siteLocationOf,
+  siteTextOf,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
+import { byLocation, locationTextOf, type MemoPlaces, memoPlaces } from './memo-places.ts';
+
+/** A refusal told where the author reads it, and every site that reaches it. */
+type Told = { readonly refusal: NotAllowed; readonly at: Place; readonly sites: readonly Site[] };
 
 /**
- * What the walk refused, as one failure for each construct of each schema: a schema several
- * places reach is told once, at the first place in code point order, with the other sites that
- * reach it.
+ * What the walk refused, as one line for each construct at each location: a refusal inside a
+ * remembered schema is told from the first place that schema is reached, with every site that
+ * reaches it; a schema several places reach is told once, at the first of them in code point
+ * order, with the other sites.
  */
 export function notAllowedFailuresOf(
   refusals: readonly NotAllowed[],
+  memoOf: ReadonlyMap<NotAllowed, Memo>,
 ): readonly NotAllowedFailure[] {
-  return reachesOf(refusals).map(failureOf);
+  const places = memoPlaces();
+  const told = [...new Set(refusals)].map((refusal) =>
+    toldOf(refusal, memoOf.get(refusal), places),
+  );
+  const bySchema = groupedBy(
+    told,
+    ({ refusal }) => refusal.schema,
+    ({ refusal }) => refusal.construct,
+  );
+  const firsts = bySchema.map(firstOfGroup);
+  const byLine = groupedBy(
+    firsts,
+    ({ at }) => locationTextOf(at),
+    ({ refusal }) => refusal.construct,
+  );
+  return byLine.map(firstOfGroup).map(failureOf);
 }
 
-/** The refusals grouped by the schema and the construct, the groups in the order they were first met. */
-function reachesOf(refusals: readonly NotAllowed[]): readonly (readonly NotAllowed[])[] {
-  const bySchema = new Map<$ZodType, Map<string, NotAllowed[]>>();
-  const groups: NotAllowed[][] = [];
-  for (const refusal of refusals) {
-    const byConstruct = bySchema.get(refusal.schema) ?? new Map<string, NotAllowed[]>();
-    bySchema.set(refusal.schema, byConstruct);
-    const same = byConstruct.get(refusal.construct);
+/** A refusal told at its place, or, raised inside a remembered schema, from that schema's first place. */
+function toldOf(refusal: NotAllowed, memo: Memo | undefined, places: MemoPlaces): Told {
+  if (memo === undefined) {
+    return { refusal, at: refusal, sites: [refusal.site] };
+  }
+  const at = movedFrom(refusal, memo.at, places.firstOf(memo));
+  return { refusal, at, sites: places.sitesOf(memo) };
+}
+
+/** The items grouped by two keys, the groups in the order each was first met. */
+function groupedBy<Item, Outer>(
+  items: readonly Item[],
+  outerOf: (item: Item) => Outer,
+  innerOf: (item: Item) => string,
+): readonly (readonly Item[])[] {
+  const byOuter = new Map<Outer, Map<string, Item[]>>();
+  const groups: Item[][] = [];
+  for (const item of items) {
+    const byInner = byOuter.get(outerOf(item)) ?? new Map<string, Item[]>();
+    byOuter.set(outerOf(item), byInner);
+    const same = byInner.get(innerOf(item));
     if (same === undefined) {
-      const group = [refusal];
-      byConstruct.set(refusal.construct, group);
+      const group = [item];
+      byInner.set(innerOf(item), group);
       groups.push(group);
     } else {
-      same.push(refusal);
+      same.push(item);
     }
   }
   return groups;
 }
 
-function failureOf(group: readonly NotAllowed[]): NotAllowedFailure {
-  const [first, ...others] = [...group].sort(byLocation);
+/** One telling for a group: at the first location in code point order, with every site of the group once. */
+function firstOfGroup(group: readonly Told[]): Told {
+  const [first, ...others] = [...group].sort((left, right) => byLocation(left.at, right.at));
   if (first === undefined) {
     throw new Error('A construct that is not allowed is reached from at least one place: a bug.');
   }
-  const { site, steps, construct, instead, declaration, origin } = first;
-  return {
-    kind: 'not-allowed',
-    site,
-    steps,
-    construct,
-    ...(instead !== undefined && { instead }),
-    declaration,
-    alsoIn: otherSitesOf(site, others),
-    origin,
-  };
-}
-
-function byLocation(left: NotAllowed, right: NotAllowed): number {
-  return byCodePoint(
-    siteLocationOf(left.site, left.steps),
-    siteLocationOf(right.site, right.steps),
-  );
-}
-
-/** The sites, other than the first's, that reach the schema, each once, in the order given. */
-function otherSitesOf(first: Site, others: readonly NotAllowed[]): readonly Site[] {
   const sites: Site[] = [];
-  for (const { site } of others) {
-    if (!sameSite(site, first) && !sites.some((known) => sameSite(known, site))) {
+  for (const site of [first, ...others].flatMap((told) => told.sites)) {
+    if (!sites.some((known) => sameSite(known, site))) {
       sites.push(site);
     }
   }
-  return sites;
+  return { refusal: first.refusal, at: first.at, sites };
+}
+
+function failureOf({ refusal, at, sites }: Told): NotAllowedFailure {
+  const { construct, instead, origin } = refusal;
+  return {
+    kind: 'not-allowed',
+    site: at.site,
+    steps: at.steps,
+    construct,
+    ...(instead !== undefined && { instead }),
+    declaration: at.declaration,
+    alsoIn: sites
+      .filter((site) => !sameSite(site, at.site))
+      .sort((left, right) => byCodePoint(siteTextOf(left), siteTextOf(right))),
+    origin,
+  };
 }

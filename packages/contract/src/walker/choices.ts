@@ -67,6 +67,9 @@ export function walkTagged(
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyDiscriminatedUnion, tagged);
   }
+  const duplicate = hasDuplicateValue(def)
+    ? [notAllowed(at, refused.duplicateDiscriminatorValue)]
+    : [];
   const variants = allWalked(
     def.options.map((option, index) => {
       const values = option._zod.propValues?.[def.discriminator];
@@ -82,18 +85,28 @@ export function walkTagged(
       return taggedVariant(variant, values, variantAt);
     }),
   );
-  if (variants.kind === 'not-allowed') {
-    return failed(variants.failures, tagged);
-  }
-  const keys = variants.value.map(([key]) => key);
-  if (new Set(keys).size !== keys.length) {
-    return notAllowed(at, refused.duplicateDiscriminatorValue, tagged);
+  if (variants.kind === 'not-allowed' || duplicate.length > 0) {
+    return failed(failuresOf([...duplicate, variants]), tagged);
   }
   return walked({
     type: 'tagged',
     discriminator: def.discriminator,
     variants: Object.fromEntries(variants.value),
   });
+}
+
+/**
+ * Whether two variants share a discriminator value, as zod reads each variant's values: judged
+ * before the variants are walked, so it is told beside what they refuse.
+ */
+function hasDuplicateValue({ options, discriminator }: core.$ZodDiscriminatedUnionDef): boolean {
+  const values = options.map((option) => [...(option._zod.propValues?.[discriminator] ?? [])]);
+  const keys = values.filter(isOneValue).map(([value]) => canonicalJson(value));
+  return new Set(keys).size !== keys.length;
+}
+
+function isOneValue(values: readonly unknown[]): values is [JsonPrimitive] {
+  return values.length === 1 && isJsonPrimitive(values[0]);
 }
 
 /** A variant is told by its discriminator's one literal, else by its position among the options. */

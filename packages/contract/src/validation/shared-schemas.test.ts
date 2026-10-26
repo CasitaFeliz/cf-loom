@@ -212,7 +212,7 @@ describe('failure lines: the variants of a discriminated union', () => {
     ]);
   });
 
-  test('two variants with one discriminator value, each refused, give a line each', () => {
+  test('two variants with one discriminator value, each refused, are one line beside the duplicate value', () => {
     const shape = z.discriminatedUnion('t', [
       z.object({ t: z.literal('a'), v: z.date() }),
       z.object({ t: z.literal('a'), v: z.date() }),
@@ -220,139 +220,334 @@ describe('failure lines: the variants of a discriminated union', () => {
 
     const lines = linesOf(serviceWith([anEndpoint('alpha', 'GET /a', { x: shape })]));
 
-    const dateAtVariant = `endpoints.GET /a (alpha) success.body.x<t="a">.v ${date}`;
-    expect(lines.filter((line) => line === dateAtVariant)).toHaveLength(2);
+    expect(lines).toEqual([
+      'endpoints.GET /a (alpha) success.body.x not allowed: two discriminated union variants with the same discriminator value',
+      `endpoints.GET /a (alpha) success.body.x<t="a">.v ${date}`,
+    ]);
   });
 });
 
-/** What a draw of the random test may put in a body, each a schema with refused constructs. */
-type Pool = readonly (readonly [string, z.ZodType])[];
+describe('failure lines: a construct stacked on itself', () => {
+  test.for([
+    ['z.set() of a z.set()', () => z.set(z.set(z.string())), 'z.set()'],
+    ['a .pipe() into a .pipe()', () => z.string().pipe(z.string().pipe(z.string())), '.pipe()'],
+    ['.transform() twice', () => z.string().transform(String).transform(String), '.transform()'],
+    ['.default() twice', () => z.string().default('a').default('b'), '.default()'],
+  ] as const)('%s is one line', ([, stacked, construct]) => {
+    const endpoint = anEndpoint('alpha', 'GET /a', { v: stacked() });
 
-function poolOf(): Pool {
-  const tree = dateTree();
-  const inner: z.ZodType = z
-    .object({
-      at: z.date(),
-      get children() {
-        return z.array(inner);
-      },
-    })
-    .meta({ id: 'inner' });
-  const outer: z.ZodType = z
-    .object({
-      i: inner,
-      get more() {
-        return z.array(outer);
-      },
-    })
-    .meta({ id: 'outer' });
-  const category: z.ZodType = z.object({
-    get children() {
-      return z.array(category);
-    },
+    expect(linesOf(serviceWith([endpoint]))).toEqual([
+      `endpoints.GET /a (alpha) success.body.v not allowed: ${construct}`,
+    ]);
   });
-  return [
-    ['date', z.date()],
-    ['default', z.string().default('a')],
-    ['any', z.any()],
-    ['tree', tree],
-    ['inner', inner],
-    ['outer', outer],
-    ['category', category],
-    ['union', z.union([openEnum(['a']), z.number()])],
-    ['both', z.intersection(z.object({ s: openEnum(['a']) }), z.record(z.string(), z.json()))],
+});
+
+describe('failure lines: defs that hold defs', () => {
+  /** Two defs that hold each other, the date in one of them, and an Endpoint entering each. */
+  function mutualPair() {
+    const either: z.ZodType = z
+      .object({
+        x: z.date(),
+        get d() {
+          return other;
+        },
+      })
+      .meta({ id: 'eDef' });
+    const other: z.ZodType = z
+      .object({
+        get e() {
+          return either;
+        },
+      })
+      .meta({ id: 'dDef' });
+    return {
+      a: anEndpoint('a', 'GET /a', { d: other }),
+      b: anEndpoint('b', 'GET /b', { e: either }),
+    };
+  }
+
+  test.for([
+    ['a', 'b'],
+    ['b', 'a'],
+  ] as const)('a date in one of two defs is told from the first place, declared %s', (order) => {
+    const endpoints = mutualPair();
+
+    const lines = linesOf(serviceWith(order.map((key) => endpoints[key])));
+
+    expect(lines).toEqual([
+      `endpoints.GET /a (a) success.body.d.e.x ${date} (also in endpoints.GET /b (b))`,
+    ]);
+  });
+
+  /** A chain of defs, each holding the next at two fields, so a body reaches the last by 2^depth paths. */
+  function chainOf(depth: number, leaf: z.ZodType): z.ZodType {
+    let next = aDef(`d${depth}`, { leaf });
+    for (let level = depth - 1; level >= 0; level -= 1) {
+      next = aDef(`d${level}`, { a: next, b: next });
+    }
+    return next;
+  }
+
+  const levels = 24;
+  const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
+
+  test.for([
+    ['a valid union', () => z.union([z.string(), z.number()]), []],
+    ['a date', () => z.date(), [`endpoints.GET /a (alpha) ${deepest} ${date}`]],
     [
-      'literal',
-      z.discriminatedUnion('t', [
-        z.object({ t: z.literal('a'), v: z.date() }),
-        z.object({ t: z.literal('a'), v: z.date() }),
-      ]),
+      'an open union',
+      () => z.union([openEnum(['x', 'y']), z.number()]),
+      [`endpoints.GET /a (alpha) ${deepest} ${unionIsRefused}`],
     ],
-    [
-      'open',
-      z.discriminatedUnion('type', [
-        z.object({ type: z.string() }),
-        z.object({ type: z.string(), x: z.number() }),
-      ]),
-    ],
-  ];
-}
+  ] as const)(
+    '%s in the last of 24 defs, each holding the next twice, is told once, quickly',
+    ([, leaf, told]) => {
+      const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(levels, leaf()) });
+      const started = performance.now();
 
-/** One body of a draw: the pool's schemas it holds, each under the name it has in the pool. */
-function fieldsOf(pool: Pool, next: () => number): Readonly<Record<string, z.ZodType>> {
-  return Object.fromEntries(pool.filter(() => next() < 0.35));
-}
+      const lines = linesOf(serviceWith([endpoint]));
 
-describe('failure lines: shared refused schemas, drawn at random', () => {
-  test.for([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])(
-    'draw %i: each declaration is told for what it holds, once, whatever the order',
-    (seed) => {
-      const next = seededNext(seed);
-      const pool = poolOf();
-      const endpoints = Array.from({ length: 1 + Math.floor(next() * 5) }, (_, index) =>
-        anEndpoint(`e${index}`, `GET /e${index}`, fieldsOf(pool, next)),
-      );
-      const events = Array.from({ length: Math.floor(next() * 4) }, (_, index) =>
-        anEvent(`Event${String.fromCharCode(65 + index)}`, fieldsOf(pool, next)),
-      );
-
-      const lines = linesOf(serviceWith(endpoints, events));
-      const reversed = linesOf(serviceWith([...endpoints].reverse(), [...events].reverse()));
-
-      expectToCoverAlone([...endpoints, ...events], lines);
-      expect(lines.filter((line) => line.startsWith('defs.'))).toEqual([]);
-      expect([...reversed].sort()).toEqual([...lines].sort());
+      expect(lines).toEqual(told);
+      expect(performance.now() - started).toBeLessThan(2000);
     },
   );
 });
 
-/** A declaration's site as its lines name it, such as `endpoints.GET /e0 (e0)`. */
-function siteOf(declaration: Endpoint | Event): string {
-  if ('method' in declaration) {
-    return `endpoints.${declaration.method} ${declaration.path} (${declaration.name})`;
-  }
-  return `events.${declaration.name}@${declaration.version}`;
+type Next = () => number;
+
+function pickOf<Value>(next: Next, values: readonly Value[]): Value {
+  return values[Math.floor(next() * values.length)] as Value;
 }
 
-/**
- * Every construct a declaration alone is told for, as many times as it is told, is told for it
- * in the lines of all of them, at its site first or after `also in`; and no line names a site twice.
- */
-function expectToCoverAlone(declarations: readonly (Endpoint | Event)[], lines: readonly string[]) {
-  for (const declaration of declarations) {
-    const site = siteOf(declaration);
-    const events = 'method' in declaration ? [] : [declaration];
-    const endpoints = 'method' in declaration ? [declaration] : [];
-    const alone = linesOf(serviceWith(endpoints, events));
-    for (const construct of new Set(alone.map(constructOf))) {
-      const told = alone.filter((line) => constructOf(line) === construct).length;
-      const covering = lines.filter(
-        (line) => constructOf(line) === construct && namesSite(line, site),
-      );
-      expect(covering.length).toBeGreaterThanOrEqual(told);
-    }
-  }
-  for (const line of lines) {
-    const sites = sitesOf(line);
-    expect(new Set(sites).size).toBe(sites.length);
-  }
+/** A leaf of the pool's schemas: refused, refused twice over, or allowed. */
+function aLeaf(next: Next): z.ZodType {
+  const leaves: readonly (() => z.ZodType)[] = [
+    () => z.date(),
+    () => z.string().default('x'),
+    () => z.any(),
+    () => z.string(),
+    () => z.number(),
+    () => z.set(z.set(z.string())),
+    () => z.string().default('a').default('b'),
+  ];
+  return pickOf(next, leaves)();
 }
 
-/** The construct a `not allowed` line refuses, without where or the sites that also reach it. */
+function anOpenUnion(): z.ZodType {
+  return z.union([openEnum(['a', 'b']), z.number()]);
+}
+
+/** A def with an id of its own, holding the fields given and a list of itself. */
+function aDef(id: string, fields: Readonly<Record<string, z.ZodType>>): z.ZodType {
+  const def: z.ZodType = z
+    .object({
+      ...fields,
+      get kids() {
+        return z.array(def);
+      },
+    })
+    .meta({ id });
+  return def;
+}
+
+/** A variant of a discriminated union, its discriminator a literal or refused, holding a leaf. */
+function aVariant(next: Next): z.ZodObject {
+  const discriminator = next() < 0.5 ? z.string() : z.literal(pickOf(next, ['a', 'b']));
+  return z.object({ t: discriminator, v: aLeaf(next) });
+}
+
+/** Two defs that hold each other, entered at either. */
+function aMutualPair(next: Next, id: string): z.ZodType {
+  const either: z.ZodType = z
+    .object({
+      x: aLeaf(next),
+      get d() {
+        return other;
+      },
+    })
+    .meta({ id: `${id}e` });
+  const other: z.ZodType = z
+    .object({
+      get e() {
+        return either;
+      },
+    })
+    .meta({ id });
+  return next() < 0.5 ? other : either;
+}
+
+/** A def held by another def, entered at either. */
+function nestedDefs(next: Next, id: string): z.ZodType {
+  const inner = aDef(`${id}i`, { at: aLeaf(next) });
+  const outer = aDef(id, { i: inner });
+  return next() < 0.5 ? outer : inner;
+}
+
+/** A cycle no id names. */
+function anUnnamedCycle(): z.ZodType {
+  const cycle: z.ZodType = z.object({
+    get self() {
+      return z.array(cycle);
+    },
+  });
+  return cycle;
+}
+
+/** What the declarations of a draw share: 1 to 3 schemas, each holding refused constructs. */
+function poolOf(next: Next): readonly z.ZodType[] {
+  const idOf = (prefix: string) => `${prefix}${Math.floor(next() * 1e6)}`;
+  const makers: readonly (() => z.ZodType)[] = [
+    () => z.object({ a: aLeaf(next), b: aLeaf(next) }),
+    () => z.object({ k: anOpenUnion() }),
+    () => z.object({ k: z.union([anOpenUnion(), z.string()]) }),
+    () => z.discriminatedUnion('t', [aVariant(next), aVariant(next)]),
+    () => aDef(idOf('d'), { at: aLeaf(next) }),
+    () => aDef(idOf('u'), { k: anOpenUnion() }),
+    () => aDef(idOf('s'), { k: z.set(z.set(aLeaf(next))) }),
+    anUnnamedCycle,
+    () => nestedDefs(next, idOf('n')),
+    () => aMutualPair(next, idOf('m')),
+    () => {
+      const def = aDef(idOf('g'), { at: aLeaf(next) });
+      return z.object({ p: def, q: def });
+    },
+  ];
+  return Array.from({ length: 1 + Math.floor(next() * 3) }, () => pickOf(next, makers)());
+}
+
+/** A body of a draw: a schema of the pool or one of its own, as is or wrapped. */
+function aBody(next: Next, pool: readonly z.ZodType[]): z.ZodType {
+  const drawn = next() < 0.75 ? pickOf(next, pool) : z.object({ fresh: z.date() });
+  const wrappings: readonly ((schema: z.ZodType) => z.ZodType)[] = [
+    (schema) => schema,
+    (schema) => z.object({ w: schema }),
+    (schema) => z.object({ p: schema, q: schema }),
+    (schema) => z.array(schema),
+  ];
+  return pickOf(next, wrappings)(drawn);
+}
+
+/** The declarations of a draw: 1 to 5 Endpoints and 0 to 3 Events, their bodies sharing a pool. */
+function declarationsOf(seed: number): readonly (Endpoint | Event)[] {
+  const next = seededNext(seed);
+  const pool = poolOf(next);
+  const endpoints = Array.from({ length: 1 + Math.floor(next() * 5) }, (_, index) =>
+    defineEndpoint({
+      name: `e${index}`,
+      method: 'GET',
+      path: `/e${index}`,
+      visibility: 'public',
+      description: 'd',
+      success: { status: 200, body: aBody(next, pool) },
+    } as never),
+  );
+  const events = Array.from({ length: Math.floor(next() * 4) }, (_, index) =>
+    defineEvent({
+      name: `Ev${index}`,
+      version: 1,
+      visibility: 'internal',
+      description: 'E',
+      body: aBody(next, pool),
+    } as never),
+  );
+  return [...endpoints, ...events];
+}
+
+function rootOf(declarations: readonly (Endpoint | Event)[]): Root {
+  return serviceWith(declarations.filter(isEndpoint), declarations.filter(isEvent));
+}
+
+function isEndpoint(declaration: Endpoint | Event): declaration is Endpoint {
+  return 'method' in declaration;
+}
+
+function isEvent(declaration: Endpoint | Event): declaration is Event {
+  return !('method' in declaration);
+}
+
+/** The `not allowed` lines `generate` prints for a Root. */
+function refusedLinesOf(root: Root): readonly string[] {
+  return linesOf(root).filter((line) => line.includes(' not allowed: '));
+}
+
+/** A line without the sites that also reach it and the origin: what it says, once. */
+function textOf(line: string): string {
+  return line.replace(/ \((also in|declared in) .*$/, '');
+}
+
 function constructOf(line: string): string {
-  const [, refused = line] = line.split(' not allowed: ');
-  return refused.replace(/ \(also in .*$/, '').replace(/ \(declared in .*$/, '');
+  return textOf(line).replace(/^.*? not allowed: /, '');
 }
 
-function namesSite(line: string, site: string): boolean {
-  return sitesOf(line).includes(site);
-}
+const siteNames = /endpoints\.(GET \/e\d+) \(e\d+\)|events\.(Ev\d+@1)|(defs\.\w+)/g;
 
 /** The sites a line names: where it sits, then each site after `also in`. */
 function sitesOf(line: string): readonly string[] {
-  const [head = '', tail = ''] = line.split(' not allowed: ');
-  const first = /^(?<site>(?:endpoints\.\S+ \S+ \(\S+\)|events\.\S+))/.exec(head)?.groups?.['site'];
-  const also = /\(also in (?<sites>.*?)\)(?: \(declared in |$)/.exec(tail)?.groups?.['sites'];
-  const others = also === undefined ? [] : also.split(/, (?=endpoints\.|events\.)/);
-  return first === undefined ? others : [first, ...others];
+  const [head = ''] = line.split(' not allowed: ');
+  const also = /\(also in (?<sites>.*?)\)(?: \(declared in |$)/.exec(line)?.groups?.['sites'] ?? '';
+  return [...head.matchAll(siteNames), ...also.matchAll(siteNames)].map(
+    ([, endpoint, event, def]) => endpoint ?? event ?? def ?? '',
+  );
 }
+
+/** How many times the lines tell each construct at each site. */
+function toldCountsOf(lines: readonly string[]): Readonly<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const line of lines) {
+    for (const site of sitesOf(line)) {
+      const key = `${site} | ${constructOf(line)}`;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function shuffled<Item>(items: readonly Item[], next: Next): readonly Item[] {
+  const shuffledItems = [...items];
+  for (let index = shuffledItems.length - 1; index > 0; index -= 1) {
+    const other = Math.floor(next() * (index + 1));
+    [shuffledItems[index], shuffledItems[other]] = [
+      shuffledItems[other] as Item,
+      shuffledItems[index] as Item,
+    ];
+  }
+  return shuffledItems;
+}
+
+const seeds = Array.from({ length: 200 }, (_, index) => index + 1);
+
+describe('failure lines: shared refused schemas, drawn at random', () => {
+  test.for(seeds)('draw %i: the lines tell each site what it alone is told', (seed) => {
+    const declarations = declarationsOf(seed);
+
+    const lines = refusedLinesOf(rootOf(declarations));
+
+    const alone = declarations.flatMap((declaration) => refusedLinesOf(rootOf([declaration])));
+    expect(toldCountsOf(lines)).toEqual(toldCountsOf(alone));
+  });
+
+  test.for(seeds)('draw %i: no line names a site twice, and no two lines say one thing', (seed) => {
+    const lines = refusedLinesOf(rootOf(declarationsOf(seed)));
+
+    const twice = lines.filter((line) => new Set(sitesOf(line)).size !== sitesOf(line).length);
+    expect({ twice, texts: new Set(lines.map(textOf)).size }).toEqual({
+      twice: [],
+      texts: lines.length,
+    });
+  });
+
+  test.for(seeds)('draw %i: the order of the declarations changes no line', (seed) => {
+    const declarations = declarationsOf(seed);
+
+    const lines = refusedLinesOf(rootOf(declarations));
+
+    const reordered = refusedLinesOf(rootOf(shuffled(declarations, seededNext(seed * 7 + 1))));
+    expect([...reordered].sort()).toEqual([...lines].sort());
+  });
+
+  test.for(seeds)('draw %i: no line sits at a def', (seed) => {
+    const lines = refusedLinesOf(rootOf(declarationsOf(seed)));
+
+    expect(lines.filter((line) => line.startsWith('defs.'))).toEqual([]);
+  });
+});
