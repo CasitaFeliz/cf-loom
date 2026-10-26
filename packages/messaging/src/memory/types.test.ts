@@ -153,6 +153,17 @@ describe('memory types', () => {
     expect(broker.messages).toEqual([]);
   });
 
+  test('messagesOf lists the Messages of a Message Version, their body typed by it', () => {
+    const recorded = broker.messagesOf(orderCreatedV1);
+    const sent = broker.messagesOf(chargeCardV1);
+
+    expectTypeOf(recorded).toEqualTypeOf<readonly RecordedMessage<typeof orderCreatedV1>[]>();
+    expectTypeOf(recorded).items.toHaveProperty('body').toEqualTypeOf<{ orderId: string }>();
+    expectTypeOf(sent).items.toHaveProperty('body').toEqualTypeOf<{ orderId: string }>();
+    expectTypeOf(recorded).items.toExtend<RecordedMessage>();
+    expect(recorded).toEqual([]);
+  });
+
   test('memory() has no apply', () => {
     // @ts-expect-error: no broker plan exists to apply
     const apply = broker.apply;

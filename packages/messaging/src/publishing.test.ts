@@ -1,12 +1,17 @@
 import {
+  type ContractPackage,
   defineCommand,
+  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
+  defineSubscription,
   openEnum,
+  providedEvent,
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
   type Broker,
   InvalidMessageError,
@@ -110,6 +115,8 @@ const v3 = {
 } as const;
 
 const charge = { orderId: ORDER_ID, amount: 12 };
+
+const tree = { treeId: 't-1' };
 
 /** A broker that records what messaging publishes, failing the publish numbered `failingAt`. */
 function aBroker(failingAt?: number) {
@@ -731,6 +738,162 @@ describe('messaging() over memory(): publish and send', () => {
       'event.Charge.v1:o-1',
       'command.Charge.v1:o-1',
     ]);
+  });
+});
+
+/** A seeded generator of the same sequence every run, so a failing sequence can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+describe('memory().messagesOf', () => {
+  test('lists the Messages of one Message Version among those the Service published and sent, in the order the Broker took them', async () => {
+    const { broker, publisher, sender } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' });
+    await sender.send('ChargeCard', charge, { factId: 'o-1' });
+    await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-2' });
+
+    const lists = [orderCreatedV2, orderCreatedV3, chargeCardV2].map((version) =>
+      broker.messagesOf(version).map(({ messageId }) => messageId),
+    );
+
+    expect(lists).toEqual([
+      ['event.OrderCreated.v2:o-1', 'event.OrderCreated.v2:o-2'],
+      ['event.OrderCreated.v3:o-1', 'event.OrderCreated.v3:o-2'],
+      ['command.ChargeCard.v2:o-1'],
+    ]);
+  });
+
+  test('lists each Message with the body the Broker took', async () => {
+    const { broker, publisher } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+
+    const recorded = broker.messagesOf(orderCreatedV3);
+
+    expect(recorded).toMatchObject([
+      { subject: 'orders-service.event.OrderCreated.v3', factId: 'o-1', body: v3 },
+    ]);
+  });
+
+  test('lists nothing for a version the Service never published or sent', async () => {
+    const { broker, publisher } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+
+    const neverPublishedOrSent = [orderCreatedV1, chargeCardV2].map((version) =>
+      broker.messagesOf(version),
+    );
+
+    expect(neverPublishedOrSent).toEqual([[], []]);
+  });
+
+  test('lists nothing before the Service connects', () => {
+    const broker = memory();
+
+    expect(broker.messagesOf(orderCreatedV2)).toEqual([]);
+  });
+
+  test('leaves out a duplicate the Broker dropped', async () => {
+    const { broker, publisher } = await overMemory();
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+
+    const recorded = broker.messagesOf(orderCreatedV2);
+
+    expect(recorded).toHaveLength(1);
+  });
+
+  test('lists nothing for a Provided Event, even when the Service publishes an Event of its name and version', async () => {
+    const paymentSettledV1 = providedEvent('payments-service', {
+      name: 'PaymentSettled',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment was settled',
+      body: z.object({ paymentId: z.string() }),
+    });
+    const payments = {
+      name: 'payments-service',
+      endpoints: {},
+      events: { paymentSettledV1 },
+      standardRejections: providedStandardRejections(),
+      exportedSnapshot: {
+        format: 1,
+        defs: {},
+        endpoints: {},
+        events: {},
+        guards: {},
+        codes: {},
+        shadowing: {},
+      },
+    } as const satisfies ContractPackage;
+    const ownSettledV1 = defineEvent({
+      name: 'PaymentSettled',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment was settled, as this Service tells it',
+      body: z.object({ paymentId: z.string() }),
+    });
+    const settling = defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'payments',
+          description: 'Payments',
+          events: [ownSettledV1],
+          subscriptions: [
+            defineSubscription({
+              name: 'onSettled',
+              description: 'On settled',
+              event: paymentSettledV1,
+            }),
+          ],
+        }),
+      ],
+      dependencies: [defineDependency({ provider: payments })],
+    });
+    const broker = memory();
+    const { publisher } = await messaging(settling, broker);
+    await publisher.publish('PaymentSettled', { v1: { paymentId: 'p-1' } }, fact);
+
+    const provided = broker.messagesOf(paymentSettledV1);
+
+    expect(provided).toEqual([]);
+    expect(broker.messagesOf(ownSettledV1)).toHaveLength(1);
+  });
+
+  test('the lists of every Message Version partition messages, each in order (seed 305)', async () => {
+    const versions = [
+      orderCreatedV1,
+      orderCreatedV2,
+      orderCreatedV3,
+      grownV9,
+      grownV10,
+      chargeCardV1,
+      chargeCardV2,
+    ];
+    const next = seededNext(305);
+    for (let round = 0; round < 60; round += 1) {
+      const { broker, publisher, sender } = await overMemory();
+      for (let step = 0; step < 24; step += 1) {
+        const given = { factId: `f-${Math.floor(next() * 4)}` };
+        const draw = next();
+        if (draw < 0.4) await publisher.publish('OrderCreated', { v2, v3 }, given);
+        else if (draw < 0.7) await publisher.publish('Grown', { v9: tree, v10: tree }, given);
+        else await sender.send('ChargeCard', charge, given);
+      }
+      const ids = broker.messages.map(({ messageId }) => messageId);
+
+      const lists = versions.map((version) =>
+        broker.messagesOf(version).map(({ messageId }) => ids.indexOf(messageId)),
+      );
+
+      const everyPosition = lists.flat().toSorted((left, right) => left - right);
+      expect(everyPosition).toEqual(ids.map((_id, position) => position));
+      expect(lists.map((list) => list.toSorted((left, right) => left - right))).toEqual(lists);
+    }
   });
 });
 
