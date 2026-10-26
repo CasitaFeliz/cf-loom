@@ -311,7 +311,7 @@ describe('validateRoot: Subscriptions', () => {
     );
   });
 
-  test('a Subscription whose event is a Command fails, saying a Command has its CommandHandler', () => {
+  test("a Subscription whose event is a Command fails, saying a Command's Message Version has its own Message Handler", () => {
     const chargeCardV1 = defineCommand({
       name: 'ChargeCard',
       version: 1,
@@ -326,7 +326,7 @@ describe('validateRoot: Subscriptions', () => {
       failed(
         ['groups', 'orders', 'subscriptions', 'onCharge', 'event'],
         'not-a-declaration',
-        'A Subscription receives an Event; a Command is handled by its CommandHandler',
+        "A Subscription receives an Event; a Command's Message Version has its own Message Handler",
       ),
     );
   });
