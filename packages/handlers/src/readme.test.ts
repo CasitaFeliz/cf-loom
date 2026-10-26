@@ -1,12 +1,12 @@
 import {
   defineEndpoint,
-  defineEvent,
   defineGuard,
   defineRejection,
   defineSubscription,
   notFound,
   openEnum,
   openEnumReader,
+  providedEvent,
 } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
@@ -150,7 +150,7 @@ const permissionHandler = handle(
   },
 );
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',

@@ -742,7 +742,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
   });
 
-  test('an Event’s file declares it with defineEvent: its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
+  test('an Event’s file declares it with providedEvent: its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
     const project = aProject(service);
 
     packageIn(project);
@@ -750,7 +750,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     const out = join(project, defaultOut);
     expect(read(out, 'src/events/order-placed.v1.ts')).toContain(
       [
-        'export const orderPlacedEventV1 = loom.defineEvent({',
+        'export const orderPlacedEventV1 = loom.providedEvent({',
         "  name: 'OrderPlaced',",
         '  version: 1,',
         "  visibility: 'internal',",
@@ -762,7 +762,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
     expect(read(out, 'src/events/order-placed.v2.ts')).toContain(
       [
-        'export const orderPlacedEventV2 = loom.defineEvent({',
+        'export const orderPlacedEventV2 = loom.providedEvent({',
         "  name: 'OrderPlaced',",
         '  version: 2,',
         "  visibility: 'internal',",
@@ -869,7 +869,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     expect(read(out, 'src/index.ts')).toContain('    listOrders: listOrdersEndpoint,\n  },');
     const getOrder = read(out, 'src/endpoints/get-order.ts');
     expect(getOrder).toContain("import * as loom from '@cf-loom/contract';");
-    expect(getOrder).toContain('export const getOrderEndpoint = loom.defineEndpoint({');
+    expect(getOrder).toContain('export const getOrderEndpoint = loom.providedEndpoint({');
     expect(getOrder).toContain(
       '  guards: [userTokenGuard, { guard: permissionGuard, qualifier: ["orders:read"] }],',
     );
@@ -878,7 +878,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       'export const permissionGuard = loom.defineGuard({',
     );
     expect(read(out, 'src/rejections/order-locked.ts')).toContain(
-      'export const orderLockedRejection = loom.defineRejection({',
+      'export const orderLockedRejection = loom.providedRejection({',
     );
   });
 

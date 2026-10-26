@@ -71,6 +71,7 @@ export {
   isStandardRejection,
   isSubscription,
 } from './predicates.ts';
+export { providedEndpoint, providedEvent, providedRejection } from './provided.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
@@ -78,7 +79,7 @@ export { isReservedCode } from './reserved-codes.ts';
 export { prototypeNames } from './reserved-names.ts';
 export type { Application, Contract } from './roots.ts';
 export { defineApplication, defineContract } from './roots.ts';
-export type { IsOneLiteral, Refusal } from './rules.ts';
+export type { IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
 export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';
 export type {

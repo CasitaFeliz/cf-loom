@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { SchemaRule } from '../walker/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { HeaderNamesRule } from './http.ts';
 import type { Rejection } from './rejection.ts';
@@ -53,11 +54,21 @@ type DemandsFieldsRule<Declaration extends GuardDeclaration> = {
   readonly demands?: DeclaredFieldsRule<NonNullable<Declaration['demands']>, Demands>;
 };
 
+type SchemasRule<Declaration extends GuardDeclaration> = {
+  readonly demands?: {
+    readonly headers?: SchemaRule<NonNullable<Declaration['demands']>['headers']>;
+    readonly query?: SchemaRule<NonNullable<Declaration['demands']>['query']>;
+  };
+  readonly context?: SchemaRule<Declaration['context']>;
+  readonly qualifier?: SchemaRule<Declaration['qualifier']>;
+};
+
 /** Declares a reusable requirement that Endpoints attach explicitly. */
 export function defineGuard<const Declaration extends GuardDeclaration>(
   declaration: Declaration &
     DemandedHeadersRule<Declaration> &
     RejectionsRule<Declaration> &
+    SchemasRule<Declaration> &
     NoInfer<
       ReservedNameRule<Declaration> &
         DeclaredFieldsRule<Declaration, GuardDeclaration> &

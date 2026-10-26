@@ -47,6 +47,9 @@ export {
   invalidInput,
   notFound,
   notImplemented,
+  providedEndpoint,
+  providedEvent,
+  providedRejection,
 } from './declarations/index.ts';
 export type { OpenEnum } from './open/index.ts';
 export { openEnum, openEnumReader } from './open/index.ts';

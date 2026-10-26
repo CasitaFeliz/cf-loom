@@ -8,6 +8,7 @@ import {
   openEnum,
   openEnumReader,
   type ProvidedStandardRejections,
+  providedEndpoint,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
@@ -301,7 +302,7 @@ describe('an Open Enum Success header', () => {
     success: { status: 204, headers: z.object({ 'x-stage': openEnum(['packed', 'shipped']) }) },
   });
   /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
-  const trackOrderReader = defineEndpoint({
+  const trackOrderReader = providedEndpoint({
     name: 'trackOrder',
     method: 'GET',
     path: '/orders/:orderId/track',
@@ -353,7 +354,7 @@ describe('an Open Enum Success header', () => {
       input: { params: z.object({ orderId: z.string() }) },
       success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
     });
-    const stageOrderReader = defineEndpoint({
+    const stageOrderReader = providedEndpoint({
       name: 'stageOrder',
       method: 'GET',
       path: '/orders/:orderId/stage',

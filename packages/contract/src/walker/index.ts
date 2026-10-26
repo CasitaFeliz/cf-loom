@@ -32,6 +32,7 @@ export type {
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
 export { openCompositionsOf } from './open-compositions.ts';
+export type { SchemaRule } from './schema-rule.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
 
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';

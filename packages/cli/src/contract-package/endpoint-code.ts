@@ -49,7 +49,7 @@ function endpointBodyOf(
   const reader: Writing = { mode: 'reader', needs };
   const listed = rejections.map(rejectionNameOf);
   return [
-    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.defineEndpoint({`,
+    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.providedEndpoint({`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),

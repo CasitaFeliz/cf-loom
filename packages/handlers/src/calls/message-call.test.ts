@@ -4,6 +4,7 @@ import {
   defineSubscription,
   openEnum,
   openEnumReader,
+  providedEvent,
 } from '@cf-loom/contract';
 import { brokerMessageIdOf } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
@@ -48,7 +49,7 @@ const notifyOnPaid = defineSubscription({
   event: orderPaidV1,
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent({
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
