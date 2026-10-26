@@ -235,7 +235,7 @@ _Avoid_: dispatcher, bus
 ### Compatibility
 
 **Snapshot**:
-A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports; the **exported Snapshot cut** of an Endpoint is the exported Snapshot cut to it, which each Endpoint a Contract Package exports carries.
+A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports; the **exported Snapshot cut** of an Endpoint is the exported Snapshot, cut to that Endpoint, which each Endpoint a Contract Package exports carries.
 _Avoid_: schema dump, manifest
 
 **Baseline**:

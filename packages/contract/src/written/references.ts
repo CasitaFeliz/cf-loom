@@ -65,21 +65,18 @@ export type References = {
 };
 
 /**
- * Every Guard and Rejection a Root reaches by reference, each once: the Guards one lists before
- * it, the Rejections in the order the lists are read. A declaration sits at its name, else at the
- * first list that holds it, an export last: the Endpoints in order, each one's own list before
- * the Guards it attaches, a Guard's list before the Guards it lists, depth first, then the Guards
- * a Definitions Package exports, in member order, then its exported Rejections.
+ * Every Guard and Rejection a Root reaches by reference, each once, one whose name is no string
+ * placed at the first list that holds it, in the order of the cli README's Failures section.
  */
 export function referencesOf(sources: Sources): References {
   const { ownMembers, endpoints } = sources;
   const attached = endpoints.flatMap(({ endpoint }) => attachedGuardsOf(endpoint));
   const exported = ownMembers === undefined ? [] : memberGuardsOf(ownMembers);
   const reached = reachedGuardsOf([...attached, ...exported]);
-  const { places, listed } = readLists(sources, reached);
+  const lists = readLists(sources, reached);
   return {
-    guards: reached.map((guard) => locatedGuardOf(guard, places)),
-    rejections: locatedRejectionsOf(listed),
+    guards: reached.map((guard) => locatedGuardOf(guard, lists.places)),
+    rejections: locatedRejectionsOf(lists.rejections),
   };
 }
 
@@ -95,14 +92,14 @@ function locatedGuardOf(guard: Guard, places: ReadonlyMap<Guard, Place>): Locate
 type Listed = { readonly rejection: unknown; readonly held: Place };
 
 /** What reading a Root's lists in order finds: where each Guard sits, and the Rejections listed. */
-type Lists = { readonly places: Map<Guard, Place>; readonly listed: Listed[] };
+type Lists = { readonly places: Map<Guard, Place>; readonly rejections: Listed[] };
 
 type GuardMember = Extract<Member, { readonly kind: 'guard' }>;
 
 function readLists({ ownMembers, endpoints }: Sources, reached: readonly Guard[]): Lists {
-  const lists: Lists = { places: new Map(), listed: [] };
+  const lists: Lists = { places: new Map(), rejections: [] };
   for (const { at, endpoint } of endpoints) {
-    lists.listed.push(...listedIn(at, endpoint.rejections));
+    lists.rejections.push(...listedIn(at, endpoint.rejections));
     for (const [index, attachment] of listOf(endpoint.guards).entries()) {
       const guard = attachedGuardOf(attachment);
       if (guard !== undefined) {
@@ -114,24 +111,22 @@ function readLists({ ownMembers, endpoints }: Sources, reached: readonly Guard[]
   for (const { name, value } of exportedGuardsInOrder(members, reached)) {
     visit(lists, value, placeOf({ kind: 'export', name }, value));
   }
-  lists.listed.push(...members.flatMap(exportedRejectionOf));
+  lists.rejections.push(...members.flatMap(exportedRejectionOf));
   return lists;
 }
 
 /**
  * The exported Guards in member order, a Guard with no name that another Guard lists left to that
- * Guard's list, which places it. Those still unplaced come last.
+ * Guard's list, which places it.
  */
 function exportedGuardsInOrder(
   members: Members,
   reached: readonly Guard[],
 ): readonly GuardMember[] {
-  const listed = new Set(reached.flatMap((guard) => listOf(guard.guards).filter(isGuard)));
-  const exported = members.filter(isGuardMember);
-  const readFirst = exported.filter(
-    ({ value }) => typeof value.name === 'string' || !listed.has(value),
-  );
-  return [...readFirst, ...exported];
+  const listedGuards = new Set(reached.flatMap((guard) => listOf(guard.guards).filter(isGuard)));
+  return members
+    .filter(isGuardMember)
+    .filter(({ value }) => typeof value.name === 'string' || !listedGuards.has(value));
 }
 
 function isGuardMember(member: Member): member is GuardMember {
@@ -146,10 +141,10 @@ function visit(lists: Lists, guard: Guard, held: Place): void {
   const name = guard.name;
   const at = placedBy(typeof name === 'string' ? { kind: 'guard', name } : undefined, held, guard);
   lists.places.set(guard, at);
-  lists.listed.push(...listedIn(at, guard.rejections));
-  for (const [index, listed] of listOf<unknown>(guard.guards).entries()) {
-    if (isGuard(listed)) {
-      visit(lists, listed, holdingAt(at, 'guards', index));
+  lists.rejections.push(...listedIn(at, guard.rejections));
+  for (const [index, inner] of listOf<unknown>(guard.guards).entries()) {
+    if (isGuard(inner)) {
+      visit(lists, inner, holdingAt(at, 'guards', index));
     }
   }
 }
@@ -165,10 +160,10 @@ function placedBy(site: Site | undefined, held: Place, declaration: unknown): Pl
 }
 
 /** Each listed Rejection once: at its code when that is a string, else at the first list. */
-function locatedRejectionsOf(listed: readonly Listed[]): readonly LocatedRejection[] {
+function locatedRejectionsOf(rejections: readonly Listed[]): readonly LocatedRejection[] {
   const seen = new Set<unknown>();
   const located: LocatedRejection[] = [];
-  for (const { rejection, held } of listed) {
+  for (const { rejection, held } of rejections) {
     if (isRejection(rejection) && !seen.has(rejection)) {
       seen.add(rejection);
       const code = rejection.code;
