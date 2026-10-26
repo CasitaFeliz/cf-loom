@@ -95,6 +95,7 @@ function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
+    headers: anOpenObject(),
     body: null,
     ...fields,
   };
@@ -193,6 +194,18 @@ function bodyField(name: string, shape: 'field-added' | 'field-removed', isRequi
   } as const;
 }
 
+function headerField(name: string, shape: Extract<Difference, { kind: 'schema' }>['shape']) {
+  return {
+    kind: 'schema',
+    position: 'success',
+    at: [
+      { kind: 'part', name: 'headers' },
+      { kind: 'field', name },
+    ],
+    shape,
+  } as const;
+}
+
 function lockedStatus(status: number): CodeSnapshot {
   return aCode({ status });
 }
@@ -251,6 +264,47 @@ describe('compatibilityReportOf, a Service’s codes', () => {
     const proposed = aProposed({
       ...answering(orderLocked),
       codes: { [orderLocked]: aCode({ body: to }) },
+    });
+
+    const changes = codeChangesOf(baseline, proposed);
+
+    expect(changes).toEqual([change]);
+  });
+
+  const realm = required(aString);
+  const retryAfter = required({ type: 'number', int: true });
+  const headers = [
+    {
+      name: 'removing a required header is Breaking',
+      from: anOpenObject({ 'www-authenticate': realm, 'retry-after': retryAfter }),
+      to: anOpenObject({ 'retry-after': retryAfter }),
+      change: breaking(site, headerField('www-authenticate', { kind: 'field-removed' })),
+    },
+    {
+      name: 'adding a required header is Additive',
+      from: anOpenObject({ 'retry-after': retryAfter }),
+      to: anOpenObject({ 'www-authenticate': realm, 'retry-after': retryAfter }),
+      change: additive(site, headerField('www-authenticate', { kind: 'field-added', required: true })),
+    },
+    {
+      name: 'a header’s description changed is Neutral',
+      from: anOpenObject({ 'www-authenticate': realm }),
+      to: anOpenObject({ 'www-authenticate': required({ type: 'string', description: 'The scheme' }) }),
+      change: neutral(
+        site,
+        headerField('www-authenticate', { kind: 'annotation-changed', annotation: 'description' }),
+      ),
+    },
+  ];
+
+  test.each(headers)('a code’s headers follow the Success rules: $name', ({ from, to, change }) => {
+    const baseline = aBaseline({
+      ...publishedAnswering(orderLocked),
+      codes: { [orderLocked]: aCode({ headers: from }) },
+    });
+    const proposed = aProposed({
+      ...answering(orderLocked),
+      codes: { [orderLocked]: aCode({ headers: to }) },
     });
 
     const changes = codeChangesOf(baseline, proposed);

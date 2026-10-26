@@ -762,7 +762,7 @@ describe('compatibilityReportOf, Neutral', () => {
 });
 
 function aCode(message: string): CodeSnapshot {
-  return { origin: 'local', status: 409, message, body: null };
+  return { origin: 'local', status: 409, message, headers: { type: 'object', fields: {} }, body: null };
 }
 
 describe('compatibilityReportOf, an Endpoint’s order', () => {
@@ -840,6 +840,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
     origin: 'local',
     status: 409,
     message: 'Locked',
+    headers: { type: 'object', fields: {} },
     body: null,
   };
 

@@ -13,10 +13,11 @@ import { type BothDefs, bothDefsOf } from './findings.ts';
 import { codeNeutralOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
 import { partsOf } from './steps.ts';
+import { textPartDifferencesOf } from './text-parts.ts';
 import { widestVisibilitiesOf } from './visibility.ts';
 
 /**
- * A Service's codes by code in code point order, each its status then its body read as Success; a
+ * A Service's codes by code in code point order, each its status, headers then body read as Success; a
  * code answered or no longer answered shows on its Endpoints instead.
  */
 export function serviceCodeDifferencesOf(
@@ -82,7 +83,7 @@ export function statusDifferencesOf(baseline: number, proposed: number): readonl
 }
 
 /**
- * A code on both sides by its status, then its body read as Success, then its message and origin,
+ * A code on both sides by its status, then its headers and body read as Success, then its message and origin,
  * a removed code the Baseline remembers with what it last had; a code on one side only has
  * nothing to compare.
  */
@@ -93,9 +94,11 @@ function comparedDifferencesOf(
   switch (code.kind) {
     case 'kept': {
       const { baseline, proposed } = code;
+      const headers = { baseline: baseline.headers, proposed: proposed.headers };
       const bodies = { baseline: baseline.body, proposed: proposed.body };
       return [
         ...statusDifferencesOf(baseline.status, proposed.status),
+        ...textPartDifferencesOf(headers, defs, { position: 'success', at: partsOf('headers') }),
         ...bodyDifferencesOf(bodies, defs, { position: 'success', at: partsOf('body') }),
         ...codeNeutralOf(baseline, proposed),
       ];

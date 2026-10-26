@@ -60,7 +60,13 @@ function aRemovedSubscription(event = 'orders-service:OrderPlaced@1'): Subscript
 }
 
 function aCode(status: number): CodeSnapshot {
-  return { origin: 'local', status, message: 'The order is locked', body: null };
+  return {
+    origin: 'local',
+    status,
+    message: 'The order is locked',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
 }
 
 function subscriptionSite(name: string): ChangeSite {

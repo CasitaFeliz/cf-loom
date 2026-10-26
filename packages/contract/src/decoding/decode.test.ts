@@ -50,23 +50,29 @@ const standardRejections: PublishedServiceSnapshot['standardRejections'] = {
   notImplemented: notImplementedCode,
 };
 
+/** A text part with no field, as the Snapshot writes one declared empty or not declared. */
+const emptyPart = { type: 'object', fields: {} } as const;
+
 const standardCodes = {
   [invalidInputCode]: {
     origin: 'standard',
     status: 400,
     message: 'Invalid',
+    headers: emptyPart,
     body: { type: 'object', fields: {} },
   },
   [notFoundCode]: {
     origin: 'standard',
     status: 404,
     message: 'Not found',
+    headers: emptyPart,
     body: null,
   },
   [notImplementedCode]: {
     origin: 'standard',
     status: 501,
     message: 'No',
+    headers: emptyPart,
     body: null,
   },
 } as const satisfies PublishedServiceSnapshot['codes'];
@@ -124,9 +130,6 @@ function aDefinitions(
   };
 }
 
-/** A text part with no field, as the Snapshot writes one declared empty or not declared. */
-const emptyPart = { type: 'object', fields: {} } as const;
-
 const anEndpoint = {
   name: 'getOrder',
   group: 'orders',
@@ -177,7 +180,7 @@ const orderLocked = 'ORDER_LOCKED';
 const unauthenticated = 'UNAUTHENTICATED';
 const gone = 'GONE';
 
-const aCode = { origin: 'local', status: 409, message: 'Locked', body: null };
+const aCode = { origin: 'local', status: 409, message: 'Locked', headers: emptyPart, body: null };
 
 const retiredEndpoint = { ...anEndpoint, lifecycle: 'retired', retiredIn: '3.0.0' } as const;
 const endpointTombstone = {
@@ -781,6 +784,11 @@ describe('decodeSnapshot', () => {
         ['endpoints', 'GET /orders/{}', 'success', 'headers'],
       ],
       [
+        'a code’s headers',
+        { codes: { ...standardCodes, [orderLocked]: { ...aCode, headers: null } } },
+        ['codes', orderLocked, 'headers'],
+      ],
+      [
         'a Guard’s demanded query',
         { guards: { apiKey: { ...aGuard, demands: { ...aGuard.demands, query: null } } } },
         ['guards', 'apiKey', 'demands', 'query'],
@@ -1071,6 +1079,41 @@ describe('decodeSnapshot', () => {
         expect([service, definitions]).toEqual([malformed, malformed]);
       },
     );
+
+    test.each([
+      { name: 'invalidInput', code: invalidInputCode },
+      { name: 'notFound', code: notFoundCode },
+      { name: 'notImplemented', code: notImplementedCode },
+    ] as const)(
+      'a header field on the code the $name Standard Rejection names is malformed at the headers',
+      ({ name, code }) => {
+        const headers = { ...emptyPart, fields: { 'x-note': { required: false, schema: stringNode } } };
+        const codes = { ...standardCodes, [code]: { ...standardCodes[code], headers } };
+
+        const service = serviceWith({ codes });
+        const definitions = decodedFrom({ ...aDefinitions(), codes });
+
+        const malformed = malformedAt(
+          ['codes', code, 'headers'],
+          `holds headers, which the ${name} Standard Rejection never has`,
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
+
+    test('a described headers object without a field on the code a Standard Rejection names is malformed', () => {
+      const headers = { ...emptyPart, description: 'Sent with it' };
+      const codes = { ...standardCodes, [notFoundCode]: { ...standardCodes[notFoundCode], headers } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(
+        malformedAt(
+          ['codes', notFoundCode, 'headers'],
+          'holds headers, which the notFound Standard Rejection never has',
+        ),
+      );
+    });
 
     test('no body on the code the invalidInput Standard Rejection names is malformed at the body', () => {
       const code = invalidInputCode;
@@ -1667,6 +1710,11 @@ describe('decodeSnapshot', () => {
         ['codes', 'GONE', 'body'],
       ],
       [
+        'a code’s headers',
+        aService({ codes: { [gone]: { ...aCode, headers: anObjectOf(aRef('missing')) } } }),
+        ['codes', 'GONE', 'headers', 'fields', 'name'],
+      ],
+      [
         'a Guard’s context',
         aService({ guards: { apiKey: { ...aGuard, context: aRef('missing') } } }),
         ['guards', 'apiKey', 'context'],
@@ -2251,15 +2299,35 @@ function declaredSnapshot() {
 
 const formatOneFixture = `{
   "codes": {
-    "GONE": { "body": null, "message": "Gone", "origin": "local", "removedIn": "3.2.0", "status": 410 },
+    "GONE": {
+      "body": null,
+      "headers": { "fields": {}, "type": "object" },
+      "message": "Gone",
+      "origin": "local",
+      "removedIn": "3.2.0",
+      "status": 410
+    },
     "INVALID_INPUT": {
       "body": { "fields": {}, "type": "object" },
+      "headers": { "fields": {}, "type": "object" },
       "message": "Invalid",
       "origin": "standard",
       "status": 400
     },
-    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "status": 404 },
-    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "status": 501 }
+    "NOT_FOUND": {
+      "body": null,
+      "headers": { "fields": {}, "type": "object" },
+      "message": "Not found",
+      "origin": "standard",
+      "status": 404
+    },
+    "NOT_IMPLEMENTED": {
+      "body": null,
+      "headers": { "fields": {}, "type": "object" },
+      "message": "No",
+      "origin": "standard",
+      "status": 501
+    }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
   "defs": {},

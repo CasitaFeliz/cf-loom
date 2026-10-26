@@ -91,6 +91,7 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     origin: 'orders-service',
     status: 409,
     message: 'Conflict',
+    headers: { type: 'object', fields: {} },
     body: null,
     ...fields,
   };
@@ -407,6 +408,7 @@ describe('exportedSnapshotOf', () => {
         },
       },
     ],
+    ['a code’s headers', { code: { headers: anObjectWith(aRef('tree')) } }],
     ['a code’s body', { code: { body: aRef('tree') } }],
   ] as const)('a def a node at %s of what is exported reaches is kept', (_, at) => {
     const endpoint = {

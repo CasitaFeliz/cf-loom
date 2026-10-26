@@ -266,6 +266,39 @@ describe('the Envelopes as they travel', () => {
     });
   });
 
+  test('rejectionResponseOf sends each header value as its text, one left undefined unsent, beside its Envelope', async () => {
+    const response = rejectionResponseOf({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      message: 'Unauthenticated',
+      headers: { 'www-authenticate': 'Bearer realm="orders"', 'retry-after': 30, 'x-note': undefined },
+    });
+
+    expect(response.status).toBe(401);
+    expect([...response.headers]).toEqual([
+      ['content-type', jsonContentType],
+      ['retry-after', '30'],
+      ['www-authenticate', 'Bearer realm="orders"'],
+    ]);
+    expect(await response.json()).toStrictEqual({
+      rejection: { code: 'UNAUTHENTICATED', message: 'Unauthenticated' },
+    });
+  });
+
+  test('a Rejection’s header that cannot travel is thrown, as a bug of the check before it', () => {
+    const send = () =>
+      rejectionResponseOf({
+        code: 'UNAUTHENTICATED',
+        status: 401,
+        message: 'Unauthenticated',
+        headers: { 'www-authenticate': 'Bearer\nrealm' },
+      });
+
+    expect(send).toThrow(
+      'A Rejection header that cannot travel was not checked before it was sent: www-authenticate',
+    );
+  });
+
   test('a reserved Fault carries its code, a Handler’s Fault none', async () => {
     const reserved = reservedResponseOf('RETIRED');
     const returned = faultResponseOf({ committed: 'yes', retryable: true, message: 'Lost' });

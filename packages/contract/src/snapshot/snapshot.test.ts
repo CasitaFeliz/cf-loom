@@ -17,6 +17,7 @@ import {
   notFound,
   providedEndpoint,
   providedEvent,
+  type Rejection,
 } from '../index.ts';
 import {
   canonicalTextOf,
@@ -38,6 +39,7 @@ const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
   message: 'Unauthenticated',
+  headers: z.object({ 'www-authenticate': z.string().describe('The scheme to sign in with') }),
 });
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 const unusedRejection = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
@@ -344,6 +346,21 @@ function codeReachSnapshot() {
   return serviceSnapshot(root);
 }
 
+/** A Service whose one Endpoint answers the Rejection, with no Definitions Package. */
+function serviceRejecting(rejection: Rejection) {
+  const getOrders = defineEndpoint({
+    name: 'getOrders',
+    method: 'GET',
+    path: '/orders',
+    visibility: 'public',
+    description: 'Every order',
+    success: { status: 200, body: z.object({ count: z.int() }) },
+    rejections: [rejection],
+  });
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrders] });
+  return serviceSnapshot(defineService({ name: 'orders-service', groups: [group] }), []);
+}
+
 function textOf(snapshot: Snapshot): string {
   return canonicalTextOf(snapshot);
 }
@@ -550,13 +567,14 @@ describe('snapshotOf: a Service', () => {
     expect(code in snapshot.codes).toBe(written);
   });
 
-  test('a code carries its origin, status, message and body, and is not removed', () => {
+  test('a code carries its origin, status, message, headers and body, and is not removed', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.codes['ORDER_LOCKED']).toEqual({
       origin: 'local',
       status: 409,
       message: 'The order can no longer be changed',
+      headers: { type: 'object', fields: {} },
       body: {
         type: 'object',
         fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
@@ -566,8 +584,49 @@ describe('snapshotOf: a Service', () => {
       origin: '@org/definitions@4.2.0',
       status: 401,
       message: 'Unauthenticated',
+      headers: {
+        type: 'object',
+        fields: {
+          'www-authenticate': {
+            required: true,
+            schema: { type: 'string', description: 'The scheme to sign in with' },
+          },
+        },
+      },
       body: null,
     });
+  });
+
+  test('the headers a Rejection declares are recorded under its code beside a body', () => {
+    const rateLimited = defineRejection({
+      code: 'RATE_LIMITED',
+      status: 429,
+      message: 'Slow down',
+      headers: z.object({ 'retry-after': z.int(), 'x-limit': z.string().optional() }),
+      body: z.object({ limit: z.int() }),
+    });
+
+    const snapshot = serviceRejecting(rateLimited);
+
+    expect(snapshot.codes['RATE_LIMITED']).toMatchObject({
+      headers: {
+        type: 'object',
+        fields: {
+          'retry-after': { required: true, schema: { type: 'number', int: true } },
+          'x-limit': { required: false, schema: { type: 'string' } },
+        },
+      },
+      body: { type: 'object', fields: { limit: { required: true, schema: { type: 'number', int: true } } } },
+    });
+  });
+
+  test('a code that declares no headers records an open object with no field, as a Standard Rejection’s does', () => {
+    const snapshot = serviceRejecting(unusedRejection);
+
+    expect(snapshot.codes['UNUSED']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['NOT_FOUND']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['NOT_IMPLEMENTED']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['INVALID_INPUT']?.headers).toEqual({ type: 'object', fields: {} });
   });
 
   test('standardRejections maps each Standard Rejection to the code it resolved to', () => {
@@ -592,6 +651,7 @@ describe('snapshotOf: a Service', () => {
       origin: 'standard',
       status: 404,
       message: 'Not found',
+      headers: { type: 'object', fields: {} },
       body: null,
     });
     expect(snapshot.codes['NOT_IMPLEMENTED']).toMatchObject({

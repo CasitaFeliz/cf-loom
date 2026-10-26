@@ -37,6 +37,7 @@ export const code = z.strictObject({
   origin: text,
   status: z.number(),
   message: text,
+  headers: objectNode,
   body: schemaNode.nullable(),
   removedIn: semanticVersionText.exactOptional(),
 });
