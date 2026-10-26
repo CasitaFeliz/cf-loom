@@ -902,6 +902,77 @@ describe('failure lines: defs reached inside one another and from the body', () 
   });
 });
 
+describe('failure lines: many dated defs that one def holds, reached from many fields', () => {
+  test('3,000 dated defs, each a field of the body and of a def that 3,000 fields hold, told within a second', () => {
+    const count = 3000;
+    const dated: z.ZodType[] = [];
+    for (let index = 0; index < count; index++) {
+      const def: z.ZodType = z
+        .object({
+          at: z.date(),
+          get self() {
+            return z.array(def);
+          },
+        })
+        .meta({ id: `d${index}` });
+      dated.push(def);
+    }
+    const held: Record<string, z.ZodType> = {};
+    for (let index = 0; index < count; index++) {
+      held[`h${String(index).padStart(6, '0')}`] = dated[index] as z.ZodType;
+    }
+    const hub: z.ZodType = z
+      .object({
+        ...held,
+        get self() {
+          return z.array(hub);
+        },
+      })
+      .meta({ id: 'hub' });
+    const fields: Record<string, z.ZodType> = {};
+    for (let index = 0; index < count; index++) {
+      fields[`a${String(index).padStart(6, '0')}`] = dated[index] as z.ZodType;
+      fields[`z${String(index).padStart(6, '0')}`] = hub;
+    }
+    const endpoint = anEndpoint('alpha', 'GET /a', fields);
+    const started = performance.now();
+
+    const lines = linesOf(serviceWith([endpoint]));
+
+    expect(lines).toHaveLength(count);
+    expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
+    expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  test('a dated def that 4,000 Endpoints hold is one line naming every other Endpoint, told within a second', () => {
+    const count = 4000;
+    const def: z.ZodType = z
+      .object({
+        at: z.date(),
+        get self() {
+          return z.array(def);
+        },
+      })
+      .meta({ id: 'd' });
+    const endpoints = Array.from({ length: count }, (_, index) =>
+      anEndpoint(`e${String(index).padStart(6, '0')}`, `GET /e${index}`, { def }),
+    );
+    const started = performance.now();
+
+    const lines = linesOf(serviceWith(endpoints));
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(
+      new RegExp(
+        `^endpoints.GET /e0 \\(e000000\\) success.body.def.at ${date.replaceAll(/[().]/g, '\\$&')} \\(also in endpoints.GET /e1 \\(e000001\\), `,
+      ),
+    );
+    expect(lines[0]?.split('endpoints.')).toHaveLength(count + 1);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
 /** A graph of defs: the edges each holds, the fields of the body, and the defs holding a date. */
 type DefGraph = {
   readonly edges: readonly (readonly (readonly [string, number])[])[];

@@ -5,12 +5,11 @@ export type PlacedReach = {
   readonly memo: Memo;
   readonly at: Place;
   readonly text: string;
-  readonly sequence: number;
 };
 
-/** Whether a reach is placed before another: by its text in code point order, else as pushed. */
+/** Whether a reach is placed before another: by its text in code point order. */
 function isBefore(left: PlacedReach, right: PlacedReach): boolean {
-  return (byCodePoint(left.text, right.text) || left.sequence - right.sequence) < 0;
+  return byCodePoint(left.text, right.text) < 0;
 }
 
 /** Whether the reach at one slot comes before the one at another; a missing slot never does. */
@@ -43,7 +42,7 @@ export function pushReach(heap: PlacedReach[], reach: PlacedReach): void {
   }
 }
 
-/** Takes the reach with the smallest place off the heap, the one pushed first among equal places. */
+/** Takes the reach with the smallest place off the heap. */
 export function popReach(heap: PlacedReach[]): PlacedReach | undefined {
   const smallest = heap[0];
   const last = heap.pop();

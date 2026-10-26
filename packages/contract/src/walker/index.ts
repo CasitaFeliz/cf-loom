@@ -27,7 +27,6 @@ export {
   movedFrom,
   placeNameOf,
   placeOf,
-  sameSite,
   siteLocationOf,
   siteTextOf,
 } from './location.ts';
@@ -60,6 +59,7 @@ export {
   keyStep,
   optionStep,
   partsOf,
+  pathTailOf,
   restStep,
   snapshotPathOf,
   tokenOf,

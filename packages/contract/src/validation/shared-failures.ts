@@ -5,12 +5,16 @@ import {
   movedFrom,
   type NotAllowed,
   type Place,
-  type Site,
-  sameSite,
   siteTextOf,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
-import { byLocation, locationTextOf, type MemoPlaces, memoPlaces } from './memo-places.ts';
+import {
+  byLocation,
+  locationTextOf,
+  type MemoPlace,
+  memoPlacesOf,
+  type Sites,
+} from './memo-places.ts';
 
 /**
  * A refusal told where the author reads it, and every site that reaches it; `foldedBy` is what
@@ -19,7 +23,7 @@ import { byLocation, locationTextOf, type MemoPlaces, memoPlaces } from './memo-
 type Told = {
   readonly refusal: NotAllowed;
   readonly at: Place;
-  readonly sites: readonly Site[];
+  readonly sites: Sites;
   readonly foldedBy: unknown;
 };
 
@@ -33,7 +37,7 @@ export function notAllowedFailuresOf(
   refusals: readonly NotAllowed[],
   memoOf: ReadonlyMap<NotAllowed, Memo>,
 ): readonly NotAllowedFailure[] {
-  const places = memoPlaces();
+  const places = memoPlacesOf(memoOf.values());
   const told = [...new Set(refusals)].map((refusal) =>
     toldOf(refusal, memoOf.get(refusal), places),
   );
@@ -55,16 +59,24 @@ export function notAllowedFailuresOf(
  * A refusal told at its place, or, raised inside a remembered schema, from that schema's first
  * place; a cycle no id names is told where the walk that refused it met it.
  */
-function toldOf(refusal: NotAllowed, memo: Memo | undefined, places: MemoPlaces): Told {
+function toldOf(
+  refusal: NotAllowed,
+  memo: Memo | undefined,
+  places: ReadonlyMap<Memo, MemoPlace>,
+): Told {
+  const own = new Map([[siteTextOf(refusal.site), refusal.site]]);
   if (isUnnamedCycle(refusal)) {
-    return { refusal, at: refusal, sites: [refusal.site], foldedBy: refusal };
+    return { refusal, at: refusal, sites: own, foldedBy: refusal };
   }
   const foldedBy = refusal.schema;
   if (memo === undefined) {
-    return { refusal, at: refusal, sites: [refusal.site], foldedBy };
+    return { refusal, at: refusal, sites: own, foldedBy };
   }
-  const at = movedFrom(refusal, memo.at, places.firstOf(memo));
-  return { refusal, at, sites: places.sitesOf(memo), foldedBy };
+  const placed = places.get(memo);
+  if (placed === undefined) {
+    throw new Error('A remembered schema is reached from no place: a bug.');
+  }
+  return { refusal, at: movedFrom(refusal, memo.at, placed.at), sites: placed.sites, foldedBy };
 }
 
 /** The items grouped by two keys, the groups in the order each was first met. */
@@ -96,10 +108,10 @@ function firstOfGroup(group: readonly Told[]): Told {
   if (first === undefined) {
     throw new Error('A construct that is not allowed is reached from at least one place: a bug.');
   }
-  const sites: Site[] = [];
-  for (const site of [first, ...others].flatMap((told) => told.sites)) {
-    if (!sites.some((known) => sameSite(known, site))) {
-      sites.push(site);
+  const sites = new Map(first.sites);
+  for (const told of others) {
+    for (const [text, site] of told.sites) {
+      sites.set(text, site);
     }
   }
   return { ...first, sites };
@@ -114,9 +126,10 @@ function failureOf({ refusal, at, sites }: Told): NotAllowedFailure {
     construct,
     ...(instead !== undefined && { instead }),
     declaration: at.declaration,
-    alsoIn: sites
-      .filter((site) => !sameSite(site, at.site))
-      .sort((left, right) => byCodePoint(siteTextOf(left), siteTextOf(right))),
+    alsoIn: [...sites]
+      .filter(([text]) => text !== siteTextOf(at.site))
+      .sort(([left], [right]) => byCodePoint(left, right))
+      .map(([, site]) => site),
     origin,
   };
 }

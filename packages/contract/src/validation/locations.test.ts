@@ -284,6 +284,24 @@ describe('failure lines: a declaration with no usable name', () => {
     ]);
   });
 
+  test('a Rejection whose code is no string sits at the first exported Guard in member order that lists it, whichever Guard lists another', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const leaf = defineGuard({ name: 'a', description: 'A', rejections: [nameless] });
+    const middle = defineGuard({ name: 'c', description: 'C', guards: [leaf] });
+    const top = defineGuard({
+      name: 'b',
+      description: 'B',
+      guards: [middle],
+      rejections: [nameless],
+    });
+    const root = defineDefinitions({});
+    const rootExports = { a: leaf, b: top, c: middle, nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.a rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
   test('a Rejection whose code is no string sits at a Guard before the Guard it lists', () => {
     const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
     const inner = defineGuard({ name: 'inner', description: 'Inner', rejections: [nameless] });

@@ -68,11 +68,6 @@ export function siteTextOf(site: Site): string {
   }
 }
 
-/** Whether two sites are the one site, which names the same declaration. */
-export function sameSite(left: Site, right: Site): boolean {
-  return siteTextOf(left) === siteTextOf(right);
-}
-
 /** Where a failure sits on one line: its site, then its steps in the author's terms. */
 export function siteLocationOf(site: Site, steps: readonly Step[]): string {
   const path = authorPathOf(steps);

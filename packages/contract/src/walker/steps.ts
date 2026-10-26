@@ -114,6 +114,11 @@ export function authorPathOf(steps: readonly Step[]): string | null {
   return steps.map((step, position) => textOf(step, position === 0)).join('');
 }
 
+/** Steps as they continue a path that already has a step: `.lines[].kind`; nothing for none. */
+export function pathTailOf(steps: readonly Step[]): string {
+  return steps.map((step) => textOf(step, false)).join('');
+}
+
 function textOf(step: Step, isFirst: boolean): string {
   switch (step.kind) {
     case 'part':
