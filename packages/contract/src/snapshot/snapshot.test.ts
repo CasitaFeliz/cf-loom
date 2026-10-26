@@ -535,14 +535,12 @@ describe('snapshotOf: a Service', () => {
         type: 'object',
         fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
       },
-      removed: false,
     });
     expect(snapshot.codes['UNAUTHENTICATED']).toEqual({
       origin: '@org/definitions@4.2.0',
       status: 401,
       message: 'Unauthenticated',
       body: null,
-      removed: false,
     });
   });
 
@@ -569,7 +567,6 @@ describe('snapshotOf: a Service', () => {
       status: 404,
       message: 'Not found',
       body: null,
-      removed: false,
     });
     expect(snapshot.codes['NOT_IMPLEMENTED']).toMatchObject({
       origin: 'standard',

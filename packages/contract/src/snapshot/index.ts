@@ -13,6 +13,7 @@ export type {
   MessageTombstone,
   PackagedSnapshot,
   PublishedApplicationSnapshot,
+  PublishedCode,
   PublishedCommand,
   PublishedDefinitionsSnapshot,
   PublishedElement,
@@ -23,7 +24,7 @@ export type {
   PublishedSnapshot,
   SubscriptionTombstone,
 } from './published.ts';
-export { isDeclared, isSubscriptionTombstone } from './published.ts';
+export { isDeclared, isRemoved, isSubscriptionTombstone } from './published.ts';
 export type { SemanticVersionParts, VersionBump } from './semantic-version.ts';
 export { caretLineOf, isSemanticVersion, semanticVersionPartsOf } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';

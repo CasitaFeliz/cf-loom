@@ -5,6 +5,7 @@ import {
   type DefinitionsSnapshot,
   isSubscriptionTombstone,
   type PublishedApplicationSnapshot,
+  type PublishedCode,
   type PublishedDefinitionsSnapshot,
   type PublishedHeading,
   type PublishedServiceSnapshot,
@@ -90,7 +91,7 @@ function serviceMerged(
     endpoints: endpointsMerged(baseline?.endpoints, proposed.endpoints, version),
     events: messagesMerged(baseline?.events, proposed.events, version),
     commands: messagesMerged(baseline?.commands, proposed.commands, version),
-    codes: codesMerged(baseline?.codes, proposed.codes),
+    codes: codesMerged(baseline?.codes, proposed.codes, version),
     subscriptions: subscriptionsMerged(baseline?.subscriptions, proposed.subscriptions, version),
   };
 }
@@ -100,15 +101,23 @@ function definitionsMerged(
   proposed: DefinitionsSnapshot,
   heading: PublishedHeading,
 ): PublishedDefinitionsSnapshot {
-  return { ...proposed, ...heading, codes: codesMerged(baseline?.codes, proposed.codes) };
+  const codes = codesMerged(baseline?.codes, proposed.codes, heading.version);
+  return { ...proposed, ...heading, codes };
 }
 
-/** A code no Endpoint answers any more stays, marked removed, with what it last had. */
+/**
+ * A code no Endpoint answers any more stays with what it last had, removed in the version that
+ * first left it out, which a later publish keeps.
+ */
 function codesMerged(
-  baseline: ByKey<CodeSnapshot> | undefined,
+  baseline: ByKey<PublishedCode> | undefined,
   proposed: ByKey<CodeSnapshot>,
-): ByKey<CodeSnapshot> {
-  const removed = carriedForward(baseline, proposed, (code) => ({ ...code, removed: true }));
+  version: string,
+): ByKey<PublishedCode> {
+  const removed = carriedForward(baseline, proposed, (code) => ({
+    ...code,
+    removedIn: code.removedIn ?? version,
+  }));
   return { ...removed, ...proposed };
 }
 

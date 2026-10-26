@@ -3,7 +3,7 @@ import {
   notImplementedStatus,
   standardRejectionNames,
 } from '../declarations/index.ts';
-import type { PublishedSnapshot } from '../snapshot/index.ts';
+import { isRemoved, type PublishedSnapshot } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 
 /**
@@ -40,8 +40,10 @@ export function codeStatusProblemsOf(snapshot: PublishedSnapshot): readonly Prob
     return [];
   }
   const problems: Problem[] = [];
-  for (const [code, { status, removed }] of Object.entries(snapshot.codes)) {
-    const mayBeNotImplemented = removed || code === snapshot.standardRejections.notImplemented;
+  for (const [code, declared] of Object.entries(snapshot.codes)) {
+    const { status } = declared;
+    const mayBeNotImplemented =
+      isRemoved(declared) || code === snapshot.standardRejections.notImplemented;
     const allowed =
       isRejectionStatus(status) || (mayBeNotImplemented && status === notImplementedStatus);
     if (!allowed) {

@@ -2,7 +2,6 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
-  type CodeSnapshot,
   type CommandSnapshot,
   canonicalTextOf,
   type DefinitionsSnapshot,
@@ -11,6 +10,7 @@ import {
   type EventSnapshot,
   hashedTextOf,
   type PublishedApplicationSnapshot,
+  type PublishedCode,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
@@ -102,13 +102,12 @@ function aSubscription(event: string): SubscriptionSnapshot {
   return { group: 'orders', description: 'Receives it', event };
 }
 
-function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
+function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
   return {
     origin: 'local',
     status: 409,
     message: 'The order can no longer be changed',
     body: null,
-    removed: false,
     ...fields,
   };
 }
@@ -386,7 +385,7 @@ describe('publishedSnapshotOf', () => {
     },
   );
 
-  test('a code no Endpoint answers any more stays, removed, with the status, body and message it last had', () => {
+  test('a code no Endpoint answers any more stays, with the status, body and message it last had, and removedIn the version', () => {
     const locked = aCode({
       status: 423,
       message: 'Locked',
@@ -399,13 +398,23 @@ describe('publishedSnapshotOf', () => {
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes).toEqual({
-      [orderLocked]: { ...locked, removed: true },
+      [orderLocked]: { ...locked, removedIn: '3.5.0' },
       [orderPaid]: aCode(),
     });
   });
 
-  test('a code removed in the Baseline and answered again is the proposed one, not removed', () => {
-    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ status: 423, removed: true }) } });
+  test('a code removed in the Baseline stays removed in the version that first left it out, whatever the later publishes', () => {
+    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) } });
+
+    const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
+
+    expect(published.codes).toEqual({ [orderLocked]: aCode({ removedIn: '3.2.0' }) });
+  });
+
+  test('a code removed in the Baseline and answered again is the proposed one, with no removedIn', () => {
+    const baseline = aBaseline({
+      codes: { [orderLocked]: aCode({ status: 423, removedIn: '3.2.0' }) },
+    });
     const proposed = aProposed({ codes: { [orderLocked]: aCode({ status: 423 }) } });
 
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
@@ -455,7 +464,7 @@ describe('publishedSnapshotOf', () => {
       ...proposed,
       version: '4.3.0',
       generator: publishedBy,
-      codes: { [oldCode]: aCode({ removed: true }), [keptCode]: aCode(), [newCode]: aCode() },
+      codes: { [oldCode]: aCode({ removedIn: '4.3.0' }), [keptCode]: aCode(), [newCode]: aCode() },
     });
   });
 
@@ -516,7 +525,7 @@ describe('publishedSnapshotOf', () => {
         'POST /orders': deprecated,
         'DELETE /orders/{}': { lifecycle: 'retired', retiredIn: '2.0.0', name: 'cancelOrder' },
       },
-      codes: { [orderLocked]: aCode({ removed: true }) },
+      codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) },
       subscriptions: { legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' } },
     });
     const proposed = aProposed({

@@ -89,7 +89,6 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     status: 409,
     message: 'Conflict',
     body: null,
-    removed: false,
     ...fields,
   };
 }

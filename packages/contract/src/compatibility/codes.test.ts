@@ -15,6 +15,7 @@ import {
   type Field,
   type ObjectNode,
   type PeerMove,
+  type PublishedCode,
   type PublishedEndpoint,
   type PublishedServiceSnapshot,
   type SchemaNode,
@@ -89,13 +90,12 @@ function aLive(endpoint: EndpointSnapshot): PublishedEndpoint {
   return { ...endpoint, lifecycle: 'active' };
 }
 
-function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
+function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
   return {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
     body: null,
-    removed: false,
     ...fields,
   };
 }
@@ -330,7 +330,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('a removed code not declared again is carried with no Change', () => {
-    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removed: true }) } });
+    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) } });
     const proposed = aProposed();
 
     const report = reportOf(baseline, proposed);
@@ -455,7 +455,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
 describe('compatibilityReportOf, a removed code declared again', () => {
   const removedBody = anOpenObject({ id: required(aString), note: required(aString) });
-  const removed = aCode({ removed: true, body: removedBody });
+  const removed = aCode({ removedIn: '3.2.0', body: removedBody });
 
   function declaredAgain(code: CodeSnapshot): readonly Change[] {
     const baseline = aBaseline({ codes: { [orderLocked]: removed } });
@@ -582,7 +582,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
       ...publishedAnswering(notFound),
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ removed: true, status: 409 }),
+        [orderGone]: aCode({ removedIn: '3.2.0', status: 409 }),
       },
     });
     const proposed = aProposed({

@@ -76,14 +76,12 @@
       },
       "message": "The request is invalid",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 400
     },
     "NOT_YET_IMPLEMENTED": {
       "body": null,
       "message": "Not implemented yet",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 501
     },
     "ORDER_LOCKED": {
@@ -101,7 +99,6 @@
       },
       "message": "The order is locked and cannot be billed",
       "origin": "local",
-      "removed": false,
       "status": 409
     },
     "ORDER_NOT_BILLABLE": {
@@ -118,14 +115,12 @@
       },
       "message": "Only a paid order can be billed",
       "origin": "local",
-      "removed": false,
       "status": 409
     },
     "RESOURCE_NOT_FOUND": {
       "body": null,
       "message": "The resource does not exist",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 404
     }
   },

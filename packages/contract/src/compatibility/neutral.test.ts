@@ -105,7 +105,6 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     status: 409,
     message: 'The order is locked',
     body: null,
-    removed: false,
     ...fields,
   };
 }

@@ -76,28 +76,24 @@
       },
       "message": "The request is invalid",
       "origin": "local",
-      "removed": false,
       "status": 400
     },
     "NOT_YET_IMPLEMENTED": {
       "body": null,
       "message": "Not implemented yet",
       "origin": "local",
-      "removed": false,
       "status": 501
     },
     "RESOURCE_NOT_FOUND": {
       "body": null,
       "message": "The resource does not exist",
       "origin": "local",
-      "removed": false,
       "status": 404
     },
     "UNAUTHENTICATED": {
       "body": null,
       "message": "The API key is missing or unknown",
       "origin": "local",
-      "removed": false,
       "status": 401
     }
   },

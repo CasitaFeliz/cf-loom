@@ -2,6 +2,7 @@ import type { Lifecycle } from '../declarations/index.ts';
 import type {
   ApplicationSnapshot,
   ByKey,
+  CodeSnapshot,
   CommandSnapshot,
   DefinitionsSnapshot,
   EndpointSnapshot,
@@ -44,15 +45,19 @@ export type PublishedHeading = { readonly version: string; readonly generator: s
 /** The Snapshot `package` writes: the declared one with the CLI that wrote it. */
 export type PackagedSnapshot = Snapshot & { readonly generator: string };
 
+/** A code in a published Snapshot: declared, or removed in the version that first left it out. */
+export type PublishedCode = CodeSnapshot & { readonly removedIn?: string };
+
 /** The published Snapshot of a Service: its declared Snapshot with its heading and the history only the Baseline knows. */
 export type PublishedServiceSnapshot = Omit<
   ServiceSnapshot,
-  'endpoints' | 'events' | 'commands' | 'subscriptions'
+  'endpoints' | 'events' | 'commands' | 'subscriptions' | 'codes'
 > &
   PublishedHeading & {
     readonly endpoints: ByKey<PublishedEndpoint>;
     readonly events: ByKey<PublishedEvent>;
     readonly commands: ByKey<PublishedCommand>;
+    readonly codes: ByKey<PublishedCode>;
     readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
   };
 
@@ -60,7 +65,8 @@ export type PublishedServiceSnapshot = Omit<
 export type PublishedApplicationSnapshot = ApplicationSnapshot & PublishedHeading;
 
 /** The published Snapshot of a Definitions Package: its declared Snapshot at a version, removed codes included. */
-export type PublishedDefinitionsSnapshot = DefinitionsSnapshot & PublishedHeading;
+export type PublishedDefinitionsSnapshot = Omit<DefinitionsSnapshot, 'codes'> &
+  PublishedHeading & { readonly codes: ByKey<PublishedCode> };
 
 /** A Snapshot as `publish` writes it to `snapshot.json` and `check` reads it as the Baseline. */
 export type PublishedSnapshot =
@@ -79,6 +85,11 @@ export function isDeclared<Element extends DeclaredElement>(
   element: Element | EndpointTombstone | MessageTombstone,
 ): element is Element {
   return 'description' in element;
+}
+
+/** Whether a published code is one no Endpoint answers any more, kept with what it last had. */
+export function isRemoved(code: PublishedCode): boolean {
+  return code.removedIn !== undefined;
 }
 
 /** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */

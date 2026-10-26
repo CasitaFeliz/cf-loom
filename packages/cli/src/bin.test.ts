@@ -604,7 +604,6 @@ describe('cf-loom generate', () => {
       status: 404,
       message: 'Missing',
       body: null,
-      removed: false,
     });
   });
 

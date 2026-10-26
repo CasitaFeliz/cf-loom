@@ -36,7 +36,7 @@ const code = z.strictObject({
   status: z.number(),
   message: text,
   body: schemaNode.nullable(),
-  removed: z.boolean(),
+  removedIn: semanticVersionText.exactOptional(),
 });
 
 const subscription = declaredOrTombstone(

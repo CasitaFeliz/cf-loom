@@ -3,13 +3,13 @@ import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
-  type CodeSnapshot,
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Difference,
   type Field,
   type GuardSnapshot,
   type ObjectNode,
+  type PublishedCode,
   type PublishedDefinitionsSnapshot,
   type SchemaNode,
   type Step,
@@ -72,13 +72,12 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
   };
 }
 
-function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
+function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
   return {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
     body: null,
-    removed: false,
     ...fields,
   };
 }
@@ -350,7 +349,9 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
   });
 
   test('a removed code not declared again is carried with no Change', () => {
-    const baseline = aBaselineDefinitions({ codes: { [orderLocked]: aCode({ removed: true }) } });
+    const baseline = aBaselineDefinitions({
+      codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) },
+    });
 
     const report = reportOf(baseline, aDefinitions());
 
@@ -359,7 +360,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
   test('a removed code declared again is added and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
-      codes: { [orderLocked]: aCode({ status: 409, removed: true }) },
+      codes: { [orderLocked]: aCode({ status: 409, removedIn: '3.2.0' }) },
     });
     const proposed = aDefinitions({ codes: { [orderLocked]: aCode({ status: 422 }) } });
 
@@ -375,7 +376,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     const baseline = aBaselineDefinitions({
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ status: 409, removed: true }),
+        [orderGone]: aCode({ status: 409, removedIn: '3.2.0' }),
       },
     });
     const proposed = aDefinitions({

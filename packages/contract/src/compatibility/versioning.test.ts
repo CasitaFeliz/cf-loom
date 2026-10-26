@@ -171,7 +171,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
 const orderLocked = 'ORDER_LOCKED';
 
 function aCode(status: number): CodeSnapshot {
-  return { origin: 'local', status, message: 'The order is locked', body: null, removed: false };
+  return { origin: 'local', status, message: 'The order is locked', body: null };
 }
 
 function aGuard(): GuardSnapshot {

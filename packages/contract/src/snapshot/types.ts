@@ -63,7 +63,6 @@ export type CodeSnapshot = {
   readonly status: number;
   readonly message: string;
   readonly body: SchemaNode | null;
-  readonly removed: boolean;
 };
 
 /** The code each Standard Rejection resolved to; its status, message, origin and body are that code's, under `codes`. */

@@ -56,21 +56,18 @@ const standardCodes = {
     status: 400,
     message: 'Invalid',
     body: { type: 'object', fields: {} },
-    removed: false,
   },
   [notFoundCode]: {
     origin: 'standard',
     status: 404,
     message: 'Not found',
     body: null,
-    removed: false,
   },
   [notImplementedCode]: {
     origin: 'standard',
     status: 501,
     message: 'No',
     body: null,
-    removed: false,
   },
 } as const satisfies PublishedServiceSnapshot['codes'];
 
@@ -180,7 +177,7 @@ const orderLocked = 'ORDER_LOCKED';
 const unauthenticated = 'UNAUTHENTICATED';
 const gone = 'GONE';
 
-const aCode = { origin: 'local', status: 409, message: 'Locked', body: null, removed: false };
+const aCode = { origin: 'local', status: 409, message: 'Locked', body: null };
 
 const retiredEndpoint = { ...anEndpoint, lifecycle: 'retired', retiredIn: '3.0.0' } as const;
 const endpointTombstone = {
@@ -402,7 +399,7 @@ describe('decodeSnapshot', () => {
         codes: {
           ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
-          [gone]: { ...aCode, status: 410, removed: true },
+          [gone]: { ...aCode, status: 410, removedIn: '3.2.0' },
         },
       });
 
@@ -454,10 +451,10 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a removed code decodes with removed true and the status and body it last had', () => {
+    test('a removed code decodes with its removedIn and the status and body it last had', () => {
       const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removed: true } },
+        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0' } },
       });
 
       const result = roundTrip(published);
@@ -2087,9 +2084,23 @@ describe('decodeSnapshot', () => {
 
       const result = roundTrip(published);
 
-      expect(published.codes[notImplementedCode]).toMatchObject({ status: 501, removed: true });
+      expect(published.codes[notImplementedCode]).toMatchObject({
+        status: 501,
+        removedIn: '3.5.0',
+      });
       expect(result.kind).toBe('decoded');
     });
+
+    test.each(['3', '3.2', 'v3.2.0', 'soon', 3, null])(
+      'a code whose removedIn is %j is malformed at removedIn',
+      (removedIn) => {
+        const codes = { ...standardCodes, [gone]: { ...aCode, status: 410, removedIn } };
+
+        const result = serviceWith({ codes });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'removedIn']));
+      },
+    );
 
     test('a Success status no Endpoint may declare is malformed in the Endpoint', () => {
       const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, status: 299 } };
@@ -2233,16 +2244,15 @@ function declaredSnapshot() {
 
 const formatOneFixture = `{
   "codes": {
-    "GONE": { "body": null, "message": "Gone", "origin": "local", "removed": true, "status": 410 },
+    "GONE": { "body": null, "message": "Gone", "origin": "local", "removedIn": "3.2.0", "status": 410 },
     "INVALID_INPUT": {
       "body": { "fields": {}, "type": "object" },
       "message": "Invalid",
       "origin": "standard",
-      "removed": false,
       "status": 400
     },
-    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "removed": false, "status": 404 },
-    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
+    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "status": 404 },
+    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "status": 501 }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
   "defs": {},
