@@ -64,7 +64,7 @@ _Avoid_: route, operation, action, call
 
 **Shadowing**:
 An Endpoint winning, by routing precedence (see [Over HTTP](ARCHITECTURE.md#over-http)), a URL another Endpoint of the same method also matches: `GET /orders/latest` shadows `GET /orders/:id` at `/orders/latest`, whatever `id`'s schema accepts. A Retired Endpoint that is still declared shadows and is shadowed like any other. When shadowing an Endpoint is a Breaking Change is in [Elements](COMPATIBILITY.md#elements).
-_Avoid_: conflict, masking, overlap (for Endpoints)
+_Avoid_: conflict, masking (for Endpoints)
 
 **Guard**:
 A reusable requirement an Endpoint attaches explicitly: what it demands from the request, the Guards whose Context it reads, the Context it provides, and the Rejections it may answer instead of admitting the request.
