@@ -636,6 +636,23 @@ describe('cf-loom generate', () => {
     expect(JSON.parse(first).endpoints['GET /ping'].deprecatedAt).toBe('2026-01-02T03:04:05Z');
   });
 
+  test('a Deprecated Endpoint with no deprecatedAt exits 1 with the line that asks for it', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ lifecycle: 'deprecated' }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "groups.health.endpoints.GET /ping.deprecatedAt deprecated-at: A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z\n",
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
   test('generate overwrites a committed file that is no JSON', () => {
     const project = aProject({
       'cf-loom.config.ts': config,

@@ -965,7 +965,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       expect(read(second, join(out, file))).toBe(read(first, join(out, file)));
     }
   });
-  test('package needs the committed Snapshot up to date, so it never stamps a deprecatedAt itself', () => {
+  test('package needs the committed Snapshot up to date, and writes no Snapshot of its own', () => {
     const project = aProject(service);
 
     const ran = cfLoom(project, 'package');

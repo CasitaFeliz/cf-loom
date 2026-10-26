@@ -1550,7 +1550,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
     });
 
-    test('a deprecatedAt that is not a stamp is malformed in the Endpoint', () => {
+    test('a deprecatedAt that is not a UTC instant to the second is malformed in the Endpoint', () => {
       const endpoint = { ...anEndpoint, lifecycle: 'deprecated', deprecatedAt: 'yesterday' };
 
       const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });

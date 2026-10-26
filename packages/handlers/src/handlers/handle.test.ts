@@ -753,7 +753,7 @@ describe('HandlerMap', () => {
     expect(generated.commands.chargeCardV1.element).toBe(getOrder);
   });
 
-  test('takes the map handlers.generated.ts exports, Handlers by name and the stamps', () => {
+  test('takes the map handlers.generated.ts exports, Handlers by name', () => {
     const generated = {
       endpoints: { getOrder: handle.stub(getOrder), findOrder: handle.stub(findOrder) },
       guards: { apiKey: handle.stub(apiKey) },

@@ -479,18 +479,18 @@ describe('bodyOf, reading a Response', () => {
 });
 
 describe('the Deprecation header', () => {
-  test('a deprecatedAt stamp is sent as @ and its unix seconds', () => {
+  test('a deprecatedAt is sent as @ and its unix seconds', () => {
     const response = withDeprecation(new Response(null), '2026-10-17T09:30:00Z');
 
     expect(response.headers.get('deprecation')).toBe('@1792229400');
   });
 
-  test('a received Deprecation header is read back as the stamp, and anything else as none', () => {
+  test('a received Deprecation header is read back as the instant, and anything else as none', () => {
     const headers = ['@1792229400', '1792229400', '@soon', '@1.5', ''];
 
-    const stamps = headers.map(deprecatedAtOfHeader);
+    const instants = headers.map(deprecatedAtOfHeader);
 
-    expect(stamps).toEqual(['2026-10-17T09:30:00Z', undefined, undefined, undefined, undefined]);
+    expect(instants).toEqual(['2026-10-17T09:30:00Z', undefined, undefined, undefined, undefined]);
   });
 });
 
@@ -660,9 +660,9 @@ describe('the received Deprecation header out of range', () => {
       '@-8639977881600',
     ];
 
-    const stamps = headers.map(deprecatedAtOfHeader);
+    const instants = headers.map(deprecatedAtOfHeader);
 
-    expect(stamps).toEqual(['1969-12-31T23:59:59Z', undefined, undefined, undefined, undefined]);
+    expect(instants).toEqual(['1969-12-31T23:59:59Z', undefined, undefined, undefined, undefined]);
   });
 });
 
