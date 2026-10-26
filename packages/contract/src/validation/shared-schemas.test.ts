@@ -820,3 +820,137 @@ describe('failure lines: shared refused schemas, drawn at random', () => {
     expect(lines.filter((line) => line.startsWith('defs.'))).toEqual([]);
   });
 });
+
+describe('failure lines: defs reached inside one another and from the body', () => {
+  /** Defs `d0` to `d(count - 1)`, each holding the next and itself, a date in the last. */
+  function chainedDefs(count: number): readonly z.ZodType[] {
+    const defs: z.ZodType[] = [];
+    for (let index = 0; index < count; index++) {
+      const id = `d${index}`;
+      const self = () => z.array(defs[index] as z.ZodType);
+      const link = () => defs[index + 1] as z.ZodType;
+      defs.push(
+        index === count - 1
+          ? z
+              .object({
+                at: z.date(),
+                get self() {
+                  return self();
+                },
+              })
+              .meta({ id })
+          : z
+              .object({
+                get next() {
+                  return link();
+                },
+                get self() {
+                  return self();
+                },
+              })
+              .meta({ id }),
+      );
+    }
+    return defs;
+  }
+
+  test('a date in the last of 2,400 defs is one line at the first place, told within a second', () => {
+    const count = 2400;
+    const defs = chainedDefs(count);
+    const fields: Record<string, z.ZodType> = {};
+    for (let index = count - 1; index >= 0; index--) {
+      fields[`f${String(index).padStart(5, '0')}`] = defs[index] as z.ZodType;
+    }
+    const endpoint = anEndpoint('alpha', 'GET /a', fields);
+    const started = performance.now();
+
+    const lines = linesOf(serviceWith([endpoint]));
+
+    const firstPlace = `success.body.f00000${'.next'.repeat(count - 1)}.at`;
+    expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+});
+
+/** A graph of defs: the edges each holds, the fields of the body, and the def holding the date. */
+type DefGraph = {
+  readonly edges: readonly (readonly (readonly [string, number])[])[];
+  readonly body: readonly (readonly [string, number])[];
+  readonly target: number;
+};
+
+/** Edges from a holder to some of the defs, each at a field of its own, named at random. */
+function edgesTo(defs: readonly number[], next: Next): readonly (readonly [string, number])[] {
+  const names = shuffled(['a', 'b', 'c', 'd', 'e', 'f'], next);
+  const held = defs.filter(() => next() < 0.5);
+  return held.map((def, index) => [names[index] as string, def]);
+}
+
+function defGraphOf(seed: number): DefGraph {
+  const next = seededNext(seed);
+  const count = 3 + Math.floor(next() * 4);
+  const defs = Array.from({ length: count }, (_, index) => index);
+  return {
+    edges: defs.map((def) =>
+      edgesTo(
+        defs.filter((other) => other !== def),
+        next,
+      ),
+    ),
+    body: edgesTo(defs, next),
+    target: Math.floor(next() * count),
+  };
+}
+
+/** Every def of the graph as a schema: each holds itself, its edges, and the date if it is the target. */
+function defsOf(graph: DefGraph): readonly z.ZodType[] {
+  const defs: z.ZodType[] = [];
+  graph.edges.forEach((edges, index) => {
+    const shape: Record<string, z.ZodType> = index === graph.target ? { at: z.date() } : {};
+    for (const [name, to] of edges) {
+      Object.defineProperty(shape, name, { enumerable: true, get: () => defs[to] });
+    }
+    Object.defineProperty(shape, 'self', {
+      enumerable: true,
+      get: () => z.array(defs[index] as z.ZodType),
+    });
+    defs.push(z.object(shape).meta({ id: `d${index}` }));
+  });
+  return defs;
+}
+
+/** Where the date is first told: the smallest text of the paths from the body to the target. */
+function firstPlaceOf(graph: DefGraph): string | undefined {
+  const places: string[] = [];
+  const visit = (def: number, text: string, visited: readonly number[]) => {
+    if (def === graph.target) {
+      places.push(`${text}.at`);
+      return;
+    }
+    for (const [name, to] of graph.edges[def] ?? []) {
+      if (!visited.includes(to)) {
+        visit(to, `${text}.${name}`, [...visited, to]);
+      }
+    }
+  };
+  for (const [name, to] of graph.body) {
+    visit(to, `success.body.${name}`, [to]);
+  }
+  return places.sort()[0];
+}
+
+describe('failure lines: a date in a graph of defs, drawn at random', () => {
+  test.for(seeds)('draw %i: the date is told from the first place that reaches it', (seed) => {
+    const graph = defGraphOf(seed);
+    const defs = defsOf(graph);
+    const fields: Record<string, z.ZodType> = {};
+    for (const [name, to] of graph.body) {
+      fields[name] = defs[to] as z.ZodType;
+    }
+
+    const lines = linesOf(serviceWith([anEndpoint('alpha', 'GET /a', fields)]));
+
+    const place = firstPlaceOf(graph);
+    expect(lines).toEqual(place === undefined ? [] : [`endpoints.GET /a (alpha) ${place} ${date}`]);
+  });
+});

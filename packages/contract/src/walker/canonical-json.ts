@@ -57,16 +57,16 @@ export function indentedCanonicalJson(value: unknown, first: readonly string[] =
 
 /** Orders text by code point, as the Snapshot orders keys and the arrays whose order means nothing. */
 export function byCodePoint(left: string, right: string): number {
-  const leftPoints = Array.from(left, codePointOf);
-  const rightPoints = Array.from(right, codePointOf);
-  const length = Math.min(leftPoints.length, rightPoints.length);
-  for (let index = 0; index < length; index++) {
-    const difference = (leftPoints[index] ?? 0) - (rightPoints[index] ?? 0);
-    if (difference !== 0) {
-      return difference;
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; ) {
+    const leftPoint = left.codePointAt(index) ?? 0;
+    const rightPoint = right.codePointAt(index) ?? 0;
+    if (leftPoint !== rightPoint) {
+      return leftPoint - rightPoint;
     }
+    index += leftPoint > 0xffff ? 2 : 1;
   }
-  return leftPoints.length - rightPoints.length;
+  return left.length - right.length;
 }
 
 function canonicalObject(value: object): string {
@@ -98,10 +98,6 @@ function membersOf(
 
 function hasValue(entry: [string, unknown]): boolean {
   return entry[1] !== undefined;
-}
-
-function codePointOf(character: string): number {
-  return character.codePointAt(0) ?? 0;
 }
 
 function indentedAt(value: unknown, indent: string, first: readonly string[]): string {
