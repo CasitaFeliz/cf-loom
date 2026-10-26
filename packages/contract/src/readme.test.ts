@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../test/providers.ts';
 import {
-  type ContractPackage,
   defineApplication,
   defineCommand,
   defineDefinitions,
@@ -109,8 +109,8 @@ const createOrder = defineEndpoint({
   success: { status: 201, body: z.object({ id: z.uuid() }) },
 });
 
-const getPayment = providedEndpoint(
-  'payments-service',
+const getPaymentEndpoint = providedEndpoint(
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -124,44 +124,17 @@ const getPayment = providedEndpoint(
   undefined,
 );
 
-const payments = {
-  name: 'payments-service',
-  endpoints: { getPayment },
-  events: {
-    paymentSettledV1: providedEvent('payments-service', {
-      name: 'PaymentSettled',
-      version: 1,
-      visibility: 'internal',
-      description: 'A payment was settled',
-      body: z.object({ paymentId: z.uuid() }),
-    }),
-  },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
-
-const paymentsDependency = defineDependency({
-  provider: payments,
-  endpoints: [payments.endpoints.getPayment],
+const paymentSettledEventV1 = providedEvent('payments-service', {
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.uuid() }),
 });
 
-const orders = {
-  name: 'orders-service',
-  endpoints: {
-    getOrder: providedEndpoint('orders-service', getOrder, undefined),
-    createOrder: providedEndpoint('orders-service', createOrder, undefined),
-  },
-  events: {},
-  standardRejections: payments.standardRejections,
-} as const satisfies ContractPackage;
+const paymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint] });
+
+const getOrderEndpoint = providedEndpoint(aProvider('orders-service'), getOrder, undefined);
 
 const orderCreatedV2 = defineEvent({
   name: 'OrderCreated',
@@ -190,7 +163,7 @@ const orderCreatedV1 = defineEvent({
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: payments.events.paymentSettledV1,
+  event: paymentSettledEventV1,
 });
 
 const ordersGroup = defineGroup({
@@ -212,25 +185,19 @@ describe('the README’s declaration examples', () => {
     });
 
     expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
-    expect(contract.groups[0].subscriptions[0].event).toBe(payments.events.paymentSettledV1);
+    expect(contract.groups[0].subscriptions[0].event).toBe(paymentSettledEventV1);
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {
-    const adminOrdersDependency = defineDependency({
-      provider: orders,
-      endpoints: [orders.endpoints.getOrder],
-    });
-    const adminPaymentsDependency = defineDependency({
-      provider: payments,
-      endpoints: [payments.endpoints.getPayment],
-    });
+    const adminOrdersDependency = defineDependency({ endpoints: [getOrderEndpoint] });
+    const adminPaymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint] });
 
     const application = defineApplication({
       name: 'web-admin',
       dependencies: [adminOrdersDependency, adminPaymentsDependency],
     });
 
-    expect(application.dependencies[1].endpoints).toEqual([getPayment]);
+    expect(application.dependencies[1].endpoints).toEqual([getPaymentEndpoint]);
   });
 });
 
@@ -266,12 +233,11 @@ describe('the README’s Event and Command examples', () => {
 
 describe('the README’s Subscription example', () => {
   test('a Subscription takes a Provider’s Event from its Contract Package', () => {
-    expect(notifyOnSettled.event).toBe(payments.events.paymentSettledV1);
+    expect(notifyOnSettled.event).toBe(paymentSettledEventV1);
   });
 
-  test('the Dependency holds the Contract Package and the Endpoints it calls, as listed', () => {
-    expect(paymentsDependency.provider.events.paymentSettledV1).toBe(notifyOnSettled.event);
-    expect(paymentsDependency.endpoints).toEqual([getPayment]);
+  test('the Dependency holds the Endpoints it calls, as listed, and no Event', () => {
+    expect(paymentsDependency).toEqual({ kind: 'dependency', endpoints: [getPaymentEndpoint] });
   });
 });
 

@@ -1,8 +1,8 @@
-import { type ContractPackage, type Definitions, defineDefinitions } from '../src/index.ts';
+import { type Definitions, defineDefinitions } from '../src/index.ts';
 import {
   type ImportedContractPackage,
   type ImportedDefinitions,
-  isContractPackage,
+  providerOf,
   type ResolvedContractPackage,
   type ResolvedDefinitions,
   type RootPackage,
@@ -11,45 +11,64 @@ import {
 
 /**
  * The package a test's Root sits in: named as the Root is, or `@org/definitions` for a
- * Definitions Package, with no Definitions Package installed, every Provider of its Dependencies
- * installed as a Contract Package at 1.0.0, and a Root file that exports nothing else, unless the
- * test gives otherwise.
+ * Definitions Package, with no Definitions Package installed, every Provider whose Elements its
+ * Dependencies and Subscriptions hold installed as a Contract Package at 1.0.0 exporting them, and
+ * a Root file that exports nothing else, unless the test gives otherwise.
  */
 export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): RootPackage {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
     packages: [],
-    contractPackages: providersOf(root).map((provider) => anInstalledContract(provider)),
+    contractPackages: providersOf(root).map(([provider, elements]) =>
+      anInstalledContract(provider, elements),
+    ),
     rootExports: {},
     ...given,
   };
 }
 
-/** The Contract Package each Dependency of a Root holds, once for each Provider. */
-function providersOf(root: unknown): readonly ContractPackage[] {
-  const dependencies: unknown =
-    typeof root === 'object' && root !== null ? Reflect.get(root, 'dependencies') : undefined;
-  const listed = Array.isArray(dependencies) ? dependencies : [];
-  const providers: unknown[] = listed.map((dependency) =>
-    Reflect.get(Object(dependency), 'provider'),
-  );
-  const packages = providers.filter(isContractPackage);
-  return packages.filter(
-    ({ name }, index) => packages.findIndex((other) => other.name === name) === index,
-  );
+/** The Provided Elements a Root's Dependencies and Subscriptions hold, by their Provider's name. */
+function providersOf(root: unknown): readonly (readonly [string, readonly unknown[]])[] {
+  const byProvider = new Map<string, unknown[]>();
+  for (const element of heldElementsOf(root)) {
+    const provider = providerOf(element);
+    if (provider !== undefined) {
+      byProvider.set(provider, [...(byProvider.get(provider) ?? []), element]);
+    }
+  }
+  return [...byProvider];
 }
 
-/** A Contract Package installed beside a test's Root, as its package.json names it, exporting the `contract` given. */
+function heldElementsOf(root: unknown): readonly unknown[] {
+  const endpoints = listAt(root, 'dependencies').flatMap((dependency) =>
+    listAt(dependency, 'endpoints'),
+  );
+  const events = listAt(root, 'groups')
+    .flatMap((group) => listAt(group, 'subscriptions'))
+    .map((subscription) => Reflect.get(Object(subscription), 'event'));
+  return [...endpoints, ...events];
+}
+
+function listAt(holder: unknown, field: string): readonly unknown[] {
+  const listed: unknown = Reflect.get(Object(holder), field);
+  return Array.isArray(listed) ? listed : [];
+}
+
+/**
+ * A Contract Package installed beside a test's Root, named `@org/contract-<provider>` at 1.0.0
+ * unless given otherwise, whose modules export the Provided Elements given, a list or by name.
+ */
 export function anInstalledContract(
-  contract: ContractPackage,
+  provider: string,
+  exported: readonly unknown[] | Readonly<Record<string, unknown>>,
   installed: Partial<ResolvedContractPackage> = {},
 ): ResolvedContractPackage {
   return {
     kind: 'identified',
-    packageName: `@org/contract-${contract.name}`,
+    packageName: `@org/contract-${provider}`,
     version: '1.0.0',
-    contract,
+    elements: Object.values(exported),
     reaches: [],
     ...installed,
   };
@@ -58,10 +77,10 @@ export function anInstalledContract(
 /** A Contract Package installed beside a test's Root whose package.json does not name it. */
 export function anUnidentifiedContract(
   identity: Unidentified,
-  contract: ContractPackage,
+  exported: readonly unknown[] | Readonly<Record<string, unknown>>,
   reaches: readonly ImportedContractPackage[] = [],
 ): ImportedContractPackage {
-  return { ...identity, contract, reaches };
+  return { ...identity, elements: Object.values(exported), reaches };
 }
 
 /** A Definitions Package installed beside a test's Root, exporting what is given beside its Definitions object. */

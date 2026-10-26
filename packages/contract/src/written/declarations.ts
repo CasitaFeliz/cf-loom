@@ -1,6 +1,6 @@
-import type { Definitions, Dependency, Root } from '../declarations/index.ts';
+import type { Definitions, Root } from '../declarations/index.ts';
 import { isDefinitions, isDependency, isServiceContract } from '../declarations/index.ts';
-import { inFields, type Place, placeOf, type Site } from '../walker/index.ts';
+import { inFields, type Place, placeOf } from '../walker/index.ts';
 import { groupedOf, groupsOf, placedIn } from './grouped.ts';
 import type {
   LocatedCode,
@@ -17,7 +17,7 @@ import type {
 } from './located.ts';
 import { type Members, membersOf } from './members.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
-import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
+import { entriesOf, isPlainObject, listOf } from './written.ts';
 
 /**
  * Every declaration of a Root, each once, with where it sits, so each rule reads one list; what
@@ -137,15 +137,15 @@ export function standardRejectionsSourceOf(root: unknown): Definitions | undefin
   return isDefinitions(named) ? named : undefined;
 }
 
+/** Each Dependency at its place in the Root's list, since a Dependency has no name of its own. */
 function dependenciesOf(root: Root): readonly LocatedDependency[] {
   if (root.kind === 'definitions') {
     return [];
   }
   const holder = placeOf({ kind: 'root' }, root);
   const written = listOf(root.dependencies).map((dependency: unknown, index) => {
-    const name = providerNameOf(dependency);
-    const site: Site | undefined = name === undefined ? undefined : { kind: 'dependency', name };
-    return { at: placedIn({ holder, field: 'dependencies', index }, dependency, site), dependency };
+    const at = placedIn({ holder, field: 'dependencies', index }, dependency, undefined);
+    return { at, dependency };
   });
   return written.filter(isLocatedDependency);
 }
@@ -156,22 +156,4 @@ function isLocatedDependency(written: {
   readonly dependency: unknown;
 }): written is LocatedDependency {
   return isDependency(written.dependency);
-}
-
-/** The name of a Dependency's Provider, the Contract Package's own; none when it has no name to give. */
-export function providerNameOf(dependency: unknown): string | undefined {
-  const { name } = partOf<'name'>(partOf<'provider'>(dependency).provider);
-  return typeof name === 'string' ? name : undefined;
-}
-
-/** The Endpoints and Events a Dependency's Provider exports; none of a kind when a cast left it out of the Contract Package. */
-export function providerExportsOf(dependency: Dependency): {
-  readonly endpoints: readonly unknown[];
-  readonly events: readonly unknown[];
-} {
-  const provider = partOf<'endpoints' | 'events'>(dependency.provider);
-  return {
-    endpoints: Object.values(partOf(provider.endpoints)),
-    events: Object.values(partOf(provider.events)),
-  };
 }

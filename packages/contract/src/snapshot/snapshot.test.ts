@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../../test/providers.ts';
 import { anInstalledContract, aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineApplication,
   defineCommand,
   defineDefinitions,
@@ -130,7 +130,7 @@ const ordersGroup = defineGroup({
 });
 
 const getPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -143,7 +143,7 @@ const getPayment = providedEndpoint(
   undefined,
 );
 const listPayments = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'listPayments',
     method: 'GET',
@@ -170,28 +170,15 @@ const paymentFailedV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: { getPayment, listPayments },
-  events: { paymentSettledV1, paymentFailedV1 },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
+/** What the payments-service's Contract Package exports, by name. */
+const payments = { getPayment, listPayments, paymentSettledV1, paymentFailedV1 };
 
 /** The Contract Package of payments-service as installed beside the Roots under test: at 5.1.0. */
-const paymentsPackage = anInstalledContract(payments, { version: '5.1.0' });
+const paymentsPackage = anInstalledContract('payments-service', payments, { version: '5.1.0' });
 
 /** An Endpoint with the Provider's name as another package may export it: equal to getPayment, and not the same object. */
 const aGetPaymentOfItsOwn = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -204,10 +191,7 @@ const aGetPaymentOfItsOwn = providedEndpoint(
   undefined,
 );
 
-const paymentsDependency = defineDependency({
-  provider: payments,
-  endpoints: [payments.endpoints.getPayment, payments.endpoints.listPayments],
-});
+const paymentsDependency = defineDependency({ endpoints: [getPayment, listPayments] });
 
 const orgPackage: ResolvedDefinitions = {
   kind: 'identified',
@@ -230,12 +214,12 @@ const orgPackage: ResolvedDefinitions = {
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: payments.events.paymentSettledV1,
+  event: paymentSettledV1,
 });
 const notifyOnFailed = defineSubscription({
   name: 'notifyOnFailed',
   description: 'Notifies the customer of each payment failed',
-  event: payments.events.paymentFailedV1,
+  event: paymentFailedV1,
 });
 
 const contract = defineService({
@@ -738,7 +722,7 @@ describe('snapshotOf: a Service', () => {
   });
 
   test('a Dependency is against the version of the installed package, whatever else its package exports', () => {
-    const installed = anInstalledContract(payments, {
+    const installed = anInstalledContract('payments-service', payments, {
       packageName: '@org/contract-payments-service',
       version: '7.0.2',
     });
@@ -749,14 +733,10 @@ describe('snapshotOf: a Service', () => {
   });
 
   test('a Dependency is not against another installed package whose contract has the Provider’s name but Elements of its own', () => {
-    const lookalike = anInstalledContract(
-      {
-        ...payments,
-        endpoints: { getPayment: aGetPaymentOfItsOwn },
-        events: {},
-      },
-      { packageName: '@org/payments-lookalike', version: '9.9.9' },
-    );
+    const lookalike = anInstalledContract('payments-service', [aGetPaymentOfItsOwn], {
+      packageName: '@org/payments-lookalike',
+      version: '9.9.9',
+    });
 
     const snapshot = serviceSnapshot(contract, [orgPackage], [lookalike, paymentsPackage]);
 
@@ -764,8 +744,8 @@ describe('snapshotOf: a Service', () => {
   });
 
   test('a Dependency is against the package that exports the Provider’s Elements, not the one that re-exports them', () => {
-    const original = anInstalledContract(payments, { version: '5.1.0' });
-    const wrapper = anInstalledContract(payments, {
+    const original = anInstalledContract('payments-service', payments, { version: '5.1.0' });
+    const wrapper = anInstalledContract('payments-service', payments, {
       packageName: '@org/payments-wrapper',
       version: '9.9.9',
       reaches: [original],
@@ -1159,10 +1139,7 @@ describe('snapshotOf: deprecatedAt', () => {
 
 describe('snapshotOf: an Application', () => {
   test('an Application’s Snapshot holds only its Dependencies', () => {
-    const adminDependency = defineDependency({
-      provider: payments,
-      endpoints: [payments.endpoints.getPayment],
-    });
+    const adminDependency = defineDependency({ endpoints: [getPayment] });
     const application = defineApplication({ name: 'web-admin', dependencies: [adminDependency] });
 
     const snapshot = snapshotFor(application, []);
@@ -1333,12 +1310,7 @@ describe('canonicalTextOf', () => {
           subscriptions: [notifyOnFailed, notifyOnSettled],
         }),
       ],
-      dependencies: [
-        defineDependency({
-          provider: payments,
-          endpoints: [payments.endpoints.listPayments, payments.endpoints.getPayment],
-        }),
-      ],
+      dependencies: [defineDependency({ endpoints: [listPayments, getPayment] })],
     });
 
     const written = textOf(snapshotFor(contract));

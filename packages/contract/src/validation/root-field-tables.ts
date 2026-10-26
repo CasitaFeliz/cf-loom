@@ -109,18 +109,17 @@ export const groupFields = {
 } satisfies Fields<Group>;
 
 /**
- * A Dependency's fields as the field rules judge them: its provider and its Endpoints are the
- * Dependency rule's, which reports them in its own terms.
+ * A Dependency's fields as the field rules judge them: its Endpoints are the Dependency rule's,
+ * which reports an empty or missing list in its own terms.
  */
 type DependencyFields = {
   readonly kind: Dependency['kind'];
-  readonly provider?: unknown;
   readonly endpoints?: unknown;
 };
 
 /** The fields of a Dependency, as `defineDependency` builds it. */
 export const dependencyFields = {
-  declared: { kind: true, provider: true, endpoints: true },
+  declared: { kind: true, endpoints: true },
   required: { kind: true },
   strings: { kind: true },
   nonBlank: {},

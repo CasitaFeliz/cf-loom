@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { exportedOrders, getOrder, oldOrder, ordersSnapshot } from '../../test/orders-exported.ts';
+import { aProvider } from '../../test/providers.ts';
 import { providedEndpoint } from '../index.ts';
 import {
   exportedCutOf,
@@ -17,7 +18,7 @@ const examples = new URL('../../../../examples/', import.meta.url);
  * Snapshot cut: the decoder reads the cut and the Provider's name, not the Endpoint.
  */
 function markedAs(provider: string, cut: unknown) {
-  return providedEndpoint(provider, getOrder, cut);
+  return providedEndpoint(aProvider(provider), getOrder, cut);
 }
 
 function carrying(cut: unknown) {
@@ -239,7 +240,7 @@ describe('providedSnapshotOf', () => {
   test('a Deprecated Endpoint keeps its instant', () => {
     const cut = exportedCutOf(ordersSnapshot(), 'GET /old-orders/{}');
 
-    const read = providedSnapshotOf(providedEndpoint('orders-service', oldOrder, cut));
+    const read = providedSnapshotOf(providedEndpoint(aProvider('orders-service'), oldOrder, cut));
 
     expect(read.endpoints['GET /old-orders/{}']).toMatchObject({
       lifecycle: 'deprecated',

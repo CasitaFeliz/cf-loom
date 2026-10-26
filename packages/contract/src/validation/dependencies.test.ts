@@ -1,24 +1,23 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { summarized } from '../../test/failures.ts';
+import { aProvider } from '../../test/providers.ts';
 import {
   anInstalledContract,
   anUnidentifiedContract,
   aRootPackage,
 } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineApplication,
   defineDependency,
   defineEndpoint,
-  defineEvent,
   defineGroup,
   defineService,
   defineSubscription,
   providedEndpoint,
   providedEvent,
 } from '../index.ts';
-import { type Root, validateRoot } from '../internal/index.ts';
+import { type Root, snapshotOf, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
@@ -26,7 +25,7 @@ function validateInPackage(root: Root) {
 }
 
 const getPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -40,7 +39,7 @@ const getPayment = providedEndpoint(
 );
 
 const refundPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'refundPayment',
     method: 'POST',
@@ -49,6 +48,46 @@ const refundPayment = providedEndpoint(
     description: 'Refunds a payment',
     input: { params: z.object({ paymentId: z.uuid() }) },
     success: { status: 204 },
+  },
+  undefined,
+);
+
+const healthCheck = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'healthCheck',
+    method: 'GET',
+    path: '/health',
+    visibility: 'private',
+    description: 'Whether the Service is up',
+    success: { status: 204 },
+  },
+  undefined,
+);
+
+const getRefund = providedEndpoint(
+  aProvider('refunds-service'),
+  {
+    name: 'getRefund',
+    method: 'GET',
+    path: '/refunds/:refundId',
+    visibility: 'public',
+    description: 'One refund by id',
+    input: { params: z.object({ refundId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+
+const listPayments = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'listPayments',
+    method: 'GET',
+    path: '/payments',
+    visibility: 'public',
+    description: 'Every payment',
+    success: { status: 200, body: z.object({ count: z.int() }) },
   },
   undefined,
 );
@@ -70,31 +109,18 @@ const paymentSettledV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: { getPayment, refundPayment },
-  events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
+/** What the payments-service's Contract Package exports, by name. */
+const payments = { getPayment, refundPayment, paymentSettledV1 };
 
 /** A Dependency the types refuse, as a cast lets an author write it. */
 function dependencyAsWritten(declaration: object) {
-  return defineDependency(declaration as unknown as { readonly provider: typeof payments });
+  return defineDependency(declaration as unknown as { readonly endpoints: [typeof getPayment] });
 }
 
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Notifies the customer of each payment settled',
-  event: payments.events.paymentSettledV1,
+  event: paymentSettledV1,
 });
 
 const messages = defineGroup({
@@ -109,10 +135,7 @@ function failed(location: string, rule: string, message: string) {
 
 describe('validateRoot: a Service’s Dependencies', () => {
   test('a Dependency on Public and Internal Endpoints validates', () => {
-    const paymentsDependency = defineDependency({
-      provider: payments,
-      endpoints: [getPayment, refundPayment],
-    });
+    const paymentsDependency = defineDependency({ endpoints: [getPayment, refundPayment] });
     const contract = defineService({
       name: 'orders-service',
       dependencies: [paymentsDependency],
@@ -121,183 +144,124 @@ describe('validateRoot: a Service’s Dependencies', () => {
     expect(validateInPackage(contract).kind).toBe('valid');
   });
 
-  test('a Dependency only a Subscription uses, through its Provider’s Event, validates', () => {
-    const paymentsDependency = defineDependency({ provider: payments });
-    const contract = defineService({
-      name: 'orders-service',
-      groups: [messages],
-      dependencies: [paymentsDependency],
-    });
+  test('two Dependencies on one Provider validate', () => {
+    const first = defineDependency({ endpoints: [getPayment] });
+    const second = defineDependency({ endpoints: [refundPayment, getPayment] });
+    const contract = defineService({ name: 'orders-service', dependencies: [first, second] });
 
     expect(validateInPackage(contract).kind).toBe('valid');
   });
 
-  test('a Dependency that selects no Endpoint and whose Event no Subscription receives fails', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [] });
-    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
+  test('a Dependency of two Providers’ Endpoints, written through a cast, fails dependency-selection at the Dependency, naming both', () => {
+    const mixed = dependencyAsWritten({ endpoints: [getRefund, getPayment, refundPayment] });
+    const contract = defineService({ name: 'orders-service', dependencies: [mixed] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.payments-service',
-        'unused-dependency',
-        "A Dependency is used: payments-service gives no Endpoint and no Subscription's Event",
+        '(root) dependencies[0]',
+        'dependency-selection',
+        "A Dependency lists one Provider's Endpoints: payments-service, refunds-service",
       ),
     );
   });
 
-  test('a second Dependency exporting a Subscription’s Event gives it nothing, so it is unused', () => {
-    const mirror = { ...payments, name: 'mirror-service' };
+  test.each([
+    { what: 'empty', declaration: { endpoints: [] } },
+    { what: 'missing', declaration: {} },
+  ])('a Dependency whose endpoints are $what fails dependency-selection', ({ declaration }) => {
     const contract = defineService({
       name: 'orders-service',
-      groups: [messages],
-      dependencies: [
-        defineDependency({ provider: payments }),
-        dependencyAsWritten({ provider: mirror }),
-      ],
-    });
-    const installed = anInstalledContract(payments);
-    const mirrored = anInstalledContract(mirror, { reaches: [installed] });
-    const contractPackages = [installed, mirrored];
-
-    expect(
-      summarized(validateRoot(contract, aRootPackage(contract, { contractPackages }))),
-    ).toEqual(
-      failed(
-        'dependencies.mirror-service',
-        'unused-dependency',
-        "A Dependency is used: mirror-service gives no Endpoint and no Subscription's Event",
-      ),
-    );
-  });
-
-  test('a Dependency whose Provider bears the Service’s own name gives a Subscription to an own Event nothing, so it is unused', () => {
-    const orderCreatedV1 = defineEvent({
-      name: 'OrderCreated',
-      version: 1,
-      visibility: 'internal',
-      description: 'An order was placed',
-      body: z.object({ orderId: z.uuid() }),
-    });
-    const auditOrders = defineSubscription({
-      name: 'auditOrders',
-      description: 'Receives it',
-      event: orderCreatedV1,
-    });
-    const orders = defineGroup({
-      name: 'orders',
-      description: 'Orders',
-      events: [orderCreatedV1],
-      subscriptions: [auditOrders],
-    });
-    const contract = defineService({
-      name: 'orders-service',
-      groups: [orders],
-      dependencies: [dependencyAsWritten({ provider: { ...payments, name: 'orders-service' } })],
+      dependencies: [dependencyAsWritten(declaration)],
     });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.orders-service',
-        'unused-dependency',
-        "A Dependency is used: orders-service gives no Endpoint and no Subscription's Event",
-      ),
-    );
-  });
-
-  test('a Dependency on an Endpoint the Provider does not export fails', () => {
-    const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints: [getReceipt] });
-    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
-
-    expect(validateInPackage(contract)).toEqual(
-      failed(
-        'dependencies.payments-service endpoints[0]',
+        '(root) dependencies[0]',
         'dependency-selection',
-        'A Dependency selects Elements its Provider exports: getReceipt is not one of them',
+        'A Dependency lists at least one Endpoint',
       ),
     );
   });
 
-  test('a Dependency on a Private Endpoint fails, even one the Provider exported', () => {
-    const healthCheck = defineEndpoint({
-      name: 'healthCheck',
-      method: 'GET',
-      path: '/health',
-      visibility: 'private',
-      description: 'Whether the Service is up',
-      success: { status: 204 },
-    });
-    const provider = { ...payments, endpoints: { healthCheck } };
-    const paymentsDependency = dependencyAsWritten({ provider, endpoints: [healthCheck] });
+  test('a Contract’s own Endpoint in a Dependency fails, as no Provider’s', () => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [getReceipt] });
     const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.payments-service endpoints[0]',
+        '(root) dependencies[0].endpoints[0]',
         'dependency-selection',
-        'A Dependency selects Elements its Provider exports: healthCheck is private',
+        "A Dependency lists Endpoints a Provider's Contract Package exports: getReceipt is no Provider's",
       ),
     );
   });
 
-  test('a Dependency on something that is not an Endpoint fails, by its position', () => {
-    const endpoints = [getPayment, { name: 'refundPayment' }];
-    const paymentsDependency = dependencyAsWritten({ provider: payments, endpoints });
+  test('a Private Endpoint fails at its place in the Dependency, naming its Provider', () => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [getPayment, healthCheck] });
     const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.payments-service endpoints[1]',
-        'not-a-declaration',
-        'is not an Endpoint',
+        '(root) dependencies[0].endpoints[1]',
+        'dependency-selection',
+        "A Dependency lists Endpoints a Provider's Contract Package exports: payments-service's healthCheck is private",
       ),
     );
   });
 
-  test('a Dependency holding events fails: a Subscription takes its Event from the Contract Package', () => {
+  test('an Endpoint listed twice in one Dependency fails at its second listing, naming its Provider', () => {
     const paymentsDependency = dependencyAsWritten({
-      provider: payments,
-      endpoints: [getPayment],
-      events: [paymentSettledV1],
-    });
-    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
-
-    expect(validateInPackage(contract)).toEqual(
-      failed(
-        'dependencies.payments-service events',
-        'undeclared-field',
-        'events is not a declared field',
-      ),
-    );
-  });
-
-  test('an Endpoint listed twice in one Dependency fails at its second listing', () => {
-    const paymentsDependency = dependencyAsWritten({
-      provider: payments,
       endpoints: [getPayment, refundPayment, getPayment],
     });
     const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.payments-service endpoints[2]',
+        '(root) dependencies[0].endpoints[2]',
         'dependency-selection',
-        'A Dependency selects Elements its Provider exports: getPayment is listed twice',
+        "A Dependency lists each Endpoint once: payments-service's getPayment is listed twice",
       ),
     );
   });
 
-  test('two Dependencies on one Provider fail', () => {
-    const first = defineDependency({ provider: payments, endpoints: [getPayment] });
-    const second = defineDependency({ provider: payments, endpoints: [refundPayment] });
-    const contract = defineService({ name: 'orders-service', dependencies: [first, second] });
+  test('a Dependency on something that is not an Endpoint fails, by its position', () => {
+    const paymentsDependency = dependencyAsWritten({
+      endpoints: [getPayment, { name: 'refundPayment' }],
+    });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed('(root) dependencies[0].endpoints[1]', 'not-a-declaration', 'is not an Endpoint'),
+    );
+  });
+
+  test.each([
+    { field: 'events', value: [paymentSettledV1] },
+    { field: 'provider', value: payments },
+  ])('a Dependency holding $field fails: it lists Endpoints only', ({ field, value }) => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [getPayment], [field]: value });
+    const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
 
     expect(validateInPackage(contract)).toEqual(
       failed(
-        'dependencies.payments-service',
-        'duplicate-dependency',
-        'A Contract lists one Dependency per Provider: "payments-service"',
+        `(root) dependencies[0].${field}`,
+        'undeclared-field',
+        `${field} is not a declared field`,
       ),
     );
+  });
+
+  test('a Subscription to a Provider’s Event needs no Dependency, and its event names that Provider', () => {
+    const contract = defineService({ name: 'orders-service', groups: [messages] });
+
+    const validated = validateRoot(contract, aRootPackage(contract));
+
+    expect(validated.kind).toBe('valid');
+    if (validated.kind === 'valid') {
+      expect(snapshotOf(validated)).toMatchObject({
+        subscriptions: { notifyOnSettled: { event: 'payments-service:PaymentSettled@1' } },
+      });
+    }
   });
 });
 
@@ -305,18 +269,18 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
   test.each([
     {
       what: 'an Endpoint written undefined',
-      declaration: { provider: payments, endpoints: [undefined] },
+      declaration: { endpoints: [undefined] },
       line: {
-        location: 'dependencies.payments-service endpoints[0]',
+        location: '(root) dependencies[0].endpoints[0]',
         rule: 'not-a-declaration',
         message: 'is not an Endpoint',
       },
     },
     {
       what: 'endpoints written null',
-      declaration: { provider: payments, endpoints: null },
+      declaration: { endpoints: null },
       line: {
-        location: 'dependencies.payments-service endpoints',
+        location: '(root) dependencies[0].endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
@@ -324,56 +288,29 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
     {
       what: 'a hole where an Endpoint belongs',
       // biome-ignore lint/suspicious/noSparseArray: the hole is what the test writes
-      declaration: { provider: payments, endpoints: [, getPayment] },
+      declaration: { endpoints: [, getPayment] },
       line: {
-        location: 'dependencies.payments-service endpoints[0]',
+        location: '(root) dependencies[0].endpoints[0]',
         rule: 'not-a-declaration',
         message: 'is not an Endpoint',
       },
     },
     {
       what: 'endpoints written as a map by name',
-      declaration: { provider: payments, endpoints: { whatever: getPayment } },
+      declaration: { endpoints: { whatever: getPayment } },
       line: {
-        location: 'dependencies.payments-service endpoints',
-        rule: 'not-a-list',
-        message: 'endpoints is a list',
-      },
-    },
-    {
-      what: 'endpoints written as an empty map',
-      declaration: { provider: payments, endpoints: {} },
-      line: {
-        location: 'dependencies.payments-service endpoints',
+        location: '(root) dependencies[0].endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
       },
     },
     {
       what: 'an Endpoint written where the list belongs',
-      declaration: { provider: payments, endpoints: getPayment },
+      declaration: { endpoints: getPayment },
       line: {
-        location: 'dependencies.payments-service endpoints',
+        location: '(root) dependencies[0].endpoints',
         rule: 'not-a-list',
         message: 'endpoints is a list',
-      },
-    },
-    {
-      what: 'a provider left undefined',
-      declaration: { provider: undefined, endpoints: [getPayment] },
-      line: {
-        location: '(root) dependencies[0]',
-        rule: 'dependency-provider',
-        message: "A Dependency's provider is the contract a Contract Package exports",
-      },
-    },
-    {
-      what: 'a provider whose name is no string',
-      declaration: { provider: { ...payments, name: 5 }, endpoints: [getPayment] },
-      line: {
-        location: '(root) dependencies[0]',
-        rule: 'dependency-provider',
-        message: "A Dependency's provider is the contract a Contract Package exports",
       },
     },
   ])('$what fails with one line', ({ declaration, line }) => {
@@ -384,36 +321,9 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
   });
 });
 
-describe('validateRoot: Dependencies whose providers have no name', () => {
-  test('two of them fail once each, by position, and never as one Provider listed twice', () => {
-    const first = dependencyAsWritten({ provider: undefined, endpoints: [getPayment] });
-    const second = dependencyAsWritten({ provider: { ...payments, name: 5 } });
-    const contract = defineService({ name: 'orders-service', dependencies: [first, second] });
-
-    const message = "A Dependency's provider is the contract a Contract Package exports";
-    expect(validateInPackage(contract)).toEqual({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'declaration',
-          location: '(root) dependencies[0]',
-          rule: 'dependency-provider',
-          message,
-        },
-        {
-          kind: 'declaration',
-          location: '(root) dependencies[1]',
-          rule: 'dependency-provider',
-          message,
-        },
-      ],
-    });
-  });
-});
-
 describe('validateRoot: an Application’s Dependencies', () => {
   test('an Application depending on Public Endpoints validates', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+    const paymentsDependency = defineDependency({ endpoints: [getPayment] });
     const application = defineApplication({
       name: 'web-admin',
       dependencies: [paymentsDependency],
@@ -422,63 +332,8 @@ describe('validateRoot: an Application’s Dependencies', () => {
     expect(validateInPackage(application).kind).toBe('valid');
   });
 
-  test('an Application depending on an Internal Endpoint fails', () => {
-    const paymentsDependency = dependencyAsWritten({
-      provider: payments,
-      endpoints: [refundPayment],
-    });
-    const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
-    const application = defineApplication({ name: 'web-admin', dependencies });
-
-    expect(validateInPackage(application)).toEqual(
-      failed(
-        'dependencies.payments-service endpoints[0]',
-        'application-dependency',
-        'An Application depends on Public Endpoints only: refundPayment is internal',
-      ),
-    );
-  });
-
-  test('an Application depending on an Internal Endpoint its Provider does not export fails as an Application’s Dependency', () => {
-    const provider = { ...payments, endpoints: { getPayment } };
-    const paymentsDependency = dependencyAsWritten({ provider, endpoints: [refundPayment] });
-    const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
-    const application = defineApplication({ name: 'web-admin', dependencies });
-
-    expect(validateInPackage(application)).toEqual(
-      failed(
-        'dependencies.payments-service endpoints[0]',
-        'application-dependency',
-        'An Application depends on Public Endpoints only: refundPayment is internal',
-      ),
-    );
-  });
-
-  test('an Application depending on a Private Endpoint fails as a Private selection, not as an Application’s', () => {
-    const healthCheck = defineEndpoint({
-      name: 'healthCheck',
-      method: 'GET',
-      path: '/health',
-      visibility: 'private',
-      description: 'Whether the Service is up',
-      success: { status: 204 },
-    });
-    const provider = { ...payments, endpoints: { healthCheck } };
-    const paymentsDependency = dependencyAsWritten({ provider, endpoints: [healthCheck] });
-    const dependencies = [paymentsDependency] as unknown as readonly [typeof publicDependency];
-    const application = defineApplication({ name: 'web-admin', dependencies });
-
-    expect(validateInPackage(application)).toEqual(
-      failed(
-        'dependencies.payments-service endpoints[0]',
-        'dependency-selection',
-        'A Dependency selects Elements its Provider exports: healthCheck is private',
-      ),
-    );
-  });
-
-  test('an Application’s Dependency that selects no Endpoint fails as unused', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [] });
+  test('an Application depending on an Internal Endpoint fails at its place, naming its Provider', () => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [refundPayment] });
     const application = defineApplication({
       name: 'web-admin',
       dependencies: [paymentsDependency],
@@ -486,22 +341,50 @@ describe('validateRoot: an Application’s Dependencies', () => {
 
     expect(validateInPackage(application)).toEqual(
       failed(
-        'dependencies.payments-service',
-        'unused-dependency',
-        "A Dependency is used: payments-service gives no Endpoint and no Subscription's Event",
+        '(root) dependencies[0].endpoints[0]',
+        'application-dependency',
+        "An Application depends on Public Endpoints only: payments-service's refundPayment is internal",
+      ),
+    );
+  });
+
+  test('an Application depending on a Private Endpoint fails as a Private selection, not as an Application’s', () => {
+    const paymentsDependency = dependencyAsWritten({ endpoints: [healthCheck] });
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [paymentsDependency],
+    });
+
+    expect(validateInPackage(application)).toEqual(
+      failed(
+        '(root) dependencies[0].endpoints[0]',
+        'dependency-selection',
+        "A Dependency lists Endpoints a Provider's Contract Package exports: payments-service's healthCheck is private",
+      ),
+    );
+  });
+
+  test('an Application’s Dependency that lists no Endpoint fails', () => {
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [dependencyAsWritten({ endpoints: [] })],
+    });
+
+    expect(validateInPackage(application)).toEqual(
+      failed(
+        '(root) dependencies[0]',
+        'dependency-selection',
+        'A Dependency lists at least one Endpoint',
       ),
     );
   });
 });
 
-const publicDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
-
-describe('validateRoot: the installed Contract Package of a Dependency', () => {
+describe('validateRoot: the installed Contract Package of a Provider', () => {
   const ordersWithPayments = defineService({
     name: 'orders-service',
-    dependencies: [defineDependency({ provider: payments, endpoints: [getPayment] })],
+    dependencies: [defineDependency({ endpoints: [getPayment] })],
   });
-  const contractName = `A Dependency's provider is an installed Contract Package's contract`;
 
   function validatedAmong(contractPackages: ReturnType<typeof aRootPackage>['contractPackages']) {
     return summarized(
@@ -509,30 +392,27 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
     );
   }
 
-  test('a Dependency whose Provider no installed package exports fails, naming the Provider', () => {
+  test('a Dependency whose Endpoint no installed package exports fails dependency-package, naming the Provider', () => {
     const validated = validatedAmong([]);
 
     expect(validated).toEqual(
       failed(
-        'dependencies.payments-service',
+        '(root) dependencies[0]',
         'dependency-package',
-        `${contractName}: no installed package exports payments-service's Elements`,
+        "A Provider's Elements come from an installed Contract Package: no installed package exports payments-service's Elements",
       ),
     );
   });
 
-  test('a Dependency whose Provider another package’s contract exports does not count that package', () => {
-    const other = { ...payments, name: 'other-service', endpoints: {}, events: {} };
+  test('a package exporting other Elements of the Provider’s name does not count', () => {
+    const other = anInstalledContract('payments-service', [refundPayment]);
 
-    const validated = validatedAmong([anInstalledContract(other)]);
+    const validated = validatedAmong([other]);
 
-    expect(validated).toEqual(
-      failed(
-        'dependencies.payments-service',
-        'dependency-package',
-        `${contractName}: no installed package exports payments-service's Elements`,
-      ),
-    );
+    expect(validated).toMatchObject({
+      kind: 'invalid',
+      failures: [{ location: '(root) dependencies[0]', rule: 'dependency-package' }],
+    });
   });
 
   test('a Provider exported by a package whose package.json has no version fails, naming it', () => {
@@ -545,9 +425,9 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        'dependencies.payments-service',
+        '(root) dependencies[0]',
         'dependency-package',
-        "A Dependency's Contract Package has a name and a version: @org/contract-payments-service has no version in its package.json",
+        "A Provider's Contract Package has a name and a version: payments-service's, @org/contract-payments-service has no version in its package.json",
       ),
     );
   });
@@ -562,31 +442,61 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toEqual(
       failed(
-        'dependencies.payments-service',
+        '(root) dependencies[0]',
         'dependency-package',
-        "A Dependency's Contract Package has a name and a version: node_modules/contract-payments/package.json has no name",
+        "A Provider's Contract Package has a name and a version: payments-service's, node_modules/contract-payments/package.json has no name",
       ),
     );
   });
 
-  test('a Provider exported by two packages, neither importing it from the other, fails, naming both', () => {
-    const first = anInstalledContract(payments, { packageName: '@org/contract-payments-service' });
-    const second = anInstalledContract(payments, { packageName: '@org/payments-mirror' });
+  test('a Provider whose Elements two packages export is one line at each Dependency and each Subscription holding them, naming both packages', () => {
+    const contract = defineService({
+      name: 'orders-service',
+      groups: [messages],
+      dependencies: [
+        defineDependency({ endpoints: [getPayment] }),
+        defineDependency({ endpoints: [refundPayment] }),
+      ],
+    });
+    const first = anInstalledContract('payments-service', payments);
+    const second = anInstalledContract('payments-service', payments, {
+      packageName: '@org/payments-mirror',
+    });
 
-    const validated = validatedAmong([first, second]);
-
-    expect(validated).toEqual(
-      failed(
-        'dependencies.payments-service',
-        'dependency-package',
-        "A Dependency's Contract Package is one package: payments-service's Elements are exported by both @org/contract-payments-service and @org/payments-mirror, and neither imports them from the other",
-      ),
+    const validated = summarized(
+      validateRoot(contract, aRootPackage(contract, { contractPackages: [first, second] })),
     );
+
+    const message =
+      "A Provider's Elements come from one Contract Package: payments-service's Elements are exported by both @org/contract-payments-service and @org/payments-mirror, and neither imports them from the other";
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: '(root) dependencies[0]',
+          rule: 'dependency-package',
+          message,
+        },
+        {
+          kind: 'declaration',
+          location: '(root) dependencies[1]',
+          rule: 'dependency-package',
+          message,
+        },
+        {
+          kind: 'declaration',
+          location: 'subscriptions.notifyOnSettled',
+          rule: 'dependency-package',
+          message,
+        },
+      ],
+    });
   });
 
-  test('a package that re-exports the contract of another is passed over for the one it imports it from', () => {
-    const original = anInstalledContract(payments);
-    const wrapper = anInstalledContract(payments, {
+  test('a package that re-exports the Elements of another is passed over for the one it imports them from', () => {
+    const original = anInstalledContract('payments-service', payments);
+    const wrapper = anInstalledContract('payments-service', payments, {
       packageName: '@org/payments-wrapper',
       reaches: [original],
     });
@@ -599,7 +509,7 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
   test('an Application’s Dependency needs its Provider installed too', () => {
     const application = defineApplication({
       name: 'web-admin',
-      dependencies: [defineDependency({ provider: payments, endpoints: [getPayment] })],
+      dependencies: [defineDependency({ endpoints: [getPayment] })],
     });
 
     const validated = summarized(
@@ -608,7 +518,113 @@ describe('validateRoot: the installed Contract Package of a Dependency', () => {
 
     expect(validated).toMatchObject({
       kind: 'invalid',
-      failures: [{ location: 'dependencies.payments-service', rule: 'dependency-package' }],
+      failures: [{ location: '(root) dependencies[0]', rule: 'dependency-package' }],
     });
   });
 });
+
+describe('snapshotOf: the Providers a Contract uses', () => {
+  function snapshotAmong(root: Root, contractPackages = aRootPackage(root).contractPackages) {
+    const validated = validateRoot(root, aRootPackage(root, { contractPackages }));
+    if (validated.kind !== 'valid') {
+      throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
+    }
+    const snapshot = snapshotOf(validated);
+    if (snapshot.kind === 'definitions') {
+      throw new Error('The fixture is no Contract');
+    }
+    return snapshot;
+  }
+
+  test('against is the version of the installed package that exports the listed Endpoint', () => {
+    const contract = defineService({
+      name: 'orders-service',
+      dependencies: [defineDependency({ endpoints: [getPayment] })],
+    });
+    const installed = anInstalledContract('payments-service', payments, { version: '2.3.0' });
+    const lookalike = anInstalledContract('payments-service', [refundPayment], {
+      packageName: '@org/payments-lookalike',
+      version: '9.9.9',
+    });
+
+    const snapshot = snapshotAmong(contract, [lookalike, installed]);
+
+    expect(snapshot.dependencies).toEqual({
+      'payments-service': {
+        against: '2.3.0',
+        endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
+      },
+    });
+  });
+
+  test('a Subscription-only Provider is recorded against the installed package that exports its Event, with no Endpoint', () => {
+    const contract = defineService({ name: 'orders-service', groups: [messages] });
+    const installed = anInstalledContract('payments-service', payments, { version: '4.0.1' });
+
+    const snapshot = snapshotAmong(contract, [installed]);
+
+    expect(snapshot.dependencies).toEqual({
+      'payments-service': { against: '4.0.1', endpoints: [] },
+    });
+  });
+
+  test.each(splitsOf([getPayment, refundPayment, listPayments]))(
+    'two Dependencies on one Provider pass, and the Snapshot records its Endpoints once, sorted, however they are split: %#',
+    (...split) => {
+      const contract = defineService({
+        name: 'orders-service',
+        dependencies: split.map((endpoints) => dependencyAsWritten({ endpoints })),
+      });
+
+      const snapshot = snapshotAmong(contract);
+
+      expect(JSON.stringify(snapshot.dependencies)).toBe(
+        JSON.stringify({
+          'payments-service': {
+            against: '1.0.0',
+            endpoints: [
+              { id: 'GET /payments', name: 'listPayments' },
+              { id: 'GET /payments/{}', name: 'getPayment' },
+              { id: 'POST /payments/{}/refund', name: 'refundPayment' },
+            ],
+          },
+        }),
+      );
+    },
+  );
+});
+
+/** Every split of some Endpoints into one or more non-empty Dependencies, in every order. */
+function splitsOf<Item>(items: readonly Item[]): readonly (readonly Item[][])[] {
+  const splits: Item[][][] = [];
+  for (const ordered of permutationsOf(items)) {
+    for (let cuts = 0; cuts < 2 ** (ordered.length - 1); cuts += 1) {
+      splits.push(cutAt(ordered, cuts));
+    }
+  }
+  return splits;
+}
+
+function permutationsOf<Item>(items: readonly Item[]): readonly (readonly Item[])[] {
+  if (items.length <= 1) {
+    return [items];
+  }
+  return items.flatMap((item, index) =>
+    permutationsOf([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [
+      item,
+      ...rest,
+    ]),
+  );
+}
+
+/** A list cut into consecutive parts after each position whose bit is set in `cuts`. */
+function cutAt<Item>(ordered: readonly Item[], cuts: number): Item[][] {
+  const parts: Item[][] = [[]];
+  ordered.forEach((item, index) => {
+    parts.at(-1)?.push(item);
+    if (index < ordered.length - 1 && (cuts >> index) & 1) {
+      parts.push([]);
+    }
+  });
+  return parts;
+}
