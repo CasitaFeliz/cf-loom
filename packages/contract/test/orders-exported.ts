@@ -7,7 +7,7 @@ import {
   defineService,
 } from '../src/index.ts';
 import {
-  type ExportedSnapshot,
+  type ExportedCut,
   exportedCutOf,
   type ServiceSnapshot,
   snapshotOf,
@@ -89,6 +89,6 @@ export function ordersSnapshot(): ServiceSnapshot {
 }
 
 /** The exported Snapshot of `orders-service` cut to `getOrder`. */
-export function exportedOrders(): ExportedSnapshot {
+export function exportedOrders(): ExportedCut {
   return exportedCutOf(ordersSnapshot(), 'GET /orders/{}');
 }

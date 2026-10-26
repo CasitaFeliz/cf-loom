@@ -11,7 +11,7 @@ import {
   declaredByCodeOf,
   type EndpointPath,
   type EndpointSnapshot,
-  type ExportedSnapshot,
+  type ExportedCut,
   endpointPathOf,
   exportedEntryOf,
   identityOf,
@@ -69,10 +69,9 @@ export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProv
   const declaredByCode = declaredByCodeOf(endpoints, provider.standardRejections);
   const listedByIdentity = new Map<string, ListedEndpoint>();
   for (const endpoint of dependency.endpoints ?? []) {
-    const entry = exportedEntryOf(provider.name, providedSnapshotOf(endpoint), endpoint);
-    const listing = { name: endpoint.name, endpoint, entry };
-    const identity = identityOf(endpoint.method, endpoint.path);
-    listedByIdentity.set(identity, listedEndpointOf(provider, listing, declaredByCode));
+    const cut = cutOf(provider.name, endpoint);
+    const listing = { name: endpoint.name, endpoint, entry: cut.entry };
+    listedByIdentity.set(cut.identity, listedEndpointOf(provider, listing, declaredByCode));
   }
   const cuts = endpoints.map((endpoint) => cutOf(provider.name, endpoint));
   const exported = cuts.map((cut) => exportedEndpointOf(cut, listedByIdentity.get(cut.identity)));
@@ -84,7 +83,7 @@ export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProv
 type Cut = {
   readonly identity: string;
   readonly entry: EndpointSnapshot;
-  readonly shadowing: ExportedSnapshot['shadowing'];
+  readonly shadowing: ExportedCut['shadowing'];
 };
 
 function cutOf(provider: string, endpoint: Endpoint): Cut {

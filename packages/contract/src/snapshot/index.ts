@@ -39,6 +39,7 @@ export type {
   DependencySnapshot,
   EndpointSnapshot,
   EventSnapshot,
+  ExportedCut,
   ExportedSnapshot,
   ExportSnapshot,
   GroupSnapshot,
@@ -48,6 +49,5 @@ export type {
   Snapshot,
   SnapshotFormat,
   SubscriptionSnapshot,
-  WholeExportedSnapshot,
 } from './types.ts';
 export { snapshotFormats, writtenSnapshotFormat } from './types.ts';

@@ -1,8 +1,8 @@
 import {
+  type ExportedSnapshot,
   exportedSnapshotOf,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
-  type WholeExportedSnapshot,
 } from '@cf-loom/contract/internal';
 import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
@@ -64,7 +64,7 @@ function serviceSourcesOf(
 /** The files that write schemas: each exported Endpoint and Event, the Guards and codes they reach. */
 function schemaFilesOf(
   { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
-  exported: WholeExportedSnapshot,
+  exported: ExportedSnapshot,
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
 ): readonly SchemaFile[] {
   return [
@@ -80,7 +80,7 @@ function schemaFilesOf(
 }
 
 function defsFilesOf(
-  exported: WholeExportedSnapshot,
+  exported: ExportedSnapshot,
   defUses: readonly DefUse[],
 ): readonly PackageFile[] {
   if (defUses.length === 0) {

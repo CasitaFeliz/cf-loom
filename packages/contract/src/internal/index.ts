@@ -90,6 +90,7 @@ export type {
   EndpointSnapshot,
   EndpointTombstone,
   EventSnapshot,
+  ExportedCut,
   ExportedSnapshot,
   ExportSnapshot,
   GroupSnapshot,
@@ -114,7 +115,6 @@ export type {
   SubscriptionSnapshot,
   SubscriptionTombstone,
   VersionBump,
-  WholeExportedSnapshot,
 } from '../snapshot/index.ts';
 export {
   canonicalSnapshotOf,

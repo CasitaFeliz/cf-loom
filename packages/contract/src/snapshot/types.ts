@@ -155,7 +155,7 @@ export type ShadowingSnapshot = Pick<EndpointSnapshot, 'lifecycle'>;
  * Events that are not Retired, with the Guards, codes and defs they reach, so no Private Element's
  * shapes reach a browser. `cf-loom package` writes the package's code from it.
  */
-export type WholeExportedSnapshot = Pick<
+export type ExportedSnapshot = Pick<
   ServiceSnapshot,
   'format' | 'defs' | 'endpoints' | 'events' | 'guards' | 'codes'
 >;
@@ -165,6 +165,6 @@ export type WholeExportedSnapshot = Pick<
  * codes and defs it reaches, no Event, and under `shadowing`, keyed by identity, the other declared
  * Endpoints that win a URL it matches, so a fake routes a request it matches as `serve` does.
  */
-export type ExportedSnapshot = WholeExportedSnapshot & {
+export type ExportedCut = ExportedSnapshot & {
   readonly shadowing: ByKey<ShadowingSnapshot>;
 };

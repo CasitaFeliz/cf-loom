@@ -15,10 +15,10 @@ import type {
   ByKey,
   EndpointSnapshot,
   EventSnapshot,
+  ExportedCut,
   ExportedSnapshot,
   ServiceSnapshot,
   ShadowingSnapshot,
-  WholeExportedSnapshot,
 } from './types.ts';
 
 /** The Endpoints and Events a cut of a Snapshot keeps, with the Guards, codes and defs they reach. */
@@ -34,7 +34,7 @@ type Kept = {
  */
 export function exportedSnapshotOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
-): WholeExportedSnapshot {
+): ExportedSnapshot {
   const endpoints = exportedOf(snapshot.endpoints);
   const events = exportedOf(snapshot.events);
   return cutOf(snapshot, { endpoints, events });
@@ -48,7 +48,7 @@ export function exportedSnapshotOf(
 export function exportedCutOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
   identity: string,
-): ExportedSnapshot {
+): ExportedCut {
   const exported = exportedOf(snapshot.endpoints);
   const entry = Object.hasOwn(exported, identity) ? exported[identity] : undefined;
   if (entry === undefined) {
@@ -61,7 +61,7 @@ export function exportedCutOf(
 function cutOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
   { endpoints, events }: Kept,
-): WholeExportedSnapshot {
+): ExportedSnapshot {
   const keptEndpoints = Object.values(endpoints);
   const attached = keptEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
   const guards = keptOf(snapshot.guards, reachedGuardNamesOf(attached, snapshot.guards));

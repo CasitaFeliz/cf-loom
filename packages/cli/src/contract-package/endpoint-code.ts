@@ -1,7 +1,7 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
-  type ExportedSnapshot,
+  type ExportedCut,
   exportedCutOf,
   isDeclaredRejection,
   type ListedRejection,
@@ -70,7 +70,7 @@ function endpointBodyOf(
 }
 
 /** The close of the declaration, with the Endpoint's cut passed beside it. */
-function closingLineOf(cut: ExportedSnapshot): string {
+function closingLineOf(cut: ExportedCut): string {
   return `}, ${jsonLiteralOf(cut, 'indented')});`;
 }
 
