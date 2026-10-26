@@ -9,6 +9,7 @@ Each fake is checked against the Provider's Snapshot, as its Contract Package ex
 ```ts
 import { fakeProvider } from '@cf-loom/testing';
 import { paymentsDependency } from '../src/contract/dependencies/payments-service.dependency.ts';
+import settlePaymentHandler from '../src/endpoints/payments/settle-payment.handler.ts';
 
 const payments = fakeProvider(paymentsDependency);
 payments.on('getPayment')
@@ -18,12 +19,15 @@ payments.on('getPayment')
   .once((r) => r.noConnection())                         // the client infers the Fault: committed 'no'
   .once((r) => r.reset())                                // a reset after sending: committed 'unknown', retryable
   .once((r) => r.status(502))                            // committed 'unknown', not retryable
-  .otherwise((r, { params }) => r.success({ id: params.paymentId, amount }));
+  .otherwise((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
 
-const settlement = new SettlementService(payments.client({ headers: { 'x-api-key': 'k' } }));
-await settlement.settle(PAYMENT_ID);
-payments.calls('getPayment');                            // the Input of each request the code made, in order
+// the Handler under test asks getPayment until the Provider answers a Success; its Resource is a client over the fake
+const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };
+await settlePaymentHandler({ params: { paymentId: 'pay-1' } }, {}, { resources });
+payments.calls('getPayment');                            // the Input of each request the Handler made, in order
 ```
+
+The Handler is called directly (see [Testing a Service's own code](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#testing-a-services-own-code) in the handlers README), and the client the fake returns is the Resource it takes.
 
 - **Requests.** `fakeProvider` reads each request as the Provider would (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), every Guard admitting it, since a step answers for its GuardHandlers. A request that fails answers the Provider's invalid-input Rejection, with the Provider's code, status and message and cf-loom's body, and takes no step. The client never sends Input that breaks its schema (see [What a call sends](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#what-a-call-sends) in the client README), so through `payments.client()` only the requests the code sends reach the fake; `payments.fetch` reads whatever Request it is given.
 - **Where requests go.** `fakeProvider(dependency, { baseUrl })` is reached at `baseUrl`, `https://<provider>.test` by default, and `payments.client()` always calls it there; `fakeProvider` throws when it is created, as `client()` does, given a `baseUrl` that `client()` refuses, which is a bug, or a Contract Package in a format it does not read (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README). Only a request's path is compared, under the base URL's path, from any origin. It is matched against every Endpoint the Contract Package exports, so routing precedence is the Provider's among them (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md). A test that wants `NO_SUCH_ENDPOINT` scripts it, `r.fault({ code: 'NO_SUCH_ENDPOINT' })`.
@@ -39,9 +43,10 @@ payments.calls('getPayment');                            // the Input of each re
 
   ```ts
   const payments = fakeProvider(paymentsDependency);
-  payments.on('getPayment').once((r, { params }) => r.success({ id: params.paymentId, amount }));
+  payments.on('getPayment').once((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
+  const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };
 
-  await settlement.settle(PAYMENT_ID);
+  await settlePaymentHandler({ params: { paymentId: 'pay-1' } }, {}, { resources });
 
   payments.verify();                                     // every mistake, wherever the code caught it, and every once step left
   ```
