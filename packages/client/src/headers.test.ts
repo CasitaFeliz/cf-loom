@@ -4,7 +4,6 @@ import {
   defineGroup,
   defineService,
   type Endpoint,
-  type ExportedSnapshot,
   type ProvidedStandardRejections,
   providedEndpoint,
 } from '@cf-loom/contract';
@@ -76,7 +75,6 @@ function contractPackageOf<
   const provided = providedEndpointsOf(name, endpoints);
   return {
     name,
-    version: '1.0.0',
     endpoints: provided,
     events: {},
     standardRejections,
@@ -216,7 +214,7 @@ describe('headers given to client()', () => {
       provider: {
         ...written,
         endpoints: { trace: named },
-        exportedSnapshot: JSON.parse(renamed) as ExportedSnapshot,
+        exportedSnapshot: JSON.parse(renamed),
       },
       endpoints: [named],
     });

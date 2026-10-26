@@ -16,9 +16,6 @@ import {
 import type { PackageFile } from './modules.ts';
 import { builtFolder, packagePaths } from './paths.ts';
 
-/** The versions of the two peers the package is built with, as installed beside the Root. */
-export type Peers = { readonly contract: string; readonly zod: string };
-
 /** Who the package is published as, at which version, and the peer ranges it declares. */
 export type Packaging = {
   readonly name: string;
@@ -34,37 +31,46 @@ export type ContractSnapshot =
   | PublishedApplicationSnapshot;
 
 /**
- * The package.json: named as the project publishes, at its version, peers on `zod` and
- * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom` metadata:
- * the hash and kind the check reads without downloading the package, and its Dependencies.
+ * The package.json: named as the project publishes, at its version, with its code if it has any,
+ * the peer ranges it is given unless there are none, and the `cfLoom` metadata: the hash and kind
+ * the check reads without downloading the package, and its Dependencies.
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
   { name, version, peerRanges }: Packaging,
 ): PackageFile {
-  const manifest = {
-    name,
-    version,
-    type: 'module',
-    exports: {
-      '.': { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` },
-    },
-    files: [builtFolder, packagePaths.snapshot],
-    sideEffects: false,
-    peerDependencies: peerRanges,
-    cfLoom: cfLoomOf(snapshot),
-  };
-  return manifestFileOf(manifest);
+  const peers = Object.keys(peerRanges).length === 0 ? {} : { peerDependencies: peerRanges };
+  const cfLoom = cfLoomOf(snapshot);
+  return manifestFileOf({ name, version, ...codeFieldsOf(snapshot.kind), ...peers, cfLoom });
 }
+
+/** What a package exports and ships: a Service's built code, and for every kind its `package.json` and `snapshot.json`. */
+function codeFieldsOf(kind: ContractSnapshot['kind']) {
+  switch (kind) {
+    case 'service': {
+      const code = { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` };
+      const exports = { '.': code, ...fileExports };
+      return {
+        type: 'module',
+        exports,
+        files: [builtFolder, packagePaths.snapshot],
+        sideEffects: false,
+      };
+    }
+    case 'application':
+      return { exports: fileExports, files: [packagePaths.snapshot] };
+  }
+}
+
+/** The two files every Contract Package exports, which a Consumer's tooling reads by name. */
+const fileExports = {
+  './package.json': `./${packagePaths.manifest}`,
+  './snapshot.json': `./${packagePaths.snapshot}`,
+};
 
 /** A package.json from its fields: two-space JSON and a final line break. */
 export function manifestFileOf(manifest: object): PackageFile {
   return { path: packagePaths.manifest, text: `${JSON.stringify(manifest, null, 2)}\n` };
-}
-
-/** The peer ranges a package declares: a caret on each version it is built with. */
-export function peerRangesOf(peers: Peers): PeerRanges {
-  return { '@cf-loom/contract': `^${peers.contract}`, zod: `^${peers.zod}` };
 }
 
 /**

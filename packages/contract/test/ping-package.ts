@@ -32,7 +32,6 @@ export const pingedV1 = providedEvent('ping-service', {
 /** The ping-service's Contract Package: what a Consumer imports as `contract`. */
 export const pingService = {
   name: 'ping-service',
-  version: '1.0.0',
   endpoints: { ping },
   events: { pingedV1 },
   standardRejections: {

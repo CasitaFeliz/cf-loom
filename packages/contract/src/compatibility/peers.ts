@@ -4,6 +4,12 @@ import { byCodePoint } from '../walker/index.ts';
 /** A package's peer ranges, as its package.json's `peerDependencies` holds them. */
 export type PeerRanges = Readonly<Record<string, string>>;
 
+/**
+ * The range of `zod` that `@cf-loom/contract` declares as its peer, which every package cf-loom
+ * publishes declares too, so a patch of `zod` installed beside it moves no range.
+ */
+export const zodPeerRange = '^4.6.7';
+
 /** The peer ranges of the Baseline's package and of the package about to be published. */
 export type PeerMove = { readonly baseline: PeerRanges; readonly proposed: PeerRanges };
 

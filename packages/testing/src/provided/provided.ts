@@ -3,13 +3,13 @@ import type { ContractPackage, Endpoint, ProvidedStandardRejections } from '@cf-
 import {
   type AnswerableRejection,
   answerableByCodeOf,
-  checkExportedFormat,
   declaredByCodeOf,
   type EndpointSnapshot,
   exportedEntryOf,
   type Matchable,
   methodAndPathOf,
   pathSegmentsOf,
+  providedSnapshotOf,
   type TextPartNodes,
   textPartNodesOf,
 } from '@cf-loom/contract/internal';
@@ -46,17 +46,17 @@ export type FakedProvider = {
  */
 export function fakedProviderOf(dependency: AnyDependency, base: URL): FakedProvider {
   const { provider } = dependency;
-  checkExportedFormat(provider);
+  const snapshot = providedSnapshotOf(provider);
   const endpoints = Object.values(provider.endpoints);
   const declaredByCode = declaredByCodeOf(endpoints, provider.standardRejections);
   const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
   for (const endpoint of dependency.endpoints ?? []) {
     const { name } = endpoint;
-    const entry = exportedEntryOf(provider, endpoint);
+    const entry = exportedEntryOf(provider.name, snapshot, endpoint);
     const listing = { name, endpoint, entry };
     listedByEntry.set(entry, listedEndpointOf(provider, listing, declaredByCode));
   }
-  const entries = Object.entries(provider.exportedSnapshot.endpoints);
+  const entries = Object.entries(snapshot.endpoints);
   const exported = entries.map(([identity, entry]) => {
     const { method, path } = methodAndPathOf(identity, entry.params);
     const segments = pathSegmentsOf(path);

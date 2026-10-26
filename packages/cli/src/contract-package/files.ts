@@ -6,13 +6,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.ts';
 import { endpointModuleOf } from './endpoint-code.ts';
-import {
-  applicationEntryOf,
-  type ServiceEntry,
-  serviceEntryOf,
-  snapshotModuleOf,
-  standardRejectionsModuleOf,
-} from './entry-code.ts';
+import { type ServiceEntry, serviceEntryOf, standardRejectionsModuleOf } from './entry-code.ts';
 import { eventModuleOf } from './event-code.ts';
 import {
   exportedEndpointsOf,
@@ -34,22 +28,18 @@ export type CanonicalSnapshot = {
 /**
  * The Contract Package of a Service or an Application, generated from its canonical Snapshot
  * alone, declared or published, so what is published is exactly what the Snapshot describes, in
- * the Snapshot's order.
+ * the Snapshot's order. An Application's is its package.json and `snapshot.json`: it offers no
+ * code.
  */
 export function contractPackageFilesOf(
   { snapshot, text }: CanonicalSnapshot,
   packaging: Packaging,
 ): readonly PackageFile[] {
-  const packageFiles = [
-    manifestOf(snapshot, packaging),
-    { path: packagePaths.snapshot, text },
-    tsconfigOf(),
-    snapshotModuleOf(snapshot),
-  ];
+  const packageFiles = [manifestOf(snapshot, packaging), { path: packagePaths.snapshot, text }];
   if (snapshot.kind === 'application') {
-    return [...packageFiles, applicationEntryOf()];
+    return packageFiles;
   }
-  return [...packageFiles, ...serviceSourcesOf(snapshot, packaging.version)];
+  return [...packageFiles, tsconfigOf(), ...serviceSourcesOf(snapshot)];
 }
 
 /**
@@ -58,7 +48,6 @@ export function contractPackageFilesOf(
  */
 function serviceSourcesOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
-  version: string,
 ): readonly PackageFile[] {
   const exported = exportedSnapshotOf(snapshot);
   const endpoints = exportedEndpointsOf(exported);
@@ -69,7 +58,7 @@ function serviceSourcesOf(
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
   return [
-    serviceEntryOf({ name: snapshot.name, version, endpoints, events, defUses }),
+    serviceEntryOf({ name: snapshot.name, endpoints, events, defUses }),
     exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),

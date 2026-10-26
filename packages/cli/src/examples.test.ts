@@ -15,6 +15,8 @@ import { test as baseTest, describe, expect } from 'vitest';
 import { cfLoomWith, type Ran } from '../test/cf-loom-run.ts';
 import { aRegistry, type Registry } from '../test/fake-registry.ts';
 import { anNpmEnvironment, loginTo, type NpmEnvironment } from '../test/npm-environment.ts';
+import type { Published as Put } from '../test/published-put.ts';
+import { entriesOf } from '../test/tarball.ts';
 
 const rootDir = join(import.meta.dirname, '..', '..', '..');
 const examplesDir = join(rootDir, 'examples');
@@ -35,19 +37,40 @@ type Published = {
   readonly publishes: readonly Ran[];
 };
 
-/** A copy of an example in `folder`, without its installed packages and Contract Package, with each package linked in. */
-function aCopyOf(example: string, folder: string): string {
+/**
+ * A copy of an example in `folder`, without its installed packages and Contract Package, with each
+ * package linked in, except those the registry was put: they are installed from their tarballs,
+ * each in a folder of its own, so nothing is ever written into the repository.
+ */
+function aCopyOf(example: string, folder: string, put: readonly Put[] = []): string {
   const source = join(examplesDir, example);
   const copy = mkdtempSync(join(folder, `${example}-`));
   const isLeftOut = (path: string) =>
     basename(path) === 'node_modules' || path === join(source, '.cf-loom');
   cpSync(source, copy, { recursive: true, filter: (path) => !isLeftOut(path) });
-  const installed = readdirSync(join(source, 'node_modules')).filter((name) => name !== '.cache');
-  for (const name of installed) {
-    link(join(source, 'node_modules', name), join(copy, 'node_modules', name));
+  const modules = join(source, 'node_modules');
+  for (const entry of readdirSync(modules).filter((name) => name !== '.cache')) {
+    const isScope = entry.startsWith('@');
+    const names = isScope ? readdirSync(join(modules, entry)).map((n) => `${entry}/${n}`) : [entry];
+    for (const name of names) {
+      const published = put.find((candidate) => candidate.name === name);
+      if (published === undefined) {
+        link(join(modules, name), join(copy, 'node_modules', name));
+      } else {
+        installed(published, join(copy, 'node_modules', name));
+      }
+    }
   }
   link(join(rootDir, 'node_modules/typescript'), join(copy, 'node_modules/typescript'));
   return copy;
+}
+
+/** Unpacks the tarball a registry was put into a folder, as an install does. */
+function installed(published: Put, folder: string): void {
+  for (const [path, text] of Object.entries(entriesOf(published.tarball))) {
+    mkdirSync(dirname(join(folder, path)), { recursive: true });
+    writeFileSync(join(folder, path), text);
+  }
 }
 
 function link(target: string, path: string): void {
@@ -76,9 +99,13 @@ async function publishedExamplesIn(folder: string, registry: Registry): Promise<
   const env = anNpmEnvironment(folder, { userConfig });
   const publishes: Ran[] = [];
   for (const { example } of publishedExamples) {
-    const copy = aCopyOf(example, folder);
+    const copy = aCopyOf(example, folder, registry.published);
     if (example === 'org-definitions') {
       withoutPrivate(copy);
+    }
+    const generated = await cfLoomWith(copy, env, 'generate');
+    if (generated.status !== 0) {
+      throw new Error(`generate failed in ${example}: ${generated.stderr}`);
     }
     publishes.push(await cfLoomWith(copy, env, 'publish'));
   }
@@ -120,11 +147,45 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
     expect(published).toEqual(publishedExamples.map(({ packageName }) => `${packageName}@1.0.0`));
   });
 
+  test('billing-service is published against the versions of the packages it installed from the registry', ({
+    examples,
+  }) => {
+    const { registry } = examples;
+    const billing = registry.published.find(({ name }) => name === '@org/contract-billing-service');
+
+    const published = JSON.parse(entriesOf(billing!.tarball)['snapshot.json'] ?? '{}');
+
+    expect(published.dependencies['orders-service'].against).toBe('1.0.0');
+    const origins = Object.values<{ origin: string }>(published.codes).map(({ origin }) => origin);
+    expect(origins).toContain('@org/definitions@1.0.0');
+    expect(JSON.stringify(published)).not.toContain('@org/definitions@0.0.0');
+  });
+
+  test('billing-service as the workspace holds it, against 0.0.0, is refused by publish and reported by check', async ({
+    examples,
+  }) => {
+    const { folder, env, registry } = examples;
+    const billing = aCopyOf('billing-service', folder);
+    const puts = registry.published.length;
+    const unlisted = [
+      'dependencies.orders-service is against @org/contract-orders-service@0.0.0, which the registry does not list: install a published version',
+      '@org/definitions@0.0.0, which the Contract uses, is not listed by the registry: install a published version',
+      '',
+    ].join('\n');
+
+    const checked = await cfLoomWith(billing, env, 'check');
+    const published = await cfLoomWith(billing, env, 'publish');
+
+    expect(checked.stderr).toBe(unlisted);
+    expect(published).toMatchObject({ status: 3, stderr: unlisted });
+    expect(registry.published).toHaveLength(puts);
+  });
+
   test('renaming org-definitions’ money export to amount is Breaking, and check exits 2', async ({
     examples,
   }) => {
-    const { folder, env } = examples;
-    const definitions = aCopyOf('org-definitions', folder);
+    const { folder, env, registry } = examples;
+    const definitions = aCopyOf('org-definitions', folder, registry.published);
     const index = join(definitions, 'src/definitions/index.ts');
     replacedIn(
       index,
@@ -153,8 +214,8 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
   test('billing with a Subscription described otherwise reports it as Neutral and would publish a patch, exit 0', async ({
     examples,
   }) => {
-    const { folder, env } = examples;
-    const billing = aCopyOf('billing-service', folder);
+    const { folder, env, registry } = examples;
+    const billing = aCopyOf('billing-service', folder, registry.published);
     const subscription = join(
       billing,
       'src/contract/subscriptions/billing/draft-invoice-on-created.subscription.ts',
@@ -181,8 +242,8 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
   test('billing without standardRejections writes cf-loom’s standard codes, and check reports the change', async ({
     examples,
   }) => {
-    const { folder, env } = examples;
-    const billing = aCopyOf('billing-service', folder);
+    const { folder, env, registry } = examples;
+    const billing = aCopyOf('billing-service', folder, registry.published);
     const root = join(billing, 'src/contract/index.ts');
     replacedIn(root, '  standardRejections: orgDefinitions,\n', '');
     const generated = await cfLoomWith(billing, env, 'generate');
@@ -205,8 +266,8 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
   test('removing a Success field from GET /orders/:orderId needs a Breaking Change Approval, and check exits 2', async ({
     examples,
   }) => {
-    const { folder, env } = examples;
-    const orders = aCopyOf('orders-service', folder);
+    const { folder, env, registry } = examples;
+    const orders = aCopyOf('orders-service', folder, registry.published);
     const getOrder = join(orders, 'src/contract/endpoints/orders/get-order.endpoint.ts');
     replacedIn(getOrder, 'body: order }', 'body: order.omit({ placedAt: true }) }');
     const generated = await cfLoomWith(orders, env, 'generate');

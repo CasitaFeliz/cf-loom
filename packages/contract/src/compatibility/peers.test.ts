@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { seededNext } from '../../test/random-schemas.ts';
-import { type PeerMove, peerMovesOf, versionBumpOf } from '../internal/index.ts';
+import { type PeerMove, peerMovesOf, versionBumpOf, zodPeerRange } from '../internal/index.ts';
 
 function movesOf(baseline: Record<string, string>, proposed: Record<string, string>) {
   return peerMovesOf({ baseline, proposed });
@@ -95,5 +96,18 @@ describe('peerMovesOf and versionBumpOf agree', () => {
     const moves = draws.map((held) => peerMovesOf({ baseline: held, proposed: { ...held } }));
 
     expect(moves.flat()).toEqual([]);
+  });
+});
+
+describe('zodPeerRange', () => {
+  test('is the range of zod the workspace declares, which @cf-loom/contract peers on', () => {
+    const workspace = readFileSync(
+      new URL('../../../../pnpm-workspace.yaml', import.meta.url),
+      'utf8',
+    );
+
+    const declared = /^ {2}zod: (\S+)$/m.exec(workspace)?.[1];
+
+    expect(zodPeerRange).toBe(declared);
   });
 });

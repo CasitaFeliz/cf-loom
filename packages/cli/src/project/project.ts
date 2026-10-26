@@ -1,4 +1,9 @@
-import type { ImportedDefinitions, Root, RootKind } from '@cf-loom/contract/internal';
+import type {
+  ImportedContractPackage,
+  ImportedDefinitions,
+  Root,
+  RootKind,
+} from '@cf-loom/contract/internal';
 import { configFile, defaultLayout, loadConfig, type ServiceLayout } from '../config/index.ts';
 import {
   type ImportedPackage,
@@ -30,6 +35,8 @@ export type Project = {
   readonly rootFile: string;
   /** Every Definitions Package the Root's import reached, as Node resolved it, named by its package.json or not. */
   readonly packages: readonly ImportedDefinitions[];
+  /** Every Contract Package the Root's import reached, as Node resolved it, named by its package.json or not. */
+  readonly contractPackages: readonly ImportedContractPackage[];
   /** Every module of a package the Root's import reached, as Node resolved it. */
   readonly imported: readonly ImportedPackage[];
 };
@@ -37,7 +44,13 @@ export type Project = {
 /** The Root a Snapshot is declared from: what a Root file exports, and the packages its import reached. */
 export type DeclaredRoot = Pick<
   Project,
-  'directory' | 'packageName' | 'root' | 'rootExports' | 'rootFile' | 'packages'
+  | 'directory'
+  | 'packageName'
+  | 'root'
+  | 'rootExports'
+  | 'rootFile'
+  | 'packages'
+  | 'contractPackages'
 >;
 
 /** A project read, or the tooling error that stopped reading it. */
@@ -73,9 +86,9 @@ export async function projectOf(directory: string): Promise<ReadProject> {
 }
 
 /**
- * The Root a loaded Root file declares, with the Definitions Packages its import reached, as
- * Node resolved them; the one step from a loaded Root to a Snapshot, for a project's own Root and
- * for a staged package's.
+ * The Root a loaded Root file declares, with the Definitions Packages and Contract Packages its
+ * import reached, as Node resolved them; the one step from a loaded Root to a Snapshot, for a
+ * project's own Root and for a staged package's.
  */
 export function declaredRootOf(
   loaded: Extract<LoadedRoot, { readonly kind: 'loaded' }>,
@@ -86,8 +99,16 @@ export function declaredRootOf(
     return tooling(resolved.message);
   }
   const { root, file: rootFile, exports: rootExports } = loaded;
-  const { packages } = resolved;
-  const declared = { directory, packageName, root, rootExports, rootFile, packages };
+  const { packages, contractPackages } = resolved;
+  const declared = {
+    directory,
+    packageName,
+    root,
+    rootExports,
+    rootFile,
+    packages,
+    contractPackages,
+  };
   return { kind: 'declared', declared };
 }
 

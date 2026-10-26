@@ -1,10 +1,14 @@
+import { Buffer } from 'node:buffer';
 import {
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -14,11 +18,11 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import {
   builtFolder,
   isPackageManifest,
-  isPackagePath,
   type PackageFile,
   packagePaths,
 } from '../contract-package/index.ts';
 import { oneLineOf } from '../loading/index.ts';
+import { isWrittenBy } from '../source-text/index.ts';
 
 /** What sits where the package is to be written. */
 type Target = 'missing' | 'empty' | 'previous-output' | 'other-files' | 'no-folder' | 'link';
@@ -94,11 +98,13 @@ function isLink(target: string): boolean {
 }
 
 /**
- * A folder `package` wrote: outside the folders it keeps, every file is one `package` writes,
- * and its package.json is one `package` wrote.
+ * A folder some cf-loom `package` wrote: its package.json carries `cfLoom`, and outside the
+ * folders it keeps every file is one `package` writes, as its own marks tell, whichever path this
+ * cf-loom would give it.
  */
 function isPreviousOutput(target: string): boolean {
-  if (!filesOutsideKeptOf(target).every(isPackagePath)) {
+  const entries = entriesOutsideKeptOf(target);
+  if (!entries.every((entry) => entry.isFile && isWrittenByPackage(target, entry.path))) {
     return false;
   }
   const manifestPath = join(target, packagePaths.manifest);
@@ -112,18 +118,49 @@ function isPreviousOutput(target: string): boolean {
   }
 }
 
-/** Every file of a folder outside the folders a previous output keeps, by its path in it. */
-function filesOutsideKeptOf(target: string): readonly string[] {
+/** Whether `package` wrote a regular file: one of the three it writes as JSON, or a module that starts with its header. */
+function isWrittenByPackage(target: string, path: string): boolean {
+  const asJson: readonly string[] = [
+    packagePaths.manifest,
+    packagePaths.snapshot,
+    packagePaths.tsconfig,
+  ];
+  return asJson.includes(path) || isWrittenBy('package', startOf(join(target, path)));
+}
+
+/** Room for the header line, a byte order mark and a carriage return, and more, so a longer first line is no header. */
+const startLength = 256;
+
+/** The start of a regular file, which holds its first line. */
+function startOf(path: string): string {
+  const descriptor = openSync(path, 'r');
+  try {
+    const start = Buffer.alloc(startLength);
+    const length = readSync(descriptor, start, 0, startLength, 0);
+    return start.toString('utf8', 0, length);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/** A path under a folder, by its path in it, and whether it is a regular file: a link, a pipe and the like are not. */
+type Entry = { readonly path: string; readonly isFile: boolean };
+
+/** Every entry of a folder that is no folder, outside the folders a previous output keeps, links not followed. */
+function entriesOutsideKeptOf(target: string): readonly Entry[] {
   const top = readdirSync(target, { withFileTypes: true });
   const searched = top.filter(({ name }) => !keptFolders.includes(name));
   return searched.flatMap((entry) => {
     if (!entry.isDirectory()) {
-      return [entry.name];
+      return [{ path: entry.name, isFile: entry.isFile() }];
     }
     const inside = readdirSync(join(target, entry.name), { recursive: true, withFileTypes: true });
     return inside
       .filter((found) => !found.isDirectory())
-      .map((found) => relative(target, join(found.parentPath, found.name)).split(sep).join('/'));
+      .map((found) => ({
+        path: relative(target, join(found.parentPath, found.name)).split(sep).join('/'),
+        isFile: found.isFile(),
+      }));
   });
 }
 

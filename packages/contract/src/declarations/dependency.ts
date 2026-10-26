@@ -1,4 +1,3 @@
-import type { ExportedSnapshot } from '../snapshot/index.ts';
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
@@ -14,17 +13,18 @@ type ProvidedEvent = Provided<Event & { readonly visibility: ExportedVisibility 
 
 /**
  * The `contract` a Contract Package exports: its Public and Internal Elements, each its Provider's,
- * its version, its Standard Rejections and the Snapshot cut to what it exports.
+ * its Standard Rejections and the Snapshot cut to what it exports, which is `unknown` since the
+ * cf-loom that wrote it may be older than the one that reads it. Its version is its package.json's,
+ * which a Dependency on it records.
  */
 export type ContractPackage = {
   readonly name: string;
-  readonly version: string;
   readonly endpoints: Readonly<
     Record<string, Provided<Endpoint & { readonly visibility: ExportedVisibility }>>
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: ProvidedStandardRejections;
-  readonly exportedSnapshot: ExportedSnapshot;
+  readonly exportedSnapshot: unknown;
 };
 
 type ElementOf<Elements> = Elements[keyof Elements];
@@ -36,9 +36,9 @@ type DependencyDeclaration<Provider extends ContractPackage> = {
 };
 
 /**
- * What a Contract uses of one Provider: its Contract Package, as imported, with the version it
- * relied on, its Standard Rejections and the Elements it exports, and the Endpoints it calls, as
- * listed. The Events it receives are its Subscriptions'.
+ * What a Contract uses of one Provider: its Contract Package, as imported, with its Standard
+ * Rejections and the Elements it exports, and the Endpoints it calls, as listed. The Events it
+ * receives are its Subscriptions'.
  */
 export type Dependency<
   Provider extends ContractPackage = ContractPackage,

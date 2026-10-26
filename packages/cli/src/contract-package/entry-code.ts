@@ -13,22 +13,16 @@ import {
   type Writing,
   zodExpressionOf,
 } from '../schema-code/index.ts';
-import {
-  jsonLiteralOf,
-  keyOf,
-  relativeSpecifierOf,
-  stringLiteralOf,
-} from '../source-text/index.ts';
+import { keyOf, relativeSpecifierOf, stringLiteralOf } from '../source-text/index.ts';
 import { deprecatedLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
 import { bindingOf, type PackagedDeclaration, siblingOf } from './names.ts';
 import { packagePaths } from './paths.ts';
 
-/** What a Service's entry exports: its name and version, its Endpoints and Events, its defs' types. */
+/** What a Service's entry exports: its name, its Endpoints and Events, its defs' types. */
 export type ServiceEntry = {
   readonly name: string;
-  readonly version: string;
   readonly endpoints: readonly ExportedEndpoint[];
   readonly events: readonly ExportedEvent[];
   readonly defUses: readonly DefUse[];
@@ -42,13 +36,12 @@ type Keyed = {
 };
 
 /**
- * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
- * Rejections resolved and its exported Snapshot, checked against `ContractPackage`; its
- * `snapshot`; and the types of its recursive defs, so a Consumer that emits declarations can
- * name them.
+ * A Service's entry: `contract`, checked against `ContractPackage` and declared with a type that
+ * names each Element by `typeof`, so a Consumer's declaration stays small and keeps the literal
+ * name; and the types of its recursive defs, so a Consumer that emits declarations can name them.
  */
 export function serviceEntryOf(entry: ServiceEntry): PackageFile {
-  const { name, version, defUses } = entry;
+  const { name, defUses } = entry;
   const endpoints = entry.endpoints.map(({ endpoint }): Keyed => {
     const declared = { kind: 'endpoint', name: endpoint.name } as const;
     return { key: endpoint.name, declared, element: endpoint };
@@ -58,21 +51,23 @@ export function serviceEntryOf(entry: ServiceEntry): PackageFile {
     return { key: codeNameOf(event), declared, element: event.event };
   });
   const body = [
-    'export const contract = {',
-    `  name: ${stringLiteralOf(name)},`,
-    `  version: ${stringLiteralOf(version)},`,
+    'export const contract: {',
+    `  readonly name: ${stringLiteralOf(name)};`,
+    ...typeLinesOf('endpoints', endpoints),
+    ...typeLinesOf('events', events),
+    '  readonly standardRejections: typeof standardRejections;',
+    '  readonly exportedSnapshot: unknown;',
+    '} = {',
+    `  name: ${stringLiteralOf(name)} as const,`,
     ...mapLinesOf('endpoints', endpoints),
     ...mapLinesOf('events', events),
     '  standardRejections,',
     '  exportedSnapshot,',
     '} satisfies loom.ContractPackage;',
-    '',
-    'export { snapshot };',
     ...defTypesExportOf(defUses),
   ];
   const siblings: readonly Sibling[] = [
     ...[...endpoints, ...events].map(({ declared }) => siblingOf(declared)),
-    { name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' },
     { name: 'exportedSnapshot', path: packagePaths.exportedSnapshot, kind: 'value' },
     { name: 'standardRejections', path: packagePaths.standardRejections, kind: 'value' },
   ];
@@ -84,11 +79,20 @@ function mapLinesOf(field: string, keyed: readonly Keyed[]): readonly string[] {
   if (keyed.length === 0) {
     return [`  ${field}: {},`];
   }
+  const lines = keyed.map(({ key, declared }) => `    ${keyOf(key)}: ${bindingOf(declared)},`);
+  return [`  ${field}: {`, ...lines, '  },'];
+}
+
+/** The type of a map of `contract`, each key typed by its declaration, a Deprecated one's marked `@deprecated` so a Consumer's editor flags each use. */
+function typeLinesOf(field: string, keyed: readonly Keyed[]): readonly string[] {
+  if (keyed.length === 0) {
+    return [`  readonly ${field}: {};`];
+  }
   const lines = keyed.flatMap(({ key, declared, element }) => [
     ...deprecatedLinesOf(element, '    '),
-    `    ${keyOf(key)}: ${bindingOf(declared)},`,
+    `    readonly ${keyOf(key)}: typeof ${bindingOf(declared)};`,
   ]);
-  return [`  ${field}: {`, ...lines, '  },'];
+  return [`  readonly ${field}: {`, ...lines, '  };'];
 }
 
 function defTypesExportOf(defUses: readonly DefUse[]): readonly string[] {
@@ -98,23 +102,6 @@ function defTypesExportOf(defUses: readonly DefUse[]): readonly string[] {
   const types = defUses.map(({ id, mode }) => defTypeNameOf(id, mode)).sort(byCodePoint);
   const specifier = relativeSpecifierOf(packagePaths.entry, packagePaths.defs);
   return [`export type { ${types.join(', ')} } from ${stringLiteralOf(specifier)};`];
-}
-
-/** An Application's entry: its `snapshot` only, since it offers no Elements. */
-export function applicationEntryOf(): PackageFile {
-  return packageModuleOf({
-    path: packagePaths.entry,
-    body: ['export { snapshot };'],
-    siblings: [{ name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' }],
-  });
-}
-
-/** The Snapshot as a module, so the built package exports what `snapshot.json` holds. */
-export function snapshotModuleOf(snapshot: unknown): PackageFile {
-  return packageModuleOf({
-    path: packagePaths.snapshotModule,
-    body: [`export const snapshot = ${jsonLiteralOf(snapshot, 'indented')};`],
-  });
 }
 
 /**

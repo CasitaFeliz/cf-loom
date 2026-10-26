@@ -27,6 +27,7 @@ export {
   publishedSnapshotOf,
   snapshotPathOf,
   versionBumpOf,
+  zodPeerRange,
 } from '../compatibility/index.ts';
 export type {
   AttachedGuardsOf,
@@ -64,7 +65,7 @@ export {
   upperSnakeCase,
 } from '../declarations/index.ts';
 export type { DecodedSnapshot } from '../decoding/index.ts';
-export { decodeSnapshot } from '../decoding/index.ts';
+export { decodeSnapshot, providedSnapshotOf } from '../decoding/index.ts';
 export type { Checked, GivenPart, Parsed, SchemaIssue } from '../issues/index.ts';
 export {
   encodedValueOf,
@@ -112,7 +113,6 @@ export type {
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
-  checkExportedFormat,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,
@@ -123,6 +123,7 @@ export {
   isSemanticVersion,
   isSubscriptionTombstone,
   nestingFailureOf,
+  originPackagesOf,
   ownRejectionsOf,
   semanticVersionPartsOf,
   snapshotFormatOf,
@@ -132,11 +133,15 @@ export {
 } from '../snapshot/index.ts';
 export type {
   Failure,
+  ImportedContractPackage,
   ImportedDefinitions,
+  OriginPackage,
   PackageIdentity,
   Problem,
   Provenance,
+  Reaching,
   Read,
+  ResolvedContractPackage,
   ResolvedDefinitions,
   RootPackage,
   TextPartNodes,
@@ -149,6 +154,7 @@ export {
   exportNamesOf,
   failureLineOf,
   identityLineOf,
+  isContractPackage,
   locationOf,
   noVersionLineOf,
   oneOf,

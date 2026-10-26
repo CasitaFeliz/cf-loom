@@ -65,10 +65,11 @@ type DefinitionsToStage = {
   readonly peerRanges: PeerRanges;
 };
 
-/** What turns a staged folder into the package to publish, with what it needs: cf-loom's `tsc` on a Contract Package, a check of the entry its author built on a Definitions Package. */
+/** What turns a staged folder into the package to publish, with what it needs: cf-loom's `tsc` on a Service's Contract Package, a check of the entry its author built on a Definitions Package, nothing on an Application's, which has no code. */
 type Build =
   | { readonly kind: 'with-tsc'; readonly building: Building }
-  | { readonly kind: 'by-author'; readonly entry: EntryToCheck };
+  | { readonly kind: 'by-author'; readonly entry: EntryToCheck }
+  | { readonly kind: 'none' };
 
 /** A staged folder, as it is built or checked, as it is published, and as the package was listed before the Check. */
 type StagedPackage = {
@@ -117,12 +118,13 @@ function stagedPackageOf(
   const publishing = { folder, packageName, version, tag };
   const listing = { packageName, highest };
   switch (published.kind) {
-    case 'service':
-    case 'application': {
+    case 'service': {
       const rootPath = join(project.directory, project.rootFile);
       const building = { folder, rootPath, spec: `${packageName}@${version}` };
       return { mode, build: { kind: 'with-tsc', building }, publishing, listing };
     }
+    case 'application':
+      return { mode, build: { kind: 'none' }, publishing, listing };
     case 'definitions': {
       const entry = { project, staged, declared };
       return { mode, build: { kind: 'by-author', entry }, publishing, listing };
@@ -151,6 +153,8 @@ async function builtAs(build: Build): Promise<Built> {
       return await builtWithTsc(build.building);
     case 'by-author':
       return await checkedEntryOf(build.entry);
+    case 'none':
+      return { kind: 'built' };
   }
 }
 

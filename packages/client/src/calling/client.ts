@@ -1,5 +1,5 @@
 import type { Http } from '@cf-loom/contract';
-import { checkExportedFormat } from '@cf-loom/contract/internal';
+import { providedSnapshotOf } from '@cf-loom/contract/internal';
 import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
@@ -21,10 +21,10 @@ export function client<const D extends AnyDependency, Configured extends Configu
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
-  checkExportedFormat(dependency.provider);
+  const exported = providedSnapshotOf(dependency.provider);
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
   const methods = (dependency.endpoints ?? []).map((endpoint) => {
-    const called = calledEndpointOf(endpoint, dependency.provider);
+    const called = calledEndpointOf(endpoint, dependency.provider, exported);
     const method = methodOf(called, calling, deprecationWatchOf(called, onDeprecation));
     return [endpoint.name, method] as const;
   });

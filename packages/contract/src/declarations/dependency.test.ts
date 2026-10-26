@@ -38,7 +38,6 @@ const paymentSettledV1 = providedEvent('payments-service', {
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: { getPayment, refundPayment },
   events: { paymentSettledV1 },
   standardRejections: {
@@ -53,6 +52,12 @@ const payments = {
   },
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
+
+describe('ContractPackage', () => {
+  test('carries no version: the package.json of the package that exports it has it', () => {
+    expectTypeOf<ContractPackage>().not.toHaveProperty('version');
+  });
+});
 
 describe('defineDependency', () => {
   test('a Dependency keeps its Provider’s Contract Package and the selected Endpoints as listed', () => {

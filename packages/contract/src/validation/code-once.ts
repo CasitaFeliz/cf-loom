@@ -44,13 +44,22 @@ function sourceOf(
 ): string {
   const provenance = definitionsPackageOf(packages, rejection);
   switch (provenance.kind) {
-    case 'found':
-      return originTextOf(provenance.package);
-    case 'unidentified':
-      return packageLabelOf(provenance.package);
+    case 'origin':
+      return sourceNamedBy(provenance.package);
     case 'none':
     case 'ambiguous':
       return root.kind === 'definitions' ? 'the Definitions Package' : 'the Contract';
+  }
+}
+
+/** The package a Rejection came from, as an origin names it, or as its package.json's name or path when it lacks a name or a version. */
+function sourceNamedBy(origin: ImportedDefinitions): string {
+  switch (origin.kind) {
+    case 'identified':
+      return originTextOf(origin);
+    case 'unnamed':
+    case 'unversioned':
+      return packageLabelOf(origin);
   }
 }
 

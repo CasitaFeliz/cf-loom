@@ -8,8 +8,8 @@ const documentFormat = 1;
 
 /**
  * An Exit as the CLI prints it: its lines, or on stdout the one document `{ format, status, ... }`
- * that the Exit holds, with the lines of its stderr as `errors` when its status is not 0; stderr
- * keeps its lines either way.
+ * that the Exit holds, with the lines of its stderr as `errors` when it has any; stderr keeps its
+ * lines either way.
  */
 export function printedExitOf(exit: Exit, output: Output): Exit {
   switch (output) {
@@ -21,6 +21,6 @@ export function printedExitOf(exit: Exit, output: Output): Exit {
 }
 
 function documentOf({ status, stderr, document }: Exit): object {
-  const errors = status === 0 ? {} : { errors: stderr };
+  const errors = stderr.length === 0 ? {} : { errors: stderr };
   return { format: documentFormat, status, ...errors, ...document };
 }

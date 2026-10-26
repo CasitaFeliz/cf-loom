@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { bin } from '../test/cf-loom-run.ts';
 import { aDeadAddress } from '../test/dead-address.ts';
-import { payments } from '../test/payments-package.ts';
+import { installedPayments, paymentsSpecifier } from '../test/payments-package.ts';
 import { usage } from '../test/usage.ts';
 
 const cliDir = join(import.meta.dirname, '..');
@@ -168,7 +168,7 @@ const auditCreated = 'auditCreated';
 function subscriptionsFile(listed: readonly string[]): string {
   const subscriptions: Readonly<Record<string, readonly string[]>> = {
     [notifyOnSettled]: [
-      importOf('{ paymentSettledV1 }', './payments.ts'),
+      importOf('{ paymentSettledV1 }', paymentsSpecifier),
       '',
       'export const notifyOnSettled = defineSubscription({',
       "  name: 'notifyOnSettled',",
@@ -243,7 +243,7 @@ function aMessagingService({
     ...(messageNames.length > 0
       ? [importOf(`{ ${[...messageNames].sort().join(', ')} }`, './messages.ts')]
       : []),
-    importOf('{ payments }', './payments.ts'),
+    importOf('{ payments }', paymentsSpecifier),
     importOf(`{ ${[...listed].sort().join(', ')} }`, './subscriptions.ts'),
     '',
     'const paymentsDependency = defineDependency({ provider: payments });',
@@ -264,7 +264,7 @@ function aMessagingService({
     'package.json': manifest,
     'cf-loom.config.ts': config,
     'src/contract/messages.ts': messagesFile(messageNames),
-    'src/contract/payments.ts': payments,
+    ...installedPayments(),
     'src/contract/subscriptions.ts': subscriptionsFile(listed),
     'src/contract/index.ts': root,
   };

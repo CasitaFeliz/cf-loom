@@ -1,10 +1,11 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
-export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exported.ts';
+export { exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
 export { nestingFailureOf, snapshotNestingLimit, tooDeepPathOf } from './nesting.ts';
+export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {

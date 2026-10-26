@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { aRootPackage } from '../../test/root-package.ts';
+import { anInstalledContract, aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
   defineApplication,
@@ -21,7 +21,9 @@ import {
 import {
   canonicalTextOf,
   isEmptyTextPart,
+  originPackagesOf,
   publishedSnapshotOf,
+  type ResolvedContractPackage,
   type ResolvedDefinitions,
   type Root,
   type RootKind,
@@ -160,7 +162,6 @@ const paymentFailedV1 = providedEvent('payments-service', {
 
 const payments = {
   name: 'payments-service',
-  version: '5.1.0',
   endpoints: { getPayment, listPayments },
   events: { paymentSettledV1, paymentFailedV1 },
   standardRejections: {
@@ -175,6 +176,20 @@ const payments = {
   },
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
+
+/** The Contract Package of payments-service as installed beside the Roots under test: at 5.1.0. */
+const paymentsPackage = anInstalledContract(payments, { version: '5.1.0' });
+
+/** An Endpoint with the Provider's name as another package may export it: equal to getPayment, and not the same object. */
+const aGetPaymentOfItsOwn = providedEndpoint('payments-service', {
+  name: 'getPayment',
+  method: 'GET',
+  path: '/payments/:paymentId',
+  visibility: 'public',
+  description: 'One payment by id',
+  input: { params: z.object({ paymentId: z.uuid() }) },
+  success: { status: 200, body: z.object({ amount: z.int() }) },
+});
 
 const paymentsDependency = defineDependency({
   provider: payments,
@@ -228,10 +243,12 @@ const contract = defineService({
 function snapshotFor(
   root: Root,
   packages: readonly ResolvedDefinitions[] = [orgPackage],
+  contractPackages: readonly ResolvedContractPackage[] = [paymentsPackage],
 ): Snapshot {
   const { definitions: _root, ...exported } = orgPackage.exports;
   const rootExports = root === orgDefinitions ? exported : {};
-  const validated = validateRoot(root, aRootPackage(root, { packages, rootExports }));
+  const rootPackage = aRootPackage(root, { packages, contractPackages, rootExports });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -241,8 +258,9 @@ function snapshotFor(
 function serviceSnapshot(
   root: Root = contract,
   packages: readonly ResolvedDefinitions[] = [orgPackage],
+  contractPackages: readonly ResolvedContractPackage[] = [paymentsPackage],
 ) {
-  const snapshot = snapshotFor(root, packages);
+  const snapshot = snapshotFor(root, packages, contractPackages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -643,6 +661,45 @@ describe('snapshotOf: a Service', () => {
       notifyOnFailed: { event: 'payments-service:PaymentFailed@1' },
       notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
     });
+  });
+
+  test('a Dependency is against the version of the installed package, whatever else its package exports', () => {
+    const installed = anInstalledContract(payments, {
+      packageName: '@org/contract-payments-service',
+      version: '7.0.2',
+    });
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [installed]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('7.0.2');
+  });
+
+  test('a Dependency is not against another installed package whose contract has the Provider’s name but Elements of its own', () => {
+    const lookalike = anInstalledContract(
+      {
+        ...payments,
+        endpoints: { getPayment: aGetPaymentOfItsOwn },
+        events: {},
+      },
+      { packageName: '@org/payments-lookalike', version: '9.9.9' },
+    );
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [lookalike, paymentsPackage]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('5.1.0');
+  });
+
+  test('a Dependency is against the package that exports the Provider’s Elements, not the one that re-exports them', () => {
+    const original = anInstalledContract(payments, { version: '5.1.0' });
+    const wrapper = anInstalledContract(payments, {
+      packageName: '@org/payments-wrapper',
+      version: '9.9.9',
+      reaches: [original],
+    });
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [wrapper, original]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('5.1.0');
   });
 
   test('recursive schemas are written once under defs and referenced', () => {
@@ -1235,5 +1292,146 @@ describe('canonicalTextOf', () => {
     const text = textOf(snapshotFor(root, []));
 
     expect(text.indexOf('"\\"a\\"": {')).toBeLessThan(text.indexOf('"1": {'));
+  });
+});
+
+describe('originPackagesOf', () => {
+  test('a Contract that takes its Guards, codes and schemas from a Definitions Package names that package at its version', () => {
+    const snapshot = serviceSnapshot();
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toEqual([{ packageName: '@org/definitions', version: '4.2.0' }]);
+  });
+
+  test('a Contract that takes nothing from a Definitions Package names none', () => {
+    const own = defineService({ name: 'orders-service' });
+
+    const packages = originPackagesOf(snapshotFor(own, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('a Definitions Package’s own Snapshot, whose origins are local, names none', () => {
+    const packages = originPackagesOf(snapshotFor(orgDefinitions, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('an Application names none', () => {
+    const application = defineApplication({ name: 'web-admin', dependencies: [] });
+
+    const packages = originPackagesOf(snapshotFor(application, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('each package version is named once, by package then version, wherever its origin sits', () => {
+    const snapshot = structuredClone(serviceSnapshot());
+    const guards = Object.values(snapshot.guards);
+    const codes = Object.values(snapshot.codes);
+    Object.assign(guards[0] ?? {}, { origin: '@other/auth@1.0.0' });
+    Object.assign(codes[0] ?? {}, { origin: '@org/definitions@3.9.0' });
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toEqual([
+      { packageName: '@org/definitions', version: '3.9.0' },
+      { packageName: '@org/definitions', version: '4.2.0' },
+      { packageName: '@other/auth', version: '1.0.0' },
+    ]);
+  });
+
+  const onlyHere = '@org/only-here@1.2.3#shape';
+
+  const messages = defineGroup({
+    name: 'messages',
+    description: 'Messages',
+    events: [
+      defineEvent({
+        name: 'OrderPlaced',
+        version: 1,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body: z.object({ orderId: z.string() }),
+      }),
+    ],
+    commands: [
+      defineCommand({
+        name: 'ChargeCard',
+        version: 1,
+        description: 'Charges the card',
+        body: z.object({ orderId: z.string() }),
+      }),
+    ],
+  });
+
+  /** A Snapshot whose origins are all `local`, so a test puts one origin in the place it tests. */
+  function withoutOrigins(snapshot: Snapshot): Snapshot {
+    const text = JSON.stringify(snapshot);
+    return JSON.parse(text, (key, value) => (key === 'origin' ? 'local' : value));
+  }
+
+  /** The Snapshot with `origin` on what sits at the path. */
+  function withOriginAt(snapshot: Snapshot, path: readonly string[], origin: string): Snapshot {
+    const copy = structuredClone(snapshot);
+    let place: unknown = copy;
+    for (const step of path) {
+      place = Reflect.get(Object(place), step);
+    }
+    Object.assign(Object(place), { origin });
+    return copy;
+  }
+
+  const service = () => withoutOrigins(serviceSnapshot());
+  const withMessages = () =>
+    withoutOrigins(snapshotFor(defineService({ name: 'orders-service', groups: [messages] }), []));
+  const definitions = () => withoutOrigins(snapshotFor(orgDefinitions, []));
+
+  test.each([
+    {
+      place: 'an Endpoint’s Input',
+      snapshot: service,
+      at: ['endpoints', 'GET /orders/{}', 'input', 'headers'],
+    },
+    {
+      place: 'an Endpoint’s Success',
+      snapshot: service,
+      at: ['endpoints', 'GET /orders/{}', 'success', 'body'],
+    },
+    { place: 'an Event’s body', snapshot: withMessages, at: ['events', 'OrderPlaced@1', 'body'] },
+    { place: 'a Command’s body', snapshot: withMessages, at: ['commands', 'ChargeCard@1', 'body'] },
+    { place: 'a Guard’s schema', snapshot: service, at: ['guards', 'userToken', 'context'] },
+    { place: 'a code’s body', snapshot: service, at: ['codes', 'ORDER_LOCKED', 'body'] },
+    { place: 'a Guard', snapshot: service, at: ['guards', 'userToken'] },
+    { place: 'a code', snapshot: service, at: ['codes', 'ORDER_LOCKED'] },
+    {
+      place: 'a Definitions Package’s shared schema',
+      snapshot: definitions,
+      at: ['exports', 'money', 'schema'],
+    },
+  ])('an origin only on $place is read', ({ snapshot, at }) => {
+    const edited = withOriginAt(snapshot(), at, onlyHere);
+
+    const packages = originPackagesOf(edited);
+
+    expect(packages).toEqual([{ packageName: '@org/only-here', version: '1.2.3' }]);
+  });
+
+  test('origins that are all local, or the standard ones, name no package', () => {
+    const packages = originPackagesOf(service());
+
+    expect(packages).toEqual([]);
+  });
+
+  test('the origin of a schema in a def is read too, whatever it follows', () => {
+    const snapshot = {
+      ...serviceSnapshot(),
+      defs: { shared: { type: 'string', origin: '@org/shapes@2.0.0#shared' } },
+    } as const;
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toContainEqual({ packageName: '@org/shapes', version: '2.0.0' });
   });
 });

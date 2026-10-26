@@ -88,7 +88,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   const provided = providedEndpointsOf(name, endpoints);
   return {
     name,
-    version: '1.0.0',
     endpoints: provided,
     events: {},
     standardRejections,

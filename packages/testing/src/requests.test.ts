@@ -5,7 +5,6 @@ import {
   defineGuard,
   defineService,
   type Endpoint,
-  type ExportedSnapshot,
 } from '@cf-loom/contract';
 import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
@@ -98,7 +97,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   const provided = providedEndpointsOf(name, endpoints);
   return {
     name,
-    version: '1.0.0',
     endpoints: provided,
     events: {},
     standardRejections,
@@ -108,10 +106,27 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
 
+/** The Provider's Contract Package with an exported Snapshot of any shape, as a package built by another cf-loom might carry. */
+type Carrying = Omit<typeof payments, 'exportedSnapshot'> & { readonly exportedSnapshot: unknown };
+
 /** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof payments, format: unknown): typeof payments {
+function inFormat(contractPackage: typeof payments, format: unknown): Carrying {
   const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+  return { ...contractPackage, exportedSnapshot };
+}
+
+/** The Provider's Contract Package with the entry of one of its Endpoints without `field`. */
+function withoutField(contractPackage: typeof payments, identity: string, field: string): Carrying {
+  const exportedSnapshot = structuredClone(contractPackage.exportedSnapshot);
+  const entry: Record<string, unknown> | undefined = Reflect.get(
+    exportedSnapshot.endpoints,
+    identity,
+  );
+  if (entry === undefined) {
+    throw new Error(`The fixture has no ${identity}`);
+  }
+  delete entry[field];
+  return { ...contractPackage, exportedSnapshot };
 }
 
 const paymentsDependency = defineDependency({
@@ -418,18 +433,29 @@ describe('fakeProvider: requests', () => {
     expect(create).toThrow(new Error("The baseUrl's scheme ftp: is no http or https"));
   });
 
-  test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {
-    const newer = defineDependency({
+  test.each([
+    {
+      given: 'in a format the fake does not read',
       provider: inFormat(payments, 2),
-      endpoints: [payments.endpoints.getPayment],
-    });
+      refusal:
+        "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
+    },
+    {
+      given: 'with an Endpoint entry that lacks its name',
+      provider: withoutField(payments, 'GET /payments/{}', 'name'),
+      refusal:
+        "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
+    },
+  ])(
+    'a Contract Package $given is a bug, refused when the fake is created',
+    ({ provider, refusal }) => {
+      const refused = defineDependency({ provider, endpoints: [payments.endpoints.getPayment] });
 
-    const create = () => fakeProvider(newer);
+      const create = () => fakeProvider(refused);
 
-    expect(create).toThrow(
-      "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
-    );
-  });
+      expect(create).toThrow(refusal);
+    },
+  );
 
   test('a path that only begins like the base URL’s path lies outside it', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/api' });
