@@ -83,7 +83,7 @@ What the Guards of an Endpoint provide to its EndpointHandler, and to the Guards
 _Avoid_: locals, principal, session
 
 **Outcome**:
-What an Endpoint answers and a Caller receives: exactly one of a Success, a Rejection or a Fault. A Handler builds it with a Rejection's declaration and body; the Caller receives it with the Rejection's code, status and message resolved.
+What an Endpoint answers and a Caller receives: exactly one of a Success, a Rejection or a Fault. A Handler builds it with a Rejection's declaration, headers and body; the Caller receives it with the Rejection's code, status and message resolved.
 _Avoid_: result (taken by `Result<T, E>` libraries), response, reply
 
 **Success**:
@@ -91,7 +91,7 @@ What an Endpoint returns when it does what was asked: its declared status, heade
 _Avoid_: response, answer, data
 
 **Rejection**:
-A declared business decision not to do what was asked, which a Caller is expected to handle (for example `INSUFFICIENT_FUNDS`). Identified by its code; it has an HTTP status, a body schema and a message. Codes are open: a Caller must handle codes it does not know.
+A declared business decision not to do what was asked, which a Caller is expected to handle (for example `INSUFFICIENT_FUNDS`). Identified by its code; it has an HTTP status, header schemas, a body schema and a message. Codes are open: a Caller must handle codes it does not know.
 _Avoid_: error, refusal, failure, exception
 
 **Standard Rejection**:
@@ -239,15 +239,15 @@ The Snapshot of the highest published version of a Contract Package or Definitio
 _Avoid_: previous snapshot, reference
 
 **Reader schema**:
-A schema generated from a Snapshot for whoever reads a Success, a Rejection body or a Message: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
+A schema generated from a Snapshot for whoever reads a Success, a Rejection's headers or body, or a Message: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
 
 **Read shape**:
-A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection body or a Message body. Every object in it is open to its readers.
+A shape a Service writes for any reader, another Release of its own included, to read with a Reader schema: a Success, a Rejection's headers or body, or a Message body. Every object in it is open to its readers.
 _Avoid_: output, response, payload
 
 **Position**:
-Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it, so the Compatibility Check judges it as a Message, which is the strongest.
+Where a shape is read, which decides what makes a change to it Breaking: Input (the Service reads it), Success (a Caller reads it, a Rejection's headers and body included) or Message (any Release reads it, at any time). A Definitions Package's shared schema has none until an Element uses it, so the Compatibility Check judges it as a Message, which is the strongest.
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:

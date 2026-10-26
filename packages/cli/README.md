@@ -98,7 +98,7 @@ events.OrderCreated@1 schema field-removed at body.total (message): Breaking, re
 commands.ChargeCard@1 retired: Breaking, needs no Approval
 ```
 
-The path is where the Difference is, in the author's terms: the part of the Endpoint it sits in (`input`, `success`; `params`, `query`, `headers`, `body`), a Rejection's `body`, or a Guard's `demands`; then `.field` for an object's field, `[]` for an array's items, `{}` for a record's value, `{key}` for its key, `[...]` for a tuple's `rest`, and `<discriminator=value>` for a variant of a discriminated union: `success.body.orders[].lines[].kind<type="a">.x`. A Change at the root of an exported schema has no path. The Position, `input`, `success` or `message`, is written after the path when the path does not start with it (`at body.total (message)`, `at demands.query.token (input)`).
+The path is where the Difference is, in the author's terms: the part of the Endpoint it sits in (`input`, `success`; `params`, `query`, `headers`, `body`), a Rejection's `headers` or `body`, or a Guard's `demands`; then `.field` for an object's field, `[]` for an array's items, `{}` for a record's value, `{key}` for its key, `[...]` for a tuple's `rest`, and `<discriminator=value>` for a variant of a discriminated union: `success.body.orders[].lines[].kind<type="a">.x`. A Change at the root of an exported schema has no path. The Position, `input`, `success` or `message`, is written after the path when the path does not start with it (`at body.total (message)`, `at demands.query.token (input)`).
 
 The hint says how to avoid a Change, from a closed table; the first row that fits decides:
 
@@ -369,7 +369,7 @@ The responses are one per status, in status order; when several answer one statu
 | Status | Response |
 | --- | --- |
 | the Success's | `Success`, with its headers (each with its `description`) and its body; none for a body-less Success such as a 204 |
-| each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it |
+| each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it, with the headers the code declares (each with its `description`), required in the response only when every code of that status requires it |
 | 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one, which may carry `retry-after` |
 | 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` as a number |
 
