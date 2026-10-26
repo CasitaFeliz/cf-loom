@@ -57,11 +57,12 @@ export type Nodes = {
   readonly defs: Readonly<Record<string, SchemaNode>>;
 };
 
-/** The slots of a Root's Endpoints and Guards that travel as text, in declaration order. */
+/** The slots of a Root's Endpoints, Guards and Rejections that travel as text, in declaration order. */
 export function textSlotsOf(declarations: Declarations): readonly Slot[] {
   const slots = [
     ...declarations.endpoints.flatMap(endpointSlots),
     ...declarations.guards.flatMap(guardSlots),
+    ...declarations.codes.flatMap(codeSlots),
   ];
   return slots.filter((slot) => isObjectPart(slot.part));
 }

@@ -3,6 +3,7 @@ import {
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
   defineService,
   type Endpoint,
 } from '@cf-loom/contract';
@@ -198,6 +199,32 @@ describe('serve: what it checks before the first request', () => {
       });
 
     expect(serving).toThrow(` ${rule}: `);
+  });
+
+  test('an Endpoint that answers a Rejection with a header name the host owns throws, as generate words it', () => {
+    const clobbering = defineRejection({
+      code: 'CLOBBERING',
+      status: 409,
+      message: 'It clobbers the Envelope’s content type',
+      headers: z.object({ 'content-type': z.string() }),
+    });
+    const odd = defineEndpoint({
+      name: 'odd',
+      method: 'GET',
+      path: '/odd',
+      visibility: 'public',
+      description: 'An odd one',
+      success: { status: 204 },
+      rejections: [clobbering],
+    });
+    const withOdd = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
+    });
+
+    const serving = () => serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} });
+
+    expect(serving).toThrow(' header-names: ');
   });
 
   test('a header an Endpoint and its Guard declare with two shapes throws, as generate words it', () => {

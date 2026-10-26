@@ -19,16 +19,17 @@ export type TextPartNodes = Readonly<Partial<Record<ObjectPart, ObjectNode>>>;
 
 /**
  * The text parts of a Contract's Endpoints and Guards walked, by declaration, or every rule of
- * `generate` they break, so the runtime reads text by the nodes `generate` accepted.
+ * `generate` they and its Rejections' headers break, so the runtime reads text by the nodes
+ * `generate` accepted.
  */
 export type WalkedTextParts =
   | { readonly kind: 'valid'; readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes> }
   | { readonly kind: 'invalid'; readonly failures: readonly [Failure, ...Failure[]] };
 
 /**
- * Walks the text parts of every Endpoint and Guard of a Contract once, and judges them by every
- * rule `generate` applies to text parts: what they hold, their names, the path's params and one
- * shape per header or query name.
+ * Walks the text parts of every Endpoint, Guard and Rejection of a Contract once, and judges them
+ * by every rule `generate` applies to text parts: what they hold, their names, the path's params
+ * and one shape per header or query name.
  */
 export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const declarations = declarationsOf(contract, {});
