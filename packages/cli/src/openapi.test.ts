@@ -1433,12 +1433,15 @@ describe('cf-loom openapi: what it refuses', () => {
     ['--prefix', ['--prefix', 'staging'], 'Only broker-plan and asyncapi take --prefix'],
     ['--json', ['--json'], 'Only check and broker-plan take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
-    ['--prerelease', ['--prerelease'], 'Only publish takes --prerelease'],
-  ] as const)('openapi does not take %s', ([_option, options, message]) => {
+    ['--prerelease', ['--prerelease'], 'Only check and publish take --prerelease'],
+  ] as const)('openapi does not take %s', ([option, options, message]) => {
     const project = aProject({});
 
     const refused = cfLoom(project, 'openapi', ...options);
 
-    expect(refused).toEqual({ status: 3, stdout: '', stderr: `${message}. ${usage}\n` });
+    const line = `${message}. ${usage}`;
+    const stdout =
+      option === '--json' ? `${JSON.stringify({ format: 1, status: 3, errors: [line] })}\n` : '';
+    expect(refused).toEqual({ status: 3, stdout, stderr: `${line}\n` });
   });
 });

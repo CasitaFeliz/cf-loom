@@ -2,6 +2,7 @@ import type { ChangeSite } from '@cf-loom/contract/internal';
 import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import { tokenOf } from './author-path.ts';
 import type { CheckedChange } from './checked-change.ts';
+import type { Derivation } from './derivation.ts';
 import type { ExitStatus } from './exit.ts';
 
 /** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
@@ -14,12 +15,13 @@ type Against =
     }
   | { readonly kind: 'none'; readonly why: NoBaseline };
 
-/** What `check` found, ready to print: the package, what it was compared with and every Change. */
+/** What `check` found, ready to print: the package, what it was compared with, every Change and the version `publish` would derive, if any. */
 export type Checked = {
   readonly kind: 'checked';
   readonly packageName: string;
   readonly against: Against;
   readonly changes: readonly CheckedChange[];
+  readonly derivation: Derivation | null;
 };
 
 /** How `check` ends: done, the check failed or a Breaking Change Approval is needed, with what it says on stderr. */

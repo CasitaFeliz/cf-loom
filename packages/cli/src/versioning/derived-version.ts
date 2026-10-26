@@ -10,8 +10,8 @@ import {
 /** The dist-tag a version is published under. */
 export type DistTag = 'latest' | 'next';
 
-/** How `publish` was asked to run: publish even when nothing changed, and publish a prerelease of the version it derives. */
-export type PublishOptions = { readonly force: boolean; readonly prerelease: boolean };
+/** How the version is asked to be derived: even when nothing changed, and as a prerelease of the version it derives. */
+export type DeriveOptions = { readonly force: boolean; readonly prerelease: boolean };
 
 /** The version `publish` derives and the dist-tag it takes. */
 export type DerivedVersion = {
@@ -40,7 +40,7 @@ type Moved = {
 export type Deriving = {
   readonly baseline: Moved | undefined;
   readonly versions: readonly string[];
-} & PublishOptions;
+} & DeriveOptions;
 
 const firstVersion = '1.0.0';
 
@@ -70,7 +70,7 @@ export function firstStableOf(prerelease: string): string {
 }
 
 /** Whether the Baseline already holds what would be published: nothing changed, and no prerelease Baseline left to promote. */
-function isNothingToPublish(baseline: Moved, { force, prerelease }: PublishOptions): boolean {
+function isNothingToPublish(baseline: Moved, { force, prerelease }: DeriveOptions): boolean {
   if (baseline.bump !== 'unchanged' || force) {
     return false;
   }

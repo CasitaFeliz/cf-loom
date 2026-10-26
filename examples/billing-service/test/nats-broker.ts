@@ -28,7 +28,7 @@ function planOf(serviceDir: string, prefix: string): BrokerPlan {
   if (ran.status !== 0) {
     throw new Error(`cf-loom broker-plan failed in ${serviceDir}: ${ran.stderr}`);
   }
-  return JSON.parse(ran.stdout);
+  return JSON.parse(ran.stdout).plan;
 }
 
 /** Applies the plan of the Service in `serviceDir` to the nats-server at `url`, as the organization's deploy step would. */

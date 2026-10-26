@@ -8,7 +8,7 @@ const syntaxes = {
   generate: 'generate',
   verify: 'verify',
   package: 'package [--out <dir>]',
-  check: 'check [--json] [--against <version|dist-tag>]',
+  check: 'check [--json] [--prerelease] [--against <version|dist-tag>]',
   'broker-plan': 'broker-plan [--prefix <p>] [--json]',
   openapi: 'openapi',
   asyncapi: 'asyncapi [--prefix <p>]',

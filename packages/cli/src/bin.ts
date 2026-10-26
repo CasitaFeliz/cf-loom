@@ -5,6 +5,7 @@ import {
   crashedExitOf,
   type Exit,
   type Output,
+  printedExitOf,
   printerTo,
   runCommand,
   statusAfterPrinting,
@@ -32,10 +33,10 @@ const valueLines: Readonly<Record<string, string>> = {
   against: '--against takes a version or a dist-tag',
 };
 
-/** The command the arguments name, or the usage error they are. */
+/** The command the arguments name, or the usage error they are, with how it is printed. */
 type Parsed =
   | { readonly kind: 'called'; readonly called: Called }
-  | { readonly kind: 'usage'; readonly exit: Exit };
+  | { readonly kind: 'usage'; readonly exit: Exit; readonly output: Output };
 
 type ParsedArgs = ReturnType<typeof parsedOf>;
 
@@ -52,13 +53,13 @@ function parsedOf(args: readonly string[]) {
 /** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--against <version|dist-tag>`, `--json`, `--force`, `--prerelease`, `--help` and `--version` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const parsed = parsedOf(args);
+  const { positionals, values } = parsed;
+  const { out, prefix, against, force, prerelease, help, version } = values;
+  const output = outputOf(parsed);
   const broken = optionProblemIn(parsed);
   if (broken !== undefined) {
-    return { kind: 'usage', exit: usageError(broken) };
+    return { kind: 'usage', exit: usageError(broken), output };
   }
-  const { positionals, values } = parsed;
-  const { out, prefix, against, json, force, prerelease, help, version } = values;
-  const output: Output = json === true ? 'json' : 'lines';
   const options = { positionals, output, force: force === true, prerelease: prerelease === true };
   const called: Called = {
     ...options,
@@ -69,6 +70,12 @@ function calledOf(args: readonly string[]): Parsed {
     ...(typeof against === 'string' ? { against } : {}),
   };
   return { kind: 'called', called };
+}
+
+/** How the arguments ask the command to print: as JSON when `--json` is among them, however it is written. */
+function outputOf({ tokens }: ParsedArgs): Output {
+  const asked = tokens.some((token) => token.kind === 'option' && token.name === 'json');
+  return asked ? 'json' : 'lines';
 }
 
 /** What is wrong with the options given, in one line, if anything is. */
@@ -98,6 +105,9 @@ function isLackingItsValue(token: ParsedArgs['tokens'][number]): boolean {
   return value === undefined || value === '' || (inlineValue === false && value.startsWith('-'));
 }
 
+/** What `--json` leaves of the lines a command prints while it runs: none, since its document holds them. */
+function silent(): void {}
+
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */
 async function exitOf(
   args: readonly string[],
@@ -105,14 +115,15 @@ async function exitOf(
 ): Promise<Exit> {
   const read = calledOf(args);
   if (read.kind === 'usage') {
-    return read.exit;
+    return printedExitOf(read.exit, read.output);
   }
   const { called } = read;
   try {
-    const run = { cwd: process.cwd(), now: Date.now(), env: process.env, progress };
-    return await runCommand(called, run);
+    const printing = called.output === 'json' ? silent : progress;
+    const run = { cwd: process.cwd(), now: Date.now(), env: process.env, progress: printing };
+    return printedExitOf(await runCommand(called, run), called.output);
   } catch (e) {
-    return crashedExitOf(e, called.output);
+    return printedExitOf(crashedExitOf(e), called.output);
   }
 }
 

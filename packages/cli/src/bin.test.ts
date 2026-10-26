@@ -110,6 +110,11 @@ function cfLoomThrowing(message: string, ...args: string[]) {
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
+/** The one line `--json` prints on stdout for a command that stopped with a message. */
+function errorsDocument(...errors: string[]): string {
+  return `${JSON.stringify({ format: 1, status: 3, errors })}\n`;
+}
+
 /** Root may write in any folder, so a permission test means nothing when run as root. */
 const isRoot = process.getuid?.() === 0;
 
@@ -124,6 +129,7 @@ function aRoot({
   lifecycle = 'active',
   body = 'z.object({ ok: z.boolean() })',
   status = 200,
+  description = 'Answers',
 } = {}): Readonly<Record<string, string>> {
   return {
     'src/contract/ping.endpoint.ts': [
@@ -135,7 +141,7 @@ function aRoot({
       "  method: 'GET',",
       "  path: '/ping',",
       "  visibility: 'public',",
-      "  description: 'Answers',",
+      `  description: '${description}',`,
       `  lifecycle: '${lifecycle}',`,
       `  success: { status: ${status}, body: ${body} },`,
       '});',
@@ -2562,6 +2568,8 @@ type Files = Readonly<Record<string, string>>;
 const checkTimeout = 60_000;
 const checkedAgainstOrders = `Checked against ${ordersPackage}@1.0.0`;
 const staleSnapshot = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
+const nothingToPublish = (packageVersion: string) =>
+  `Nothing to publish: the Snapshot and peer ranges are those of ${packageVersion}`;
 const approvalNeededLine =
   '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it';
 const refusedLine = 'The check failed: 1 Change(s) refused';
@@ -2711,6 +2719,11 @@ function publishedAs(
 
 function servedAs(packageName: string, ...versions: readonly ServedVersion[]): RegistryOptions {
   return { packages: { [packageName]: { versions } } };
+}
+
+/** A served version whose package.json declares the peer ranges given, as published by a project that installed other versions. */
+function withPeers(served: ServedVersion, peers: Readonly<Record<string, string>>): ServedVersion {
+  return { ...served, manifest: { ...served.manifest, peerDependencies: peers } };
 }
 
 /** A project and what the registry it is checked against serves. */
@@ -2896,7 +2909,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
     expect(ran.status).toBe(0);
     expect(ran.stdout.split('\n')[0]).toBe(`Checked against ${ordersPackage}@1.1.0`);
-    expect(ran.stdout).toContain(`No Change against ${ordersPackage}@1.1.0`);
+    expect(ran.stdout).toContain(nothingToPublish(`${ordersPackage}@1.1.0`));
   });
 
   test('a Definitions Package is checked against the package its package.json names', async ({
@@ -2909,7 +2922,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
     expect(ran).toEqual({
       status: 0,
-      stdout: 'Checked against @org/definitions@1.0.0\nNo Change against @org/definitions@1.0.0\n',
+      stdout: `Checked against @org/definitions@1.0.0\n${nothingToPublish('@org/definitions@1.0.0')}\n`,
       stderr: '',
     });
   });
@@ -2932,7 +2945,13 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const checked = 'Checked against @org/contract-web-admin@1.0.0';
     expect(ran).toEqual({
       status: 0,
-      stdout: `${checked}\ndependencies.orders-service removed: Neutral\nNo Change needs a Breaking Change Approval\n`,
+      stdout: [
+        checked,
+        'dependencies.orders-service removed: Neutral',
+        'No Change needs a Breaking Change Approval',
+        'Would publish @org/contract-web-admin@1.0.1 (patch)',
+        '',
+      ].join('\n'),
       stderr: '',
     });
   });
@@ -2947,7 +2966,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `${ordersPackage} has no Baseline: ${why}\n`,
+      stdout: `${ordersPackage} has no Baseline: ${why}\nWould publish ${ordersPackage}@1.0.0 (first version)\n`,
       stderr: '',
     });
   });
@@ -3000,7 +3019,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `contract-orders-service has no Baseline: ${why}\n`,
+      stdout: `contract-orders-service has no Baseline: ${why}\nWould publish contract-orders-service@1.0.0 (first version)\n`,
       stderr: '',
     });
   });
@@ -3034,7 +3053,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const checked = `${ordersPackage}@1.0.0-rc.2`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `Checked against ${checked} (no stable version: the first is 1.0.0)\nNo Change against ${checked}\n`,
+      stdout: `Checked against ${checked} (no stable version: the first is 1.0.0)\nWould publish ${ordersPackage}@1.0.0 (promotes 1.0.0-rc.2)\n`,
       stderr: '',
     });
   });
@@ -3051,6 +3070,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       stdout: [
         `Checked against ${ordersPackage}@1.0.0-1 (no stable version: the first is 1.0.0)`,
         'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+        `Would publish ${ordersPackage}@1.0.0 (major)`,
         '',
       ].join('\n'),
       stderr: `${approvalNeededLine}\n`,
@@ -3083,7 +3103,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const checked = `${ordersPackage}@1.1.0-0`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `Checked against ${checked} (version from 1.0.0)\nNo Change against ${checked}\n`,
+      stdout: `Checked against ${checked} (version from 1.0.0)\nWould publish ${ordersPackage}@1.1.0 (promotes 1.1.0-0)\n`,
       stderr: '',
     });
   });
@@ -3122,7 +3142,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const checked = `${ordersPackage}@1.1.0`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `Checked against ${checked}\nNo Change against ${checked}\n`,
+      stdout: `Checked against ${checked}\n${nothingToPublish(checked)}\n`,
       stderr: '',
     });
   });
@@ -3229,7 +3249,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
 
     expect(ran).toEqual({
       status: 0,
-      stdout: `${checkedAgainstOrders}\nNo Change against ${ordersPackage}@1.0.0\n`,
+      stdout: `${checkedAgainstOrders}\n${nothingToPublish(`${ordersPackage}@1.0.0`)}\n`,
       stderr: '',
     });
   });
@@ -3252,6 +3272,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       `${schema} field-removed at success.body.total: ${approval}`,
       'events.OrderCreated@2 added: Additive',
       'commands.ChargeCard@1 retired: Breaking, needs no Approval',
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);
   });
@@ -3270,6 +3291,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
       `endpoints.GET /ping (ping) schema field-removed at success.body."odd\\nkey": ${approval}`,
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);
   });
@@ -3296,6 +3318,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
       `${change} from="odd\\nkind" to=kind: ${approval}`,
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);
   });
@@ -3319,6 +3342,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
         `endpoints.GET /ping (ping) schema field-removed at success.body.${key}: ${approval}`,
+        `Would publish ${ordersPackage}@2.0.0 (major)`,
         '',
       ]);
     },
@@ -3344,6 +3368,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
         `${change} value="b${sequence}c" enum=closed: ${approval}; ${openEnumHint}`,
+        `Would publish ${ordersPackage}@2.0.0 (major)`,
         '',
       ]);
     },
@@ -3364,6 +3389,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       expect(ran.stdout.split('\n')).toEqual([
         'Checked against @org/definitions@1.0.0',
         `${section}."odd\\nname" removed: ${approval}`,
+        'Would publish @org/definitions@2.0.0 (major)',
         '',
       ]);
     },
@@ -3425,6 +3451,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       stdout: [
         checkedAgainstOrders,
         'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+        `Would publish ${ordersPackage}@2.0.0 (major)`,
         '',
       ].join('\n'),
       stderr: `${approvalNeededLine}\n`,
@@ -3442,6 +3469,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
         checkedAgainstOrders,
         'commands.ChargeCard@1 retired: Breaking, needs no Approval',
         'No Change needs a Breaking Change Approval',
+        `Would publish ${ordersPackage}@1.0.1 (patch)`,
         '',
       ].join('\n'),
       stderr: '',
@@ -3528,6 +3556,10 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
           hint: null,
         },
       ],
+      peers: [],
+      bump: 'major',
+      version: '2.0.0',
+      tag: 'latest',
     });
   });
 
@@ -3563,6 +3595,10 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
       stable: null,
       reason,
       changes: [],
+      peers: [],
+      bump: null,
+      version: '1.0.0',
+      tag: 'latest',
     });
   });
 
@@ -3719,6 +3755,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
       `endpoints.GET /ping (ping) schema field-removed at success.body.orders[].lines[].kind<type="a">.x: ${needsApproval}`,
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);
   });
@@ -3755,6 +3792,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
         `endpoints.GET /ping (ping) ${change}: ${needsApproval}`,
+        `Would publish ${ordersPackage}@2.0.0 (major)`,
         '',
       ]);
     },
@@ -3778,6 +3816,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
       'Checked against @org/definitions@1.0.0',
       'guards.apiKey schema field-removed at demands.query.token (input): Additive',
       'No Change needs a Breaking Change Approval',
+      'Would publish @org/definitions@1.1.0 (minor)',
       '',
     ]);
   });
@@ -3861,6 +3900,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
       'endpoints.GET /ping (pong) visibility-widened from=private to=public: Additive',
       'endpoints.GET /ping (pong) renamed from=ping to=pong baselineVisibility=private: Neutral',
       'No Change needs a Breaking Change Approval',
+      `Would publish ${ordersPackage}@1.1.0 (minor)`,
       '',
     ]);
   });
@@ -4178,6 +4218,251 @@ function publishedWithOtherPeer(project: string, range: string): ServedVersion {
   return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 }
 
+describe.concurrent('cf-loom check, the version publish would take', {
+  timeout: checkTimeout,
+}, () => {
+  const wouldPublish = (version: string, why: string) =>
+    `Would publish ${ordersPackage}@${version} (${why})`;
+  const neutralLine = 'endpoints.GET /ping (ping) description-changed: Neutral';
+  const noApprovalNeeded = 'No Change needs a Breaking Change Approval';
+  const reworded = { before: aRoot(), after: aRoot({ description: 'Reads' }) };
+  const refusedGap = { before: aMessagingRoot(), after: aMessagingRoot({ eventVersions: [1, 3] }) };
+  const zodLine = Number(zodVersion.split('.')[0]);
+
+  test('a Neutral Change is printed, and check closes with the patch publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, reworded);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        neutralLine,
+        noApprovalNeeded,
+        wouldPublish('1.0.1', 'patch'),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('check --json of a Neutral Change has the bump, the version and the dist-tag publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, reworded);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({
+      status: 0,
+      peers: [],
+      bump: 'patch',
+      version: '1.0.1',
+      tag: 'latest',
+    });
+  });
+
+  test('a Breaking Change that needs an Approval still closes with the major publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.status).toBe(2);
+    expect(ran.stdout.split('\n').slice(-3)).toEqual([
+      'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+      wouldPublish('2.0.0', 'major'),
+      '',
+    ]);
+    expect(ran.stderr).toBe(`${approvalNeededLine}\n`);
+  });
+
+  test('a refused Change closes with no version: check exits 1 and its --json nulls them', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, refusedGap);
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    expect(lines.ran.status).toBe(1);
+    expect(lines.ran.stdout).not.toContain('Would publish');
+    expect(JSON.parse(json.ran.stdout)).toMatchObject({
+      status: 1,
+      bump: null,
+      version: null,
+      tag: null,
+    });
+    const kinds = JSON.parse(json.ran.stdout).changes.map(
+      ({ difference }: { difference: { kind: string } }) => difference.kind,
+    );
+    expect(kinds).toContain('version-gap');
+  });
+
+  test('a Snapshot and peer ranges equal to the Baseline’s are nothing to publish, with no --force clause', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() });
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    const same = `${ordersPackage}@1.0.0`;
+    expect(lines.ran).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\nNothing to publish: the Snapshot and peer ranges are those of ${same}\n`,
+      stderr: '',
+    });
+    expect(JSON.parse(json.ran.stdout)).toMatchObject({ bump: null, version: null, tag: null });
+  });
+
+  test('a peer moving to a new major is printed and derives a major with no Change line', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const older = withPeers(publishedAs(project, '1.0.0'), {
+      ...installedPeers,
+      zod: `^${zodLine - 1}.0.0`,
+    });
+
+    const lines = await checkedAgainst(lab, { project, served: servedAs(ordersPackage, older) });
+    const json = await checkedAgainst(
+      lab,
+      { project, served: servedAs(ordersPackage, older) },
+      '--json',
+    );
+
+    const move = `Peer zod moves from ^${zodLine - 1}.0.0 to ^${zodVersion}: major`;
+    expect(lines.ran).toEqual({
+      status: 0,
+      stdout: [checkedAgainstOrders, move, wouldPublish('2.0.0', 'major'), ''].join('\n'),
+      stderr: '',
+    });
+    expect(JSON.parse(json.ran.stdout)).toMatchObject({
+      changes: [],
+      peers: [{ name: 'zod', from: `^${zodLine - 1}.0.0`, to: `^${zodVersion}`, bump: 'major' }],
+      bump: 'major',
+      version: '2.0.0',
+    });
+  });
+
+  test('a peer moving within its line is printed as minor and derives a minor', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const older = withPeers(publishedAs(project, '1.0.0'), {
+      ...installedPeers,
+      zod: `^${zodLine}.0.0`,
+    });
+
+    const { ran } = await checkedAgainst(lab, { project, served: servedAs(ordersPackage, older) });
+
+    const move = `Peer zod moves from ^${zodLine}.0.0 to ^${zodVersion}: minor`;
+    expect(ran.stdout).toBe(
+      [checkedAgainstOrders, move, wouldPublish('1.1.0', 'minor'), ''].join('\n'),
+    );
+  });
+
+  test('check --prerelease derives the prerelease publish --prerelease would take, tagged next over a stable version', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField);
+
+    const stable = await checkedAgainst(lab, changed, '--json');
+    const prerelease = await checkedAgainst(lab, changed, '--prerelease', '--json');
+
+    expect(JSON.parse(stable.ran.stdout)).toMatchObject({ version: '1.1.0', tag: 'latest' });
+    expect(JSON.parse(prerelease.ran.stdout)).toMatchObject({ version: '1.1.0-0', tag: 'next' });
+  });
+
+  test('check --prerelease over only prereleases is tagged latest', async ({ lab }) => {
+    const changed = await aChangedProjectListing(lab, addedSuccessField, ['1.0.0-0']);
+
+    const { ran } = await checkedAgainst(lab, changed, '--prerelease', '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ version: '1.0.0-1', tag: 'latest' });
+  });
+
+  test('--against closes with no version, with --prerelease too', async ({ lab }) => {
+    const changed = await aProjectPublishedTwice(lab);
+
+    const plain = await checkedAgainst(lab, changed, '--against', '1.0.0');
+    const prerelease = await checkedAgainst(
+      lab,
+      changed,
+      '--against',
+      '1.0.0',
+      '--prerelease',
+      '--json',
+    );
+
+    expect(plain.ran.stdout).not.toContain('Would publish');
+    expect(JSON.parse(prerelease.ran.stdout)).toMatchObject({
+      peers: [],
+      bump: null,
+      version: null,
+      tag: null,
+    });
+  });
+
+  test('a package never published closes with 1.0.0 as its first version, or 1.0.0-0 with --prerelease', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const first = await checkedAgainst(lab, { project, served: {} });
+    const prerelease = await checkedAgainst(lab, { project, served: {} }, '--prerelease');
+
+    expect(first.ran).toEqual({
+      status: 0,
+      stdout: `${neverPublished(first.registry)}\n${wouldPublish('1.0.0', 'first version')}\n`,
+      stderr: '',
+    });
+    expect(prerelease.ran.stdout.split('\n')[1]).toBe(wouldPublish('1.0.0-0', 'first version'));
+  });
+
+  test('a package never published with a Message Version after a gap prints the refused Change and no version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aMessagingRoot({ eventVersions: [1, 3] }));
+
+    const { ran } = await checkedAgainst(lab, { project, served: {} }, '--json');
+
+    expect(ran.status).toBe(1);
+    expect(JSON.parse(ran.stdout)).toMatchObject({ bump: null, version: null, tag: null });
+  });
+
+  test('an unchanged package whose Baseline is a prerelease closes with the promotion', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
+
+    const plain = await checkedAgainst(lab, changed);
+    const prerelease = await checkedAgainst(lab, changed, '--prerelease');
+
+    expect(plain.ran.stdout.split('\n').at(-2)).toBe(wouldPublish('1.1.0', 'promotes 1.1.0-0'));
+    expect(prerelease.ran.stdout.split('\n').at(-2)).toBe(
+      `Nothing to publish: the Snapshot and peer ranges are those of ${ordersPackage}@1.1.0-0`,
+    );
+  });
+
+  test('--prerelease over a hand-published prerelease the derived one would not be above exits 3, as publish does', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const { ran } = await checkedAgainst(lab, changed, '--prerelease');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).not.toContain('Would publish');
+    expect(ran.stderr).toBe(
+      `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
+    );
+  });
+});
+
 describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   test('publish fails when contract.snapshot.json is out of date, before it reads the registry', async ({
     lab,
@@ -4244,7 +4529,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const checked = await cfLoomWith(project, env, 'check');
     expect(checked).toEqual({
       status: 0,
-      stdout: `${checkedAgainstOrders}\nNo Change against ${ordersPackage}@1.0.0\n`,
+      stdout: `${checkedAgainstOrders}\n${nothingToPublish(`${ordersPackage}@1.0.0`)}\n`,
       stderr: '',
     });
     expect(leftBehindIn(project)).toEqual([]);
@@ -4440,9 +4725,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       served: servedAs(ordersPackage, older),
     });
 
+    const move = `Peer zod moves from ^3.0.0 to ^${zodVersion}: major`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `${checkedAgainstOrders}\nPublished ${ordersPackage}@2.0.0\n`,
+      stdout: `${checkedAgainstOrders}\n${move}\nPublished ${ordersPackage}@2.0.0\n`,
       stderr: '',
     });
   });
@@ -5002,9 +5288,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
     const checked = 'Checked against @org/definitions@1.0.0';
+    const move = 'Peer @org/other moves from ^2.0.0 to ^3.0.0: major';
     expect(ran).toEqual({
       status: 0,
-      stdout: `${checked}\nPublished @org/definitions@2.0.0\n`,
+      stdout: `${checked}\n${move}\nPublished @org/definitions@2.0.0\n`,
       stderr: '',
     });
     expect(registry.published[0]?.manifest).toMatchObject({
@@ -5256,7 +5543,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
   test.for([
     [['generate', '--force'], 'Only publish takes --force'],
-    [['generate', '--prerelease'], 'Only publish takes --prerelease'],
+    [['generate', '--prerelease'], 'Only check and publish take --prerelease'],
     [['publish', '--force=true'], '--force takes no value'],
     [['publish', '--prerelease=false'], '--prerelease takes no value'],
     [['publish', 'now'], 'publish takes no argument'],
@@ -5299,11 +5586,8 @@ describe('cf-loom', () => {
 
     const ran = cfLoom(project, 'generate', '--json');
 
-    expect(ran).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: `Only check and broker-plan take --json. ${usage}\n`,
-    });
+    const line = `Only check and broker-plan take --json. ${usage}`;
+    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
   });
 
   test('only check takes --against', () => {
@@ -5341,12 +5625,22 @@ describe('cf-loom', () => {
     expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
   });
 
-  test('a usage error stays one line on stderr under --json, with nothing on stdout', () => {
+  test('a usage error under --json is the errors document on stdout and its one line on stderr', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'check', 'now', '--json');
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `check takes no argument. ${usage}\n` });
+    const line = `check takes no argument. ${usage}`;
+    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
+  });
+
+  test('an unknown option under --json is the errors document too', () => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'check', '--json', '--now');
+
+    const line = `Unknown option: --now. ${usage}`;
+    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
   });
 
   test('--json takes no value', () => {
@@ -5354,7 +5648,8 @@ describe('cf-loom', () => {
 
     const ran = cfLoom(project, 'check', '--json=false');
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+    const line = `--json takes no value. ${usage}`;
+    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
   });
 
   test.for([
@@ -5366,7 +5661,8 @@ describe('cf-loom', () => {
 
     const ran = cfLoom(project, 'check', first, second);
 
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `--json takes no value. ${usage}\n` });
+    const line = `--json takes no value. ${usage}`;
+    expect(ran).toEqual({ status: 3, stdout: errorsDocument(line), stderr: `${line}\n` });
   });
 
   test('a throw is a tooling error that says cf-loom failed and where in cf-loom, never a stack trace', () => {

@@ -141,6 +141,7 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
         'Checked against @org/definitions@1.0.0',
         'exports.amount added: Additive',
         'exports.money removed: Breaking, needs a Breaking Change Approval',
+        'Would publish @org/definitions@2.0.0 (major)',
         '',
       ].join('\n'),
       stderr:
@@ -189,6 +190,7 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
       stdout: [
         'Checked against @org/contract-orders-service@1.0.0',
         'endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.placedAt: Breaking, needs a Breaking Change Approval',
+        'Would publish @org/contract-orders-service@2.0.0 (major)',
         '',
       ].join('\n'),
       stderr:

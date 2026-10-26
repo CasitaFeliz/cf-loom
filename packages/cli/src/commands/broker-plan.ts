@@ -1,7 +1,5 @@
 import { type BrokerPlan, brokerPlanOf } from '@cf-loom/contract/internal';
 import { builtOf, type Run } from '../project/index.ts';
-import type { Output } from './check.ts';
-import { errorsExitOf } from './check-json.ts';
 import {
   committedStopOf,
   done,
@@ -18,22 +16,12 @@ type Planned = { readonly kind: 'planned'; readonly service: string; readonly pl
  * Prints the broker plan of a Service from the committed Snapshot, which must be what `generate`
  * would write; an Application or a Definitions Package has none.
  */
-export async function brokerPlanCommand(
-  run: Run,
-  prefix: string | null,
-  output: Output,
-): Promise<Exit> {
+export async function brokerPlanCommand(run: Run, prefix: string | null): Promise<Exit> {
   const planned = await plannedOf(run, prefix);
-  switch (output) {
-    case 'lines':
-      return planned.kind === 'stopped'
-        ? planned.exit
-        : done(brokerPlanLinesOf(planned.plan, planned.service));
-    case 'json':
-      return planned.kind === 'stopped'
-        ? errorsExitOf(planned.exit)
-        : done([JSON.stringify(planned.plan)]);
+  if (planned.kind === 'stopped') {
+    return planned.exit;
   }
+  return done(brokerPlanLinesOf(planned.plan, planned.service), { plan: planned.plan });
 }
 
 async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Stopped> {

@@ -1,7 +1,14 @@
-import { firstStableOf } from '../versioning/index.ts';
+import type { PeerRangeMove } from '@cf-loom/contract/internal';
+import {
+  type Derived,
+  type DerivedVersion,
+  firstStableOf,
+  isPrerelease,
+} from '../versioning/index.ts';
 import { tokenOf } from './author-path.ts';
 import { type Checked, type Ending, reasonOf, siteOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
+import type { Derivation } from './derivation.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
 const jsonFields = new Set(['value']);
@@ -73,13 +80,28 @@ function classWordOf(changeClass: CheckedChange['class']): string {
   }
 }
 
-/** The lines a command opens with: the Baseline it compared with, or why there is none, then every Change. */
-export function comparedLinesOf({ packageName, against, changes }: Checked): readonly string[] {
+/** The lines a command opens with: the Baseline it compared with, or why there is none, every Change, then every peer range that moved. */
+export function comparedLinesOf({
+  packageName,
+  against,
+  changes,
+  derivation,
+}: Checked): readonly string[] {
   const opening =
     against.kind === 'none'
       ? `${packageName} has no Baseline: ${reasonOf(against.why)}`
       : `Checked against ${packageName}@${against.version}${versionNoteOf(against)}`;
-  return [opening, ...changes.map(changeLineOf)];
+  const peers = (derivation?.peers ?? []).map(peerLineOf);
+  return [opening, ...changes.map(changeLineOf), ...peers];
+}
+
+function peerLineOf({ name, from, to, bump }: PeerRangeMove): string {
+  if (from === null) {
+    return `Peer ${name} added ${to}: ${bump}`;
+  }
+  return to === null
+    ? `Peer ${name} dropped ${from}: ${bump}`
+    : `Peer ${name} moves from ${from} to ${to}: ${bump}`;
 }
 
 /** What the opening line says of the Baseline beyond its version: that `--against` named it, or where a version derives from. */
@@ -95,23 +117,55 @@ function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }
     : ` (version from ${against.stable})`;
 }
 
-/** The lines `check` prints on stdout: the Baseline it used, every Change, and how it closes. */
+/** The lines `check` prints on stdout: the Baseline it used, every Change, the peer ranges that moved, and how it closes. */
 export function linesOf(checked: Checked, status: Ending['status']): readonly string[] {
-  const { packageName, against, changes } = checked;
-  const compared = comparedLinesOf(checked);
-  if (against.kind === 'none') {
-    return compared;
-  }
-  return [...compared, ...closingLinesOf(`${packageName}@${against.version}`, changes, status)];
+  return [...comparedLinesOf(checked), ...closingLinesOf(checked, status)];
 }
 
-function closingLinesOf(
-  compared: string,
-  changes: readonly CheckedChange[],
-  status: Ending['status'],
-): string[] {
-  if (changes.length === 0) {
-    return [`No Change against ${compared}`];
+/** How `check` closes: that no Change needs an Approval, then the version `publish` would take. */
+function closingLinesOf(checked: Checked, status: Ending['status']): readonly string[] {
+  const { against, changes, derivation } = checked;
+  const hasNoRefusal = against.kind === 'baseline' && changes.length > 0 && status === 0;
+  const approval = hasNoRefusal ? ['No Change needs a Breaking Change Approval'] : [];
+  switch (derivation?.derived.kind) {
+    case 'version':
+      return [...approval, wouldPublishOf(checked, derivation.derived)];
+    case 'unchanged':
+      return [...approval, nothingToPublishOf(checked.packageName, derivation.derived.baseline)];
+    case 'not-above':
+    case undefined:
+      return approval;
   }
-  return status === 0 ? ['No Change needs a Breaking Change Approval'] : [];
+}
+
+/** The version `publish` would take, and why: the bump, that the package is new, or that a prerelease Baseline is promoted. */
+export function wouldPublishOf(
+  { packageName, against, derivation }: Checked,
+  derived: DerivedVersion,
+): string {
+  return `Would publish ${packageName}@${derived.version} (${whyOf(against, derivation?.bump ?? null)})`;
+}
+
+function whyOf(against: Checked['against'], bump: Derivation['bump']): string {
+  if (against.kind === 'none') {
+    return 'first version';
+  }
+  if (bump !== null) {
+    return bump;
+  }
+  return isPrerelease(against.version) ? `promotes ${against.version}` : 'patch';
+}
+
+/** The line for a package whose Snapshot and peer ranges are those of its Baseline. */
+export function nothingToPublishOf(packageName: string, baseline: string): string {
+  return `Nothing to publish: the Snapshot and peer ranges are those of ${packageName}@${baseline}`;
+}
+
+/** The tooling error for a derived version that would not be above the Baseline. */
+export function notAboveOf(
+  packageName: string,
+  derived: Extract<Derived, { readonly kind: 'not-above' }>,
+): string {
+  const would = `${packageName}@${derived.version} would not be above the Baseline`;
+  return `${would} ${derived.baseline}: publish a version above it by hand`;
 }

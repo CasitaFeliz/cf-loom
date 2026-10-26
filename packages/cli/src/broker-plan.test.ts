@@ -308,6 +308,11 @@ const aDefinitionsPackage = {
 
 const staleSnapshotLine = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
 
+/** The document `broker-plan --json` prints for the Service of `theReadmeService`: the plan the messaging README shows, in the one document every command prints. */
+function planDocument(): string {
+  return JSON.stringify({ format: 1, status: 0, plan: readmePlan() });
+}
+
 /** The plan the messaging README shows for the Service of `theReadmeService`, as the README writes it. */
 function readmePlan(): unknown {
   const readme = readFileSync(join(packagesDir, 'messaging/README.md'), 'utf8');
@@ -397,7 +402,7 @@ describe('cf-loom broker-plan', () => {
 
     const ran = cfLoom(project, 'broker-plan', '--json');
 
-    expect(ran).toEqual({ status: 0, stdout: `${JSON.stringify(readmePlan())}\n`, stderr: '' });
+    expect(ran).toEqual({ status: 0, stdout: `${planDocument()}\n`, stderr: '' });
   });
 
   test('--prefix puts the prefix in front of every subject, stream and durable consumer name', () => {
@@ -422,7 +427,7 @@ describe('cf-loom broker-plan', () => {
     const ran = cfLoom(project, 'broker-plan', '--prefix', 'staging', '--json');
 
     expect(ran.status).toBe(0);
-    expect(JSON.parse(ran.stdout)).toEqual({
+    expect(JSON.parse(ran.stdout).plan).toEqual({
       prefix: 'staging',
       streams: {
         'staging_orders-service': {
@@ -454,7 +459,7 @@ describe('cf-loom broker-plan', () => {
 
     const ran = await cfLoomOffline(project, 'broker-plan', '--json');
 
-    expect(ran).toEqual({ status: 0, stdout: `${JSON.stringify(readmePlan())}\n`, stderr: '' });
+    expect(ran).toEqual({ status: 0, stdout: `${planDocument()}\n`, stderr: '' });
   });
 });
 

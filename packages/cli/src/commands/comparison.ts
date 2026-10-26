@@ -76,19 +76,25 @@ export async function comparisonOf(
   }
 }
 
-/** What `check` reports of a comparison: the package, what it was compared with and every Change. */
+/** What `check` reports of a comparison: the package, what it was compared with and every Change, before any version is derived from it. */
 export function checkedFrom(comparison: Comparison): Checked {
   switch (comparison.kind) {
     case 'no-baseline': {
       const { packageName, why } = comparison;
       const changes = comparison.changes.map(checkedChangeOf);
-      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes };
+      return {
+        kind: 'checked',
+        packageName,
+        against: { kind: 'none', why },
+        changes,
+        derivation: null,
+      };
     }
     case 'baseline': {
       const { packageName, snapshot, stable, chosen } = comparison.read;
       const against = { kind: 'baseline', version: snapshot.version, stable, chosen } as const;
       const changes = comparison.report.changes.map(checkedChangeOf);
-      return { kind: 'checked', packageName, against, changes };
+      return { kind: 'checked', packageName, against, changes, derivation: null };
     }
   }
 }
