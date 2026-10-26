@@ -178,7 +178,9 @@ test('the README’s fakeProvider example runs: a Handler called directly with t
 
 test('the README’s verify example runs: a fake all of whose steps were taken verifies, and one left a step does not', async () => {
   const payments = fakeProvider(paymentsDependency);
-  payments.on('getPayment').once((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
+  payments
+    .on('getPayment')
+    .once((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
   const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };
   const unsettled = fakeProvider(paymentsDependency);
   unsettled.on('getPayment').once((r) => r.fault({ committed: 'no', retryable: true }));

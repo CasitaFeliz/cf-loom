@@ -164,7 +164,9 @@ describe('the README', () => {
       ...options,
       fetch: blocked,
       inferFault: (happened) =>
-        happened.kind === 'connection-failed' ? { committed: 'unknown', retryable: true } : undefined,
+        happened.kind === 'connection-failed'
+          ? { committed: 'unknown', retryable: true }
+          : undefined,
     });
 
     const outcomes = [
