@@ -7,6 +7,9 @@ export const snapshotFormats = [1] as const;
 /** The version of SNAPSHOT.md a Snapshot follows, so a reader knows every format it ever wrote. */
 export type SnapshotFormat = (typeof snapshotFormats)[number];
 
+/** The format `generate` and `publish` write, the one place that names it. */
+export const writtenSnapshotFormat = 1 satisfies SnapshotFormat;
+
 /** A Guard as an Endpoint attaches it: by name, with its Qualifier as written, or `null`. */
 export type AttachmentSnapshot = { readonly guard: string; readonly qualifier: unknown };
 

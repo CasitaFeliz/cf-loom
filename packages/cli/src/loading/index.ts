@@ -18,6 +18,8 @@ export { importedModuleOf, oneLineOf } from './imported.ts';
 export type { ImportedPackage } from './imported-packages.ts';
 export type { InstalledManifest, InstalledVersion } from './installed-package.ts';
 export { installedManifestOf, installedVersionOf } from './installed-package.ts';
+export type { InstalledPackage } from './installed-root.ts';
+export { installedRootOf } from './installed-root.ts';
 export { newerFormatTextOf } from './newer-format.ts';
 export type { ResolvedPackages } from './packages.ts';
 export { resolvePackages } from './packages.ts';

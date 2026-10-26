@@ -33,6 +33,12 @@ export type Project = {
   readonly imported: readonly ImportedPackage[];
 };
 
+/** The root a Snapshot is declared from: what a root file exports, and the packages its import reached. */
+export type DeclaredRoot = Pick<
+  Project,
+  'directory' | 'packageName' | 'root' | 'rootExports' | 'rootFile' | 'packages'
+>;
+
 /** A project read, or the tooling error that stopped reading it. */
 export type ReadProject = { readonly kind: 'read'; readonly project: Project } | Tooling;
 
@@ -53,26 +59,34 @@ export async function projectOf(directory: string): Promise<ReadProject> {
   if (loaded.kind === 'failed') {
     return tooling(loaded.message);
   }
+  const { packageName, manifest } = projectPackage;
+  const declaring = declaredRootOf(loaded, { directory, packageName });
+  if (declaring.kind === 'tooling') {
+    return declaring;
+  }
+  const { layout = defaultLayout } = config.config;
+  const { imported } = loaded;
+  const project = { ...declaring.declared, manifest, layout, imported };
+  return { kind: 'read', project };
+}
+
+/**
+ * The root a loaded root file declares, with the Definitions Packages its import reached, as
+ * Node resolved them; the one step from a loaded root to a Snapshot, for a project's own root and
+ * for a staged package's.
+ */
+export function declaredRootOf(
+  loaded: Extract<LoadedRoot, { readonly kind: 'loaded' }>,
+  { directory, packageName }: Pick<Project, 'directory' | 'packageName'>,
+): { readonly kind: 'declared'; readonly declared: DeclaredRoot } | Tooling {
   const resolved = resolvePackages(loaded.root, loaded.imported);
   if (resolved.kind === 'failed') {
     return tooling(resolved.message);
   }
-  const { packageName, manifest } = projectPackage;
-  const { root, file: rootFile, exports: rootExports, imported } = loaded;
-  const { layout = defaultLayout } = config.config;
+  const { root, file: rootFile, exports: rootExports } = loaded;
   const { packages } = resolved;
-  const project = {
-    directory,
-    packageName,
-    manifest,
-    layout,
-    root,
-    rootExports,
-    rootFile,
-    packages,
-    imported,
-  };
-  return { kind: 'read', project };
+  const declared = { directory, packageName, root, rootExports, rootFile, packages };
+  return { kind: 'declared', declared };
 }
 
 /** The project's root, unless its configuration sets a `layout` a root without Handlers refuses. */

@@ -14,6 +14,20 @@ function singleQuotedOf(token: string): string {
   return token === "'" ? "\\'" : token;
 }
 
+/**
+ * A text as a JSDoc comment, on one line when the text is one line, else a block of one line per
+ * line of the text; the star and slash that end a comment are escaped inside it, so no text can
+ * close the comment early.
+ */
+export function docCommentOf(text: string): readonly string[] {
+  const lines = text.split(/\r\n|[\r\n\u2028\u2029]/).map((line) => line.replaceAll('*/', '*\\/'));
+  const [first = '', ...more] = lines;
+  if (more.length === 0) {
+    return [`/** ${first} */`];
+  }
+  return ['/**', ...lines.map((line) => (line === '' ? ' *' : ` * ${line}`)), ' */'];
+}
+
 /** How a JSON literal is laid out: on one line, or indented by two spaces as JSON text is. */
 export type JsonLayout = 'inline' | 'indented';
 

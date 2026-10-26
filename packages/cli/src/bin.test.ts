@@ -217,7 +217,7 @@ function sortedKeys(value: unknown): unknown {
 }
 
 describe('cf-loom init', () => {
-  test('init service writes only the root, named after package.json', () => {
+  test('init service writes the root, named after package.json, and no configuration', () => {
     const project = aProject();
 
     const ran = cfLoom(project, 'init', 'service');
@@ -244,7 +244,11 @@ describe('cf-loom init', () => {
     const ran = cfLoom(project, 'init', 'service');
     const generatedRan = cfLoom(project, 'generate');
 
-    expect(ran).toEqual({ status: 0, stdout: 'Created src/contract/index.ts\n', stderr: '' });
+    expect(ran).toEqual({
+      status: 0,
+      stdout: 'Created src/contract/index.ts\nCreated .gitattributes\n',
+      stderr: '',
+    });
     expect(generatedRan).toMatchObject({ status: 0, stderr: '' });
   });
 
@@ -301,6 +305,7 @@ describe('cf-loom init', () => {
     expect(ran.stderr).toBe('src/contract/index.ts already exists\n');
     expect(read(project, 'src/contract/index.ts')).toBe(root);
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init of an unknown kind is a tooling error', () => {
@@ -327,6 +332,7 @@ describe('cf-loom init', () => {
     });
     expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init writes nothing when src/contract is a file', () => {
@@ -337,6 +343,7 @@ describe('cf-loom init', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toBe('src/contract is no folder: init cannot write src/contract/index.ts\n');
     expect(existsSync(join(project, 'cf-loom.config.ts'))).toBe(false);
+    expect(existsSync(join(project, '.gitattributes'))).toBe(false);
   });
 
   test('init reports a root it cannot write in one line, and keeps what was there', () => {
@@ -4029,8 +4036,31 @@ const aRootWithoutEndpoints: Files = {
   ].join('\n'),
 };
 
-/** The Definitions Package `@org/definitions` as its author left it once built. */
-function aBuiltDefinitions(manifest: Readonly<Record<string, unknown>> = {}): Files {
+/** The root file of a Definitions Package, which exports what is given besides `definitions`. */
+function aDefinitionsModule(exported: readonly string[] = []): string {
+  const imports =
+    "import { defineDefinitions, defineGuard, defineRejection } from '@cf-loom/contract';";
+  return [imports, ...exported, 'export const definitions = defineDefinitions({});', ''].join('\n');
+}
+
+const aMoney = [
+  "import { z } from 'zod';",
+  'export const money = z.object({ amount: z.number() });',
+].join('\n');
+const anApiKey = "export const apiKey = defineGuard({ name: 'apiKey', description: 'A key' });";
+const aGone =
+  "export const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });";
+const aGuardNamedWithAnUnderscore =
+  "export const apiKey = defineGuard({ name: 'api_key', description: 'A key' });";
+
+/**
+ * The Definitions Package `@org/definitions` as its author left it once built: its `dist` is the
+ * JavaScript of `source` unless `built` says it was built from other source.
+ */
+function aBuiltDefinitions(
+  manifest: Readonly<Record<string, unknown>> = {},
+  { source = aDefinitionsModule(), built = source }: { source?: string; built?: string } = {},
+): Files {
   return {
     ...aDefinitionsRoot,
     'package.json': JSON.stringify({
@@ -4041,8 +4071,9 @@ function aBuiltDefinitions(manifest: Readonly<Record<string, unknown>> = {}): Fi
       files: ['dist'],
       ...manifest,
     }),
-    'dist/index.js': 'export const money = 1;\n',
-    'dist/index.d.ts': 'export declare const money: number;\n',
+    'src/definitions/index.ts': source,
+    'dist/index.js': built,
+    'dist/index.d.ts': 'export {};\n',
   };
 }
 
@@ -4099,12 +4130,14 @@ function withTsc(project: string, script: string): void {
 function aTscThatLocksItsStaging(ending: string): string {
   return [
     "const { chmodSync, mkdirSync, writeFileSync } = require('node:fs');",
-    "const { dirname, join } = require('node:path');",
+    "const { basename, dirname, join } = require('node:path');",
     'const folder = process.argv[3];',
     "mkdirSync(join(folder, 'dist'), { recursive: true });",
     "writeFileSync(join(folder, 'dist/index.js'), 'export {};\\n');",
     "writeFileSync(join(folder, 'dist/index.d.ts'), 'export {};\\n');",
-    'chmodSync(dirname(folder), 0o555);',
+    'let place = folder;',
+    "while (basename(place) !== 'cf-loom') place = dirname(place);",
+    'chmodSync(place, 0o555);',
     ending,
   ].join('\n');
 }
@@ -4123,6 +4156,26 @@ function snapshotHashOf(snapshotJson: string): string {
 function neverPublished(registry: Registry, packageName = ordersPackage): string {
   const why = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
   return `${packageName} has no Baseline: ${why}`;
+}
+
+const anotherPeer = '^2.0.0';
+const otherPeerMeta = { '@org/other': { optional: true } };
+
+/** The manifest fields of a Definitions Package with the peer `@org/other` at `range`, and the two cf-loom peers as a monorepo writes them. */
+function withOtherPeer(range: string): Readonly<Record<string, unknown>> {
+  const peerDependencies = {
+    '@cf-loom/contract': 'workspace:^',
+    zod: 'catalog:',
+    '@org/other': range,
+  };
+  return { peerDependencies, peerDependenciesMeta: otherPeerMeta };
+}
+
+/** A version of `@org/definitions` as its project would publish it with the peer `@org/other` at `range`. */
+function publishedWithOtherPeer(project: string, range: string): ServedVersion {
+  const baseline = publishedAs(project, '1.0.0');
+  const peerDependencies = { ...installedPeers, '@org/other': range };
+  return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 }
 
 describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
@@ -4433,7 +4486,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `Checked against ${ordersPackage}@1.1.0-rc.1 (version from 1.0.0)\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
       stderr: `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4455,7 +4508,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `Checked against ${ordersPackage}@1.0.0-rc.2 (no stable version: the first is 1.0.0)\n`,
       stderr: `${ordersPackage}@1.0.0-0 would not be above the Baseline 1.0.0-rc.2: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4613,7 +4666,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${checkedAgainstOrders}\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
       stderr: `${ordersPackage} lists 1.2.0, published while publish ran: rerun publish, which reads the registry again\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4636,7 +4689,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${neverPublished(registry)}\n`,
       stderr: `${ordersPackage} lists 1.0.0, published while publish ran: rerun publish, which reads the registry again\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4752,7 +4805,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       'package.json',
       'snapshot.json',
     ]);
-    expect(files['dist/index.js']).toBe('export const money = 1;\n');
+    expect(files['dist/index.js']).toBe(aDefinitionsModule());
     expect(JSON.parse(files['snapshot.json']!)).toMatchObject({
       kind: 'definitions',
       version: '1.0.0',
@@ -4773,6 +4826,114 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       },
     });
     expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package built from its source publishes, and one that imports another Definitions Package too', async ({
+    lab,
+  }) => {
+    const source = aDefinitionsModule([anApiKey, "export { gone } from '@org/definitions';"]);
+    const files = {
+      ...installedDefinitions('node_modules'),
+      ...aBuiltDefinitions({ name: '@other/definitions' }, { source }),
+    };
+    const project = await aGeneratedProject(lab, files);
+    const registry = await lab.aRegistry({});
+    const env = lab.anNpmEnvironment({ userConfig: defaultLoginTo(registry) });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
+    expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test.for([
+    [
+      'still exports a schema removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([aMoney]) },
+    ],
+    [
+      'lacks a Guard added to src',
+      { source: aDefinitionsModule([anApiKey]), built: aDefinitionsModule() },
+    ],
+    [
+      'lacks a schema added to src',
+      { source: aDefinitionsModule([aMoney]), built: aDefinitionsModule() },
+    ],
+    [
+      'still exports a Guard removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([anApiKey]) },
+    ],
+    [
+      'still exports a Rejection removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([aGone]) },
+    ],
+    [
+      'lacks a Rejection added to src',
+      { source: aDefinitionsModule([aGone]), built: aDefinitionsModule() },
+    ],
+    [
+      'declares a Guard that breaks a rule of the Contract',
+      {
+        source: aDefinitionsModule([anApiKey]),
+        built: aDefinitionsModule([aGuardNamedWithAnUnderscore]),
+      },
+    ],
+  ] as const)(
+    'a Definitions Package whose dist %s is refused, and nothing is put or left behind',
+    async ([, sources], { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions({}, sources));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      const refused = `@org/definitions's built files are not what contract.snapshot.json describes: build, then publish`;
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${refused}\n` });
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    ['has no dist', {}, false, 'Cannot find module'],
+    [
+      'exports its TypeScript source',
+      { exports: './src/definitions/index.ts', files: ['src'] },
+      true,
+      'files under node_modules',
+    ],
+    ['has no entry Node can resolve', { exports: undefined }, true, 'Cannot find package'],
+  ] as const)(
+    'a Definitions Package that %s cannot be imported as installed, and nothing is put or left behind',
+    async ([, manifest, hasDist, reason], { lab }) => {
+      const built = aBuiltDefinitions(manifest);
+      const { 'dist/index.js': _js, 'dist/index.d.ts': _declarations, ...files } = built;
+      const project = await aGeneratedProject(lab, hasDist ? built : files);
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout).toBe(`${neverPublished(registry, '@org/definitions')}\n`);
+      expect(ran.stderr).toMatch(
+        /^@org\/definitions cannot be imported as installed: [^\n]+: build, then publish\n$/,
+      );
+      expect(ran.stderr).toContain(reason);
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test('a Definitions Package with a main and no exports is imported as installed and publishes', async ({
+    lab,
+  }) => {
+    const manifest = { exports: undefined, main: './dist/index.js' };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(manifest));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(putsOf(registry)).toHaveLength(1);
   });
 
   test('a Definitions Package’s publishConfig.tag is left out of what is published, and the rest of publishConfig is kept', async ({
@@ -4802,6 +4963,53 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     const distTags = { latest: '1.0.0' };
     expect(putsOf(registry)).toEqual([{ name: '@other/definitions', version: '1.0.0', distTags }]);
+  });
+
+  test('a Definitions Package’s peers besides zod and @cf-loom/contract are published as written, and the two are set to carets', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer(anotherPeer)));
+
+    const { registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(registry.published[0]?.manifest).toMatchObject({
+      peerDependencies: { ...installedPeers, '@org/other': '^2.0.0' },
+      peerDependenciesMeta: otherPeerMeta,
+    });
+  });
+
+  test('a Definitions Package with a peer besides zod and @cf-loom/contract and nothing changed publishes nothing', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer(anotherPeer)));
+    const served = servedAs('@org/definitions', publishedWithOtherPeer(project, '^2.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const nothing =
+      'Nothing to publish: the Snapshot and peer ranges are those of @org/definitions@1.0.0; --force publishes anyway';
+    const checked = 'Checked against @org/definitions@1.0.0';
+    expect(ran).toEqual({ status: 0, stdout: `${checked}\n${nothing}\n`, stderr: '' });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a peer of a Definitions Package besides zod and @cf-loom/contract moving to a new major publishes a major although the Snapshot did not change', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions(withOtherPeer('^3.0.0')));
+    const served = servedAs('@org/definitions', publishedWithOtherPeer(project, '^2.0.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const checked = 'Checked against @org/definitions@1.0.0';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\nPublished @org/definitions@2.0.0\n`,
+      stderr: '',
+    });
+    expect(registry.published[0]?.manifest).toMatchObject({
+      peerDependencies: { ...installedPeers, '@org/other': '^3.0.0' },
+    });
   });
 
   test('a Definitions Package’s catalog: and workspace: peers are published as carets of the installed versions', async ({
@@ -4856,6 +5064,16 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       { optionalDependencies: { left: 'link:./vendor/left' } },
       'package.json lists left in optionalDependencies as link:./vendor/left, which npm cannot install from the registry',
     ],
+    [
+      'lists a workspace: range in peerDependencies',
+      { peerDependencies: { '@org/shared': 'workspace:*' } },
+      'package.json lists @org/shared in peerDependencies as workspace:*, which npm cannot install from the registry',
+    ],
+    [
+      'lists a catalog: range in peerDependencies',
+      { peerDependencies: { left: 'catalog:' } },
+      'package.json lists left in peerDependencies as catalog:, which npm cannot install from the registry',
+    ],
   ] as const)(
     'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
     async ([, manifest, line], { lab }) => {
@@ -4869,7 +5087,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${line}\n` });
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${line}\n` });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },
@@ -4892,7 +5111,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toHaveLength(1);
   });
 
-  test('npm refusing the publish is a tooling error with the first line of its summary, and nothing is put or left behind', async ({
+  test('npm refusing the publish is a tooling error with the first line of its summary after the lines of the Check, and nothing is put or left behind', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aBuiltDefinitions({ private: true }));
@@ -4901,7 +5120,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const refused =
       'npm publish @org/definitions@1.0.0 failed (EPRIVATE: This package has been marked as private)';
-    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${refused}\n` });
+    const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+    expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${refused}\n` });
     expect(putRequestsOf(registry)).toEqual([]);
     expect(leftBehindIn(project)).toEqual([]);
   });
@@ -4916,7 +5136,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: '',
+      stdout: `${neverPublished(registry)}\n`,
       stderr: 'typescript is not installed: publish builds the Contract Package with its tsc\n',
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -4962,11 +5182,22 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
       const label = `tsc on the Contract Package of ${ordersPackage}@1.0.0`;
-      expect(ran).toEqual({ status: 3, stdout: '', stderr: `${label} ${ending}\n` });
+      const checked = `${neverPublished(registry)}\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: `${label} ${ending}\n` });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
     },
   );
+
+  test('a publish killed while it builds has printed the lines of the Check', async ({ lab }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    withTsc(project, "process.kill(process.ppid, 'SIGKILL');");
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+    expect(ran).toEqual({ status: null, stdout: `${neverPublished(registry)}\n`, stderr: '' });
+    expect(putRequestsOf(registry)).toEqual([]);
+  });
 
   test.skipIf(isRoot)(
     'a staging folder that cannot be removed leaves a published version published: publish names the folder',
@@ -4997,7 +5228,8 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
         const failure = `tsc on the Contract Package of ${ordersPackage}@1.0.0 failed: exit status 1`;
         const [first, second, ...more] = ran.stderr.split('\n');
-        expect([ran.status, ran.stdout, first, more]).toEqual([3, '', failure, ['']]);
+        const checked = `${neverPublished(registry)}\n`;
+        expect([ran.status, ran.stdout, first, more]).toEqual([3, checked, failure, ['']]);
         expect(`${second}\n`).toMatch(leftBehindLine);
         expect(putRequestsOf(registry)).toEqual([]);
       } finally {
@@ -5016,7 +5248,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
     expect(ran.status).toBe(3);
-    expect(ran.stdout).toBe('');
+    expect(ran.stdout).toBe(`${neverPublished(registry)}\n`);
     expect(ran.stderr).toMatch(/^node_modules\/\.cache\/cf-loom cannot be written: [^\n]+\n$/);
     expect(ran.stderr).not.toContain('was left behind');
     expect(putRequestsOf(registry)).toEqual([]);

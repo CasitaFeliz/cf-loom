@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { type ImportedPackage, importedRootOf } from './imported-packages.ts';
 import { type RootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
 
@@ -32,22 +33,45 @@ export async function loadRoot(directory: string): Promise<LoadedRoot> {
   if (others.length > 0) {
     return failed(`A project has one root: both ${present.join(' and ')} exist`);
   }
-  const imported = await importedRootOf(join(directory, file), directory);
+  const path = join(directory, file);
+  const target = { specifier: pathToFileURL(path).href, from: path };
+  const imported = await importedRootOf(target, join(directory, 'package.json'), directory);
   if (imported.kind === 'failed') {
     return failed(`${file} cannot be loaded: ${imported.message}`);
   }
-  const kinds = rootKinds.filter(
-    (rootKind) => imported.exports[exportedAs(rootKind)] !== undefined,
-  );
+  const split = splitRoot(imported.exports);
+  if (split.kind === 'failed') {
+    return failed(`${file} ${split.reason}`);
+  }
+  const { root, rootKind, exports } = split;
+  return { kind: 'loaded', root, rootKind, file, exports, imported: imported.imported };
+}
+
+/** What a root file exports: the root and its kind, and everything else by name; or why it exports no one root. */
+export type SplitRoot =
+  | {
+      readonly kind: 'split';
+      readonly root: unknown;
+      readonly rootKind: RootKind;
+      readonly exports: Readonly<Record<string, unknown>>;
+    }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+/** Splits a root file's exports into its root, found under the name its kind exports it by, and the rest. */
+export function splitRoot(exported: Readonly<Record<string, unknown>>): SplitRoot {
+  const kinds = rootKinds.filter((rootKind) => exported[exportedAs(rootKind)] !== undefined);
   const [rootKind, ...more] = kinds;
   if (rootKind === undefined) {
-    return failed(`${file} exports none of ${rootKinds.map(exportedAs).join(', ')}`);
+    return { kind: 'failed', reason: `exports none of ${rootKinds.map(exportedAs).join(', ')}` };
   }
   if (more.length > 0) {
-    return failed(`${file} exports one root, not ${kinds.map(exportedAs).join(' and ')}`);
+    return {
+      kind: 'failed',
+      reason: `exports one root, not ${kinds.map(exportedAs).join(' and ')}`,
+    };
   }
-  const { [exportedAs(rootKind)]: root, ...exports } = imported.exports;
-  return { kind: 'loaded', root, rootKind, file, exports, imported: imported.imported };
+  const { [exportedAs(rootKind)]: root, ...exports } = exported;
+  return { kind: 'split', root, rootKind, exports };
 }
 
 function exportedAs(rootKind: RootKind): string {

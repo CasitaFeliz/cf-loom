@@ -120,6 +120,7 @@ export {
   snapshotFormatOf,
   snapshotOf,
   textPartNodesOf,
+  writtenSnapshotFormat,
 } from '../snapshot/index.ts';
 export type {
   Failure,
@@ -145,6 +146,7 @@ export {
   packageLabelOf,
   problemLineOf,
   problemOf,
+  rootNameProblemOf,
   validateContract,
   walkedTextPartsOf,
 } from '../validation/index.ts';

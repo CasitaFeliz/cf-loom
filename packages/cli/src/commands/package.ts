@@ -3,7 +3,7 @@ import { publishedNameOf } from '../loading/index.ts';
 import { builtOf, type Run } from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
 import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
-import { builtPeersOf } from './peers.ts';
+import { builtPeersOf, publishedRangesOf } from './peers.ts';
 
 /** Where `package` writes when no `--out` is given, next to package.json, in the folder that holds only cf-loom's output. */
 export const defaultPackageFolder = '.cf-loom/contract-package';
@@ -36,7 +36,8 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
     return toolingError(peers.message);
   }
   const name = publishedNameOf(project.packageName, snapshot.kind);
-  const packaging = { name, version: localVersion, peers: peers.peers };
+  const peerRanges = publishedRangesOf(built, peers.peers);
+  const packaging = { name, version: localVersion, peerRanges };
   const files = contractPackageFilesOf({ snapshot, text }, packaging);
   const written = writeContractPackageTo(run.cwd, out, files);
   switch (written.kind) {

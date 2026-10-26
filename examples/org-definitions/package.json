@@ -10,6 +10,9 @@
       "default": "./dist/definitions/index.js"
     }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "generate": "cf-loom generate && tsc -b tsconfig.build.json"
   },

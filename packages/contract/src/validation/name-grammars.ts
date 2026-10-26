@@ -19,10 +19,7 @@ type Named = { readonly at: Path; readonly value: unknown; readonly noun: string
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, groups, endpoints, guards, rejections, standardRejections } = declarations;
   const { events, commands, subscriptions } = declarations;
-  const kebab = [
-    ...rootNamed(root),
-    ...named(groups, (listed) => listed.group.name, 'A Group name'),
-  ];
+  const kebab = named(groups, (listed) => listed.group.name, 'A Group name');
   const camel = [
     ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
     ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
@@ -37,6 +34,7 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
     ...codes(standardRejections, (listed) => listed.declaration.code),
   ];
   return [
+    ...rootNameFailures(root),
     ...grammarFailures(kebab, kebabCase),
     ...grammarFailures(camel, elementName),
     ...grammarFailures(pascal, pascalCase),
@@ -69,9 +67,15 @@ function grammarFailures(named: readonly Named[], grammar: Grammar): readonly De
   );
   return breaking.map(({ at, value, noun }) => {
     const text = textOf(value);
-    const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
-    return failure(at, 'name-grammar', `${noun} is ${rule}: ${text}${hintFor(grammar, text)}`);
+    const sentence = ruleSentenceOf(noun, grammar, text);
+    return failure(at, 'name-grammar', `${sentence}: ${text}${hintFor(grammar, text)}`);
   });
+}
+
+/** What a name that breaks a grammar is told: `A Group name is kebab-case`, or that and no reserved word. */
+function ruleSentenceOf(noun: string, grammar: Grammar, text: string): string {
+  const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
+  return `${noun} is ${rule}`;
 }
 
 /** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */
@@ -80,14 +84,47 @@ function hintFor(grammar: Grammar, text: string): string {
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
-/** A Service's or Application's name; a Definitions Package has none but its package.json's. */
-function rootNamed(root: Declarations['root']): readonly Named[] {
+/** The grammar of a Service's and an Application's name, the one place it is named. */
+const rootNameGrammar = kebabCase;
+
+/** What a Service's and an Application's name is called in a sentence. */
+const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
+
+/** The kinds of root, as `init` names them. */
+type RootNameKind = 'service' | 'application' | 'definitions';
+
+/**
+ * Why a name cannot be a root's, as the clause validation fails it with, such as `a Service name
+ * is kebab-case`; nothing when it follows the grammar of its kind, and for a Definitions Package,
+ * which has no name but its package.json's.
+ */
+export function rootNameProblemOf(kind: RootNameKind, name: string): string | undefined {
+  switch (kind) {
+    case 'service':
+    case 'application': {
+      if (follows(rootNameGrammar, name)) {
+        return undefined;
+      }
+      const sentence = ruleSentenceOf(rootNouns[kind], rootNameGrammar, name);
+      return `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+    }
+    case 'definitions':
+      return undefined;
+  }
+}
+
+/** A Service's or Application's name follows its grammar; a Definitions Package has none. */
+function rootNameFailures(root: Declarations['root']): readonly DeclarationFailure[] {
   switch (root.kind) {
     case 'contract':
-      return [{ at: ['name'], value: root.name, noun: 'A Service name' }];
+      return grammarFailures(rootNamed('service', root.name), rootNameGrammar);
     case 'application':
-      return [{ at: ['name'], value: root.name, noun: 'An Application name' }];
+      return grammarFailures(rootNamed('application', root.name), rootNameGrammar);
     case 'definitions':
       return [];
   }
+}
+
+function rootNamed(kind: 'service' | 'application', value: unknown): readonly Named[] {
+  return [{ at: ['name'], value, noun: rootNouns[kind] }];
 }

@@ -13,8 +13,13 @@ export type Imported =
  * naming what broke, relative to the project in `directory`, and never a stack trace.
  */
 export async function importedModuleOf(path: string, directory: string): Promise<Imported> {
+  return await importedSpecifierOf(pathToFileURL(path).href, directory);
+}
+
+/** Imports what a specifier names, a file URL or a package name, with the same one line for a failure. */
+export async function importedSpecifierOf(specifier: string, directory: string): Promise<Imported> {
   try {
-    const exports: Readonly<Record<string, unknown>> = await import(pathToFileURL(path).href);
+    const exports: Readonly<Record<string, unknown>> = await import(specifier);
     return { kind: 'imported', exports };
   } catch (e) {
     return { kind: 'failed', message: oneLineOf(e, directory) };

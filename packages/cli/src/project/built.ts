@@ -1,5 +1,4 @@
 import { Buffer } from 'node:buffer';
-import { readFileSync } from 'node:fs';
 import {
   canonicalSnapshotOf,
   canonicalTextOf,
@@ -14,9 +13,11 @@ import {
   validateContract,
 } from '@cf-loom/contract/internal';
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
+import { type FileComparison, fileComparisonOf } from '../writing/index.ts';
 import { type Committed, committedOf } from './committed.ts';
 import { type Invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
-import { type Project, projectOf } from './project.ts';
+import { runningGeneratorOf } from './generator.ts';
+import { type DeclaredRoot, type Project, projectOf } from './project.ts';
 import type { Run } from './run.ts';
 
 /**
@@ -28,7 +29,8 @@ export type Generator = 'running' | 'committed';
 
 /**
  * What every command builds before it writes: the project, its valid root, the declared Snapshot
- * in canonical order with its text and bytes, and the committed file; or why it could not be built.
+ * in canonical order with its text and bytes, the committed file and the context the Snapshot was
+ * declared in; or why it could not be built.
  */
 export type Built =
   | {
@@ -39,6 +41,7 @@ export type Built =
       readonly text: string;
       readonly bytes: Buffer;
       readonly committed: Committed;
+      readonly context: SnapshotContext;
     }
   | ProjectFailure;
 
@@ -48,9 +51,10 @@ export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 /** A Service's project as built, the one kind of root that offers Elements. */
 export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
 
-/** Whether the committed `contract.snapshot.json` is what `generate` would write, its generator aside. */
-export function isCommittedCurrent(built: BuiltProject): boolean {
-  return built.committed.kind === 'json' && built.committed.bytes.equals(built.bytes);
+/** How the committed `contract.snapshot.json` differs from what `generate` would write; a file that is missing or no JSON differs. */
+export function committedComparisonOf(built: BuiltProject): FileComparison {
+  const { committed } = built;
+  return committed.kind === 'json' ? fileComparisonOf(built.bytes, committed.bytes) : 'different';
 }
 
 /** Whether a built project is a Service's. */
@@ -60,8 +64,7 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
 
 /**
  * Builds the declared Snapshot of the project where the command runs, offline, reading from the
- * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator;
- * a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
+ * committed file only the `deprecatedAt` stamps it carries forward and, for `verify`, its generator.
  */
 export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   const read = await projectOf(run.cwd);
@@ -79,7 +82,31 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
     committed: parsed,
     now: run.now,
   };
-  const validated = validatedOf(project);
+  const declared = declaredOf(project, context);
+  if (declared.kind !== 'declared') {
+    return declared;
+  }
+  const { validated, snapshot, text, bytes } = declared;
+  return { kind: 'built', project, validated, snapshot, text, bytes, committed, context };
+}
+
+/** A root's declared Snapshot in canonical order with its text and bytes, or why the root declares none. */
+export type Declared =
+  | {
+      readonly kind: 'declared';
+      readonly validated: ValidContract;
+      readonly snapshot: Snapshot;
+      readonly text: string;
+      readonly bytes: Buffer;
+    }
+  | ProjectFailure;
+
+/**
+ * Validates a root and declares its Snapshot in canonical order, the one way every Snapshot is
+ * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
+ */
+export function declaredOf(declaring: DeclaredRoot, context: SnapshotContext): Declared {
+  const validated = validatedOf(declaring);
   switch (validated.kind) {
     case 'tooling':
     case 'invalid':
@@ -91,8 +118,7 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
         return tooDeep;
       }
       const text = canonicalTextOf(snapshot);
-      const bytes = Buffer.from(text, 'utf8');
-      return { kind: 'built', project, validated, snapshot, text, bytes, committed };
+      return { kind: 'declared', validated, snapshot, text, bytes: Buffer.from(text, 'utf8') };
     }
   }
 }
@@ -104,8 +130,8 @@ function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
 }
 
 /** The root validated: the walk runs the user's schemas, whose getters may throw. */
-function validatedOf(project: Project): ValidatedContract | Tooling {
-  const { directory, packageName, root, rootExports, rootFile, packages } = project;
+function validatedOf(declaring: DeclaredRoot): ValidatedContract | Tooling {
+  const { directory, packageName, root, rootExports, rootFile, packages } = declaring;
   const rootPackage: RootPackage = {
     packageName: packageJsonNameOf(packageName),
     packages,
@@ -128,18 +154,4 @@ function generatorOf(generator: Generator, committed: unknown): string {
     return written;
   }
   return runningGeneratorOf();
-}
-
-/** The CLI running, by its package's name and version. */
-function runningGeneratorOf(): string {
-  const manifest: unknown = JSON.parse(
-    readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-  );
-  const name =
-    typeof manifest === 'object' && manifest !== null ? Reflect.get(manifest, 'name') : undefined;
-  const version =
-    typeof manifest === 'object' && manifest !== null
-      ? Reflect.get(manifest, 'version')
-      : undefined;
-  return `${String(name)}@${String(version)}`;
 }

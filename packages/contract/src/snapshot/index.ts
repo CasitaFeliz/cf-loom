@@ -43,4 +43,4 @@ export type {
   SnapshotFormat,
   SubscriptionSnapshot,
 } from './types.ts';
-export { snapshotFormats } from './types.ts';
+export { snapshotFormats, writtenSnapshotFormat } from './types.ts';

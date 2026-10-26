@@ -12,13 +12,11 @@ import { init } from './init.ts';
 import { openApiCommand } from './openapi.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
 import { publish } from './publish.ts';
+import { helpExitOf, usageError, versionExit } from './usage.ts';
 import { verify } from './verify.ts';
 
 /** The package folder of the CLI, where its sources or its build sit, so a throw names the file in it. */
 const packageRoot = join(import.meta.dirname, '..', '..');
-
-const usage =
-  'Usage: cf-loom init [service | application | definitions] | generate | verify | package [--out <dir>] | check [--json] [--against <version|dist-tag>] | broker-plan [--prefix <p>] [--json] | openapi | asyncapi [--prefix <p>] | publish [--force] [--prerelease]';
 
 /** How the CLI was called: the command and its arguments, and the options it was given. */
 export type Called = {
@@ -29,12 +27,9 @@ export type Called = {
   readonly output: Output;
   readonly force: boolean;
   readonly prerelease: boolean;
+  readonly help: boolean;
+  readonly version: boolean;
 };
-
-/** How the CLI is called wrongly: an unknown command, kind, option or argument, with the usage. */
-export function usageError(message: string): Exit {
-  return toolingError(`${message}. ${usage}`);
-}
 
 /** A throw, which is a bug of cf-loom, as the tooling error that says so, in the output the command prints. */
 export function crashedExitOf(thrown: unknown, output: Output): Exit {
@@ -51,9 +46,9 @@ export function crashedExitOf(thrown: unknown, output: Output): Exit {
 export async function runCommand(called: Called, run: Run): Promise<Exit> {
   const { positionals, out, force, prerelease } = called;
   const [command, ...rest] = positionals;
-  const misplaced = misplacedOptionIn(called, command);
-  if (misplaced !== undefined) {
-    return misplaced;
+  const answered = misplacedOptionIn(called, command) ?? askedAboutOf(called);
+  if (answered !== undefined) {
+    return answered;
   }
   switch (command) {
     case 'init':
@@ -81,6 +76,15 @@ export async function runCommand(called: Called, run: Run): Promise<Exit> {
     default:
       return usageError(`Unknown command: ${command ?? '(none)'}`);
   }
+}
+
+/** The answer to `--help`, `help` and `--version`, which come before any command runs. */
+function askedAboutOf({ help, version, positionals }: Called): Exit | undefined {
+  const [command, ...rest] = positionals;
+  if (help || command === 'help') {
+    return helpExitOf(command === 'help' ? rest : positionals);
+  }
+  return version ? versionExit() : undefined;
 }
 
 /** The usage error of an option given to a command that does not take it. */

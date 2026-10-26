@@ -2,14 +2,14 @@ import { contractExportsOf } from '../loading/index.ts';
 import {
   type BuiltProject,
   builtOf,
+  committedComparisonOf,
   isBuiltService,
-  isCommittedCurrent,
   type Run,
   snapshotFile,
 } from '../project/index.ts';
 import type { HandlerPath } from '../service-code/index.ts';
-import { comparedOf } from '../writing/index.ts';
-import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exit.ts';
+import { type Compared, comparedOf, type GeneratedFile } from '../writing/index.ts';
+import { checkFailed, crlfLineOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 import { noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts';
 import { pendingLineOf } from './placement.ts';
 import { type RecordRead, recordOf } from './record.ts';
@@ -61,12 +61,9 @@ async function verifyService(
   if (record.kind === 'tooling') {
     return toolingError(record.message);
   }
-  const outdated = compared.filter(({ compared: { kind } }) => kind === 'different');
   const failures = [
     ...snapshotLines,
-    ...outdated.map(
-      ({ file }) => `${file.path} was edited or is out of date: run cf-loom generate`,
-    ),
+    ...comparedFailuresOf(compared),
     ...stubsOf(service, exports.exportsOf, record.lacking).failureLines,
     ...regenerated.failureLines,
     ...unreachedLinesOf(service, exports.exports),
@@ -74,6 +71,25 @@ async function verifyService(
     ...recordFailuresOf(record),
   ];
   return verifiedExit(failures, [snapshotFile, ...regenerated.files.map(({ path }) => path)]);
+}
+
+/** The lines for the regenerated files that differ from what `generate` would write, or only by their line endings. */
+function comparedFailuresOf(
+  compared: readonly { readonly file: GeneratedFile; readonly compared: Compared }[],
+): readonly string[] {
+  return compared.flatMap(({ file, compared: result }) => comparedFailureLinesOf(file, result));
+}
+
+function comparedFailureLinesOf(file: GeneratedFile, compared: Compared): readonly string[] {
+  switch (compared.kind) {
+    case 'same':
+    case 'failed':
+      return [];
+    case 'different':
+      return [`${file.path} was edited or is out of date: run cf-loom generate`];
+    case 'crlf':
+      return [crlfLineOf(file.path)];
+  }
 }
 
 /** What the record leaves for `generate` to do or for the author to settle, as `verify` says it. */
@@ -115,8 +131,17 @@ function snapshotFailureOf(built: BuiltProject): string | undefined {
     case 'no-json':
       return `${snapshotFile} was edited: it is no JSON (${committed.reason})`;
     case 'json':
-      return isCommittedCurrent(built)
-        ? undefined
-        : `${snapshotFile} was edited or is out of date: run cf-loom generate`;
+      return jsonFailureOf(built);
+  }
+}
+
+function jsonFailureOf(built: BuiltProject): string | undefined {
+  switch (committedComparisonOf(built)) {
+    case 'same':
+      return undefined;
+    case 'crlf':
+      return crlfLineOf(snapshotFile);
+    case 'different':
+      return `${snapshotFile} was edited or is out of date: run cf-loom generate`;
   }
 }
