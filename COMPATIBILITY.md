@@ -182,7 +182,7 @@ Standard Rejections:
 
 ### Dependencies
 
-Adding or removing a Dependency is Neutral, and so is changing which Endpoints it selects or the version it is declared against, the version of the Provider's Contract Package installed: no Consumer relies on what a Service itself consumes.
+Adding or removing a Dependency is Neutral, and so is changing which Endpoints it lists or the version it is declared against, the version of the Provider's Contract Package installed: no Consumer relies on what a Service itself consumes.
 
 ### Subscriptions
 

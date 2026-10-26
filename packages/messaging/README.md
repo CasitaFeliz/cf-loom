@@ -199,7 +199,7 @@ await broker.settled();   // OrderCreated v1 and v2 published, ChargeCard v1 sen
 broker.messages;          // each with its subject, body, Fact id, Broker message id and Transport headers
 broker.messagesOf(orderCreatedV1);   // those of one Message Version, each body typed by it
 
-await broker.deliver(payments.events.paymentSettledV1, body, { factId: 'pay-1' });
+await broker.deliver(paymentSettledEventV1, body, { factId: 'pay-1' });
 // → 'acked' | 'pending' | 'ended' | 'handed-back'
 
 await running.close();
