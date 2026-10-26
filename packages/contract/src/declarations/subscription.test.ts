@@ -77,7 +77,7 @@ describe('defineSubscription', () => {
 
     expectTypeOf<
       Written['event']
-    >().toExtend<'A Subscription receives an Event; a Command is handled by its CommandHandler'>();
+    >().toExtend<"A Subscription receives an Event; a Command's Message Version has its own Message Handler">();
   });
 
   test('a Subscription to an Event keeps the Event’s exact type', () => {

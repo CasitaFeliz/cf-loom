@@ -59,7 +59,7 @@ describe('orders-service over the memory adapter', () => {
     expect(sent).toMatchObject([{ factId: `${orderId}:charge`, body: { orderId, total } }]);
   });
 
-  test('ChargeCard’s CommandHandler charges the order’s total', async () => {
+  test('ChargeCard’s Message Handler charges the order’s total', async () => {
     const orderId = await placeOrder();
 
     const charges = chargesOf(orderId);

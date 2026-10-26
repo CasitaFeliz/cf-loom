@@ -284,7 +284,7 @@ To retire it, mark it `lifecycle: 'retired'` and publish; this needs the Element
 At runtime:
 
 - A Deprecated Endpoint still works, and every HTTP response carries `Deprecation: @<unix seconds>` (RFC 9745), the instant its declaration states as `deprecatedAt`, which `serve` reads from the declaration (see [Endpoints](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#endpoints) in SNAPSHOT.md); the client tells it once per method (see [Deprecation](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#deprecation) in the client README). A Deprecated Message Version carries no header: none exists for it. Its Contract Package marks a Deprecated Endpoint or Message Version `@deprecated` on its key in `contract`, with its description, so a Consumer's editor flags each use.
-- A Deprecated Event is still published until it is Retired, so Subscribers that have not moved on keep receiving it. A Deprecated Command is not sent, but its CommandHandler keeps running to drain what is already queued.
+- A Deprecated Event is still published until it is Retired, so Subscribers that have not moved on keep receiving it. A Deprecated Command is not sent, but its Message Handler keeps running to drain what is already queued.
 - A Retired Endpoint that is still declared answers the `RETIRED` Fault; once deleted, its URLs route like any other request, and `NO_SUCH_ENDPOINT`, or `METHOD_NOT_ALLOWED` on a path another Endpoint declares, answers when nothing matches, never the not-found Rejection (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in ARCHITECTURE.md).
 - A Retired Message cannot be published or sent (a type error), and its Handler is not consumed.
 
@@ -427,7 +427,7 @@ export const notifyOnSettled = defineSubscription({
 });
 ```
 
-`name` is unique in the Service and names the Subscription's Durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one a listed Dependency's Provider exports, taken from its Contract Package, and not Retired; another fails `generate`, a Provider's Event that no listed Dependency gives naming the Provider, and a Retired one is also a type error. A Command in `event` is a type error too, and fails `generate`: a Command is handled by its CommandHandler. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's Durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one a listed Dependency's Provider exports, taken from its Contract Package, and not Retired; another fails `generate`, a Provider's Event that no listed Dependency gives naming the Provider, and a Retired one is also a type error. A Command in `event` is a type error too, and fails `generate`: a Command's Message Version has its own Message Handler. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 

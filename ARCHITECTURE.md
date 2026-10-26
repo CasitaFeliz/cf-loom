@@ -108,7 +108,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 ## Messages
 
-- Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [In memory](packages/messaging/README.md#in-memory) in the messaging README). A Command is handled by one CommandHandler, and every Handler must be safe to run again.
+- Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (the in-memory adapter is sequential: see [In memory](packages/messaging/README.md#in-memory) in the messaging README). A Command is handled by one Message Handler, and every Handler must be safe to run again.
 - Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract (see [Over the Broker](#over-the-broker)). A Group adds nothing to a Message: its subject, Stream and Durable consumer never name it.
@@ -117,7 +117,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 
 ## Dependencies
 
-- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which holds the Provider's Contract Package: a Dependency enables the typed client of the Endpoints it selects, and a Subscription to an Event its Provider exports enables the EventHandler Stub. Code cannot call what was not declared.
+- A Service or Application reaches a Provider only through a Dependency, declared with the tools, which holds the Provider's Contract Package: a Dependency enables the typed client of the Endpoints it selects, and a Subscription to an Event its Provider exports enables a Message Handler Stub. Code cannot call what was not declared.
 - A Service's Dependency targets only Public or Internal Elements; an Application's targets only Public Elements, since an Application runs outside the internal network.
 
 ## Wire protocol

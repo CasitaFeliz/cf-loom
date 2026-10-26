@@ -237,7 +237,7 @@ describe('memory(): what the Service publishes and sends', () => {
     expect(log).toEqual(['notify starts', 'notify ends', 'audit']);
   });
 
-  test('a sent Command reaches its CommandHandler', async () => {
+  test('a sent Command reaches its Message Handler', async () => {
     const { sender, broker, received } = await running();
 
     await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-27' });

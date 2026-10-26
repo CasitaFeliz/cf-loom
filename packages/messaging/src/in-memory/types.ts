@@ -25,7 +25,7 @@ export type MemoryBroker = Broker & {
   ) => readonly RecordedMessage<M>[];
   /**
    * Delivers one new Message as attempt 1: an Event reaches every Subscription to it, a Command its
-   * CommandHandler; resolves to the most severe settlement. Its body is typed as its Message
+   * Message Handler; resolves to the most severe settlement. Its body is typed as its Message
    * Version's writer writes it and is written back through each consumer's Reader. A Handler that
    * awaits it never settles.
    */

@@ -16,9 +16,9 @@ export type Layout = {
   readonly endpoint?: `src/${string}.handler.ts`;
   /** A GuardHandler's path from `{name}`; `src/guards/{name}.handler.ts` by default. */
   readonly guard?: `src/${string}.handler.ts`;
-  /** A CommandHandler's path from `{group}`, `{name}` and `{version}`; `src/commands/{group}/{name}.v{version}.handler.ts` by default. */
+  /** A Command's Message Handler's path from `{group}`, `{name}` and `{version}`; `src/commands/{group}/{name}.v{version}.handler.ts` by default. */
   readonly command?: `src/${string}.handler.ts`;
-  /** An EventHandler's path from `{group}` and `{name}`, the Subscription's; `src/subscriptions/{group}/{name}.handler.ts` by default. */
+  /** A Subscription's Message Handler's path from `{group}` and `{name}`, the Subscription's; `src/subscriptions/{group}/{name}.handler.ts` by default. */
   readonly subscription?: `src/${string}.handler.ts`;
   /** The Handler map's file; `src/handlers.generated.ts` by default. */
   readonly handlerMap?: `src/${string}.generated.ts`;

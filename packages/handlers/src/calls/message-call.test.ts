@@ -117,7 +117,7 @@ describe("a Message Handler's Resources", () => {
   type Notifications = { readonly send: (orderId: string) => void };
   type NotificationsTaken = { readonly notifications: Notifications };
 
-  test("a CommandHandler's and an EventHandler's implementation receive the Resources their direct call is given", async () => {
+  test("a Message Handler's implementation receives the Resources its direct call is given", async () => {
     const resources = { notifications: { send: () => undefined } };
     const received: unknown[] = [];
     const chargeCardHandler = handle(
@@ -323,7 +323,7 @@ describe("a Message Handler's meta, left out", () => {
     return { received, notifyOnPaidHandler };
   }
 
-  test('a direct EventHandler call with no meta gives attempt 1, not the last, and no headers', async () => {
+  test("a direct call of a Subscription's Message Handler with no meta gives attempt 1, not the last, and no headers", async () => {
     const { received, notifyOnPaidHandler } = receivingEvents();
 
     await notifyOnPaidHandler(body);
@@ -350,7 +350,7 @@ describe("a Message Handler's meta, left out", () => {
     expect(first?.factId).not.toBe(second?.factId);
   });
 
-  test("a direct CommandHandler call's derived broker message id names its Command's Message Version", async () => {
+  test("a direct call of a Command's Message Handler derives a broker message id that names its Message Version", async () => {
     const { received, chargeCardHandler } = receiving();
 
     await chargeCardHandler(body, { factId: 'f-1' });
@@ -467,7 +467,7 @@ describe("what a Message Handler's direct call answers", () => {
     );
   });
 
-  test('an EventHandler that returns something other than a Fault throws a TypeError naming no Fault', async () => {
+  test("a Subscription's Message Handler that returns something other than a Fault throws a TypeError naming no Fault", async () => {
     const notifyOnSettledHandler = handle(notifyOnSettledReader, () => success() as never);
 
     const call = notifyOnSettledHandler(body, meta);

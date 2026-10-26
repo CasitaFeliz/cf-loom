@@ -3033,7 +3033,7 @@ async function aChangedProjectListing(
   return { project, served };
 }
 
-/** Deletes the Endpoint and Command Handlers `generate` wrote, as a developer deletes those of the Elements a change retires. */
+/** Deletes the EndpointHandlers and the Message Handlers of Commands `generate` wrote, as a developer deletes those of the Elements a change retires. */
 function withoutRetiredHandlers(project: string): void {
   for (const folder of ['endpoints', 'commands']) {
     rmSync(join(project, 'src', folder), { recursive: true, force: true });
