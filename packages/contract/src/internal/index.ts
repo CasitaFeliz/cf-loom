@@ -198,7 +198,6 @@ export {
   hashPartsOf,
   isHashFormat,
   isJsonValue,
-  pathTailOf,
   reachedDefsOf,
   siteTextOf,
   snapshotPathOf,

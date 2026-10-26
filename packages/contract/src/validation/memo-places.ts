@@ -1,9 +1,9 @@
 import {
   byCodePoint,
+  locationBelowOf,
   type Memo,
   movedFrom,
   type Place,
-  pathTailOf,
   type Site,
   siteLocationOf,
   siteTextOf,
@@ -26,7 +26,8 @@ type HeldReach = { readonly memo: Memo; readonly reach: Memo['reaches'][number] 
  * The places of the memos of one walk, settled together once it is over: a first place is known
  * only after the whole walk, since a later Endpoint can reach a def at a smaller place, so the
  * walker cannot hand each memo its place as it closes. The memos given and every memo they are
- * reached inside settle, and a memo's sites are those of every reach it is reached inside.
+ * reached inside settle, and a memo's sites are its own and those of every memo it is reached
+ * inside.
  */
 export function memoPlacesOf(memos: Iterable<Memo>): ReadonlyMap<Memo, MemoPlace> {
   const wanted = new Set(memos);
@@ -97,7 +98,11 @@ function frontierOf(memos: ReadonlySet<Memo>) {
     offerInside: (outer: PlacedReach, held: readonly HeldReach[]) => {
       for (const { memo, reach } of held.filter((entry) => !settled.has(entry.memo))) {
         const below = reach.at.steps.slice(outer.memo.at.steps.length);
-        offer(memo, movedFrom(reach.at, outer.memo.at, outer.at), extendedTextOf(outer, below));
+        offer(
+          memo,
+          movedFrom(reach.at, outer.memo.at, outer.at),
+          locationBelowOf(outer.text, outer.at, below),
+        );
       }
     },
   };
@@ -133,16 +138,6 @@ function heldInsideOf(memos: ReadonlySet<Memo>): ReadonlyMap<Memo, readonly Held
     }
   }
   return inside;
-}
-
-/** The text of a place below a placed reach: that reach's text continued by the steps below it. */
-function extendedTextOf(outer: PlacedReach, below: Place['steps']): string {
-  if (below.length === 0) {
-    return outer.text;
-  }
-  return outer.at.steps.length === 0
-    ? siteLocationOf(outer.at.site, below)
-    : outer.text + pathTailOf(below);
 }
 
 /**

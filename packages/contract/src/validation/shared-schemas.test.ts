@@ -973,6 +973,36 @@ describe('failure lines: many dated defs that one def holds, reached from many f
   });
 });
 
+describe('failure lines: a def held by a def of a Definitions Package, exported', () => {
+  test.for([
+    ['outer-x written first', ['outer-x', 'outer']],
+    ['outer written first', ['outer', 'outer-x']],
+  ] as const)('a date in the held def is told at the holding def, with %s', ([, order]) => {
+    const inner: z.ZodType = z
+      .object({
+        at: z.date(),
+        get kids() {
+          return z.array(inner);
+        },
+      })
+      .meta({ id: 'inner' });
+    const outer: z.ZodType = z
+      .object({
+        i: inner,
+        get more() {
+          return z.array(outer);
+        },
+      })
+      .meta({ id: 'outer' });
+    const exported = { 'outer-x': z.object({ i: inner }), outer };
+    const rootExports = Object.fromEntries(order.map((name) => [name, exported[name]]));
+
+    const lines = linesOf(defineDefinitions({}), { rootExports });
+
+    expect(lines).toEqual([`exports.outer i.at ${date} (also in exports.outer-x)`]);
+  });
+});
+
 /** A graph of defs: the edges each holds, the fields of the body, and the defs holding a date. */
 type DefGraph = {
   readonly edges: readonly (readonly (readonly [string, number])[])[];

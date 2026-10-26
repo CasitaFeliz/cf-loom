@@ -1,4 +1,4 @@
-import { authorPathOf, fieldStep, type Step, tokenOf } from './steps.ts';
+import { authorPathOf, fieldStep, pathTailOf, type Step, tokenOf } from './steps.ts';
 
 /** An Endpoint by identity, with its name. */
 type EndpointSite = { readonly kind: 'endpoint'; readonly identity: string; readonly name: string };
@@ -72,6 +72,14 @@ export function siteTextOf(site: Site): string {
 export function siteLocationOf(site: Site, steps: readonly Step[]): string {
   const path = authorPathOf(steps);
   return path === null ? siteTextOf(site) : `${siteTextOf(site)} ${path}`;
+}
+
+/** The text `siteLocationOf` gives a place `below` steps under another, from the text of that place. */
+export function locationBelowOf(text: string, place: Place, below: readonly Step[]): string {
+  if (below.length === 0) {
+    return text;
+  }
+  return place.steps.length === 0 ? siteLocationOf(place.site, below) : text + pathTailOf(below);
 }
 
 /**

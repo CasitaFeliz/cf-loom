@@ -1,13 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { seededNext } from '../../test/random-schemas.ts';
-import {
-  authorPathOf,
-  pathTailOf,
-  type Site,
-  type Step,
-  siteTextOf,
-  tokenOf,
-} from '../internal/index.ts';
+import { authorPathOf, type Site, type Step, siteTextOf, tokenOf } from '../internal/index.ts';
 
 const field = (name: string): Step => ({ kind: 'field', name });
 const part = (name: 'success' | 'body'): Step => ({ kind: 'part', name });
@@ -63,40 +55,5 @@ describe('authorPathOf', () => {
 
   test('a text on a line is itself when it is plain and JSON otherwise', () => {
     expect([tokenOf('getOrder'), tokenOf('two words')]).toEqual(['getOrder', '"two words"']);
-  });
-});
-
-describe('pathTailOf', () => {
-  test('steps that continue a path are written as authorPathOf writes them after a first step (seed 314)', () => {
-    const next = seededNext(314);
-    const pick = <Item>(items: readonly Item[]): Item =>
-      items[Math.floor(next() * items.length)] as Item;
-    const stepOf = (): Step =>
-      pick<Step>([
-        part('success'),
-        part('body'),
-        field('lines'),
-        field('Retry After'),
-        { kind: 'index', index: Math.floor(next() * 4) },
-        { kind: 'option', index: Math.floor(next() * 4) },
-        { kind: 'items' },
-        { kind: 'rest' },
-        { kind: 'key' },
-        { kind: 'value' },
-        { kind: 'variant', discriminator: pick(['type', 'a b']), value: '"a"' },
-      ]);
-    const stepsOf = (length: number) => Array.from({ length }, stepOf);
-    const disagreements: string[] = [];
-
-    for (let draw = 0; draw < 2000; draw++) {
-      const head = stepsOf(1 + Math.floor(next() * 3));
-      const tail = stepsOf(Math.floor(next() * 4));
-      const whole = authorPathOf([...head, ...tail]);
-      if (whole !== `${authorPathOf(head)}${pathTailOf(tail)}`) {
-        disagreements.push(JSON.stringify({ head, tail }));
-      }
-    }
-
-    expect(disagreements).toEqual([]);
   });
 });

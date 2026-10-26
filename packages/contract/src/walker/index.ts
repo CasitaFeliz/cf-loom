@@ -24,6 +24,7 @@ export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
   inside,
+  locationBelowOf,
   movedFrom,
   placeNameOf,
   placeOf,
@@ -59,7 +60,6 @@ export {
   keyStep,
   optionStep,
   partsOf,
-  pathTailOf,
   restStep,
   snapshotPathOf,
   tokenOf,
