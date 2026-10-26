@@ -1,7 +1,7 @@
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { PackageFile } from '../contract-package/index.ts';
-import { oneLineOf } from '../loading/index.ts';
+import { type InstalledPackage, oneLineOf } from '../loading/index.ts';
 import { writeAll } from './package-target.ts';
 
 /** Where a package is staged to be built and published, in the project's `node_modules`, so its peers resolve. */
@@ -11,7 +11,7 @@ const stagingParent = 'node_modules/.cache/cf-loom';
 export type CopiedFile = { readonly from: string; readonly path: string };
 
 /** What a package is staged from: the files written, and the files of the project copied as they are. */
-export type StagedContent = {
+type StagedContent = {
   readonly files: readonly PackageFile[];
   readonly copied: readonly CopiedFile[];
 };
@@ -22,12 +22,7 @@ export type StagedContent = {
  * a `node_modules`, so Node finds it as it finds an installed package.
  */
 export type Staged =
-  | {
-      readonly kind: 'staged';
-      readonly staging: string;
-      readonly folder: string;
-      readonly packageName: string;
-    }
+  | ({ readonly kind: 'staged' } & InstalledPackage)
   | { readonly kind: 'failed'; readonly message: string; readonly left: readonly string[] };
 
 /**

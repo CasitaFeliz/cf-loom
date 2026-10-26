@@ -47,15 +47,11 @@ export type PublishedPackage = {
   readonly left: readonly string[];
 };
 
-/** Who builds a staged package: cf-loom, with the project's `tsc`, or its author before `publish`, which checks it. */
-type BuildMode = 'with-tsc' | 'by-author';
-
 /** The files a package is staged from: those written, and those of the project copied as they are. */
 type StagedFiles = {
   readonly kind: 'files';
   readonly files: readonly PackageFile[];
   readonly copied: readonly CopiedFile[];
-  readonly build: BuildMode;
 };
 
 /** What a Definitions Package is published as: its Snapshot as published with its text, and the peer ranges it declares. */
@@ -65,7 +61,7 @@ type DefinitionsToStage = {
   readonly peerRanges: PeerRanges;
 };
 
-/** What turns a staged folder into the package to publish, with what it needs: `tsc` on a Contract Package, the import of a Definitions Package's entry. */
+/** What turns a staged folder into the package to publish, with what it needs: cf-loom's `tsc` on a Contract Package, a check of the entry its author built on a Definitions Package. */
 type Build =
   | { readonly kind: 'with-tsc'; readonly building: Building }
   | { readonly kind: 'by-author'; readonly entry: EntryToCheck };
@@ -100,7 +96,7 @@ export async function publishedPackageOf(
   let put: PublishedPackage['put'];
   let left: readonly string[];
   try {
-    put = await builtAndPublished(npm, stagedPackageOf(staged, files.build, toPublish));
+    put = await builtAndPublished(npm, stagedPackageOf(staged, toPublish));
   } finally {
     left = removeStaged(staged.staging, project.directory);
   }
@@ -109,30 +105,23 @@ export async function publishedPackageOf(
 
 function stagedPackageOf(
   staged: InstalledPackage,
-  mode: BuildMode,
   { project, declared, published, tag, highest }: ToPublish,
 ): StagedPackage {
   const { packageName, folder } = staged;
   const { version } = published;
-  const rootPath = join(project.directory, project.rootFile);
-  const building = { folder, rootPath, spec: `${packageName}@${version}` };
-  const build = buildOf(mode, { building, entry: { project, staged, declared } });
-  return {
-    build,
-    publishing: { folder, packageName, version, tag },
-    listing: { packageName, highest },
-  };
-}
-
-function buildOf(
-  mode: BuildMode,
-  { building, entry }: { readonly building: Building; readonly entry: EntryToCheck },
-): Build {
-  switch (mode) {
-    case 'with-tsc':
-      return { kind: 'with-tsc', building };
-    case 'by-author':
-      return { kind: 'by-author', entry };
+  const publishing = { folder, packageName, version, tag };
+  const listing = { packageName, highest };
+  switch (published.kind) {
+    case 'service':
+    case 'application': {
+      const rootPath = join(project.directory, project.rootFile);
+      const building = { folder, rootPath, spec: `${packageName}@${version}` };
+      return { build: { kind: 'with-tsc', building }, publishing, listing };
+    }
+    case 'definitions': {
+      const entry = { project, staged, declared };
+      return { build: { kind: 'by-author', entry }, publishing, listing };
+    }
   }
 }
 
@@ -167,7 +156,7 @@ async function stagedFilesOf(
     case 'application': {
       const packaging = { name, version: published.version, peerRanges };
       const files = contractPackageFilesOf({ snapshot: published, text }, packaging);
-      return { kind: 'files', files, copied: [], build: 'with-tsc' };
+      return { kind: 'files', files, copied: [] };
     }
     case 'definitions':
       return await definitionsFilesOf(npm, project, { published, text, peerRanges });
@@ -190,5 +179,5 @@ async function definitionsFilesOf(
   }
   const copied = packed.paths.map((path) => ({ from: join(directory, path), path }));
   const files = [manifest.file, { path: packagePaths.snapshot, text }];
-  return { kind: 'files', files, copied, build: 'by-author' };
+  return { kind: 'files', files, copied };
 }

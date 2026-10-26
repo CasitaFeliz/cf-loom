@@ -4858,8 +4858,20 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       { source: aDefinitionsModule([anApiKey]), built: aDefinitionsModule() },
     ],
     [
+      'lacks a schema added to src',
+      { source: aDefinitionsModule([aMoney]), built: aDefinitionsModule() },
+    ],
+    [
+      'still exports a Guard removed from src',
+      { source: aDefinitionsModule(), built: aDefinitionsModule([anApiKey]) },
+    ],
+    [
       'still exports a Rejection removed from src',
       { source: aDefinitionsModule(), built: aDefinitionsModule([aGone]) },
+    ],
+    [
+      'lacks a Rejection added to src',
+      { source: aDefinitionsModule([aGone]), built: aDefinitionsModule() },
     ],
     [
       'declares a Guard that breaks a rule of the Contract',
