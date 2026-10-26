@@ -9,7 +9,7 @@ import type {
 import { answeredDifferencesOf } from './codes.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
-import { guardNeutralOf } from './neutral.ts';
+import { guardNeutralOf, guardSourcesOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
 import { partsOf } from './steps.ts';
 import { inputHeaderDifferencesOf, textPartDifferencesOf } from './text-parts.ts';
@@ -63,9 +63,9 @@ function keptDifferencesOf(
 }
 
 /**
- * A Service's Guards by name in code point order, only what no rule compares, which is Neutral: its
- * demands and Rejections are judged on the Endpoints that attach it. A Guard's site takes the widest
- * Visibility of the Endpoints that attach it, Private when none does.
+ * A Service's Guards by name in code point order, each Neutral: what it demands and answers, whose
+ * effect the Endpoints that attach it report, and what no rule compares. A Guard's site takes the
+ * widest Visibility of the Endpoints that attach it, Private when none does.
  */
 export function serviceGuardDifferencesOf(
   baseline: PublishedServiceSnapshot,
@@ -80,10 +80,17 @@ export function serviceGuardDifferencesOf(
         name: guard.key,
         visibility: visibilities.get(guard.key) ?? 'private',
       },
-      differences:
-        guard.kind === 'kept' ? guardNeutralOf(guard.baseline, guard.proposed, defs) : [],
+      differences: guard.kind === 'kept' ? keptServiceDifferencesOf(guard, defs) : [],
     }),
   );
+}
+
+/** A Service's kept Guard: what it demands and answers, then what no rule compares. */
+function keptServiceDifferencesOf(
+  { baseline, proposed }: Extract<Counterpart<GuardSnapshot>, { readonly kind: 'kept' }>,
+  defs: BothDefs,
+): readonly Difference[] {
+  return [...guardSourcesOf(baseline, proposed, defs), ...guardNeutralOf(baseline, proposed, defs)];
 }
 
 function attachedGuardsOf(endpoint: EndpointSnapshot): readonly string[] {

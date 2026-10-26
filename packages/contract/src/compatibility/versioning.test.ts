@@ -132,8 +132,13 @@ function anEndpointOf(
     description: 'An Endpoint',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -143,7 +148,12 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
   const getOrder = anEndpointOf(visibility, {
     name: 'getOrder',
     params: ['id'],
-    input: { params: idParams, query: null, headers: null, body: null },
+    input: {
+      params: idParams,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
   });
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
@@ -170,7 +180,7 @@ function aGuard(): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
   };

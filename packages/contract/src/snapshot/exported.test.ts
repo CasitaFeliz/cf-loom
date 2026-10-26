@@ -95,12 +95,16 @@ describe('textPartNodesOf', () => {
     expect(Object.keys(nodes['input.headers']?.fields ?? {})).toEqual(['x-api-key']);
   });
 
-  test('a part the Endpoint takes nothing in has no node', () => {
-    const entry = { ...entryOf(), input: { params: null, query: null, headers: null, body: null } };
+  test('the parts the Endpoint takes nothing in are nodes with no field, except its params', () => {
+    const noFields = { type: 'object', fields: {} } as const;
+    const entry = {
+      ...entryOf(),
+      input: { params: null, query: noFields, headers: noFields, body: null },
+    };
 
     const nodes = textPartNodesOf(entry);
 
-    expect(nodes).toEqual({});
+    expect(nodes).toEqual({ 'input.query': noFields, 'input.headers': noFields });
   });
 });
 

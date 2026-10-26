@@ -66,7 +66,7 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -121,6 +121,7 @@ function placeOf(site: ChangeSite): string {
     case 'export':
     case 'subscription':
     case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -142,6 +143,11 @@ function inputField(at: readonly Step[], isRequired: boolean): Difference {
   return { kind: 'schema', position: 'input', at, shape };
 }
 
+const standardSite: ChangeSite = {
+  kind: 'standard-rejection',
+  name: 'notFound',
+  visibility: 'public',
+};
 const guardSite: ChangeSite = { kind: 'guard', name: 'authenticated', visibility: 'public' };
 
 function codeSite(code: string): ChangeSite {
@@ -180,7 +186,10 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   test('a required demand added to a Guard is Breaking and needs an Approval', () => {
     const query = anOpenObject({ token: required(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+    );
 
     expect(changes).toEqual([breaking(guardSite, inputField(demandAt('query', 'token'), true))]);
   });
@@ -188,7 +197,10 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   test('an optional query demand added is Additive', () => {
     const query = anOpenObject({ token: optional(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+    );
 
     expect(changes).toEqual([additive(guardSite, inputField(demandAt('query', 'token'), false))]);
   });
@@ -197,7 +209,10 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
     const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional({ type: 'string', format: 'uuid' }) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: traced, query: { type: 'object', fields: {} } } }),
+    );
 
     expect(changes).toEqual([breaking(guardSite, { kind: 'header-refuses-text', at })]);
   });
@@ -206,7 +221,10 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
     const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: traced, query: { type: 'object', fields: {} } } }),
+    );
 
     expect(changes).toEqual([additive(guardSite, inputField(at, false))]);
   });
@@ -214,7 +232,10 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   test('removing a demand is Additive', () => {
     const query = anOpenObject({ token: required(aString) });
 
-    const changes = guardChangesOf(aGuard({ demands: { headers: null, query } }), aGuard());
+    const changes = guardChangesOf(
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+      aGuard(),
+    );
 
     expect(changes).toEqual([
       additive(guardSite, {
@@ -311,7 +332,10 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([additive(codeSite(orderGone), { kind: 'added' })]);
+    expect(changes).toEqual([
+      additive(codeSite(orderGone), { kind: 'added' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
+    ]);
   });
 
   test('a code’s status changed is Breaking on a Public code site', () => {
@@ -365,6 +389,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       additive(codeSite(orderGone), { kind: 'added' }),
       breaking(codeSite(orderGone), { kind: 'status-changed', from: 409, to: 404 }),
       neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
     ]);
   });
 
@@ -384,6 +409,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
     expect(changes).toEqual([
       neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
     ]);
   });
 

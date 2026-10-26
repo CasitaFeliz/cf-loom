@@ -97,6 +97,31 @@ export function guardNeutralOf(
   return [...differences, ...originDifferencesOf(baseline, proposed)];
 }
 
+/**
+ * What a Service's Guard itself demands and answers, whose effect the Endpoints that attach it
+ * report: told when it differs, since an Endpoint that declares the same field or Rejection hides
+ * it. Each is Neutral.
+ */
+export function guardSourcesOf(
+  baseline: GuardSnapshot,
+  proposed: GuardSnapshot,
+  defs: BothDefs,
+): readonly Difference[] {
+  const differences: Difference[] = [];
+  if (demandsKeyOf(baseline, defs.baseline) !== demandsKeyOf(proposed, defs.proposed)) {
+    differences.push({ kind: 'demands-changed' });
+  }
+  if (differ(baseline.rejections, proposed.rejections)) {
+    differences.push({ kind: 'rejections-changed' });
+  }
+  return differences;
+}
+
+/** A Guard's demands as text with the defs they reach, so a change in a def shows in them. */
+function demandsKeyOf({ demands }: GuardSnapshot, defs: Defs): string {
+  return canonicalJson([demands, reachedKeyOf([demands.headers, demands.query], defs)]);
+}
+
 /** A kept code's Neutral differences: its message, then its origin. */
 export function codeNeutralOf(
   baseline: CodeSnapshot,

@@ -39,6 +39,7 @@ const heading = {
   dependencies: {},
 } as const;
 const anObject: SchemaNode = { type: 'object', fields: {} };
+const noFields = { type: 'object', fields: {} } as const;
 
 function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
   return {
@@ -54,11 +55,11 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
         type: 'object',
         fields: { orderId: { required: true, schema: { type: 'string' } } },
       },
-      query: null,
-      headers: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
       body: null,
     },
-    success: { status: 200, headers: null, body: null },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -91,7 +92,7 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -362,7 +363,7 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
     expect(changes).toEqual([neutral(guardSite('private'), description)]);
   });
 
-  test('a Guard whose demands or Rejections changed is reported at its Endpoints only, once', () => {
+  test('a Guard whose demands and Rejections changed is reported at its Endpoints, and beside them on the Guard', () => {
     const from = attaching('public');
     const to = {
       ...attaching('public'),
@@ -381,7 +382,7 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
           type: 'object',
           fields: { authorization: { required: true, schema: { type: 'string' } } },
         },
-        query: null,
+        query: { type: 'object', fields: {} },
       },
       rejections: ['UNAUTHENTICATED'],
     });
@@ -396,7 +397,61 @@ describe('compatibilityReportOf, a Service’s Guard', () => {
 
     const { changes } = compatibilityReportOf(baseline, proposed);
 
-    expect(changes.map(({ site }) => site.kind)).toEqual(['endpoint', 'endpoint']);
+    expect(changes.map(({ site, difference }) => [site.kind, difference.kind])).toEqual([
+      ['endpoint', 'schema'],
+      ['endpoint', 'rejection-added'],
+      ['guard', 'demands-changed'],
+      ['guard', 'rejections-changed'],
+    ]);
+  });
+
+  test('a Guard relaxing a demand the Endpoint declares too is told on the Guard, since the Endpoint’s Input did not change', () => {
+    const own = { authorization: { required: true, schema: { type: 'string' } } } as const;
+    const endpoint = anEndpoint({
+      guards: [{ guard: 'authenticated', qualifier: null }],
+      input: { ...anEndpoint().input, headers: { type: 'object', fields: own } },
+    });
+    const demanding = (required: boolean) =>
+      aGuard({
+        demands: {
+          headers: {
+            type: 'object',
+            fields: { authorization: { required, schema: { type: 'string' } } },
+          },
+          query: { type: 'object', fields: {} },
+        },
+      });
+    const baseline = aBaseline({
+      endpoints: { [identity]: endpoint },
+      guards: { authenticated: demanding(true) },
+    });
+    const proposed = aProposed({
+      endpoints: { [identity]: endpoint },
+      guards: { authenticated: demanding(false) },
+    });
+
+    const { changes } = compatibilityReportOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite('public'), { kind: 'demands-changed' })]);
+  });
+
+  test('a Guard dropping a Rejection the Endpoint lists too is told on the Guard', () => {
+    const endpoint = anEndpoint({
+      guards: [{ guard: 'authenticated', qualifier: null }],
+      rejections: ['UNAUTHENTICATED'],
+    });
+    const baseline = aBaseline({
+      endpoints: { [identity]: endpoint },
+      guards: { authenticated: aGuard({ rejections: ['UNAUTHENTICATED'] }) },
+    });
+    const proposed = aProposed({
+      endpoints: { [identity]: endpoint },
+      guards: { authenticated: aGuard() },
+    });
+
+    const { changes } = compatibilityReportOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite('public'), { kind: 'rejections-changed' })]);
   });
 });
 
@@ -494,7 +549,10 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
   test.each([
     { name: 'description', fields: { description: 'Reworded' } },
     { name: 'Group', fields: { group: 'archive' } },
-    { name: 'Success status', fields: { success: { status: 201, headers: null, body: null } } },
+    {
+      name: 'Success status',
+      fields: { success: { status: 201, headers: { type: 'object', fields: {} }, body: null } },
+    },
     { name: 'Visibility', fields: { visibility: 'private' } },
   ] as const)(
     'a Retired Endpoint whose $name changed gives one Neutral retired-changed',
@@ -534,7 +592,7 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
 
   test('a def only a Retired Endpoint reaches, changed, gives one retired-changed', () => {
     const body = { type: 'ref', name: 'tree' } as const;
-    const success = { status: 200, headers: null, body };
+    const success = { status: 200, headers: noFields, body };
     const tree = (description: string): SchemaNode => ({ type: 'object', fields: {}, description });
     const baseline = aBaseline({
       endpoints: { [identity]: retired({ success }) },

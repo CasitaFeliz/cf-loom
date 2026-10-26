@@ -18,10 +18,18 @@ export function inputOf(
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
     params: nodeOf(endpoint, 'input.params') ?? null,
-    query: mergedOf([own('input.query'), ...demanded('demands.query')]) ?? null,
-    headers: headers ?? null,
+    query: textPartOf(mergedOf([own('input.query'), ...demanded('demands.query')])),
+    headers: textPartOf(headers),
     body: nodeOf(endpoint, 'input.body') ?? null,
   };
+}
+
+/**
+ * A text part as the Snapshot writes it: an open object, with no field when none is declared, so
+ * a part declared empty and one not declared are the same Snapshot.
+ */
+export function textPartOf(part: ObjectNode | undefined): ObjectNode {
+  return part ?? { type: 'object', fields: {} };
 }
 
 /**

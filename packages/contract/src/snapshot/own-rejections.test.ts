@@ -62,7 +62,7 @@ function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'A Guard',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,

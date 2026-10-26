@@ -35,7 +35,13 @@ export type ChangeSite =
       readonly kind: 'subscription' | 'dependency' | 'export' | 'guard';
       readonly name: string;
       readonly visibility: Visibility;
-    };
+    }
+  /**
+   * A Standard Rejection by name, whose resolved code the Snapshot records; its Visibility is the
+   * widest of the Endpoints that list either code, or Private when none does, or Public in a
+   * Definitions Package.
+   */
+  | { readonly kind: 'standard-rejection'; readonly name: string; readonly visibility: Visibility };
 
 /**
  * Where a shape is read, which decides what makes a change to it Breaking: Input, Success (a
@@ -149,7 +155,13 @@ export type Difference =
       readonly to: string;
     }
   /** What an Element Retired in the proposed Snapshot still declares changed; nothing reads it. */
-  | { readonly kind: 'retired-changed' };
+  | { readonly kind: 'retired-changed' }
+  /** A Standard Rejection resolves to another code; the Endpoints that list it report the codes. */
+  | { readonly kind: 'code-changed'; readonly from: string; readonly to: string }
+  /** What a Service's Guard demands changed; its effect is judged on the Endpoints that attach it. */
+  | { readonly kind: 'demands-changed' }
+  /** The codes a Service's Guard answers changed; its effect is judged on the Endpoints that attach it. */
+  | { readonly kind: 'rejections-changed' };
 
 /** A site with what differs at it, before each difference is classified. */
 export type SiteDifferences = {

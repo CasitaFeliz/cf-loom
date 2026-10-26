@@ -19,11 +19,17 @@ export function annotationFindingsOf({ baseline, proposed }: NodePair): readonly
   return changed.map((annotation) => found({ kind: 'annotation-changed', annotation }));
 }
 
-/** The name of the def, when both nodes are `ref`s to defs of different names: none is part of a shape. */
+/**
+ * The def's name a use carries, when it differs: another def's, or none where the shape is now
+ * written inline, or one where it was. The name is an annotation (`.meta({ id })`), never a shape.
+ */
 export function renamedFindingsOf({ baseline, proposed }: NodePair): readonly Finding[] {
-  const isRenamed =
-    baseline.type === 'ref' && proposed.type === 'ref' && baseline.name !== proposed.name;
+  const isRenamed = defNameOf(baseline) !== defNameOf(proposed);
   return isRenamed ? [found({ kind: 'annotation-changed', annotation: 'id' })] : [];
+}
+
+function defNameOf(node: SchemaNode): string | undefined {
+  return node.type === 'ref' ? node.name : undefined;
 }
 
 /**

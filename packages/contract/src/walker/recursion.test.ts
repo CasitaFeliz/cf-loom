@@ -111,6 +111,24 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  test('a def whose id sits on its .nullable() is written plain, and every ref to it is nullable', () => {
+    const onDef: z.ZodType = z
+      .object({ label: z.string(), next: z.lazy(() => onDef) })
+      .nullable()
+      .meta({ id: 'tree' });
+    const node: z.ZodType = z
+      .object({ label: z.string(), next: z.lazy(() => node).nullable() })
+      .meta({ id: 'tree' });
+    const onUses = node.nullable();
+
+    const writtenOnDef = walkBody(z.object({ root: onDef }));
+    const writtenOnUses = walkBody(z.object({ root: onUses }));
+
+    expect(writtenOnDef).toEqual(writtenOnUses);
+    expect(writtenOnDef.defs['tree']?.nullable).toBeUndefined();
+    expect(JSON.stringify(writtenOnDef)).toContain('"type":"ref","name":"tree","nullable":true');
+  });
+
   describe('a cycle through z.lazy(), unions and intersections alone', () => {
     const nodelessCycle = {
       construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',

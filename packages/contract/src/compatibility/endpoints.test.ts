@@ -66,15 +66,15 @@ function theParams(...fields: readonly (readonly [string, SchemaNode])[]): Objec
 function anInput(fields: Partial<Input> = {}): Input {
   return {
     params: theParams(['orderId', aString]),
-    query: null,
-    headers: null,
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
     body: null,
     ...fields,
   };
 }
 
 function aSuccess(fields: Partial<Success> = {}): Success {
-  return { status: 200, headers: null, body: null, ...fields };
+  return { status: 200, headers: { type: 'object', fields: {} }, body: null, ...fields };
 }
 
 function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
@@ -99,7 +99,7 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -408,7 +408,10 @@ describe('compatibilityReportOf, query', () => {
       input: anInput({ query: anOpenObject({ token: required(aString) }) }),
     });
     const demanding = aGuard({
-      demands: { headers: null, query: anOpenObject({ token: required(aString) }) },
+      demands: {
+        headers: { type: 'object', fields: {} },
+        query: anOpenObject({ token: required(aString) }),
+      },
     });
 
     const report = reportOf(
@@ -486,7 +489,10 @@ describe('compatibilityReportOf, Input headers', () => {
       input: anInput({ headers: anOpenObject({ 'x-trace': optional(closedEnum) }) }),
     });
     const demanding = aGuard({
-      demands: { query: null, headers: anOpenObject({ 'x-trace': optional(closedEnum) }) },
+      demands: {
+        query: { type: 'object', fields: {} },
+        headers: anOpenObject({ 'x-trace': optional(closedEnum) }),
+      },
     });
 
     const report = reportOf(

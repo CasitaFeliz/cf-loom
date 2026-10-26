@@ -72,8 +72,13 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -148,6 +153,7 @@ function placeOf(site: ChangeSite): string {
     case 'export':
     case 'subscription':
     case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -508,7 +514,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     expect(changes).toEqual([breaking(codeSite(notFound, 'public'), statusChanged(404, 410))]);
   });
 
-  test('a Standard Rejection resolving to another code removes one code and adds another on every Endpoint, both Additive, with no code Change', () => {
+  test('a Standard Rejection resolving to another code removes one code and adds another on every Endpoint, both Additive, beside one Neutral code-changed', () => {
     const baseline = aBaseline({
       ...publishedAnswering(notFound),
       codes: { [notFound]: aCode({ origin: 'standard', status: 404 }) },
@@ -524,6 +530,10 @@ describe('compatibilityReportOf, Standard Rejections', () => {
     expect(changes).toEqual([
       additive(endpointSite('public'), { kind: 'rejection-removed', code: notFound }),
       additive(endpointSite('public'), { kind: 'rejection-added', code: orderGone }),
+      neutral(
+        { kind: 'standard-rejection', name: 'notFound', visibility: 'public' },
+        { kind: 'code-changed', from: notFound, to: orderGone },
+      ),
     ]);
   });
 

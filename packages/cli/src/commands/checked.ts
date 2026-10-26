@@ -66,6 +66,8 @@ export function siteOf(site: ChangeSite): string {
       return `exports.${tokenOf(site.name)}`;
     case 'guard':
       return `guards.${tokenOf(site.name)}`;
+    case 'standard-rejection':
+      return `standardRejections.${site.name}`;
   }
 }
 

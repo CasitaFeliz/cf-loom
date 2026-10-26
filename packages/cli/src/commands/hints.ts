@@ -54,6 +54,9 @@ export function hintOf(change: Change): string | null {
     case 'endpoint-removed':
     case 'endpoint-renamed':
     case 'retired-changed':
+    case 'code-changed':
+    case 'demands-changed':
+    case 'rejections-changed':
       return null;
   }
 }

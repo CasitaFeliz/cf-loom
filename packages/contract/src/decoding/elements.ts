@@ -29,13 +29,13 @@ const messageTombstone = z.strictObject(retired);
 const attachment = z.strictObject({ guard: z.string(), qualifier: z.unknown() });
 const input = z.strictObject({
   params: objectNode.nullable(),
-  query: objectNode.nullable(),
-  headers: objectNode.nullable(),
+  query: objectNode,
+  headers: objectNode,
   body: schemaNode.nullable(),
 });
 const success = z.strictObject({
   status: z.literal(successStatuses),
-  headers: objectNode.nullable(),
+  headers: objectNode,
   body: schemaNode.nullable(),
 });
 

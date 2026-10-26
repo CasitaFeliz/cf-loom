@@ -157,9 +157,15 @@
           },
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "params": null,
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "lifecycle": "active",
       "name": "createInvoice",
@@ -218,7 +224,10 @@
           },
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "status": 201
       },
       "visibility": "internal"

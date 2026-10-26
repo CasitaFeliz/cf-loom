@@ -40,6 +40,9 @@ export function classificationOf(site: ChangeSite, difference: Difference): Clas
     case 'endpoint-removed':
     case 'endpoint-renamed':
     case 'retired-changed':
+    case 'code-changed':
+    case 'demands-changed':
+    case 'rejections-changed':
       return neutral;
     case 'retired-before-deprecated':
     case 'deleted':
@@ -111,6 +114,7 @@ function breakingClassificationOf(site: ChangeSite): Classification {
     case 'guard':
     case 'subscription':
     case 'dependency':
+    case 'standard-rejection':
       return { class: 'breaking', verdict: 'approval-needed' };
   }
 }
@@ -130,6 +134,7 @@ function retiredOrNarrowedClassificationOf(site: ChangeSite): Classification {
     case 'guard':
     case 'subscription':
     case 'dependency':
+    case 'standard-rejection':
       return { class: 'breaking', verdict: 'approval-needed' };
   }
 }

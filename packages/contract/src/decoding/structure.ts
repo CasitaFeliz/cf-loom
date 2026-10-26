@@ -20,9 +20,14 @@ const guard = z.strictObject({
   description: text,
   guards: z.array(text),
   qualifier: schemaNode.nullable(),
-  demands: z.strictObject({ headers: objectNode.nullable(), query: objectNode.nullable() }),
+  demands: z.strictObject({ headers: objectNode, query: objectNode }),
   context: schemaNode.nullable(),
   rejections: codeList,
+});
+
+/** A def is never nullable: `.nullable()` belongs to a use of it, so every `ref` to it carries it. */
+const def = schemaNode.refine((node) => node.nullable !== true, {
+  message: 'is nullable: a def is written plain, and each ref to it carries nullable',
 });
 
 const code = z.strictObject({
@@ -57,7 +62,7 @@ const service = z.strictObject({
   ...heading,
   kind: z.literal('service'),
   standardRejections,
-  defs: byKey(schemaNode),
+  defs: byKey(def),
   endpoints: byKey(publishedEndpoint),
   events: byKey(publishedEvent),
   commands: byKey(publishedCommand),
@@ -79,7 +84,7 @@ const definitions = z.strictObject({
   ...heading,
   kind: z.literal('definitions'),
   standardRejections,
-  defs: byKey(schemaNode),
+  defs: byKey(def),
   exports: byKey(exported),
   guards: byKey(guard),
   codes: byKey(code),

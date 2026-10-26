@@ -15,6 +15,10 @@ import { exportDifferencesOf } from './exports.ts';
 import { guardDifferencesOf, serviceGuardDifferencesOf } from './guards.ts';
 import { publishedSnapshotOf } from './merge.ts';
 import type { Change, ComparedReport } from './report.ts';
+import {
+  definitionsStandardRejectionDifferencesOf,
+  serviceStandardRejectionDifferencesOf,
+} from './standard-rejections.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 
 /**
@@ -57,6 +61,7 @@ function serviceChangesOf(
     ...commandChangesOf(baseline, proposed),
     ...siteChangesOf(serviceGuardDifferencesOf(baseline, proposed)),
     ...siteChangesOf(serviceCodeDifferencesOf(baseline, proposed)),
+    ...siteChangesOf(serviceStandardRejectionDifferencesOf(baseline, proposed)),
     ...siteChangesOf(subscriptionDifferencesOf(baseline, proposed)),
     ...siteChangesOf(dependencyDifferencesOf(baseline.dependencies, proposed.dependencies)),
   ];
@@ -71,5 +76,6 @@ function definitionsChangesOf(
     ...exportDifferencesOf(baseline, proposed),
     ...guardDifferencesOf(baseline, proposed),
     ...definitionsCodeDifferencesOf(baseline, proposed),
+    ...definitionsStandardRejectionDifferencesOf(baseline, proposed),
   ]);
 }

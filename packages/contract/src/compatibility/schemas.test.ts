@@ -53,8 +53,13 @@ const heading = {
 } as const;
 const noDefs: Defs = {};
 const noBodies = {
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: {
+    params: null,
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
 } as const;
 
 function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
@@ -1468,25 +1473,6 @@ const refRows: readonly Row[] = [
   },
   ...containedRows,
   {
-    change: 'making a def a ref names nullable',
-    from: aRef('leaf'),
-    to: aRef('leaf'),
-    fromDefs: { leaf },
-    toDefs: { leaf: aNullable(leaf) },
-    found: [found({ kind: 'nullability-added' }, guaranteesLess)],
-  },
-  {
-    change: 'making a recursive def nullable, which makes every ref to it nullable',
-    from: aRef('tree'),
-    to: aRef('tree'),
-    fromDefs: { tree },
-    toDefs: { tree: aNullable(tree) },
-    found: [
-      found({ kind: 'nullability-added' }, guaranteesLess),
-      found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items']),
-    ],
-  },
-  {
     change: 'making a ref nullable where its def is not',
     from: aRef('tree'),
     to: aNullable(aRef('tree')),
@@ -1508,6 +1494,8 @@ const refRows: readonly Row[] = [
     to: anObject({ child: required(aRef('tree')) }),
     toDefs: { tree },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'child']),
+      found(annotationChanged('id'), neutralEverywhere, childItems),
       found({ kind: 'type-changed', from: 'string', to: 'object' }, breaksEverywhere, childItems),
     ],
   },
@@ -1517,6 +1505,8 @@ const refRows: readonly Row[] = [
     to: inlineChild,
     fromDefs: { tree },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'child']),
+      found(annotationChanged('id'), neutralEverywhere, childItems),
       found({ kind: 'type-changed', from: 'object', to: 'string' }, breaksEverywhere, childItems),
     ],
   },
@@ -1534,7 +1524,9 @@ const refRows: readonly Row[] = [
     to: anObject({ a: required(aLeafWithName()), b: required(aLeafWithName()) }),
     fromDefs: { leaf },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'a']),
       found(nameAdded, acceptsLess, ['fields', 'a', 'fields', 'name']),
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'b']),
       found(nameAdded, acceptsLess, ['fields', 'b', 'fields', 'name']),
     ],
   },
@@ -1543,7 +1535,10 @@ const refRows: readonly Row[] = [
     from: aTagged('kind', { card: {} }),
     to: { ...aTagged('kind', {}), variants: { '"card"': aRefVariant('card') } },
     toDefs: { card: anObject({ kind: required(aClosedEnum('card')), last4: required(aString) }) },
-    found: [found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])],
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, ['variants', '"card"']),
+      found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4']),
+    ],
   },
   {
     change: 'changing a def a discriminated union reaches again through its own variant',
@@ -1605,7 +1600,7 @@ describe('compatibilityReportOf, refs', () => {
     },
   );
 
-  test('a cycle whose refs fall at different depths on each side ends and finds only the def’s id', () => {
+  test('a cycle whose refs fall at different depths on each side ends and finds only the defs’ ids', () => {
     const shallow: Defs = { shallow: anObject({ x: required(aRef('shallow')) }) };
     const deep: Defs = {
       deep: anObject({ x: required(anObject({ x: required(aRef('deep')) })) }),
@@ -1619,7 +1614,12 @@ describe('compatibilityReportOf, refs', () => {
     });
 
     expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(annotationChanged('id'), neutralEverywhere)),
       changeAt(input, found(annotationChanged('id'), neutralEverywhere, ['fields', 'x'])),
+      changeAt(
+        input,
+        found(annotationChanged('id'), neutralEverywhere, ['fields', 'x', 'fields', 'x']),
+      ),
     ]);
   });
 
@@ -1762,6 +1762,34 @@ describe('compatibilityReportOf, refs', () => {
       ]);
     },
   );
+
+  test.each(
+    casesOf([
+      {
+        change: 'a variant that turns from inline to a ref of the same shape',
+        from: {
+          type: 'tagged',
+          discriminator: 'kind',
+          variants: { '"card"': anObject({ kind: required(aClosedEnum('card')) }) },
+        },
+        to: {
+          type: 'tagged',
+          discriminator: 'kind',
+          variants: { '"card"': aRefVariant('card') },
+        },
+        toDefs: { card: anObject({ kind: required(aClosedEnum('card')) }) },
+        found: [found(annotationChanged('id'), neutralEverywhere, ['variants', '"card"'])],
+      },
+      {
+        change: 'a ref written inline as the shape of its def',
+        from: aRef('tree'),
+        to: anObject({ children: required(anArray(aRef('tree'))) }),
+        fromDefs: { tree },
+        toDefs: { tree },
+        found: [found(annotationChanged('id'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
   test.each(places)(
     'a variant that is a ref to an unchanged def is no Change in $name',

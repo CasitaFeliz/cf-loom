@@ -57,8 +57,13 @@ function anEndpointEntry(fields: Partial<EndpointSnapshot> = {}): EndpointSnapsh
     description: 'One order',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -70,7 +75,7 @@ function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'A Guard',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -118,6 +123,8 @@ function attaching(...guards: readonly string[]): EndpointSnapshot {
 const orderLocked = 'ORDER_LOCKED';
 
 const privateEntry = anEndpointEntry({ name: 'purgeOrders', visibility: 'private' });
+
+const noFields = { type: 'object', fields: {} } as const;
 
 describe('exportedSnapshotOf', () => {
   test.each([
@@ -311,7 +318,12 @@ describe('exportedSnapshotOf', () => {
       'input.params',
       {
         endpoint: {
-          input: { params: anObjectWith(aRef('tree')), query: null, headers: null, body: null },
+          input: {
+            params: anObjectWith(aRef('tree')),
+            query: { type: 'object', fields: {} },
+            headers: { type: 'object', fields: {} },
+            body: null,
+          },
         },
       },
     ],
@@ -319,19 +331,38 @@ describe('exportedSnapshotOf', () => {
       'input.headers',
       {
         endpoint: {
-          input: { params: null, query: null, headers: anObjectWith(aRef('tree')), body: null },
+          input: {
+            params: null,
+            query: { type: 'object', fields: {} },
+            headers: anObjectWith(aRef('tree')),
+            body: null,
+          },
         },
       },
     ],
     [
       'input.body',
-      { endpoint: { input: { params: null, query: null, headers: null, body: aRef('tree') } } },
+      {
+        endpoint: {
+          input: {
+            params: null,
+            query: { type: 'object', fields: {} },
+            headers: { type: 'object', fields: {} },
+            body: aRef('tree'),
+          },
+        },
+      },
     ],
     [
       'input.query',
       {
         endpoint: {
-          input: { params: null, query: anObjectWith(aRef('tree')), headers: null, body: null },
+          input: {
+            params: null,
+            query: anObjectWith(aRef('tree')),
+            headers: { type: 'object', fields: {} },
+            body: null,
+          },
         },
       },
     ],
@@ -339,16 +370,31 @@ describe('exportedSnapshotOf', () => {
       'success.headers',
       { endpoint: { success: { status: 200, headers: anObjectWith(aRef('tree')), body: null } } },
     ],
-    ['success.body', { endpoint: { success: { status: 200, headers: null, body: aRef('tree') } } }],
+    [
+      'success.body',
+      {
+        endpoint: {
+          success: { status: 200, headers: noFields, body: aRef('tree') },
+        },
+      },
+    ],
     ['a Guard’s context', { guard: { context: aRef('tree') } }],
     ['a Guard’s qualifier', { guard: { qualifier: aRef('tree') } }],
     [
       'a Guard’s demands headers',
-      { guard: { demands: { headers: anObjectWith(aRef('tree')), query: null } } },
+      {
+        guard: {
+          demands: { headers: anObjectWith(aRef('tree')), query: { type: 'object', fields: {} } },
+        },
+      },
     ],
     [
       'a Guard’s demands query',
-      { guard: { demands: { headers: null, query: anObjectWith(aRef('tree')) } } },
+      {
+        guard: {
+          demands: { headers: { type: 'object', fields: {} }, query: anObjectWith(aRef('tree')) },
+        },
+      },
     ],
     ['a code’s body', { code: { body: aRef('tree') } }],
   ] as const)('a def a node at %s of what is exported reaches is kept', (_, at) => {
@@ -379,7 +425,9 @@ describe('exportedSnapshotOf', () => {
       c: anObjectWith(aRef('a')),
       d: aString,
     };
-    const endpoint = anEndpointEntry({ success: { status: 200, headers: null, body: aRef('a') } });
+    const endpoint = anEndpointEntry({
+      success: { status: 200, headers: { type: 'object', fields: {} }, body: aRef('a') },
+    });
 
     const cut = exportedSnapshotOf(
       aServiceSnapshot({ endpoints: { 'GET /orders': endpoint }, defs }),
@@ -391,7 +439,10 @@ describe('exportedSnapshotOf', () => {
   test.each([
     {
       through: 'its own success body',
-      purging: { ...privateEntry, success: { status: 200, headers: null, body: aRef('tree') } },
+      purging: {
+        ...privateEntry,
+        success: { status: 200, headers: noFields, body: aRef('tree') },
+      },
       guards: {},
       codes: {},
     },
@@ -425,7 +476,7 @@ describe('exportedSnapshotOf', () => {
       rejections: ['Z_CODE', 'A_CODE'],
       success: {
         status: 200,
-        headers: null,
+        headers: noFields,
         body: anObjectWith({ type: 'union', options: [aRef('z'), aRef('a')] }),
       },
     };

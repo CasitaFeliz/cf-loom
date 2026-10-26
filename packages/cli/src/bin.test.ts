@@ -3806,7 +3806,10 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', {
       fields: { token: { required: true, schema: { type: 'string' } } },
     };
     const guards = {
-      apiKey: { ...snapshot.guards.apiKey, demands: { headers: null, query: token } },
+      apiKey: {
+        ...snapshot.guards.apiKey,
+        demands: { headers: { type: 'object', fields: {} }, query: token },
+      },
     };
     const served = servedAs('@org/definitions', publishedAs(project, '1.0.0', { guards }));
 
@@ -4301,6 +4304,40 @@ describe.concurrent('cf-loom check, the version publish would take', {
       ({ difference }: { difference: { kind: string } }) => difference.kind,
     );
     expect(kinds).toContain('version-gap');
+  });
+
+  test('a Standard Rejection that resolved to another code in the Baseline is a Neutral Change at its own site', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    const { NOT_FOUND: standard, ...others } = snapshot.codes;
+    const resolved = { ...snapshot.standardRejections, notFound: 'ORDER_GONE' };
+    const codes = { ...others, ['ORDER_GONE']: standard };
+    const more = { standardRejections: resolved, codes };
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0', more));
+
+    const lines = await checkedAgainst(lab, { project, served });
+    const json = await checkedAgainst(lab, { project, served }, '--json');
+
+    expect(lines.ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'standardRejections.notFound code-changed from=ORDER_GONE to=NOT_FOUND: Neutral',
+        noApprovalNeeded,
+        wouldPublish('1.0.1', 'patch'),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+    expect(JSON.parse(json.ran.stdout).changes).toMatchObject([
+      {
+        site: { kind: 'standard-rejection', name: 'notFound', visibility: 'private' },
+        difference: { kind: 'code-changed', from: 'ORDER_GONE', to: 'NOT_FOUND' },
+        class: 'neutral',
+      },
+    ]);
   });
 
   test('a Snapshot and peer ranges equal to the Baseline’s are nothing to publish, with no --force clause', async ({

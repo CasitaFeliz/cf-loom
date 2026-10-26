@@ -8,6 +8,7 @@ import {
 } from './metadata.ts';
 import type { Field, Origin, Path, SchemaNode } from './nodes.ts';
 import { notAllowed, refusedWrapperId } from './not-allowed.ts';
+import { withNullableOnUses } from './nullable-uses.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   distinctFailures,
@@ -73,7 +74,8 @@ export function walkMeetingSchemas(
     at,
     walked: distinct(walker.schema(schema, at)),
   }));
-  return { located: walkedLocations, defs: recursion.defs(), met: state.met };
+  const canonical = withNullableOnUses({ located: walkedLocations, defs: recursion.defs() });
+  return { ...canonical, met: state.met };
 }
 
 /** A schema's failures each once, without the node the walk was building. */

@@ -20,7 +20,7 @@ type Json = unknown;
 type Mutation = {
   readonly at: Path;
   readonly operation: string;
-  readonly apply: (value: Json) => Json;
+  readonly change: (snapshot: Json) => Json;
 };
 
 function declaredSnapshotOf(example: string): Json {
@@ -66,7 +66,7 @@ function mutationsAt(json: Json, at: Path): readonly Mutation[] {
   const edit = (operation: string, apply: (value: Json) => Json): Mutation => ({
     at,
     operation,
-    apply,
+    change: (snapshot) => changedAt(snapshot, at, apply),
   });
   if (typeof value === 'string') {
     return [edit('append', (text) => `${text as string}x`)];
@@ -127,10 +127,10 @@ const headingKeys = ['format', 'kind', 'name', 'generator'];
 /**
  * Whether `generate` never writes a place changed alone: the heading, what it derives from other
  * places (the codes' `removed` flags and the codes nothing answers, the Input of a path param and
- * its `params`, a Service Guard's demands and Rejections) and the Guards no Endpoint attaches.
+ * its `params`) and the Guards no Endpoint attaches.
  */
 function isUnwritableAlone(kind: string, at: Path): boolean {
-  const [section, key, part, next] = at;
+  const [section, , part, next] = at;
   if (at.length === 1 && headingKeys.includes(String(section))) {
     return true;
   }
@@ -140,24 +140,50 @@ function isUnwritableAlone(kind: string, at: Path): boolean {
   if (section === 'endpoints') {
     return part === 'params' || (part === 'input' && next === 'params');
   }
-  if (section === 'guards' && kind === 'service') {
-    return key === undefined || part === 'demands' || part === 'rejections';
+  return section === 'guards' && kind === 'service' && at.length === 1;
+}
+
+/** A Snapshot with every use of a code under another name, as when a Standard Rejection resolves to it. */
+function withCodeRenamed(json: Json, from: string, to: string): Json {
+  if (json === from) {
+    return to;
   }
-  return false;
+  if (Array.isArray(json)) {
+    return json.map((item) => withCodeRenamed(item, from, to));
+  }
+  if (typeof json !== 'object' || json === null) {
+    return json;
+  }
+  const renamed = Object.entries(json).map(([key, value]) => [
+    key === from ? to : key,
+    withCodeRenamed(value, from, to),
+  ]);
+  return Object.fromEntries(renamed);
+}
+
+/** Each Standard Rejection resolving to another code, which no single place of the Snapshot can change alone. */
+function remapsOf(declared: Json): readonly Mutation[] {
+  const standard = Reflect.get(declared as object, 'standardRejections') as Record<string, string>;
+  return Object.entries(standard).map(([name, code]) => ({
+    at: ['standardRejections', name],
+    operation: 'resolve to another code',
+    change: (snapshot) => withCodeRenamed(snapshot, code, `${code}_REMAPPED`),
+  }));
 }
 
 function mutationsOf(declared: Json): readonly Mutation[] {
   const kind = String(Reflect.get(declared as object, 'kind'));
-  return placesOf(declared)
+  const places = placesOf(declared)
     .filter((at) => at.length > 0 && !isUnwritableAlone(kind, at))
     .flatMap((at) => mutationsAt(declared, at));
+  return kind === 'application' ? places : [...places, ...remapsOf(declared)];
 }
 
 /** The mutation as a declared Snapshot `generate` can write, or `undefined` when the decoder refuses it. */
 function writableAfter(declared: Json, mutations: readonly Mutation[]): Snapshot | undefined {
   let mutated: Json = declared;
   for (const mutation of mutations) {
-    mutated = changedAt(mutated, mutation.at, mutation.apply);
+    mutated = mutation.change(mutated);
   }
   const published = JSON.stringify({ ...(mutated as object), version: '1.0.1' });
   return decodeSnapshot(published).kind === 'decoded' ? (mutated as Snapshot) : undefined;

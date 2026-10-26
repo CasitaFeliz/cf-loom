@@ -43,8 +43,13 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };

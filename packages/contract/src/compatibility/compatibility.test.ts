@@ -53,8 +53,13 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: orderIdParam, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: orderIdParam,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -152,6 +157,7 @@ function identityOf(site: ChangeSite): string {
     case 'export':
     case 'subscription':
     case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -523,7 +529,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
         endpoints: {
           'GET /orders/{}': anEndpoint({
             ...stillRetired,
-            success: { status: 200, headers: null, body: changedBody },
+            success: { status: 200, headers: { type: 'object', fields: {} }, body: changedBody },
           }),
         },
       },
@@ -586,7 +592,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
       endpoints: {
         'GET /orders/{}': anEndpoint({
           lifecycle: 'retired',
-          success: { status: 201, headers: null, body: null },
+          success: { status: 201, headers: { type: 'object', fields: {} }, body: null },
         }),
       },
     });

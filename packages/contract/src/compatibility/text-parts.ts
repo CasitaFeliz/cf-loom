@@ -7,13 +7,11 @@ import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
 import { fieldStep, partsOf, type Step } from './steps.ts';
 
-/** A query or headers object of the Baseline and the proposed one, `null` where none is declared. */
+/** A query or headers object of the Baseline and the proposed one, with no field where none is declared. */
 export type TextParts = {
-  readonly baseline: ObjectNode | null;
-  readonly proposed: ObjectNode | null;
+  readonly baseline: ObjectNode;
+  readonly proposed: ObjectNode;
 };
-
-const noFields: ObjectNode = { type: 'object', fields: {} };
 
 /**
  * Path params compared by position, as the URL matches them: a name changed is a rename, and each
@@ -60,24 +58,13 @@ function paramSchemaDifferencesOf(
   return schemaDifferencesOf(schemas, defs, { position: 'input', at });
 }
 
-/** The two objects of a part, one declared nowhere counting as an open object with no fields. */
-function objectsOf(parts: TextParts): {
-  readonly baseline: ObjectNode;
-  readonly proposed: ObjectNode;
-} {
-  return { baseline: parts.baseline ?? noFields, proposed: parts.proposed ?? noFields };
-}
-
-/**
- * A query or headers compared as the open object it is: one declared nowhere has no fields, since
- * an undeclared part is never read.
- */
+/** A query or headers compared as the open object it is. */
 export function textPartDifferencesOf(
   parts: TextParts,
   defs: BothDefs,
   place: EndpointPlace,
 ): readonly Difference[] {
-  return schemaDifferencesOf(objectsOf(parts), defs, place);
+  return schemaDifferencesOf(parts, defs, place);
 }
 
 /**
@@ -90,7 +77,7 @@ export function inputHeaderDifferencesOf(
   defs: BothDefs,
   at: readonly Step[],
 ): readonly Difference[] {
-  const { baseline, proposed } = objectsOf(parts);
+  const { baseline, proposed } = parts;
   const refusing = counterpartsOf(baseline.fields, proposed.fields)
     .filter((header) => header.kind === 'added' && refusesSomeText(header.proposed))
     .map((header) => header.key);

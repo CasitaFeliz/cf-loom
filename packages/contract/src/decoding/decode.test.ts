@@ -125,6 +125,9 @@ function aDefinitions(
   };
 }
 
+/** A text part with no field, as the Snapshot writes one declared empty or not declared. */
+const emptyPart = { type: 'object', fields: {} } as const;
+
 const anEndpoint = {
   name: 'getOrder',
   group: 'orders',
@@ -133,8 +136,8 @@ const anEndpoint = {
   description: 'One order',
   params: ['orderId'],
   guards: [],
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: { params: null, query: emptyPart, headers: emptyPart, body: null },
+  success: { status: 200, headers: emptyPart, body: null },
   rejections: [],
 } as const satisfies EndpointSnapshot;
 
@@ -158,7 +161,7 @@ const aGuard = {
   description: 'An API key',
   guards: [],
   qualifier: null,
-  demands: { headers: null, query: null },
+  demands: { headers: emptyPart, query: emptyPart },
   context: null,
   rejections: [],
 } as const satisfies GuardSnapshot;
@@ -305,7 +308,7 @@ describe('decodeSnapshot', () => {
           'GET /orders/{}': {
             ...anEndpoint,
             guards: [{ guard: 'apiKey', qualifier: ['orders:read'] }],
-            input: { params: null, query: null, headers: null, body: aRef('tree') },
+            input: { params: null, query: emptyPart, headers: emptyPart, body: aRef('tree') },
             rejections: ['ORDER_LOCKED'],
           },
         },
@@ -348,7 +351,7 @@ describe('decodeSnapshot', () => {
         endpoints: {
           'POST /orders': {
             ...anEndpoint,
-            input: { params: null, query: null, headers: null, body: everyNode },
+            input: { params: null, query: emptyPart, headers: emptyPart, body: everyNode },
           },
         },
       });
@@ -733,6 +736,61 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
+    test.each([
+      [
+        'an Endpoint’s query',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, input: { ...anEndpoint.input, query: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'input', 'query'],
+      ],
+      [
+        'an Endpoint’s headers',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, input: { ...anEndpoint.input, headers: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'input', 'headers'],
+      ],
+      [
+        'a Success’s headers',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, success: { ...anEndpoint.success, headers: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'success', 'headers'],
+      ],
+      [
+        'a Guard’s demanded query',
+        { guards: { apiKey: { ...aGuard, demands: { ...aGuard.demands, query: null } } } },
+        ['guards', 'apiKey', 'demands', 'query'],
+      ],
+      [
+        'a Guard’s demanded headers',
+        { guards: { apiKey: { ...aGuard, demands: { ...aGuard.demands, headers: null } } } },
+        ['guards', 'apiKey', 'demands', 'headers'],
+      ],
+    ])(
+      '%s given as null is malformed there: a text part is an object with no field when none is declared',
+      (_, fields, at) => {
+        const result = serviceWith(fields);
+
+        expect(elementOf(result)).toEqual(at.slice(0, 2));
+      },
+    );
+
+    test('a nullable def is malformed at the def: nullable belongs to a use of it', () => {
+      const tree: SchemaNode = { type: 'object', fields: {}, nullable: true };
+
+      const result = serviceWith({ defs: { tree } });
+
+      expect(result).toEqual(malformedAt(['defs', 'tree'], expect.stringContaining('nullable')));
+    });
+
     test('a Snapshot without version is malformed at version: package writes none, only publish does', () => {
       const { version: _version, ...declared } = aService();
 
@@ -932,7 +990,9 @@ describe('decodeSnapshot', () => {
       [
         'a Guard’s demands with a key of its own',
         {
-          guards: { apiKey: { ...aGuard, demands: { headers: null, query: null, extra: 1 } } },
+          guards: {
+            apiKey: { ...aGuard, demands: { headers: emptyPart, query: emptyPart, extra: 1 } },
+          },
         },
         ['guards', 'apiKey', 'demands', 'extra'],
       ],
@@ -1157,7 +1217,7 @@ describe('decodeSnapshot', () => {
           endpoints: {
             'GET /orders/{}': {
               ...anEndpoint,
-              input: { params: null, query: null, headers: null, body: aRef('missing') },
+              input: { params: null, query: emptyPart, headers: emptyPart, body: aRef('missing') },
             },
           },
         }),
@@ -1194,7 +1254,7 @@ describe('decodeSnapshot', () => {
           guards: {
             apiKey: {
               ...aGuard,
-              demands: { headers: anObjectOf(aRef('missing')), query: null },
+              demands: { headers: anObjectOf(aRef('missing')), query: emptyPart },
             },
           },
         }),
@@ -1303,17 +1363,12 @@ describe('decodeSnapshot', () => {
 
       test.each([
         ['a ref', aRef('node')],
-        ['a nullable ref', { ...aRef('node'), nullable: true }],
         ['a union with a ref to itself', { type: 'union', options: [aRef('node'), stringNode] }],
         [
           'a union with a nullable ref to itself',
           { type: 'union', options: [{ ...aRef('node'), nullable: true }, stringNode] },
         ],
         ['an allOf with itself', { type: 'allOf', items: [anObjectOf(stringNode), aRef('node')] }],
-        [
-          'a nullable union of itself',
-          { type: 'union', options: [aRef('node'), stringNode], nullable: true },
-        ],
         [
           'a union with itself in a nested union',
           { type: 'union', options: [{ type: 'union', options: [aRef('node'), stringNode] }] },
@@ -1697,13 +1752,13 @@ const formatOneFixture = `{
         "body": null,
         "headers": { "fields": {}, "type": "object" },
         "params": { "fields": {}, "type": "object" },
-        "query": null
+        "query": { "fields": {}, "type": "object" }
       },
       "lifecycle": "deprecated",
       "name": "getOrder",
       "params": ["orderId"],
       "rejections": ["INVALID_INPUT", "NOT_FOUND", "NOT_IMPLEMENTED"],
-      "success": { "body": null, "headers": null, "status": 200 },
+      "success": { "body": null, "headers": { "fields": {}, "type": "object" }, "status": 200 },
       "visibility": "public"
     }
   },
@@ -1721,7 +1776,7 @@ const formatOneFixture = `{
   "guards": {
     "apiKey": {
       "context": null,
-      "demands": { "headers": { "fields": {}, "type": "object" }, "query": null },
+      "demands": { "headers": { "fields": {}, "type": "object" }, "query": { "fields": {}, "type": "object" } },
       "description": "An API key",
       "guards": [],
       "origin": "local",
@@ -1937,11 +1992,11 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     expect(result).toEqual({ kind: 'decoded', snapshot: published });
   });
 
-  /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk. */
+  /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk or is nullable, which no def is. */
   function publishedHolding(committed: ServiceSnapshot, schema: z.ZodType) {
     const walk = walkSchemas([{ at: ['defs', 'probe'], schema }], () => undefined);
     const [located] = walk.located;
-    if (located?.walked.kind !== 'walked') {
+    if (located?.walked.kind !== 'walked' || located.walked.value.nullable === true) {
       return undefined;
     }
     const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };

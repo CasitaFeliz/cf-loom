@@ -13,7 +13,7 @@ import { elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, siblingOf } from './names.ts';
-import { partsLinesOf } from './schema-lines.ts';
+import { declaredTextPartOf, partsLinesOf } from './schema-lines.ts';
 
 /**
  * An exported Endpoint rebuilt from its Snapshot entry, so its Input, Success and Rejections type
@@ -54,11 +54,21 @@ function endpointBodyOf(
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),
     ...guardsLinesOf(endpoint.guards),
-    ...partsLinesOf('input', endpoint.input, declared),
+    ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
     ...(listed.length === 0 ? [] : [`  rejections: [${listed.join(', ')}],`]),
     '});',
   ];
+}
+
+/** An Endpoint's Input as the author declared it: its text parts only when they declare something. */
+function declaredInputOf({ params, query, headers, body }: EndpointSnapshot['input']) {
+  return {
+    params,
+    query: declaredTextPartOf(query),
+    headers: declaredTextPartOf(headers),
+    body,
+  };
 }
 
 /** The method and path of an identity, its params' names put back in order. */
@@ -83,9 +93,10 @@ function guardsLinesOf(guards: readonly AttachmentSnapshot[]): readonly string[]
 /** A Success's status, then its headers and body when it declares them. */
 function successFieldsOf(endpoint: EndpointSnapshot, reader: Writing): string {
   const { status, headers, body } = endpoint.success;
+  const declared = declaredTextPartOf(headers);
   const fields = [
     `status: ${status}`,
-    ...(headers === null ? [] : [`headers: ${zodExpressionOf(headers, reader)}`]),
+    ...(declared === null ? [] : [`headers: ${zodExpressionOf(declared, reader)}`]),
     ...(body === null ? [] : [`body: ${zodExpressionOf(body, reader)}`]),
   ];
   return fields.join(', ');
