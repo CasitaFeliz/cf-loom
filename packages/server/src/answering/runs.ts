@@ -83,13 +83,14 @@ export function answeredOfNotSuccess(
   }
 }
 
-/** A Rejection as built, as it travels: its code, status and message as the Root resolves them, and its body. */
+/** A Rejection as built, as it travels: its code, status and message as the Root resolves them, its headers and its body. */
 function sentRejectionOf(
   { rejection, ...built }: Extract<NotSuccess, { readonly kind: 'rejection' }>,
   standards: StandardRejections,
 ): SentRejection {
+  const headers = 'headers' in built ? built.headers : undefined;
   const body = 'body' in built ? built.body : undefined;
-  return { ...resolutionOf(rejection, standards), body };
+  return { ...resolutionOf(rejection, standards), headers, body };
 }
 
 /**

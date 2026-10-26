@@ -48,7 +48,7 @@ export type BuiltRejection<Answered extends AnswerableRejection> =
         : {
             readonly kind: 'rejection';
             readonly rejection: Answered;
-            readonly headers?: unknown;
+            readonly headers?: Readonly<Record<string, unknown>>;
             readonly body?: unknown;
           };
 

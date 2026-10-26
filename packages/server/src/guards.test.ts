@@ -17,6 +17,15 @@ const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
   message: 'Unauthenticated',
+  headers: z.object({ 'www-authenticate': z.string() }),
+});
+
+const rateLimited = defineRejection({
+  code: 'RATE_LIMITED',
+  status: 429,
+  message: 'Slow down',
+  headers: z.object({ 'retry-after': z.int().min(0) }),
+  body: z.object({ limit: z.int() }),
 });
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
@@ -84,6 +93,7 @@ const listOrders = defineEndpoint({
   description: 'A tenant’s orders',
   guards: [userToken, tenant],
   success: { status: 204 },
+  rejections: [rateLimited],
 });
 
 const contract = defineService({
@@ -98,11 +108,12 @@ const contract = defineService({
 });
 
 const calls: string[] = [];
+const challenge = 'Bearer realm="orders"';
 
 const userTokenHandler = handle(userToken, ({ headers }) => {
   calls.push('userToken');
   if (headers.authorization !== 'Bearer u-1') {
-    return reject(unauthenticated);
+    return reject(unauthenticated, { headers: { 'www-authenticate': challenge } });
   }
   return admit({ userId: 'u-1' });
 });
@@ -217,6 +228,47 @@ describe('serve: Guards', () => {
       rejection: { code: 'UNAUTHENTICATED', message: 'Unauthenticated' },
     });
     expect(calls).toEqual(['userToken']);
+  });
+
+  test('a Guard’s 401 carries the www-authenticate header its Rejection declares', async () => {
+    const response = await serve(contract, handlers)(put(ORDER_ID, { authorization: 'Bearer x' }));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe(challenge);
+  });
+
+  test('an EndpointHandler’s Rejection is sent with its declared headers and its body', async () => {
+    const limited = handle(listOrders, () =>
+      reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
+    );
+    const http = serve(contract, {
+      ...handlers,
+      endpoints: { ...handlers.endpoints, listOrders: limited },
+    });
+    const request = new Request('http://test/orders', {
+      headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
+    });
+
+    const response = await http(request);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(await response.json()).toEqual({
+      rejection: { code: 'RATE_LIMITED', message: 'Slow down', body: { limit: 100 } },
+    });
+  });
+
+  test('a Rejection header that cannot travel as field text answers INVALID_OUTCOME', async () => {
+    const broken = handle(userToken, () =>
+      reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer\nrealm' } }),
+    );
+    const http = serve(contract, { ...handlers, guards: { ...handlers.guards, userToken: broken } });
+
+    const response = await http(put(ORDER_ID));
+
+    expect(response.status).toBe(500);
+    expect(response.headers.has('www-authenticate')).toBe(false);
+    expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
   });
 
   test('a GuardHandler’s Rejection is answered though a later Guard’s demands fail', async () => {
