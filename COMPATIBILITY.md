@@ -62,7 +62,7 @@ Every shape is read in one of three Positions:
 - **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes.
 
-Readers of a Read shape (a Success, a Rejection body or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
+Readers of a Read shape (a Success, a Rejection body or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](packages/contract/README.md#not-allowed) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -97,11 +97,11 @@ An Open Enum gives its readers a type with an Unknown case, so they must handle 
 | Discriminated union: rename the discriminator, change a variant's value, or turn it into a plain union | Breaking | Breaking | Breaking |
 | Plain union or tuple: any change | Breaking | Breaking | Breaking |
 
-A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.md), and a literal is a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible. Reordering a plain union's options is a change, since the first option that parses wins.
+A union of literals is an enum (see [Schemas](packages/contract/README.md#schemas) in the contract README), and a literal is a closed enum of its one value. Prefer enums and discriminated unions: a change inside a plain union cannot be proven compatible. Reordering a plain union's options is a change, since the first option that parses wins.
 
 ### Constraints
 
-Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`. Each is compared on its own: `min` and `exclusiveMin` are one lower bound, and `max` and `exclusiveMax` one upper bound (see [Schemas](SNAPSHOT.md#schemas)); whether one `multipleOf` is a multiple of another is judged exactly, on its decimal digits. When one constraint tightens and another relaxes, together the Changes are Breaking in every Position.
+Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`. Each is compared on its own: `min` and `exclusiveMin` are one lower bound, and `max` and `exclusiveMax` one upper bound (see [Schemas](SNAPSHOT.md#schemas)); whether one `multipleOf` is a multiple of another is judged exactly, on its decimal digits. When one constraint tightens and another relaxes, `check` reports two Changes, and in every Position at least one is Breaking (in Message both are).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -113,7 +113,7 @@ Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`
 
 - A record's value and an array's items follow the field rules; a record's key schema and an array's item counts follow the constraint rules.
 - A tuple's `rest` schema is compared like an array's items: its type under the field rules, its constraints under the constraint rules. Adding or removing `rest` is Breaking. A tuple's `items` follow the plain-union rule.
-- An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](SNAPSHOT.md#schemas)). An intersection with anything else follows the plain-union rule: any change is Breaking.
+- An intersection of objects is compared as the one object it amounts to (which intersections are allowed is in [Schemas](packages/contract/README.md#schemas) in the contract README). An intersection with anything else follows the plain-union rule: any change is Breaking.
 - A recursive schema is compared by following its `ref`s into each Snapshot's `defs`, as if written inline (see [Recursion](SNAPSHOT.md#recursion)): a def's name is not part of its shape, and a pair of schemas met again within the same schema compares no further. Under the plain-union rule, renaming a def or pointing a `ref` at another def is a change.
 - `z.json()` is an opaque JSON value: any change to or from it is Breaking.
 
@@ -142,7 +142,7 @@ Descriptions, a Group's included, examples, a Rejection's message, key order, an
 
 ### Not allowed in a Contract
 
-A Contract describes shapes, not behavior. Only the nodes and checks listed in [Schemas](SNAPSHOT.md#schemas) are allowed; `generate` fails on anything else, defaults, transforms, refinements, coercion and custom validation included (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md).
+A Contract describes shapes, not behavior. Only the constructs listed in [Schemas](packages/contract/README.md#schemas) in the contract README are allowed; `generate` fails on anything else, defaults, transforms, refinements, coercion and custom validation included (see [Not allowed](packages/contract/README.md#not-allowed) there).
 
 ### Rejections
 
