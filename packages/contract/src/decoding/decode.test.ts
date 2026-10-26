@@ -901,6 +901,20 @@ describe('decodeSnapshot', () => {
       },
     );
 
+    test('a generator that is no string is malformed at generator, in cf-loom’s words', () => {
+      const result = serviceWith({ generator: 42 });
+
+      expect(result).toEqual(malformedAt(['generator'], 'is not a string'));
+    });
+
+    test('a Snapshot without a generator is malformed at generator: it is missing', () => {
+      const { generator: _generator, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['generator'], 'is missing'));
+    });
+
     test('a kind the format does not define is malformed at kind', () => {
       const result = serviceWith({ kind: 'library' });
 
@@ -1172,7 +1186,12 @@ describe('decodeSnapshot', () => {
 
         const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
 
-        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'visibility']));
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is none of "public", "internal", "private"',
+          ),
+        );
       });
 
       test('a Deprecated Endpoint with a description that is no string is malformed at the description', () => {
@@ -1180,11 +1199,13 @@ describe('decodeSnapshot', () => {
 
         const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
 
-        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'description']));
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'description'], 'is not a string'),
+        );
       });
 
       test.each(elements)(
-        'a $kind tombstone with a key of its own is malformed at that key',
+        'the tombstone of a published $kind with a key of its own is malformed at that key',
         ({ map, identity, forms }) => {
           const tombstone = { ...forms.tombstone, extra: true };
 
@@ -1233,10 +1254,13 @@ describe('decodeSnapshot', () => {
         'the $form form of a published $kind with a $field of the wrong type is malformed at that $field',
         ({ map, identity, element, field }) => {
           const wrong = { ...element, [field]: null };
+          const zodsWording = /^(Invalid|Unrecognized|Too )/;
 
           const result = serviceWith({ [map]: { [identity]: wrong } });
 
-          expect(result).toEqual(malformedAt([map, identity, field]));
+          expect(result).toEqual(
+            malformedAt([map, identity, field], expect.not.stringMatching(zodsWording)),
+          );
         },
       );
     });

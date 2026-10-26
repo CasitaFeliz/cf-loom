@@ -21,20 +21,21 @@ function formNameOf(element: z.output<typeof withLifecycle>): FormName {
   return Object.hasOwn(element, 'group') ? 'retired' : 'tombstone';
 }
 
-/** The issues of a parse as the issues of the schema that chose it, at the paths they have. */
+/**
+ * Runs the form that was chosen and hands its issues, still unworded, to the schema that chose it,
+ * which words them with the rest of the document's.
+ */
 function parsedAs<Form extends z.core.$ZodType>(
   form: Form,
   element: unknown,
   ctx: z.core.$RefinementCtx,
 ): z.output<Form> {
-  const parsed = z.safeParse(form, element);
-  if (parsed.success) {
-    return parsed.data;
+  const ran = form._zod.run({ value: element, issues: [] }, { async: false });
+  if (ran instanceof Promise) {
+    throw new Error('A published Element has no asynchronous check');
   }
-  for (const issue of parsed.error.issues) {
-    ctx.issues.push({ ...issue, input: element } as z.core.$ZodRawIssue);
-  }
-  return z.NEVER;
+  ctx.issues.push(...ran.issues);
+  return ran.value as z.output<Form>;
 }
 
 /**

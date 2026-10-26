@@ -1,5 +1,5 @@
 import { inspect } from 'node:util';
-import { problemLineOf, problemOf } from '@cf-loom/contract/internal';
+import { type Problem, problemLineOf, readWith } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 import {
   type DurableConsumerLimits,
@@ -69,7 +69,10 @@ const durationText = 'a duration such as 500ms, 30s, 2m, 1h or 7d';
 const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
   input === 'unlimited' ? -1 : countOf(input),
 );
-const notAnObject = { error: () => 'is not an object' };
+const notAnObject = {
+  error: (issue: z.core.$ZodRawIssue) =>
+    issue.code === 'invalid_type' ? 'is not an object' : undefined,
+};
 
 const streamShape = {
   retention: choice(retentions).optional(),
@@ -165,14 +168,13 @@ export type ReadLimits =
 
 /** Reads the limits a Service passed, which only a JSON file or untyped code can get wrong. */
 export function readLimits(limits: unknown): ReadLimits {
-  const parsed = brokerLimits.safeParse(limits);
-  if (!parsed.success) {
-    return { kind: 'refused', lines: parsed.error.issues.map(lineOf) };
+  const read = readWith(brokerLimits, limits, 'BrokerLimits');
+  if (read.kind === 'refused') {
+    return { kind: 'refused', lines: read.problems.map(lineOf) };
   }
-  return { kind: 'read', limits: parsed.data };
+  return { kind: 'read', limits: read.value };
 }
 
-function lineOf(issue: z.core.$ZodIssue): string {
-  const problem = problemOf([issue], 'BrokerLimits');
+function lineOf(problem: Problem): string {
   return problemLineOf({ at: ['limits', ...problem.at], reason: problem.reason });
 }

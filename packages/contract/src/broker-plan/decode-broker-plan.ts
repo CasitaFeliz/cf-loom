@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { $ZodRawIssue } from 'zod/v4/core';
-import { type Problem, problemLineOf, problemOf } from '../validation/index.ts';
+import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
@@ -50,12 +50,12 @@ const plan = z.strictObject(
  * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
-  const structured = plan.safeParse(value);
-  if (!structured.success) {
-    return malformedAt(problemOf(structured.error.issues, 'the broker plan'));
+  const structured = readWith(plan, value, 'the broker plan');
+  if (structured.kind === 'refused') {
+    return malformedAt(structured.problems[0]);
   }
-  const problem = uncarriedProblemOf(structured.data);
-  return problem === undefined ? { kind: 'decoded', plan: structured.data } : malformedAt(problem);
+  const problem = uncarriedProblemOf(structured.value);
+  return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {
