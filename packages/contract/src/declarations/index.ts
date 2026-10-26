@@ -58,7 +58,6 @@ export type {
 export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
-  isApplicationContract,
   isCommand,
   isDefinitions,
   isDependency,

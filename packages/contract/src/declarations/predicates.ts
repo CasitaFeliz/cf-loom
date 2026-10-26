@@ -31,8 +31,7 @@ export function isServiceContract(value: unknown): value is ServiceContract {
   return isDeclaration(value) && value.kind === 'service';
 }
 
-/** Whether a value is a declared Application's Contract, from any copy of this package. */
-export function isApplicationContract(value: unknown): value is ApplicationContract {
+function isApplicationContract(value: unknown): value is ApplicationContract {
   return isDeclaration(value) && value.kind === 'application';
 }
 
