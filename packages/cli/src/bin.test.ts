@@ -5855,6 +5855,62 @@ function documentOf(ran: { readonly stdout: string }): Record<string, unknown> {
   return JSON.parse(lines[0] ?? '');
 }
 
+describe('cf-loom generate --json', () => {
+  const movedFrom = 'src/http/ping.handler.ts';
+  const movedTo = 'src/api/ping.handler.ts';
+
+  /** A project whose Handler was written under one layout and is now placed under another. */
+  function aProjectWhoseHandlerMoves(): string {
+    const project = aProject({
+      'cf-loom.config.ts': aConfigWith("{ endpoint: 'src/http/{name}.handler.ts' }"),
+      ...aRoot(),
+    });
+    cfLoom(project, 'generate');
+    write(project, {
+      'cf-loom.config.ts': aConfigWith("{ endpoint: 'src/api/{name}.handler.ts' }"),
+    });
+    return project;
+  }
+
+  test('lists the Handlers it moved, the files it wrote and the files it deleted, as its lines name them', () => {
+    const project = aProjectWhoseHandlerMoves();
+
+    const ran = cfLoom(project, 'generate', '--json');
+
+    expect(documentOf(ran)).toMatchObject({
+      format: 1,
+      status: 0,
+      moved: [{ from: movedFrom, to: movedTo }],
+      wrote: expect.arrayContaining(['contract.snapshot.json']),
+      deleted: [],
+    });
+  });
+
+  test.skipIf(isRoot)(
+    'keeps the Handlers it moved beside the error when a write then fails',
+    () => {
+      const project = aProjectWhoseHandlerMoves();
+      chmodSync(project, 0o555);
+
+      let ran: ReturnType<typeof cfLoom>;
+      try {
+        ran = cfLoom(project, 'generate', '--json');
+      } finally {
+        chmodSync(project, 0o755);
+      }
+
+      const [line] = ran.stderr.split('\n');
+      expect(ran.status).toBe(3);
+      expect(documentOf(ran)).toEqual({
+        format: 1,
+        status: 3,
+        errors: [line],
+        moved: [{ from: movedFrom, to: movedTo }],
+      });
+    },
+  );
+});
+
 describe('cf-loom --json on every command', () => {
   const generatedProject = () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
