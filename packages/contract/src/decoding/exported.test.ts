@@ -1,17 +1,29 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { exportedOrders } from '../../test/orders-exported.ts';
-import { exportedSnapshotOf, providedSnapshotOf, type ServiceSnapshot } from '../internal/index.ts';
+import { exportedOrders, getOrder, oldOrder, ordersSnapshot } from '../../test/orders-exported.ts';
+import { providedEndpoint } from '../index.ts';
+import {
+  exportedCutOf,
+  exportedSnapshotOf,
+  providedSnapshotOf,
+  type ServiceSnapshot,
+} from '../internal/index.ts';
 
 const orders = exportedOrders();
-const providing = { name: 'orders-service', exportedSnapshot: orders };
 const examples = new URL('../../../../examples/', import.meta.url);
 
-/** The provider with its exported Snapshot replaced by what `change` makes of a copy of it. */
+/** `getOrder` as orders-service's Contract Package exports it, carrying `cut` as its exported Snapshot. */
+function carrying(cut: unknown) {
+  return providedEndpoint('orders-service', getOrder, cut);
+}
+
+const providing = carrying(orders);
+
+/** The Endpoint carrying what `change` makes of a copy of its exported Snapshot. */
 function changed(change: (copy: Record<string, unknown>) => void): typeof providing {
   const copy: Record<string, unknown> = structuredClone(orders);
   change(copy);
-  return { ...providing, exportedSnapshot: copy as typeof orders };
+  return carrying(copy);
 }
 
 function entryOf(copy: Record<string, unknown>, identity: string): Record<string, unknown> {
@@ -24,24 +36,34 @@ function entryOf(copy: Record<string, unknown>, identity: string): Record<string
 }
 
 describe('providedSnapshotOf', () => {
-  test('an exported Snapshot in a format this cf-loom reads is read back as it was written', () => {
+  test('an Endpoint’s exported Snapshot cut in a format this cf-loom reads is read back as it was written', () => {
     const read = providedSnapshotOf(providing);
 
     expect(read).toStrictEqual(orders);
   });
 
   test.each(['orders-service', 'billing-service'])(
-    'the exported Snapshot of the example %s is read back as it was written',
+    'the cut of every Endpoint of the example %s is read back as it was written',
     (example) => {
       const file = new URL(`${example}/contract.snapshot.json`, examples);
       const declared: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
-      const exported = exportedSnapshotOf(declared);
+      const cuts = Object.keys(exportedSnapshotOf(declared).endpoints).map((identity) =>
+        exportedCutOf(declared, identity),
+      );
 
-      const read = providedSnapshotOf({ name: example, exportedSnapshot: exported });
+      const read = cuts.map((cut) => providedSnapshotOf(providedEndpoint(example, getOrder, cut)));
 
-      expect(read).toStrictEqual(exported);
+      expect(read).toStrictEqual(cuts);
     },
   );
+
+  test('an Endpoint no Contract Package exports carries no exported Snapshot', () => {
+    const read = () => providedSnapshotOf(getOrder);
+
+    expect(read).toThrow(
+      'getOrder is no Endpoint a Contract Package exports, so it carries no exported Snapshot',
+    );
+  });
 
   test.each([2, 99])(
     'an exported Snapshot in format %i, newer than this cf-loom reads, is refused',
@@ -74,7 +96,7 @@ describe('providedSnapshotOf', () => {
   });
 
   test('an exported Snapshot that is no object is refused as malformed', () => {
-    const read = () => providedSnapshotOf({ name: 'orders-service', exportedSnapshot: 'text' });
+    const read = () => providedSnapshotOf(carrying('text'));
 
     expect(read).toThrow(
       "orders-service's exported Snapshot is malformed: format is not a whole number from 1",
@@ -119,12 +141,8 @@ describe('providedSnapshotOf', () => {
 
   test('a Retired Event is refused, since a Contract Package exports none', () => {
     const damaged = changed((copy) => {
-      const events = copy['events'] as Record<string, Record<string, unknown>>;
-      const event = events['OrderPlaced@1'];
-      if (event === undefined) {
-        throw new Error('The fixture has no OrderPlaced@1');
-      }
-      event['lifecycle'] = 'retired';
+      const event = ordersSnapshot().events['OrderPlaced@1'];
+      copy['events'] = { 'OrderPlaced@1': { ...event, lifecycle: 'retired' } };
     });
 
     const read = () => providedSnapshotOf(damaged);
@@ -213,7 +231,9 @@ describe('providedSnapshotOf', () => {
   });
 
   test('a Deprecated Endpoint keeps its instant', () => {
-    const read = providedSnapshotOf(providing);
+    const cut = exportedCutOf(ordersSnapshot(), 'GET /old-orders/{}');
+
+    const read = providedSnapshotOf(providedEndpoint('orders-service', oldOrder, cut));
 
     expect(read.endpoints['GET /old-orders/{}']).toMatchObject({
       lifecycle: 'deprecated',

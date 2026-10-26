@@ -52,8 +52,8 @@ export function isContractPackage(provider: unknown): provider is ContractPackag
   if (!isPlainObject(provider)) {
     return false;
   }
-  const { name, endpoints, events, standardRejections, exportedSnapshot } = provider;
-  const maps = [endpoints, events, standardRejections, exportedSnapshot];
+  const { name, endpoints, events, standardRejections } = provider;
+  const maps = [endpoints, events, standardRejections];
   return typeof name === 'string' && maps.every(isPlainObject);
 }
 

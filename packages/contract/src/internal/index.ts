@@ -114,11 +114,13 @@ export type {
   SubscriptionSnapshot,
   SubscriptionTombstone,
   VersionBump,
+  WholeExportedSnapshot,
 } from '../snapshot/index.ts';
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
   exportedCodeOf,
+  exportedCutOf,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,

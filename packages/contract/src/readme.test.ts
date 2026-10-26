@@ -109,16 +109,20 @@ const createOrder = defineEndpoint({
   success: { status: 201, body: z.object({ id: z.uuid() }) },
 });
 
-const getPayment = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: money }) },
-  rejections: [notFound],
-});
+const getPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: money }) },
+    rejections: [notFound],
+  },
+  undefined,
+);
 
 const payments = {
   name: 'payments-service',
@@ -142,15 +146,6 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
-  },
 } as const satisfies ContractPackage;
 
 const paymentsDependency = defineDependency({
@@ -161,20 +156,11 @@ const paymentsDependency = defineDependency({
 const orders = {
   name: 'orders-service',
   endpoints: {
-    getOrder: providedEndpoint('orders-service', getOrder),
-    createOrder: providedEndpoint('orders-service', createOrder),
+    getOrder: providedEndpoint('orders-service', getOrder, undefined),
+    createOrder: providedEndpoint('orders-service', createOrder, undefined),
   },
   events: {},
   standardRejections: payments.standardRejections,
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
-  },
 } as const satisfies ContractPackage;
 
 const orderCreatedV2 = defineEvent({

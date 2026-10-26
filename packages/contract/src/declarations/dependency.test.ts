@@ -8,25 +8,33 @@ import {
   providedEvent,
 } from '../index.ts';
 
-const getPayment = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
+const getPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
 
-const refundPayment = providedEndpoint('payments-service', {
-  name: 'refundPayment',
-  method: 'POST',
-  path: '/payments/:paymentId/refund',
-  visibility: 'internal',
-  description: 'Refunds a payment',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 204 },
-});
+const refundPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'refundPayment',
+    method: 'POST',
+    path: '/payments/:paymentId/refund',
+    visibility: 'internal',
+    description: 'Refunds a payment',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 204 },
+  },
+  undefined,
+);
 
 const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
@@ -49,15 +57,6 @@ const payments = {
     },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
   },
 } as const satisfies ContractPackage;
 

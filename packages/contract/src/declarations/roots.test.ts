@@ -60,8 +60,8 @@ const auditOnSettled = defineSubscription({
 const payments = {
   name: 'payments-service',
   endpoints: {
-    getPayment: providedEndpoint('payments-service', getPayment),
-    refundPayment: providedEndpoint('payments-service', refundPayment),
+    getPayment: providedEndpoint('payments-service', getPayment, undefined),
+    refundPayment: providedEndpoint('payments-service', refundPayment, undefined),
   },
   events: { paymentSettledV1: providedEvent('payments-service', paymentSettledV1) },
   standardRejections: {
@@ -73,15 +73,6 @@ const payments = {
     },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
   },
 } as const satisfies ContractPackage;
 

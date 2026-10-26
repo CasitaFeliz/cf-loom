@@ -1,6 +1,6 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
 export { exportedCodeOf, exportedEntryOf, textPartNodesOf } from './exported.ts';
-export { exportedSnapshotOf } from './exported-snapshot.ts';
+export { exportedCutOf, exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
@@ -48,5 +48,6 @@ export type {
   Snapshot,
   SnapshotFormat,
   SubscriptionSnapshot,
+  WholeExportedSnapshot,
 } from './types.ts';
 export { snapshotFormats, writtenSnapshotFormat } from './types.ts';

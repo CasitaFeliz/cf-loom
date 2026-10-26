@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import type { ContractPackage } from '../declarations/index.ts';
+import { carriedCutOf, type Endpoint, providerOf } from '../declarations/index.ts';
 import { type ExportedSnapshot, type SnapshotFormat, snapshotFormatOf } from '../snapshot/index.ts';
 import { problemLineOf, readWith } from '../validation/index.ts';
 import { exportedSnapshot } from './exported-structure.ts';
@@ -10,24 +10,28 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<ExportedSnapshot>>> 
   1: exportedSnapshot,
 };
 
-/** The exported Snapshots already read, by the object a Contract Package carries, so each is read once. */
+/** The exported Snapshot cuts already read, by the object an Endpoint carries, so each is read once. */
 const decodedByCarried = new WeakMap<object, ExportedSnapshot>();
 
 /**
- * The exported Snapshot a Provider's Contract Package carries, read by the format it names, once
- * per Snapshot; a format this cf-loom does not read, or a Snapshot its format does not describe,
- * throws rather than being read as far as it goes.
+ * The exported Snapshot cut to a Provided Endpoint, which it carries, read by the format it names,
+ * once per cut; a format this cf-loom does not read, or a cut its format does not describe, throws
+ * rather than being read as far as it goes.
  */
-export function providedSnapshotOf(
-  provider: Pick<ContractPackage, 'name' | 'exportedSnapshot'>,
-): ExportedSnapshot {
-  const { exportedSnapshot: carried } = provider;
+export function providedSnapshotOf(endpoint: Endpoint): ExportedSnapshot {
+  const provider = providerOf(endpoint);
+  if (provider === undefined) {
+    throw new Error(
+      `${endpoint.name} is no Endpoint a Contract Package exports, so it carries no exported Snapshot`,
+    );
+  }
+  const carried = carriedCutOf(endpoint);
   const known =
     typeof carried === 'object' && carried !== null ? decodedByCarried.get(carried) : undefined;
   if (known !== undefined) {
     return known;
   }
-  const decoded = decodedFrom(provider.name, carried);
+  const decoded = decodedFrom(provider, carried);
   if (typeof carried === 'object' && carried !== null) {
     decodedByCarried.set(carried, decoded);
   }

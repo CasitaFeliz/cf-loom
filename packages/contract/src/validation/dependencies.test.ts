@@ -25,25 +25,33 @@ function validateInPackage(root: Root) {
   return summarized(validateRoot(root, aRootPackage(root)));
 }
 
-const getPayment = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
+const getPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
 
-const refundPayment = providedEndpoint('payments-service', {
-  name: 'refundPayment',
-  method: 'POST',
-  path: '/payments/:paymentId/refund',
-  visibility: 'internal',
-  description: 'Refunds a payment',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 204 },
-});
+const refundPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'refundPayment',
+    method: 'POST',
+    path: '/payments/:paymentId/refund',
+    visibility: 'internal',
+    description: 'Refunds a payment',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 204 },
+  },
+  undefined,
+);
 
 const getReceipt = defineEndpoint({
   name: 'getReceipt',
@@ -75,15 +83,6 @@ const payments = {
     },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
   },
 } as const satisfies ContractPackage;
 
@@ -364,15 +363,6 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       declaration: { provider: undefined, endpoints: [getPayment] },
       line: {
         location: '(root) dependencies[0]',
-        rule: 'dependency-provider',
-        message: "A Dependency's provider is the contract a Contract Package exports",
-      },
-    },
-    {
-      what: 'a provider without its exported Snapshot',
-      declaration: { provider: { ...payments, exportedSnapshot: undefined } },
-      line: {
-        location: 'dependencies.payments-service',
         rule: 'dependency-provider',
         message: "A Dependency's provider is the contract a Contract Package exports",
       },

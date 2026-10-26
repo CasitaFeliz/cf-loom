@@ -14,27 +14,59 @@ import { reachedGuardNamesOf } from './reached-guards.ts';
 import type {
   ByKey,
   EndpointSnapshot,
+  EventSnapshot,
   ExportedSnapshot,
   ServiceSnapshot,
   ShadowingSnapshot,
+  WholeExportedSnapshot,
 } from './types.ts';
 
+/** The Endpoints and Events a cut of a Snapshot keeps, with the Guards, codes and defs they reach. */
+type Kept = {
+  readonly endpoints: ByKey<EndpointSnapshot>;
+  readonly events: ByKey<EventSnapshot>;
+};
+
 /**
- * The Snapshot a Service's Contract Package exports, from its declared or published Snapshot: its
- * Public and Internal Endpoints and its Internal Events that are not Retired, and the Guards, codes
- * and recursive defs they reach, keyed and ordered as in the Snapshot, and the declared Endpoints
- * it does not export that win a URL an exported one matches.
+ * The Snapshot a Service's Contract Package is written from, from its declared or published
+ * Snapshot: its Public and Internal Endpoints and its Internal Events that are not Retired, and
+ * the Guards, codes and recursive defs they reach, keyed and ordered as in the Snapshot.
  */
 export function exportedSnapshotOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
-): ExportedSnapshot {
+): WholeExportedSnapshot {
   const endpoints = exportedOf(snapshot.endpoints);
   const events = exportedOf(snapshot.events);
-  const exportedEndpoints = Object.values(endpoints);
-  const attached = exportedEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
+  return cutOf(snapshot, { endpoints, events });
+}
+
+/**
+ * The exported Snapshot cut to one exported Endpoint, which the Endpoint's module carries: its
+ * entry, the Guards, codes and recursive defs it reaches, no Event, and the declared Endpoints that
+ * win a URL it matches, so a fake picks that winner as `serve` does.
+ */
+export function exportedCutOf(
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
+  identity: string,
+): ExportedSnapshot {
+  const exported = exportedOf(snapshot.endpoints);
+  const entry = Object.hasOwn(exported, identity) ? exported[identity] : undefined;
+  if (entry === undefined) {
+    throw new Error(`${identity} is no Endpoint a Contract Package exports`);
+  }
+  const cut = cutOf(snapshot, { endpoints: { [identity]: entry }, events: {} });
+  return { ...cut, shadowing: shadowingOf(snapshot.endpoints, identity) };
+}
+
+function cutOf(
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
+  { endpoints, events }: Kept,
+): WholeExportedSnapshot {
+  const keptEndpoints = Object.values(endpoints);
+  const attached = keptEndpoints.flatMap(({ guards }) => guards.map(({ guard }) => guard));
   const guards = keptOf(snapshot.guards, reachedGuardNamesOf(attached, snapshot.guards));
   const reachedCodes = reachedCodesOf(
-    { endpoints: exportedEndpoints, guards: Object.values(guards) },
+    { endpoints: keptEndpoints, guards: Object.values(guards) },
     {
       ownCodesOf: (endpoint) => declaredCodesOf(ownRejectionsOf(endpoint, snapshot)),
       answeredBy: ({ rejections }) => rejections,
@@ -42,48 +74,42 @@ export function exportedSnapshotOf(
   );
   const codes = keptOf(snapshot.codes, reachedCodes);
   const nodes = [
-    ...exportedEndpoints.flatMap(endpointNodesOf),
+    ...keptEndpoints.flatMap(endpointNodesOf),
     ...Object.values(events).map(({ body }) => body),
     ...Object.values(guards).flatMap(guardNodesOf),
     ...Object.values(codes).flatMap(codeNodesOf),
   ];
   const defs = keptOf(snapshot.defs, new Set(reachedDefsOf(nodes, snapshot.defs)));
-  const shadowing = shadowingOf(snapshot.endpoints, endpoints);
-  return { format: snapshot.format, defs, endpoints, events, guards, codes, shadowing };
+  return { format: snapshot.format, defs, endpoints, events, guards, codes };
 }
 
 /**
- * The declared Endpoints a Contract Package does not export that win a URL an exported one
- * matches, by identity and lifecycle, so a fake picks that winner as `serve` does; a tombstone
- * declares none.
+ * The declared Endpoints, exported or not, other than the cut's own that win a URL it matches, by
+ * identity and lifecycle, so a fake picks that winner as `serve` does; a tombstone declares none.
  */
 function shadowingOf(
   declared: ByKey<EndpointSnapshot | EndpointTombstone>,
-  exported: ByKey<EndpointSnapshot>,
+  identity: string,
 ): ByKey<ShadowingSnapshot> {
   const entries = Object.entries(declared).filter(isKeyedDeclared);
-  const routed = entries.map(([identity]) => endpointPathOf(identity));
-  const exportedRoutes = Object.keys(exported).map(endpointPathOf);
-  const unexported = entries.filter(([identity]) => !Object.hasOwn(exported, identity));
-  const carried = unexported.filter(([identity]) => {
-    return winsAnExportedUrl(endpointPathOf(identity), exportedRoutes, routed);
-  });
-  return Object.fromEntries(carried.map(([identity, { lifecycle }]) => [identity, { lifecycle }]));
+  const routed = entries.map(([other]) => endpointPathOf(other));
+  const own = endpointPathOf(identity);
+  const others = entries.filter(([other]) => other !== identity);
+  const carried = others.filter(([other]) => winsUrlOf(endpointPathOf(other), own, routed));
+  return Object.fromEntries(carried.map(([other, { lifecycle }]) => [other, { lifecycle }]));
 }
 
-/** Whether routing picks the candidate at a URL an exported Endpoint shares with it. */
-function winsAnExportedUrl(
+/** Whether routing picks the candidate at a URL it shares with the cut's own Endpoint. */
+function winsUrlOf(
   candidate: EndpointPath,
-  exported: readonly EndpointPath[],
+  own: EndpointPath,
   declared: readonly EndpointPath[],
 ): boolean {
-  return exported.some((route) => {
-    const texts = sharedUrlOf(route, candidate);
-    if (texts === undefined) {
-      return false;
-    }
-    return matchedOf(declared, candidate.method, texts)?.identity === candidate.identity;
-  });
+  const texts = sharedUrlOf(own, candidate);
+  if (texts === undefined) {
+    return false;
+  }
+  return matchedOf(declared, candidate.method, texts)?.identity === candidate.identity;
 }
 
 function isKeyedDeclared(
