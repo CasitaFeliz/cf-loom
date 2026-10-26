@@ -1,10 +1,10 @@
-import type { Contract } from './roots.ts';
+import type { ServiceContract } from './roots.ts';
 
 /** A field a Group lists declarations in. */
 export type GroupedField = 'endpoints' | 'events' | 'commands' | 'subscriptions';
 
-/** Each declaration a Contract's Groups list in one field, with its exact type, so `publish` and `send` know every version whatever Group holds it. */
-export type GroupedOf<C extends Contract, Field extends GroupedField> = C extends {
+/** Each declaration a Service's Contract's Groups list in one field, with its exact type, so `publish` and `send` know every version whatever Group holds it. */
+export type GroupedOf<C extends ServiceContract, Field extends GroupedField> = C extends {
   readonly groups: readonly (infer Listed)[];
 }
   ? ListedIn<Listed, Field>

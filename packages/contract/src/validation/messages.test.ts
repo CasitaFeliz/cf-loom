@@ -4,12 +4,12 @@ import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Command,
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   type Event,
 } from '../index.ts';
-import { messageIdentityOf, nameAndVersionOf, validateContract } from '../internal/index.ts';
+import { messageIdentityOf, nameAndVersionOf, validateRoot } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -45,15 +45,15 @@ function validateMessages(events: readonly unknown[], commands: readonly unknown
     events,
     commands,
   } as unknown as Parameters<typeof defineGroup>[0]);
-  const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
-  return validateContract(contract, aRootPackage(contract, { packageName: 'orders-service' }));
+  const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
+  return validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: Events and Commands', () => {
+describe('validateRoot: Events and Commands', () => {
   test('a Contract with Events and Commands validates', () => {
     const result = validateMessages([anEvent()], [aCommand()]);
 
@@ -400,7 +400,7 @@ function safeVersions(): readonly number[] {
   return [1, 2, 2 ** 53 - 1, ...random];
 }
 
-describe('validateContract: a Message Version’s version keeps its text and its predecessor exact', () => {
+describe('validateRoot: a Message Version’s version keeps its text and its predecessor exact', () => {
   test('every whole number from 1 to the largest safe integer validates, reads back from its identity and differs from its predecessor', () => {
     const versions = safeVersions();
 
@@ -488,7 +488,7 @@ const objects = {
   'a recursive object written with z.lazy()': lazyNode,
 };
 
-describe('validateContract: a Message body is an object of its fields', () => {
+describe('validateRoot: a Message body is an object of its fields', () => {
   const eventAt = ['groups', 'orders', 'events', 'OrderCreated@1', 'body'];
   const commandAt = ['groups', 'orders', 'commands', 'ChargeCard@1', 'body'];
 
@@ -529,7 +529,7 @@ describe('validateContract: a Message body is an object of its fields', () => {
   });
 });
 
-describe('validateContract: Message Versions that fail only as fields', () => {
+describe('validateRoot: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],
     [

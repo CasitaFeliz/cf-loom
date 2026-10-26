@@ -58,9 +58,8 @@ export type {
 export type { CodeNameOf } from './message-version.ts';
 export { codeNameOf, isMessageVersion } from './message-version.ts';
 export {
-  isApplication,
+  isApplicationContract,
   isCommand,
-  isContract,
   isDefinitions,
   isDependency,
   isEndpoint,
@@ -68,6 +67,8 @@ export {
   isGroup,
   isGuard,
   isRejection,
+  isRoot,
+  isServiceContract,
   isStandardRejection,
   isSubscription,
 } from './predicates.ts';
@@ -78,8 +79,14 @@ export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
 export { isReservedCode } from './reserved-codes.ts';
 export { prototypeNames } from './reserved-names.ts';
-export type { Application, Contract } from './roots.ts';
-export { defineApplication, defineContract } from './roots.ts';
+export type {
+  ApplicationContract,
+  Contract,
+  Root,
+  RootKind,
+  ServiceContract,
+} from './roots.ts';
+export { defineApplication, defineService } from './roots.ts';
 export type { IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
 export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export { isStamp, isStampable, stampOf } from './stamps.ts';

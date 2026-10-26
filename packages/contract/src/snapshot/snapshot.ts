@@ -1,5 +1,5 @@
-import type { Contract } from '../declarations/index.ts';
-import type { ValidContract } from '../validation/index.ts';
+import type { ServiceContract } from '../declarations/index.ts';
+import type { ValidRoot } from '../validation/index.ts';
 import type { Member } from '../written/index.ts';
 import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
 import type { SnapshotContext, SnapshotSources } from './context.ts';
@@ -19,10 +19,10 @@ import {
  * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
  * name, every array whose order means nothing sorted, and no `version`, which `publish` fills in.
  */
-export function snapshotOf(validated: ValidContract, context: SnapshotContext): Snapshot {
+export function snapshotOf(validated: ValidRoot, context: SnapshotContext): Snapshot {
   const { root } = validated.declarations;
   switch (root.kind) {
-    case 'contract':
+    case 'service':
       return serviceSnapshotOf(validated, root, context);
     case 'application':
       return {
@@ -38,8 +38,8 @@ export function snapshotOf(validated: ValidContract, context: SnapshotContext): 
 }
 
 function serviceSnapshotOf(
-  validated: ValidContract,
-  root: Contract,
+  validated: ValidRoot,
+  root: ServiceContract,
   context: SnapshotContext,
 ): ServiceSnapshot {
   const { schemas, declarations } = validated;
@@ -63,7 +63,7 @@ function serviceSnapshotOf(
 }
 
 function definitionsSnapshotOf(
-  validated: ValidContract,
+  validated: ValidRoot,
   context: SnapshotContext,
 ): DefinitionsSnapshot {
   const { schemas, declarations } = validated;
@@ -103,7 +103,7 @@ function exportSnapshotOf(member: Member, { nodeOf }: SnapshotSources): ExportSn
   }
 }
 
-function sourcesOf({ schemas, declarations }: ValidContract): SnapshotSources {
+function sourcesOf({ schemas, declarations }: ValidRoot): SnapshotSources {
   return {
     nodeOf: schemas.nodeOf,
     standards: declarations.standardRejections,

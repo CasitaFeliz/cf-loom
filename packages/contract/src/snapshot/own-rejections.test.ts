@@ -2,11 +2,11 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   notFound,
 } from '../index.ts';
 import {
@@ -15,7 +15,7 @@ import {
   ownRejectionsOf,
   type ServiceSnapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({ code: 'UNAUTHENTICATED', status: 401, message: 'No' });
@@ -42,9 +42,9 @@ const updateOrder = defineEndpoint({
 
 function declaredSnapshot(): ServiceSnapshot {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [updateOrder] });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

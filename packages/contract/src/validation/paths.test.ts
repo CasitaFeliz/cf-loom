@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { defineEndpoint, defineGroup, defineService, type Endpoint } from '../index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const listOrders = {
@@ -21,7 +21,7 @@ const listOrders = {
 /** The result of validating one Endpoint, written with a cast where the types refuse it. */
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 /** A path failure of the Endpoint of that identity: a path that is not canonical still has one. */
@@ -33,7 +33,7 @@ function failedAt(at: readonly (string | number)[], rule: string, message: strin
   return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
 }
 
-describe('validateContract: canonical paths', () => {
+describe('validateRoot: canonical paths', () => {
   test('a canonical path with literal and param segments validates', () => {
     const getItem = defineEndpoint({
       ...listOrders,
@@ -209,7 +209,7 @@ describe('validateContract: canonical paths', () => {
   });
 });
 
-describe('validateContract: params against the path', () => {
+describe('validateRoot: params against the path', () => {
   const paramsAt = ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'];
 
   test('params with exactly the path’s :names validate', () => {

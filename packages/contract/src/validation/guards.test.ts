@@ -4,18 +4,18 @@ import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type Attachment,
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
   type Guard,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 /** What a Guard may demand, so a cast can put a part there the types refuse. */
@@ -58,7 +58,7 @@ function validateGuards(guards: readonly Attachment[]) {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -67,7 +67,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
 
 const guardsAt = ['groups', 'orders', 'endpoints', 'GET /orders', 'guards'];
 
-describe('validateContract: what a Guard demands', () => {
+describe('validateRoot: what a Guard demands', () => {
   test('a Guard demanding headers and query validates', () => {
     const paged = defineGuard({
       name: 'paged',
@@ -105,7 +105,7 @@ describe('validateContract: what a Guard demands', () => {
   });
 });
 
-describe('validateContract: the order of an Endpoint’s Guards', () => {
+describe('validateRoot: the order of an Endpoint’s Guards', () => {
   test('a dependent Guard after the Guards it lists validates', () => {
     expect(
       validateGuards([userToken, { guard: permission, qualifier: ['orders:edit'] }]).kind,
@@ -171,7 +171,7 @@ describe('validateContract: the order of an Endpoint’s Guards', () => {
   });
 });
 
-describe('validateContract: bare and qualified Attachments', () => {
+describe('validateRoot: bare and qualified Attachments', () => {
   test('a Guard with a qualifier listed bare fails', () => {
     const guards: readonly Attachment[] = [userToken, permission];
 
@@ -205,7 +205,7 @@ describe('validateContract: bare and qualified Attachments', () => {
   });
 });
 
-describe('validateContract: Attachments written without a Guard or a Qualifier', () => {
+describe('validateRoot: Attachments written without a Guard or a Qualifier', () => {
   test('a qualified Attachment whose guard is null fails once, as a required field', () => {
     const guards = [{ guard: null, qualifier: 'acme' }] as unknown as readonly Attachment[];
 
@@ -243,7 +243,7 @@ describe('validateContract: Attachments written without a Guard or a Qualifier',
   });
 });
 
-describe('validateContract: a Qualifier against its schema', () => {
+describe('validateRoot: a Qualifier against its schema', () => {
   test('a Qualifier its schema accepts validates', () => {
     expect(validateGuards([{ guard: quota, qualifier: { perMinute: 60 } }]).kind).toBe('valid');
   });
@@ -523,7 +523,7 @@ describe('validateContract: a Qualifier against its schema', () => {
   });
 });
 
-describe('validateContract: Guards typed wider than their declarations', () => {
+describe('validateRoot: Guards typed wider than their declarations', () => {
   test('a Guard typed as any Guard is checked by what it declares', () => {
     const guard: Guard = permission;
     const guards: readonly Attachment[] = [userToken, guard];
@@ -697,7 +697,7 @@ function reportedKeysOf(validated: Validated): readonly string[] {
   return validated.failures.filter(isQualifierKeysFailure).flatMap(keysNamedBy).sort();
 }
 
-describe('validateContract: a Qualifier holds the keys zod keeps when it parses it', () => {
+describe('validateRoot: a Qualifier holds the keys zod keeps when it parses it', () => {
   test('generate names exactly the keys zod strips, whatever the union, record, array or tuple around them', () => {
     const next = seededNext(214);
     let stripping = 0;

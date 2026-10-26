@@ -1,5 +1,5 @@
 import {
-  type Contract,
+  type ServiceContract,
   type StandardRejectionName,
   type StandardRejections,
   standardRejectionDefaults,
@@ -51,7 +51,7 @@ export function resolvedStandards(
  * The code, status and message of each Standard Rejection a valid root resolves, as `serve`
  * answers them; a valid root's statuses are the ones the type allows.
  */
-export function standardRejectionsOf(root: Contract): StandardRejections {
+export function standardRejectionsOf(root: ServiceContract): StandardRejections {
   const resolved = resolvedStandards(declarationsOf(root, {}));
   const entries = resolved.map(({ name, code, status, message }) => [
     name,

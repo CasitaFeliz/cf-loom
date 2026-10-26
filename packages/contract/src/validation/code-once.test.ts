@@ -3,18 +3,23 @@ import { z } from 'zod';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   type Definitions,
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Guard,
   notFound,
   type Rejection,
   type StandardRejection,
 } from '../index.ts';
-import { type ResolvedDefinitions, snapshotOf, validateContract } from '../internal/index.ts';
+import {
+  type ResolvedDefinitions,
+  type Root,
+  snapshotOf,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** A Service whose Endpoint `i` attaches `guards[i]` and lists `rejections[i]`, one Endpoint per entry. */
 function aService(
@@ -37,15 +42,15 @@ function aService(
     }),
   );
   const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: declared as never });
-  return defineContract({
+  return defineService({
     name: 'ping-service',
     groups: [group],
     ...(standardRejections === undefined ? {} : { standardRejections }),
   });
 }
 
-function failuresOf(root: unknown, packages: readonly ResolvedDefinitions[] = []) {
-  const validated = validateContract(root, aRootPackage(root, { packages }));
+function failuresOf(root: Root, packages: readonly ResolvedDefinitions[] = []) {
+  const validated = validateRoot(root, aRootPackage(root, { packages }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
@@ -60,7 +65,7 @@ function codeOnce(code: string, sources: string) {
 
 const locked = (message: string) => defineRejection({ code: 'LOCKED', status: 409, message });
 
-describe('validateContract: a code is declared once', () => {
+describe('validateRoot: a code is declared once', () => {
   test.each([
     ['identical', locked('Locked'), locked('Locked')],
     ['with another message', locked('Locked'), locked('Other')],
@@ -196,7 +201,7 @@ describe('validateContract: a code is declared once', () => {
     const root = defineDefinitions({});
     const rootExports = { first: locked('One'), second: locked('Two') };
 
-    const validated = validateContract(root, aRootPackage(root, { rootExports }));
+    const validated = validateRoot(root, aRootPackage(root, { rootExports }));
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -299,7 +304,7 @@ function rootWith(drawn: readonly { readonly source: Source; readonly reached: b
   return { root: aService(endpoints, standardRejections), packages, code };
 }
 
-describe('validateContract and snapshotOf: a valid root’s Snapshot says what its Endpoints answer', () => {
+describe('validateRoot and snapshotOf: a valid root’s Snapshot says what its Endpoints answer', () => {
   test.each(pairs)(
     '$first (reached: $firstReached) and $second (reached: $secondReached)',
     ({ first, second, firstReached, secondReached }) => {
@@ -319,7 +324,7 @@ describe('validateContract and snapshotOf: a valid root’s Snapshot says what i
           ),
       );
 
-      const validated = validateContract(root, aRootPackage(root, { packages }));
+      const validated = validateRoot(root, aRootPackage(root, { packages }));
 
       if (named.length > 1) {
         const line = named.map(({ source }) => sourceNames[source]).join(' and ');

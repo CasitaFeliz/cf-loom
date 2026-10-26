@@ -2,14 +2,14 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { validateRoot } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -46,11 +46,11 @@ const ping = defineEndpoint({
 /** The failures of a Definitions root whose file exports what is given beside it. */
 function failuresOf(exported: Readonly<Record<string, unknown>>) {
   const root = defineDefinitions({});
-  const validated = validateContract(root, aRootPackage(root, { rootExports: exported }));
+  const validated = validateRoot(root, aRootPackage(root, { rootExports: exported }));
   return validated.kind === 'invalid' ? validated.failures : [];
 }
 
-describe('validateContract: a Definitions Package exports what its Guards reach', () => {
+describe('validateRoot: a Definitions Package exports what its Guards reach', () => {
   test('a Definitions Package that exports every Guard and Rejection its Guards reach is valid', () => {
     const failures = failuresOf({ userToken, permission, unauthenticated, forbidden });
 
@@ -115,7 +115,7 @@ describe('validateContract: a Definitions Package exports what its Guards reach'
   );
 });
 
-describe('validateContract: a Definitions Package’s root file exports only what it shares', () => {
+describe('validateRoot: a Definitions Package’s root file exports only what it shares', () => {
   test.each([
     ['a function', () => true],
     ['a number', 100],
@@ -138,7 +138,7 @@ describe('validateContract: a Definitions Package’s root file exports only wha
     const root = defineDefinitions({});
     const rootExports = { again: root };
 
-    const validated = validateContract(root, aRootPackage(root, { rootExports }));
+    const validated = validateRoot(root, aRootPackage(root, { rootExports }));
 
     expect(validated).toEqual({
       kind: 'invalid',
@@ -173,13 +173,13 @@ describe('validateContract: a Definitions Package’s root file exports only wha
 
   test('an installed Definitions Package a Contract uses is not judged by what it exports', () => {
     const definitions = defineDefinitions({});
-    const contract = defineContract({
+    const contract = defineService({
       name: 'ping-service',
       groups: [defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] })],
     });
     const packages = [anInstalledPackage(definitions, { permission, helper: () => true })];
 
-    const validated = validateContract(contract, aRootPackage(contract, { packages }));
+    const validated = validateRoot(contract, aRootPackage(contract, { packages }));
 
     expect(validated.kind).toBe('valid');
   });

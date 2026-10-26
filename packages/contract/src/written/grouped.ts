@@ -1,10 +1,11 @@
 import type {
   Command,
-  Contract,
   Endpoint,
   Event,
   Group,
   GroupedField,
+  Root,
+  ServiceContract,
   Subscription,
 } from '../declarations/index.ts';
 import { isGroup, providerOf } from '../declarations/index.ts';
@@ -20,7 +21,6 @@ import type {
   LocatedEvent,
   LocatedGroup,
   LocatedSubscription,
-  Root,
 } from './located.ts';
 import { listOf, textOf } from './written.ts';
 
@@ -34,7 +34,7 @@ export type Grouped = {
 
 /** A root's Groups, each where it sits by name; only a Contract has them. */
 export function groupsOf(root: Root): readonly LocatedGroup[] {
-  if (root.kind !== 'contract') {
+  if (root.kind !== 'service') {
     return [];
   }
   return listOf(root.groups)
@@ -126,27 +126,27 @@ function locatedIn<Field extends GroupedField>(
 }
 
 /** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
-export function endpointsOf(contract: Contract): readonly Endpoint[] {
+export function endpointsOf(contract: ServiceContract): readonly Endpoint[] {
   return declarationsListed(contract, 'endpoints');
 }
 
 /** Every Event's Message Version a Contract lists through its Groups, each once, in the root's order. */
-export function eventsOf(contract: Contract): readonly Event[] {
+export function eventsOf(contract: ServiceContract): readonly Event[] {
   return declarationsListed(contract, 'events');
 }
 
 /** Every Command's Message Version a Contract lists through its Groups, each once, in the root's order. */
-export function commandsOf(contract: Contract): readonly Command[] {
+export function commandsOf(contract: ServiceContract): readonly Command[] {
   return declarationsListed(contract, 'commands');
 }
 
 /** Every Subscription a Contract lists through its Groups, each once, in the root's order. */
-export function subscriptionsOf(contract: Contract): readonly Subscription[] {
+export function subscriptionsOf(contract: ServiceContract): readonly Subscription[] {
   return declarationsListed(contract, 'subscriptions');
 }
 
 function declarationsListed<Field extends GroupedField>(
-  contract: Contract,
+  contract: ServiceContract,
   field: Field,
 ): readonly GroupedDeclarations[Field][] {
   return distinctListed(groupsOf(contract), field).map(({ declaration }) => declaration);

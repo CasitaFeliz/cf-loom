@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '../index.ts';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '../index.ts';
 import { attachmentsOf, endpointsOf, isInputPart, pathSegmentsOf } from '../internal/index.ts';
 
 const userToken = defineGuard({
@@ -33,7 +33,7 @@ describe('endpointsOf', () => {
     const listOrders = anEndpoint('listOrders', '/orders');
     const getOrder = anEndpoint('getOrder', '/orders/a');
     const ping = anEndpoint('ping', '/ping');
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [
         defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders, getOrder] }),

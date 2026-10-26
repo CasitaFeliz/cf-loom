@@ -24,8 +24,8 @@ describe('failureLineOf', () => {
     ],
     [
       'a declaration failure at the root',
-      { kind: 'declaration', at: [], rule: 'not-a-root', message: 'is not a Contract' },
-      '(root) not-a-root: is not a Contract',
+      { kind: 'declaration', at: [], rule: 'blank-text', message: 'is blank' },
+      '(root) blank-text: is blank',
     ],
     [
       'a construct that is not allowed',

@@ -2,7 +2,6 @@ import type { NotAllowed, Path } from '../walker/index.ts';
 
 /** The rules `generate` enforces on declarations, one id per documented rule, so a caller decides by rule. */
 export type Rule =
-  | 'not-a-root'
   | 'not-a-list'
   | 'not-a-declaration'
   | 'not-a-schema'

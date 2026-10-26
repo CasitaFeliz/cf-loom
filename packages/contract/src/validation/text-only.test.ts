@@ -3,18 +3,18 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const listing = {
@@ -33,7 +33,7 @@ function headersOf(shape: Record<string, core.$ZodType>) {
 
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 function failed(at: readonly (string | number)[], rule: string, message: string) {
@@ -43,7 +43,7 @@ function failed(at: readonly (string | number)[], rule: string, message: string)
 const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
 const text = 'travels as text: a string, number, boolean, literal or enum';
 
-describe('validateContract: text-only headers, query and path params', () => {
+describe('validateRoot: text-only headers, query and path params', () => {
   test('strings, numbers, booleans, literals and enums validate in every text part', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -231,7 +231,7 @@ describe('validateContract: text-only headers, query and path params', () => {
   });
 });
 
-describe('validateContract: a text part that is itself nullable', () => {
+describe('validateRoot: a text part that is itself nullable', () => {
   test('a nullable headers object fails', () => {
     const headers = z.object({ 'x-tenant': z.string() }).nullable() as unknown as z.ZodObject;
 
@@ -249,7 +249,7 @@ describe('validateContract: a text part that is itself nullable', () => {
   });
 });
 
-describe('validateContract: header names', () => {
+describe('validateRoot: header names', () => {
   test('an upper-case Input header name fails', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -339,7 +339,7 @@ const reservedHeaderNames = [
 
 const notTokens = ['x y', 'héader', 'a:b', '', 'x"y', 'x/y'];
 
-describe('validateContract: header names are lower-case RFC 9110 tokens no host owns', () => {
+describe('validateRoot: header names are lower-case RFC 9110 tokens no host owns', () => {
   test.each(
     positions.flatMap((position) => reservedHeaderNames.map((name) => [position, name] as const)),
   )('a %s header named %s, which the host or cf-loom owns, fails', (position, name) => {
@@ -380,7 +380,7 @@ describe('validateContract: header names are lower-case RFC 9110 tokens no host 
   });
 });
 
-describe('validateContract: one schema per header or query name on an Endpoint', () => {
+describe('validateRoot: one schema per header or query name on an Endpoint', () => {
   const userToken = defineGuard({
     name: 'userToken',
     description: 'A signed-in user',

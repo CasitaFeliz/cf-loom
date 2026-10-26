@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { ping, pingedV1, pingService } from '../../test/ping-package.ts';
-import { defineContract, defineDependency, defineEvent, defineGroup } from '../index.ts';
+import { defineDependency, defineEvent, defineGroup, defineService } from '../index.ts';
 import { eventServiceOf } from '../internal/index.ts';
 
 const orderShippedV1 = defineEvent({
@@ -20,7 +20,7 @@ function aContractListing(events: readonly unknown[], provider: typeof pingServi
     events,
   } as unknown as Parameters<typeof defineGroup>[0]);
   const dependency = defineDependency({ provider, endpoints: [ping] });
-  return defineContract({ name: 'billing-service', groups: [group], dependencies: [dependency] });
+  return defineService({ name: 'billing-service', groups: [group], dependencies: [dependency] });
 }
 
 describe('eventServiceOf', () => {

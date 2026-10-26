@@ -1,15 +1,16 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Contract,
   type ContractPackage,
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
   defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   providedEndpoint,
   providedEvent,
@@ -77,15 +78,22 @@ const payments = {
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
 } as const satisfies ContractPackage;
 
-describe('defineContract', () => {
-  test('definitions is a type error: what a Contract reaches says which Definitions Packages it uses', () => {
-    // @ts-expect-error: definitions is not a declared field
-    const contract = defineContract({ name: 'orders-service', definitions: [] });
+describe('defineService', () => {
+  test('a Service’s Contract is what was written with the kind service, frozen', () => {
+    const service = defineService({ name: 'orders-service' });
 
-    expect(contract.kind).toBe('contract');
+    expect(service).toEqual({ kind: 'service', name: 'orders-service' });
+    expect(Object.isFrozen(service)).toBe(true);
   });
 
-  test('a Contract keeps what its root lists by identity', () => {
+  test('definitions is a type error: what a Service’s Contract reaches says which Definitions Packages it uses', () => {
+    // @ts-expect-error: definitions is not a declared field
+    const contract = defineService({ name: 'orders-service', definitions: [] });
+
+    expect(contract.kind).toBe('service');
+  });
+
+  test('a Service’s Contract keeps what its Root lists by identity', () => {
     const definitions = defineDefinitions({});
     const paymentsGroup = defineGroup({
       name: 'payments',
@@ -97,7 +105,7 @@ describe('defineContract', () => {
       endpoints: [payments.endpoints.refundPayment],
     });
 
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       standardRejections: definitions,
       groups: [paymentsGroup],
@@ -107,10 +115,10 @@ describe('defineContract', () => {
     expect(contract.groups[0]).toBe(paymentsGroup);
     expect(contract.standardRejections).toBe(definitions);
     expect(contract.dependencies[0]).toBe(paymentsDependency);
-    expect(contract.kind).toBe('contract');
+    expect(contract.kind).toBe('service');
   });
 
-  test('a Contract keeps each Group’s Command and Subscription with its exact type', () => {
+  test('a Service’s Contract keeps each Group’s Command and Subscription with its exact type', () => {
     const paymentsGroup = defineGroup({
       name: 'payments',
       description: 'Payments',
@@ -119,7 +127,7 @@ describe('defineContract', () => {
       subscriptions: [auditOnSettled],
     });
 
-    const contract = defineContract({ name: 'payments-service', groups: [paymentsGroup] });
+    const contract = defineService({ name: 'payments-service', groups: [paymentsGroup] });
 
     expectTypeOf(contract.groups[0].commands[0]).toEqualTypeOf(refundCardV1);
     expectTypeOf(contract.groups[0].subscriptions[0]).toEqualTypeOf(auditOnSettled);
@@ -176,10 +184,23 @@ describe('defineApplication', () => {
   });
 });
 
-describe('the roots’ fields', () => {
-  test('an undeclared field on a Contract is a type error', () => {
-    // @ts-expect-error a Contract lists its Endpoints through its Groups
-    const declare = () => defineContract({ name: 'orders-service', endpoints: [] });
+describe('Contract', () => {
+  test('a Service’s and an Application’s Contract are Contracts, a Definitions Package is not', () => {
+    const service = defineService({ name: 'orders-service' });
+    const application = defineApplication({ name: 'web-admin' });
+    const definitions = defineDefinitions({});
+
+    expectTypeOf(service).toExtend<Contract>();
+    expectTypeOf(application).toExtend<Contract>();
+    expectTypeOf(definitions).not.toExtend<Contract>();
+    expect([service.kind, application.kind]).toEqual(['service', 'application']);
+  });
+});
+
+describe('the Roots’ fields', () => {
+  test('an undeclared field on a Service’s Contract is a type error', () => {
+    // @ts-expect-error a Service’s Contract lists its Endpoints through its Groups
+    const declare = () => defineService({ name: 'orders-service', endpoints: [] });
 
     expect(declare).not.toThrow();
   });
@@ -187,20 +208,20 @@ describe('the roots’ fields', () => {
   test.each([
     [
       'events',
-      // @ts-expect-error a Contract lists its Events through its Groups
-      () => defineContract({ name: 'payments-service', events: [paymentSettledV1] }),
+      // @ts-expect-error a Service’s Contract lists its Events through its Groups
+      () => defineService({ name: 'payments-service', events: [paymentSettledV1] }),
     ],
     [
       'commands',
-      // @ts-expect-error a Contract lists its Commands through its Groups
-      () => defineContract({ name: 'payments-service', commands: [refundCardV1] }),
+      // @ts-expect-error a Service’s Contract lists its Commands through its Groups
+      () => defineService({ name: 'payments-service', commands: [refundCardV1] }),
     ],
     [
       'subscriptions',
-      // @ts-expect-error a Contract lists its Subscriptions through its Groups
-      () => defineContract({ name: 'payments-service', subscriptions: [auditOnSettled] }),
+      // @ts-expect-error a Service’s Contract lists its Subscriptions through its Groups
+      () => defineService({ name: 'payments-service', subscriptions: [auditOnSettled] }),
     ],
-  ])('a Contract’s root that lists %s is a type error', (_field, declare) => {
+  ])('a Service’s Root that lists %s is a type error', (_field, declare) => {
     expect(declare).not.toThrow();
   });
 
@@ -213,13 +234,13 @@ describe('the roots’ fields', () => {
   });
 });
 
-describe('a declared root’s containers', () => {
-  test('a Contract freezes its lists', () => {
+describe('a declared Root’s containers', () => {
+  test('a Service’s Contract freezes its lists', () => {
     const groups = [
       defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] }),
     ];
 
-    const contract = defineContract({ name: 'payments-service', groups });
+    const contract = defineService({ name: 'payments-service', groups });
     groups.pop();
 
     expect(contract.groups).toHaveLength(1);

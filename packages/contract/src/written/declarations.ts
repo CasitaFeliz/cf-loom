@@ -1,5 +1,5 @@
-import type { Definitions, Dependency } from '../declarations/index.ts';
-import { isContract, isDefinitions, isDependency } from '../declarations/index.ts';
+import type { Definitions, Dependency, Root } from '../declarations/index.ts';
+import { isDefinitions, isDependency, isServiceContract } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { groupedOf, groupsOf } from './grouped.ts';
 import type {
@@ -14,7 +14,6 @@ import type {
   LocatedStandardRejection,
   LocatedSubscription,
   NamedDefinitions,
-  Root,
 } from './located.ts';
 import { type Members, membersOf } from './members.ts';
 import { codesOf, guardsOf, rejectionsOf } from './references.ts';
@@ -127,7 +126,7 @@ function namedSourceOf(root: Root): NamedDefinitions | undefined {
  * rule reports.
  */
 export function standardRejectionsSourceOf(root: unknown): Definitions | undefined {
-  if (!isContract(root)) {
+  if (!isServiceContract(root)) {
     return undefined;
   }
   const named: unknown = root.standardRejections;

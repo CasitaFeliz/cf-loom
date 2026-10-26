@@ -45,7 +45,7 @@ export function structureFailures(declarations: Declarations): readonly Declarat
 
 /** What a Contract names as `standardRejections`, when it names one, is a Definitions Package's definitions. */
 function standardsSourceFailures(root: Declarations['root']): readonly DeclarationFailure[] {
-  if (root.kind !== 'contract' || root.standardRejections === undefined) {
+  if (root.kind !== 'service' || root.standardRejections === undefined) {
     return [];
   }
   if (standardRejectionsSourceOf(root) !== undefined) {
@@ -99,7 +99,7 @@ function groupListings({ at, group }: LocatedGroup): readonly Listing[] {
 
 function rootListings(root: Declarations['root']): readonly Listing[] {
   switch (root.kind) {
-    case 'contract':
+    case 'service':
       return [
         { at: ['groups'], list: root.groups, noun: 'a Group', fits: isGroup },
         {

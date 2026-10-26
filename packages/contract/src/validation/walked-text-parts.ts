@@ -1,4 +1,4 @@
-import type { Contract, Endpoint, Guard } from '../declarations/index.ts';
+import type { Endpoint, Guard, ServiceContract } from '../declarations/index.ts';
 import { isEndpoint, isGuard } from '../declarations/index.ts';
 import { type ObjectNode, walkSchemas } from '../walker/index.ts';
 import { declarationsOf, type ObjectPart } from '../written/index.ts';
@@ -30,7 +30,7 @@ export type WalkedTextParts =
  * rule `generate` applies to text parts: what they hold, their names, the path's params and one
  * shape per header or query name.
  */
-export function walkedTextPartsOf(contract: Contract): WalkedTextParts {
+export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const declarations = declarationsOf(contract, {});
   const { slots, failures: notSchemas } = schemaSlotsAmong(textSlotsOf(declarations));
   const walked = walkSchemas(locatedSchemasOf(slots), () => undefined);

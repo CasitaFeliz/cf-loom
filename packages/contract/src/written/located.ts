@@ -1,7 +1,5 @@
 import type {
-  Application,
   Command,
-  Contract,
   Definitions,
   Dependency,
   Endpoint,
@@ -13,9 +11,6 @@ import type {
   Subscription,
 } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
-
-/** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
-export type Root = Contract | Application | Definitions;
 
 /** A Group and where it sits in its root: `['groups', <name>]`. */
 export type LocatedGroup = { readonly at: Path; readonly group: Group };

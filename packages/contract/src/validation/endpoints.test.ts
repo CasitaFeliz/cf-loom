@@ -2,20 +2,20 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
   type Lifecycle,
   type Method,
   type SuccessStatus,
   type Visibility,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
 /** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown) {
-  return validateContract(root, aRootPackage(root));
+function validateInPackage(root: Root) {
+  return validateRoot(root, aRootPackage(root));
 }
 
 const orderBody = z.object({ id: z.uuid() });
@@ -41,7 +41,7 @@ const createOrder = {
 /** The result of validating one Endpoint, written with a cast where the types refuse it. */
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineContract({ name: 'orders-service', groups: [orders] }));
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
 function failedAt(at: readonly string[], rule: string, message: string) {
@@ -53,7 +53,7 @@ function failedAt(at: readonly string[], rule: string, message: string) {
   };
 }
 
-describe('validateContract: an Endpoint’s method, Visibility and lifecycle', () => {
+describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () => {
   test('every declared method validates', () => {
     const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'] as const;
     const endpoints = methods.map((method) => defineEndpoint({ ...createOrder, method }));
@@ -126,7 +126,7 @@ describe('validateContract: an Endpoint’s method, Visibility and lifecycle', (
   });
 });
 
-describe('validateContract: a Success’s status and body', () => {
+describe('validateRoot: a Success’s status and body', () => {
   test('a Success status outside 200 to 204 fails', () => {
     const status = 205 as SuccessStatus;
 
@@ -172,7 +172,7 @@ describe('validateContract: a Success’s status and body', () => {
   });
 });
 
-describe('validateContract: an Input body', () => {
+describe('validateRoot: an Input body', () => {
   test('a body on POST validates', () => {
     const validated = validateEndpoint(
       defineEndpoint({ ...createOrder, input: { body: z.object({ total: z.int() }) } }),
@@ -194,7 +194,7 @@ describe('validateContract: an Input body', () => {
   });
 });
 
-describe('validateContract: where Endpoints sit', () => {
+describe('validateRoot: where Endpoints sit', () => {
   test('a Retired and an Active Endpoint of one name sit at their own identities', () => {
     const retired = defineEndpoint({
       ...listOrders,
@@ -217,7 +217,7 @@ describe('validateContract: where Endpoints sit', () => {
     });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     const nonText =

@@ -1,17 +1,17 @@
 import type {
-  Application,
+  ApplicationContract,
   Command,
-  Contract,
   Definitions,
   Dependency,
   Event,
   Group,
+  ServiceContract,
   Subscription,
 } from '../declarations/index.ts';
 import type { Declarations } from '../written/index.ts';
 import type { Fields, KnownFields } from './declared-fields.ts';
 
-const contractFields = {
+const serviceFields = {
   declared: {
     kind: true,
     name: true,
@@ -23,7 +23,7 @@ const contractFields = {
   strings: { kind: true, name: true },
   nonBlank: {},
   objects: {},
-} satisfies Fields<Contract>;
+} satisfies Fields<ServiceContract>;
 
 const applicationFields = {
   declared: { kind: true, name: true, dependencies: true },
@@ -31,7 +31,7 @@ const applicationFields = {
   strings: { kind: true, name: true },
   nonBlank: {},
   objects: {},
-} satisfies Fields<Application>;
+} satisfies Fields<ApplicationContract>;
 
 /** The fields of an Event's Message Version. */
 export const eventFields = {
@@ -129,7 +129,7 @@ export const dependencyFields = {
 
 /** The fields of each kind of root. */
 export const rootFields: Readonly<Record<Declarations['root']['kind'], KnownFields>> = {
-  contract: contractFields,
+  service: serviceFields,
   application: applicationFields,
   definitions: definitionsFields,
 };

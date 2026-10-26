@@ -7,14 +7,14 @@ import { isDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { Guard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
-import type { Application, Contract } from './roots.ts';
+import type { ApplicationContract, Root, ServiceContract } from './roots.ts';
 import type { StandardRejection } from './standard-rejections.ts';
 import type { Subscription } from './subscription.ts';
 
 /** The `kind` every declaration carries, which tells them apart at runtime. */
 export type Kind =
-  | Contract['kind']
-  | Application['kind']
+  | ServiceContract['kind']
+  | ApplicationContract['kind']
   | Definitions['kind']
   | Group['kind']
   | Endpoint['kind']
@@ -26,19 +26,24 @@ export type Kind =
   | Command['kind']
   | Subscription['kind'];
 
-/** Whether a value is a declared Contract, from any copy of this package. */
-export function isContract(value: unknown): value is Contract {
-  return isDeclaration(value) && value.kind === 'contract';
+/** Whether a value is a declared Service's Contract, from any copy of this package. */
+export function isServiceContract(value: unknown): value is ServiceContract {
+  return isDeclaration(value) && value.kind === 'service';
 }
 
-/** Whether a value is a declared Application, from any copy of this package. */
-export function isApplication(value: unknown): value is Application {
+/** Whether a value is a declared Application's Contract, from any copy of this package. */
+export function isApplicationContract(value: unknown): value is ApplicationContract {
   return isDeclaration(value) && value.kind === 'application';
 }
 
 /** Whether a value is a declared Definitions Package, from any copy of this package. */
 export function isDefinitions(value: unknown): value is Definitions {
   return isDeclaration(value) && value.kind === 'definitions';
+}
+
+/** Whether a value is a declared Root of any kind, from any copy of this package. */
+export function isRoot(value: unknown): value is Root {
+  return isServiceContract(value) || isApplicationContract(value) || isDefinitions(value);
 }
 
 /** Whether a value is a declared Group, from any copy of this package. */

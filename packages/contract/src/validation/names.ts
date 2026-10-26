@@ -1,4 +1,4 @@
-import { isLive } from '../declarations/index.ts';
+import { isLive, type Root } from '../declarations/index.ts';
 import {
   type Declarations,
   identityOf,
@@ -6,7 +6,6 @@ import {
   type LocatedEndpoint,
   packageNamePartsOf,
   providerNameOf,
-  type Root,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';

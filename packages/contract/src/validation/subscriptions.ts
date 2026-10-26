@@ -4,6 +4,7 @@ import {
   isEvent,
   isLive,
   providerOf,
+  type Root,
   reaches,
 } from '../declarations/index.ts';
 import {
@@ -12,7 +13,6 @@ import {
   isWithoutValue,
   type LocatedSubscription,
   messageIdentityOf,
-  type Root,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';

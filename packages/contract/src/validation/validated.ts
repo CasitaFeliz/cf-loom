@@ -1,3 +1,4 @@
+import type { Root } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   type Declarations,
@@ -12,7 +13,6 @@ import {
   type LocatedSubscription,
   type Members,
   type ResolvedStandard,
-  type Root,
   resolvedStandards,
 } from '../written/index.ts';
 import { definitionsPackageOf } from './provenance.ts';
