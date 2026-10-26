@@ -467,22 +467,94 @@ const fieldRows: readonly Row[] = [
 
 describe('compatibilityReportOf, fields', () => {
   test.each(casesOf(fieldRows))('$change is $outcome in $place', expectRow);
+});
 
-  test.each(places)(
-    'a change of description, examples or origin alone is no Change in $name',
-    (place) => {
-      const from: SchemaNode = anObject({
-        note: required({ type: 'string', description: 'A note', origin: 'local', examples: ['a'] }),
-      });
-      const to: SchemaNode = anObject({
-        note: required({ type: 'string', description: 'The note', origin: '@org/x@1#note' }),
-      });
+const neutralEverywhere: Classes = [neutral, neutral, neutral, neutral];
 
-      const report = reportOf(place, { from, to });
+function annotationChanged(annotation: 'description' | 'examples' | 'origin' | 'id') {
+  return { kind: 'annotation-changed', annotation } as const;
+}
 
-      expect(report).toEqual({ changes: [], hashChanged: true });
-    },
-  );
+const annotationRows: readonly Row[] = [
+  {
+    change: 'changing a field’s description',
+    from: anObject({ note: required({ type: 'string', description: 'A note' }) }),
+    to: anObject({ note: required({ type: 'string', description: 'The note' }) }),
+    found: [found(annotationChanged('description'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'adding a field’s description',
+    from: anObject({ note: required(aString) }),
+    to: anObject({ note: required({ type: 'string', description: 'The note' }) }),
+    found: [found(annotationChanged('description'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing a field’s examples',
+    from: anObject({ note: required({ type: 'string', examples: ['a'] }) }),
+    to: anObject({ note: required({ type: 'string', examples: ['a', 'b'] }) }),
+    found: [found(annotationChanged('examples'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing a field’s origin',
+    from: anObject({ note: required({ type: 'string', origin: 'local' }) }),
+    to: anObject({ note: required({ type: 'string', origin: '@org/x@1#note' }) }),
+    found: [found(annotationChanged('origin'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing the schema’s own description',
+    from: { type: 'number', description: 'A total' },
+    to: { type: 'number', description: 'The total' },
+    found: [found(annotationChanged('description'), neutralEverywhere)],
+  },
+  {
+    change: 'changing a description, examples and origin at once',
+    from: anObject({
+      note: required({ type: 'string', description: 'A note', origin: 'local', examples: ['a'] }),
+    }),
+    to: anObject({
+      note: required({ type: 'string', description: 'The note', origin: '@org/x@1#note' }),
+    }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, noteField),
+      found(annotationChanged('examples'), neutralEverywhere, noteField),
+      found(annotationChanged('origin'), neutralEverywhere, noteField),
+    ],
+  },
+  {
+    change: 'changing a description beside a removed field',
+    from: anObject({
+      id: required({ type: 'string', description: 'An id' }),
+      note: required(aString),
+    }),
+    to: anObject({ id: required({ type: 'string', description: 'The id' }) }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, ['fields', 'id']),
+      found({ kind: 'field-removed' }, guaranteesLess, noteField),
+    ],
+  },
+  {
+    change: 'changing the description of an array’s items',
+    from: { type: 'array', items: { type: 'string', description: 'A tag' } },
+    to: { type: 'array', items: { type: 'string', description: 'The tag' } },
+    found: [found(annotationChanged('description'), neutralEverywhere, ['items'])],
+  },
+  {
+    change: 'changing the description of a discriminated union’s variant field',
+    from: aTagged('kind', { card: { last4: required({ type: 'string', description: 'a' }) } }),
+    to: aTagged('kind', { card: { last4: required({ type: 'string', description: 'b' }) } }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, [
+        'variants',
+        '"card"',
+        'fields',
+        'last4',
+      ]),
+    ],
+  },
+];
+
+describe('compatibilityReportOf, a node’s annotations', () => {
+  test.each(casesOf(annotationRows))('$change is $outcome in $place', expectRow);
 });
 
 const sizes = ['a', 'b'];
@@ -634,14 +706,16 @@ const enumRows: readonly Row[] = [
 describe('compatibilityReportOf, enums and literals', () => {
   test.each(casesOf(enumRows))('$change is $outcome in $place', expectRow);
 
-  test.each(places)('changing only an enum’s description is no Change in $name', (place) => {
-    const from: SchemaNode = { type: 'enum', values: sizes, open: false, description: 'Sizes' };
-    const to: SchemaNode = { type: 'enum', values: sizes, open: false, description: 'The sizes' };
-
-    const report = reportOf(place, { from, to });
-
-    expect(report.changes).toEqual([]);
-  });
+  test.each(
+    casesOf([
+      {
+        change: 'changing only an enum’s description',
+        from: { type: 'enum', values: sizes, open: false, description: 'Sizes' },
+        to: { type: 'enum', values: sizes, open: false, description: 'The sizes' },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 });
 
 const plainUnion = (...options: readonly SchemaNode[]): SchemaNode => ({ type: 'union', options });
@@ -723,47 +797,55 @@ const unionRows: readonly Row[] = [
 describe('compatibilityReportOf, unions', () => {
   test.each(casesOf(unionRows))('$change is $outcome in $place', expectRow);
 
-  test.each(places)(
-    'a plain union whose options differ only in descriptions is no Change in $name',
-    (place) => {
-      const described = plainUnion(
-        { type: 'string', description: 'a' },
-        { type: 'number', description: 'z' },
-      );
-      const redescribed = plainUnion(
-        { type: 'string', description: 'z' },
-        { type: 'number', description: 'a' },
-      );
-
-      const report = reportOf(place, { from: described, to: redescribed });
-
-      expect(report).toEqual({ changes: [], hashChanged: true });
-    },
-  );
-
-  test.each(places)(
-    'an intersection whose items differ only in descriptions is no Change in $name, whatever order they sort in',
-    (place) => {
-      const withNumberFirst: SchemaNode = {
-        type: 'allOf',
-        items: [
-          { type: 'number', description: 'a' },
-          { type: 'string', description: 'z' },
-        ],
-      };
-      const withStringFirst: SchemaNode = {
-        type: 'allOf',
-        items: [
+  test.each(
+    casesOf([
+      {
+        change: 'a plain union whose options differ only in descriptions',
+        from: plainUnion(
           { type: 'string', description: 'a' },
           { type: 'number', description: 'z' },
+        ),
+        to: plainUnion({ type: 'string', description: 'z' }, { type: 'number', description: 'a' }),
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+      {
+        change: 'a plain union whose options differ only in examples and origin',
+        from: plainUnion({ type: 'string', examples: ['a'], origin: 'local' }, { type: 'number' }),
+        to: plainUnion(
+          { type: 'string', examples: ['b'], origin: '@org/x@1#id' },
+          { type: 'number' },
+        ),
+        found: [
+          found(annotationChanged('examples'), neutralEverywhere),
+          found(annotationChanged('origin'), neutralEverywhere),
         ],
-      };
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
-      const report = reportOf(place, { from: withNumberFirst, to: withStringFirst });
-
-      expect(report).toEqual({ changes: [], hashChanged: true });
-    },
-  );
+  test.each(
+    casesOf([
+      {
+        change:
+          'an intersection whose items differ only in descriptions, whatever order they sort in',
+        from: {
+          type: 'allOf',
+          items: [
+            { type: 'number', description: 'a' },
+            { type: 'string', description: 'z' },
+          ],
+        },
+        to: {
+          type: 'allOf',
+          items: [
+            { type: 'string', description: 'a' },
+            { type: 'number', description: 'z' },
+          ],
+        },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 });
 
 type Constraint = Extract<ShapeDifference, { kind: 'constraint-tightened' }>['constraint'];
@@ -1324,26 +1406,31 @@ const treeContainers: readonly {
   readonly container: string;
   readonly node: SchemaNode;
   readonly changed: Found;
+  readonly described: Found;
 }[] = [
   {
     container: 'a plain union',
     node: { type: 'union', options: [aRef('tree'), aString] },
     changed: found({ kind: 'union-changed' }, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
   {
     container: 'a record',
     node: aRecord(aString, aRef('tree')),
     changed: found(nameAdded, acceptsLess, ['value', 'fields', 'name']),
+    described: found(annotationChanged('description'), neutralEverywhere, ['value']),
   },
   {
     container: 'a tuple',
     node: aTuple([aRef('tree')]),
     changed: found(tupleChanged, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
   {
     container: 'an intersection',
     node: { type: 'allOf', items: [aRef('tree'), aString] },
     changed: found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
 ];
 
@@ -1518,7 +1605,7 @@ describe('compatibilityReportOf, refs', () => {
     },
   );
 
-  test('a cycle whose refs fall at different depths on each side ends and finds no Change', () => {
+  test('a cycle whose refs fall at different depths on each side ends and finds only the def’s id', () => {
     const shallow: Defs = { shallow: anObject({ x: required(aRef('shallow')) }) };
     const deep: Defs = {
       deep: anObject({ x: required(anObject({ x: required(aRef('deep')) })) }),
@@ -1531,7 +1618,9 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: deep,
     });
 
-    expect(report.changes).toEqual([]);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(annotationChanged('id'), neutralEverywhere, ['fields', 'x'])),
+    ]);
   });
 
   test('a def with twenty refs to itself is compared in one visit of each', () => {
@@ -1572,46 +1661,66 @@ describe('compatibilityReportOf, refs', () => {
     ]);
   });
 
-  test.each(places)(
-    'pointing a ref at another def of the same shape is no Change in $name',
-    (place) => {
-      const defs: Defs = { tree, branch };
-
-      const report = reportOf(place, {
+  test.each(
+    casesOf([
+      {
+        change: 'pointing a ref at another def of the same shape',
         from: aRef('tree'),
         to: aRef('branch'),
-        fromDefs: defs,
-        toDefs: defs,
-      });
-
-      expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)('renaming a recursive def’s id is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('branch'),
-      fromDefs: { tree },
-      toDefs: { branch },
-    });
-
-    expect(report).toEqual({ changes: [], hashChanged: true });
-  });
-
-  test.each(places)(
-    'pointing a ref at the other def of a mutual recursion of the same shape is no Change in $name',
-    (place) => {
-      const report = reportOf(place, {
+        fromDefs: { tree, branch },
+        toDefs: { tree, branch },
+        found: [found(annotationChanged('id'), neutralEverywhere)],
+      },
+      {
+        change: 'renaming a recursive def’s id',
+        from: aRef('tree'),
+        to: aRef('branch'),
+        fromDefs: { tree },
+        toDefs: { branch },
+        found: [found(annotationChanged('id'), neutralEverywhere)],
+      },
+      {
+        change: 'pointing a ref at the other def of a mutual recursion of the same shape',
         from: aRef('first'),
         to: aRef('second'),
         fromDefs: mutualDefs,
         toDefs: mutualDefs,
-      });
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next']),
+        ],
+      },
+      {
+        change: 'an alias def on one side only',
+        from: aRef('tree'),
+        to: aRef('alias'),
+        fromDefs: { tree },
+        toDefs: { alias: aRef('tree'), tree },
+        found: [found(annotationChanged('id'), neutralEverywhere)],
+      },
+      {
+        change: 'describing a recursive def a ref names',
+        from: aRef('tree'),
+        to: aRef('tree'),
+        fromDefs: { tree },
+        toDefs: { tree: { ...tree, description: 'A tree' } },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
-      expect(report.changes).toEqual([]);
-    },
-  );
+  test.each(
+    casesOf(
+      treeContainers.map(({ container, node, described }) => ({
+        change: `describing a def a ref reaches inside ${container}`,
+        from: node,
+        to: node,
+        fromDefs: { tree },
+        toDefs: { tree: { ...tree, description: 'A tree' } },
+        found: [described],
+      })),
+    ),
+  )('$change is $outcome in $place', expectRow);
 
   test.each(places)('nullability moved from a ref to its def is no Change in $name', (place) => {
     const report = reportOf(place, {
@@ -1622,17 +1731,6 @@ describe('compatibilityReportOf, refs', () => {
     });
 
     expect(report.changes).toEqual([]);
-  });
-
-  test.each(places)('an alias def on one side only is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('alias'),
-      fromDefs: { tree },
-      toDefs: { alias: aRef('tree'), tree },
-    });
-
-    expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
   test.each(places)(
@@ -1689,39 +1787,6 @@ describe('compatibilityReportOf, refs', () => {
       });
 
       expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)('a ref whose def is unchanged is no Change in $name', (place) => {
-    const describedTree = { ...tree, description: 'A tree' };
-
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('tree'),
-      fromDefs: { tree: tree },
-      toDefs: { tree: describedTree },
-    });
-
-    expect(report).toEqual({ changes: [], hashChanged: true });
-  });
-
-  test.each(
-    treeContainers.flatMap(({ container, node }) =>
-      places.map((place) => ({ container, node, place: place.name, where: place })),
-    ),
-  )(
-    'a def changed only in its description under $container is no Change in $place',
-    ({ node, where }) => {
-      const describedTree = { ...tree, description: 'A tree' };
-
-      const report = reportOf(where, {
-        from: node,
-        to: node,
-        fromDefs: { tree },
-        toDefs: { tree: describedTree },
-      });
-
-      expect(report).toEqual({ changes: [], hashChanged: true });
     },
   );
 

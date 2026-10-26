@@ -801,7 +801,7 @@ describe('compatibilityReportOf, the report', () => {
     ]);
   });
 
-  test('an Application’s Dependencies give no Element Change, only a changed hash', () => {
+  test('an Application’s Dependencies give Dependency Changes, never Element Changes', () => {
     const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
     const proposed = anApplication({
       dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder] } },
@@ -809,7 +809,14 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([
+      {
+        site: { kind: 'dependency', name: 'orders-service', visibility: 'private' },
+        difference: { kind: 'added' },
+        class: 'neutral',
+        verdict: 'allowed',
+      },
+    ]);
   });
 
   test('a Definitions Package’s Snapshot gives no Element Change', () => {
@@ -821,7 +828,7 @@ describe('compatibilityReportOf, the report', () => {
     expect(report).toEqual({ changes: [], hashChanged: true });
   });
 
-  test('a Dependency declared against a newer version changes the hash', () => {
+  test('a Dependency declared against a newer version is one Neutral Change', () => {
     const baseline = aBaseline({
       dependencies: { 'payments-service': { against: '5.1.0', endpoints: [] } },
     });
@@ -831,7 +838,9 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes.map(({ difference }) => difference)).toEqual([
+      { kind: 'against-changed', from: '5.1.0', to: '5.2.0' },
+    ]);
   });
 
   test.each(['3.4.0', '10.0.0-rc.1'])(

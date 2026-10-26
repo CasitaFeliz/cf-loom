@@ -9,6 +9,7 @@ import {
 } from '../snapshot/index.ts';
 import { siteChangesOf } from './changes.ts';
 import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.ts';
+import { dependencyDifferencesOf } from './dependencies.ts';
 import { commandChangesOf, endpointChangesOf, eventChangesOf } from './element-changes.ts';
 import { exportDifferencesOf } from './exports.ts';
 import { guardDifferencesOf, serviceGuardDifferencesOf } from './guards.ts';
@@ -28,10 +29,12 @@ export function compatibilityReportOf(
   };
 }
 
-/** An Application holds only Dependencies, so it has no Change to judge. */
 function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
   if (baseline.kind === 'service' && proposed.kind === 'service') {
     return serviceChangesOf(baseline, proposed);
+  }
+  if (baseline.kind === 'application' && proposed.kind === 'application') {
+    return siteChangesOf(dependencyDifferencesOf(baseline.dependencies, proposed.dependencies));
   }
   if (baseline.kind === 'definitions' && proposed.kind === 'definitions') {
     return definitionsChangesOf(baseline, proposed);
@@ -50,6 +53,7 @@ function serviceChangesOf(
     ...siteChangesOf(serviceGuardDifferencesOf(baseline, proposed)),
     ...siteChangesOf(serviceCodeDifferencesOf(baseline, proposed)),
     ...siteChangesOf(subscriptionDifferencesOf(baseline, proposed)),
+    ...siteChangesOf(dependencyDifferencesOf(baseline.dependencies, proposed.dependencies)),
   ];
 }
 
