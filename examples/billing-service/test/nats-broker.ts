@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { type BrokerLimits, type BrokerPlan, jetstream } from '@cf-loom/messaging/jetstream';
+import { applyBrokerPlan, type BrokerLimits, type BrokerPlan } from '@cf-loom/messaging/jetstream';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
@@ -33,8 +33,8 @@ function planOf(serviceDir: string, prefix: string): BrokerPlan {
 
 /** Applies the plan of the Service in `serviceDir` to the nats-server at `url`, as the organization's deploy step would. */
 export async function applyPlanOf(serviceDir: string, url: string, prefix: string): Promise<void> {
-  const broker = jetstream({ connect: () => connect({ servers: url }), prefix });
-  await broker.apply(planOf(serviceDir, prefix), testLimits);
+  const connecting = { connect: () => connect({ servers: url }) };
+  await applyBrokerPlan(connecting, planOf(serviceDir, prefix), testLimits);
 }
 
 /** The stream sequence and Fact id of the last Message on a subject; undefined while the subject holds none. */
