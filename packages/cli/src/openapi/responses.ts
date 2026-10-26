@@ -11,11 +11,18 @@ import { faultEnvelopeName } from './envelopes.ts';
 import type { OpenApiObject } from './objects.ts';
 import type { LiveServed, Served, ServedRejection } from './served.ts';
 
+/** A header as one Outcome of an Endpoint declares it. */
+type HeaderPart = {
+  readonly required: boolean;
+  readonly description: string | undefined;
+  readonly schema: JsonSchema;
+};
+
 /** What one Outcome of an Endpoint adds to the response of its status. */
 type StatusPart = {
   readonly status: number;
   readonly description: string;
-  readonly headers?: Readonly<Record<string, OpenApiObject>>;
+  readonly headers?: Readonly<Record<string, HeaderPart>>;
   readonly schema?: JsonSchema | undefined;
 };
 
@@ -49,11 +56,11 @@ function successPartOf(success: LiveServed['success']): StatusPart {
   };
 }
 
-function headersOf(headers: ObjectNode): Readonly<Record<string, OpenApiObject>> {
+function headersOf(headers: ObjectNode): Readonly<Record<string, HeaderPart>> {
   const entries = Object.entries(headers.fields).map(([name, field]) => {
     const schema = jsonSchemaOf(field.schema, '2020-12');
-    const description = field.schema.description;
-    return [name, definedOf({ required: field.required, description, schema })] as const;
+    const header = { required: field.required, description: field.schema.description, schema };
+    return [name, header] as const;
   });
   return Object.fromEntries(entries);
 }
@@ -66,7 +73,7 @@ function rejectionPartOf({ code, status, message, headers }: ServedRejection): S
 /** The `Retry-After` a retryable Fault may carry. */
 const retryAfterHeader = 'retry-after';
 
-const retryAfterObject: OpenApiObject = {
+const retryAfterObject: HeaderPart = {
   required: false,
   description: 'When to retry, in whole seconds, if the Fault says',
   schema: { type: 'integer', minimum: 0 },
@@ -124,14 +131,35 @@ function responseOf(parts: readonly StatusPart[], deprecatedAt: string | undefin
   });
 }
 
-/** The headers of one status's parts, each once, required only when every part of the status requires it. */
+/** The headers of one status's parts, each name once. */
 function mergedHeadersOf(parts: readonly StatusPart[]): Readonly<Record<string, OpenApiObject>> {
-  const listed = parts.flatMap(({ headers }) => Object.entries(headers ?? {}));
-  const merged = listed.map(([name, header]) => {
-    const required = parts.every(({ headers }) => headers?.[name]?.['required'] === true);
-    return [name, { ...header, required }] as const;
-  });
+  const names = new Set(parts.flatMap(({ headers }) => Object.keys(headers ?? {})));
+  const merged = [...names].map((name) => [name, mergedHeaderOf(name, parts)] as const);
   return Object.fromEntries(merged);
+}
+
+/**
+ * A header of one status: required only when every part of the status requires it, its schemas
+ * the alternatives of those the parts declare, and its descriptions joined.
+ */
+function mergedHeaderOf(name: string, parts: readonly StatusPart[]): OpenApiObject {
+  const declared = parts.map(({ headers }) => headers?.[name]).filter(isHeader);
+  const required = parts.every(({ headers }) => headers?.[name]?.required === true);
+  const descriptions = new Set(declared.map(({ description }) => description).filter(isText));
+  const schemas = new Map(declared.map(({ schema }) => [JSON.stringify(schema), schema]));
+  return definedOf({
+    required,
+    description: descriptions.size === 0 ? undefined : [...descriptions].join('; '),
+    schema: alternativesOf([...schemas.values()]),
+  });
+}
+
+function isHeader(header: HeaderPart | undefined): header is HeaderPart {
+  return header !== undefined;
+}
+
+function isText(text: string | undefined): text is string {
+  return text !== undefined;
 }
 
 function isSchema(schema: JsonSchema | undefined): schema is JsonSchema {

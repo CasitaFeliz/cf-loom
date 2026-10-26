@@ -369,7 +369,7 @@ The responses are one per status, in status order; when several answer one statu
 | Status | Response |
 | --- | --- |
 | the Success's | `Success`, with its headers (each with its `description`) and its body; none for a body-less Success such as a 204 |
-| each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it, with the headers the code declares (each with its `description`), required in the response only when every code of that status requires it |
+| each Rejection code's | the Endpoint's own, its Guards', invalid-input and not-implemented, and not-found when it lists it, with the headers the code declares (each with its `description`), required in the response only when every code of that status requires it, and, when the codes declare one name with different schemas, `oneOf` them with their descriptions joined |
 | 500 and 503 | `FaultEnvelope`: a Fault that is not retryable (or `INVALID_OUTCOME`), and a retryable one, which may carry `retry-after` |
 | 413 | `FaultEnvelope`, for `BODY_TOO_LARGE`, only for an Endpoint with an Input body, and when `serve` is given `maxBodyBytes` as a number |
 

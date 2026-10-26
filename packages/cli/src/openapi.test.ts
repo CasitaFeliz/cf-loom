@@ -133,6 +133,18 @@ const orders = [
   '  body: z.object({ lockedAt: z.iso.datetime() }),',
   '});',
   "const duplicateOrder = defineRejection({ code: 'DUPLICATE_ORDER', status: 409, message: 'The order exists' });",
+  'const slowDown = defineRejection({',
+  "  code: 'SLOW_DOWN',",
+  '  status: 429,',
+  "  message: 'Too many requests',",
+  "  headers: z.object({ 'retry-after': z.int().describe('Seconds to wait') }),",
+  '});',
+  'const tooBusy = defineRejection({',
+  "  code: 'TOO_BUSY',",
+  '  status: 429,',
+  "  message: 'The Service is busy',",
+  "  headers: z.object({ 'retry-after': z.string().describe('An HTTP-date') }),",
+  '});',
   "const orderClosed = defineRejection({ code: 'ORDER_CLOSED', status: 422, message: 'The order is closed' });",
   "const refusal = z.object({ get cause() { return refusal.optional(); } }).meta({ id: 'refusal' });",
   "const orderRefused = defineRejection({ code: 'ORDER_REFUSED', status: 422, message: 'The order is refused', body: refusal });",
@@ -192,7 +204,7 @@ const orders = [
   '    query: z.object({ lang: z.string() }),',
   '  },',
   '  success: { status: 200, body: z.object({ itemId: z.string() }) },',
-  '  rejections: [orderRefused],',
+  '  rejections: [orderRefused, slowDown, tooBusy],',
   '});',
   'export const deleteOrder = defineEndpoint({',
   "  name: 'deleteOrder',",
@@ -937,6 +949,23 @@ describe('cf-loom openapi: the responses', () => {
     ).toBe(false);
   });
 
+  test('two Rejections of one status that declare a header with different schemas list oneOf them, their descriptions joined', () => {
+    expect(
+      valueAt(responseOf('/orders/{orderId}/items/{itemId}', 'get', '429'), 'headers'),
+    ).toEqual({
+      'retry-after': {
+        required: true,
+        description: 'Seconds to wait; An HTTP-date',
+        schema: {
+          oneOf: [
+            { type: 'integer', description: 'Seconds to wait' },
+            { type: 'string', description: 'An HTTP-date' },
+          ],
+        },
+      },
+    });
+  });
+
   test('a Rejection’s response carries its code’s Envelope', () => {
     expect(responseBodyOf('/orders/{orderId}', 'get', '409')).toEqual(refTo('ORDER_LOCKED'));
   });
@@ -1144,6 +1173,8 @@ describe('cf-loom openapi: the components', () => {
       'ORDER_LOCKED',
       'ORDER_REFUSED',
       'PAYLOAD_TOO_BIG',
+      'SLOW_DOWN',
+      'TOO_BUSY',
       'UNAUTHENTICATED',
     ]);
   });

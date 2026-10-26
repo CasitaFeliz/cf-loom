@@ -18,9 +18,9 @@ import { conflictFailures, textPartFailures } from './text-only.ts';
 export type TextPartNodes = Readonly<Partial<Record<ObjectPart, ObjectNode>>>;
 
 /**
- * The text parts of a Contract's Endpoints and Guards walked, by declaration, or every rule of
- * `generate` they and its Rejections' headers break, so the runtime reads text by the nodes
- * `generate` accepted.
+ * The text parts of a Contract walked, or every rule of `generate` they break, so the runtime reads
+ * and writes text by what `generate` accepted. Its nodes are the Endpoints' and Guards', since a
+ * Rejection's headers are judged and never read.
  */
 export type WalkedTextParts =
   | { readonly kind: 'valid'; readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes> }

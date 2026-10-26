@@ -56,15 +56,15 @@ function heldStandardsOf(snapshot: PublishedSnapshot): readonly HeldStandard[] {
   if (snapshot.kind === 'application') {
     return [];
   }
-  const held: HeldStandard[] = [];
+  const standards: HeldStandard[] = [];
   for (const name of standardRejectionNames) {
     const code = snapshot.standardRejections[name];
-    const declared = Object.hasOwn(snapshot.codes, code) ? snapshot.codes[code] : undefined;
-    if (declared !== undefined) {
-      held.push({ name, code, held: declared });
+    const held = Object.hasOwn(snapshot.codes, code) ? snapshot.codes[code] : undefined;
+    if (held !== undefined) {
+      standards.push({ name, code, held });
     }
   }
-  return held;
+  return standards;
 }
 
 /**
