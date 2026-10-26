@@ -67,8 +67,8 @@ function aRefusedChange(site: ChangeSite): Change {
   return { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' };
 }
 
-function aReport(changes: readonly Change[], hashChanged = true): ComparedReport {
-  return { changes, hashChanged };
+function aReport(changes: readonly Change[]): ComparedReport {
+  return { changes };
 }
 
 function peersMoving(baseline: string, proposed: string): PeerMove {
@@ -132,8 +132,13 @@ function anEndpointOf(
     description: 'An Endpoint',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -143,7 +148,12 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
   const getOrder = anEndpointOf(visibility, {
     name: 'getOrder',
     params: ['id'],
-    input: { params: idParams, query: null, headers: null, body: null },
+    input: {
+      params: idParams,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
   });
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
@@ -170,7 +180,7 @@ function aGuard(): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
   };
@@ -244,13 +254,21 @@ describe('versionBumpOf', () => {
     expect(bumps).toEqual(['minor', 'minor']);
   });
 
-  test('a changed hash with Neutral Changes only, or none classified, bumps patch', () => {
+  test('Neutral Changes only bump patch', () => {
     const neutral = aReport([aNeutralChange(publicEndpoint)]);
-    const unclassified = aReport([]);
+    const onPrivate = aReport([aNeutralChange(privateEndpoint)]);
 
-    const bumps = [neutral, unclassified].map((report) => versionBumpOf(report, unmoved));
+    const bumps = [neutral, onPrivate].map((report) => versionBumpOf(report, unmoved));
 
     expect(bumps).toEqual(['patch', 'patch']);
+  });
+
+  test('no Change and no peer move leave the version unchanged', () => {
+    const report = aReport([]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('unchanged');
   });
 
   test('Changes on Private Elements only bump patch, however Breaking', () => {
@@ -508,7 +526,7 @@ describe('versionBumpOf', () => {
   });
 
   test('an unchanged hash with unchanged peers is unchanged, so publish does nothing', () => {
-    const report = aReport([], false);
+    const report = aReport([]);
 
     const bump = versionBumpOf(report, unmoved);
 
@@ -537,7 +555,7 @@ describe('versionBumpOf', () => {
   });
 
   test('a changed peer range bumps even when the hash is unchanged', () => {
-    const report = aReport([], false);
+    const report = aReport([]);
 
     const bump = versionBumpOf(report, peersMoving('^4.1.0', '^4.6.7'));
 
@@ -547,37 +565,37 @@ describe('versionBumpOf', () => {
 
 describe('versionBumpOf, the peer rule', () => {
   test('a peer moving to a new major bumps major with an unchanged Snapshot', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^5.0.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^4.1.0', '^5.0.0'));
 
     expect(bump).toBe('major');
   });
 
   test('any other change to a peer range bumps minor', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^4.6.7'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^4.1.0', '^4.6.7'));
 
     expect(bump).toBe('minor');
   });
 
   test('^0.1.0 to ^0.2.0 is a new major, as a caret reads it', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.2.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.1.0', '^0.2.0'));
 
     expect(bump).toBe('major');
   });
 
   test('^0.1.0 to ^0.1.5 is not a new major', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.1.5'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.1.0', '^0.1.5'));
 
     expect(bump).toBe('minor');
   });
 
   test('^0.0.3 to ^0.0.4 is a new major', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.0.3', '^0.0.4'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.0.3', '^0.0.4'));
 
     expect(bump).toBe('major');
   });
 
   test('a prerelease range keeps its line: ^1.0.0-rc.1 to ^1.2.0 bumps minor', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^1.0.0-rc.1', '^1.2.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^1.0.0-rc.1', '^1.2.0'));
 
     expect(bump).toBe('minor');
   });
@@ -587,7 +605,7 @@ describe('versionBumpOf, the peer rule', () => {
     ['a caret on a partial version', '^4.1', '^4.2.0'],
     ['a comparator range', '>=4.1.0', '>=4.2.0'],
   ])('%s counts as a new major, since no overlap can be proven', (_name, baseline, proposed) => {
-    const bump = versionBumpOf(aReport([], false), peersMoving(baseline, proposed));
+    const bump = versionBumpOf(aReport([]), peersMoving(baseline, proposed));
 
     expect(bump).toBe('major');
   });
@@ -596,13 +614,13 @@ describe('versionBumpOf, the peer rule', () => {
     const added: PeerMove = { baseline: {}, proposed: { zod: '^4.1.0' } };
     const dropped: PeerMove = { baseline: { zod: '^4.1.0' }, proposed: {} };
 
-    const bumps = [added, dropped].map((peers) => versionBumpOf(aReport([], false), peers));
+    const bumps = [added, dropped].map((peers) => versionBumpOf(aReport([]), peers));
 
     expect(bumps).toEqual(['minor', 'minor']);
   });
 
   test('a range that is not a caret and stays the same is no change', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('>=4.1.0', '>=4.1.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('>=4.1.0', '>=4.1.0'));
 
     expect(bump).toBe('unchanged');
   });
@@ -613,7 +631,7 @@ describe('versionBumpOf, the peer rule', () => {
       proposed: { zod: '^4.6.7', '@cf-loom/contract': '^2.0.0' },
     };
 
-    const bump = versionBumpOf(aReport([], false), peers);
+    const bump = versionBumpOf(aReport([]), peers);
 
     expect(bump).toBe('major');
   });

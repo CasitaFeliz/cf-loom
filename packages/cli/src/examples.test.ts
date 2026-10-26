@@ -115,6 +115,7 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
       stderr: '',
     }));
     expect(publishes).toEqual(expectedPublishes);
+    expect(publishes.map(({ stdout }) => stdout.includes('Peer '))).toEqual([false, false, false]);
     const published = registry.published.map(({ name, version }) => `${name}@${version}`);
     expect(published).toEqual(publishedExamples.map(({ packageName }) => `${packageName}@1.0.0`));
   });
@@ -141,10 +142,39 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
         'Checked against @org/definitions@1.0.0',
         'exports.amount added: Additive',
         'exports.money removed: Breaking, needs a Breaking Change Approval',
+        'Would publish @org/definitions@2.0.0 (major)',
         '',
       ].join('\n'),
       stderr:
         '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it\n',
+    });
+  });
+
+  test('billing with a Subscription described otherwise reports it as Neutral and would publish a patch, exit 0', async ({
+    examples,
+  }) => {
+    const { folder, env } = examples;
+    const billing = aCopyOf('billing-service', folder);
+    const subscription = join(
+      billing,
+      'src/contract/subscriptions/billing/draft-invoice-on-created.subscription.ts',
+    );
+    replacedIn(subscription, 'Drafts an invoice for each order created', 'Drafts each invoice');
+    const generated = await cfLoomWith(billing, env, 'generate');
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+
+    const checked = await cfLoomWith(billing, env, 'check');
+
+    expect(checked).toEqual({
+      status: 0,
+      stdout: [
+        'Checked against @org/contract-billing-service@1.0.0',
+        'subscriptions.draftInvoiceOnCreated description-changed: Neutral',
+        'No Change needs a Breaking Change Approval',
+        'Would publish @org/contract-billing-service@1.0.1 (patch)',
+        '',
+      ].join('\n'),
+      stderr: '',
     });
   });
 
@@ -189,6 +219,7 @@ describe('cf-loom publish and check on the examples', { timeout: examplesTimeout
       stdout: [
         'Checked against @org/contract-orders-service@1.0.0',
         'endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.placedAt: Breaking, needs a Breaking Change Approval',
+        'Would publish @org/contract-orders-service@2.0.0 (major)',
         '',
       ].join('\n'),
       stderr:

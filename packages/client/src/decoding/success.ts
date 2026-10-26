@@ -72,7 +72,7 @@ function declaredSuccessOf(
 /** The declared Success headers, each text converted by its node, then read with its schema. */
 function successHeadersOf(received: Headers, called: CalledEndpoint): SuccessHeaders {
   const schema = called.endpoint.success.headers;
-  if (schema === undefined || called.successHeaders === undefined) {
+  if (schema === undefined) {
     return { value: {}, issues: [] };
   }
   const parsed = parseValue(schema, headerValuesOf(called.successHeaders, received));

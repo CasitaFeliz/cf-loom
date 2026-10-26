@@ -43,11 +43,24 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: {
+        type: 'object',
+        fields: { orderId: { required: true, schema: { type: 'string' } } },
+      },
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
+}
+
+/** The Endpoint on a path with no params, as `POST /orders` has none. */
+function withoutParams(endpoint: EndpointSnapshot): EndpointSnapshot {
+  return { ...endpoint, params: [], input: { ...endpoint.input, params: null } };
 }
 
 function aLive<Element extends { readonly lifecycle: Lifecycle }>(
@@ -467,7 +480,7 @@ describe('publishedSnapshotOf', () => {
       subscriptions: { legacySync: aSubscription('orders-service:OrderPlaced@1') },
     });
     const proposed = aProposed({
-      endpoints: { 'POST /orders': anEndpoint({ name: 'createOrder' }) },
+      endpoints: { 'POST /orders': withoutParams(anEndpoint({ name: 'createOrder' })) },
       commands: { 'ChargeCard@1': aCommand({ lifecycle: 'retired' }) },
       codes: { ...standardCodes, [orderLocked]: aCode() },
     });
@@ -481,7 +494,10 @@ describe('publishedSnapshotOf', () => {
   });
 
   test('merging an unchanged Snapshot into its Baseline hashes like the Baseline, whatever the version', () => {
-    const deprecated = aLive(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' }), 'deprecated');
+    const deprecated = aLive(
+      withoutParams(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' })),
+      'deprecated',
+    );
     const baseline = aBaseline({
       endpoints: {
         'GET /orders/{}': aRetired(anEndpoint(), '3.0.0'),

@@ -53,8 +53,13 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: orderIdParam, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: orderIdParam,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -151,6 +156,8 @@ function identityOf(site: ChangeSite): string {
     case 'guard':
     case 'export':
     case 'subscription':
+    case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -265,7 +272,7 @@ describe('compatibilityReportOf, presence', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(elements)('adding a $name is Additive', ({ site, proposed }) => {
@@ -315,7 +322,7 @@ describe('compatibilityReportOf, presence', () => {
     ({ tombstone }) => {
       const report = compatibilityReportOf(aBaseline(tombstone()), aProposed());
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
@@ -504,7 +511,7 @@ describe('compatibilityReportOf, lifecycle', () => {
     ({ retired, proposed }) => {
       const report = compatibilityReportOf(aBaseline(retired()), aProposed(proposed('retired')));
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 });
@@ -522,7 +529,7 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
         endpoints: {
           'GET /orders/{}': anEndpoint({
             ...stillRetired,
-            success: { status: 200, headers: null, body: changedBody },
+            success: { status: 200, headers: { type: 'object', fields: {} }, body: changedBody },
           }),
         },
       },
@@ -565,28 +572,37 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
   ];
 
   test.each(rows)(
-    'an Element Retired on both sides gives no Change when $name changes, only a changed hash',
+    'an Element Retired on both sides gives one Neutral retired-changed when $name changes',
     ({ baseline, proposed }) => {
       const report = compatibilityReportOf(aBaseline(baseline), aProposed(proposed));
 
-      expect(report).toEqual({ changes: [], hashChanged: true });
+      expect(
+        report.changes.map(({ difference, class: changeClass, verdict }) => [
+          difference.kind,
+          changeClass,
+          verdict,
+        ]),
+      ).toEqual([['retired-changed', 'neutral', 'allowed']]);
     },
   );
 
-  test('an Element retired in this change is judged by its lifecycle alone, not by what it declares', () => {
+  test('an Element retired in this change is judged by its lifecycle, and what it declares only as retired-changed', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
         'GET /orders/{}': anEndpoint({
           lifecycle: 'retired',
-          success: { status: 201, headers: null, body: null },
+          success: { status: 201, headers: { type: 'object', fields: {} }, body: null },
         }),
       },
     });
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired']);
+    expect(changes.map(({ difference }) => difference.kind)).toEqual([
+      'retired',
+      'retired-changed',
+    ]);
   });
 });
 
@@ -791,7 +807,7 @@ describe('compatibilityReportOf, the report', () => {
     ]);
   });
 
-  test('an Application’s Dependencies give no Element Change, only a changed hash', () => {
+  test('an Application’s Dependencies give Dependency Changes, never Element Changes', () => {
     const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
     const proposed = anApplication({
       dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder] } },
@@ -799,19 +815,26 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes).toEqual([
+      {
+        site: { kind: 'dependency', name: 'orders-service', visibility: 'private' },
+        difference: { kind: 'added' },
+        class: 'neutral',
+        verdict: 'allowed',
+      },
+    ]);
   });
 
-  test('a Definitions Package’s Snapshot gives no Element Change', () => {
+  test('a Snapshot that differs where no rule looks is a bug, so the check throws', () => {
     const baseline: PublishedDefinitionsSnapshot = { ...aDefinitions(), version: '4.2.0' };
     const proposed = aDefinitions({ defs: { money: emptyObject } });
 
-    const report = compatibilityReportOf(baseline, proposed);
+    const check = () => compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(check).toThrow('The Snapshot changed but no Change was found: a bug.');
   });
 
-  test('a Dependency declared against a newer version changes the hash', () => {
+  test('a Dependency declared against a newer version is one Neutral Change', () => {
     const baseline = aBaseline({
       dependencies: { 'payments-service': { against: '5.1.0', endpoints: [] } },
     });
@@ -821,7 +844,9 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(report.changes.map(({ difference }) => difference)).toEqual([
+      { kind: 'against-changed', from: '5.1.0', to: '5.2.0' },
+    ]);
   });
 
   test.each(['3.4.0', '10.0.0-rc.1'])(
@@ -841,7 +866,7 @@ describe('compatibilityReportOf, the report', () => {
 
       const report = compatibilityReportOf(baseline, proposed);
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
@@ -851,7 +876,7 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(mismatches)('$name is a bug, so the check throws', ({ proposed, baseline }) => {

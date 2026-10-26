@@ -36,7 +36,8 @@ export async function applyPlan(applier: Applier, plan: unknown, limits: unknown
 function checkedOf(prefix: string | null, plan: unknown, limits: unknown): Checked {
   const decoded = decodeBrokerPlan(plan);
   if (decoded.kind === 'malformed') {
-    const shape = 'The broker plan is not the shape cf-loom broker-plan --json prints';
+    const shape =
+      'The broker plan is not the plan of the document cf-loom broker-plan --json prints';
     return { kind: 'refused', message: `${shape}: ${decoded.reason}` };
   }
   if (decoded.plan.prefix !== prefix) {

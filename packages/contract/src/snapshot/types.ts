@@ -13,18 +13,21 @@ export const writtenSnapshotFormat = 1 satisfies SnapshotFormat;
 /** A Guard as an Endpoint attaches it: by name, with its Qualifier as written, or `null`. */
 export type AttachmentSnapshot = { readonly guard: string; readonly qualifier: unknown };
 
-/** What a Caller sends to an Endpoint, each part `null` when the Endpoint accepts none. */
+/**
+ * What a Caller sends to an Endpoint: its path params and body, `null` when it accepts none, and
+ * its query and headers, objects with no field when it declares none.
+ */
 export type InputSnapshot = {
   readonly params: ObjectNode | null;
-  readonly query: ObjectNode | null;
-  readonly headers: ObjectNode | null;
+  readonly query: ObjectNode;
+  readonly headers: ObjectNode;
   readonly body: SchemaNode | null;
 };
 
 /** What an Endpoint answers when it does what was asked. */
 export type SuccessSnapshot = {
   readonly status: number;
-  readonly headers: ObjectNode | null;
+  readonly headers: ObjectNode;
   readonly body: SchemaNode | null;
 };
 
@@ -49,7 +52,7 @@ export type GuardSnapshot = {
   readonly description: string;
   readonly guards: readonly string[];
   readonly qualifier: SchemaNode | null;
-  readonly demands: { readonly headers: ObjectNode | null; readonly query: ObjectNode | null };
+  readonly demands: { readonly headers: ObjectNode; readonly query: ObjectNode };
   readonly context: SchemaNode | null;
   readonly rejections: readonly string[];
 };

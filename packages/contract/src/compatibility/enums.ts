@@ -12,7 +12,7 @@ import {
   shapeKeyBesidesNullability,
   typeChanged,
 } from './findings.ts';
-import type { BaseType } from './report.ts';
+import type { BaseType } from './shape-differences.ts';
 
 /**
  * How two schemas differ when either is an enum: its openness and values, or widened to and

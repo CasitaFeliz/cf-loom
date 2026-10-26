@@ -10,14 +10,25 @@ import {
 /** The dist-tag a version is published under. */
 export type DistTag = 'latest' | 'next';
 
-/** How `publish` was asked to run: publish even when nothing changed, and publish a prerelease of the version it derives. */
-export type PublishOptions = { readonly force: boolean; readonly prerelease: boolean };
+/** How the version is asked to be derived: even when nothing changed, and as a prerelease of the version it derives. */
+export type DeriveOptions = { readonly force: boolean; readonly prerelease: boolean };
 
-/** The version `publish` derives and the dist-tag it takes. */
+/**
+ * Why a version is derived: the package has no Baseline, the size of what moved, a prerelease
+ * Baseline promoted to the version that is not one, or `--force` over a Baseline nothing moved from.
+ */
+export type Why =
+  | { readonly kind: 'first-version' }
+  | { readonly kind: 'bump'; readonly bump: VersionBump }
+  | { readonly kind: 'promotes'; readonly baseline: string }
+  | { readonly kind: 'forced' };
+
+/** The version `publish` derives, the dist-tag it takes and why. */
 export type DerivedVersion = {
   readonly kind: 'version';
   readonly version: string;
   readonly tag: DistTag;
+  readonly why: Why;
 };
 
 /**
@@ -40,7 +51,7 @@ type Moved = {
 export type Deriving = {
   readonly baseline: Moved | undefined;
   readonly versions: readonly string[];
-} & PublishOptions;
+} & DeriveOptions;
 
 const firstVersion = '1.0.0';
 
@@ -58,7 +69,20 @@ export function derivedVersionOf({ baseline, versions, force, prerelease }: Deri
     return { kind: 'not-above', version, baseline: baseline.version };
   }
   const tag = prerelease && baseline?.stable !== undefined ? 'next' : 'latest';
-  return { kind: 'version', version, tag };
+  return { kind: 'version', version, tag, why: whyOf(baseline, prerelease) };
+}
+
+/** Why the version is the one derived: what moved, else that a prerelease Baseline is promoted, else that `--force` asked. */
+function whyOf(baseline: Moved | undefined, prerelease: boolean): Why {
+  if (baseline === undefined) {
+    return { kind: 'first-version' };
+  }
+  if (baseline.bump !== 'unchanged') {
+    return { kind: 'bump', bump: baseline.bump };
+  }
+  return isPrerelease(baseline.version) && !prerelease
+    ? { kind: 'promotes', baseline: baseline.version }
+    : { kind: 'forced' };
 }
 
 /**
@@ -70,7 +94,7 @@ export function firstStableOf(prerelease: string): string {
 }
 
 /** Whether the Baseline already holds what would be published: nothing changed, and no prerelease Baseline left to promote. */
-function isNothingToPublish(baseline: Moved, { force, prerelease }: PublishOptions): boolean {
+function isNothingToPublish(baseline: Moved, { force, prerelease }: DeriveOptions): boolean {
   if (baseline.bump !== 'unchanged' || force) {
     return false;
   }

@@ -49,8 +49,8 @@ function successPartOf(success: LiveServed['success']): StatusPart {
   };
 }
 
-function headersOf(headers: ObjectNode | null): Readonly<Record<string, OpenApiObject>> {
-  const entries = Object.entries(headers?.fields ?? {}).map(([name, field]) => {
+function headersOf(headers: ObjectNode): Readonly<Record<string, OpenApiObject>> {
+  const entries = Object.entries(headers.fields).map(([name, field]) => {
     const schema = jsonSchemaOf(field.schema, '2020-12');
     const description = field.schema.description;
     return [name, definedOf({ required: field.required, description, schema })] as const;

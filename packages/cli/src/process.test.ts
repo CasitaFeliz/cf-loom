@@ -431,11 +431,11 @@ describe('cf-loom: help and version', () => {
     ['generate', 'generate'],
     ['verify', 'verify'],
     ['package', 'package [--out <dir>]'],
-    ['check', 'check [--json] [--against <version|dist-tag>]'],
+    ['check', 'check [--json] [--prerelease] [--against <version|dist-tag>]'],
     ['broker-plan', 'broker-plan [--prefix <p>] [--json]'],
     ['openapi', 'openapi'],
     ['asyncapi', 'asyncapi [--prefix <p>]'],
-    ['publish', 'publish [--force] [--prerelease]'],
+    ['publish', 'publish [--json] [--dry-run] [--force] [--prerelease]'],
   ] as const)('%s --help and help %s print its usage line and end 0', ([command, syntax]) => {
     const project = aProject({});
     const expected = { status: 0, stdout: `Usage: cf-loom ${syntax}\n`, stderr: '' };

@@ -162,7 +162,10 @@
           },
           "type": "object"
         },
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "description": "An API key per Caller",
       "guards": [],

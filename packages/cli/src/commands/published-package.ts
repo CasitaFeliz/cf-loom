@@ -26,12 +26,16 @@ import type { DistTag } from '../versioning/index.ts';
 import { type CopiedFile, removeStaged, stagedIn } from '../writing/index.ts';
 import { checkedEntryOf, type EntryToCheck } from './built-entry.ts';
 
+/** What a publish does with the package it built: puts it out, or stops before `npm publish`. */
+export type PublishMode = 'publish' | 'dry-run';
+
 /**
  * What a publish puts out: the package's Snapshot as published with its text, the declared
- * Snapshot it was published from, the peer ranges it declares, its dist-tag, and the highest
- * version the package listed when the Baseline was read.
+ * Snapshot it was published from, the peer ranges it declares, its dist-tag, the highest
+ * version the package listed when the Baseline was read, and whether it is put out at all.
  */
 export type ToPublish = {
+  readonly mode: PublishMode;
   readonly project: Project;
   readonly declared: Pick<BuiltProject, 'text' | 'context'>;
   readonly published: PublishedSnapshot;
@@ -41,9 +45,9 @@ export type ToPublish = {
   readonly highest: string | undefined;
 };
 
-/** How a publish ends: the version put or why not, and the lines naming a staging folder it could not remove. */
+/** How a publish ends: the version put, or built and left unput on a dry run, or why not, and the lines naming a staging folder it could not remove. */
 export type PublishedPackage = {
-  readonly put: { readonly kind: 'published' } | Failed;
+  readonly put: { readonly kind: 'published' | 'built' } | Failed;
   readonly left: readonly string[];
 };
 
@@ -68,6 +72,7 @@ type Build =
 
 /** A staged folder, as it is built or checked, as it is published, and as the package was listed before the Check. */
 type StagedPackage = {
+  readonly mode: PublishMode;
   readonly build: Build;
   readonly publishing: Publishing;
   readonly listing: FirstListing;
@@ -105,7 +110,7 @@ export async function publishedPackageOf(
 
 function stagedPackageOf(
   staged: InstalledPackage,
-  { project, declared, published, tag, highest }: ToPublish,
+  { mode, project, declared, published, tag, highest }: ToPublish,
 ): StagedPackage {
   const { packageName, folder } = staged;
   const { version } = published;
@@ -116,22 +121,25 @@ function stagedPackageOf(
     case 'application': {
       const rootPath = join(project.directory, project.rootFile);
       const building = { folder, rootPath, spec: `${packageName}@${version}` };
-      return { build: { kind: 'with-tsc', building }, publishing, listing };
+      return { mode, build: { kind: 'with-tsc', building }, publishing, listing };
     }
     case 'definitions': {
       const entry = { project, staged, declared };
-      return { build: { kind: 'by-author', entry }, publishing, listing };
+      return { mode, build: { kind: 'by-author', entry }, publishing, listing };
     }
   }
 }
 
 async function builtAndPublished(
   npm: NpmPlace,
-  { build, publishing, listing }: StagedPackage,
+  { mode, build, publishing, listing }: StagedPackage,
 ): Promise<PublishedPackage['put']> {
   const built = await builtAs(build);
   if (built.kind === 'failed') {
     return built;
+  }
+  if (mode === 'dry-run') {
+    return { kind: 'built' };
   }
   const unchanged = await unchangedSince(npm, listing);
   return unchanged.kind === 'failed' ? unchanged : await publishFolder(npm, publishing);

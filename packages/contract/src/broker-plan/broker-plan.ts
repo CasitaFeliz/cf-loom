@@ -23,7 +23,7 @@ export type BrokerPlanConsumer = {
   readonly subject: string;
 };
 
-/** What one Service needs on the Broker, keyed by prefixed names, in the shape `cf-loom broker-plan --json` prints. */
+/** What one Service needs on the Broker, keyed by prefixed names, in the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
 export type BrokerPlan = {
   readonly prefix: string | null;
   readonly streams: Readonly<Record<string, BrokerPlanStream>>;

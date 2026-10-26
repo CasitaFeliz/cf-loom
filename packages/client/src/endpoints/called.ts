@@ -39,7 +39,7 @@ export type CalledEndpoint = {
   readonly name: string;
   readonly endpoint: Endpoint;
   readonly inputHeaderNames: ReadonlySet<string>;
-  readonly successHeaders: ObjectNode | undefined;
+  readonly successHeaders: ObjectNode;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
   readonly standards: ProvidedStandardRejections;
 };
@@ -52,8 +52,8 @@ export function calledEndpointOf(endpoint: Endpoint, provider: ContractPackage):
     provider: provider.name,
     name: endpoint.name,
     endpoint,
-    inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),
-    successHeaders: entry.success.headers ?? undefined,
+    inputHeaderNames: new Set(Object.keys(entry.input.headers.fields)),
+    successHeaders: entry.success.headers,
     rejectionsByCode: answerableByCodeOf(endpoint, standards),
     standards,
   };

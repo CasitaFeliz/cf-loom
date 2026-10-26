@@ -7,7 +7,7 @@ import {
 import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
-import type { Checked } from './checked.ts';
+import type { Compared } from './checked.ts';
 import { checkedChangeOf } from './checked-change.ts';
 import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
 
@@ -76,8 +76,8 @@ export async function comparisonOf(
   }
 }
 
-/** What `check` reports of a comparison: the package, what it was compared with and every Change. */
-export function checkedFrom(comparison: Comparison): Checked {
+/** What `check` reports of a comparison: the package, what it was compared with and every Change, before any version is derived from it. */
+export function comparedFrom(comparison: Comparison): Compared {
   switch (comparison.kind) {
     case 'no-baseline': {
       const { packageName, why } = comparison;

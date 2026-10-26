@@ -171,9 +171,15 @@
       "guards": [],
       "input": {
         "body": null,
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "params": null,
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "lifecycle": "active",
       "name": "health",
@@ -194,7 +200,10 @@
           },
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "status": 200
       },
       "visibility": "private"
@@ -233,7 +242,10 @@
           },
           "type": "object"
         },
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "lifecycle": "active",
       "name": "getOrder",
@@ -314,7 +326,10 @@
           },
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "status": 200
       },
       "visibility": "internal"
@@ -380,7 +395,10 @@
           "type": "object"
         },
         "params": null,
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "lifecycle": "active",
       "name": "createOrder",
@@ -457,7 +475,10 @@
           },
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "status": 201
       },
       "visibility": "public"
@@ -544,7 +565,10 @@
           },
           "type": "object"
         },
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "description": "An API key per Caller",
       "guards": [],

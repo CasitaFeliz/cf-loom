@@ -6,16 +6,15 @@ const bumpsInOrder = ['unchanged', 'patch', 'minor', 'major'] as const;
 
 /**
  * The bump a publish takes: the highest of its Changes' classes, Private and refused ones capped at
- * patch, and of the peer rule; `unchanged` when neither the hash nor a peer range moved.
+ * patch, and of the peer rule; `unchanged` with no Change and no peer range moved.
  */
 export function versionBumpOf(report: ComparedReport, peers: PeerMove): VersionBump | 'unchanged' {
-  const snapshotBump = report.hashChanged ? snapshotBumpOf(report.changes) : 'unchanged';
-  return higherOf(snapshotBump, peerBumpOf(peers));
+  return higherOf(changesBumpOf(report.changes), peerBumpOf(peers));
 }
 
-/** A changed hash is a patch at least, whatever its Changes; the highest of them decides past that. */
-function snapshotBumpOf(changes: readonly Change[]): VersionBump {
-  let highest: VersionBump = 'patch';
+/** The highest bump of the Changes, `unchanged` when there are none. */
+function changesBumpOf(changes: readonly Change[]): VersionBump | 'unchanged' {
+  let highest: VersionBump | 'unchanged' = 'unchanged';
   for (const change of changes) {
     highest = higherOf(highest, bumpOf(change));
   }

@@ -13,6 +13,7 @@ export type {
   ComparedReport,
   Difference,
   PeerMove,
+  PeerRangeMove,
   PeerRanges,
   Position,
   ShapeDifference,
@@ -22,6 +23,7 @@ export type {
 export {
   compatibilityReportOf,
   firstPublishChangesOf,
+  peerMovesOf,
   publishedSnapshotOf,
   snapshotPathOf,
   versionBumpOf,
@@ -111,6 +113,7 @@ export {
   hashedTextOf,
   isDeclared,
   isDeclaredRejection,
+  isEmptyTextPart,
   isSemanticVersion,
   isSubscriptionTombstone,
   nestingFailureOf,

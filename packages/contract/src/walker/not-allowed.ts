@@ -145,6 +145,14 @@ export function refusedAcyclicId(id: string): Refused {
   };
 }
 
+/** A recursion id on a schema that admits `null`: `.nullable()` belongs to a use, so a def is never nullable. */
+export function refusedNullableDef(id: string): Refused {
+  return {
+    construct: `.meta({ id: ${JSON.stringify(id)} }) on a schema that admits null`,
+    instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
+  };
+}
+
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {
   return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };

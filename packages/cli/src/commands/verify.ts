@@ -109,7 +109,10 @@ function verifiedExit(failures: readonly string[], compared: readonly string[]):
   if (failures.length > 0) {
     return checkFailed(failures);
   }
-  return done(compared.map((path) => `${path} is up to date`));
+  return done(
+    compared.map((path) => `${path} is up to date`),
+    { upToDate: compared },
+  );
 }
 
 /** What a Service's Handler files fail `verify` on, as `generate` would complete or refuse them. */

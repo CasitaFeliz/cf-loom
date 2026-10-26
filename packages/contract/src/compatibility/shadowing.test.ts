@@ -62,8 +62,13 @@ function anEndpoint(identity: string, fields: Partial<EndpointSnapshot> = {}): E
     description: 'An Endpoint',
     params,
     guards: [],
-    input: { params: paramsNodeOf(params), query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: paramsNodeOf(params),
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
   };
@@ -225,7 +230,12 @@ describe('compatibilityReportOf, shadowing', () => {
 function byParam(schema: SchemaNode): Partial<EndpointSnapshot> {
   return {
     params: ['orderId'],
-    input: { params: paramsNodeOf(['orderId'], schema), query: null, headers: null, body: null },
+    input: {
+      params: paramsNodeOf(['orderId'], schema),
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
   };
 }
 

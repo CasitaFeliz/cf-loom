@@ -1,6 +1,7 @@
 import type { ValidatedGuard } from '../validation/index.ts';
 import { sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
+import { textPartOf } from './input.ts';
 import { packageOriginOf } from './origins.ts';
 import type { GuardSnapshot } from './types.ts';
 
@@ -27,8 +28,8 @@ function guardSnapshotOf(
     guards: (guard.guards ?? []).map(({ name }) => name),
     qualifier: nodeOf(guard, 'qualifier') ?? null,
     demands: {
-      headers: nodeOf(guard, 'demands.headers') ?? null,
-      query: nodeOf(guard, 'demands.query') ?? null,
+      headers: textPartOf(nodeOf(guard, 'demands.headers')),
+      query: textPartOf(nodeOf(guard, 'demands.query')),
     },
     context: nodeOf(guard, 'context') ?? null,
     rejections: sortedCodes((guard.rejections ?? []).map(({ code }) => code)),

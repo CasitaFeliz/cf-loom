@@ -77,8 +77,13 @@ const getOrder = {
   description: 'One order',
   params: ['orderId'],
   guards: [],
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: {
+    params: { type: 'object', fields: { orderId: { required: true, schema: { type: 'string' } } } },
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
   rejections: [],
 } as const satisfies EndpointSnapshot;
 

@@ -286,7 +286,7 @@ describe('cf-loom asyncapi: the channels', () => {
   });
 
   test('the channels’ addresses are the Event subjects broker-plan puts in the Service’s stream', () => {
-    const plan = JSON.parse(cfLoom(fixture, 'broker-plan', '--json').stdout);
+    const { plan } = JSON.parse(cfLoom(fixture, 'broker-plan', '--json').stdout);
     const subjects = valueAt(plan, 'streams', 'orders-service', 'subjects') as string[];
     const addresses = Object.values(valueAt(document, 'channels') as object).map((channel) =>
       valueAt(channel, 'address'),
@@ -733,9 +733,8 @@ describe('cf-loom asyncapi: what it refuses', () => {
 
   test.for([
     ['--out', ['--out', 'folder'], 'Only package takes --out'],
-    ['--json', ['--json'], 'Only check and broker-plan take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
-    ['--prerelease', ['--prerelease'], 'Only publish takes --prerelease'],
+    ['--prerelease', ['--prerelease'], 'Only check and publish take --prerelease'],
   ] as const)('asyncapi does not take %s', ([_option, options, message]) => {
     const project = aProject({});
 

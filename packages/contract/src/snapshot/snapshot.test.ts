@@ -20,6 +20,7 @@ import {
 } from '../index.ts';
 import {
   canonicalTextOf,
+  isEmptyTextPart,
   type ResolvedDefinitions,
   type Snapshot,
   type SnapshotContext,
@@ -377,11 +378,17 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('the parts an Endpoint does not declare are null', () => {
+  test('the bodies an Endpoint does not declare are null, and the text parts have no field', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['GET /orders/{}']?.input).toMatchObject({ query: null, body: null });
-    expect(snapshot.endpoints['GET /orders/{}']?.success.headers).toBeNull();
+    expect(snapshot.endpoints['GET /orders/{}']?.input).toMatchObject({
+      query: { type: 'object', fields: {} },
+      body: null,
+    });
+    expect(snapshot.endpoints['GET /orders/{}']?.success.headers).toEqual({
+      type: 'object',
+      fields: {},
+    });
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.success).toMatchObject({
       status: 204,
       body: null,
@@ -464,7 +471,7 @@ describe('snapshotOf: a Service', () => {
             type: 'object',
             fields: { 'x-api-key': { required: true, schema: { type: 'string' } } },
           },
-          query: null,
+          query: { type: 'object', fields: {} },
         },
         context: {
           type: 'object',
@@ -482,7 +489,7 @@ describe('snapshotOf: a Service', () => {
           min: 1,
           items: { type: 'enum', values: ['orders:edit', 'orders:read'], open: false },
         },
-        demands: { headers: null, query: null },
+        demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
         context: null,
         rejections: ['FORBIDDEN'],
       },
@@ -729,6 +736,104 @@ const orderIdBody = {
   type: 'object',
   fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
 };
+
+describe('snapshotOf: one Snapshot for one Contract', () => {
+  const emptyPart = { type: 'object', fields: {} };
+
+  /** A one-Endpoint Service whose Endpoint declares the parts given and attaches a Guard that demands the part given. */
+  function aPingService(parts: {
+    readonly input?: { readonly query?: z.ZodObject; readonly headers?: z.ZodObject };
+    readonly headers?: z.ZodObject;
+    readonly demands?: { readonly query?: z.ZodObject; readonly headers?: z.ZodObject };
+  }) {
+    const gate = defineGuard({ name: 'gate', description: 'A gate', demands: parts.demands ?? {} });
+    const ping = defineEndpoint({
+      name: 'ping',
+      method: 'GET',
+      path: '/ping',
+      visibility: 'public',
+      description: 'Answers',
+      guards: [gate],
+      input: parts.input ?? {},
+      success: {
+        status: 200,
+        body: z.object({ ok: z.boolean() }),
+        ...(parts.headers === undefined ? {} : { headers: parts.headers }),
+      },
+    });
+    const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
+    return defineContract({ name: 'ping-service', groups: [group] });
+  }
+
+  test.each([
+    ['an Endpoint’s query', { input: { query: z.object({}) } }],
+    ['an Endpoint’s headers', { input: { headers: z.object({}) } }],
+    ['a Success’s headers', { headers: z.object({}) }],
+    ['a Guard’s demanded query', { demands: { query: z.object({}) } }],
+    ['a Guard’s demanded headers', { demands: { headers: z.object({}) } }],
+  ])(
+    '%s declared with no field writes the same Snapshot as one not declared',
+    (_name, declared) => {
+      const empty = canonicalTextOf(snapshotFor(aPingService(declared), aContext(), []));
+      const undeclared = canonicalTextOf(snapshotFor(aPingService({}), aContext(), []));
+
+      expect(empty).toBe(undeclared);
+    },
+  );
+
+  test('a text part with no field is an open object with no field, never null', () => {
+    const snapshot = snapshotFor(aPingService({}), aContext(), []);
+    if (snapshot.kind !== 'service') {
+      throw new Error('The fixture is no Service');
+    }
+
+    const endpoint = snapshot.endpoints['GET /ping'];
+    expect([endpoint?.input.query, endpoint?.input.headers, endpoint?.success.headers]).toEqual([
+      emptyPart,
+      emptyPart,
+      emptyPart,
+    ]);
+    expect(snapshot.guards['gate']?.demands).toEqual({ headers: emptyPart, query: emptyPart });
+  });
+});
+
+/** A one-Endpoint Service whose Endpoint declares one query field and no headers. */
+function aPingServiceWithQuery() {
+  const ping = defineEndpoint({
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Answers',
+    input: { query: z.object({ page: z.string() }) },
+    success: { status: 204 },
+  });
+  const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
+  return defineContract({ name: 'ping-service', groups: [group] });
+}
+
+describe('isEmptyTextPart', () => {
+  test('is the text part the Snapshot writes where none is declared, and no other', () => {
+    const snapshot = snapshotFor(aPingServiceWithQuery(), aContext(), []);
+    if (snapshot.kind !== 'service') {
+      throw new Error('The fixture is no Service');
+    }
+    const input = snapshot.endpoints['GET /ping']?.input;
+
+    expect(input === undefined ? [] : [input.headers, input.query].map(isEmptyTextPart)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  test.each([
+    ['a description', { type: 'object', fields: {}, description: 'The query' }],
+    ['an example', { type: 'object', fields: {}, examples: [{}] }],
+    ['an origin', { type: 'object', fields: {}, origin: '@org/definitions@1.0.0#query' }],
+  ] as const)('is not a part that carries %s', (_name, part) => {
+    expect(isEmptyTextPart(part)).toBe(false);
+  });
+});
 
 describe('snapshotOf: Messages and Subscriptions', () => {
   test('Events are written by identity with their Group, Visibility, lifecycle, description and body', () => {

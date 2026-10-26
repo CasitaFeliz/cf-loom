@@ -8,11 +8,11 @@ const syntaxes = {
   generate: 'generate',
   verify: 'verify',
   package: 'package [--out <dir>]',
-  check: 'check [--json] [--against <version|dist-tag>]',
+  check: 'check [--json] [--prerelease] [--against <version|dist-tag>]',
   'broker-plan': 'broker-plan [--prefix <p>] [--json]',
   openapi: 'openapi',
   asyncapi: 'asyncapi [--prefix <p>]',
-  publish: 'publish [--force] [--prerelease]',
+  publish: 'publish [--json] [--dry-run] [--force] [--prerelease]',
 } as const;
 
 type CommandName = keyof typeof syntaxes;
@@ -32,18 +32,25 @@ export function usageError(message: string): Exit {
 export function helpExitOf(topic: readonly string[]): Exit {
   const [command, ...more] = topic;
   if (command === undefined) {
-    return done([usage]);
+    return done([usage], { usage });
   }
   if (more.length > 0) {
     return usageError('help takes one command');
   }
-  return isCommandName(command)
-    ? done([`Usage: cf-loom ${syntaxes[command]}`])
-    : usageError(`Unknown command: ${command}`);
+  if (!isCommandName(command)) {
+    return usageError(`Unknown command: ${command}`);
+  }
+  const line = `Usage: cf-loom ${syntaxes[command]}`;
+  return done([line], { usage: line });
 }
 
 /** What `--version` prints: the CLI's version and the Snapshot format it writes. */
 export function versionExit(): Exit {
   const { name, version } = runningCliOf();
-  return done([`${name} ${version} (Snapshot format ${writtenSnapshotFormat})`]);
+  const snapshotFormat = writtenSnapshotFormat;
+  return done([`${name} ${version} (Snapshot format ${snapshotFormat})`], {
+    name,
+    version,
+    snapshotFormat,
+  });
 }

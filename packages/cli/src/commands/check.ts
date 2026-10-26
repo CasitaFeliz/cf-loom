@@ -1,51 +1,34 @@
 import type { Run } from '../project/index.ts';
-import { checkedJsonOf, errorsExitOf } from './check-json.ts';
-import { linesOf } from './check-lines.ts';
+import { comparedLinesOf, linesOf, notAboveOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
-import { checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
-import type { Exit, Stopped } from './exit.ts';
+import { checkedDocumentOf } from './checked-document.ts';
+import { derivedCheckedOf } from './derivation.ts';
+import type { Exit } from './exit.ts';
+import { preparedOf } from './prepared.ts';
 
-/** How a command prints: its lines, or, for `check` and `broker-plan`, one JSON document. */
-export type Output = 'lines' | 'json';
-
-/** How `check` was asked to run: how it prints, and the version or dist-tag to compare with instead of the highest version. */
-export type CheckOptions = { readonly output: Output; readonly against: string | undefined };
+/** How `check` was asked to run: the version or dist-tag to compare with instead of the highest version, and whether to derive a prerelease. */
+export type CheckOptions = { readonly against: string | undefined; readonly prerelease: boolean };
 
 /**
  * Runs the Compatibility Check of the committed Snapshot against its Baseline and prints every
- * Change with its class and Verdict; it only reports, and the organization enforces any Approval.
+ * Change with its class and Verdict, and the version `publish` would take; it only reports, and the
+ * organization enforces any Approval.
  */
-export async function check(run: Run, { output, against }: CheckOptions): Promise<Exit> {
-  const checked = await checkedOf(run, against);
-  switch (output) {
-    case 'lines':
-      return linesExitOf(checked);
-    case 'json':
-      return jsonExitOf(checked);
+export async function check(run: Run, { against, prerelease }: CheckOptions): Promise<Exit> {
+  const prepared = await preparedOf(run, against);
+  if (prepared.kind === 'stopped') {
+    return prepared.exit;
   }
+  return exitOf(derivedCheckedOf(prepared, { force: false, prerelease }));
 }
 
-function linesExitOf(checked: Checked | Stopped): Exit {
-  if (checked.kind === 'stopped') {
-    return checked.exit;
+/** How `check` ends: a version that would not be above the Baseline is a tooling error, as it is for `publish`; else the Changes decide. */
+function exitOf(checked: Checked): Exit {
+  const { derivation } = checked;
+  if (derivation.kind === 'derived' && derivation.derived.kind === 'not-above') {
+    const stderr = [notAboveOf(checked.packageName, derivation.derived)];
+    return { status: 3, stdout: comparedLinesOf(checked), stderr };
   }
   const { status, stderr } = endingOf(checked.changes);
-  return { status, stdout: linesOf(checked, status), stderr };
-}
-
-function jsonExitOf(checked: Checked | Stopped): Exit {
-  if (checked.kind === 'stopped') {
-    return errorsExitOf(checked.exit);
-  }
-  const { status, stderr } = endingOf(checked.changes);
-  return { status, stdout: [checkedJsonOf(checked, status)], stderr };
-}
-
-async function checkedOf(run: Run, against: string | undefined): Promise<Checked | Stopped> {
-  const built = await committedBuiltOf(run);
-  if (built.kind === 'stopped') {
-    return built;
-  }
-  const comparison = await comparisonOf(built, run, against);
-  return comparison.kind === 'stopped' ? comparison : checkedFrom(comparison);
+  return { status, stdout: linesOf(checked, status), stderr, document: checkedDocumentOf(checked) };
 }

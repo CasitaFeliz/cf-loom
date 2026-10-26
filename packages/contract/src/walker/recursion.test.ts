@@ -111,6 +111,133 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  describe('a def is never nullable: .nullable() belongs to a use', () => {
+    const nullableDefOf = (id: string) => ({
+      construct: `.meta({ id: "${id}" }) on a schema that admits null`,
+      instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
+    });
+
+    test('a plain def used with .nullable() writes the def plain and each such ref nullable', () => {
+      const node: z.ZodType = z
+        .object({ label: z.string(), next: z.lazy(() => node).nullable() })
+        .meta({ id: 'tree' });
+
+      const written = walkBody(z.object({ root: node.nullable(), other: node }));
+
+      expect(written.defs['tree']?.nullable).toBeUndefined();
+      expect(written.located).toEqual([
+        walkedAt(['body'], {
+          type: 'object',
+          fields: {
+            root: { required: true, schema: { type: 'ref', name: 'tree', nullable: true } },
+            other: { required: true, schema: { type: 'ref', name: 'tree' } },
+          },
+        }),
+      ]);
+    });
+
+    test('an alias def of a plain def is written plain, nullable only on its nullable uses', () => {
+      const inner: z.ZodType = z
+        .object({
+          label: z.string(),
+          get next() {
+            return alias.nullable();
+          },
+        })
+        .meta({ id: 'inner' });
+      const alias: z.ZodType = z.lazy(() => inner).meta({ id: 'alias' });
+
+      const written = walkBody(z.object({ root: alias }));
+
+      expect(written.defs).toEqual({
+        inner: {
+          type: 'object',
+          fields: {
+            label: { required: true, schema: { type: 'string' } },
+            next: { required: true, schema: { type: 'ref', name: 'alias', nullable: true } },
+          },
+        },
+        alias: { type: 'ref', name: 'inner' },
+      });
+    });
+
+    const onDef: z.ZodType = z
+      .object({ label: z.string(), next: z.lazy(() => onDef) })
+      .nullable()
+      .meta({ id: 'tree' });
+    const throughLazy: z.ZodType = z
+      .lazy(() => z.object({ next: throughLazy }).nullable())
+      .meta({ id: 'tree' });
+    const nullableInner: z.ZodType = z
+      .object({
+        get next() {
+          return aliasOfNullable;
+        },
+      })
+      .nullable()
+      .meta({ id: 'tree' });
+    const aliasOfNullable: z.ZodType = z.lazy(() => nullableInner).meta({ id: 'alias' });
+    const intersected: z.ZodType = z
+      .intersection(
+        z
+          .object({
+            get next() {
+              return intersected;
+            },
+          })
+          .nullable(),
+        z.object({ label: z.string() }).nullable(),
+      )
+      .meta({ id: 'tree' });
+
+    test.each([
+      ['on .nullable()', onDef],
+      ['through z.lazy() to a .nullable()', throughLazy],
+      ['on an intersection of nullable objects', intersected],
+    ])('an id %s is refused where the schema is used, and writes no def', (_name, schema) => {
+      const written = walkBody(z.object({ root: schema }));
+
+      expect(written).toEqual({
+        located: [
+          refusedAt(['body'], [{ at: ['body', 'fields', 'root'], ...nullableDefOf('tree') }]),
+        ],
+        defs: {},
+      });
+    });
+
+    const aliasOfLazy: z.ZodType = z.lazy(() => nullableLazy).meta({ id: 'a' });
+    const nullableLazy: z.ZodType = z
+      .lazy(() =>
+        z
+          .object({
+            get next() {
+              return aliasOfLazy;
+            },
+          })
+          .nullable(),
+      )
+      .meta({ id: 'b' });
+
+    test.each([
+      ['the alias', aliasOfNullable, 'tree'],
+      ['the nullable def', nullableInner, 'tree'],
+      ['the alias of a lazy nullable', aliasOfLazy, 'b'],
+      ['a lazy nullable def', nullableLazy, 'b'],
+    ])(
+      'a cycle through an alias of a nullable def, entered at %s, reports its refusal and writes no def',
+      (_name, schema, id) => {
+        const written = walkBody(z.object({ root: schema }));
+
+        expect(written).toEqual({
+          located: [
+            refusedAt(['body'], [{ at: ['body', 'fields', 'root'], ...nullableDefOf(id) }]),
+          ],
+          defs: {},
+        });
+      },
+    );
+  });
+
   describe('a cycle through z.lazy(), unions and intersections alone', () => {
     const nodelessCycle = {
       construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',

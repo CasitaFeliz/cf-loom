@@ -52,6 +52,8 @@ export function writtenDocumentExitOf(written: Written): Exit {
     case 'unnamed':
       return toolingError(written.line);
     case 'written':
-      return done(JSON.stringify(written.document, null, 2).split('\n'));
+      return done(JSON.stringify(written.document, null, 2).split('\n'), {
+        document: written.document,
+      });
   }
 }

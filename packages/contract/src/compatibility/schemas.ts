@@ -1,4 +1,5 @@
 import type { SchemaNode } from '../walker/index.ts';
+import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
 import { enumFindingsOf } from './enums.ts';
@@ -50,14 +51,24 @@ function differencesWithin(
   place: EnteredPlace,
 ): readonly Difference[] {
   const followed = followedOf(pair, defs, place.entered);
+  const own = annotationFindingsOf(pair);
   switch (followed.kind) {
     case 'settled':
-      return differencesOf(nullabilityFindingsOf(followed.pair), defs, place);
+      return differencesOf([...own, ...nullabilityFindingsOf(followed.pair)], defs, place);
     case 'inline':
-      return differencesOf(findingsOf(followed.pair, defs), defs, place);
+      return differencesOf([...own, ...findingsOf(followed.pair, defs)], defs, place);
     case 'entered':
       place.entered.push(followed.entered);
-      return differencesOf(findingsOf(followed.pair, defs), defs, place);
+      return differencesOf(
+        [
+          ...own,
+          ...renamedFindingsOf(pair),
+          ...annotationFindingsOf(followed.pair),
+          ...findingsOf(followed.pair, defs),
+        ],
+        defs,
+        place,
+      );
   }
 }
 

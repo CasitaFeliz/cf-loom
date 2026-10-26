@@ -1,18 +1,17 @@
-import { isLive, type Visibility } from '../declarations/index.ts';
-import {
-  type CodeSnapshot,
-  type DefinitionsSnapshot,
-  isDeclared,
-  type PublishedDefinitionsSnapshot,
-  type PublishedServiceSnapshot,
-  type ServiceSnapshot,
+import type {
+  CodeSnapshot,
+  DefinitionsSnapshot,
+  PublishedDefinitionsSnapshot,
+  PublishedServiceSnapshot,
+  ServiceSnapshot,
 } from '../snapshot/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
+import { codeNeutralOf } from './neutral.ts';
 import type { Difference, SiteDifferences } from './report.ts';
 import { partsOf } from './steps.ts';
-import { widerOf } from './visibility.ts';
+import { widestVisibilitiesOf } from './visibility.ts';
 
 /**
  * A Service's codes by code in code point order, each its status then its body read as Success; a
@@ -23,7 +22,7 @@ export function serviceCodeDifferencesOf(
   proposed: ServiceSnapshot,
 ): readonly SiteDifferences[] {
   const defs = bothDefsOf(baseline, proposed);
-  const visibilities = answeringVisibilitiesOf(baseline, proposed);
+  const visibilities = widestVisibilitiesOf(baseline, proposed, (endpoint) => endpoint.rejections);
   return counterpartsOf(baseline.codes, proposed.codes).map(
     (code): SiteDifferences => ({
       site: { kind: 'code', code: code.key, visibility: visibilities.get(code.key) ?? 'private' },
@@ -81,8 +80,9 @@ export function statusDifferencesOf(baseline: number, proposed: number): readonl
 }
 
 /**
- * A code on both sides by its status, then its body read as Success, a removed code the Baseline
- * remembers with what it last had; a code on one side only has nothing to compare.
+ * A code on both sides by its status, then its body read as Success, then its message and origin,
+ * a removed code the Baseline remembers with what it last had; a code on one side only has
+ * nothing to compare.
  */
 function comparedDifferencesOf(
   code: Counterpart<CodeSnapshot>,
@@ -95,6 +95,7 @@ function comparedDifferencesOf(
       return [
         ...statusDifferencesOf(baseline.status, proposed.status),
         ...bodyDifferencesOf(bodies, defs, { position: 'success', at: partsOf('body') }),
+        ...codeNeutralOf(baseline, proposed),
       ];
     }
     case 'added':
@@ -123,26 +124,4 @@ function presenceDifferencesOf(
 
 function standardCodesOf(baseline: PublishedDefinitionsSnapshot): ReadonlySet<string> {
   return new Set(Object.values(baseline.standardRejections));
-}
-
-/**
- * The widest Visibility of the declared Endpoints of either Snapshot that list each code, so a
- * Change to a code reaches every Consumer that can see an Endpoint answering it; a Retired
- * Endpoint answers only `RETIRED`, so it counts toward none.
- */
-function answeringVisibilitiesOf(
-  baseline: PublishedServiceSnapshot,
-  proposed: ServiceSnapshot,
-): ReadonlyMap<string, Visibility> {
-  const endpoints = [
-    ...Object.values(baseline.endpoints).filter(isDeclared),
-    ...Object.values(proposed.endpoints),
-  ].filter(isLive);
-  const visibilities = new Map<string, Visibility>();
-  for (const { visibility, rejections } of endpoints) {
-    for (const code of rejections) {
-      visibilities.set(code, widerOf(visibilities.get(code) ?? 'private', visibility));
-    }
-  }
-  return visibilities;
 }

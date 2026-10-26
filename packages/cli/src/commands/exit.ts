@@ -13,19 +13,26 @@ import {
  */
 export type ExitStatus = 0 | 1 | 2 | 3;
 
-/** What a command ends with: its exit status and the lines it prints on each stream. */
+/** The fields of a `--json` document beside its `format` and `status`. */
+export type Document = Readonly<Record<string, unknown>>;
+
+/**
+ * What a command ends with: its exit status, the lines it prints on each stream and, when it did
+ * its work, the document `--json` prints instead of its stdout lines.
+ */
 export type Exit = {
   readonly status: ExitStatus;
   readonly stdout: readonly string[];
   readonly stderr: readonly string[];
+  readonly document?: Document;
 };
 
 /** A command that ended before it did its work, with the exit it ends with. */
 export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
-/** A command that did what was asked, with the lines that say what it did. */
-export function done(lines: readonly string[]): Exit {
-  return { status: 0, stdout: lines, stderr: [] };
+/** A command that did what was asked, with the lines that say what it did and the document that says it. */
+export function done(lines: readonly string[], document: Document): Exit {
+  return { status: 0, stdout: lines, stderr: [], document };
 }
 
 /** A command whose check failed: a Change refused, a broken rule, or a generated file that differs. */

@@ -49,7 +49,7 @@ export function textPartNodesOf(entry: EndpointSnapshot): TextPartNodes {
   const { params, query, headers } = entry.input;
   return {
     ...(params !== null && { 'input.params': params }),
-    ...(query !== null && { 'input.query': query }),
-    ...(headers !== null && { 'input.headers': headers }),
+    'input.query': query,
+    'input.headers': headers,
   };
 }

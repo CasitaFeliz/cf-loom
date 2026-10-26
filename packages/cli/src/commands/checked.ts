@@ -2,6 +2,7 @@ import type { ChangeSite } from '@cf-loom/contract/internal';
 import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import { tokenOf } from './author-path.ts';
 import type { CheckedChange } from './checked-change.ts';
+import type { Derivation } from './derivation.ts';
 import type { ExitStatus } from './exit.ts';
 
 /** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
@@ -14,13 +15,16 @@ type Against =
     }
   | { readonly kind: 'none'; readonly why: NoBaseline };
 
-/** What `check` found, ready to print: the package, what it was compared with and every Change. */
-export type Checked = {
+/** What `check` found before any version is derived: the package, what it was compared with and every Change. */
+export type Compared = {
   readonly kind: 'checked';
   readonly packageName: string;
   readonly against: Against;
   readonly changes: readonly CheckedChange[];
 };
+
+/** What `check` found, ready to print: the comparison and what `publish` would derive from it. */
+export type Checked = Compared & { readonly derivation: Derivation };
 
 /** How `check` ends: done, the check failed or a Breaking Change Approval is needed, with what it says on stderr. */
 export type Ending = {
@@ -58,10 +62,14 @@ export function siteOf(site: ChangeSite): string {
       return `codes.${tokenOf(site.code)}`;
     case 'subscription':
       return `subscriptions.${tokenOf(site.name)}`;
+    case 'dependency':
+      return `dependencies.${tokenOf(site.name)}`;
     case 'export':
       return `exports.${tokenOf(site.name)}`;
     case 'guard':
       return `guards.${tokenOf(site.name)}`;
+    case 'standard-rejection':
+      return `standardRejections.${site.name}`;
   }
 }
 

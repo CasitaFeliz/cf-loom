@@ -41,6 +41,22 @@ export function hintOf(change: Change): string | null {
     case 'param-renamed':
     case 'rejection-added':
     case 'rejection-removed':
+    case 'description-changed':
+    case 'group-changed':
+    case 'attachments-changed':
+    case 'guards-changed':
+    case 'qualifier-changed':
+    case 'context-changed':
+    case 'origin-changed':
+    case 'message-changed':
+    case 'against-changed':
+    case 'endpoint-added':
+    case 'endpoint-removed':
+    case 'endpoint-renamed':
+    case 'retired-changed':
+    case 'code-changed':
+    case 'demands-changed':
+    case 'rejections-changed':
       return null;
   }
 }

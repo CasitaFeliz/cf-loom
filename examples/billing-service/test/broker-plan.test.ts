@@ -13,7 +13,7 @@ describe('the broker plan', () => {
     });
 
     expect({ status: ran.status, stderr: ran.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(JSON.parse(ran.stdout)).toEqual({
+    expect(JSON.parse(ran.stdout).plan).toEqual({
       prefix: null,
       streams: {},
       consumers: {

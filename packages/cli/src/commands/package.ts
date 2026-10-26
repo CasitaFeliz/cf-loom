@@ -42,7 +42,7 @@ export async function packageCommand(run: Run, out: string): Promise<Exit> {
   const written = writeContractPackageTo(run.cwd, out, files);
   switch (written.kind) {
     case 'written':
-      return done([`Wrote ${out}`]);
+      return done([`Wrote ${out}`], { wrote: out });
     case 'refused':
     case 'failed':
       return toolingError(written.message);
