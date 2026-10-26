@@ -54,20 +54,23 @@ export function bindingOf(declared: PackagedDeclaration): string {
   }
 }
 
-function constructorOf(declared: ProvidedDeclaration): string {
+/**
+ * The constructor of an Element and the Provider it is marked with: an Endpoint's carries its
+ * Provider's Standard Rejections, which the module imports, an Event's only its name.
+ */
+function constructorOf(declared: ProvidedDeclaration, provider: string): string {
+  const name = stringLiteralOf(provider);
   switch (declared.kind) {
     case 'endpoint':
-      return 'providedEndpoint';
+      return `providedEndpoint({ name: ${name}, standardRejections }`;
     case 'event':
-      return 'providedEvent';
+      return `providedEvent(${name}`;
   }
 }
 
 /** The line a package opens an Element's declaration with: its constructor, which marks it as `provider`'s. */
 export function providedOpeningOf(declared: ProvidedDeclaration, provider: string): string {
-  const binding = bindingOf(declared);
-  const marked = stringLiteralOf(provider);
-  return `export const ${binding} = loom.${constructorOf(declared)}(${marked}, {`;
+  return `export const ${bindingOf(declared)} = loom.${constructorOf(declared, provider)}, {`;
 }
 
 /** A declaration as another file of the package imports it. */

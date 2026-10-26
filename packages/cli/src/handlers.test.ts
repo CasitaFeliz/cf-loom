@@ -540,15 +540,13 @@ function aMessagingRoot({
         '  orderPurgedV1,',
         '  refundCardV1,',
         "} from './messages.ts';",
-        `import { paymentSettledV1, payments } from '${paymentsSpecifier}';`,
+        `import { paymentSettledV1 } from '${paymentsSpecifier}';`,
         "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
       ]).trimEnd(),
     )
     .replace(
       "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
       lines([
-        'const paymentsDependency = defineDependency({ provider: payments });',
-        '',
         'const paymentsGroup = defineGroup({',
         "  name: 'payments',",
         "  description: 'Payments',",
@@ -559,7 +557,6 @@ function aMessagingRoot({
         'export const contract = defineService({',
         "  name: 'orders-service',",
         '  groups: [orders, paymentsGroup],',
-        '  dependencies: [paymentsDependency],',
         '});',
       ]).trimEnd(),
     )
@@ -3659,8 +3656,8 @@ describe('cf-loom verify: the Handler map, readers and Handlers', () => {
       text
         .replace('  refundCardV1,\n', '')
         .replace(
-          'import { paymentSettledV1,',
-          "import { refundCardV1 } from './refunds.ts';\nimport { paymentSettledV1,",
+          'import { paymentSettledV1 }',
+          "import { refundCardV1 } from './refunds.ts';\nimport { paymentSettledV1 }",
         ),
     );
 
@@ -4332,28 +4329,20 @@ const archiveFile = lines([
   '});',
 ]);
 
-/** `payments`, the Provider's Contract Package, also exporting an Endpoint, `getPayment`. */
-const paymentsWithEndpoint = paymentsSource
-  .replace(
-    'export const payments = {',
-    [
-      "export const getPayment = providedEndpoint('payments-service', {",
-      "  name: 'getPayment',",
-      "  method: 'GET',",
-      "  path: '/payments',",
-      "  visibility: 'internal',",
-      "  description: 'getPayment',",
-      '  success: { status: 200, body: z.object({ id: z.string() }) },',
-      '}, undefined);',
-      '',
-      'export const payments = {',
-    ].join('\n'),
-  )
-  .replace(
-    'import { openEnumReader, providedEvent }',
-    'import { openEnumReader, providedEndpoint, providedEvent }',
-  )
-  .replace('endpoints: {},', 'endpoints: { getPayment },');
+/** The Provider's Contract Package also exporting an Endpoint, `getPayment`. */
+const paymentsWithEndpoint = `${paymentsSource.replace(
+  'import { openEnumReader, providedEvent }',
+  'import { openEnumReader, providedEndpoint, providedEvent }',
+)}${[
+  "export const getPayment = providedEndpoint({ name: 'payments-service', standardRejections }, {",
+  "  name: 'getPayment',",
+  "  method: 'GET',",
+  "  path: '/payments',",
+  "  visibility: 'internal',",
+  "  description: 'getPayment',",
+  '  success: { status: 200, body: z.object({ id: z.string() }) },',
+  '}, undefined);',
+].join('\n')}\n`;
 
 /** `service` with its Dependency on the Provider listing the Endpoint `getPayment`, which the Provider exports. */
 function withProviderEndpoint(
@@ -4363,13 +4352,10 @@ function withProviderEndpoint(
     ...service,
     ...installedPayments({ source: paymentsWithEndpoint }),
     'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+      .replace('import { paymentSettledV1 }', 'import { getPayment, paymentSettledV1 }')
       .replace(
-        'import { paymentSettledV1, payments }',
-        'import { getPayment, paymentSettledV1, payments }',
-      )
-      .replace(
-        'defineDependency({ provider: payments })',
-        'defineDependency({ provider: payments, endpoints: [getPayment] })',
+        '  groups: [orders, paymentsGroup],',
+        '  groups: [orders, paymentsGroup],\n  dependencies: [defineDependency({ endpoints: [getPayment] })],',
       ),
   };
 }

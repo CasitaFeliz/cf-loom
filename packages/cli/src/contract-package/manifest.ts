@@ -87,7 +87,7 @@ export function cfLoomOf(snapshot: Snapshot | PublishedSnapshot) {
 }
 
 /**
- * Each Dependency as the Snapshot records it, with the Events received from its Provider, which
+ * Each Provider as the Snapshot records it, with the Events received from it, which
  * the Snapshot keeps only in the Subscriptions, so the registry's metadata records every use of a
  * Provider's Elements.
  */

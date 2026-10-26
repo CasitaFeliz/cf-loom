@@ -43,10 +43,10 @@ export async function preparedOf(
   return { kind: 'prepared', comparison, peerRanges, unlisted: unlisted.lines };
 }
 
-/** The versions of other packages a built project's Contract is declared against: its Dependencies' and its origins'. */
+/** The versions of other packages a built project's Contract is declared against: its Providers' and its origins'. */
 function usedVersionsOf({ validated, snapshot }: BuiltProject): UsedVersions {
-  const dependencies = validated.declarations.dependencies.map(({ dependency, from }) => ({
-    provider: dependency.provider.name,
+  const dependencies = validated.declarations.providers.map(({ name, from }) => ({
+    provider: name,
     packageName: from.packageName,
     version: from.version,
   }));

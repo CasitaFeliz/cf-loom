@@ -2593,11 +2593,11 @@ describe('cf-loom generate: the package a module belongs to', () => {
   });
 });
 
-describe('cf-loom generate: the Contract Package a Dependency is against', () => {
+describe('cf-loom generate: the Contract Package a Provider is against', () => {
   const dependencyPackageLine = (what: string) =>
-    `dependencies.payments-service dependency-package: ${what}\n`;
+    `src/contract/index.ts: subscriptions.notifyOnSettled dependency-package: ${what}\n`;
 
-  test('a Dependency is against the version in the package.json of the installed package', () => {
+  test('a Provider is against the version in the package.json of the installed package', () => {
     const project = aProject({ ...aSubscribingRoot(), ...installedPayments({ version: '7.4.2' }) });
 
     const ran = cfLoom(project, 'generate');
@@ -2607,7 +2607,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
     expect(snapshot.dependencies['payments-service'].against).toBe('7.4.2');
   });
 
-  test('a Dependency is against the package that exports the Provider’s contract, not the installed package that re-exports it', () => {
+  test('a Provider is against the package that exports its Elements, not the installed package that re-exports them', () => {
     const own = aSubscribingRoot();
     const wrapper = '@org/payments-wrapper';
     const project = aProject({
@@ -2622,7 +2622,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
         type: 'module',
         exports: './index.js',
       }),
-      [`node_modules/${wrapper}/index.js`]: `export { payments } from '${paymentsSpecifier}';\n`,
+      [`node_modules/${wrapper}/index.js`]: `export { paymentSettledV1 } from '${paymentsSpecifier}';\n`,
     });
 
     const ran = cfLoom(project, 'generate');
@@ -2632,7 +2632,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
     expect(snapshot.dependencies['payments-service'].against).toBe('5.1.0');
   });
 
-  test('a Dependency on a Provider the project holds in a file of its own, installed from no package, exits 1', () => {
+  test('a Provider whose Elements the project holds in a file of its own, installed from no package, exits 1', () => {
     const own = aSubscribingRoot();
     const files = {
       ...own,
@@ -2650,7 +2650,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
       status: 1,
       stdout: '',
       stderr: dependencyPackageLine(
-        "A Dependency's provider is an installed Contract Package's contract: no installed package exports payments-service's Elements",
+        "A Provider's Elements come from an installed Contract Package: no installed package exports payments-service's Elements",
       ),
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
@@ -2665,7 +2665,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
       status: 1,
       stdout: '',
       stderr: dependencyPackageLine(
-        `A Dependency's Contract Package has a name and a version: ${paymentsSpecifier} has no version in its package.json`,
+        `A Provider's Contract Package has a name and a version: payments-service's, ${paymentsSpecifier} has no version in its package.json`,
       ),
     });
   });
@@ -2688,7 +2688,7 @@ describe('cf-loom generate: the Contract Package a Dependency is against', () =>
       status: 1,
       stdout: '',
       stderr: dependencyPackageLine(
-        `A Dependency's Contract Package has a name and a version: node_modules/${paymentsSpecifier}/package.json has no name`,
+        `A Provider's Contract Package has a name and a version: payments-service's, node_modules/${paymentsSpecifier}/package.json has no name`,
       ),
     });
   });
@@ -2861,7 +2861,7 @@ function aMessagingRoot({
   return { ...root, 'src/contract/index.ts': index, 'src/contract/messages.ts': messages };
 }
 
-/** `aRoot` also subscribing, as `notifyOnSettled`, to `PaymentSettled@1` of its Dependency `payments-service`, installed at the version given. */
+/** `aRoot` also subscribing, as `notifyOnSettled`, to `PaymentSettled@1` of `payments-service`, installed at the version given. */
 function aSubscribingRoot(
   options: Parameters<typeof aRoot>[0] = {},
   paymentsVersion = '5.1.0',
@@ -2870,12 +2870,12 @@ function aSubscribingRoot(
   const index = [
     "import { defineService, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
     "import { ping } from './ping.endpoint.ts';",
-    `import { payments } from '${paymentsSpecifier}';`,
+    `import { paymentSettledV1 } from '${paymentsSpecifier}';`,
     '',
     'export const notifyOnSettled = defineSubscription({',
     "  name: 'notifyOnSettled',",
     "  description: 'Notify on settled',",
-    '  event: payments.events.paymentSettledV1,',
+    '  event: paymentSettledV1,',
     '});',
     '',
     "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping], subscriptions: [notifyOnSettled] });",
@@ -2883,7 +2883,6 @@ function aSubscribingRoot(
     'export const contract = defineService({',
     "  name: 'orders-service',",
     '  groups: [health],',
-    '  dependencies: [defineDependency({ provider: payments })],',
     '});',
     '',
   ].join('\n');

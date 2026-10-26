@@ -21,17 +21,16 @@ function lifecycleLinesOf(lifecycle: EventSnapshot['lifecycle']): readonly strin
 }
 
 /**
- * The `@deprecated` comment above a Deprecated Element's key in `contract`, with its description,
- * so a Consumer's editor flags each use of it; none for an Active one.
+ * The `@deprecated` comment above a Deprecated Element's export, with its description, so a
+ * Consumer's editor flags each use of it; none for an Active one.
  */
 export function deprecatedLinesOf(
   element: Pick<EventSnapshot, 'description' | 'lifecycle'>,
-  indent: string,
 ): readonly string[] {
   if (!isDeprecated(element.lifecycle)) {
     return [];
   }
-  return docCommentOf(`@deprecated ${element.description}`).map((line) => `${indent}${line}`);
+  return docCommentOf(`@deprecated ${element.description}`);
 }
 
 function isDeprecated(lifecycle: EventSnapshot['lifecycle']): boolean {
