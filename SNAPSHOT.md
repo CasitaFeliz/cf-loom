@@ -14,6 +14,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 - JSON, UTF-8, object keys sorted by code point, two-space indentation, a final newline. The same Contract always produces the same bytes, apart from `version`, `generator` and the `deprecatedAt` stamps carried forward.
 - A Snapshot's JSON nests at most 256 levels, the outermost object being the first; `generate` fails on a Contract whose Snapshot would nest deeper, so every Snapshot it writes reads back.
+- The Snapshot writes one spelling for one shape. A text part (`input.query`, `input.headers`, `success.headers`, a Guard's `demands.headers` and `demands.query`) is always an open object, with no field when none is declared, so a part declared with `z.object({})` and one not declared write the same Snapshot. A def is never `nullable`: `.nullable()` belongs to a use, so a def whose id sits on its `.nullable()` is written without it and every `ref` to it carries `nullable: true`, as when the `.nullable()` is on each use.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id`, and `enum.values` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a union's `options`, since zod's union returns the first option that parses, a Qualifier's list) keep it.
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
 
@@ -39,7 +40,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ```
 
 - `format` is the version of this specification, and the CLI reads a Baseline written in any format it ever wrote; `generator` is the cf-loom CLI that wrote the file. From the first released format on, anything this specification adds or changes is a new format.
-- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, a Standard Rejection names or an export names, or a Guard an Endpoint attaches, a Guard lists or an export names; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
+- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def, a code an Endpoint or Guard lists, a Standard Rejection names or an export names, or a Guard an Endpoint attaches, a Guard lists or an export names; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones; a def that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; a text part that is not an object, and a def that is `nullable`; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
 - `kind` is `service`, `application` or `definitions`. `name` is a Service's or Application's root name, and a Definitions Package's package.json name, scope included. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `exports` (what its root file exports, by name: a Guard by its name, a Rejection by its code, a shared schema's node), `guards`, `codes`, `standardRejections` and `defs`.
 
 A Definitions Package's Snapshot:
@@ -89,11 +90,15 @@ A Definitions Package's Snapshot:
   "guards": [{ "guard": "apiKey", "qualifier": null }],
   "input": {
     "params": { "type": "object", "fields": {} },
-    "query": null,
+    "query": { "type": "object", "fields": {} },
     "headers": { "type": "object", "fields": {} },
     "body": null
   },
-  "success": { "status": 200, "headers": null, "body": { "type": "object", "fields": {} } },
+  "success": {
+    "status": 200,
+    "headers": { "type": "object", "fields": {} },
+    "body": { "type": "object", "fields": {} }
+  },
   "rejections": ["BAD_REQUEST", "NOT_FOUND", "NOT_IMPLEMENTED", "ORDER_LOCKED", "UNAUTHENTICATED"]
 }
 ```
@@ -127,7 +132,7 @@ Subjects, stream names and durable consumer names are derived from these identit
   "description": "An API key per Caller",
   "guards": [],
   "qualifier": null,
-  "demands": { "headers": {}, "query": null },
+  "demands": { "headers": {}, "query": {} },
   "context": {},
   "rejections": ["UNAUTHENTICATED"]
 }
