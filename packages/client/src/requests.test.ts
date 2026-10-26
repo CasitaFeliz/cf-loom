@@ -5,7 +5,6 @@ import {
   defineGuard,
   defineService,
   type Endpoint,
-  type ExportedSnapshot,
   type Http,
   openEnumReader,
   type ProvidedStandardRejections,
@@ -120,10 +119,27 @@ const ordersDependency = defineDependency({
   ],
 });
 
+/** The Provider's Contract Package with an exported Snapshot of any shape, as a package built by another cf-loom might carry. */
+type Carrying = Omit<typeof orders, 'exportedSnapshot'> & { readonly exportedSnapshot: unknown };
+
 /** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof orders, format: unknown): typeof orders {
+function inFormat(contractPackage: typeof orders, format: unknown): Carrying {
   const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+  return { ...contractPackage, exportedSnapshot };
+}
+
+/** The Provider's Contract Package with the entry of one of its Endpoints without `field`. */
+function withoutField(contractPackage: typeof orders, identity: string, field: string): Carrying {
+  const exportedSnapshot = structuredClone(contractPackage.exportedSnapshot);
+  const entry: Record<string, unknown> | undefined = Reflect.get(
+    exportedSnapshot.endpoints,
+    identity,
+  );
+  if (entry === undefined) {
+    throw new Error(`The fixture has no ${identity}`);
+  }
+  delete entry[field];
+  return { ...contractPackage, exportedSnapshot };
 }
 
 /** A client whose `fetch` records each request and answers `response`. */
@@ -922,6 +938,19 @@ describe('a Provider’s exported Snapshot, read when the client is created', ()
     const create = () => client(newer, { baseUrl: 'http://orders.test' });
 
     expect(create).toThrow('is in format 2, newer than this cf-loom reads');
+  });
+
+  test('a Contract Package whose Endpoint entry lacks its name is refused as malformed', () => {
+    const damaged = defineDependency({
+      provider: withoutField(orders, 'GET /shops/{}/orders', 'name'),
+      endpoints: [orders.endpoints.searchOrders],
+    });
+
+    const create = () => client(damaged, { baseUrl: 'http://orders.test' });
+
+    expect(create).toThrow(
+      "orders-service's exported Snapshot is malformed: endpoints.GET /shops/{}/orders.name is missing",
+    );
   });
 
   test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {

@@ -1,4 +1,3 @@
-import type { ExportedSnapshot } from '../snapshot/index.ts';
 import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
@@ -14,7 +13,8 @@ type ProvidedEvent = Provided<Event & { readonly visibility: ExportedVisibility 
 
 /**
  * The `contract` a Contract Package exports: its Public and Internal Elements, each its Provider's,
- * its version, its Standard Rejections and the Snapshot cut to what it exports.
+ * its version, its Standard Rejections and the Snapshot cut to what it exports, which is `unknown`
+ * since the cf-loom that wrote it may be older than the one that reads it.
  */
 export type ContractPackage = {
   readonly name: string;
@@ -24,7 +24,7 @@ export type ContractPackage = {
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: ProvidedStandardRejections;
-  readonly exportedSnapshot: ExportedSnapshot;
+  readonly exportedSnapshot: unknown;
 };
 
 type ElementOf<Elements> = Elements[keyof Elements];

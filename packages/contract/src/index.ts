@@ -55,6 +55,5 @@ export {
 } from './declarations/index.ts';
 export type { OpenEnum } from './open/index.ts';
 export { openEnum, openEnumReader } from './open/index.ts';
-export type { ExportedSnapshot } from './snapshot/index.ts';
 export type { Committed, Http } from './wire/index.ts';
 export type { Issue } from './written/index.ts';

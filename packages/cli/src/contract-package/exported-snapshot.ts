@@ -6,7 +6,6 @@ import {
   type ExportedSnapshot,
   nameAndVersionOf,
 } from '@cf-loom/contract/internal';
-import { loomNeeds } from '../schema-code/index.ts';
 import { jsonLiteralOf } from '../source-text/index.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';
 import { packagePaths } from './paths.ts';
@@ -35,12 +34,11 @@ export function exportedEventsOf(exported: ExportedSnapshot): readonly ExportedE
     .sort((left, right) => byCodePoint(codeNameOf(left), codeNameOf(right)));
 }
 
-/** The exported Snapshot as a module, typed so the package's `contract` satisfies its type. */
+/** The exported Snapshot as a module, typed `unknown` since the cf-loom that reads it reads it by the format it names. */
 export function exportedSnapshotModuleOf(exported: ExportedSnapshot): PackageFile {
   const literal = jsonLiteralOf(exported, 'indented');
   return packageModuleOf({
     path: packagePaths.exportedSnapshot,
-    body: [`export const exportedSnapshot: loom.ExportedSnapshot = ${literal};`],
-    needs: loomNeeds(),
+    body: [`export const exportedSnapshot: unknown = ${literal};`],
   });
 }

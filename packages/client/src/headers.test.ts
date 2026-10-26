@@ -4,7 +4,6 @@ import {
   defineGroup,
   defineService,
   type Endpoint,
-  type ExportedSnapshot,
   type ProvidedStandardRejections,
   providedEndpoint,
 } from '@cf-loom/contract';
@@ -216,7 +215,7 @@ describe('headers given to client()', () => {
       provider: {
         ...written,
         endpoints: { trace: named },
-        exportedSnapshot: JSON.parse(renamed) as ExportedSnapshot,
+        exportedSnapshot: JSON.parse(renamed),
       },
       endpoints: [named],
     });

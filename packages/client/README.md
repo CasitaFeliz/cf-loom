@@ -33,7 +33,7 @@ The client has one method per Endpoint listed in the Dependency, named after it,
 
 `baseUrl` is a string or a `URL`. Its path is kept as a prefix, such as a gateway's mount, with one trailing slash removed: `client(dependency, { baseUrl: 'https://gw.example/payments/' })` calls `getPayment` at `https://gw.example/payments/payments/<id>`. A `baseUrl` whose scheme is not `http` or `https`, with a username or a password, which `fetch` refuses in a URL, or with a query or a fragment, even an empty one, is a bug, and `client()` throws, never showing the password.
 
-Given a Contract Package whose exported Snapshot is in a format the installed cf-loom does not read (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), `client()` throws `<provider>'s exported Snapshot is in format <n>, newer than this cf-loom reads: upgrade the @cf-loom packages`, or, when its `format` is no whole number from 1, `<provider>'s exported Snapshot is malformed: format is not a whole number from 1`.
+Given a Contract Package whose exported Snapshot is in a format the installed cf-loom does not read (see [Where it lives](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#where-it-lives) in SNAPSHOT.md), `client()` throws `<provider>'s exported Snapshot is in format <n>, newer than this cf-loom reads: upgrade the @cf-loom packages`, or, when it breaks the format it names, `<provider>'s exported Snapshot is malformed: <where> <reason>`, such as `format is not a whole number from 1` or `endpoints.GET /orders/{}.name is missing`.
 
 ### What a call sends
 

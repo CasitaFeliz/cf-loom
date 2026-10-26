@@ -5192,7 +5192,11 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       name: ordersPackage,
       version: '1.0.0',
       type: 'module',
-      exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
+      exports: {
+        '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+        './package.json': './package.json',
+        './snapshot.json': './snapshot.json',
+      },
       files: ['dist', 'snapshot.json'],
       sideEffects: false,
       peerDependencies: installedPeers,
@@ -5249,20 +5253,25 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(paths.filter((path) => path.startsWith('src/') || path === 'tsconfig.json')).toEqual([]);
   });
 
-  test('an Application publishes its Contract Package', async ({ lab }) => {
+  test('an Application publishes its package.json and snapshot.json alone, with no peers, and builds nothing', async ({
+    lab,
+  }) => {
     const project = await aGeneratedProject(lab, anApplicationRoot);
+    withTsc(project, "console.error('tsc must not run'); process.exit(1);");
 
     const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
 
     const published = 'Published @org/contract-web-admin@1.0.0';
     expect(ran.stdout.split('\n').at(-2)).toBe(published);
     const files = publishedFilesOf(registry);
+    expect(Object.keys(files).sort()).toEqual(['package.json', 'snapshot.json']);
     expect(JSON.parse(files['snapshot.json']!)).toMatchObject({
       kind: 'application',
       name: 'web-admin',
       version: '1.0.0',
     });
-    expect(Object.keys(files)).toContain('dist/index.js');
+    expect(Object.keys(JSON.parse(files['package.json']!))).not.toContain('peerDependencies');
+    expect(leftBehindIn(project)).toEqual([]);
   });
 
   test('a Definitions Package publishes its own package.json and built files, with snapshot.json, cfLoom and the version written in, and snapshot.json added to files', async ({

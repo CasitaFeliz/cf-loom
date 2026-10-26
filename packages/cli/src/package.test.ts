@@ -99,6 +99,17 @@ function packageIn(project: string, ...args: string[]) {
   return cfLoom(project, 'package', ...args);
 }
 
+/** A module that imports the two JSON files of the Contract Package of orders-service, as its exports name them. */
+const importingJsonOf = `
+const base = '@org/contract-orders-service';
+const snapshot = (await import(\`\${base}/snapshot.json\`, { with: { type: 'json' } })).default;
+const manifest = (await import(\`\${base}/package.json\`, { with: { type: 'json' } })).default;
+console.log(JSON.stringify({
+  snapshot: { kind: snapshot.kind, name: snapshot.name },
+  manifest: { name: manifest.name, version: manifest.version },
+}));
+`;
+
 function typeCheck(project: string) {
   const ran = spawnSync(tsc, ['-p', project], { encoding: 'utf8' });
   return { status: ran.status, stdout: ran.stdout };
@@ -634,7 +645,6 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       'src/rejections',
       'src/rejections/forbidden.ts',
       'src/rejections/order-locked.ts',
-      'src/snapshot.ts',
       'src/standard-rejections.ts',
       'tsconfig.json',
     ]);
@@ -662,7 +672,11 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
       name: '@org/contract-orders-service',
       version: '0.0.0',
       type: 'module',
-      exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
+      exports: {
+        '.': { types: './dist/index.d.ts', default: './dist/index.js' },
+        './package.json': './package.json',
+        './snapshot.json': './snapshot.json',
+      },
       files: ['dist', 'snapshot.json'],
       sideEffects: false,
       peerDependencies: {
@@ -711,7 +725,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
 
     const out = join(project, defaultOut);
     const code = filesIn(out)
-      .filter((file) => file.endsWith('.ts') && file !== 'src/snapshot.ts')
+      .filter((file) => file.endsWith('.ts'))
       .map((file) => read(out, file))
       .join('\n');
     const absents = ['adminOrder', 'apiKey', 'ADMIN_ONLY', 'category', 'StockReserved'];
@@ -1030,12 +1044,13 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(typeCheck(out)).toEqual({ status: 0, stdout: '' });
   });
 
-  test('its entry exports contract, with the Endpoints that are not Retired, and snapshot', async () => {
+  test('its entry exports contract alone, with the Endpoints that are not Retired', async () => {
     const out = builtPackage();
     expect(typeCheck(out).status).toBe(0);
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
+    expect(Object.keys(built)).toEqual(['contract']);
     expect(built.contract).toMatchObject({
       name: 'orders-service',
       version: '0.0.0',
@@ -1049,7 +1064,23 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(Object.keys(built.contract.events)).toEqual(['orderPlacedV1', 'orderPlacedV2']);
     expect(built.contract.endpoints.listOrders.lifecycle).toBe('deprecated');
     expect(built.contract.endpoints.getOrder.lifecycle).toBeUndefined();
-    expect(built.snapshot).toEqual(JSON.parse(read(out, 'snapshot.json')));
+  });
+
+  test('a Consumer imports snapshot.json and package.json by name, which the exports name', () => {
+    const out = builtPackage();
+    const consumer = aFolder();
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+
+    const ran = spawnSync(process.execPath, ['--input-type=module', '-e', importingJsonOf], {
+      cwd: consumer,
+      encoding: 'utf8',
+    });
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(JSON.parse(ran.stdout)).toEqual({
+      snapshot: { kind: 'service', name: 'orders-service' },
+      manifest: { name: '@org/contract-orders-service', version: '0.0.0' },
+    });
   });
 
   test('its Standard Rejections take code, status and message from the codes the Snapshot holds', async () => {
@@ -1069,10 +1100,11 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
+    const snapshot = JSON.parse(read(out, 'snapshot.json'));
     expect(built.contract.standardRejections.notFound).toEqual({
       code: 'MISSING',
-      status: built.snapshot.codes.MISSING.status,
-      message: built.snapshot.codes.MISSING.message,
+      status: snapshot.codes.MISSING.status,
+      message: snapshot.codes.MISSING.message,
     });
     expect(built.contract.standardRejections.notFound.status).toBe(410);
   });
@@ -1147,7 +1179,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
 
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
-    const { snapshot } = built;
+    const snapshot = JSON.parse(read(out, 'snapshot.json'));
     const exported = built.contract.exportedSnapshot;
     expect(exported).toEqual({
       format: 1,
@@ -1677,7 +1709,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     );
   });
 
-  test('an Application’s package exports its Snapshot only, and builds', async () => {
+  test('an Application’s package is its package.json and snapshot.json, with no code and no peers', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@org/web-admin', type: 'module' }),
       'cf-loom.config.ts': config,
@@ -1687,22 +1719,23 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       ]),
     });
     const out = join(aFolder(), 'contract-web-admin');
-    expect(packageIn(project, '--out', out).status).toBe(0);
-    linkPeers(out);
-    expect(typeCheck(out).status).toBe(0);
 
-    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
+    const packaged = packageIn(project, '--out', out);
 
-    expect(filesIn(out).filter((file) => !file.startsWith('dist'))).toEqual([
-      'package.json',
-      'snapshot.json',
-      'src',
-      'src/index.ts',
-      'src/snapshot.ts',
-      'tsconfig.json',
-    ]);
-    expect(Object.keys(built)).toEqual(['snapshot']);
-    expect(JSON.parse(read(out, 'package.json')).cfLoom.kind).toBe('application');
+    expect(packaged.status).toBe(0);
+    expect(filesIn(out)).toEqual(['package.json', 'snapshot.json']);
+    expect(JSON.parse(read(out, 'package.json'))).toEqual({
+      name: '@org/contract-web-admin',
+      version: '0.0.0',
+      exports: { './package.json': './package.json', './snapshot.json': './snapshot.json' },
+      files: ['snapshot.json'],
+      cfLoom: {
+        format: 1,
+        kind: 'application',
+        dependencies: {},
+        snapshotHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      },
+    });
   });
 });
 

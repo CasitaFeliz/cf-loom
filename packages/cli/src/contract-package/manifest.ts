@@ -34,28 +34,47 @@ export type ContractSnapshot =
   | PublishedApplicationSnapshot;
 
 /**
- * The package.json: named as the project publishes, at its version, peers on `zod` and
- * `@cf-loom/contract` only with a caret on the versions built with, and the `cfLoom` metadata:
- * the hash and kind the check reads without downloading the package, and its Dependencies.
+ * The package.json: named as the project publishes, at its version, with `package.json` and
+ * `snapshot.json` among its exports, and the `cfLoom` metadata: the hash and kind the check reads
+ * without downloading the package, and its Dependencies. A Service's also exports its code, peers
+ * on `zod` and `@cf-loom/contract` only with a caret on the versions built with; an Application's
+ * has no code, so it has no peers.
  */
 export function manifestOf(
   snapshot: ContractSnapshot,
   { name, version, peerRanges }: Packaging,
 ): PackageFile {
-  const manifest = {
-    name,
-    version,
-    type: 'module',
-    exports: {
-      '.': { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` },
-    },
-    files: [builtFolder, packagePaths.snapshot],
-    sideEffects: false,
-    peerDependencies: peerRanges,
-    cfLoom: cfLoomOf(snapshot),
-  };
-  return manifestFileOf(manifest);
+  const cfLoom = cfLoomOf(snapshot);
+  switch (snapshot.kind) {
+    case 'service': {
+      const code = { types: `./${builtFolder}/index.d.ts`, default: `./${builtFolder}/index.js` };
+      return manifestFileOf({
+        name,
+        version,
+        type: 'module',
+        exports: { '.': code, ...fileExports },
+        files: [builtFolder, packagePaths.snapshot],
+        sideEffects: false,
+        peerDependencies: peerRanges,
+        cfLoom,
+      });
+    }
+    case 'application':
+      return manifestFileOf({
+        name,
+        version,
+        exports: fileExports,
+        files: [packagePaths.snapshot],
+        cfLoom,
+      });
+  }
 }
+
+/** The two files every Contract Package exports, which a Consumer's tooling reads by name. */
+const fileExports = {
+  './package.json': `./${packagePaths.manifest}`,
+  './snapshot.json': `./${packagePaths.snapshot}`,
+};
 
 /** A package.json from its fields: two-space JSON and a final line break. */
 export function manifestFileOf(manifest: object): PackageFile {

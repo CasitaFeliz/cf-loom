@@ -231,7 +231,7 @@ type Shaped = {
 
 let folder = '';
 let echo: Endpoint;
-let entrySnapshot: unknown;
+let exported: { readonly endpoints: Readonly<Record<string, unknown>> };
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
 let overlap: { readonly success: { readonly body: Reader } };
@@ -264,7 +264,7 @@ beforeAll(async () => {
   expect(built.stdout).toBe('');
   const entry = await import(pathToFileURL(join(out, 'dist/index.js')).href);
   echo = entry.contract.endpoints.echo;
-  entrySnapshot = entry.snapshot;
+  exported = entry.contract.exportedSnapshot;
   rich = entry.contract.endpoints.rich;
   proto = entry.contract.endpoints.proto;
   overlap = entry.contract.endpoints.overlap;
@@ -469,9 +469,11 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['stem']).toEqual(sample.stem);
   });
 
-  test('the entry’s snapshot is snapshot.json, a __proto__ key in an example included', () => {
-    expect(isDeepStrictEqual(entrySnapshot, snapshot)).toBe(true);
-    expect(JSON.stringify(entrySnapshot)).toContain('"__proto__"');
+  test('the entry’s exported Snapshot holds the entries of snapshot.json, a __proto__ key in an example included', () => {
+    const entry = exported.endpoints['POST /proto'];
+
+    expect(isDeepStrictEqual(entry, snapshot.endpoints['POST /proto'])).toBe(true);
+    expect(JSON.stringify(entry)).toContain('"__proto__"');
   });
 
   test('an example holding a __proto__ key walks back to the Snapshot’s node', () => {

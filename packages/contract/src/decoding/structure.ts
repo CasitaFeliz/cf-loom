@@ -16,7 +16,8 @@ const heading = {
   generator: text,
 };
 
-const guard = z.strictObject({
+/** Format 1's Guard, in a published Snapshot and in an exported one. */
+export const guard = z.strictObject({
   origin: text,
   description: text,
   guards: z.array(text),
@@ -26,12 +27,13 @@ const guard = z.strictObject({
   rejections: codeList,
 });
 
-/** A def is never nullable: `.nullable()` belongs to a use of it, so every `ref` to it carries it. */
-const def = schemaNode.refine((node) => node.nullable !== true, {
+/** Format 1's def, in a published Snapshot and in an exported one: never nullable, since every `ref` to it carries `nullable`. */
+export const def = schemaNode.refine((node) => node.nullable !== true, {
   message: 'is nullable: a def is written plain, and each ref to it carries nullable',
 });
 
-const code = z.strictObject({
+/** Format 1's code, in a published Snapshot and in an exported one. */
+export const code = z.strictObject({
   origin: text,
   status: z.number(),
   message: text,

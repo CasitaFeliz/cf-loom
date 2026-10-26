@@ -13,12 +13,7 @@ import {
   type Writing,
   zodExpressionOf,
 } from '../schema-code/index.ts';
-import {
-  jsonLiteralOf,
-  keyOf,
-  relativeSpecifierOf,
-  stringLiteralOf,
-} from '../source-text/index.ts';
+import { keyOf, relativeSpecifierOf, stringLiteralOf } from '../source-text/index.ts';
 import { deprecatedLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf, type Sibling } from './modules.ts';
@@ -43,9 +38,8 @@ type Keyed = {
 
 /**
  * A Service's entry: `contract`, its Endpoints by name, its Events by name in code, its Standard
- * Rejections resolved and its exported Snapshot, checked against `ContractPackage`; its
- * `snapshot`; and the types of its recursive defs, so a Consumer that emits declarations can
- * name them.
+ * Rejections resolved and its exported Snapshot, checked against `ContractPackage`; and the types
+ * of its recursive defs, so a Consumer that emits declarations can name them.
  */
 export function serviceEntryOf(entry: ServiceEntry): PackageFile {
   const { name, version, defUses } = entry;
@@ -66,13 +60,10 @@ export function serviceEntryOf(entry: ServiceEntry): PackageFile {
     '  standardRejections,',
     '  exportedSnapshot,',
     '} satisfies loom.ContractPackage;',
-    '',
-    'export { snapshot };',
     ...defTypesExportOf(defUses),
   ];
   const siblings: readonly Sibling[] = [
     ...[...endpoints, ...events].map(({ declared }) => siblingOf(declared)),
-    { name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' },
     { name: 'exportedSnapshot', path: packagePaths.exportedSnapshot, kind: 'value' },
     { name: 'standardRejections', path: packagePaths.standardRejections, kind: 'value' },
   ];
@@ -98,23 +89,6 @@ function defTypesExportOf(defUses: readonly DefUse[]): readonly string[] {
   const types = defUses.map(({ id, mode }) => defTypeNameOf(id, mode)).sort(byCodePoint);
   const specifier = relativeSpecifierOf(packagePaths.entry, packagePaths.defs);
   return [`export type { ${types.join(', ')} } from ${stringLiteralOf(specifier)};`];
-}
-
-/** An Application's entry: its `snapshot` only, since it offers no Elements. */
-export function applicationEntryOf(): PackageFile {
-  return packageModuleOf({
-    path: packagePaths.entry,
-    body: ['export { snapshot };'],
-    siblings: [{ name: 'snapshot', path: packagePaths.snapshotModule, kind: 'value' }],
-  });
-}
-
-/** The Snapshot as a module, so the built package exports what `snapshot.json` holds. */
-export function snapshotModuleOf(snapshot: unknown): PackageFile {
-  return packageModuleOf({
-    path: packagePaths.snapshotModule,
-    body: [`export const snapshot = ${jsonLiteralOf(snapshot, 'indented')};`],
-  });
 }
 
 /**

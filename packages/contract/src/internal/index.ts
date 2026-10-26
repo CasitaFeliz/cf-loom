@@ -64,7 +64,7 @@ export {
   upperSnakeCase,
 } from '../declarations/index.ts';
 export type { DecodedSnapshot } from '../decoding/index.ts';
-export { decodeSnapshot } from '../decoding/index.ts';
+export { decodeSnapshot, providedSnapshotOf } from '../decoding/index.ts';
 export type { Checked, GivenPart, Parsed, SchemaIssue } from '../issues/index.ts';
 export {
   encodedValueOf,
@@ -112,7 +112,6 @@ export type {
 export {
   canonicalSnapshotOf,
   canonicalTextOf,
-  checkExportedFormat,
   exportedEntryOf,
   exportedSnapshotOf,
   hashedTextOf,
