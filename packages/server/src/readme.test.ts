@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import {
   defineContract,
   defineEndpoint,
@@ -10,13 +11,14 @@ import { admit, handle, reject, success, type WithResources } from '@cf-loom/han
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Http, serve } from './index.ts';
+import { nodeHttp } from './node-http/index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
-  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  demands: { headers: z.object({ 'x-api-key': z.string().optional() }) },
   context: z.object({ callerId: z.string() }),
 });
 
@@ -32,9 +34,21 @@ const getOrder = defineEndpoint({
   rejections: [notFound],
 });
 
+const noteOrder = defineEndpoint({
+  name: 'noteOrder',
+  method: 'POST',
+  path: '/notes',
+  visibility: 'public',
+  description: 'A note on an order, which takes no Resources',
+  input: { body: z.object({ text: z.string() }) },
+  success: { status: 200, body: z.object({ text: z.string() }) },
+});
+
 const contract = defineContract({
   name: 'orders-service',
-  groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
+  groups: [
+    defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder, noteOrder] }),
+  ],
 });
 
 type Resources = { readonly orders: { readonly nameOf: (orderId: string) => string } };
@@ -47,6 +61,7 @@ const handlers = {
       ({ params }, { context }, { resources: { orders } }: WithResources<Resources>) =>
         success({ id: orders.nameOf(params.orderId), callerId: context.apiKey.callerId }),
     ),
+    noteOrder: handle(noteOrder, ({ body }) => success({ text: body.text })),
   },
   guards: { apiKey: handle(apiKey, () => reject(notFound) as never) },
   commands: {},
@@ -105,6 +120,46 @@ describe('the READMEs', () => {
 
     expectTypeOf(http).toEqualTypeOf<Http>();
     expectTypeOf(http).toEqualTypeOf<(request: Request) => Promise<Response>>();
+    expect(typeof http).toBe('function');
+  });
+
+  test('the HTTP-only main.ts serves the Contract with a body limit, and its server closes', async () => {
+    const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });
+    const server = nodeHttp(http).listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (typeof address !== 'object' || address === null) {
+      throw new Error('The server listens on a port');
+    }
+
+    const tooLarge = await fetch(`http://127.0.0.1:${address.port}/notes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'x'.repeat(1_048_577) }),
+    });
+    server.close();
+    await once(server, 'close');
+
+    expect(tooLarge.status).toBe(413);
+    expect(await tooLarge.json()).toMatchObject({ fault: { code: 'BODY_TOO_LARGE' } });
+    expect(server.listening).toBe(false);
+  });
+
+  test('serve takes no resources when no Handler takes any', () => {
+    const notes = defineContract({
+      name: 'notes-service',
+      groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [noteOrder] })],
+    });
+    const noteHandlers = {
+      endpoints: { noteOrder: handle(noteOrder, ({ body }) => success({ text: body.text })) },
+      guards: {},
+      commands: {},
+      subscriptions: {},
+      deprecatedAt: {},
+    };
+
+    const http = serve(notes, noteHandlers, { maxBodyBytes: 1_048_576 });
+
     expect(typeof http).toBe('function');
   });
 
