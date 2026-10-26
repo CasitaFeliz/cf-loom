@@ -58,8 +58,9 @@ function headersOf(headers: ObjectNode): Readonly<Record<string, OpenApiObject>>
   return Object.fromEntries(entries);
 }
 
-function rejectionPartOf({ code, status, message }: ServedRejection): StatusPart {
-  return { status, description: `${code}: ${message}`, schema: componentRefOf(code) };
+function rejectionPartOf({ code, status, message, headers }: ServedRejection): StatusPart {
+  const description = `${code}: ${message}`;
+  return { status, description, headers: headersOf(headers), schema: componentRefOf(code) };
 }
 
 /** The `Retry-After` a retryable Fault may carry. */
@@ -114,15 +115,23 @@ function responsesFrom(
 }
 
 function responseOf(parts: readonly StatusPart[], deprecatedAt: string | undefined): OpenApiObject {
-  const partHeaders = parts.flatMap(({ headers }) => Object.entries(headers ?? {}));
-  const deprecation = Object.entries(deprecationOf(deprecatedAt));
-  const headers = Object.fromEntries([...partHeaders, ...deprecation]);
+  const headers = { ...mergedHeadersOf(parts), ...deprecationOf(deprecatedAt) };
   const schemas = parts.map(({ schema }) => schema).filter(isSchema);
   return definedOf({
     description: parts.map(({ description }) => description).join('; '),
     headers: Object.keys(headers).length === 0 ? undefined : headers,
     content: schemas.length === 0 ? undefined : jsonContentOf(alternativesOf(schemas)),
   });
+}
+
+/** The headers of one status's parts, each once, required only when every part of the status requires it. */
+function mergedHeadersOf(parts: readonly StatusPart[]): Readonly<Record<string, OpenApiObject>> {
+  const listed = parts.flatMap(({ headers }) => Object.entries(headers ?? {}));
+  const merged = listed.map(([name, header]) => {
+    const required = parts.every(({ headers }) => headers?.[name]?.['required'] === true);
+    return [name, { ...header, required }] as const;
+  });
+  return Object.fromEntries(merged);
 }
 
 function isSchema(schema: JsonSchema | undefined): schema is JsonSchema {

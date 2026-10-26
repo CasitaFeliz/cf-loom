@@ -119,11 +119,17 @@ const rootImports = [
 
 /** The Rejections, the Guard and the Endpoints around `/orders`. */
 const orders = [
-  "const unauthenticated = defineRejection({ code: 'UNAUTHENTICATED', status: 401, message: 'The API key is missing or unknown' });",
+  'const unauthenticated = defineRejection({',
+  "  code: 'UNAUTHENTICATED',",
+  '  status: 401,',
+  "  message: 'The API key is missing or unknown',",
+  "  headers: z.object({ 'www-authenticate': z.string() }),",
+  '});',
   'const orderLocked = defineRejection({',
   "  code: 'ORDER_LOCKED',",
   '  status: 409,',
   "  message: 'The order can no longer be changed',",
+  "  headers: z.object({ 'x-lock-owner': z.string().describe('Who holds the lock') }),",
   '  body: z.object({ lockedAt: z.iso.datetime() }),',
   '});',
   "const duplicateOrder = defineRejection({ code: 'DUPLICATE_ORDER', status: 409, message: 'The order exists' });",
@@ -906,6 +912,28 @@ describe('cf-loom openapi: the responses', () => {
   test('a Rejection is the response of its code’s status, described by its code and message', () => {
     expect(valueAt(responseOf('/orders/{orderId}', 'get', '409'), 'description')).toBe(
       'ORDER_LOCKED: The order can no longer be changed',
+    );
+  });
+
+  test('a Rejection’s header is a response header of its status, with its schema and description', () => {
+    expect(valueAt(responseOf('/orders/{orderId}', 'get', '409'), 'headers')).toEqual({
+      'x-lock-owner': {
+        required: true,
+        description: 'Who holds the lock',
+        schema: { type: 'string', description: 'Who holds the lock' },
+      },
+    });
+  });
+
+  test('a Guard’s Rejection lists its headers like the Endpoint’s own', () => {
+    expect(valueAt(responseOf('/orders/{orderId}', 'get', '401'), 'headers')).toEqual({
+      'www-authenticate': { required: true, schema: { type: 'string' } },
+    });
+  });
+
+  test('two Rejections of one status list a header only one of them requires as not required', () => {
+    expect(valueAt(responseOf('/orders', 'post', '409'), 'headers', 'x-lock-owner', 'required')).toBe(
+      false,
     );
   });
 
