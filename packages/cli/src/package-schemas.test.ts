@@ -263,12 +263,12 @@ beforeAll(async () => {
   const built = spawnSync(tsc, ['-p', out], { encoding: 'utf8' });
   expect(built.stdout).toBe('');
   const entry = await import(pathToFileURL(join(out, 'dist/index.js')).href);
-  echo = entry.contract.endpoints.echo;
-  protoCut = providedSnapshotOf(entry.contract.endpoints.proto);
-  rich = entry.contract.endpoints.rich;
-  proto = entry.contract.endpoints.proto;
-  overlap = entry.contract.endpoints.overlap;
-  shaped = entry.contract.events.shapedV1;
+  echo = entry.echoEndpoint;
+  protoCut = providedSnapshotOf(entry.protoEndpoint);
+  rich = entry.richEndpoint;
+  proto = entry.protoEndpoint;
+  overlap = entry.overlapEndpoint;
+  shaped = entry.shapedEventV1;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
 

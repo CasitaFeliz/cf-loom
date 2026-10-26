@@ -1,6 +1,6 @@
 import { loomNeeds, type Writing } from '../schema-code/index.ts';
 import { stringLiteralOf } from '../source-text/index.ts';
-import { elementLinesOf } from './element-lines.ts';
+import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEvent } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { fileOf, providedOpeningOf } from './names.ts';
@@ -17,7 +17,8 @@ export function eventModuleOf(
   const declared = { kind: 'event', name, version } as const;
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    providedOpeningOf(declared, provider),
+    ...deprecatedLinesOf(event),
+    providedOpeningOf(declared, stringLiteralOf(provider)),
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${version},`,
     ...elementLinesOf(event),

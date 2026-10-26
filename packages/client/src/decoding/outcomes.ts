@@ -1,6 +1,7 @@
 import type {
   Endpoint,
   Issue,
+  ProvidedEndpoint,
   ProvidedStandardRejections,
   RejectionsOf,
   SuccessOf,
@@ -110,13 +111,17 @@ export type ReceivedSuccess<D extends AnyDependency, Name extends ListedName<D>>
 
 /**
  * A Rejection the method `Name` answers, as a Caller receives it: its code, a Standard one the
- * Provider's, the status it arrived with, its message, and its headers and body where its code declares them;
+ * Provider's, as its Endpoint carries them, the status it arrived with, its message, and its headers and body where its code declares them;
  * `source` is `client` for the invalid-input Rejection the client answered without sending.
  */
 export type ReceivedRejection<D extends AnyDependency, Name extends ListedName<D>> =
   ListedEndpoint<D, Name> extends infer Target extends Endpoint
-    ? EndpointRejection<Target, D['provider']['standardRejections']>
+    ? EndpointRejection<Target, CarriedStandardsOf<Target>>
     : never;
+
+/** The Standard Rejections a listed Endpoint carries, as its type gives them. */
+type CarriedStandardsOf<Target> =
+  Target extends ProvidedEndpoint<unknown, string, infer Standards> ? Standards : never;
 
 /** The Outcome a Caller receives from one Endpoint of a Dependency: a Success, a Rejection, an unknown Rejection or a Fault. */
 export type ReceivedOutcome<D extends AnyDependency, Name extends ListedName<D>> =

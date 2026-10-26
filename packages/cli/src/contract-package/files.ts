@@ -54,7 +54,7 @@ function serviceSourcesOf(
     schemaFiles.flatMap(({ defUses: uses }) => uses),
   );
   return [
-    serviceEntryOf({ name: snapshot.name, endpoints, events, defUses }),
+    serviceEntryOf({ endpoints, events, defUses }),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(exported, defUses),

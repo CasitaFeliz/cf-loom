@@ -4,10 +4,9 @@ import {
   camelCaseOfCode,
   kebabCaseOfCode,
   messageVersionStemOf,
-  stringLiteralOf,
 } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
-import { declaredFolders } from './paths.ts';
+import { declaredFolders, packagePaths } from './paths.ts';
 
 /** An Element the package exports, which its Provider's name marks: an Endpoint by name, an Event's Message Version by name and version. */
 export type ProvidedDeclaration =
@@ -54,6 +53,13 @@ export function bindingOf(declared: PackagedDeclaration): string {
   }
 }
 
+/** The Provider's Standard Rejections, which their module declares and each Endpoint module imports to carry them. */
+export const standardRejectionsSibling: Sibling = {
+  name: 'standardRejections',
+  path: packagePaths.standardRejections,
+  kind: 'value',
+};
+
 function constructorOf(declared: ProvidedDeclaration): string {
   switch (declared.kind) {
     case 'endpoint':
@@ -63,11 +69,12 @@ function constructorOf(declared: ProvidedDeclaration): string {
   }
 }
 
-/** The line a package opens an Element's declaration with: its constructor, which marks it as `provider`'s. */
-export function providedOpeningOf(declared: ProvidedDeclaration, provider: string): string {
-  const binding = bindingOf(declared);
-  const marked = stringLiteralOf(provider);
-  return `export const ${binding} = loom.${constructorOf(declared)}(${marked}, {`;
+/**
+ * The line a package opens an Element's declaration with: its constructor, given `markedBy`, the
+ * text of the Provider it marks the Element with.
+ */
+export function providedOpeningOf(declared: ProvidedDeclaration, markedBy: string): string {
+  return `export const ${bindingOf(declared)} = loom.${constructorOf(declared)}(${markedBy}, {`;
 }
 
 /** A declaration as another file of the package imports it. */

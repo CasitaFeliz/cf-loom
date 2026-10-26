@@ -139,7 +139,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -161,7 +161,6 @@ const orders = contractPackageOf(exported, defaultStandards, [
 ]);
 
 const ordersDependency = defineDependency({
-  provider: orders,
   endpoints: [
     orders.endpoints.getOrder,
     orders.endpoints.createOrder,
@@ -265,7 +264,7 @@ async function outcomesOfEndpointWith(method: Method) {
   try {
     const probeUrl = `http://127.0.0.1:${(probeServer.address() as AddressInfo).port}/`;
     const provider = contractPackageOf({ probe }, defaultStandards);
-    const probes = client(defineDependency({ provider, endpoints: [provider.endpoints.probe] }), {
+    const probes = client(defineDependency({ endpoints: [provider.endpoints.probe] }), {
       baseUrl: probeUrl,
     });
     const rejection = await probes.probe({ params: { answer: 'rejection' } });

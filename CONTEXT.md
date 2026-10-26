@@ -9,7 +9,7 @@ This file defines the language. The rules live in [COMPATIBILITY.md](COMPATIBILI
 ### Contract and its parties
 
 **Contract**:
-The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints, Internal Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies), and the Guards its Endpoints attach.
+The complete, versioned definition of one Service or Application: what it offers to Consumers (Public and Internal Endpoints, Internal Events), what it keeps for itself (Private Elements and Subscriptions to its own Events), what it requires (Dependencies, and Subscriptions to other Services' Events), and the Guards its Endpoints attach.
 _Avoid_: schema (overloaded with the zod schemas inside a Contract), registry (for the Contract itself), API definition
 
 **Element**:
@@ -21,7 +21,7 @@ A named set of its Contract's own Endpoints, Events, Commands and Subscriptions,
 _Avoid_: router, family, tag, module
 
 **Contract Package**:
-The published artifact that carries exactly one Contract: its Public and Internal Elements, each a Provided Element, and its Snapshot, which also records its Dependencies. Versioned with semantic versioning, its version being its package.json's.
+The published artifact that carries exactly one Contract: its Public and Internal Elements, each a Provided Element exported by name, and its Snapshot, which also records the Providers it uses. Versioned with semantic versioning, its version being its package.json's.
 _Avoid_: schemas package, public package (Visibility is not about the registry)
 
 **Definitions Package**:
@@ -179,19 +179,19 @@ _Avoid_: deployment, build, instance
 ### Dependencies
 
 **Dependency**:
-A declaration, in a Contract, of what its owner uses of one other Service, the Provider: it holds the Provider's Contract Package and the Public or Internal Endpoints its owner calls. A Subscription to an Event that Contract Package exports needs the Dependency listed.
+A declaration, in a Contract, of the Provided Endpoints of one other Service, the Provider, that its owner calls, each Public or Internal.
 _Avoid_: import, integration, upstream
 
 **Provider**:
-The Service whose Contract Package a Dependency holds.
+The Service whose Contract Package exports a Provided Element.
 _Avoid_: upstream, producer, server
 
 **Subscription**:
-A declaration that a Service receives an Event, its own or one a listed Dependency's Provider exports, taken from that Provider's Contract Package.
+A declaration that a Service receives an Event, its own or one another Service's Contract Package exports, taken from that Contract Package.
 _Avoid_: listener, binding
 
 **Provided Element**:
-An Element as its Provider's Contract Package exports it: rebuilt from the Snapshot, with Reader schemas where a Consumer reads, and marked as the Provider's, an Endpoint also carrying its exported Snapshot cut; a Dependency selects it, a Subscription receives it, and a Group never lists it.
+An Element as its Provider's Contract Package exports it: rebuilt from the Snapshot, with Reader schemas where a Consumer reads, and marked as the Provider's, an Endpoint also carrying its Provider's Standard Rejections and its exported Snapshot cut; a Dependency lists it, a Subscription receives it, and a Group never lists it.
 _Avoid_: imported Element, foreign Element, external Element, carried Element
 
 ### Implementation

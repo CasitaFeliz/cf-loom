@@ -2,9 +2,7 @@
 
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -26,7 +24,6 @@ import {
 } from '../../test/durables.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import {
   type BrokerTrouble,
@@ -643,12 +640,6 @@ describe('consuming over jetstream()', () => {
       description: 'A payment was settled',
       body: z.object({ paymentId: z.string() }),
     });
-    const payments = {
-      name: 'payments-service',
-      endpoints: {},
-      events: { paymentSettledV1 },
-      standardRejections: providedStandardRejections(),
-    } as const satisfies ContractPackage;
     const notifyOnSettled = defineSubscription({
       name: 'notifyOnSettled',
       description: 'Notify on settled',
@@ -663,7 +654,6 @@ describe('consuming over jetstream()', () => {
           subscriptions: [notifyOnSettled],
         }),
       ],
-      dependencies: [defineDependency({ provider: payments })],
     });
     const broker = jetstream({
       connect: aConnect().connect,

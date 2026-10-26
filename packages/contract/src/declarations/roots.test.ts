@@ -1,8 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../../test/providers.ts';
 import {
   type Contract,
-  type ContractPackage,
   defineApplication,
   defineCommand,
   defineDefinitions,
@@ -57,24 +57,14 @@ const auditOnSettled = defineSubscription({
   event: paymentSettledV1,
 });
 
+/** The payments-service's Elements as its Contract Package exports them by name. */
 const payments = {
-  name: 'payments-service',
   endpoints: {
-    getPayment: providedEndpoint('payments-service', getPayment, undefined),
-    refundPayment: providedEndpoint('payments-service', refundPayment, undefined),
+    getPayment: providedEndpoint(aProvider('payments-service'), getPayment, undefined),
+    refundPayment: providedEndpoint(aProvider('payments-service'), refundPayment, undefined),
   },
   events: { paymentSettledV1: providedEvent('payments-service', paymentSettledV1) },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
+};
 
 describe('defineService', () => {
   test('a Service’s Contract is what was written with the kind service, frozen', () => {
@@ -99,7 +89,6 @@ describe('defineService', () => {
       endpoints: [getPayment],
     });
     const paymentsDependency = defineDependency({
-      provider: payments,
       endpoints: [payments.endpoints.refundPayment],
     });
 
@@ -136,7 +125,6 @@ describe('defineService', () => {
 describe('defineApplication', () => {
   test('an Application may depend on Public Endpoints', () => {
     const publicDependency = defineDependency({
-      provider: payments,
       endpoints: [payments.endpoints.getPayment],
     });
 
@@ -147,7 +135,6 @@ describe('defineApplication', () => {
 
   test('an Application depending on an Internal Endpoint is a type error', () => {
     const internalDependency = defineDependency({
-      provider: payments,
       endpoints: [payments.endpoints.refundPayment],
     });
 
@@ -160,7 +147,6 @@ describe('defineApplication', () => {
 
   test('an Application depending on an Internal Endpoint is refused with the Endpoint’s name', () => {
     const internalDependency = defineDependency({
-      provider: payments,
       endpoints: [payments.endpoints.refundPayment],
     });
     type Written = Parameters<

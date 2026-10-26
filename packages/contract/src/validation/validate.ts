@@ -1,4 +1,4 @@
-import type { ContractPackage, Definitions, Root } from '../declarations/index.ts';
+import type { Definitions, Root } from '../declarations/index.ts';
 import { openCompositionsOf, type SchemaNode, walkMeetingSchemas } from '../walker/index.ts';
 import { type Declarations, declarationsOf } from '../written/index.ts';
 import { codeOnceFailures } from './code-once.ts';
@@ -70,16 +70,16 @@ export type ResolvedDefinitions = Extract<ImportedDefinitions, { readonly kind: 
 
 /**
  * A Contract Package the Root's files import, as Node resolved it: who its package.json says it
- * is, the `contract` its module exports, and the other imported Contract Packages its files
+ * is, the Provided Elements its modules export, and the other imported Contract Packages its files
  * import, directly or through any package, which says which of two exporters of one Element
  * imports it from the other.
  */
 export type ImportedContractPackage = PackageIdentity & {
-  readonly contract: ContractPackage;
+  readonly elements: readonly unknown[];
   readonly reaches: readonly ImportedContractPackage[];
 };
 
-/** An imported Contract Package whose package.json names it, the only kind a Dependency can record the version of. */
+/** An imported Contract Package whose package.json names it, the only kind the Snapshot can record as a Provider's `against`. */
 export type ResolvedContractPackage = Extract<
   ImportedContractPackage,
   { readonly kind: 'identified' }

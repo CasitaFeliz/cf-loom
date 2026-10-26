@@ -111,7 +111,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
   });
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -130,7 +130,11 @@ function withCut(change: (cut: Record<string, unknown>) => void): typeof payment
   const { getPayment: written } = payments.endpoints;
   const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(written));
   change(cut);
-  const getPayment = providedEndpoint('payments-service', written, cut);
+  const getPayment = providedEndpoint(
+    { name: 'payments-service', standardRejections: payments.standardRejections },
+    written,
+    cut,
+  );
   return { ...payments, endpoints: { ...payments.endpoints, getPayment } };
 }
 
@@ -145,7 +149,6 @@ function entryOf(cut: Record<string, unknown>): Record<string, unknown> {
 }
 
 const paymentsDependency = defineDependency({
-  provider: payments,
   endpoints: [payments.endpoints.getPayment, payments.endpoints.capturePayment],
 });
 
@@ -170,7 +173,7 @@ function countingFake(options: { readonly baseUrl?: string } = {}) {
 function fakeBesides(latest: Endpoint) {
   const declared = [getPayment, capturePayment, getSummary, latest];
   const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
+  const dependency = defineDependency({ endpoints: [provider.endpoints.getPayment] });
   const fake = fakeProvider(dependency);
   const taken = { getPayment: 0 };
   fake.on('getPayment').otherwise((builder, { params }) => {
@@ -208,7 +211,7 @@ function fakeOverPaths() {
     visibility: 'private',
   });
   const provider = contractPackageOf({ getFirst: first }, [first, retired, hidden]);
-  const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getFirst] });
+  const dependency = defineDependency({ endpoints: [provider.endpoints.getFirst] });
   const fake = fakeProvider(dependency);
   const taken = { getFirst: 0 };
   fake.on('getFirst').otherwise((builder) => {
@@ -219,9 +222,10 @@ function fakeOverPaths() {
 }
 
 /**
- * A fake over a Provider that exports `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in
- * that order, and also declares a Retired `GET /beta/latest` and a live Private `GET /beta/stats`,
- * which only the cut of `getBeta`, not the first Endpoint, lists as `shadowing`.
+ * A fake of a Dependency listing `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in that
+ * order, over a Provider that also declares a Retired `GET /beta/latest` and a live Private
+ * `GET /beta/stats`, which only the cut of `getBeta`, not the first listed Endpoint's, lists as
+ * `shadowing`.
  */
 function fakeOverTwoEndpoints() {
   const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
@@ -261,11 +265,18 @@ function fakeOverTwoEndpoints() {
   const exported = { getAlpha, getBeta, getBetaFirst };
   const provider = contractPackageOf(exported, [...Object.values(exported), betaLatest, betaStats]);
   const dependency = defineDependency({
-    provider,
-    endpoints: [provider.endpoints.getBeta, provider.endpoints.getBetaFirst],
+    endpoints: [
+      provider.endpoints.getAlpha,
+      provider.endpoints.getBeta,
+      provider.endpoints.getBetaFirst,
+    ],
   });
   const fake = fakeProvider(dependency);
-  const taken = { getBeta: 0, getBetaFirst: 0 };
+  const taken = { getAlpha: 0, getBeta: 0, getBetaFirst: 0 };
+  fake.on('getAlpha').otherwise((builder) => {
+    taken.getAlpha += 1;
+    return builder.success();
+  });
   fake.on('getBeta').otherwise((builder) => {
     taken.getBeta += 1;
     return builder.success();
@@ -298,7 +309,6 @@ const tagPayment = defineEndpoint({
 
 const taggingDependencyPackage = contractPackageOf({ tagPayment });
 const taggingDependency = defineDependency({
-  provider: taggingDependencyPackage,
   endpoints: [taggingDependencyPackage.endpoints.tagPayment],
 });
 
@@ -501,7 +511,7 @@ describe('fakeProvider: requests', () => {
     );
   });
 
-  test('an unlisted Endpoint whose literal beats a listed param is a mistake, not that param', async () => {
+  test('a request won by an Endpoint the Dependency does not list, whose literal beats a listed param, is the one mistake naming it', async () => {
     const { fake, taken } = countingFake();
 
     const answering = fake.fetch(
@@ -509,7 +519,9 @@ describe('fakeProvider: requests', () => {
     );
 
     await expect(answering).rejects.toThrow(FakeProviderError);
-    await expect(answering).rejects.toThrow('does not list GET /payments/summary');
+    await expect(answering).rejects.toThrow(
+      'payments-service: the request is won by GET /payments/summary, which the Dependency does not list',
+    );
     expect(taken.getPayment).toBe(0);
   });
 
@@ -535,7 +547,7 @@ describe('fakeProvider: requests', () => {
     ['a live Private Endpoint takes', '/p/a/c'],
     ['only a Retired Endpoint shadowing lists would take', '/p/a/z'],
   ])(
-    'a request no exported Endpoint matches, which %s, is the mistake of matching none',
+    'a request no listed Endpoint matches, which %s, is the mistake of matching none',
     async (_, path) => {
       const { fake, taken } = fakeOverPaths();
 
@@ -543,7 +555,7 @@ describe('fakeProvider: requests', () => {
 
       await expect(answering).rejects.toThrow(FakeProviderError);
       await expect(answering).rejects.toThrow(
-        `payments-service: no Endpoint it exports is GET ${path} under /`,
+        `payments-service: no Endpoint the Dependency lists is GET ${path} under /`,
       );
       expect(taken.getFirst).toBe(0);
     },
@@ -564,7 +576,7 @@ describe('fakeProvider: requests', () => {
     ['Active', latestPayment({ visibility: 'private', lifecycle: 'active' })],
     ['Deprecated', deprecatedLatestPayment],
   ])(
-    'a request a %s Private Endpoint wins is a mistake naming it, and takes no step',
+    'a request a %s Private Endpoint wins is the one mistake naming it, and takes no step',
     async (_, latest) => {
       const { fake, taken } = fakeBesides(latest);
 
@@ -574,7 +586,7 @@ describe('fakeProvider: requests', () => {
 
       await expect(answering).rejects.toThrow(FakeProviderError);
       await expect(answering).rejects.toThrow(
-        'payments-service: the Provider does not export GET /payments/latest, which GET /payments/latest reaches',
+        'payments-service: the request is won by GET /payments/latest, which the Dependency does not list',
       );
       expect(taken.getPayment).toBe(0);
     },
@@ -598,7 +610,7 @@ describe('fakeProvider: requests', () => {
 
     await expect(answering).rejects.toThrow(FakeProviderError);
     await expect(answering).rejects.toThrow(
-      'payments-service: the Provider does not export GET /beta/stats, which GET /beta/stats reaches',
+      'payments-service: the request is won by GET /beta/stats, which the Dependency does not list',
     );
     expect(taken.getBeta).toBe(0);
   });
@@ -609,7 +621,17 @@ describe('fakeProvider: requests', () => {
     await fake.fetch(new Request('https://payments-service.test/beta/first'));
     await fake.fetch(new Request('https://payments-service.test/beta/other'));
 
-    expect(taken).toEqual({ getBeta: 1, getBetaFirst: 1 });
+    expect(taken).toEqual({ getAlpha: 0, getBeta: 1, getBetaFirst: 1 });
+  });
+
+  test('a Dependency with no Endpoint, written through a cast, is a bug, refused when the fake is created', () => {
+    const empty = defineDependency({ endpoints: [] } as unknown as Parameters<
+      typeof defineDependency
+    >[0]);
+
+    const create = () => fakeProvider(empty);
+
+    expect(create).toThrow('A Dependency lists at least one Endpoint, so its fake has a Provider');
   });
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
@@ -670,7 +692,7 @@ describe('fakeProvider: requests', () => {
     'an Endpoint whose exported Snapshot cut is $given is a bug, refused when the fake is created',
     ({ damage, refusal }) => {
       const provider = withCut(damage);
-      const refused = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
+      const refused = defineDependency({ endpoints: [provider.endpoints.getPayment] });
 
       const create = () => fakeProvider(refused);
 
@@ -786,17 +808,17 @@ describe('fakeProvider: requests', () => {
     expect(fake.invalidCalls('getPayment')).not.toBe(invalidCalls);
   });
 
-  test('a path no exported Endpoint matches is a mistake naming the path and the base URL', async () => {
+  test('a path no listed Endpoint matches is a mistake naming the path and the base URL', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
 
     const answering = fake.fetch(new Request('https://gateway.test/payments-api/refunds/r-1'));
 
     await expect(answering).rejects.toThrow(
-      'payments-service: no Endpoint it exports is GET /refunds/r-1 under /payments-api/',
+      'payments-service: no Endpoint the Dependency lists is GET /refunds/r-1 under /payments-api/',
     );
   });
 
-  test('a method the exported path does not take is a mistake naming the path’s methods', async () => {
+  test('a method the listed path does not take is a mistake naming the path’s methods', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
 
     const answering = fake.fetch(
@@ -806,7 +828,7 @@ describe('fakeProvider: requests', () => {
     );
 
     await expect(answering).rejects.toThrow(
-      'payments-service: no Endpoint it exports is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
+      'payments-service: no Endpoint the Dependency lists is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
     );
   });
 });

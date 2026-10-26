@@ -1,7 +1,5 @@
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -11,7 +9,6 @@ import {
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
 import { memory } from './index.ts';
 
@@ -53,15 +50,6 @@ const paymentSettledV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: {},
-  events: { paymentSettledV1 },
-  standardRejections: providedStandardRejections(),
-} as const satisfies ContractPackage;
-
-const paymentsDependency = defineDependency({ provider: payments });
-
 const chargeOnCreated = defineSubscription({
   name: 'chargeOnCreated',
   description: 'Charge on created',
@@ -85,7 +73,6 @@ const contract = defineService({
       subscriptions: [chargeOnCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDependency],
 });
 
 type Resources = {
@@ -154,7 +141,7 @@ describe('the In memory section of the messaging README', () => {
     const messages = broker.messages.map(({ subject }) => subject);
     const created = broker.messagesOf(orderCreatedV1).map(({ subject }) => subject);
     const settlement = await broker.deliver(
-      payments.events.paymentSettledV1,
+      paymentSettledV1,
       { paymentId: PAYMENT_ID },
       { factId: 'pay-1' },
     );

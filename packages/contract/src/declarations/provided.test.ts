@@ -1,9 +1,9 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { summaryOf } from '../../test/failures.ts';
+import { aProvider } from '../../test/providers.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineCommand,
   defineDependency,
   defineEndpoint,
@@ -17,12 +17,13 @@ import {
   openEnum,
   openEnumReader,
   type Provided,
+  type ProvidedEndpoint,
   providedEndpoint,
   providedEvent,
   providedRejection,
   type SuccessOf,
 } from '../index.ts';
-import { validateRoot } from '../internal/index.ts';
+import { carriedStandardRejectionsOf, providerOf, validateRoot } from '../internal/index.ts';
 
 const trackOrder = {
   name: 'trackOrder',
@@ -88,7 +89,7 @@ const pinged = providedEvent('ping-service', {
 });
 
 const ping = providedEndpoint(
-  'ping-service',
+  aProvider('ping-service'),
   {
     name: 'ping',
     method: 'GET',
@@ -99,22 +100,6 @@ const ping = providedEndpoint(
   },
   undefined,
 );
-
-const pingService = {
-  name: 'ping-service',
-  endpoints: { ping },
-  events: { pinged },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
 
 /** The failures `generate` reports for a Group that lists these, as a cast lets an author write them. */
 function failuresOfListing(lists: Readonly<Record<string, readonly unknown[]>>) {
@@ -127,11 +112,24 @@ function failuresOfListing(lists: Readonly<Record<string, readonly unknown[]>>) 
 
 describe('the provided-Element constructors', () => {
   test('a provided Endpoint is the declaration, frozen and kept by identity, as defineEndpoint returns it', () => {
-    const endpoint = providedEndpoint('orders-service', trackOrder, undefined);
+    const endpoint = providedEndpoint(aProvider('orders-service'), trackOrder, undefined);
 
     expect(endpoint).toEqual(defineEndpoint(trackOrder));
     expect(endpoint.success.body).toBe(trackOrder.success.body);
     expect(Object.isFrozen(endpoint)).toBe(true);
+  });
+
+  test('a provided Endpoint carries its Provider’s name and Standard Rejections, which its type keeps', () => {
+    const orders = aProvider('orders-service');
+
+    const endpoint = providedEndpoint(orders, trackOrder, undefined);
+
+    expect(providerOf(endpoint)).toBe('orders-service');
+    expect(carriedStandardRejectionsOf(endpoint)).toBe(orders.standardRejections);
+    expectTypeOf(endpoint).toExtend<
+      ProvidedEndpoint<typeof endpoint, 'orders-service', typeof orders.standardRejections>
+    >();
+    expectTypeOf(endpoint).not.toExtend<ProvidedEndpoint<typeof endpoint, 'payments-service'>>();
   });
 
   test('a provided Event is the declaration, frozen and kept by identity, as defineEvent returns it', () => {
@@ -152,7 +150,7 @@ describe('the provided-Element constructors', () => {
 
   test('an Open Enum’s Reader compiles in a provided Endpoint’s Success body, a provided Event’s and a provided Rejection’s', () => {
     const endpoint = providedEndpoint(
-      'orders-service',
+      aProvider('orders-service'),
       {
         ...trackOrder,
         success: { status: 200, body: z.object({ stage: openEnumReader(['packed', 'shipped']) }) },
@@ -172,7 +170,7 @@ describe('the provided-Element constructors', () => {
   });
 
   test('a provided Endpoint types InputOf and SuccessOf as defineEndpoint does', () => {
-    const provided = providedEndpoint('orders-service', trackOrder, undefined);
+    const provided = providedEndpoint(aProvider('orders-service'), trackOrder, undefined);
     const defined = defineEndpoint(trackOrder);
 
     expectTypeOf<InputOf<typeof provided>>().toEqualTypeOf<InputOf<typeof defined>>();
@@ -215,7 +213,7 @@ describe('a Provider’s Elements', () => {
   test.each([
     { kind: 'a Guard', value: defineGuard({ name: 'apiKey', description: 'An API key' }) },
     { kind: 'a Rejection', value: defineRejection({ code: 'LOCKED', status: 409, message: 'No' }) },
-    { kind: 'a Dependency', value: defineDependency({ provider: pingService, endpoints: [ping] }) },
+    { kind: 'a Dependency', value: defineDependency({ endpoints: [ping] }) },
   ])('$kind listed where an Element belongs is no Provider’s Element', ({ value }) => {
     const failures = failuresOfListing({ endpoints: [value] });
 
@@ -281,7 +279,7 @@ describe('the types of a Provider’s Elements', () => {
   });
 
   test('a Dependency and a Subscription take a Provider’s Elements, and InputOf and SuccessOf type them', () => {
-    const dependency = defineDependency({ provider: pingService, endpoints: [ping] });
+    const dependency = defineDependency({ endpoints: [ping] });
     const subscription = defineSubscription({
       name: 'onPinged',
       description: 'Reacts to each ping',

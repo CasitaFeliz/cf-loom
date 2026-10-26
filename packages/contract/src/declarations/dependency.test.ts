@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../../test/providers.ts';
 import {
-  type ContractPackage,
+  type Dependency,
   defineDependency,
   defineEndpoint,
   providedEndpoint,
@@ -9,7 +10,7 @@ import {
 } from '../index.ts';
 
 const getPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -23,7 +24,7 @@ const getPayment = providedEndpoint(
 );
 
 const refundPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'refundPayment',
     method: 'POST',
@@ -36,6 +37,20 @@ const refundPayment = providedEndpoint(
   undefined,
 );
 
+const getRefund = providedEndpoint(
+  aProvider('refunds-service'),
+  {
+    name: 'getRefund',
+    method: 'GET',
+    path: '/refunds/:refundId',
+    visibility: 'public',
+    description: 'One refund by id',
+    input: { params: z.object({ refundId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+
 const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
@@ -44,87 +59,54 @@ const paymentSettledV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: { getPayment, refundPayment },
-  events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
-
-describe('ContractPackage', () => {
-  test('carries no version: the package.json of the package that exports it has it', () => {
-    expectTypeOf<ContractPackage>().not.toHaveProperty('version');
-  });
-});
-
 describe('defineDependency', () => {
-  test('a Dependency keeps its Provider’s Contract Package and the selected Endpoints as listed', () => {
-    const paymentsDependency = defineDependency({
-      provider: payments,
-      endpoints: [payments.endpoints.getPayment],
-    });
+  test('a Dependency keeps the Endpoints it lists, as listed, and its client’s names are theirs', () => {
+    const paymentsDependency = defineDependency({ endpoints: [getPayment, refundPayment] });
 
     expect(paymentsDependency.kind).toBe('dependency');
-    expect(paymentsDependency.provider).toEqual(payments);
-    expect(paymentsDependency.endpoints).toEqual([getPayment]);
+    expect(paymentsDependency.endpoints).toEqual([getPayment, refundPayment]);
     expect(paymentsDependency.endpoints[0]).toBe(getPayment);
-    expectTypeOf(paymentsDependency.endpoints).toEqualTypeOf<readonly [typeof getPayment]>();
+    expectTypeOf(paymentsDependency.endpoints).toEqualTypeOf<
+      readonly [typeof getPayment, typeof refundPayment]
+    >();
+    expectTypeOf<(typeof paymentsDependency.endpoints)[number]['name']>().toEqualTypeOf<
+      'getPayment' | 'refundPayment'
+    >();
   });
 
-  test('a Dependency keeps the Elements its Provider exports, by identity', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+  test('a Dependency is a Dependency of the Endpoints it lists', () => {
+    const paymentsDependency = defineDependency({ endpoints: [getPayment] });
 
-    expect(paymentsDependency.provider.endpoints.refundPayment).toBe(refundPayment);
-    expect(paymentsDependency.provider.events.paymentSettledV1).toBe(paymentSettledV1);
+    expectTypeOf(paymentsDependency).toExtend<Dependency>();
+    expectTypeOf<keyof typeof paymentsDependency>().toEqualTypeOf<'kind' | 'endpoints'>();
   });
 
-  test('a Dependency keeps its Provider’s Standard codes as literals, so a Caller narrows by them', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+  test('a Dependency of two Providers’ Endpoints is a type error naming both', () => {
+    type Written = Parameters<
+      typeof defineDependency<{
+        readonly endpoints: readonly [typeof getPayment, typeof getRefund];
+      }>
+    >[0];
 
-    const { standardRejections } = paymentsDependency.provider;
-    expectTypeOf(standardRejections.notFound.code).toEqualTypeOf<'NOT_FOUND'>();
-    expectTypeOf(standardRejections.invalidInput.code).toEqualTypeOf<'INVALID_INPUT'>();
-    expect(standardRejections.notFound.code).toBe('NOT_FOUND');
-  });
-
-  test('a Dependency that selects no Endpoint holds no list', () => {
-    const paymentsDependency = defineDependency({ provider: payments });
-
-    expect(paymentsDependency).not.toHaveProperty('endpoints');
-    expectTypeOf<keyof typeof paymentsDependency>().toEqualTypeOf<'kind' | 'provider'>();
-  });
-
-  test('a Contract Package exports only Public and Internal Elements', () => {
-    const healthCheck = defineEndpoint({
-      name: 'healthCheck',
-      method: 'GET',
-      path: '/health',
-      visibility: 'private',
-      description: 'Whether the Service is up',
-      success: { status: 204 },
-    });
-
-    const declare = () =>
-      defineDependency({
-        // @ts-expect-error a Private Endpoint is never exported
-        provider: { ...payments, endpoints: { healthCheck } },
-        // @ts-expect-error nor selected
-        endpoints: [healthCheck],
-      });
-
+    expectTypeOf<
+      Written['endpoints']
+    >().toExtend<"A Dependency lists one Provider's Endpoints: payments-service, refunds-service">();
+    // @ts-expect-error a Dependency calls one Provider
+    const declare = () => defineDependency({ endpoints: [getPayment, getRefund] });
     expect(declare).not.toThrow();
   });
 
-  test('an Endpoint the Provider does not export is a type error', () => {
+  test('a Dependency that lists no Endpoint is a type error', () => {
+    // @ts-expect-error a Dependency lists at least one Endpoint
+    const empty = () => defineDependency({ endpoints: [] });
+    // @ts-expect-error nor leaves its list out
+    const missing = () => defineDependency({});
+
+    expect(empty).not.toThrow();
+    expect(missing).not.toThrow();
+  });
+
+  test('a Contract’s own Endpoint in a Dependency is a type error', () => {
     const getReceipt = defineEndpoint({
       name: 'getReceipt',
       method: 'GET',
@@ -135,8 +117,8 @@ describe('defineDependency', () => {
     });
 
     const declare = () =>
-      // @ts-expect-error the Provider has no such Endpoint
-      defineDependency({ provider: payments, endpoints: [getReceipt] });
+      // @ts-expect-error no Provider's Contract Package exports it
+      defineDependency({ endpoints: [getReceipt] });
 
     expect(declare).not.toThrow();
   });
@@ -146,8 +128,8 @@ describe('defineDependency fields', () => {
   test('events is a type error: a Subscription takes its Event from the Contract Package', () => {
     const declare = () =>
       defineDependency({
-        provider: payments,
-        // @ts-expect-error a Dependency selects Endpoints only
+        endpoints: [getPayment],
+        // @ts-expect-error a Dependency lists Endpoints only
         events: [paymentSettledV1],
       });
 
@@ -157,26 +139,22 @@ describe('defineDependency fields', () => {
   test.each([
     { what: 'an Endpoint written undefined', declaration: { endpoints: [undefined] } },
     { what: 'endpoints written null', declaration: { endpoints: null } },
-    { what: 'a provider left undefined', declaration: { provider: undefined } },
-    { what: 'a provider written null', declaration: { provider: null, endpoints: [getPayment] } },
+    { what: 'endpoints left out', declaration: {} },
     // biome-ignore lint/suspicious/noSparseArray: the hole is what the test writes
     { what: 'a hole in the list', declaration: { endpoints: [, getPayment] } },
   ])('$what does not throw, leaving it to generate to report', ({ declaration }) => {
-    const written = { provider: payments, ...declaration } as unknown as Parameters<
-      typeof defineDependency
-    >[0];
+    const written = declaration as unknown as Parameters<typeof defineDependency>[0];
 
     expect(() => defineDependency(written)).not.toThrow();
   });
 });
 
 describe('a declared Dependency’s containers', () => {
-  test('a Dependency freezes itself, its list of Endpoints and its Contract Package', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+  test('a Dependency freezes itself and its list of Endpoints, keeping each Endpoint', () => {
+    const paymentsDependency = defineDependency({ endpoints: [getPayment] });
 
     expect(Object.isFrozen(paymentsDependency)).toBe(true);
     expect(Object.isFrozen(paymentsDependency.endpoints)).toBe(true);
-    expect(Object.isFrozen(paymentsDependency.provider)).toBe(true);
     expect(paymentsDependency.endpoints[0]).toBe(getPayment);
   });
 });

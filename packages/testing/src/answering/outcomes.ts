@@ -33,7 +33,7 @@ type KnownRejection = Extract<Answer, { readonly kind: 'rejection' }>;
 export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedEndpoint): Response {
   const rejection = listed.rejectionsByCode.get(answer.code);
   if (rejection === undefined) {
-    const sends = "r.unknownRejection sends a code the Provider's Contract does not declare";
+    const sends = 'r.unknownRejection sends a code the listed Endpoints do not declare';
     const what = `the Endpoint answers no code ${answer.code}; ${sends}`;
     throw mistakeOf({ ...whoOf(listed), what });
   }

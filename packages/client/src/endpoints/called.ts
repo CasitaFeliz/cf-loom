@@ -1,30 +1,28 @@
 import type {
-  ContractPackage,
   Dependency,
   Endpoint,
+  ProvidedEndpoint,
   ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import {
   answerableByCodeOf,
+  carriedStandardRejectionsOf,
   exportedCodeOf,
   exportedEntryOf,
   isRejection,
   type ObjectNode,
   providedSnapshotOf,
+  providerOf,
   type ReadShape,
   rejectionShapeOf,
   successShapeOf,
 } from '@cf-loom/contract/internal';
 
-/** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
-export type AnyDependency = Dependency<ContractPackage, readonly Endpoint[]>;
+/** Any Dependency, whatever it lists and whatever Standard codes its Provider resolved. */
+export type AnyDependency = Dependency<readonly ProvidedEndpoint[]>;
 
-/** The Endpoints a Dependency lists: none when it was written without the list. */
-export type ListedEndpoints<D extends AnyDependency> = D extends {
-  readonly endpoints?: infer Listed;
-}
-  ? Extract<Listed, readonly Endpoint[]>
-  : never;
+/** The Endpoints a Dependency lists. */
+export type ListedEndpoints<D extends AnyDependency> = D['endpoints'];
 
 /** The name of each Endpoint a Dependency lists: a method of its client and a script of its fake. */
 export type ListedName<D extends AnyDependency> = ListedEndpoints<D>[number]['name'];
@@ -58,20 +56,24 @@ export type CalledEndpoint = {
   readonly standards: ProvidedStandardRejections;
 };
 
-/** An Endpoint a Dependency lists, prepared for calling, its nodes read from its entry and its codes' in the exported Snapshot cut it carries. */
-export function calledEndpointOf(endpoint: Endpoint, provider: ContractPackage): CalledEndpoint {
+/**
+ * An Endpoint a Dependency lists, prepared for calling, its nodes read from its entry and its
+ * codes' in the exported Snapshot cut it carries, and its Standard Rejections the ones it carries.
+ */
+export function calledEndpointOf(endpoint: ProvidedEndpoint): CalledEndpoint {
   const exported = providedSnapshotOf(endpoint);
-  const entry = exportedEntryOf(provider.name, exported, endpoint);
-  const standards = provider.standardRejections;
+  const provider = providerOf(endpoint);
+  const entry = exportedEntryOf(provider, exported, endpoint);
+  const standards = carriedStandardRejectionsOf(endpoint);
   const answered = answerableByCodeOf(endpoint, standards);
   const rejections = [...answered].map(([code, rejection]): readonly [string, CalledShape] => {
     const headers = isRejection(rejection)
-      ? exportedCodeOf(provider.name, exported, code).headers
+      ? exportedCodeOf(provider, exported, code).headers
       : undefined;
     return [code, { shape: rejectionShapeOf(rejection, standards), headers }];
   });
   return {
-    provider: provider.name,
+    provider,
     name: endpoint.name,
     endpoint,
     inputHeaderNames: new Set(Object.keys(entry.input.headers.fields)),

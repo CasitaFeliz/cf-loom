@@ -121,13 +121,13 @@ export type Difference =
   | { readonly kind: 'origin-changed'; readonly from: string; readonly to: string }
   /** A Rejection's message changed. */
   | { readonly kind: 'message-changed' }
-  /** A Dependency is declared against another version of its Provider. */
+  /** A Provider is declared against at another version. */
   | { readonly kind: 'against-changed'; readonly from: string; readonly to: string }
-  /** A Dependency selects an Endpoint of its Provider that it did not. */
+  /** A Dependency lists an Endpoint of its Provider that none listed before. */
   | { readonly kind: 'endpoint-added'; readonly id: string; readonly name: string }
-  /** A Dependency no longer selects an Endpoint of its Provider. */
+  /** No Dependency lists an Endpoint of its Provider any longer. */
   | { readonly kind: 'endpoint-removed'; readonly id: string; readonly name: string }
-  /** A Dependency's selected Endpoint is named otherwise by the Provider version it adopted. */
+  /** An Endpoint a Dependency lists is named otherwise by the Provider version the Contract adopted. */
   | {
       readonly kind: 'endpoint-renamed';
       readonly id: string;

@@ -113,7 +113,9 @@ describe('the Contract Package', () => {
       .join('\n');
 
     expect(events).toEqual(['src/events/order-created.v1.ts']);
-    expect(files['src/index.ts']).toContain('orderCreatedV1: orderCreatedEventV1');
+    expect(files['src/index.ts']).toContain(
+      "export { orderCreatedEventV1 } from './events/order-created.v1.ts';",
+    );
     expect(sources).not.toMatch(/ChargeCard|chargeOnCreated/i);
   });
 });
