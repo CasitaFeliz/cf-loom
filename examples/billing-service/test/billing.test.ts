@@ -1,5 +1,5 @@
 import { FakeProviderError, fakeProvider } from '@cf-loom/testing';
-import { contract as orders } from '@org/contract-orders-service';
+import * as ordersPackage from '@org/contract-orders-service';
 import { describe, expect, test } from 'vitest';
 import createInvoiceHandler from '../src/billing/create-invoice.handler.ts';
 import { invoiceFor } from '../src/billing/invoice-for.ts';
@@ -226,9 +226,9 @@ describe('createInvoice called directly over the faked orders-service', () => {
 });
 
 describe('the Contract Package of orders-service', () => {
-  test('it exports the Public and Internal Endpoints, never the Private health', () => {
-    const exported = Object.keys(orders.endpoints);
+  test('it exports each Public and Internal Element by name, never the Private health, and no contract', () => {
+    const exported = Object.keys(ordersPackage).sort();
 
-    expect(exported).toEqual(['createOrder', 'getOrder']);
+    expect(exported).toEqual(['createOrderEndpoint', 'getOrderEndpoint', 'orderCreatedEventV1']);
   });
 });
