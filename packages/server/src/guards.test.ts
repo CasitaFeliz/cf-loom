@@ -258,6 +258,25 @@ describe('serve: Guards', () => {
     });
   });
 
+  test('a Rejection built with a header its schema does not declare is sent without it', async () => {
+    const wider = { 'retry-after': 30, 'x-extra': 'not declared' };
+    const limited = handle(listOrders, () =>
+      reject(rateLimited, { headers: wider, body: { limit: 100 } }),
+    );
+    const http = serve(contract, {
+      ...handlers,
+      endpoints: { ...handlers.endpoints, listOrders: limited },
+    });
+    const request = new Request('http://test/orders', {
+      headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
+    });
+
+    const response = await http(request);
+
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(response.headers.has('x-extra')).toBe(false);
+  });
+
   test('a Rejection header that cannot travel as field text answers INVALID_OUTCOME', async () => {
     const broken = handle(userToken, () =>
       reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer\nrealm' } }),

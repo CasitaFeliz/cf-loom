@@ -32,11 +32,14 @@ export {
 export type {
   AttachedGuardsOf,
   CodeNameOf,
+  GivenShapeOf,
   GroupedField,
   GroupedOf,
   IsOneLiteral,
   LiveOf,
+  ReceivedShapeOf,
   Refusal,
+  RejectionValueOf,
   Root,
   RootKind,
   SuccessValueOf,
@@ -66,13 +69,16 @@ export {
 } from '../declarations/index.ts';
 export type { DecodedSnapshot } from '../decoding/index.ts';
 export { decodeSnapshot, providedSnapshotOf } from '../decoding/index.ts';
-export type { Checked, GivenPart, Parsed, SchemaIssue } from '../issues/index.ts';
+export type { Checked, GivenPart, Parsed, SchemaIssue, ShapeValues } from '../issues/index.ts';
 export {
   encodedValueOf,
   parsedPartOf,
   parsedPartsOf,
+  parsedShapeOf,
   parseValue,
+  readShapeOf,
   writtenPartOf,
+  writtenShapeOf,
 } from '../issues/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
 export { readingOf } from '../reading/index.ts';
@@ -252,8 +258,6 @@ export {
   receivedBodyOf,
   receivedEnvelopeOf,
   receivedHeadersOf,
-  rejectionBodyReaderOf,
-  rejectionHeadersReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,
@@ -273,6 +277,8 @@ export type {
   PackageNameParts,
   Part,
   PathSegment,
+  ReadShape,
+  ShapeFields,
 } from '../written/index.ts';
 export {
   answerableByCodeOf,
@@ -303,13 +309,13 @@ export {
   pathSegmentsOf,
   readEndpointIdentity,
   readEventReference,
-  rejectionFieldsOf,
-  rejectionParts,
+  rejectionShapeOf,
   resolutionOf,
   schemaOf,
+  shapeFieldsOf,
   standardRejectionsOf,
   standardRejectionsSourceOf,
   subscriptionsOf,
-  successFieldsOf,
   successParts,
+  successShapeOf,
 } from '../written/index.ts';

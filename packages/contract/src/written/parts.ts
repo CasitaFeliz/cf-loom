@@ -1,13 +1,5 @@
 import { $ZodType } from 'zod/v4/core';
-import {
-  type Endpoint,
-  type Guard,
-  type IssueCode,
-  type inputIns,
-  isRejection,
-  type Rejection,
-  type StandardRejection,
-} from '../declarations/index.ts';
+import type { Endpoint, Guard, IssueCode, inputIns, Rejection } from '../declarations/index.ts';
 import type { Path } from '../walker/index.ts';
 import { partOf } from './written.ts';
 
@@ -52,9 +44,6 @@ export const inputParts = [
 /** The parts of an Endpoint's Success. */
 export const successParts = ['success.headers', 'success.body'] as const satisfies readonly Part[];
 
-/** The parts of a Rejection, headers first as in a Success. */
-export const rejectionParts = ['headers', 'body'] as const satisfies readonly Part[];
-
 /** The parts of the request a Guard may demand. */
 export const demandParts = ['demands.headers', 'demands.query'] as const satisfies readonly Part[];
 
@@ -69,9 +58,6 @@ export type EndpointPart = (typeof endpointParts)[number];
 
 /** A part a Guard may declare a schema in. */
 export type GuardPart = (typeof guardParts)[number];
-
-/** The parts of a Rejection: its headers and its body. */
-export type RejectionPart = (typeof rejectionParts)[number];
 
 /** The fields a part names, outermost first: `input.params` is `input`, then `params`. */
 type FieldsOf<Named extends string> = Named extends `${infer Outer}.${infer Inner}`
@@ -144,7 +130,7 @@ export function writtenAt(declaration: unknown, part: Exclude<Part, 'schema'>): 
 /** The schema an Endpoint, a Guard or a Rejection declares at a part; nothing when it declares none. */
 export function schemaOf(endpoint: Endpoint, part: EndpointPart): $ZodType | undefined;
 export function schemaOf(guard: Guard, part: GuardPart): $ZodType | undefined;
-export function schemaOf(rejection: Rejection, part: RejectionPart): $ZodType | undefined;
+export function schemaOf(rejection: Rejection, part: 'headers' | 'body'): $ZodType | undefined;
 export function schemaOf(
   declaration: Endpoint | Guard | Rejection,
   part: Exclude<Part, 'schema'>,
@@ -160,32 +146,4 @@ export function schemaOf(
  */
 export function isSchema(value: unknown): value is $ZodType {
   return value instanceof $ZodType;
-}
-
-/**
- * What a Success is built from, by field: the body alone where the Endpoint declares no headers,
- * else its `headers` and `body`; the one place that reads what `success()` is given.
- */
-export function successFieldsOf(
-  endpoint: Endpoint,
-  given: unknown,
-): Readonly<Record<string, unknown>> {
-  if (schemaOf(endpoint, 'success.headers') === undefined) {
-    return { body: given };
-  }
-  return typeof given === 'object' && given !== null ? { ...given } : {};
-}
-
-/**
- * What a Rejection is built from, by field: the body alone where the Rejection declares no
- * headers, else its `headers` and `body`; the one place that reads what `reject()` is given.
- */
-export function rejectionFieldsOf(
-  rejection: Rejection | StandardRejection,
-  given: unknown,
-): Readonly<Record<string, unknown>> {
-  if (!isRejection(rejection) || schemaOf(rejection, 'headers') === undefined) {
-    return { body: given };
-  }
-  return typeof given === 'object' && given !== null ? { ...given } : {};
 }

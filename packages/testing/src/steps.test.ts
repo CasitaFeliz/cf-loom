@@ -291,6 +291,19 @@ describe('fakeProvider: steps', () => {
     });
   });
 
+  test('reject(code, { headers, body }) sends only the headers its reader declares', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const wider = { 'retry-after': 30, 'x-extra': 'not declared' };
+    payments
+      .on('refundPayment')
+      .otherwise((r) => r.reject('THROTTLED', { headers: wider, body: { limit: 5 } }));
+
+    const response = await payments.fetch(new Request(`${at}/refund`, { method: 'POST' }));
+
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(response.headers.has('x-extra')).toBe(false);
+  });
+
   test('reject(code, { headers }) answers the headers of a code that declares no body', async () => {
     const payments = fakeProvider(paymentsDependency);
     const challenge = 'Bearer realm="payments"';
@@ -322,7 +335,7 @@ describe('fakeProvider: steps', () => {
 
     await expect(calling).rejects.toThrow(
       [
-        'payments-service: refundPayment: the scripted UNAUTHORIZED headers break their reader or cannot travel',
+        'payments-service: refundPayment: the scripted UNAUTHORIZED breaks its readers',
         'payments-service: refundPayment: headers.www-authenticate invalid_format: The header value cannot travel as HTTP field text',
       ].join('\n'),
     );
@@ -351,7 +364,7 @@ describe('fakeProvider: steps', () => {
 
     await expect(calling).rejects.toThrow(
       [
-        'payments-service: cancelPayment: the scripted NO_PAYMENT headers break their reader or cannot travel',
+        'payments-service: cancelPayment: the scripted NO_PAYMENT breaks its readers',
         'payments-service: cancelPayment: headers invalid_type: Expected no value',
       ].join('\n'),
     );
@@ -487,7 +500,7 @@ describe('fakeProvider: steps', () => {
 
     await expect(calling).rejects.toThrow(
       [
-        'payments-service: capturePayment: the scripted PAYMENT_LOCKED body breaks its reader',
+        'payments-service: capturePayment: the scripted PAYMENT_LOCKED breaks its readers',
         'payments-service: capturePayment: body.lockedAt invalid_format: ',
       ].join('\n'),
     );
@@ -523,7 +536,7 @@ describe('fakeProvider: steps', () => {
 
     await expect(calling).rejects.toThrow(
       [
-        'payments-service: capturePayment: the scripted NO_PAYMENT body breaks its reader',
+        'payments-service: capturePayment: the scripted NO_PAYMENT breaks its readers',
         'payments-service: capturePayment: body invalid_type: Expected no value',
       ].join('\n'),
     );

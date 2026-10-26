@@ -1,18 +1,5 @@
-import type * as core from 'zod/v4/core';
-import {
-  isRejection,
-  isStandardRejection,
-  type ProvidedStandardRejections,
-  type StandardRejections,
-} from '../declarations/index.ts';
-import {
-  type AnswerableRejection,
-  type InputIn,
-  type InputPart,
-  type Issue,
-  inOf,
-  schemaOf,
-} from '../written/index.ts';
+import type { StandardRejections } from '../declarations/index.ts';
+import { type InputIn, type InputPart, type Issue, inOf } from '../written/index.ts';
 import { rejectionResponseOf } from './responses.ts';
 
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
@@ -42,25 +29,4 @@ export function invalidInputResponseOf(
 ): Response {
   const { code, status, message } = standards.invalidInput;
   return rejectionResponseOf({ code, status, message, body: invalidInputBodyOf(issues) });
-}
-
-/**
- * The schema a Rejection's body is read with: its declared one, or for invalid input the Reader the
- * Provider's Contract Package generated from its Snapshot.
- */
-export function rejectionBodyReaderOf(
-  rejection: AnswerableRejection,
-  standards: ProvidedStandardRejections,
-): core.$ZodType | undefined {
-  if (!isStandardRejection(rejection)) {
-    return schemaOf(rejection, 'body');
-  }
-  return rejection.name === 'invalidInput' ? standards.invalidInput.body : undefined;
-}
-
-/** The schema a Rejection's headers are read with: its declared one; a Standard Rejection declares none. */
-export function rejectionHeadersReaderOf(
-  rejection: AnswerableRejection,
-): core.$ZodType | undefined {
-  return isRejection(rejection) ? schemaOf(rejection, 'headers') : undefined;
 }

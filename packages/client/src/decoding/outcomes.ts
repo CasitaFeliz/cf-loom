@@ -5,9 +5,9 @@ import type {
   RejectionsOf,
   SuccessOf,
 } from '@cf-loom/contract';
-import { type Parsed, reservedFaults } from '@cf-loom/contract/internal';
+import { headerValuesOf, reservedFaults, type ShapeFields } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
-import type { AnyDependency, ListedEndpoint, ListedName } from '../endpoints/index.ts';
+import type { AnyDependency, CalledShape, ListedEndpoint, ListedName } from '../endpoints/index.ts';
 import type { ReceivedFault } from '../inference/index.ts';
 
 type Output<Schema> = Schema extends core.$ZodType ? core.output<Schema> : undefined;
@@ -37,7 +37,7 @@ export type DecodedRejection = {
   readonly code: string;
   readonly status: number;
   readonly message: string;
-  readonly headers?: unknown;
+  readonly headers?: Readonly<Record<string, unknown>>;
   readonly body?: unknown;
 };
 
@@ -154,7 +154,12 @@ export function invalidOutcomeOf({ status, committed, issues }: BrokenOutcome): 
   };
 }
 
-/** The Issues of a value read at a part of the answer; none when it was read. */
-export function issuesAt(part: Issue['part'], parsed: Parsed): readonly Issue[] {
-  return parsed.kind === 'issues' ? parsed.issues.map((issue) => ({ part, ...issue })) : [];
+/** What a response carries of a Success or a Rejection, side by side: its headers' values by their nodes, and its body as received. */
+export function receivedFieldsOf(
+  called: CalledShape,
+  headers: Headers,
+  body: unknown,
+): ShapeFields {
+  const values = called.headers === undefined ? undefined : headerValuesOf(called.headers, headers);
+  return { headers: values, body };
 }

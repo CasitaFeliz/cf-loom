@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineRejection, invalidInput, notFound, type ReservedCode } from '../index.ts';
+import type { ReservedCode } from '../index.ts';
 import {
   allowedMethodsOf,
   bodyOf,
@@ -23,7 +23,6 @@ import {
   pathSegmentsOf,
   receivedBodyOf,
   receivedEnvelopeOf,
-  rejectionBodyReaderOf,
   rejectionResponseOf,
   reservedFaults,
   reservedResponseOf,
@@ -633,43 +632,6 @@ describe('the invalid-input Rejection of a Provider whose Standard Rejections ca
         },
       },
     });
-  });
-});
-
-describe('rejectionBodyReaderOf', () => {
-  const issuesReader = z.object({ issues: z.array(z.object({ message: z.string() })) });
-  const standards = {
-    invalidInput: {
-      code: 'BAD_REQUEST',
-      status: 422,
-      message: 'The request is invalid',
-      body: issuesReader,
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
-
-  test('a Rejection’s body is read by its declared schema, and none without one', () => {
-    const locked = z.object({ lockedAt: z.iso.datetime() });
-    const orderLocked = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: locked,
-    });
-    const gone = defineRejection({ code: 'GONE', status: 410, message: 'Gone' });
-
-    const readers = [orderLocked, gone, notFound].map((rejection) =>
-      rejectionBodyReaderOf(rejection, standards),
-    );
-
-    expect(readers).toEqual([locked, undefined, undefined]);
-  });
-
-  test('invalid input’s body is read by the Reader the Provider’s Standard Rejections carry', () => {
-    const reader = rejectionBodyReaderOf(invalidInput, standards);
-
-    expect(reader).toBe(issuesReader);
   });
 });
 

@@ -103,6 +103,26 @@ const createOrder = defineEndpoint({
   },
 });
 
+/** A body schema that is optional, which the types refuse, as a declaration that bypassed them writes it. */
+const optionalBody = z.string().optional() as unknown as z.ZodString;
+
+const noted = defineRejection({
+  code: 'NOTED',
+  status: 409,
+  message: 'Noted',
+  body: optionalBody,
+});
+
+const lookup = defineEndpoint({
+  name: 'lookup',
+  method: 'GET',
+  path: '/lookup',
+  visibility: 'public',
+  description: 'A lookup whose body may be left out',
+  success: { status: 200, body: optionalBody },
+  rejections: [noted],
+});
+
 const searchOrders = defineEndpoint({
   name: 'searchOrders',
   method: 'GET',
@@ -863,6 +883,33 @@ describe('an EndpointHandler’s Rejections with headers', () => {
       { part: 'headers', path: ['retry-after'] },
       { part: 'body', path: ['limit'] },
     ]);
+  });
+});
+
+describe('what a direct call returns of the parts a Success or a Rejection declares', () => {
+  test('a declared optional body given undefined comes back as its key, for a Success and a Rejection alike', async () => {
+    const found = handle(lookup, () => success(undefined as never));
+    const refused = handle(lookup, () => reject(noted, undefined as never));
+
+    const outcomes = [await found({}, {}), await refused({}, {})];
+
+    expect(outcomes).toStrictEqual([
+      { kind: 'success', status: 200, body: undefined },
+      { kind: 'rejection', rejection: noted, body: undefined },
+    ]);
+  });
+
+  test('a Rejection built with a header its schema does not declare comes back without it', async () => {
+    const wider = { 'retry-after': 30, 'x-extra': 'not declared' };
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(rateLimited, { headers: wider, body: { limit: 100 } }),
+    );
+
+    const outcome = await searchOrdersHandler({}, {});
+
+    expect(isRejectionOf(outcome, rateLimited) && outcome.headers).toStrictEqual({
+      'retry-after': 30,
+    });
   });
 });
 

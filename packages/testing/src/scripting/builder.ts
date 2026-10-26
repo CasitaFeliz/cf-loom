@@ -1,6 +1,6 @@
 import type { ReceivedFault, ReceivedRejection } from '@cf-loom/client';
 import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/internal';
-import { internalError, type SuccessValueOf } from '@cf-loom/contract/internal';
+import { type GivenShapeOf, internalError, type SuccessValueOf } from '@cf-loom/contract/internal';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
 
 /**
@@ -21,23 +21,16 @@ type SuccessArguments<D extends AnyDependency, Name extends ListedName<D>> =
 type RejectionArguments<D extends AnyDependency, Name extends ListedName<D>> =
   ReceivedRejection<D, Name> extends infer Received
     ? Received extends { readonly code: infer Code }
-      ? [code: Code, ...GivenArgumentsOf<Received>]
+      ? [code: Code, ...GivenArgumentsOf<GivenShapeOf<Received>>]
       : never
     : never;
 
-type GivenArgumentsOf<Received> = Received extends { readonly headers: infer Headers }
-  ? [given: { readonly headers: Headers } & BodyGivenOf<Received>]
-  : BodyArgumentsOf<Received>;
-
-type BodyGivenOf<Received> = Received extends { readonly body: infer Body }
-  ? { readonly body: Body }
-  : { readonly body?: never };
-
-type BodyArgumentsOf<Received> = Received extends { readonly body: infer Body }
-  ? undefined extends Body
-    ? [body?: Body]
-    : [body: Body]
-  : [];
+/** What follows the code: nothing where the code declares neither side, optional where it admits `undefined`. */
+type GivenArgumentsOf<Value> = [Value] extends [undefined]
+  ? []
+  : undefined extends Value
+    ? [given?: Value]
+    : [given: Value];
 
 /**
  * What `r.unknownRejection` takes beside its code: the message its Envelope carries, and its
