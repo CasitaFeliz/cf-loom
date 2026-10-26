@@ -16,7 +16,7 @@ import { unreachedLinesOf } from './unreached.ts';
 
 /**
  * Writes the declared Snapshot to `contract.snapshot.json`, so every Contract change shows in
- * review; a Service also gets its Handler map, its readers and its missing Handlers' stubs.
+ * review; a Service also gets its Handler map, its readers and its missing Handlers' Stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
   const built = await builtOf(run, 'running');
@@ -35,7 +35,7 @@ export async function generate(run: Run): Promise<Exit> {
 
 /**
  * A Service's files, or every line that stops them: a Handler path under `src/contract/` or two
- * Elements at one, an Element no stub or the readers could import, a file nothing names, a
+ * Elements at one, an Element no Stub or the readers could import, a file nothing names, a
  * Handler path that is no file.
  */
 async function generateService(run: Run, built: BuiltService): Promise<Exit> {

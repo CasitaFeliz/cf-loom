@@ -31,7 +31,7 @@ export function noFileLinesOf(
   return blocked.map((path) => `${path} is no file: a Handler is a file`);
 }
 
-/** Nothing is at the path, not even a dangling link, so a stub may be written there. */
+/** Nothing is at the path, not even a dangling link, so a Stub may be written there. */
 export function isNothingAt(path: string): boolean {
   try {
     lstatSync(path);

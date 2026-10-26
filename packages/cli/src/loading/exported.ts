@@ -55,7 +55,7 @@ export type ContractExports =
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * Imports every `.ts` under `src/contract/`, through linked folders too, tests aside, so a stub
+ * Imports every `.ts` under `src/contract/`, through linked folders too, tests aside, so a Stub
  * and the readers file import a declaration from where it is exported: Node gives each the
  * instance the root holds.
  */

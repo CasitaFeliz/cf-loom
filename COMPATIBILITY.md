@@ -160,7 +160,7 @@ Codes:
 - A code is declared once across the Contract and the Definitions Packages it uses (see [Rejections](packages/contract/README.md#rejections) in the contract README), so it has one status, one body and one message.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
 - The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status and body it last had, as a kept code is: another status is Breaking, and its body follows the rules of a Success.
-- Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new reserved code only comes with a cf-loom major.
+- Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new Reserved code only comes with a cf-loom major.
 
 Standard Rejections:
 
@@ -177,7 +177,7 @@ Standard Rejections:
 
 - Every Element must be Deprecated in the Baseline before it can be Retired; retiring one that is not is Breaking and refused.
 - **Endpoint or Event:** Breaking, and needs a Breaking Change Approval: the check does not know who still calls the Endpoint or subscribes to the Event, a Public Endpoint's Callers with no Contract included. See also the deploy rule in [ARCHITECTURE.md](ARCHITECTURE.md#messages).
-- **Command:** Breaking, but needs no Breaking Change Approval: a Deprecated Command is no longer sent, and the deploy rule drains its durable consumer before the Release that retires it deploys (see [ARCHITECTURE.md](ARCHITECTURE.md#messages)).
+- **Command:** Breaking, but needs no Breaking Change Approval: a Deprecated Command is no longer sent, and the deploy rule drains its Durable consumer before the Release that retires it deploys (see [ARCHITECTURE.md](ARCHITECTURE.md#messages)).
 
 ### Dependencies
 
@@ -185,7 +185,7 @@ Adding or removing a Dependency is Neutral, and so is changing which Endpoints i
 
 ### Subscriptions
 
-Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused (Breaking and refused), a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event never changes, because the Releases running side by side share its durable consumer: changing it is Breaking and refused, so the check fails. A new name is a new Subscription, and the old one is removed. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
+Adding or removing a Subscription is Neutral, but a removed Subscription's name is never reused (Breaking and refused), a Subscription to an Event that is Retired fails `generate` (so a Service retiring an Event it subscribes to keeps that Subscription until the retiring Release, which removes it), and a Subscription's Event never changes, because the Releases running side by side share its Durable consumer: changing it is Breaking and refused, so the check fails. A new name is a new Subscription, and the old one is removed. Moving to a new Message Version is a new Subscription next to the old one, and the old one is removed in a later Release. While both exist, the same fact arrives once per version, so their Handlers must recognize a fact already handled by its Fact id, not just a Message already received.
 
 ## Breaking Change Approval
 

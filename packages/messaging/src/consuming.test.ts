@@ -360,8 +360,8 @@ describe('consume', () => {
       'orders-service_notify-on-settled',
     ]);
     expect(warned.mock.calls).toEqual([
-      ["ChargeCard@1's Handler is a stub: consume does not pull its Messages"],
-      ["notifyOnCreated's Handler is a stub: consume does not pull its Messages"],
+      ["ChargeCard@1's Handler is a Stub: consume does not pull its Messages"],
+      ["notifyOnCreated's Handler is a Stub: consume does not pull its Messages"],
     ]);
   });
 

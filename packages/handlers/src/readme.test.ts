@@ -12,8 +12,10 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
+  type DirectMeta,
   handle,
   isRejectionOf,
+  type MessageMeta,
   type ResourcesOf,
   readersOf,
   reject,
@@ -43,7 +45,7 @@ const orderLocked = defineRejection({
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
-  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  demands: { headers: z.object({ 'x-api-key': z.string().optional() }) },
   context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
@@ -103,7 +105,9 @@ const orders = {
   find: async (orderId: string, callerId: string) =>
     orderId === stored.id && callerId === stored.callerId ? stored : undefined,
 };
-const callers = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
+const callers = {
+  byKey: async (key: string | undefined) => (key === 'key-1' ? { id: 'c-1' } : undefined),
+};
 const permissions = { of: async (_userId: string): Promise<string[]> => ['orders:edit'] };
 const sent: unknown[] = [];
 const notifications = { send: async (...given: unknown[]) => void sent.push(given) };
@@ -201,6 +205,21 @@ describe('the handlers README', () => {
     });
   });
 
+  test('DirectMeta types the meta a direct call takes, each part of MessageMeta optional', async () => {
+    const meta: DirectMeta = { factId: 'f-1', deliveryCount: 2 };
+
+    await notifyOnSettledHandler({ paymentId: 'pay-1', method: 'card' }, meta, { resources });
+
+    expectTypeOf<DirectMeta>().toEqualTypeOf<Partial<MessageMeta>>();
+    expectTypeOf<Parameters<typeof notifyOnSettledHandler>[1]>().toEqualTypeOf<
+      DirectMeta | undefined
+    >();
+    expect(sent.at(-1)).toEqual([
+      'pay-1',
+      { messageId: 'event.PaymentSettled.v1:f-1', factId: 'f-1', deliveryCount: 2, headers: {} },
+    ]);
+  });
+
   test('the EndpointHandler example answers its Success', async () => {
     const outcome = await getOrderHandler(
       { params: { orderId: ORDER_ID } },
@@ -235,6 +254,12 @@ describe('the handlers README', () => {
       { kind: 'admitted', context: { callerId: 'c-1' } },
       { kind: 'rejection', rejection: unauthenticated },
     ]);
+  });
+
+  test('the GuardHandler example rejects a request without a key as unauthenticated', async () => {
+    const admission = await apiKeyHandler({ headers: {} }, {}, { resources });
+
+    expect(admission).toMatchObject({ kind: 'rejection', rejection: unauthenticated });
   });
 
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {

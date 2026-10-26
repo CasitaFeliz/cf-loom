@@ -4,6 +4,24 @@
 
 ## Serving
 
+A Service without messaging serves HTTP alone:
+
+```ts
+// src/main.ts
+import { serve } from '@cf-loom/server';
+import { nodeHttp } from '@cf-loom/server/node-http';
+import { contract } from './contract/index.ts';
+import handlers from './handlers.generated.ts';
+
+const resources = { orders: await ordersRepository() };   // the Service's own
+const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });   // (Request) => Promise<Response>
+const server = nodeHttp(http).listen(3000);
+
+process.on('SIGTERM', () => server.close());   // stops accepting connections; requests in flight finish
+```
+
+A Service with messaging connects it first, hands its EventPublisher and CommandSender to the Handlers as Resources, closes it on SIGTERM too, and consumes its Messages once it serves (see [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README):
+
 ```ts
 // src/main.ts
 import { serve } from '@cf-loom/server';
@@ -23,7 +41,7 @@ const resources = {      // the Service's own
   publisher: running.publisher,
   sender: running.sender,
 };
-const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });   // (Request) => Promise<Response>
+const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });
 const server = nodeHttp(http).listen(3000);
 
 process.on('SIGTERM', () => {
@@ -31,13 +49,6 @@ process.on('SIGTERM', () => {
   void running.close();
 });
 await running.consume(handlers, { resources });
-```
-
-A Service without messaging leaves out `messaging` and `consume`, and its `main.ts` serves HTTP alone:
-
-```ts
-const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });
-nodeHttp(http).listen(3000);
 ```
 
 `serve` returns a web-standard handler that an adapter connects to the host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). `serve(contract, handlers, { resources })` hands the Service's Resources to every EndpointHandler and GuardHandler it runs (see [Resources](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#resources) in the handlers README). `serve(contract, handlers, { maxBodyBytes })` refuses a larger body with `BODY_TOO_LARGE` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md), and counts the bytes read, not `Content-Length`; it is a whole number of bytes from 0, or `'unlimited'`, and `serve` throws at startup on any other value. Without it, or with `'unlimited'`, cf-loom sets no limit, leaving it to the host or the organization's gateway. The limit is operational, not part of the Contract.
@@ -51,7 +62,7 @@ How `serve` validates every Outcome before sending it is in [Validation](https:/
 - `invalid-outcome`, an Outcome that broke a constraint, or a Success header whose value cannot travel as HTTP field text, answered `INVALID_OUTCOME`, with the issues;
 - `runtime-bug`, a Context or Qualifier `serve` built that breaks the Contract, answered as a Fault with `committed: 'no'`, with the issues.
 
-The Caller's Faults, `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED` and `BODY_TOO_LARGE`, never reach it; `onAnswered` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue after `<identity>[ <guard>]`, as the contract writes an issue (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [Connecting](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#connecting) in the messaging README.
+The Faults `serve` answers with a Reserved code and no Handler (see [Reserved code](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md), `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED` and `BODY_TOO_LARGE`, never reach it; `onAnswered` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per issue after `<identity>[ <guard>]`, as the contract writes an issue (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [onServiceFault](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#onservicefault) in the messaging README.
 
 `serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onAnswered` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, which the Service adds by wrapping the handler `serve` returns.
 
@@ -68,7 +79,7 @@ const http = serve(contract, handlers, {
 });
 ```
 
-`serve(contract, handlers, { onAnswered })` calls `onAnswered(answered, request)` for every request it answers, with the web-standard `Request`, whose headers carry what tracing reads, such as `traceparent`, and `answered`, an `AnsweredRequest`: `method`, the matched Endpoint's, or, when none matched, the request's when it is a method an Endpoint may declare or `HEAD`, else `_OTHER`, so its cardinality is bounded, as OpenTelemetry's `http.request.method` asks; `endpoint` and `path`, the matched Endpoint's name and its path as declared (`/orders/:orderId`), both present exactly when an Endpoint matched; `status`, the HTTP status; `kind`, `'success'`, `'rejection'` or `'fault'`; `code`, the code sent, a Rejection's as the root resolves it or a reserved Fault's, and none for a Success or a Fault the Service produced; `aborted`, whether the request's signal aborted before `serve` had its answer, as when the Caller went away; and `durationMs`, the time taken. It is the hook for metrics and tracing: `method` and `path` fill OpenTelemetry's `http.request.method` and `http.route`; cf-loom ships no exporter: the backend is the organization's. On the Caller's side the `fetch` option of the client does the same (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README).
+`serve(contract, handlers, { onAnswered })` calls `onAnswered(answered, request)` for every request it answers, with the web-standard `Request`, whose headers carry what tracing reads, such as `traceparent`, and `answered`, an `AnsweredRequest`: `method`, the matched Endpoint's, or, when none matched, the request's when it is a method an Endpoint may declare or `HEAD`, else `_OTHER`, so its cardinality is bounded, as OpenTelemetry's `http.request.method` asks; `endpoint` and `path`, the matched Endpoint's name and its path as declared (`/orders/:orderId`), both present exactly when an Endpoint matched; `status`, the HTTP status; `kind`, `'success'`, `'rejection'` or `'fault'`; `code`, the code sent, a Rejection's as the root resolves it or a Reserved code's, and none for a Success or a Fault the Service produced; `aborted`, whether the request's signal aborted before `serve` had its answer, as when the Caller went away; and `durationMs`, the time taken. It is the hook for metrics and tracing: `method` and `path` fill OpenTelemetry's `http.request.method` and `http.route`; cf-loom ships no exporter: the backend is the organization's. On the Caller's side the `fetch` option of the client does the same (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README).
 
 Both hooks may be async and are awaited before the response is returned; what one throws or rejects is logged and never escapes (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
@@ -79,7 +90,7 @@ Both hooks may be async and are awaited before the response is returned; what on
 ## Types
 
 - `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
-- `ServeOptions<Resources>`, `{ resources, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take and what is operational about serving; none of it is part of the Contract.
+- `ServeOptions<Resources>`, `{ resources?, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes besides the Contract and the Handler map, the Resources its Handlers take, required exactly when some Handler takes any, and what is operational about serving; none of it is part of the Contract.
 - `BodyLimit`, `number | 'unlimited'`: what `maxBodyBytes` takes, a whole number of bytes from 0 or no limit.
 - `ServedFault`: what `onServiceFault` receives first, beside the `Request`, `{ element, identity, guard? }` and `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
 - `AnsweredRequest`, `{ method, endpoint?, path?, status, kind, code?, aborted, durationMs }`: what `onAnswered` receives first, beside the `Request`.

@@ -63,7 +63,7 @@ const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
   demands: {
-    headers: z.object({ 'x-api-key': z.string() }),
+    headers: z.object({ 'x-api-key': z.string().optional() }),
   },
   context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
@@ -258,6 +258,12 @@ describe('the README’s Subscription example', () => {
 });
 
 describe('the README’s Guard examples', () => {
+  test('the Guard leaves the key optional, so its Handler decides on a request without one', () => {
+    const withoutKey = apiKey.demands.headers.safeParse({});
+
+    expect(withoutKey.success).toBe(true);
+  });
+
   test('an Endpoint lists every Guard itself, in order', () => {
     const updateOrder = defineEndpoint({
       name: 'updateOrder',

@@ -2,7 +2,7 @@ import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { byCodePoint, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
 import { byCommandName } from './code-names.ts';
 
-/** An Endpoint or a Guard, whose stub imports its declaration. */
+/** An Endpoint or a Guard, whose Stub imports its declaration. */
 export type DeclarationHandled =
   | { readonly kind: 'endpoint'; readonly name: string; readonly group: string }
   | { readonly kind: 'guard'; readonly name: string };

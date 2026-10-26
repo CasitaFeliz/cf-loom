@@ -15,15 +15,15 @@ import { exportedAtOf } from './exported-declarations.ts';
 import type { PlacedService } from './handler-files.ts';
 
 /**
- * The stubs `generate` writes, and a line for every Endpoint and Guard that nothing exports for a
- * stub to import.
+ * The Stubs `generate` writes, and a line for every Endpoint and Guard that nothing exports for a
+ * Stub to import.
  */
 export type Stubs = {
   readonly stubs: readonly GeneratedFile[];
   readonly failureLines: readonly string[];
 };
 
-/** What a Handler's stub passes to `handle.stub`, or why it cannot be written. */
+/** What a Handler's Stub passes to `handle.stub`, or why it cannot be written. */
 type StubLocated =
   | { readonly kind: 'exported'; readonly target: StubTarget }
   | { readonly kind: 'refused'; readonly line: string };
@@ -31,7 +31,7 @@ type StubLocated =
 /** A handled Element located, with the path its Handler is written at. */
 type LocatedHandler = StubLocated & { readonly path: string };
 
-/** The stub of every Handler that lacks a file, importing its Element under its name. */
+/** The Stub of every Handler that lacks a file, importing its Element under its name. */
 export function stubsOf(
   service: PlacedService,
   exportsOf: ExportsOf,
@@ -57,7 +57,7 @@ function locatedHandlerOf(
 }
 
 /**
- * Where a stub imports what its Handler is written for: an Endpoint or Guard where it is exported,
+ * Where a Stub imports what its Handler is written for: an Endpoint or Guard where it is exported,
  * a Command's Message Version or Subscription from the readers, which pair it with its Reader.
  */
 function locatedOf(service: PlacedService, handled: Handled, exportsOf: ExportsOf): StubLocated {

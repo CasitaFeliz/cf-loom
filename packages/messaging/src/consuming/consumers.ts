@@ -24,7 +24,7 @@ type ConsumersRun = {
 /**
  * The consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
  * be written for the very pairing the map's `readers` hold, which gives the Reader its Messages
- * are read with; a stub left out with a warning, since `consume` does not pull from it; the rest
+ * are read with; a Stub left out with a warning, since `consume` does not pull from it; the rest
  * run with `consume`'s Resources.
  */
 export function consumersOf(
@@ -38,7 +38,7 @@ export function consumersOf(
   }));
   for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
     console.warn(
-      `${elementNameOf(consumed.element)}'s Handler is a stub: consume does not pull its Messages`,
+      `${elementNameOf(consumed.element)}'s Handler is a Stub: consume does not pull its Messages`,
     );
   }
   return pulled

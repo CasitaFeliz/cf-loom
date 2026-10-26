@@ -121,7 +121,7 @@ A Definitions Package's Snapshot:
 
 `group` names the Group that lists the Message Version, as an Endpoint's does; a tombstone has none.
 
-Subjects, stream names and durable consumer names are derived from these identities, by the adapter and by `cf-loom broker-plan`, and subjects also by `cf-loom asyncapi`, and are not stored.
+Subjects, Stream names and Durable consumer names are derived from these identities, by the adapter and by `cf-loom broker-plan`, and subjects also by `cf-loom asyncapi`, and are not stored.
 
 ## Origin
 
