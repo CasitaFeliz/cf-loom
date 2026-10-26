@@ -1,8 +1,9 @@
-import { failureLineOf } from '@cf-loom/contract/internal';
+import { type Failure, failureLineOf } from '@cf-loom/contract/internal';
 import {
   type BuiltProject,
   type Committed,
   committedComparisonOf,
+  type FileOf,
   type ProjectFailure,
   snapshotFile,
 } from '../project/index.ts';
@@ -49,10 +50,17 @@ export function toolingError(message: string): Exit {
 export function failureExitOf(failure: ProjectFailure): Exit {
   switch (failure.kind) {
     case 'invalid':
-      return checkFailed(failure.failures.map(failureLineOf));
+      return checkFailed(failure.failures.map((broken) => lineOf(broken, failure.fileOf)));
     case 'tooling':
       return toolingError(failure.message);
   }
+}
+
+/** A failure on one line, the file that exports its declaration first when the project's files say. */
+function lineOf(broken: Failure, fileOf: FileOf): string {
+  const file = fileOf(broken.declaration);
+  const line = failureLineOf(broken);
+  return file === undefined ? line : `${file}: ${line}`;
 }
 
 /** The stop of a command that works from the committed Snapshot when it is no JSON, as a merge conflict leaves it. */

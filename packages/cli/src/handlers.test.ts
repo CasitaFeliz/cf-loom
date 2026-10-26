@@ -2259,7 +2259,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: "handle"\n',
+        'src/contract/endpoints/orders/create-order.endpoint.ts: endpoints.POST /orders (handle) name name-grammar: An Endpoint name is camelCase words and no reserved word: "handle"\n',
     });
   });
 
@@ -2287,7 +2287,7 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'groups.orders.endpoints.POST /orders.name name-grammar: An Endpoint name is camelCase words and no reserved word: "then"\n',
+        'src/contract/endpoints/orders/create-order.endpoint.ts: endpoints.POST /orders (then) name name-grammar: An Endpoint name is camelCase words and no reserved word: "then"\n',
     });
   });
 
@@ -2707,7 +2707,7 @@ describe('cf-loom generate: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: `groups.payments.subscriptions.${name}.name name-grammar: A Subscription name is ${rule}: "${name}"\n`,
+      stderr: `subscriptions.${name} name name-grammar: A Subscription name is ${rule}: "${name}"\n`,
     });
   });
 
@@ -2808,8 +2808,8 @@ describe('cf-loom generate: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr: lines([
-        'groups.orders.events.OrderCreated@2.body.fields.items not allowed: .meta({ id: "2-tree" }) (use a camelCase name)',
-        'groups.orders.events.OrderCreated@2.body.fields.items.fields.children.items not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
+        'src/contract/messages.ts: events.OrderCreated@2 body.items not allowed: .meta({ id: "2-tree" }) (use a camelCase name)',
+        'src/contract/messages.ts: events.OrderCreated@2 body.items.children[] not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
       ]),
     });
   });
@@ -4583,7 +4583,7 @@ describe('cf-loom generate and verify: a declaration the Root does not reach', (
       status: 1,
       stdout: '',
       stderr:
-        "groups.payments.events.PaymentSettled@1 provided-element: A Group lists the Contract's own Elements: PaymentSettled@1 is payments-service's\n",
+        "groups.payments provided-element: A Group lists the Contract's own Elements: PaymentSettled@1 is payments-service's\n",
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
     expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
@@ -4605,7 +4605,7 @@ describe('cf-loom generate and verify: a declaration the Root does not reach', (
       status: 1,
       stdout: '',
       stderr:
-        "groups.payments.endpoints.GET /payments provided-element: A Group lists the Contract's own Elements: getPayment is payments-service's\n",
+        "groups.payments provided-element: A Group lists the Contract's own Elements: getPayment is payments-service's\n",
     });
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
