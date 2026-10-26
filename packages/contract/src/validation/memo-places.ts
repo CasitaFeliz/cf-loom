@@ -7,6 +7,7 @@ import {
   sameSite,
   siteLocationOf,
 } from '../walker/index.ts';
+import { type PlacedReach, popReach, pushReach } from './reach-heap.ts';
 
 /**
  * Where each schema the walk remembers is told: from the first place it is reached, in code point
@@ -64,14 +65,6 @@ function firstOf(first: Map<Memo, Place>, memo: Memo): Place {
   throw new Error('A remembered schema is reached from no place: a bug.');
 }
 
-/** A reach of a memo, with the place it stands at and the text a line names that place by. */
-type PlacedReach = {
-  readonly memo: Memo;
-  readonly at: Place;
-  readonly text: string;
-  readonly sequence: number;
-};
-
 /** A reach of a memo, which stands nowhere until the memo it was made inside is settled. */
 type HeldReach = { readonly memo: Memo; readonly reach: Memo['reaches'][number] };
 
@@ -95,7 +88,9 @@ function placedReaches(first: ReadonlyMap<Memo, Place>, memos: readonly Memo[]) 
       if (outer === undefined || first.has(outer)) {
         place({ memo, reach });
       } else {
-        waiting.set(outer, [...(waiting.get(outer) ?? []), { memo, reach }]);
+        const held = waiting.get(outer) ?? [];
+        held.push({ memo, reach });
+        waiting.set(outer, held);
       }
     }
   }
@@ -119,67 +114,6 @@ function placeOf(
   }
   const outer = first.get(reach.within);
   return outer === undefined ? undefined : movedFrom(reach.at, reach.within.at, outer);
-}
-
-/** Whether a reach is placed before another: by its text in code point order, else as pushed. */
-function isBefore(left: PlacedReach, right: PlacedReach): boolean {
-  return (byCodePoint(left.text, right.text) || left.sequence - right.sequence) < 0;
-}
-
-/** Whether the reach at one slot comes before the one at another; a missing slot never does. */
-function isBeforeAt(heap: readonly PlacedReach[], left: number, right: number): boolean {
-  const first = heap[left];
-  const second = heap[right];
-  return first !== undefined && second !== undefined && isBefore(first, second);
-}
-
-function swapAt(heap: PlacedReach[], left: number, right: number): void {
-  const first = heap[left];
-  const second = heap[right];
-  if (first !== undefined && second !== undefined) {
-    heap[left] = second;
-    heap[right] = first;
-  }
-}
-
-function pushReach(heap: PlacedReach[], reach: PlacedReach): void {
-  heap.push(reach);
-  let index = heap.length - 1;
-  while (index > 0) {
-    const parent = Math.floor((index - 1) / 2);
-    if (!isBeforeAt(heap, index, parent)) {
-      return;
-    }
-    swapAt(heap, index, parent);
-    index = parent;
-  }
-}
-
-function popReach(heap: PlacedReach[]): PlacedReach | undefined {
-  const smallest = heap[0];
-  const last = heap.pop();
-  if (smallest !== undefined && last !== undefined && heap.length > 0) {
-    heap[0] = last;
-    sinkFirst(heap);
-  }
-  return smallest;
-}
-
-function sinkFirst(heap: PlacedReach[]): void {
-  let index = 0;
-  for (;;) {
-    let smallest = index;
-    for (const child of [2 * index + 1, 2 * index + 2]) {
-      if (isBeforeAt(heap, child, smallest)) {
-        smallest = child;
-      }
-    }
-    if (smallest === index) {
-      return;
-    }
-    swapAt(heap, index, smallest);
-    index = smallest;
-  }
 }
 
 /** Every site the memo is reached from, through the memos it is reached inside. */
