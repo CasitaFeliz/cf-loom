@@ -207,6 +207,44 @@ describe('fakeProvider and serve answer alike', () => {
     expect(await fromFake.text()).toBe(await fromServe.text());
   });
 
+  test('a request a Retired Endpoint the Provider does not export wins is answered with the bytes serve sends for it', async () => {
+    const retired = defineEndpoint({
+      name: 'getLatestPayment',
+      method: 'GET',
+      path: '/payments/latest',
+      visibility: 'internal',
+      lifecycle: 'retired',
+      description: 'The latest payment',
+      success: { status: 200, body: z.object({ id: z.string() }) },
+    });
+    const endpoints = [getPayment, capturePayment, retired] as const;
+    const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
+    const root = defineService({ name: 'payments-service', groups: [group] });
+    const handlers = {
+      getPayment: handle(getPayment, () => success({ headers, body })),
+      capturePayment: handle(capturePayment, () => success()),
+    };
+    const providing = serve(root, { endpoints: handlers, guards: {} });
+    const provider = contractPackageOf(
+      { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
+      endpoints,
+    );
+    const dependency = defineDependency({
+      provider,
+      endpoints: [provider.endpoints.getPayment],
+    });
+    const payments = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
+    const url = 'http://payments.test/payments/latest';
+
+    const fromServe = await providing(new Request(url));
+    const fromFake = await payments.fetch(new Request(url));
+
+    expect(fromServe.status).toBe(410);
+    expect(fromFake.status).toBe(fromServe.status);
+    expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+    expect(await fromFake.text()).toBe(await fromServe.text());
+  });
+
   test.each([
     ['a Success with its headers', '/payments/pay-1', {}],
     ['a Standard Rejection', '/payments/missing', {}],

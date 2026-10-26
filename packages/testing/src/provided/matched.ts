@@ -52,7 +52,10 @@ export function matchedOf(faked: FakedProvider, request: Request): Matched {
   }
 }
 
-/** An Endpoint the Provider does not export that wins a request: Retired answers it, a live one is the test's mistake. */
+/**
+ * An Endpoint the Provider does not export that wins a request: a Retired one answers it, a live
+ * one is the test's mistake.
+ */
 function shadowedMatchOf(
   faked: FakedProvider,
   shadowing: Extract<RoutedEndpoint, { readonly kind: 'shadowing' }>,
@@ -65,7 +68,7 @@ function shadowedMatchOf(
   throw mistakeOf({ provider: faked.provider, what });
 }
 
-/** The listed Endpoint a matched exported one is, or the test's mistake when the Dependency does not list it. */
+/** The listed Endpoint an exported match is, or the test's mistake when the Dependency lists none. */
 function listedOf(
   faked: FakedProvider,
   exported: Extract<RoutedEndpoint, { readonly kind: 'exported' }>,
