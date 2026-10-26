@@ -4,6 +4,7 @@ import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
 import { paramProblemsOf } from './params.ts';
 import { codeStatusProblemsOf, standardBodyProblemsOf } from './standard-codes.ts';
+import { notEndpointIdentity } from './texts.ts';
 import { usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
@@ -49,7 +50,7 @@ type Form = { readonly isForm: (text: string) => boolean; readonly reason: strin
 
 const endpointIdentity: Form = {
   isForm: (text) => readEndpointIdentity(text) !== undefined,
-  reason: 'is not an Endpoint’s identity: a method and a path with its params as {}',
+  reason: notEndpointIdentity,
 };
 const messageIdentity: Form = {
   isForm: (text) => readMessageIdentity(text) !== undefined,

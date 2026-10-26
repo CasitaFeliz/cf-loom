@@ -183,6 +183,25 @@ describe('providedSnapshotOf', () => {
     );
   });
 
+  test.each([
+    { map: 'shadowing', entry: { lifecycle: 'active' } },
+    { map: 'endpoints', entry: { ...orders.endpoints['GET /orders/{}'] } },
+  ])(
+    'a key of $map that is no Endpoint’s identity is refused as malformed, naming the key',
+    ({ map, entry }) => {
+      const damaged = changed((copy) => {
+        const keyed = copy[map] as Record<string, unknown>;
+        keyed['garbage'] = entry;
+      });
+
+      const read = () => providedSnapshotOf(damaged);
+
+      expect(read).toThrow(
+        `orders-service's exported Snapshot is malformed: ${map}.garbage is not an Endpoint’s identity: a method and a path with its params as {}`,
+      );
+    },
+  );
+
   test('an exported Snapshot without shadowing is refused as malformed', () => {
     const damaged = changed((copy) => {
       delete copy['shadowing'];

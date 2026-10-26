@@ -134,6 +134,13 @@ function withoutField(contractPackage: typeof payments, identity: string, field:
   return { ...contractPackage, exportedSnapshot };
 }
 
+/** The Provider's Contract Package with `entry` under `key` of its exported Snapshot's `map`. */
+function withKey(map: 'endpoints' | 'shadowing', key: string, entry: unknown): Carrying {
+  const exportedSnapshot = structuredClone(payments.exportedSnapshot);
+  Reflect.set(exportedSnapshot[map], key, entry);
+  return { ...payments, exportedSnapshot };
+}
+
 const paymentsDependency = defineDependency({
   provider: payments,
   endpoints: [payments.endpoints.getPayment, payments.endpoints.capturePayment],
@@ -473,6 +480,22 @@ describe('fakeProvider: requests', () => {
       provider: withoutField(payments, 'GET /payments/{}', 'name'),
       refusal:
         "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
+    },
+    {
+      given: 'with a shadowing key that is no Endpoint’s identity',
+      provider: withKey('shadowing', 'garbage', { lifecycle: 'retired' }),
+      refusal:
+        "payments-service's exported Snapshot is malformed: shadowing.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
+    },
+    {
+      given: 'with an endpoints key that is no Endpoint’s identity',
+      provider: withKey(
+        'endpoints',
+        'garbage',
+        payments.exportedSnapshot.endpoints['GET /payments/{}'],
+      ),
+      refusal:
+        "payments-service's exported Snapshot is malformed: endpoints.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
     },
   ])(
     'a Contract Package $given is a bug, refused when the fake is created',

@@ -6,6 +6,10 @@ import { isStringFormat, type StringFormat } from '../walker/index.ts';
 /** Who a refusal says defines what a published Snapshot may hold: the Snapshot's format. */
 export const formatDefiner = 'its format';
 
+/** What a text that is no Endpoint's identity breaks, as every reader of a Snapshot words it. */
+export const notEndpointIdentity =
+  'is not an Endpoint’s identity: a method and a path with its params as {}';
+
 /** A version `publish` writes: a semantic version, a prerelease included. */
 export const semanticVersionText = z.custom<string>(isSemanticVersion, 'is not a semantic version');
 
