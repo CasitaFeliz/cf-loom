@@ -127,7 +127,7 @@ const headingKeys = ['format', 'kind', 'name'];
 /**
  * Whether `generate` never writes a place changed alone, which the decoder does not refuse: the
  * heading, what it derives from other places (the codes' `removed` flags and the codes nothing
- * answers) and the Guards no Endpoint attaches.
+ * answers), the Guards no Endpoint attaches and the Groups no Element lists.
  */
 function isUnwritableAlone(kind: string, at: Path): boolean {
   const [section, , part] = at;
@@ -136,6 +136,9 @@ function isUnwritableAlone(kind: string, at: Path): boolean {
   }
   if (section === 'codes') {
     return at.length === 1 || part === 'removed';
+  }
+  if (section === 'groups') {
+    return at.length === 1;
   }
   return section === 'guards' && kind === 'service' && at.length === 1;
 }

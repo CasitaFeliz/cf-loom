@@ -46,6 +46,7 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   standardRejections,
+  groups: {},
   guards: {},
   codes: {},
   dependencies: {},

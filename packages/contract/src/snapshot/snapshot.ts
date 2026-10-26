@@ -5,6 +5,7 @@ import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
+import { groupSnapshotsOf } from './groups.ts';
 import { guardSnapshotsOf } from './guards.ts';
 import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
 import {
@@ -46,6 +47,7 @@ function serviceSnapshotOf(validated: ValidRoot, root: ServiceContract): Service
     kind: 'service',
     name: root.name,
     standardRejections,
+    groups: groupSnapshotsOf(declarations.groups),
     defs: schemas.defs,
     endpoints: endpointSnapshotsOf(declarations.endpoints, sources),
     events: eventSnapshotsOf(declarations.events, sources),

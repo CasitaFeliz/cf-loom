@@ -113,6 +113,7 @@ function breakingClassificationOf(site: ChangeSite): Classification {
     case 'code':
     case 'export':
     case 'guard':
+    case 'group':
     case 'subscription':
     case 'dependency':
     case 'standard-rejection':
@@ -133,6 +134,7 @@ function retiredOrNarrowedClassificationOf(site: ChangeSite): Classification {
     case 'code':
     case 'export':
     case 'guard':
+    case 'group':
     case 'subscription':
     case 'dependency':
     case 'standard-rejection':

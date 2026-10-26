@@ -39,6 +39,7 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -150,6 +151,7 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
+    case 'group':
     case 'export':
     case 'subscription':
     case 'dependency':

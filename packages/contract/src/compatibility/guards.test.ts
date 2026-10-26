@@ -117,6 +117,7 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
+    case 'group':
     case 'export':
     case 'subscription':
     case 'dependency':

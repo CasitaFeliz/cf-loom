@@ -57,6 +57,7 @@ function aPublishedService(
       notFound: notFoundCode,
       notImplemented: notImplementedCode,
     },
+    groups: { orders: { description: 'Orders' } },
     defs: {},
     endpoints: {},
     events: {},

@@ -36,6 +36,7 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
       notFound: 'NOT_FOUND',
       notImplemented: 'NOT_IMPLEMENTED',
     },
+    groups: {},
     defs: {},
     endpoints: {},
     events: {},

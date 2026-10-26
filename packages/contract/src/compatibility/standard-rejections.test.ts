@@ -65,6 +65,7 @@ function aService(
     kind: 'service',
     name: 'orders-service',
     standardRejections: standard,
+    groups: {},
     defs: {},
     endpoints,
     events: {},

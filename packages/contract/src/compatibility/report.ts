@@ -28,11 +28,12 @@ export type ChangeSite =
   /**
    * A Subscription or a Dependency by name, Private since no Consumer relies on what a Service
    * itself consumes; a Service's Guard by name, with the widest Visibility of the Endpoints that
-   * attach it; or a Definitions Package's export or Guard by name, Public since the Services that
-   * import it may use all of it.
+   * attach it; a Service's Group by name, with the widest Visibility of the Endpoints and Events
+   * that are not Retired and that it lists, Private when none; or a Definitions Package's export or
+   * Guard by name, Public since the Services that import it may use all of it.
    */
   | {
-      readonly kind: 'subscription' | 'dependency' | 'export' | 'guard';
+      readonly kind: 'subscription' | 'dependency' | 'export' | 'guard' | 'group';
       readonly name: string;
       readonly visibility: Visibility;
     }

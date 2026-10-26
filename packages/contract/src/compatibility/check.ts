@@ -12,6 +12,7 @@ import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.
 import { dependencyDifferencesOf } from './dependencies.ts';
 import { commandChangesOf, endpointChangesOf, eventChangesOf } from './element-changes.ts';
 import { exportDifferencesOf } from './exports.ts';
+import { groupDifferencesOf } from './groups.ts';
 import { guardDifferencesOf, serviceGuardDifferencesOf } from './guards.ts';
 import { publishedSnapshotOf } from './merge.ts';
 import type { Change, ComparedReport } from './report.ts';
@@ -60,6 +61,7 @@ function serviceChangesOf(
     ...endpointChangesOf(baseline, proposed),
     ...eventChangesOf(baseline, proposed),
     ...commandChangesOf(baseline, proposed),
+    ...siteChangesOf(groupDifferencesOf(baseline, proposed)),
     ...siteChangesOf(serviceGuardDifferencesOf(baseline, proposed)),
     ...siteChangesOf(serviceCodeDifferencesOf(baseline, proposed)),
     ...siteChangesOf(serviceStandardRejectionDifferencesOf(baseline, proposed)),

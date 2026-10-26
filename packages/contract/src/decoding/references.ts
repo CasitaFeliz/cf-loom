@@ -96,6 +96,7 @@ const unheld = {
   code: 'lists a code the Snapshot does not hold',
   'standard-code': 'names a code the Snapshot does not hold',
   guard: 'names a Guard the Snapshot does not hold',
+  group: 'names a Group the Snapshot does not hold',
 } as const;
 
 function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
@@ -124,6 +125,7 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
     code: snapshot.codes,
     'standard-code': snapshot.codes,
     guard: snapshot.guards,
+    group: snapshot.kind === 'service' ? snapshot.groups : {},
   };
   const missing = usesOf(snapshot).filter((use) => !Object.hasOwn(held[use.kind], use.name));
   return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));

@@ -33,6 +33,7 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   standardRejections,
+  groups: { orders: { description: 'Orders' } },
   defs: {},
   codes: {},
   dependencies: {},
@@ -326,6 +327,99 @@ describe('compatibilityReportOf, a Message Version’s Neutral Changes', () => {
 
     const difference = { kind: 'group-changed', from: 'orders', to: 'billing' } as const;
     expect(report.changes).toEqual([neutral(site, difference)]);
+  });
+});
+
+describe('compatibilityReportOf, a Service’s Group', () => {
+  const reworded = { orders: { description: 'Order lifecycle' } };
+
+  function groupSite(visibility: Visibility): ChangeSite {
+    return { kind: 'group', name: 'orders', visibility };
+  }
+
+  test('changing only a Group’s description gives one Neutral description-changed at its site', () => {
+    const held = { endpoints: { [identity]: anEndpoint() } };
+
+    const report = compatibilityReportOf(aBaseline(held), aProposed({ ...held, groups: reworded }));
+
+    expect(report.changes).toEqual([neutral(groupSite('public'), { kind: 'description-changed' })]);
+  });
+
+  test('a Group left as it is gives no Change', () => {
+    const held = { endpoints: { [identity]: anEndpoint() } };
+
+    const report = compatibilityReportOf(aBaseline(held), aProposed(held));
+
+    expect(report.changes).toEqual([]);
+  });
+
+  test.each([
+    {
+      name: 'the widest of the Endpoints and Events it lists',
+      held: {
+        endpoints: { [identity]: anEndpoint({ visibility: 'private' }) },
+        events: { 'OrderPlaced@1': anEvent({ visibility: 'internal' }) },
+      },
+      visibility: 'internal',
+    },
+    {
+      name: 'Private when it lists only a Command',
+      held: { commands: { 'ChargeCard@1': aCommand() } },
+      visibility: 'private',
+    },
+    {
+      name: 'Private when the Elements it lists are Retired',
+      held: { endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } },
+      visibility: 'private',
+    },
+    {
+      name: 'only the Elements it lists, never those of another Group',
+      held: {
+        endpoints: {
+          [identity]: anEndpoint({ visibility: 'private' }),
+          'GET /other': anEndpoint({ group: 'other', visibility: 'public' }),
+        },
+        events: { 'OrderPlaced@1': anEvent({ visibility: 'internal', group: 'other' }) },
+      },
+      visibility: 'private',
+    },
+  ] as const)('a Group’s site takes $name', ({ held, visibility }) => {
+    const groups = { ...heading.groups, other: { description: 'Other' } };
+
+    const report = compatibilityReportOf(
+      aBaseline({ ...held, groups }),
+      aProposed({ ...held, groups: { ...groups, ...reworded } }),
+    );
+
+    expect(report.changes).toEqual([
+      neutral(groupSite(visibility), { kind: 'description-changed' }),
+    ]);
+  });
+
+  test('a Group’s site takes the widest Visibility of either Snapshot', () => {
+    const before = { endpoints: { [identity]: anEndpoint({ visibility: 'public' }) } };
+    const after = { endpoints: { [identity]: anEndpoint({ visibility: 'private' }) } };
+
+    const { changes } = compatibilityReportOf(
+      aBaseline(before),
+      aProposed({ ...after, groups: reworded }),
+    );
+
+    const sites = changes.map(({ site }) => site);
+    expect(sites).toContainEqual(groupSite('public'));
+  });
+
+  test('a Group added or removed gives no Change of its own: the Elements it lists give theirs', () => {
+    const baseline = aBaseline({ endpoints: { [identity]: anEndpoint() } });
+    const moved = anEndpoint({ group: 'fulfilment' });
+    const groups = { fulfilment: { description: 'Fulfilment' } };
+
+    const { changes } = compatibilityReportOf(
+      baseline,
+      aProposed({ endpoints: { [identity]: moved }, groups }),
+    );
+
+    expect(changes.map(({ site }) => site.kind)).toEqual(['endpoint']);
   });
 });
 
@@ -709,6 +803,14 @@ describe('compatibilityReportOf, every Neutral Change', () => {
         endpoints: {
           [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
         },
+      }),
+    ],
+    [
+      'a Group’s description',
+      aBaseline({ endpoints: { [identity]: anEndpoint() } }),
+      aProposed({
+        endpoints: { [identity]: anEndpoint() },
+        groups: { orders: { description: 'Order lifecycle' } },
       }),
     ],
     [

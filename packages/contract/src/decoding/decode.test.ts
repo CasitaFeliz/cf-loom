@@ -82,6 +82,7 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
+    groups: { orders: { description: 'Order lifecycle' } },
     defs: {},
     endpoints: {},
     events: {},
@@ -1783,6 +1784,71 @@ describe('decodeSnapshot', () => {
       },
     );
 
+    test.each([
+      { name: 'an Endpoint', section: 'endpoints', key: 'GET /orders/{}', declared: anEndpoint },
+      { name: 'an Event', section: 'events', key: 'OrderPlaced@1', declared: anEvent },
+      { name: 'a Command', section: 'commands', key: 'ChargeCard@1', declared: aCommand },
+      {
+        name: 'a Subscription',
+        section: 'subscriptions',
+        key: 'notifyOnPlaced',
+        declared: {
+          group: 'orders',
+          description: 'Receives it',
+          event: 'orders-service:OrderPlaced@1',
+        },
+      },
+    ])('$name whose Group the Snapshot does not hold is malformed at its group', (element) => {
+      const { section, key, declared } = element;
+
+      const result = serviceWith({ [section]: { [key]: { ...declared, group: 'payments' } } });
+
+      const reason = 'names a Group the Snapshot does not hold: payments';
+      expect(result).toEqual(malformedAt([section, key, 'group'], reason));
+    });
+
+    test('a Snapshot whose Elements are all tombstones holds no Group and decodes', () => {
+      const tombstones = {
+        groups: {},
+        endpoints: { 'GET /orders/{}': endpointTombstone },
+        events: { 'OrderPlaced@1': messageTombstone },
+        commands: { 'ChargeCard@1': messageTombstone },
+        subscriptions: {
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        },
+      };
+
+      const result = serviceWith(tombstones);
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a Group the Snapshot holds and no Element names decodes', () => {
+      const result = serviceWith({
+        groups: { orders: { description: 'Orders' }, spare: { description: 'Spare' } },
+      });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each([
+      ['no description', { orders: {} }],
+      ['a description that is no text', { orders: { description: 1 } }],
+      ['a key it does not define', { orders: { description: 'Orders', tags: [] } }],
+    ])('a Group with %s is malformed at the Group', (_name, groups) => {
+      const result = serviceWith({ groups });
+
+      expect(elementOf(result)).toEqual(['groups', 'orders']);
+    });
+
+    test('a Service without groups is malformed at groups: it is missing', () => {
+      const { groups: _groups, ...withoutGroups } = aService();
+
+      const result = decodedFrom(withoutGroups);
+
+      expect(result).toEqual(malformedAt(['groups'], 'is missing'));
+    });
+
     test('a Guard an Endpoint attaches, or a Guard lists, that guards does not hold is malformed', () => {
       const attaching = { ...anEndpoint, guards: [{ guard: 'apiKey', qualifier: null }] };
 
@@ -2221,6 +2287,7 @@ const formatOneFixture = `{
   },
   "format": 1,
   "generator": "@cf-loom/cli@2.1.0",
+  "groups": { "orders": { "description": "Order lifecycle" } },
   "guards": {
     "apiKey": {
       "context": null,

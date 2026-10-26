@@ -39,6 +39,7 @@ export type {
   EventSnapshot,
   ExportedSnapshot,
   ExportSnapshot,
+  GroupSnapshot,
   GuardSnapshot,
   ServiceSnapshot,
   Snapshot,

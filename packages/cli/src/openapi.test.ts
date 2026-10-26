@@ -747,11 +747,11 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
     expect(valueAt(operationOf('/orders', 'post'), 'tags')).toEqual(['orders']);
   });
 
-  test('the Groups are the document’s tags, in code point order', () => {
+  test('the Groups are the document’s tags, in code point order, each with its description', () => {
     expect(valueAt(document, 'tags')).toEqual([
-      { name: 'infrastructure' },
-      { name: 'orders' },
-      { name: 'shapes' },
+      { name: 'infrastructure', description: 'Infrastructure' },
+      { name: 'orders', description: 'Order lifecycle' },
+      { name: 'shapes', description: 'Shapes' },
     ]);
   });
 
@@ -760,7 +760,7 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
 
     const written = JSON.parse(cfLoom(project, 'openapi').stdout);
 
-    expect(valueAt(written, 'tags')).toEqual([{ name: 'orders' }]);
+    expect(valueAt(written, 'tags')).toEqual([{ name: 'orders', description: 'Orders' }]);
   });
 
   test('public, internal and private Endpoints are all written, each with its Visibility', () => {

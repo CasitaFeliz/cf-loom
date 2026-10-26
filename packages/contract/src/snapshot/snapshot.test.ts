@@ -338,6 +338,15 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot).not.toHaveProperty('version');
   });
 
+  test('groups holds each Group by name with its description', () => {
+    const snapshot = serviceSnapshot();
+
+    expect(snapshot.groups).toEqual({
+      messages: { description: 'Messages' },
+      orders: { description: 'Order lifecycle' },
+    });
+  });
+
   test('an Endpoint is written by its identity with its Group, Visibility, lifecycle, description and param names', () => {
     const snapshot = serviceSnapshot();
 

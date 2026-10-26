@@ -59,10 +59,13 @@ const standardRejections = z.strictObject({
   notImplemented: text,
 });
 
+const group = z.strictObject({ description: text });
+
 const service = z.strictObject({
   ...heading,
   kind: z.literal('service'),
   standardRejections,
+  groups: byKey(group),
   defs: byKey(def),
   endpoints: byKey(publishedEndpoint),
   events: byKey(publishedEvent),

@@ -88,6 +88,7 @@ export type {
   EventSnapshot,
   ExportedSnapshot,
   ExportSnapshot,
+  GroupSnapshot,
   GuardSnapshot,
   ListedRejection,
   MessageTombstone,

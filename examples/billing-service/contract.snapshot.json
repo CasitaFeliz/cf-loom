@@ -237,6 +237,11 @@
     }
   },
   "events": {},
+  "groups": {
+    "billing": {
+      "description": "Invoices for paid orders"
+    }
+  },
   "guards": {},
   "standardRejections": {
     "invalidInput": "BAD_REQUEST",

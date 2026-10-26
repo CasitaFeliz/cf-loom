@@ -541,6 +541,14 @@
       "visibility": "internal"
     }
   },
+  "groups": {
+    "infrastructure": {
+      "description": "What the Service’s own infrastructure calls"
+    },
+    "orders": {
+      "description": "Order lifecycle"
+    }
+  },
   "guards": {
     "apiKey": {
       "context": {

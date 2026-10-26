@@ -129,6 +129,7 @@ const heading = {
   kind: 'service',
   name: 'orders-service',
   standardRejections,
+  groups: { orders: { description: 'Orders' } },
   defs: {},
   guards: {},
   codes: {},

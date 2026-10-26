@@ -45,6 +45,7 @@ const standardCodes = {
 const serviceBody = {
   kind: 'service',
   standardRejections,
+  groups: {},
   defs: {},
   endpoints: {},
   events: {},

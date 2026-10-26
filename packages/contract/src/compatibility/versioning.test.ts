@@ -104,6 +104,7 @@ const serviceHeading = {
     notFound: 'NOT_FOUND',
     notImplemented: 'NOT_IMPLEMENTED',
   },
+  groups: {},
   defs: {},
   guards: {},
   codes: {},

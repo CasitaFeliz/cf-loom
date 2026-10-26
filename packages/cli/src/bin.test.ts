@@ -132,6 +132,7 @@ function aRoot({
   status = 200,
   description = 'Answers',
   deprecatedAt = undefined as string | undefined,
+  groupDescription = 'Health',
 } = {}): Readonly<Record<string, string>> {
   return {
     'src/contract/ping.endpoint.ts': [
@@ -154,7 +155,7 @@ function aRoot({
       "import { defineService, defineGroup } from '@cf-loom/contract';",
       "import { ping } from './ping.endpoint.ts';",
       '',
-      "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
+      `const health = defineGroup({ name: 'health', description: '${groupDescription}', endpoints: [ping] });`,
       '',
       "export const contract = defineService({ name: 'orders-service', groups: [health] });",
       '',
@@ -4326,6 +4327,29 @@ describe.concurrent('cf-loom check, the version publish would take', {
       stdout: [
         checkedAgainstOrders,
         'endpoints.GET /ping (ping) deprecation-moved from="2026-01-01T00:00:00Z" to="2026-06-01T00:00:00Z": Neutral',
+        noApprovalNeeded,
+        wouldPublish('1.0.1', 'patch'),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  test('a changed Group description is a Neutral Change at the Group, and check closes with the patch publish would take', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot(),
+      after: aRoot({ groupDescription: 'Whether the Service is up' }),
+    });
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        'groups.health description-changed: Neutral',
         noApprovalNeeded,
         wouldPublish('1.0.1', 'patch'),
         '',
