@@ -113,6 +113,7 @@ export {
   hashedTextOf,
   isDeclared,
   isDeclaredRejection,
+  isEmptyTextPart,
   isSemanticVersion,
   isSubscriptionTombstone,
   nestingFailureOf,

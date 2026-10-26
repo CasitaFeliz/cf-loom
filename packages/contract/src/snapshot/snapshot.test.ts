@@ -20,6 +20,7 @@ import {
 } from '../index.ts';
 import {
   canonicalTextOf,
+  isEmptyTextPart,
   type ResolvedDefinitions,
   type Snapshot,
   type SnapshotContext,
@@ -793,6 +794,44 @@ describe('snapshotOf: one Snapshot for one Contract', () => {
       emptyPart,
     ]);
     expect(snapshot.guards['gate']?.demands).toEqual({ headers: emptyPart, query: emptyPart });
+  });
+});
+
+/** A one-Endpoint Service whose Endpoint declares one query field and no headers. */
+function aPingServiceWithQuery() {
+  const ping = defineEndpoint({
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Answers',
+    input: { query: z.object({ page: z.string() }) },
+    success: { status: 204 },
+  });
+  const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
+  return defineContract({ name: 'ping-service', groups: [group] });
+}
+
+describe('isEmptyTextPart', () => {
+  test('is the text part the Snapshot writes where none is declared, and no other', () => {
+    const snapshot = snapshotFor(aPingServiceWithQuery(), aContext(), []);
+    if (snapshot.kind !== 'service') {
+      throw new Error('The fixture is no Service');
+    }
+    const input = snapshot.endpoints['GET /ping']?.input;
+
+    expect(input === undefined ? [] : [input.headers, input.query].map(isEmptyTextPart)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  test.each([
+    ['a description', { type: 'object', fields: {}, description: 'The query' }],
+    ['an example', { type: 'object', fields: {}, examples: [{}] }],
+    ['an origin', { type: 'object', fields: {}, origin: '@org/definitions@1.0.0#query' }],
+  ] as const)('is not a part that carries %s', (_name, part) => {
+    expect(isEmptyTextPart(part)).toBe(false);
   });
 });
 

@@ -29,7 +29,18 @@ export function inputOf(
  * a part declared empty and one not declared are the same Snapshot.
  */
 export function textPartOf(part: ObjectNode | undefined): ObjectNode {
-  return part ?? { type: 'object', fields: {} };
+  return part ?? emptyTextPart();
+}
+
+/** Whether a text part is the one the Snapshot writes where none is declared, with no field and no annotation. */
+export function isEmptyTextPart(part: ObjectNode): boolean {
+  const empty = emptyTextPart();
+  const isBare = Object.keys(part).every((key) => Object.hasOwn(empty, key));
+  return isBare && Object.keys(part.fields).length === 0;
+}
+
+function emptyTextPart(): ObjectNode {
+  return { type: 'object', fields: {} };
 }
 
 /**

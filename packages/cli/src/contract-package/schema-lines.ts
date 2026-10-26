@@ -1,4 +1,4 @@
-import type { ObjectNode, SchemaNode } from '@cf-loom/contract/internal';
+import { isEmptyTextPart, type ObjectNode, type SchemaNode } from '@cf-loom/contract/internal';
 import { type Writing, zodExpressionOf } from '../schema-code/index.ts';
 
 /** An object of schema parts, each declared one written in a mode; none when no part is. */
@@ -17,11 +17,10 @@ export function partsLinesOf(
 
 /**
  * A text part as the author declared it: the Snapshot writes one declared with no field and one not
- * declared alike, so an object with no field and no annotation is none.
+ * declared alike, so the empty part is none.
  */
 export function declaredTextPartOf(part: ObjectNode): ObjectNode | null {
-  const isBare = Object.keys(part).every((key) => key === 'type' || key === 'fields');
-  return isBare && Object.keys(part.fields).length === 0 ? null : part;
+  return isEmptyTextPart(part) ? null : part;
 }
 
 /** One schema field of a declaration, when it declares one. */
