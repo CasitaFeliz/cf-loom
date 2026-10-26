@@ -1,7 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { type AddressInfo, createServer as createNetServer } from 'node:net';
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -12,6 +11,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client, type Happened, type Http, type InferredFault } from './index.ts';
@@ -32,7 +32,7 @@ const getOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -50,14 +50,25 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const defaultStandards = providedStandardRejections();
 
 const orders = contractPackageOf({ getOrder }, defaultStandards);
 
-const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder] });
+const ordersDependency = defineDependency({
+  provider: orders,
+  endpoints: [orders.endpoints.getOrder],
+});
 
 const input = { params: { orderId: 'o-1' } };
 

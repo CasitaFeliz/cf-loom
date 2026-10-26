@@ -1,9 +1,9 @@
-/** A Provider's Contract Package, written by hand, exporting the Event `PaymentSettled@1`. */
+/** A Provider's Contract Package, written by hand as `cf-loom package` writes one, exporting the Event `PaymentSettled@1`. */
 export const payments = `${[
-  "import { defineEvent, openEnumReader } from '@cf-loom/contract';",
+  "import { openEnumReader, providedEvent } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   '',
-  'export const paymentSettledV1 = defineEvent({',
+  "export const paymentSettledV1 = providedEvent('payments-service', {",
   "  name: 'PaymentSettled',",
   '  version: 1,',
   "  visibility: 'internal',",

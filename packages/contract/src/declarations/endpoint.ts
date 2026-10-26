@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { SchemaRule } from '../walker/index.ts';
 import type { AttachedGuardOf, Attachment, AttachmentsRule } from './attachment.ts';
 import type { Lifecycle, Visibility } from './element.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
@@ -32,7 +33,7 @@ type SuccessDeclaration = {
 };
 
 /** What an author writes to declare an Endpoint; a `lifecycle` left out is Active, a list empty. */
-type EndpointDeclaration = {
+export type EndpointDeclaration = {
   readonly name: string;
   readonly method: Method;
   readonly path: string;
@@ -150,7 +151,18 @@ type NestedFieldsRule<Declaration extends EndpointDeclaration> = {
   readonly success?: DeclaredFieldsRule<Declaration['success'], SuccessDeclaration>;
 };
 
+type SchemasRule<Declaration extends EndpointDeclaration> = {
+  readonly input?: {
+    readonly [Part in keyof InputDeclaration]?: SchemaRule<InputOfDeclaration<Declaration>[Part]>;
+  };
+  readonly success?: {
+    readonly headers?: SchemaRule<Declaration['success']['headers']>;
+    readonly body?: SchemaRule<Declaration['success']['body']>;
+  };
+};
+
 type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declaration> &
+  SchemasRule<Declaration> &
   InputBodyRule<Declaration> &
   SuccessBodyRule<Declaration> &
   HeadersRule<Declaration> &

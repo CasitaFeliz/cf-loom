@@ -1,4 +1,5 @@
 import type * as core from 'zod/v4/core';
+import type { SchemaRule } from '../walker/index.ts';
 import type { GroupedField } from './grouped.ts';
 import type { ReservedName } from './reserved-names.ts';
 
@@ -96,16 +97,25 @@ export const messageBodyRefusal = 'A Message body is an object of its fields';
 type GrowableBody = core.$ZodObject | core.$ZodIntersection | core.$ZodLazy;
 
 /**
- * What a Message body must also satisfy: an object of its fields, so the Message can grow. It
- * says nothing where the schema's kind is not one literal, as for a `z.ZodType<T>` written for
- * recursion: `generate` judges it.
+ * An object of its fields, so the Message can grow. It says nothing where the schema's kind is not
+ * one literal, as for a `z.ZodType<T>` written for recursion: `generate` judges it.
  */
-export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }> =
+type ObjectBodyRule<Declaration extends { readonly body: core.$ZodType }> =
   IsOneLiteral<Declaration['body']['_zod']['def']['type']> extends true
     ? Declaration['body'] extends GrowableBody
       ? unknown
       : { readonly body: Refusal<typeof messageBodyRefusal> }
     : unknown;
+
+/**
+ * What a Message body must also satisfy: its schemas are allowed, and it is an object of its
+ * fields. The second speaks only where the first says nothing, since `generate` reports a refused
+ * body by its construct alone.
+ */
+export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }> =
+  unknown extends SchemaRule<Declaration['body']>
+    ? ObjectBodyRule<Declaration>
+    : { readonly body: SchemaRule<Declaration['body']> };
 
 /** Why a Message version is refused, as the types and `generate` both say it. */
 export const messageVersionRefusal =

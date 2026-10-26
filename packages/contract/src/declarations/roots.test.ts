@@ -11,6 +11,8 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
+  providedEndpoint,
+  providedEvent,
 } from '../index.ts';
 
 const getPayment = defineEndpoint({
@@ -57,8 +59,11 @@ const auditOnSettled = defineSubscription({
 const payments = {
   name: 'payments-service',
   version: '5.1.0',
-  endpoints: { getPayment, refundPayment },
-  events: { paymentSettledV1 },
+  endpoints: {
+    getPayment: providedEndpoint('payments-service', getPayment),
+    refundPayment: providedEndpoint('payments-service', refundPayment),
+  },
+  events: { paymentSettledV1: providedEvent('payments-service', paymentSettledV1) },
   standardRejections: {
     invalidInput: {
       code: 'INVALID_INPUT',
@@ -87,7 +92,10 @@ describe('defineContract', () => {
       description: 'Payments',
       endpoints: [getPayment],
     });
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
+    const paymentsDependency = defineDependency({
+      provider: payments,
+      endpoints: [payments.endpoints.refundPayment],
+    });
 
     const contract = defineContract({
       name: 'orders-service',
@@ -121,7 +129,10 @@ describe('defineContract', () => {
 
 describe('defineApplication', () => {
   test('an Application may depend on Public Endpoints', () => {
-    const publicDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+    const publicDependency = defineDependency({
+      provider: payments,
+      endpoints: [payments.endpoints.getPayment],
+    });
 
     const application = defineApplication({ name: 'web-admin', dependencies: [publicDependency] });
 
@@ -129,7 +140,10 @@ describe('defineApplication', () => {
   });
 
   test('an Application depending on an Internal Endpoint is a type error', () => {
-    const internalDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
+    const internalDependency = defineDependency({
+      provider: payments,
+      endpoints: [payments.endpoints.refundPayment],
+    });
 
     const declare = () =>
       // @ts-expect-error an Application runs outside the internal network
@@ -139,7 +153,10 @@ describe('defineApplication', () => {
   });
 
   test('an Application depending on an Internal Endpoint is refused with the Endpoint’s name', () => {
-    const internalDependency = defineDependency({ provider: payments, endpoints: [refundPayment] });
+    const internalDependency = defineDependency({
+      provider: payments,
+      endpoints: [payments.endpoints.refundPayment],
+    });
     type Written = Parameters<
       typeof defineApplication<{
         readonly name: 'web-admin';

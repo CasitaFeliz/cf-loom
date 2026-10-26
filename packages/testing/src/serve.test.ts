@@ -1,6 +1,5 @@
 import { client } from '@cf-loom/client';
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -17,6 +16,7 @@ import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { type ServedFault, serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
@@ -65,7 +65,7 @@ const readers = paymentEndpointsOf(openEnumReader(['pending', 'settled']));
 const { getPayment, capturePayment, paymentLocked } = declared;
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declaredEndpoints: readonly Endpoint[],
 ) {
@@ -85,15 +85,27 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
+const paymentsDependencyPackage = contractPackageOf(
+  { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
+  [getPayment, capturePayment],
+);
 const paymentsDependency = defineDependency({
-  provider: contractPackageOf(
-    { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
-    [getPayment, capturePayment],
-  ),
-  endpoints: [readers.getPayment, readers.capturePayment],
+  provider: paymentsDependencyPackage,
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.capturePayment,
+  ],
 });
 
 const headers = { 'x-stage': 'settled', 'x-count': 0.000_000_15 } as const;
@@ -294,9 +306,12 @@ const packagedRefund = defineEndpoint({
   success: { status: 204 },
 });
 
+const refundDependencyPackage = contractPackageOf({ refundPayment: packagedRefund }, [
+  refundPayment,
+]);
 const refundDependency = defineDependency({
-  provider: contractPackageOf({ refundPayment: packagedRefund }, [refundPayment]),
-  endpoints: [packagedRefund],
+  provider: refundDependencyPackage,
+  endpoints: [refundDependencyPackage.endpoints.refundPayment],
 });
 
 /** The Provider of `refundPayment`, every GuardHandler admitting, so no run stops the reading. */

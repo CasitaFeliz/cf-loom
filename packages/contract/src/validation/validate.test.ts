@@ -16,6 +16,7 @@ import {
   type Guard,
   notFound,
   openEnum,
+  providedEndpoint,
 } from '../index.ts';
 import { validateContract, walkSchemas } from '../internal/index.ts';
 
@@ -72,7 +73,7 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder],
 });
 
-const getPayment = defineEndpoint({
+const getPayment = providedEndpoint('payments-service', {
   name: 'getPayment',
   method: 'GET',
   path: '/payments/:paymentId',
@@ -477,6 +478,7 @@ describe('validateContract', () => {
       path: '/orders',
       visibility: 'public',
       description: 'Creates an order',
+      // @ts-expect-error z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
@@ -517,6 +519,7 @@ describe('validateContract', () => {
       visibility: 'public',
       description: 'Creates an order',
       input: {
+        // @ts-expect-error z.date() is refused by the types, as generate refuses it
         body: z.object({ placedAt: z.date() }),
         headers: z.object({ 'x-tenant': z.object({ id: z.string() }) }),
       },
@@ -555,6 +558,7 @@ describe('validateContract', () => {
       path: '/orders/',
       visibility: 'public',
       description: 'Creates an order',
+      // @ts-expect-error z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });

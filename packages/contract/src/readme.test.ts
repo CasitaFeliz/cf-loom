@@ -15,6 +15,8 @@ import {
   defineSubscription,
   notFound,
   openEnum,
+  providedEndpoint,
+  providedEvent,
 } from './index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
@@ -107,7 +109,7 @@ const createOrder = defineEndpoint({
   success: { status: 201, body: z.object({ id: z.uuid() }) },
 });
 
-const getPayment = defineEndpoint({
+const getPayment = providedEndpoint('payments-service', {
   name: 'getPayment',
   method: 'GET',
   path: '/payments/:paymentId',
@@ -123,7 +125,7 @@ const payments = {
   version: '5.1.0',
   endpoints: { getPayment },
   events: {
-    paymentSettledV1: defineEvent({
+    paymentSettledV1: providedEvent('payments-service', {
       name: 'PaymentSettled',
       version: 1,
       visibility: 'internal',
@@ -152,7 +154,10 @@ const paymentsDependency = defineDependency({
 const orders = {
   name: 'orders-service',
   version: '3.4.0',
-  endpoints: { getOrder, createOrder },
+  endpoints: {
+    getOrder: providedEndpoint('orders-service', getOrder),
+    createOrder: providedEndpoint('orders-service', createOrder),
+  },
   events: {},
   standardRejections: payments.standardRejections,
   exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },

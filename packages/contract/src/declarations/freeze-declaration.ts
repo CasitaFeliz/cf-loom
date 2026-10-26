@@ -1,12 +1,19 @@
 const declarationBrand = Symbol.for('@cf-loom/contract.declaration');
 
-/** What every declaration returns: what was written, its containers copied and frozen, a kind. */
+/**
+ * What every declaration returns: what was written, its containers copied and frozen, a kind. A
+ * mark is set before the freeze, which takes no property after it.
+ */
 export function freezeDeclaration<const Kind extends string, Fields extends object>(
   kind: Kind,
   fields: Fields,
+  marks: Readonly<Record<symbol, unknown>> = {},
 ): Readonly<Fields> & { readonly kind: Kind } {
   const declaration = { ...frozenFields(fields), kind };
   Object.defineProperty(declaration, declarationBrand, { value: true });
+  for (const mark of Object.getOwnPropertySymbols(marks)) {
+    Object.defineProperty(declaration, mark, { value: marks[mark] });
+  }
   return Object.freeze(declaration) as Readonly<Fields> & { readonly kind: Kind };
 }
 

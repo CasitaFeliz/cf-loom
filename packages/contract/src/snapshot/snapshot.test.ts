@@ -15,6 +15,8 @@ import {
   defineRejection,
   defineSubscription,
   notFound,
+  providedEndpoint,
+  providedEvent,
 } from '../index.ts';
 import {
   canonicalTextOf,
@@ -117,7 +119,7 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder, editOrder],
 });
 
-const getPayment = defineEndpoint({
+const getPayment = providedEndpoint('payments-service', {
   name: 'getPayment',
   method: 'GET',
   path: '/payments/:paymentId',
@@ -126,7 +128,7 @@ const getPayment = defineEndpoint({
   input: { params: z.object({ paymentId: z.uuid() }) },
   success: { status: 200, body: z.object({ amount: z.int() }) },
 });
-const listPayments = defineEndpoint({
+const listPayments = providedEndpoint('payments-service', {
   name: 'listPayments',
   method: 'GET',
   path: '/payments',
@@ -135,14 +137,14 @@ const listPayments = defineEndpoint({
   success: { status: 200, body: z.object({ count: z.int() }) },
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
   description: 'A payment was settled',
   body: z.object({ paymentId: z.uuid() }),
 });
-const paymentFailedV1 = defineEvent({
+const paymentFailedV1 = providedEvent('payments-service', {
   name: 'PaymentFailed',
   version: 1,
   visibility: 'internal',

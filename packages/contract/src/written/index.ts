@@ -14,16 +14,16 @@ export {
   standardRejectionsDeclarerOf,
   standardRejectionsSourceOf,
 } from './declarations.ts';
-export type { Listed } from './grouped.ts';
+export type { Listed } from './field-listings.ts';
+export { fieldListings, groupedFields } from './field-listings.ts';
 export {
   commandsOf,
   declarationsListedBy,
   endpointsOf,
   eventsOf,
-  fieldListings,
-  groupedFields,
   isListable,
   listingsOf,
+  providedListingsOf,
   subscriptionsOf,
 } from './grouped.ts';
 export type { PathSegment } from './identity.ts';

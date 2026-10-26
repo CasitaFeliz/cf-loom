@@ -12,7 +12,7 @@ export function rejectionModuleOf(
 ): SchemaFile {
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    `export const ${bindingOf(declared)} = loom.defineRejection({`,
+    `export const ${bindingOf(declared)} = loom.providedRejection({`,
     `  code: ${stringLiteralOf(declared.code)},`,
     `  status: ${code.status},`,
     `  message: ${stringLiteralOf(code.message)},`,

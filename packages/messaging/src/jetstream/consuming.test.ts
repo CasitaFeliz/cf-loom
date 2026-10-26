@@ -9,6 +9,7 @@ import {
   defineEvent,
   defineGroup,
   defineSubscription,
+  providedEvent,
 } from '@cf-loom/contract';
 import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { type ConsumerConfig, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
@@ -635,7 +636,7 @@ describe('consuming over jetstream()', () => {
   });
 
   test('the jetstream options reach consume: an unknown domain rejects it with the client’s error', async () => {
-    const paymentSettledV1 = defineEvent({
+    const paymentSettledV1 = providedEvent('payments-service', {
       name: 'PaymentSettled',
       version: 1,
       visibility: 'internal',

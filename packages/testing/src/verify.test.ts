@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -10,6 +9,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
@@ -43,7 +43,7 @@ const getSummary = defineEndpoint({
 });
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
 ) {
   const listed = Object.values(endpoints) as unknown as [Endpoint];
@@ -62,12 +62,24 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
+const paymentsDependencyPackage = contractPackageOf({ getPayment, getSummary });
 const paymentsDependency = defineDependency({
-  provider: contractPackageOf({ getPayment, getSummary }),
-  endpoints: [getPayment, getSummary],
+  provider: paymentsDependencyPackage,
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.getSummary,
+  ],
 });
 
 type Builder = StepBuilder<typeof paymentsDependency, 'getPayment'>;

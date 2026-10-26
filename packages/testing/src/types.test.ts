@@ -1,6 +1,5 @@
 import type { Client } from '@cf-loom/client';
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -16,6 +15,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
@@ -79,7 +79,7 @@ const declared = paymentEndpointsOf(openEnum(['pending', 'settled']));
 const readers = paymentEndpointsOf(openEnumReader(['pending', 'settled']));
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declaredEndpoints: readonly Endpoint[],
 ) {
@@ -101,12 +101,24 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
   });
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
+const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
 const paymentsDependency = defineDependency({
-  provider: contractPackageOf(readers, Object.values(declared)),
-  endpoints: [readers.getPayment, readers.tagPayment],
+  provider: paymentsDependencyPackage,
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.tagPayment,
+  ],
 });
 
 describe('fakeProvider: types', () => {

@@ -20,13 +20,13 @@ export function throwMistakes(faking: Faking): void {
 }
 
 /** One mistake for each Endpoint with `once` steps no request took. */
-function unusedStepsOf({ provided, scripted }: Faking): readonly FakeProviderError[] {
+function unusedStepsOf({ faked, scripted }: Faking): readonly FakeProviderError[] {
   const unused: FakeProviderError[] = [];
   for (const [endpoint, steps] of scripted) {
     const left = steps.tally().unused;
     if (left > 0) {
       const what = `${onceStepsOf(left)} left unused`;
-      unused.push(mistakeOf({ provider: provided.provider, endpoint, what }));
+      unused.push(mistakeOf({ provider: faked.provider, endpoint, what }));
     }
   }
   return unused;

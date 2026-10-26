@@ -17,6 +17,7 @@ export type Rule =
   | 'duplicate-guard-name'
   | 'duplicate-dependency'
   | 'group-membership'
+  | 'provided-element'
   | 'empty-group'
   | 'canonical-path'
   | 'duplicate-path-param'

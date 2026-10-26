@@ -81,11 +81,11 @@ function serviceSourcesOf(
 function schemaFilesOf(
   { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
   exported: ExportedSnapshot,
-  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
+  snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
 ): readonly SchemaFile[] {
   return [
     ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),
-    ...events.map(eventModuleOf),
+    ...events.map((event) => eventModuleOf(event, snapshot.name)),
     ...Object.entries(exported.guards).map(([name, guard]) =>
       guardModuleOf({ kind: 'guard', name }, guard),
     ),

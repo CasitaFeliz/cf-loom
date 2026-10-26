@@ -383,6 +383,7 @@ describe('an EndpointHandler’s Context, for a Guard named like every object', 
       const guard = defineGuard({
         name: name as 'inherited',
         description: 'Named like every object',
+        // @ts-expect-error a Contract declares no optional Context; the handler's reading of one is tested
         context: z.object({ id: z.string() }).optional(),
       });
       const ping = defineEndpoint({

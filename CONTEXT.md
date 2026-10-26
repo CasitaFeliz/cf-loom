@@ -17,11 +17,11 @@ A declared part of a Contract that has a Visibility and a lifecycle: an Endpoint
 _Avoid_: item, entry, member
 
 **Group**:
-A named set of Endpoints, Events, Commands and Subscriptions, for organizing code and documentation only; it adds nothing to what it lists.
+A named set of its Contract's own Endpoints, Events, Commands and Subscriptions, for organizing code and documentation only; it adds nothing to what it lists.
 _Avoid_: router, family, tag, module
 
 **Contract Package**:
-The published artifact that carries exactly one Contract: its Public and Internal Elements and its Snapshot, which also records its Dependencies. Versioned with semantic versioning.
+The published artifact that carries exactly one Contract: its Public and Internal Elements, each a Provided Element, and its Snapshot, which also records its Dependencies. Versioned with semantic versioning.
 _Avoid_: schemas package, public package (Visibility is not about the registry)
 
 **Definitions Package**:
@@ -149,6 +149,10 @@ _Avoid_: upstream, producer, server
 **Subscription**:
 A declaration that a Service receives an Event, its own or one a listed Dependency's Provider exports, taken from that Provider's Contract Package.
 _Avoid_: listener, binding
+
+**Provided Element**:
+An Element as its Provider's Contract Package exports it: rebuilt from the Snapshot, with Reader schemas where a Consumer reads, and marked as the Provider's; a Dependency selects it, a Subscription receives it, and a Group never lists it.
+_Avoid_: imported Element, foreign Element, external Element, carried Element
 
 ### Implementation
 
