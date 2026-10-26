@@ -1,5 +1,7 @@
 import type { Endpoint, Guard, ServiceContract } from '@cf-loom/contract';
 import {
+  deprecationFailuresOf,
+  type Failure,
   failureLineOf,
   isServiceContract,
   type TextPartNodes,
@@ -41,8 +43,20 @@ export function checkedTextPartsOf(
 ): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
   const walked = walkedTextPartsOf(contract);
   if (walked.kind === 'invalid') {
-    const lines = walked.failures.map(failureLineOf);
-    throw new Error(`serve() takes a Contract generate accepts:\n${lines.join('\n')}`);
+    throw notAcceptedBy(walked.failures);
   }
   return walked.nodes;
+}
+
+/** The `deprecatedAt` of every Endpoint, which must be what `generate` accepts. */
+export function checkedDeprecationsOf(contract: ServiceContract): void {
+  const failures = deprecationFailuresOf(contract);
+  if (failures.length > 0) {
+    throw notAcceptedBy(failures);
+  }
+}
+
+function notAcceptedBy(failures: readonly Failure[]): Error {
+  const lines = failures.map(failureLineOf);
+  return new Error(`serve() takes a Contract generate accepts:\n${lines.join('\n')}`);
 }

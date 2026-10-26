@@ -127,7 +127,7 @@ describe('validateRoot: an Endpoint’s method, Visibility and lifecycle', () =>
 
 describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
   const instant =
-    'A Deprecated Endpoint’s deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z';
+    "A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z";
 
   test('a Deprecated Endpoint with its instant validates', () => {
     const deprecated = defineEndpoint({
@@ -168,6 +168,21 @@ describe('validateRoot: the instant an Endpoint is Deprecated as of', () => {
     const validated = validateEndpoint(castEndpoint(deprecated));
 
     expect(validated).toEqual(failedAt(['GET /orders', 'deprecatedAt'], 'deprecated-at', instant));
+  });
+
+  test('a deprecatedAt beside a lifecycle that is none fails the lifecycle rule alone', () => {
+    const lifecycle = 'sunset' as Lifecycle;
+    const declared = { ...listOrders, lifecycle, deprecatedAt: '2026-11-01T00:00:00Z' };
+
+    const validated = validateEndpoint(castEndpoint(declared));
+
+    expect(validated).toEqual(
+      failedAt(
+        ['GET /orders', 'lifecycle'],
+        'lifecycle',
+        'A lifecycle is active, deprecated or retired: sunset',
+      ),
+    );
   });
 
   test('a deprecatedAt that is no text fails the text rule alone', () => {

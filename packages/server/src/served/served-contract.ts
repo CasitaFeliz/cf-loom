@@ -9,6 +9,7 @@ import {
   type TextPartNodes,
 } from '@cf-loom/contract/internal';
 import {
+  checkedDeprecationsOf,
   checkedTextPartsOf,
   contractOf,
   endpointHandlerOf,
@@ -30,7 +31,7 @@ type Declared = {
   readonly segments: readonly PathSegment[];
 };
 
-/** A live Endpoint, ready to answer: its Handler, its Attachments and its stamp. */
+/** A live Endpoint, ready to answer: its Handler, its Attachments and its `deprecatedAt`. */
 export type LiveEndpoint = Declared & {
   readonly kind: 'live';
   readonly handler: { readonly element: Endpoint };
@@ -67,6 +68,7 @@ export function servedContractOf(
 ): ServedContract {
   const contract = contractOf(root);
   const nodes = checkedTextPartsOf(contract);
+  checkedDeprecationsOf(contract);
   return {
     endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
     nodes,

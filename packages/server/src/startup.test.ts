@@ -176,6 +176,22 @@ describe('serve: what it checks before the first request', () => {
       },
       'header-names',
     ],
+    ['a Deprecated lifecycle and no deprecatedAt', { lifecycle: 'deprecated' }, 'deprecated-at'],
+    [
+      'a deprecatedAt that is no UTC instant to the second',
+      { lifecycle: 'deprecated', deprecatedAt: '2026-11-01' },
+      'deprecated-at',
+    ],
+    [
+      'a deprecatedAt and an Active lifecycle',
+      { deprecatedAt: '2026-11-01T00:00:00Z' },
+      'deprecated-at',
+    ],
+    [
+      'a deprecatedAt and a Retired lifecycle',
+      { lifecycle: 'retired', deprecatedAt: '2026-11-01T00:00:00Z' },
+      'deprecated-at',
+    ],
   ])('an Endpoint with %s throws, as generate words it', (_case, written, rule) => {
     const odd = defineEndpoint({
       name: 'odd',

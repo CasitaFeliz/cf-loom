@@ -1,4 +1,5 @@
 export { oneOf } from './closed-values.ts';
+export { deprecationFailuresOf } from './deprecations.ts';
 export { exportNamesOf } from './export-names.ts';
 export type { Failure } from './failures.ts';
 export { failureLineOf, locationOf } from './failures.ts';

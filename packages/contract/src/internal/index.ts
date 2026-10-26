@@ -56,7 +56,6 @@ export {
   isReservedCode,
   isRoot,
   isServiceContract,
-  isStamp,
   isStandardRejection,
   isSubscription,
   kebabCase,
@@ -147,6 +146,7 @@ export type {
 } from '../validation/index.ts';
 export {
   definitionsPackageOf,
+  deprecationFailuresOf,
   exportNamesOf,
   failureLineOf,
   identityLineOf,

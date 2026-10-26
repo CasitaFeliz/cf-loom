@@ -1,5 +1,11 @@
 import type { Endpoint } from '../declarations/index.ts';
-import { isStamp, methods, successStatuses, visibilities } from '../declarations/index.ts';
+import {
+  isUtcInstant,
+  lifecycles,
+  methods,
+  successStatuses,
+  visibilities,
+} from '../declarations/index.ts';
 import {
   isMissing,
   isWithoutValue,
@@ -34,19 +40,38 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
   ];
 }
 
-/** An Endpoint declares `deprecatedAt` exactly when it is Deprecated, a UTC instant to the second. */
-function deprecationFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
-  const deprecatedAt: unknown = endpoint.deprecatedAt;
-  const where = [...at, 'deprecatedAt'];
-  if (endpoint.lifecycle !== 'deprecated') {
-    const message = 'Only a Deprecated Endpoint declares deprecatedAt';
-    return isMissing(deprecatedAt) ? [] : [failure(where, 'deprecated-at', message)];
+/**
+ * An Endpoint declares `deprecatedAt` exactly when it is Deprecated, a UTC instant to the second;
+ * a lifecycle that is none is the lifecycle rule's finding alone.
+ */
+export function deprecationFailures(located: LocatedEndpoint): readonly DeclarationFailure[] {
+  const written: unknown = located.endpoint.lifecycle;
+  if (written === 'deprecated') {
+    return instantFailures(located);
   }
+  const isKnown = written === undefined || lifecycles.some((known) => known === written);
+  return isKnown ? undeclaredInstantFailures(located) : [];
+}
+
+/** A Deprecated Endpoint states its instant; a value that is no text is the field rules' finding. */
+function instantFailures({ at, endpoint }: LocatedEndpoint): readonly DeclarationFailure[] {
+  const deprecatedAt: unknown = endpoint.deprecatedAt;
   const isNoInstant =
-    isMissing(deprecatedAt) || (typeof deprecatedAt === 'string' && !isStamp(deprecatedAt));
+    isMissing(deprecatedAt) || (typeof deprecatedAt === 'string' && !isUtcInstant(deprecatedAt));
   const message =
-    'A Deprecated Endpoint’s deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z';
-  return isNoInstant ? [failure(where, 'deprecated-at', message)] : [];
+    "A Deprecated Endpoint's deprecatedAt is a UTC instant to the second, such as 2026-11-01T00:00:00Z";
+  return isNoInstant ? [failure([...at, 'deprecatedAt'], 'deprecated-at', message)] : [];
+}
+
+/** An Endpoint that is not Deprecated states no instant. */
+function undeclaredInstantFailures({
+  at,
+  endpoint,
+}: LocatedEndpoint): readonly DeclarationFailure[] {
+  const message = 'Only a Deprecated Endpoint declares deprecatedAt';
+  return isMissing(endpoint.deprecatedAt)
+    ? []
+    : [failure([...at, 'deprecatedAt'], 'deprecated-at', message)];
 }
 
 /** A Success declares an allowed status; 204 answers no body, every other status one. */
