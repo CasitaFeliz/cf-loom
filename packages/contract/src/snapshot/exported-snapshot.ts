@@ -22,8 +22,8 @@ import type {
 /**
  * The Snapshot a Service's Contract Package exports, from its declared or published Snapshot: its
  * Public and Internal Endpoints and its Internal Events that are not Retired, and the Guards, codes
- * and recursive defs they reach, keyed and ordered as in the Snapshot, and the declared Endpoints it
- * does not export that win a URL an exported one matches.
+ * and recursive defs they reach, keyed and ordered as in the Snapshot, and the declared Endpoints
+ * it does not export that win a URL an exported one matches.
  */
 export function exportedSnapshotOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,
@@ -53,8 +53,9 @@ export function exportedSnapshotOf(
 }
 
 /**
- * The declared Endpoints a Contract Package does not export that win a URL an exported one matches,
- * by identity and lifecycle, so a fake picks that winner as `serve` does; a tombstone declares none.
+ * The declared Endpoints a Contract Package does not export that win a URL an exported one
+ * matches, by identity and lifecycle, so a fake picks that winner as `serve` does; a tombstone
+ * declares none.
  */
 function shadowingOf(
   declared: ByKey<EndpointSnapshot | EndpointTombstone>,
@@ -70,7 +71,7 @@ function shadowingOf(
   return Object.fromEntries(carried.map(([identity, { lifecycle }]) => [identity, { lifecycle }]));
 }
 
-/** Whether, at a URL an exported Endpoint shares with it, the candidate is the declared Endpoint routing picks. */
+/** Whether routing picks the candidate at a URL an exported Endpoint shares with it. */
 function winsAnExportedUrl(
   candidate: EndpointPath,
   exported: readonly EndpointPath[],
