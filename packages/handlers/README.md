@@ -43,6 +43,8 @@ export default handle(apiKey, async ({ headers }, _call, { resources: { callers 
 });
 ```
 
+The Guard declares the key optional (see [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#guards) in the contract README), so a request without it reaches this Handler, which rejects it as `unauthenticated`.
+
 A Guard that lists other Guards, or declares a `qualifier` (see [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#guards) in the contract README), receives their Context and its Qualifier too:
 
 ```ts
@@ -141,7 +143,7 @@ const http = serve(
   { resources },
 );
 const res = await http(new Request(`http://test/orders/${ORDER_ID}`, {
-  headers: { 'x-api-key': 'any' },          // still demanded by the Contract
+  headers: { 'x-api-key': 'any' },          // the replaced GuardHandler admits any key
 }));
 ```
 

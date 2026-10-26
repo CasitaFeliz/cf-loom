@@ -172,14 +172,14 @@ export const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
   demands: {
-    headers: z.object({ 'x-api-key': z.string() }),
+    headers: z.object({ 'x-api-key': z.string().optional() }),
   },
   context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
 ```
 
-A Guard states what it demands from the request (`headers` or `query`; a body or path params are a type error), the Context it provides, and the Rejections it may answer, declared ones only: a Standard Rejection on a Guard is a type error. It holds no logic: its GuardHandler lives in each Service that attaches it. Its `name` keys its Context and must be unique among the Guards the Contract reaches, its own and its Definitions Packages'; a duplicate fails `generate`.
+A Guard states what it demands from the request (`headers` or `query`; a body or path params are a type error), the Context it provides, and the Rejections it may answer, declared ones only: a Standard Rejection on a Guard is a type error. It holds no logic: its GuardHandler lives in each Service that attaches it. The example leaves the key optional on purpose: a request without a required demand is answered as invalid input, before any GuardHandler runs (see [GuardHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#guardhandler) in the handlers README), while an optional one lets the GuardHandler answer `unauthenticated`. Its `name` keys its Context and must be unique among the Guards the Contract reaches, its own and its Definitions Packages'; a duplicate fails `generate`.
 
 A Guard may build on others and take a Qualifier:
 

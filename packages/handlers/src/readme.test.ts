@@ -45,7 +45,7 @@ const orderLocked = defineRejection({
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
-  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  demands: { headers: z.object({ 'x-api-key': z.string().optional() }) },
   context: z.object({ callerId: z.string() }),
   rejections: [unauthenticated],
 });
@@ -105,7 +105,9 @@ const orders = {
   find: async (orderId: string, callerId: string) =>
     orderId === stored.id && callerId === stored.callerId ? stored : undefined,
 };
-const callers = { byKey: async (key: string) => (key === 'key-1' ? { id: 'c-1' } : undefined) };
+const callers = {
+  byKey: async (key: string | undefined) => (key === 'key-1' ? { id: 'c-1' } : undefined),
+};
 const permissions = { of: async (_userId: string): Promise<string[]> => ['orders:edit'] };
 const sent: unknown[] = [];
 const notifications = { send: async (...given: unknown[]) => void sent.push(given) };
@@ -252,6 +254,12 @@ describe('the handlers README', () => {
       { kind: 'admitted', context: { callerId: 'c-1' } },
       { kind: 'rejection', rejection: unauthenticated },
     ]);
+  });
+
+  test('the GuardHandler example rejects a request without a key as unauthenticated', async () => {
+    const admission = await apiKeyHandler({ headers: {} }, {}, { resources });
+
+    expect(admission).toMatchObject({ kind: 'rejection', rejection: unauthenticated });
   });
 
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
