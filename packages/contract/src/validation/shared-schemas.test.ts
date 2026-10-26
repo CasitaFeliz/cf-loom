@@ -313,6 +313,139 @@ describe('failure lines: defs that hold defs', () => {
   );
 });
 
+/** An Endpoint named `name` at a route such as `GET /things`, answering the body given. */
+function answering(name: string, route: string, body: z.ZodType) {
+  const [method, path] = route.split(' ');
+  return defineEndpoint({
+    name,
+    method,
+    path,
+    visibility: 'public',
+    description: 'd',
+    success: { status: 200, body },
+  } as never);
+}
+
+const unnamedCycle = 'not allowed: a cycle without .meta({ id }) (use .meta({ id }))';
+
+describe('failure lines: a cycle of two schemas no id names', () => {
+  /** `a` holding `b`, and `b` holding `a`, itself again and a date, its fields in the order given. */
+  function cycleOf(order: 'a first' | 'date first', depth: 'shallow' | 'deep') {
+    const first: z.ZodType = z.object({
+      get b() {
+        return second;
+      },
+    });
+    const second: z.ZodType = secondOf(first, () => second, { order, depth });
+    return { first, second };
+  }
+
+  /** The second schema, its getters written out, since a spread would call them. */
+  function secondOf(
+    first: z.ZodType,
+    itself: () => z.ZodType,
+    shape: { readonly order: 'a first' | 'date first'; readonly depth: 'shallow' | 'deep' },
+  ): z.ZodType {
+    if (shape.depth === 'deep') {
+      return z.object({
+        get a() {
+          return first;
+        },
+        w: z.object({
+          x: z.object({
+            get b2() {
+              return itself();
+            },
+          }),
+        }),
+        d: z.object({ e: z.date() }),
+      });
+    }
+    if (shape.order === 'date first') {
+      return z.object({
+        d: z.date(),
+        get a() {
+          return first;
+        },
+        get b2() {
+          return itself();
+        },
+      });
+    }
+    return z.object({
+      get a() {
+        return first;
+      },
+      get b2() {
+        return itself();
+      },
+      d: z.date(),
+    });
+  }
+
+  test.for([
+    ['a first', 'shallow', ['b.a', 'b.d']],
+    ['a first', 'deep', ['b.a', 'b.d.e']],
+    ['date first', 'shallow', ['b.d', 'b.a']],
+  ] as const)(
+    'entered again inside its own walk, its fields %s and %s, tells each where it is',
+    ([order, depth, [earlier, later]]) => {
+      const { first } = cycleOf(order, depth);
+
+      const lines = linesOf(serviceWith([answering('alpha', 'GET /a', first)]));
+
+      const at = (path: string) => `endpoints.GET /a (alpha) success.body.${path}`;
+      const told = { 'b.a': unnamedCycle, 'b.d': date, 'b.d.e': date };
+      expect(lines).toEqual([`${at(earlier)} ${told[earlier]}`, `${at(later)} ${told[later]}`]);
+    },
+  );
+
+  test('with its other schema at an Endpoint declared after, is told from the first site', () => {
+    const { first, second } = cycleOf('a first', 'deep');
+    const endpoints = [
+      answering('alpha', 'GET /a', first),
+      anEndpoint('beta', 'GET /b', { q: second }),
+    ];
+
+    const lines = linesOf(serviceWith(endpoints));
+
+    expect(lines).toEqual([
+      `endpoints.GET /a (alpha) success.body.b.a ${unnamedCycle} (also in endpoints.GET /b (beta))`,
+      `endpoints.GET /a (alpha) success.body.b.d.e ${date} (also in endpoints.GET /b (beta))`,
+    ]);
+  });
+
+  test('holding a def that reaches back, tells the cycle where it closes', () => {
+    const first: z.ZodType = z.object({
+      get b() {
+        return second;
+      },
+    });
+    const second: z.ZodType = z.object({
+      get a() {
+        return first;
+      },
+      get c() {
+        return held;
+      },
+    });
+    const held: z.ZodType = z
+      .object({
+        get back() {
+          return first;
+        },
+        get kids() {
+          return z.array(held);
+        },
+      })
+      .meta({ id: 'c' });
+
+    const lines = linesOf(serviceWith([answering('alpha', 'GET /a', first)]));
+
+    expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.b.a ${unnamedCycle}`]);
+  });
+});
+
 type Next = () => number;
 
 function pickOf<Value>(next: Next, values: readonly Value[]): Value {
@@ -393,6 +526,25 @@ function anUnnamedCycle(): z.ZodType {
   return cycle;
 }
 
+/** A cycle of two schemas no id names, the second holding a leaf and itself again, entered at either. */
+function anUnnamedPair(next: Next): z.ZodType {
+  const first: z.ZodType = z.object({
+    get b() {
+      return second;
+    },
+  });
+  const second: z.ZodType = z.object({
+    get a() {
+      return first;
+    },
+    get b2() {
+      return second;
+    },
+    d: aLeaf(next),
+  });
+  return next() < 0.5 ? first : second;
+}
+
 /** What the declarations of a draw share: 1 to 3 schemas, each holding refused constructs. */
 function poolOf(next: Next): readonly z.ZodType[] {
   const idOf = (prefix: string) => `${prefix}${Math.floor(next() * 1e6)}`;
@@ -405,6 +557,7 @@ function poolOf(next: Next): readonly z.ZodType[] {
     () => aDef(idOf('u'), { k: anOpenUnion() }),
     () => aDef(idOf('s'), { k: z.set(z.set(aLeaf(next))) }),
     anUnnamedCycle,
+    () => anUnnamedPair(next),
     () => nestedDefs(next, idOf('n')),
     () => aMutualPair(next, idOf('m')),
     () => {
@@ -463,6 +616,14 @@ function isEndpoint(declaration: Endpoint | Event): declaration is Endpoint {
 
 function isEvent(declaration: Endpoint | Event): declaration is Event {
   return !('method' in declaration);
+}
+
+/** A line naming the declaration's site, so its site reads as `sitesOf` reads a line's. */
+function lineAt(declaration: Endpoint | Event): string {
+  const site = isEndpoint(declaration)
+    ? `endpoints.${declaration.method} ${declaration.path} (${declaration.name})`
+    : `events.${declaration.name}@${declaration.version}`;
+  return `${site} not allowed: `;
 }
 
 /** The `not allowed` lines `generate` prints for a Root. */
@@ -543,6 +704,22 @@ describe('failure lines: shared refused schemas, drawn at random', () => {
 
     const reordered = refusedLinesOf(rootOf(shuffled(declarations, seededNext(seed * 7 + 1))));
     expect([...reordered].sort()).toEqual([...lines].sort());
+  });
+
+  test.for(seeds)('draw %i: each line sits where its first site alone tells it', (seed) => {
+    const declarations = declarationsOf(seed);
+
+    const lines = refusedLinesOf(rootOf(declarations));
+
+    const misplaced = lines.filter((line) => {
+      const [first] = sitesOf(line);
+      const declaration = declarations.find((candidate) =>
+        sitesOf(lineAt(candidate)).includes(first ?? ''),
+      );
+      const alone = declaration === undefined ? [] : refusedLinesOf(rootOf([declaration]));
+      return !alone.map(textOf).includes(textOf(line));
+    });
+    expect(misplaced).toEqual([]);
   });
 
   test.for(seeds)('draw %i: no line sits at a def', (seed) => {

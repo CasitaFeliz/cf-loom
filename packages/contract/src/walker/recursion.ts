@@ -86,8 +86,9 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
   const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
+  state.memos.raised(failuresOf([result]));
   if (isRemembered(state, ancestor.schema)) {
-    state.memos.close(ancestor, failuresOf([result]), start);
+    state.memos.close(ancestor, start);
   }
   closeGroup(state, ancestor);
   return result;
@@ -103,7 +104,7 @@ function refOf(state: State, entering: Entering): Walked | undefined {
   if (open !== undefined) {
     reachBack(state, open.low);
   }
-  state.memos.reached(entering, entering.at);
+  state.memos.reached(entering.schema, entering.at);
   return walked({ type: 'ref', name });
 }
 
@@ -113,7 +114,7 @@ function reportedOf(state: State, entering: Entering): Walked | undefined {
   if (reported === undefined) {
     return undefined;
   }
-  state.memos.reached(entering, entering.at);
+  state.memos.reached(entering.schema, entering.at);
   return reported;
 }
 
@@ -133,7 +134,7 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   reachBack(state, closing.index);
   const cycle = state.ancestors.slice(closingIndex);
   if (entering.id !== undefined) {
-    state.memos.reached(closing, entering.at);
+    state.memos.reached(entering.schema, entering.at);
     return walked({ type: 'ref', name: entering.id });
   }
   if (cycle.some((member) => member.id !== undefined)) {
@@ -143,7 +144,8 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   for (const ancestor of cycle) {
     state.reportedBySchema.set(ancestor.schema, failure);
   }
-  state.memos.reached(closing, entering.at);
+  state.memos.raised(failure.failures);
+  state.memos.reached(entering.schema, entering.at);
   return failure;
 }
 
