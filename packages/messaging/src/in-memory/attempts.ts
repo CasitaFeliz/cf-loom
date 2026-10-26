@@ -44,7 +44,7 @@ export function injectedAttemptsOf(
   return attemptsOf(reachedBy(consumers, injection.message), injection);
 }
 
-/** The consumers a Message Version reaches: a Command's CommandHandler, or the Subscriptions to an Event. */
+/** The consumers a Message Version reaches: a Command's Message Handler, or the Subscriptions to an Event. */
 function reachedBy(
   consumers: readonly BrokerConsumer[],
   message: Event | Command,

@@ -2912,7 +2912,7 @@ describe('cf-loom generate: the Service type-checks', () => {
   /** A file that type-checks the Handler map and the Message Handlers, with the lines given after. */
   function aCheck(after: readonly string[]): string {
     return lines([
-      "import type { CommandHandler, EventHandler, HandlerMap } from '@cf-loom/handlers';",
+      "import type { HandlerMap, MessageHandler } from '@cf-loom/handlers';",
       importOf('handlers', './handlers.generated.ts'),
       importOf('{ readers }', './readers.generated.ts'),
       '',
@@ -2923,14 +2923,14 @@ describe('cf-loom generate: the Service type-checks', () => {
     ]);
   }
 
-  test('the generated Service with Messages passes tsc: each stub is a CommandHandler or EventHandler and the map is a HandlerMap', () => {
+  test('the generated Service with Messages passes tsc: each stub is a MessageHandler and the map is a HandlerMap', () => {
     const project = aProject({ ...aMessagingService(), 'tsconfig.json': tsconfig });
     expect(cfLoom(project, 'generate').status).toBe(0);
     write(project, {
       'src/check.ts': aCheck([
-        'export const charge: CommandHandler<typeof chargeCardV2> = handlers.commands.chargeCardV2;',
-        'export const audit: EventHandler<typeof auditCreated> = handlers.subscriptions.auditCreated;',
-        'export const old: CommandHandler<typeof chargeCardV1> = handlers.commands.chargeCardV1;',
+        'export const charge: MessageHandler<typeof chargeCardV2> = handlers.commands.chargeCardV2;',
+        'export const audit: MessageHandler<typeof auditCreated> = handlers.subscriptions.auditCreated;',
+        'export const old: MessageHandler<typeof chargeCardV1> = handlers.commands.chargeCardV1;',
       ]),
     });
 
@@ -2945,7 +2945,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     write(project, {
       'src/check.ts': aCheck([
         '// @ts-expect-error ChargeCard@2’s Handler is no Handler of ChargeCard@1',
-        'export const wrong: CommandHandler<typeof chargeCardV1> = handlers.commands.chargeCardV2;',
+        'export const wrong: MessageHandler<typeof chargeCardV1> = handlers.commands.chargeCardV2;',
         'export { auditCreated, chargeCardV2 };',
       ]),
     });

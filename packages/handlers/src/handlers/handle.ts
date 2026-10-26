@@ -1,4 +1,4 @@
-import type { Command, Endpoint, Guard, Subscription } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import { notImplemented } from '@cf-loom/contract';
 import { isCommand, isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
 import {
@@ -25,12 +25,7 @@ import type {
   GuardHandler,
   GuardImplementation,
 } from './handler.ts';
-import type {
-  CommandHandler,
-  CommandImplementation,
-  EventHandler,
-  EventImplementation,
-} from './message-handler.ts';
+import type { MessageHandler, MessageImplementation } from './message-handler.ts';
 import type {
   LastNotAnnotated,
   NoResources,
@@ -63,22 +58,18 @@ type ImplementationOf<
   ? EndpointImplementation<Target, Last>
   : Target extends Guard
     ? GuardImplementation<Target, Last>
-    : Target extends Pairing<Command>
-      ? CommandImplementation<Target, Last>
-      : Target extends Pairing<Subscription>
-        ? EventImplementation<Target, Last>
-        : never;
+    : Target extends Pairing
+      ? MessageImplementation<Target, Last>
+      : never;
 
 /** The Handler `handle()` and `handle.stub()` return for a target, nominal over what it was written for. */
 type HandlerOf<Target extends HandleArgument, Resources extends object> = Target extends Endpoint
   ? EndpointHandler<Target, Resources>
   : Target extends Guard
     ? GuardHandler<Target, Resources>
-    : Target extends Pairing<Command>
-      ? CommandHandler<Target, Resources>
-      : Target extends Pairing<Subscription>
-        ? EventHandler<Target, Resources>
-        : never;
+    : Target extends Pairing
+      ? MessageHandler<Target, Resources>
+      : never;
 
 /** The type `handle()` takes a target as: itself, or the refusal for a Command or Subscription that is not paired. */
 type TargetOf<Target extends HandleArgument> = Target extends MessageElement

@@ -189,7 +189,7 @@ const notifyOnSettledHandler = handle(
 );
 
 describe('the handlers README', () => {
-  test('the direct call of an EventHandler receives its body and its meta defaulted', async () => {
+  test("the direct call of a Subscription's Message Handler receives its body and its meta defaulted", async () => {
     const settled = { paymentId: 'pay-1', method: { unknown: 'wallet' } };
 
     const answer = await notifyOnSettledHandler(settled, {}, { resources });

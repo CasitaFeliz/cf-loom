@@ -11,16 +11,17 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
-  type CommandHandler,
   type EndpointHandler,
   type EndpointImplementation,
-  type EventHandler,
   type Fault,
   fault,
   type GuardHandler,
   type HandlerMap,
   handle,
+  type MessageHandler,
+  type MessageImplementation,
   type MessageMeta,
+  type Pairing,
   type ResourcesNotAnnotated,
   type ResourcesOf,
   readersOf,
@@ -143,15 +144,61 @@ describe('handle', () => {
     }
   });
 
-  test('a Handler of one Command is not a Handler of another', () => {
+  test("handle() of a Command's pairing returns a MessageHandler of that pairing", () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
 
-    // @ts-expect-error a Handler is nominal over its Command
-    const refundCardHandler: CommandHandler<typeof refundCard> = chargeCardHandler;
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expect(chargeCardHandler.element).toBe(chargeCardV1);
+  });
 
-    expectTypeOf(chargeCardHandler).toEqualTypeOf<CommandHandler<typeof chargeCard>>();
-    expectTypeOf(handle.stub(notifyOnPaid)).toEqualTypeOf<EventHandler<typeof notifyOnPaid>>();
-    expect(refundCardHandler.element).toBe(chargeCardV1);
+  test("handle() of a Subscription's pairing returns a MessageHandler of that pairing", () => {
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
+
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
+    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+  });
+
+  test('handle.stub() of a pairing returns a MessageHandler taking no Resources', () => {
+    const chargeCardStub = handle.stub(chargeCard);
+    const notifyOnPaidStub = handle.stub(notifyOnPaid);
+
+    expectTypeOf(chargeCardStub).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expectTypeOf(notifyOnPaidStub).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
+    expect([chargeCardStub.element, notifyOnPaidStub.element]).toEqual([
+      chargeCardV1,
+      notifyOnPaidV1,
+    ]);
+  });
+
+  test("a Command's MessageHandler is not a Subscription's, nor another Command's, nor the reverse", () => {
+    const chargeCardHandler = handle(chargeCard, () => undefined);
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
+
+    const assignments = [
+      // @ts-expect-error a Handler is nominal over its Command
+      (): MessageHandler<typeof refundCard> => chargeCardHandler,
+      // @ts-expect-error a Command's Handler is not a Subscription's
+      (): MessageHandler<typeof notifyOnPaid> => chargeCardHandler,
+      // @ts-expect-error a Subscription's Handler is not a Command's
+      (): MessageHandler<typeof chargeCard> => notifyOnPaidHandler,
+    ];
+
+    expect(assignments.map((assign) => assign().element)).toEqual([
+      chargeCardV1,
+      chargeCardV1,
+      notifyOnPaidV1,
+    ]);
+  });
+
+  test('a MessageHandler is assignable to the MessageHandler of no other pairing, whichever kind', () => {
+    type Pairings = typeof chargeCard | typeof refundCard | typeof notifyOnPaid;
+    type PairingsItIsAssignedTo<Target extends Pairing> = Target extends Pairing
+      ? [MessageHandler<Target>] extends [MessageHandler<Exclude<Pairings, Target>>]
+        ? Target
+        : never
+      : never;
+
+    expectTypeOf<PairingsItIsAssignedTo<Pairings>>().toBeNever();
   });
 
   test("a Message Handler's body is typed by its Reader, Unknown cases included", () => {
@@ -251,8 +298,8 @@ describe('handle', () => {
     const chargeCardHandler = handle(chargeCard, async () => {});
     const notifyOnPaidHandler = handle(notifyOnPaid, () => {});
 
-    expectTypeOf(chargeCardHandler).toEqualTypeOf<CommandHandler<typeof chargeCard>>();
-    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<EventHandler<typeof notifyOnPaid>>();
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
     expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
   });
 
@@ -448,10 +495,10 @@ describe('handle and Resources', () => {
     ];
 
     expectTypeOf(chargeCardHandler).toEqualTypeOf<
-      CommandHandler<typeof chargeCard, NotificationsTaken>
+      MessageHandler<typeof chargeCard, NotificationsTaken>
     >();
     expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<
-      EventHandler<typeof notifyOnPaid, NotificationsTaken>
+      MessageHandler<typeof notifyOnPaid, NotificationsTaken>
     >();
     expectTypeOf(chargeCardHandler).toBeCallableWith(body, meta, {
       resources: { notifications: { send: () => undefined } },
@@ -575,6 +622,29 @@ describe('ResourcesOf', () => {
     >();
   });
 
+  test('a Message implementation typed by its last parameter gives a Handler that takes those Resources', () => {
+    const chargeCardImplementation: MessageImplementation<typeof chargeCard, Needs<'orders'>> = (
+      _body,
+      _meta,
+      { resources },
+    ) => {
+      resources.orders.find(ORDER_ID);
+    };
+    const notifyOnPaidImplementation: MessageImplementation<
+      typeof notifyOnPaid,
+      Needs<'callers'>
+    > = (_body, _meta, { resources }) => {
+      resources.callers.byKey('k');
+    };
+
+    expectTypeOf(handle(chargeCard, chargeCardImplementation)).toEqualTypeOf<
+      MessageHandler<typeof chargeCard, Pick<Resources, 'orders'>>
+    >();
+    expectTypeOf(handle(notifyOnPaid, notifyOnPaidImplementation)).toEqualTypeOf<
+      MessageHandler<typeof notifyOnPaid, Pick<Resources, 'callers'>>
+    >();
+  });
+
   test('handle() keeps the any an implementation types its Resources as, every kind alike', () => {
     /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
     const handlers = [
@@ -596,8 +666,8 @@ describe('ResourcesOf', () => {
 
     expectTypeOf(handlers[0]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     expectTypeOf(handlers[1]).toEqualTypeOf<GuardHandler<typeof apiKey, any>>();
-    expectTypeOf(handlers[2]).toEqualTypeOf<CommandHandler<typeof chargeCard, any>>();
-    expectTypeOf(handlers[3]).toEqualTypeOf<EventHandler<typeof notifyOnPaid, any>>();
+    expectTypeOf(handlers[2]).toEqualTypeOf<MessageHandler<typeof chargeCard, any>>();
+    expectTypeOf(handlers[3]).toEqualTypeOf<MessageHandler<typeof notifyOnPaid, any>>();
     expectTypeOf(handlers[4]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     expectTypeOf(handlers[5]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
