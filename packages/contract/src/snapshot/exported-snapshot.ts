@@ -54,8 +54,18 @@ export function exportedCutOf(
   if (entry === undefined) {
     throw new Error(`${identity} is no Endpoint a Contract Package exports`);
   }
-  const cut = cutOf(snapshot, { endpoints: { [identity]: entry }, events: {} });
-  return { ...cut, shadowing: shadowingOf(snapshot.endpoints, identity) };
+  const { format, defs, endpoints, guards, codes } = cutOf(snapshot, {
+    endpoints: { [identity]: entry },
+    events: {},
+  });
+  return {
+    format,
+    defs,
+    endpoints,
+    guards,
+    codes,
+    shadowing: shadowingOf(snapshot.endpoints, identity),
+  };
 }
 
 function cutOf(

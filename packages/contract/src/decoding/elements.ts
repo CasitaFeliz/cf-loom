@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { successStatuses, visibilities } from '../declarations/index.ts';
 import type {
   EndpointSnapshot,
-  EventSnapshot,
   PublishedCommand,
   PublishedEndpoint,
   PublishedEvent,
@@ -95,12 +94,6 @@ export const publishedEvent: z.ZodType<PublishedEvent> = published(
   eventFields,
   {},
   messageTombstone,
-);
-
-/** Format 1's Event Message Version in an exported Snapshot: declared, Active or Deprecated. */
-export const exportedEvent: z.ZodType<EventSnapshot> = z.discriminatedUnion(
-  'lifecycle',
-  live(eventFields, {}),
 );
 
 /** Format 1's Command Message Version in a published Snapshot: declared, or its tombstone. */

@@ -162,9 +162,9 @@ export type ExportedSnapshot = Pick<
 
 /**
  * The exported Snapshot cut to one Endpoint, as that Endpoint carries it: its entry and the Guards,
- * codes and defs it reaches, no Event, and under `shadowing`, keyed by identity, the other declared
- * Endpoints that win a URL it matches, so a fake routes a request it matches as `serve` does.
+ * codes and defs it reaches, with no Events, and under `shadowing`, keyed by identity, the other
+ * declared Endpoints that win a URL it matches, so a fake routes a request it matches as `serve` does.
  */
-export type ExportedCut = ExportedSnapshot & {
+export type ExportedCut = Omit<ExportedSnapshot, 'events'> & {
   readonly shadowing: ByKey<ShadowingSnapshot>;
 };

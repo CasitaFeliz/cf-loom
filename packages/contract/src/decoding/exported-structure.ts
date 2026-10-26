@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { lifecycles } from '../declarations/index.ts';
 import type { ExportedCut, ShadowingSnapshot } from '../snapshot/index.ts';
-import { exportedEndpoint, exportedEvent } from './elements.ts';
+import { exportedEndpoint } from './elements.ts';
 import { byEndpointIdentity, byKey } from './maps.ts';
 import { code, def, guard } from './structure.ts';
 
@@ -15,7 +15,6 @@ export const exportedCut: z.ZodType<ExportedCut> = z.strictObject({
   format: z.literal(1),
   defs: byKey(def),
   endpoints: byEndpointIdentity(exportedEndpoint),
-  events: byKey(exportedEvent),
   guards: byKey(guard),
   codes: byKey(code),
   shadowing: byEndpointIdentity(shadowingEntry),

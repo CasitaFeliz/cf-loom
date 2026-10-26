@@ -1257,7 +1257,6 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       format: 1,
       defs: {},
       endpoints: { 'GET /orders/{}': snapshot.endpoints['GET /orders/{}'] },
-      events: {},
       guards: { permission: snapshot.guards.permission, userToken: snapshot.guards.userToken },
       codes: {
         // biome-ignore lint/style/useNamingConvention: a Rejection code, as the Snapshot keys it
@@ -1271,7 +1270,6 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
       format: 1,
       defs: {},
       endpoints: { 'GET /orders': snapshot.endpoints['GET /orders'] },
-      events: {},
       guards: {},
       codes: {},
       shadowing: {},

@@ -580,7 +580,7 @@ describe('exportedSnapshotOf', () => {
 });
 
 describe('exportedCutOf', () => {
-  test('the cut of an exported Endpoint holds its entry and the Guards, codes and defs it reaches, and no Event', () => {
+  test('the cut of an exported Endpoint holds its entry, the Guards, codes and defs it reaches and its shadowing, with no events key', () => {
     const snapshot = reachingSnapshot();
 
     const cut = exportedCutOf(snapshot, 'GET /a');
@@ -589,7 +589,6 @@ describe('exportedCutOf', () => {
       format: 1,
       defs: { dA: aString },
       endpoints: { 'GET /a': snapshot.endpoints['GET /a'] },
-      events: {},
       guards: { gA: snapshot.guards['gA'] },
       codes: { [codeA]: snapshot.codes[codeA] },
       shadowing: {},

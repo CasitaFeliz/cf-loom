@@ -146,16 +146,15 @@ describe('providedSnapshotOf', () => {
     );
   });
 
-  test('a Retired Event is refused, since a Contract Package exports none', () => {
+  test('a cut that carries events is refused as malformed, since a cut holds no Event', () => {
     const damaged = changed((copy) => {
-      const event = ordersSnapshot().events['OrderPlaced@1'];
-      copy['events'] = { 'OrderPlaced@1': { ...event, lifecycle: 'retired' } };
+      copy['events'] = {};
     });
 
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      `orders-service's exported Snapshot is malformed: events.OrderPlaced@1.lifecycle is none of "active", "deprecated"`,
+      "orders-service's exported Snapshot is malformed: events is a key its format does not define",
     );
   });
 
