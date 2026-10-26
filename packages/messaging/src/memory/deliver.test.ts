@@ -1,10 +1,10 @@
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   openEnum,
   openEnumReader,
@@ -101,7 +101,7 @@ const notifyOnSettled = defineSubscription({
   event: paymentSettledV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

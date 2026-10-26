@@ -8,9 +8,9 @@ import {
   type Snapshot,
   type SnapshotContext,
   snapshotOf,
-  type ValidatedContract,
-  type ValidContract,
-  validateContract,
+  type ValidatedRoot,
+  type ValidRoot,
+  validateRoot,
 } from '@cf-loom/contract/internal';
 import { oneLineOf, packageJsonNameOf } from '../loading/index.ts';
 import { type FileComparison, fileComparisonOf } from '../writing/index.ts';
@@ -28,7 +28,7 @@ import type { Run } from './run.ts';
 export type Generator = 'running' | 'committed';
 
 /**
- * What every command builds before it writes: the project, its valid root, the declared Snapshot
+ * What every command builds before it writes: the project, its valid Root, the declared Snapshot
  * in canonical order with its text and bytes, the committed file and the context the Snapshot was
  * declared in; or why it could not be built.
  */
@@ -36,7 +36,7 @@ export type Built =
   | {
       readonly kind: 'built';
       readonly project: Project;
-      readonly validated: ValidContract;
+      readonly validated: ValidRoot;
       readonly snapshot: Snapshot;
       readonly text: string;
       readonly bytes: Buffer;
@@ -48,7 +48,7 @@ export type Built =
 /** A project as built, valid. */
 export type BuiltProject = Extract<Built, { readonly kind: 'built' }>;
 
-/** A Service's project as built, the one kind of root that offers Elements. */
+/** A Service's project as built, the one kind of Root that offers Elements. */
 export type BuiltService = BuiltProject & { readonly snapshot: ServiceSnapshot };
 
 /** How the committed `contract.snapshot.json` differs from what `generate` would write; a file that is missing or no JSON differs. */
@@ -90,11 +90,11 @@ export async function builtOf(run: Run, generator: Generator): Promise<Built> {
   return { kind: 'built', project, validated, snapshot, text, bytes, committed, context };
 }
 
-/** A root's declared Snapshot in canonical order with its text and bytes, or why the root declares none. */
+/** A Root's declared Snapshot in canonical order with its text and bytes, or why the Root declares none. */
 export type Declared =
   | {
       readonly kind: 'declared';
-      readonly validated: ValidContract;
+      readonly validated: ValidRoot;
       readonly snapshot: Snapshot;
       readonly text: string;
       readonly bytes: Buffer;
@@ -102,7 +102,7 @@ export type Declared =
   | ProjectFailure;
 
 /**
- * Validates a root and declares its Snapshot in canonical order, the one way every Snapshot is
+ * Validates a Root and declares its Snapshot in canonical order, the one way every Snapshot is
  * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
  */
 export function declaredOf(declaring: DeclaredRoot, context: SnapshotContext): Declared {
@@ -129,8 +129,8 @@ function tooDeepOf(snapshot: Snapshot): Invalid | undefined {
   return failure === undefined ? undefined : { kind: 'invalid', failures: [failure] };
 }
 
-/** The root validated: the walk runs the user's schemas, whose getters may throw. */
-function validatedOf(declaring: DeclaredRoot): ValidatedContract | Tooling {
+/** The Root validated: the walk runs the user's schemas, whose getters may throw. */
+function validatedOf(declaring: DeclaredRoot): ValidatedRoot | Tooling {
   const { directory, packageName, root, rootExports, rootFile, packages } = declaring;
   const rootPackage: RootPackage = {
     packageName: packageJsonNameOf(packageName),
@@ -138,7 +138,7 @@ function validatedOf(declaring: DeclaredRoot): ValidatedContract | Tooling {
     rootExports,
   };
   try {
-    return validateContract(root, rootPackage);
+    return validateRoot(root, rootPackage);
   } catch (e) {
     return tooling(`${rootFile} threw while it was read: ${oneLineOf(e, directory)}`);
   }

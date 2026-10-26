@@ -16,7 +16,7 @@ import {
 } from './types.ts';
 
 /**
- * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
+ * The declared Snapshot of a valid Root, as `generate` writes it: every map keyed by identity or
  * name, every array whose order means nothing sorted, and no `version`, which `publish` fills in.
  */
 export function snapshotOf(validated: ValidRoot, context: SnapshotContext): Snapshot {

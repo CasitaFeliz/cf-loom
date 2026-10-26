@@ -1,7 +1,7 @@
-import type { Contract, Endpoint, Guard } from '@cf-loom/contract';
+import type { Endpoint, Guard, ServiceContract } from '@cf-loom/contract';
 import {
   failureLineOf,
-  isContract,
+  isServiceContract,
   isStamp,
   ownOf,
   type TextPartNodes,
@@ -13,10 +13,10 @@ import { mappedHandlerOf } from '@cf-loom/handlers/internal';
 /** What of the Handler map `serve` reads: the Handlers of Endpoints and Guards, and the stamps. */
 export type ServedHandlers = Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>;
 
-/** The root `serve` answers for, which must be a Contract; anything else is a bug of the Service. */
-export function contractOf(root: unknown): Contract {
-  if (!isContract(root)) {
-    throw new Error('serve() takes a Contract declared with defineContract');
+/** The Root `serve` answers for, which must be a Service's Contract; anything else is a bug of the Service. */
+export function contractOf(root: unknown): ServiceContract {
+  if (!isServiceContract(root)) {
+    throw new Error("serve() takes a Service's Contract declared with defineService");
   }
   return root;
 }
@@ -39,7 +39,7 @@ export function guardHandlerOf(
 
 /** The walked text parts of every Endpoint and Guard, which must be what `generate` accepts. */
 export function checkedTextPartsOf(
-  contract: Contract,
+  contract: ServiceContract,
 ): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
   const walked = walkedTextPartsOf(contract);
   if (walked.kind === 'invalid') {

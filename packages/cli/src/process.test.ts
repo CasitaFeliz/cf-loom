@@ -30,7 +30,7 @@ const aBarePackage = {
 
 /** A Service with one Endpoint, `ping`. */
 const aService = aContractProject([
-  "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+  "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   'export const ping = defineEndpoint({',
   "  name: 'ping',",
@@ -41,7 +41,7 @@ const aService = aContractProject([
   '  success: { status: 200, body: z.object({ ok: z.boolean() }) },',
   '});',
   "const health = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });",
-  "export const contract = defineContract({ name: 'orders-service', groups: [health] });",
+  "export const contract = defineService({ name: 'orders-service', groups: [health] });",
 ]);
 
 const crlfLine = (path: string) => `${path} has CRLF line endings: set eol=lf in .gitattributes\n`;
@@ -140,8 +140,8 @@ describe('cf-loom: a Contract module that keeps the process alive', () => {
     const project = aProject(
       aContractProject([
         'setInterval(() => {}, 1_000_000);',
-        "import { defineContract } from '@cf-loom/contract';",
-        "export const contract = defineContract({ name: 'orders-service' });",
+        "import { defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
       ]),
     );
 

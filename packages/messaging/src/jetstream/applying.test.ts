@@ -1,5 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
+import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
 import {
   type ConsumerConfig,
@@ -36,7 +36,7 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

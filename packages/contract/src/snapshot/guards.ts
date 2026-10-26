@@ -6,7 +6,7 @@ import { packageOriginOf } from './origins.ts';
 import type { GuardSnapshot } from './types.ts';
 
 /**
- * The Guards the root reaches, by name: a Service's Endpoints attach them, directly or through a
+ * The Guards the Root reaches, by name: a Service's Endpoints attach them, directly or through a
  * Guard's `guards`; a Definitions Package's are those it exports and those they reach.
  */
 export function guardSnapshotsOf(

@@ -1,4 +1,4 @@
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -51,7 +51,7 @@ const lookup = defineEndpoint({
   success: { status: 200, body: echoed },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'pages-service',
   groups: [
     defineGroup({ name: 'pages', description: 'Pages', endpoints: [getPage, search, lookup] }),

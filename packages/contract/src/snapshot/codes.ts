@@ -15,7 +15,7 @@ export function sortedCodes(codes: readonly string[]): readonly string[] {
   return [...new Set(codes)].sort(byCodePoint);
 }
 
-/** The code a Standard Rejection resolves to in this root. */
+/** The code a Standard Rejection resolves to in this Root. */
 export function codeOfStandard(
   standards: readonly ResolvedStandard[],
   name: StandardRejectionName,
@@ -23,7 +23,7 @@ export function codeOfStandard(
   return standardNamed(standards, name).code;
 }
 
-/** The code each Standard Rejection resolves to in this root. */
+/** The code each Standard Rejection resolves to in this Root. */
 export function standardRejectionsOf({
   standards,
 }: Pick<SnapshotSources, 'standards'>): StandardRejectionsSnapshot {
@@ -34,7 +34,7 @@ export function standardRejectionsOf({
 }
 
 /**
- * The codes a root reaches with their declaration, then every Standard Rejection's code;
+ * The codes a Root reaches with their declaration, then every Standard Rejection's code;
  * none is removed, since only the Baseline knows a removed code.
  */
 export function codeSnapshotsOf(
@@ -54,7 +54,7 @@ function standardNamed(
 ): ResolvedStandard {
   const standard = standards.find((resolved) => resolved.name === name);
   if (standard === undefined) {
-    throw new Error(`A valid root resolves every Standard Rejection: ${name} is missing, a bug.`);
+    throw new Error(`A valid Root resolves every Standard Rejection: ${name} is missing, a bug.`);
   }
   return standard;
 }

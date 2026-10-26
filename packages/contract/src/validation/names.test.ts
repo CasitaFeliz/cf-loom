@@ -442,7 +442,7 @@ describe('validateRoot: the root is named as its package', () => {
           kind: 'declaration',
           at: ['name'],
           rule: 'package-name',
-          message: 'A root is named as its package.json, without the scope: billing-service',
+          message: 'A Root is named as its package.json, without the scope: billing-service',
         },
       ],
     });

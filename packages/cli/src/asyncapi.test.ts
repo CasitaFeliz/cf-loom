@@ -82,7 +82,7 @@ function targetOf(ref: string): unknown {
 
 /** The lines that declare the Events of `theService`, around the Commands and Subscription. */
 const theEvents = [
-  "import { defineCommand, defineContract, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';",
+  "import { defineCommand, defineService, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
   "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purgeNode' });",
@@ -159,14 +159,14 @@ const theService = aContractProject([
   '});',
   "const notes = defineGroup({ name: 'notes', description: 'Notes', events: [orderNotedV1] });",
   "const purges = defineGroup({ name: 'purges', description: 'Purges', events: [orderPurgedV1] });",
-  "export const contract = defineContract({ name: 'orders-service', groups: [trees, orders, notes, purges] });",
+  "export const contract = defineService({ name: 'orders-service', groups: [trees, orders, notes, purges] });",
 ]);
 
 /** A Service named `orders-service` that declares no Event. */
 const aServiceWithoutEvents = aContractProject([
-  "import { defineContract } from '@cf-loom/contract';",
+  "import { defineService } from '@cf-loom/contract';",
   '',
-  "export const contract = defineContract({ name: 'orders-service' });",
+  "export const contract = defineService({ name: 'orders-service' });",
 ]);
 
 /** A Service whose one Event, in the Lifecycle given, has a recursive def as its body, with a description and an example. */
@@ -174,7 +174,7 @@ function aServiceWithDescribedTree(
   lifecycle: 'active' | 'deprecated',
 ): Readonly<Record<string, string>> {
   return aContractProject([
-    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
     'export const treeGrownV1 = defineEvent({',
@@ -183,7 +183,7 @@ function aServiceWithDescribedTree(
     "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
     '});',
     "const trees = defineGroup({ name: 'trees', description: 'Trees', events: [treeGrownV1] });",
-    "export const contract = defineContract({ name: 'orders-service', groups: [trees] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [trees] });",
   ]);
 }
 
@@ -205,11 +205,11 @@ function aServiceWithVersions(count: number): Readonly<Record<string, string>> {
   ]);
   const names = versions.map((version) => `orderCreatedV${version}`);
   return aContractProject([
-    "import { defineContract, defineEvent, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...declared.flat(),
     `const orders = defineGroup({ name: 'orders', description: 'Orders', events: [${names.join(', ')}] });`,
-    "export const contract = defineContract({ name: 'orders-service', groups: [orders] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
   ]);
 }
 
@@ -663,7 +663,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
   });
 

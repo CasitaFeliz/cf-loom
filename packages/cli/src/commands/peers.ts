@@ -4,7 +4,7 @@ import { type Peers, peerRangesOf, publishedPeersOf } from '../contract-package/
 import { installedVersionOf } from '../loading/index.ts';
 import type { BuiltProject } from '../project/index.ts';
 
-/** The versions of the two peers as the root file imports them, which the package's peer ranges are taken from. */
+/** The versions of the two peers as the Root file imports them, which the package's peer ranges are taken from. */
 export function builtPeersOf(
   built: BuiltProject,
 ):

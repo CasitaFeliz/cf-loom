@@ -16,7 +16,7 @@ export const addedStandardRejectionNames = ['invalidInput', 'notImplemented'] as
 /** The Standard Rejections cf-loom's runtime adds to every Endpoint, so none lists them. */
 export type AddedStandardRejectionName = (typeof addedStandardRejectionNames)[number];
 
-/** A Rejection whose code, status and message the root resolves; no Contract declares one. */
+/** A Rejection whose code, status and message the Root resolves; no Contract declares one. */
 export type StandardRejection<Name extends StandardRejectionName = StandardRejectionName> =
   Name extends StandardRejectionName
     ? { readonly kind: 'standard-rejection'; readonly name: Name }

@@ -9,7 +9,7 @@ import {
   packageRootManifestOf,
 } from './package-manifest.ts';
 
-/** A module of a package the root's import reached, as Node resolved it: the instance the root holds. */
+/** A module of a package the Root's import reached, as Node resolved it: the instance the Root holds. */
 export type ImportedPackage = {
   /** The file URL Node resolved it to; specifiers resolving to one URL are one module. */
   readonly url: string;
@@ -26,7 +26,7 @@ export type ImportedPackage = {
   readonly exports: Readonly<Record<string, unknown>>;
 };
 
-/** A root file as Node imported it, with every package its import reached, or why it could not be. */
+/** A Root file as Node imported it, with every package its import reached, or why it could not be. */
 export type ImportedRoot =
   | {
       readonly kind: 'imported';
@@ -45,16 +45,16 @@ type Resolution = {
 /** What `importedBy` names the project's own files as. */
 const projectImporter = 'project';
 
-/** What a root is imported from: a file URL, or a package name Node resolves as from the folder of `from`. */
+/** What a Root is imported from: a file URL, or a package name Node resolves as from the folder of `from`. */
 export type ImportTarget = {
   readonly specifier: string;
   readonly from: string;
 };
 
 /**
- * Imports a root while a resolve hook records every file Node resolves an import to, whichever
+ * Imports a Root while a resolve hook records every file Node resolves an import to, whichever
  * file imports it, so the packages are the ones Node chose, through a package name or the
- * package's own `imports` alike; the modules of the package at `rootManifest` are the root's own,
+ * package's own `imports` alike; the modules of the package at `rootManifest` are the Root's own,
  * not another package's.
  */
 export async function importedRootOf(

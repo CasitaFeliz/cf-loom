@@ -1,9 +1,9 @@
 import { once } from 'node:events';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Method,
   notFound,
 } from '@cf-loom/contract';
@@ -44,7 +44,7 @@ const noteOrder = defineEndpoint({
   success: { status: 200, body: z.object({ text: z.string() }) },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder, noteOrder] }),
@@ -146,7 +146,7 @@ describe('the READMEs', () => {
   });
 
   test('serve takes no resources when no Handler takes any', () => {
-    const notes = defineContract({
+    const notes = defineService({
       name: 'notes-service',
       groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [noteOrder] })],
     });

@@ -1,9 +1,9 @@
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineRejection,
+  defineService,
   notFound,
 } from '@cf-loom/contract';
 import {
@@ -68,7 +68,7 @@ const definitions = defineDefinitions({
   },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   standardRejections: definitions,
   groups: [
@@ -274,7 +274,7 @@ describe('serve: a Success body that is JSON null', () => {
       description: 'The note, if any',
       success: { status: 200, body: z.object({ text: z.string() }).nullable() },
     });
-    const withNote = defineContract({
+    const withNote = defineService({
       name: 'notes-service',
       groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [findNote] })],
     });

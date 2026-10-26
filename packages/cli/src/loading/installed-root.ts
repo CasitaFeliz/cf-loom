@@ -11,7 +11,7 @@ export type InstalledPackage = {
 
 /**
  * Imports a package as a Service that installed it does: by its name, from the `node_modules` of
- * `staging`, through the entry Node resolves, with its own modules the root's, never another
+ * `staging`, through the entry Node resolves, with its own modules the Root's, never another
  * package's.
  */
 export async function installedRootOf({
@@ -28,11 +28,11 @@ export async function installedRootOf({
   if (split.kind === 'failed') {
     return { kind: 'failed', message: `its entry ${split.reason}` };
   }
-  const { root, rootKind, exports } = split;
+  const { root, rootExport, exports } = split;
   return {
     kind: 'loaded',
     root,
-    rootKind,
+    rootExport,
     file: packageName,
     exports,
     imported: imported.imported,

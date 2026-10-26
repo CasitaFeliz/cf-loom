@@ -239,7 +239,7 @@ function aMessagingService({
     .filter(([, list]) => list !== '[]')
     .map(([field, list]) => `  ${field}: ${list},`);
   const root = lines([
-    "import { defineContract, defineDependency, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineDependency, defineGroup } from '@cf-loom/contract';",
     ...(messageNames.length > 0
       ? [importOf(`{ ${[...messageNames].sort().join(', ')} }`, './messages.ts')]
       : []),
@@ -254,7 +254,7 @@ function aMessagingService({
     ...grouped,
     '});',
     '',
-    'export const contract = defineContract({',
+    'export const contract = defineService({',
     "  name: 'orders-service',",
     '  groups: [orders],',
     '  dependencies: [paymentsDependency],',
@@ -281,9 +281,9 @@ function aServiceWithoutMessages(): Readonly<Record<string, string>> {
     'package.json': manifest,
     'cf-loom.config.ts': config,
     'src/contract/index.ts': lines([
-      "import { defineContract } from '@cf-loom/contract';",
+      "import { defineService } from '@cf-loom/contract';",
       '',
-      "export const contract = defineContract({ name: 'orders-service' });",
+      "export const contract = defineService({ name: 'orders-service' });",
     ]),
   };
 }
@@ -493,7 +493,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
   });
 

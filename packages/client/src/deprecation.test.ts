@@ -1,12 +1,12 @@
 import {
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -53,9 +53,9 @@ function contractPackageOf<
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

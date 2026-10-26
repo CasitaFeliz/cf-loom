@@ -1,10 +1,10 @@
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
 } from '@cf-loom/contract';
 import { admit, fault, type HandledRequest, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
@@ -86,7 +86,7 @@ const listOrders = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -301,7 +301,7 @@ describe('serve: Guards', () => {
         notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Coming soon' },
       },
     });
-    const rooted = defineContract({
+    const rooted = defineService({
       name: 'orders-service',
       standardRejections: definitions,
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [addNote] })],

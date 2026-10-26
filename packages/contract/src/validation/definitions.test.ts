@@ -115,7 +115,7 @@ describe('validateRoot: a Definitions Package exports what its Guards reach', ()
   );
 });
 
-describe('validateRoot: a Definitions Package’s root file exports only what it shares', () => {
+describe('validateRoot: a Definitions Package’s Root file exports only what it shares', () => {
   test.each([
     ['a function', () => true],
     ['a number', 100],
@@ -188,4 +188,4 @@ describe('validateRoot: a Definitions Package’s root file exports only what it
 const unexportedMessage =
   'A Definitions Package exports every Guard and Rejection its Guards reach, since Services import them to attach and to reject';
 const exportsOnly =
-  "A Definitions Package's root file exports only its definitions, Guards, Rejections and zod schemas";
+  "A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas";

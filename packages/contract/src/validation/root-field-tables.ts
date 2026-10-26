@@ -127,7 +127,7 @@ export const dependencyFields = {
   objects: {},
 } satisfies Fields<DependencyFields>;
 
-/** The fields of each kind of root. */
+/** The fields of each kind of Root. */
 export const rootFields: Readonly<Record<Declarations['root']['kind'], KnownFields>> = {
   service: serviceFields,
   application: applicationFields,

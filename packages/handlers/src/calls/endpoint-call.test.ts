@@ -1,9 +1,9 @@
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   invalidInput,
   notFound,
   notImplemented,
@@ -607,7 +607,7 @@ describe('an EndpointHandler’s Rejections', () => {
   });
 
   test('a direct call takes no contract', () => {
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
     });

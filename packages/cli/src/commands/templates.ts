@@ -1,6 +1,7 @@
-import { type RootKind, rootPlaces } from '../loading/index.ts';
+import type { RootKind } from '@cf-loom/contract/internal';
+import { rootPlaces } from '../loading/index.ts';
 
-/** A root that declares nothing yet, under the export the CLI loads it from, named when it has a name. */
+/** A Root that declares nothing yet, exported under the conventional name, named when it has a name. */
 export function rootTemplateOf(kind: RootKind, name: string): string {
   const { define, exported } = rootPlaces[kind];
   const imported = `import { ${define} } from '@cf-loom/contract';`;

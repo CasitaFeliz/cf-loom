@@ -16,7 +16,7 @@ import { type DeclarationFailure, failure } from './failures.ts';
 /** A name as declared, where it sits, and what the sentence calls it: `A Group name`. */
 type Named = { readonly at: Path; readonly value: unknown; readonly noun: string };
 
-/** Every name of a root follows the grammar of its kind; a name that is no string is another rule's. */
+/** Every name of a Root follows the grammar of its kind; a name that is no string is another rule's. */
 export function nameFailures(declarations: Declarations): readonly DeclarationFailure[] {
   const { root, groups, endpoints, guards, rejections, standardRejections } = declarations;
   const { events, commands, subscriptions } = declarations;
@@ -92,7 +92,7 @@ const rootNameGrammar = kebabCase;
 const rootNouns = { service: 'A Service name', application: 'An Application name' } as const;
 
 /**
- * Why a name cannot be a root's, as the clause validation fails it with, such as `a Service name
+ * Why a name cannot be a Root's, as the clause validation fails it with, such as `a Service name
  * is kebab-case`; nothing when it follows the grammar of its kind, and for a Definitions Package,
  * which has no name but its package.json's.
  */

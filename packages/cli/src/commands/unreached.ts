@@ -4,7 +4,7 @@ import type { ExportedValue } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
 
 /**
- * A line for every Group a file under `src/contract/` exports that the root does not list, then
+ * A line for every Group a file under `src/contract/` exports that the Root does not list, then
  * for every Endpoint, Event, Command's Message Version or Subscription it exports that no Group
  * lists, each at the first file that exports it.
  */
@@ -22,7 +22,7 @@ export function unreachedLinesOf(
   return [...groups.map(unlistedGroupLineOf), ...declarations.map(unlistedDeclarationLineOf)];
 }
 
-/** The Groups that a file exports and the root does not list. */
+/** The Groups that a file exports and the Root does not list. */
 function unlistedGroupsOf(
   rootGroups: readonly Group[],
   exports: readonly ExportedValue[],
@@ -33,7 +33,7 @@ function unlistedGroupsOf(
     .filter((group) => !rootGroups.includes(group));
 }
 
-/** What needs no line: whatever a Group lists, the root's or an unlisted one. A Provider's Element is no Group's to list. */
+/** What needs no line: whatever a Group lists, the Root's or an unlisted one. A Provider's Element is no Group's to list. */
 function reachedOf(groups: readonly Group[]): ReadonlySet<unknown> {
   return new Set<unknown>(groups.flatMap(declarationsListedBy));
 }
@@ -50,7 +50,7 @@ function firstExportsOf(
 }
 
 function unlistedGroupLineOf({ path, name }: ExportedValue): string {
-  return `${path} exports ${name}, which the root does not list: list it in groups or delete it`;
+  return `${path} exports ${name}, which the Root does not list: list it in groups or delete it`;
 }
 
 function unlistedDeclarationLineOf({ path, name }: ExportedValue): string {

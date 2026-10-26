@@ -1,9 +1,9 @@
 import {
   type Command,
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   type Event,
   type Subscription,
@@ -34,7 +34,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

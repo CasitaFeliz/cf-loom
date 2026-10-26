@@ -1,9 +1,9 @@
-import type { Contract } from '@cf-loom/contract';
+import type { ServiceContract } from '@cf-loom/contract';
 import {
   type BrokerPlan,
   brokerPlanOf,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '@cf-loom/contract/internal';
 import { jetstreamManager, type StreamConfig, type StreamInfo } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
@@ -55,14 +55,14 @@ export async function dropStream(url: string, name: string): Promise<void> {
 }
 
 /** The broker plan `cf-loom broker-plan` derives from a Service's Contract under a prefix. */
-export function planOf(contract: Contract, prefix: string | null): BrokerPlan {
+export function planOf(contract: ServiceContract, prefix: string | null): BrokerPlan {
   return brokerPlanOf(serviceSnapshotOf(contract), prefix);
 }
 
 /** Creates the streams of a Service's broker plan under a prefix, as the organization's tooling would from `cf-loom broker-plan`. */
 export async function arrangePlanOf(
   url: string,
-  contract: Contract,
+  contract: ServiceContract,
   prefix: string | null,
 ): Promise<void> {
   const plan = planOf(contract, prefix);
@@ -71,8 +71,8 @@ export async function arrangePlanOf(
   }
 }
 
-function serviceSnapshotOf(contract: Contract) {
-  const validated = validateContract(contract, {
+function serviceSnapshotOf(contract: ServiceContract) {
+  const validated = validateRoot(contract, {
     packageName: contract.name,
     packages: [],
     rootExports: {},

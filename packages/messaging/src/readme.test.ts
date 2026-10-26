@@ -1,8 +1,8 @@
 import {
   defineCommand,
-  defineContract,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
 } from '@cf-loom/contract';
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
@@ -42,7 +42,7 @@ const notifyOnCreated = defineSubscription({
   event: orderCreatedV2,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({

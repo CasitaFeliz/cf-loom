@@ -1,4 +1,4 @@
-import type { Contract } from '@cf-loom/contract';
+import type { ServiceContract } from '@cf-loom/contract';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import type { Broker, BrokerService } from '../broker/index.ts';
@@ -27,7 +27,7 @@ export type MessagingOptions = {
 export type ConsumeOptions<Resources extends object = NoResources> = ResourcesField<Resources>;
 
 /** One connection's messaging, which `messaging()` resolves to: publishing, sending and consuming until it is closed. */
-export type Messaging<C extends Contract> = {
+export type Messaging<C extends ServiceContract> = {
   readonly publisher: EventPublisher<C>;
   readonly sender: CommandSender<C>;
   readonly consume: <
@@ -43,7 +43,7 @@ export type Messaging<C extends Contract> = {
 };
 
 /** Connects a Contract's messaging through a broker, so it publishes, sends and consumes the Contract's Messages. */
-export async function messaging<const C extends Contract>(
+export async function messaging<const C extends ServiceContract>(
   contract: C,
   broker: Broker,
   options: MessagingOptions = {},

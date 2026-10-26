@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { exitReasonOf, type Failed, failed, ranChild } from '../child-process/index.ts';
 import { installedManifestOf } from '../loading/index.ts';
 
-/** What `tsc -p` builds: a staged folder, the root file whose project's TypeScript builds it, and the package it is of. */
+/** What `tsc -p` builds: a staged folder, the Root file whose project's TypeScript builds it, and the package it is of. */
 export type Building = {
   readonly folder: string;
   readonly rootPath: string;
@@ -13,7 +13,7 @@ export type Building = {
 export type Built = { readonly kind: 'built' } | Failed;
 
 /**
- * Builds a staged Contract Package with `tsc -p`, the TypeScript installed where the root file
+ * Builds a staged Contract Package with `tsc -p`, the TypeScript installed where the Root file
  * imports packages, run by Node with no shell, so the build is the one Consumers' compiler reads.
  */
 export async function builtWithTsc({ folder, rootPath, spec }: Building): Promise<Built> {

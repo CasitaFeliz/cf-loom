@@ -146,7 +146,7 @@ function isImportedByProject(module: ImportedPackage): module is ImportedModule 
   return module.specifier !== undefined;
 }
 
-/** The declaration a handled Element is, as the root holds it: a Retired Endpoint is never one. */
+/** The declaration a handled Element is, as the Root holds it: a Retired Endpoint is never one. */
 function declarationOf(service: PlacedService, handled: DeclarationHandled): unknown {
   const { declarations } = service.validated;
   switch (handled.kind) {

@@ -1,18 +1,18 @@
 import type { Client } from '@cf-loom/client';
 import {
-  defineContract,
   defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Endpoint,
   type InputOf,
   notFound,
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -85,9 +85,9 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 ) {
   const listed = declaredEndpoints as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
+  const root = defineService({ name: 'payments-service', groups: [group] });
   const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
-  const validated = validateContract(root, rootPackage);
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }

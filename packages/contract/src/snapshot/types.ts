@@ -129,7 +129,7 @@ export type ExportSnapshot =
   | { readonly kind: 'rejection'; readonly code: string }
   | { readonly kind: 'schema'; readonly schema: SchemaNode };
 
-/** The declared Snapshot of a Definitions Package: everything its root file exports, and what that reaches. */
+/** The declared Snapshot of a Definitions Package: everything its Root file exports, and what that reaches. */
 export type DefinitionsSnapshot = Heading<'definitions'> & {
   readonly standardRejections: StandardRejectionsSnapshot;
   readonly defs: ByKey<SchemaNode>;

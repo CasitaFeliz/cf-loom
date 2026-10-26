@@ -31,7 +31,7 @@ import { conflictFailures, textPartFailures } from './text-only.ts';
 import { type ValidatedDeclarations, validatedDeclarationsOf } from './validated.ts';
 
 /**
- * The walked schemas of a valid root and their `defs`: `nodeOf` finds the node of a declaration's
+ * The walked schemas of a valid Root and their `defs`: `nodeOf` finds the node of a declaration's
  * part, a shared schema being its own declaration.
  */
 export type ValidatedSchemas = {
@@ -53,7 +53,7 @@ export type PackageIdentity =
   | Unidentified;
 
 /**
- * A Definitions Package the root's files import, as Node resolved it: who its package.json says it
+ * A Definitions Package the Root's files import, as Node resolved it: who its package.json says it
  * is, its Definitions object, what its module exports by name, and the other imported Definitions
  * Packages its files import, directly or through any package, which says which of two exporters of
  * one object imports it from the other.
@@ -68,9 +68,9 @@ export type ImportedDefinitions = PackageIdentity & {
 export type ResolvedDefinitions = Extract<ImportedDefinitions, { readonly kind: 'identified' }>;
 
 /**
- * The package a root sits in: its package.json name, scope included; every Definitions Package its
- * files import, as Node resolved them, named by their package.json or not; and what the root file
- * exports beside the root, by name, which a Definitions root's members are.
+ * The package a Root sits in: its package.json name, scope included; every Definitions Package its
+ * files import, as Node resolved them, named by their package.json or not; and what the Root file
+ * exports beside the Root, by name, which a Definitions Package's members are.
  */
 export type RootPackage = {
   readonly packageName: string;
@@ -161,7 +161,7 @@ function schemaFailures(declarations: Declarations, nodes: Nodes): readonly Decl
 function invalid(failures: readonly Failure[]): ValidatedRoot {
   const [first, ...others] = failures;
   if (first === undefined) {
-    throw new Error('An invalid root must name at least one failure.');
+    throw new Error('An invalid Root must name at least one failure.');
   }
   return { kind: 'invalid', failures: [first, ...others] };
 }

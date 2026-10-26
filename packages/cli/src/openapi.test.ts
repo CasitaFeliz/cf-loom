@@ -105,7 +105,7 @@ function aRootProject(root: readonly string[]): Readonly<Record<string, string>>
 /** The imports every fixture root starts with. */
 const rootImports = [
   'import {',
-  '  defineContract,',
+  '  defineService,',
   '  defineEndpoint,',
   '  defineGroup,',
   '  defineGuard,',
@@ -291,7 +291,7 @@ const theService = aRootProject([
   ...rootImports,
   ...orders,
   ...shapes,
-  'export const contract = defineContract({',
+  'export const contract = defineService({',
   "  name: 'orders-service',",
   '  groups: [ordersGroup, shapesGroup, infrastructureGroup],',
   '  standardRejections: definitions,',
@@ -300,14 +300,14 @@ const theService = aRootProject([
 
 /** A Service named `orders-service` that declares no Endpoint. */
 const aServiceWithoutEndpoints = aRootProject([
-  "import { defineContract } from '@cf-loom/contract';",
+  "import { defineService } from '@cf-loom/contract';",
   '',
-  "export const contract = defineContract({ name: 'orders-service' });",
+  "export const contract = defineService({ name: 'orders-service' });",
 ]);
 
 /** A Service with a Group of one Endpoint and a Group that lists only an Event. */
 const aServiceWithMessagesGroup = aRootProject([
-  "import { defineContract, defineEndpoint, defineEvent, defineGroup } from '@cf-loom/contract';",
+  "import { defineService, defineEndpoint, defineEvent, defineGroup } from '@cf-loom/contract';",
   "import { z } from 'zod';",
   'export const getOrder = defineEndpoint({',
   "  name: 'getOrder', method: 'GET', path: '/orders', visibility: 'public',",
@@ -319,7 +319,7 @@ const aServiceWithMessagesGroup = aRootProject([
   '});',
   "const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });",
   "const events = defineGroup({ name: 'events', description: 'Events', events: [orderCreatedV1] });",
-  "export const contract = defineContract({ name: 'orders-service', groups: [orders, events] });",
+  "export const contract = defineService({ name: 'orders-service', groups: [orders, events] });",
 ]);
 
 /** A Service whose Endpoints take the recursive schemas given as their Input bodies, in the order given. */
@@ -333,18 +333,18 @@ function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<strin
   ]);
   const names = recursive.map((_id, index) => `post${index}`);
   return aRootProject([
-    "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...declared.flat(),
     `const group = defineGroup({ name: 'posts', description: 'Posts', endpoints: [${names.join(', ')}] });`,
-    "export const contract = defineContract({ name: 'orders-service', groups: [group] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [group] });",
   ]);
 }
 
 /** A Service with two Endpoints on one path that name its param as given. */
 function aServiceWithParams(first: string, second: string): Readonly<Record<string, string>> {
   return aRootProject([
-    "import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+    "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     'export const getOrder = defineEndpoint({',
     "  name: 'getOrder', method: 'GET', path: '/orders/:" + first + "', visibility: 'public',",
@@ -361,7 +361,7 @@ function aServiceWithParams(first: string, second: string): Readonly<Record<stri
       ': z.string() }) }, success: { status: 204 },',
     '});',
     "const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder, deleteOrder] });",
-    "export const contract = defineContract({ name: 'orders-service', groups: [group] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [group] });",
   ]);
 }
 
@@ -1355,7 +1355,7 @@ describe('cf-loom openapi: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'name package-name: A Root is named as its package.json, without the scope: billing-service\n',
     });
   });
 

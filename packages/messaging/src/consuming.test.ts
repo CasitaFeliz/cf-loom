@@ -1,10 +1,10 @@
 import {
   type ContractPackage,
   defineCommand,
-  defineContract,
   defineDependency,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
   openEnum,
   openEnumReader,
@@ -97,7 +97,7 @@ const notifyOnSettled = defineSubscription({
   event: paymentSettledV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -319,7 +319,7 @@ describe('consume', () => {
       commands: [chargeCardV1, chargeCardV2, refundV1],
       subscriptions: [notifyOnCreated, notifyOnSettled],
     } as unknown as Parameters<typeof defineGroup>[0]);
-    const listing = defineContract({
+    const listing = defineService({
       name: 'orders-service',
       groups: [group],
       dependencies: [paymentsDependency],
@@ -776,7 +776,7 @@ describe('a Message whose body is nested past the stack', () => {
     description: 'A deep body',
     body: tree,
   });
-  const nesting = defineContract({
+  const nesting = defineService({
     name: 'nesting-service',
     groups: [defineGroup({ name: 'nesting', description: 'Nesting', commands: [nestV1] })],
   });

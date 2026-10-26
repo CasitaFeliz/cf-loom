@@ -1,22 +1,15 @@
-/** The kinds of root a project has, as `init` names them. */
-export const rootKinds = ['service', 'application', 'definitions'] as const;
+import type { RootKind } from '@cf-loom/contract/internal';
 
-/** A kind of root a project has. */
-export type RootKind = (typeof rootKinds)[number];
-
-/** Where a kind of root sits in its project and the name its root file exports it under. */
+/** Where a kind of Root sits in its project, the name `init` writes it under and the function that declares it. */
 export type RootPlace = {
   readonly file: 'src/contract/index.ts' | 'src/definitions/index.ts';
   readonly exported: 'contract' | 'application' | 'definitions';
-  readonly define: 'defineContract' | 'defineApplication' | 'defineDefinitions';
+  readonly define: 'defineService' | 'defineApplication' | 'defineDefinitions';
 };
 
-/**
- * Each kind of root's file, export and declaration: the one place `init` writes them and the
- * loader reads them.
- */
+/** Each kind of Root's file, export and declaration, which `init` writes and the loader names. */
 export const rootPlaces: Readonly<Record<RootKind, RootPlace>> = {
-  service: { file: 'src/contract/index.ts', exported: 'contract', define: 'defineContract' },
+  service: { file: 'src/contract/index.ts', exported: 'contract', define: 'defineService' },
   application: {
     file: 'src/contract/index.ts',
     exported: 'application',
@@ -29,13 +22,12 @@ export const rootPlaces: Readonly<Record<RootKind, RootPlace>> = {
   },
 };
 
-/** Every file a root may sit in, each once. */
+/** Every file a Root may sit in, each once. */
 export const rootFiles: readonly RootPlace['file'][] = [
   ...new Set(Object.values(rootPlaces).map(({ file }) => file)),
 ];
 
-/** Whether a word names a kind of root. */
+/** Whether a word names a kind of Root. */
 export function isRootKind(kind: string): kind is RootKind {
-  const kinds: readonly string[] = rootKinds;
-  return kinds.includes(kind);
+  return Object.hasOwn(rootPlaces, kind);
 }

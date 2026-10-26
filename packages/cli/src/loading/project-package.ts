@@ -24,7 +24,7 @@ export type ProjectPackage =
 const packageNamePattern = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 
 /**
- * Reads the package.json of the project in `directory`: its name, which the root's name and the
+ * Reads the package.json of the project in `directory`: its name, which the Root's name and the
  * published package's name come from, and its `"type": "module"`, since the config and the
  * Contract's files are ES modules.
  */

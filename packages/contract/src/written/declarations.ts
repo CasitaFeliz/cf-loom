@@ -20,24 +20,24 @@ import { codesOf, guardsOf, rejectionsOf } from './references.ts';
 import { entriesOf, isPlainObject, listOf, partOf } from './written.ts';
 
 /**
- * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
+ * Every declaration of a Root, each once, with where it sits, so each rule reads one list; what
  * sits where a declaration belongs and is none is left out here and reported by the structure rules.
  */
 export type Declarations = {
   readonly root: Root;
-  /** What a Definitions root's file exports that it shares; none for another root. */
+  /** What a Definitions Package's Root file exports that it shares; none for another Root. */
   readonly ownMembers: Members | undefined;
-  /** The Definitions Package a Contract names as `standardRejections`, at `['standardRejections']`; none for another root. */
+  /** The Definitions Package a Contract names as `standardRejections`, at `['standardRejections']`; none for another Root. */
   readonly standardRejectionsSource: NamedDefinitions | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
-  /** Every Guard the root reaches, each once. */
+  /** Every Guard the Root reaches, each once. */
   readonly guards: readonly LocatedGuard[];
-  /** Every Rejection the root reaches, each once, in the root's order. */
+  /** Every Rejection the Root reaches, each once, in the Root's order. */
   readonly rejections: readonly LocatedRejection[];
-  /** Every code the root reaches, each once, with every declaration of it. */
+  /** Every code the Root reaches, each once, with every declaration of it. */
   readonly codes: readonly LocatedCode[];
-  /** The Standard Rejections the root's declaring package declares. */
+  /** The Standard Rejections the Root's declaring package declares. */
   readonly standardRejections: readonly LocatedStandardRejection[];
   readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
@@ -46,8 +46,8 @@ export type Declarations = {
 };
 
 /**
- * Gathers what a root reaches, Guards and Rejections included, each where it was first met: what
- * its Endpoints reach, and for a Definitions root the members its file exports, by `rootExports`.
+ * Gathers what a Root reaches, Guards and Rejections included, each where it was first met: what
+ * its Endpoints reach, and for a Definitions Package the members its file exports, by `rootExports`.
  */
 export function declarationsOf(
   root: Root,
@@ -79,8 +79,8 @@ export function declarationsOf(
 }
 
 /**
- * The Definitions Package whose `standardRejections` a root's Standard Rejections come from: the
- * one a Contract names, or a Definitions root itself.
+ * The Definitions Package whose `standardRejections` a Root's Standard Rejections come from: the
+ * one a Contract names, or a Definitions Package itself.
  */
 export function standardRejectionsDeclarerOf({
   root,
@@ -121,8 +121,8 @@ function namedSourceOf(root: Root): NamedDefinitions | undefined {
 }
 
 /**
- * The Definitions object a Contract names as `standardRejections`, whatever a root file exported;
- * none for any other root, or when what it names is no Definitions object, which the structure
+ * The Definitions object a Contract names as `standardRejections`, whatever a Root file exported;
+ * none for any other Root, or when what it names is no Definitions object, which the structure
  * rule reports.
  */
 export function standardRejectionsSourceOf(root: unknown): Definitions | undefined {

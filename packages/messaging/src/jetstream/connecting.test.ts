@@ -1,4 +1,4 @@
-import { defineCommand, defineContract, defineEvent, defineGroup } from '@cf-loom/contract';
+import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
@@ -26,7 +26,7 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -253,7 +253,7 @@ describe('jetstream()', () => {
   });
 
   test('a Service that publishes and sends nothing connects with no stream on the Broker', async () => {
-    const quiet = defineContract({ name: 'quiet-service' });
+    const quiet = defineService({ name: 'quiet-service' });
     const service = aConnect();
 
     const opening = messaging(quiet, jetstream({ connect: service.connect, prefix: aPrefix() }));
@@ -263,7 +263,7 @@ describe('jetstream()', () => {
 
   test('without a prefix, the stream checked is the one named after the Service, on unprefixed subjects', async () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', events: [orderCreatedV1] });
-    const unprefixed = defineContract({ name: 'unprefixed-service', groups: [orders] });
+    const unprefixed = defineService({ name: 'unprefixed-service', groups: [orders] });
     await arrangeStream(server.url, {
       name: 'unprefixed-service',
       subjects: ['unprefixed-service.event.OrderCreated.v1'],
