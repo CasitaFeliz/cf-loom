@@ -125,20 +125,17 @@ function mapMutations(
 const headingKeys = ['format', 'kind', 'name', 'generator'];
 
 /**
- * Whether `generate` never writes a place changed alone: the heading, what it derives from other
- * places (the codes' `removed` flags and the codes nothing answers, the Input of a path param and
- * its `params`) and the Guards no Endpoint attaches.
+ * Whether `generate` never writes a place changed alone, which the decoder does not refuse: the
+ * heading, what it derives from other places (the codes' `removed` flags and the codes nothing
+ * answers) and the Guards no Endpoint attaches.
  */
 function isUnwritableAlone(kind: string, at: Path): boolean {
-  const [section, , part, next] = at;
+  const [section, , part] = at;
   if (at.length === 1 && headingKeys.includes(String(section))) {
     return true;
   }
   if (section === 'codes') {
     return at.length === 1 || part === 'removed';
-  }
-  if (section === 'endpoints') {
-    return part === 'params' || (part === 'input' && next === 'params');
   }
   return section === 'guards' && kind === 'service' && at.length === 1;
 }

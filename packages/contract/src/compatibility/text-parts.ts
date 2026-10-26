@@ -14,48 +14,43 @@ export type TextParts = {
 };
 
 /**
- * Path params compared by position, as the URL matches them: a name changed is a rename, and each
- * schema is read as Input, found by its name in `params` since the object's keys are in code point
- * order, not in position.
+ * Path params compared as the text part they are, read as Input, with a name matched by its
+ * position, as the URL matches it: each position whose name moved is a rename, and the Baseline's
+ * fields are read under the proposed names, so the two objects compare field by field.
  */
 export function paramDifferencesOf(
   baseline: EndpointSnapshot,
   proposed: EndpointSnapshot,
   defs: BothDefs,
 ): readonly Difference[] {
-  const differences: Difference[] = [];
-  for (const [index, name] of proposed.params.entries()) {
+  const renames = proposed.params.flatMap((name, index): Difference[] => {
     const was = baseline.params[index];
-    if (was === undefined) {
-      continue;
-    }
-    if (was !== name) {
-      differences.push({ kind: 'param-renamed', from: was, to: name });
-    }
-    const params = { baseline: paramOf(baseline, was), proposed: paramOf(proposed, name) };
-    differences.push(...paramSchemaDifferencesOf(params, defs, name));
+    return was === undefined || was === name
+      ? []
+      : [{ kind: 'param-renamed', from: was, to: name }];
+  });
+  if (baseline.input.params === null || proposed.input.params === null) {
+    return renames;
   }
-  return differences;
+  const parts = {
+    baseline: underProposedNames(baseline.input.params, baseline.params, proposed.params),
+    proposed: proposed.input.params,
+  };
+  const place = { position: 'input', at: partsOf('input', 'params') } as const;
+  return [...renames, ...textPartDifferencesOf(parts, defs, place)];
 }
 
-function paramOf(endpoint: EndpointSnapshot, name: string): Field | undefined {
-  const fields = endpoint.input.params?.fields ?? {};
-  return Object.hasOwn(fields, name) ? fields[name] : undefined;
-}
-
-/** A param either Snapshot holds no schema for cannot be proven compatible, so it is Breaking. */
-function paramSchemaDifferencesOf(
-  params: { readonly baseline: Field | undefined; readonly proposed: Field | undefined },
-  defs: BothDefs,
-  name: string,
-): readonly Difference[] {
-  const at = [...partsOf('input', 'params'), fieldStep(name)];
-  if (params.baseline === undefined || params.proposed === undefined) {
-    const shape = { kind: 'unproven', node: 'param' } as const;
-    return [{ kind: 'schema', position: 'input', at, shape }];
-  }
-  const schemas = { baseline: params.baseline.schema, proposed: params.proposed.schema };
-  return schemaDifferencesOf(schemas, defs, { position: 'input', at });
+/** The Baseline's params object with each field under the name the proposed Snapshot gives its position. */
+function underProposedNames(
+  object: ObjectNode,
+  baselineNames: readonly string[],
+  proposedNames: readonly string[],
+): ObjectNode {
+  const renamed = Object.entries(object.fields).map(([name, field]) => {
+    const position = baselineNames.indexOf(name);
+    return [proposedNames[position] ?? name, field] as const;
+  });
+  return { ...object, fields: Object.fromEntries(renamed) };
 }
 
 /** A query or headers compared as the open object it is. */

@@ -173,7 +173,6 @@ function fieldAdded(
 }
 
 const typeChange = { kind: 'type-changed', from: 'string', to: 'number' } as const;
-const unprovenParam = { kind: 'unproven', node: 'param' } as const;
 
 describe('compatibilityReportOf, path params', () => {
   test.each(['public', 'internal', 'private'] as const)(
@@ -237,7 +236,6 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'a', to: 'b' }),
-      breaking(schemaChange(fieldAt(['input', 'params'], 'b'), typeChange)),
       additive({ kind: 'param-renamed', from: 'b', to: 'a' }),
       breaking(
         schemaChange(fieldAt(['input', 'params'], 'a'), {
@@ -246,6 +244,7 @@ describe('compatibilityReportOf, path params', () => {
           to: 'string',
         }),
       ),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'b'), typeChange)),
     ]);
   });
 
@@ -284,54 +283,20 @@ describe('compatibilityReportOf, path params', () => {
     ]);
   });
 
-  test('a path param with no schema in the Baseline is Breaking: nothing proves it compatible', () => {
-    const corrupted = anEndpoint({ input: anInput({ params: theParams(['id', aString]) }) });
-
-    const changes = changesOf(corrupted, anEndpoint());
-
-    expect(changes).toEqual([
-      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), unprovenParam)),
-    ]);
-  });
-
-  test('a path param named where the Baseline declares no params is Breaking', () => {
-    const corrupted = anEndpoint({ input: anInput({ params: null }) });
-
-    const changes = changesOf(corrupted, anEndpoint());
-
-    expect(changes).toEqual([
-      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), unprovenParam)),
-    ]);
-  });
-
-  test('a path param named constructor that one side holds no schema for is Breaking', () => {
-    const named = anEndpoint({
-      params: ['constructor'],
-      input: anInput({ params: theParams(['constructor', aString]) }),
-    });
-    const corrupted = anEndpoint({
-      params: ['constructor'],
-      input: anInput({ params: theParams(['id', aString]) }),
+  test('the params object’s own description, examples or origin changed is Neutral at input.params', () => {
+    const described = anEndpoint({
+      input: anInput({ params: { ...theParams(['orderId', aString]), description: 'The order' } }),
     });
 
-    const changes = changesOf(corrupted, named);
+    const changes = changesOf(anEndpoint(), described);
 
     expect(changes).toEqual([
-      breaking(schemaChange(fieldAt(['input', 'params'], 'constructor'), unprovenParam)),
-    ]);
-  });
-
-  test('a renamed path param with no schema in the proposed Snapshot gives a rename and a Breaking Change', () => {
-    const corrupted = anEndpoint({
-      params: ['id'],
-      input: anInput({ params: theParams(['orderId', aString]) }),
-    });
-
-    const changes = changesOf(anEndpoint(), corrupted);
-
-    expect(changes).toEqual([
-      additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
-      breaking(schemaChange(fieldAt(['input', 'params'], 'id'), unprovenParam)),
+      neutral(
+        schemaChange(partsAt('input', 'params'), {
+          kind: 'annotation-changed',
+          annotation: 'description',
+        }),
+      ),
     ]);
   });
 

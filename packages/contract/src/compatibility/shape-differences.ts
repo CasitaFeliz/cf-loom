@@ -55,10 +55,9 @@ export type ShapeDifference =
   | { readonly kind: 'rest-removed' }
   /**
    * A change no rule proves compatible, so Breaking in every Position: a tuple's items or an
-   * intersection that is not of objects, under the plain-union rule, or a path param that either
-   * Snapshot holds no schema for.
+   * intersection that is not of objects, under the plain-union rule.
    */
-  | { readonly kind: 'unproven'; readonly node: 'tuple' | 'allOf' | 'param' }
+  | { readonly kind: 'unproven'; readonly node: 'tuple' | 'allOf' }
   /** A node's description, examples or origin changed, or a `ref` names a def of another name. */
   | {
       readonly kind: 'annotation-changed';

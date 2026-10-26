@@ -137,10 +137,18 @@ const anEndpoint = {
   description: 'One order',
   params: ['orderId'],
   guards: [],
-  input: { params: null, query: emptyPart, headers: emptyPart, body: null },
+  input: {
+    params: { type: 'object', fields: { orderId: { required: true, schema: { type: 'string' } } } },
+    query: emptyPart,
+    headers: emptyPart,
+    body: null,
+  },
   success: { status: 200, headers: emptyPart, body: null },
   rejections: [],
 } as const satisfies EndpointSnapshot;
+
+/** The Endpoint fixture on a path with no params, as `POST /orders` has none. */
+const withoutParams = { ...anEndpoint, params: [], input: { ...anEndpoint.input, params: null } };
 
 const anEvent = {
   group: 'orders',
@@ -309,7 +317,15 @@ describe('decodeSnapshot', () => {
           'GET /orders/{}': {
             ...anEndpoint,
             guards: [{ guard: 'apiKey', qualifier: ['orders:read'] }],
-            input: { params: null, query: emptyPart, headers: emptyPart, body: aRef('tree') },
+            input: {
+              params: {
+                type: 'object',
+                fields: { orderId: { required: true, schema: { type: 'string' } } },
+              },
+              query: emptyPart,
+              headers: emptyPart,
+              body: aRef('tree'),
+            },
             rejections: ['ORDER_LOCKED'],
           },
         },
@@ -352,6 +368,7 @@ describe('decodeSnapshot', () => {
         endpoints: {
           'POST /orders': {
             ...anEndpoint,
+            params: [],
             input: { params: null, query: emptyPart, headers: emptyPart, body: everyNode },
           },
         },
@@ -487,7 +504,7 @@ describe('decodeSnapshot', () => {
 
     test('a Snapshot whose keys are out of code point order decodes in canonical order', () => {
       const published = aService({
-        endpoints: { 'POST /orders': anEndpoint, 'GET /orders/{}': anEndpoint },
+        endpoints: { 'POST /orders': withoutParams, 'GET /orders/{}': anEndpoint },
         defs: { b: { type: 'string' }, a: { type: 'string' } },
       });
 
@@ -783,6 +800,81 @@ describe('decodeSnapshot', () => {
         expect(elementOf(result)).toEqual(at.slice(0, 2));
       },
     );
+
+    describe('an Endpoint’s params are its identity’s, each a required field of input.params', () => {
+      const at = ['endpoints', 'GET /orders/{}'];
+      const paramsAt = [...at, 'input', 'params'];
+      const idField = { required: true, schema: { type: 'string' } } as const;
+
+      test.each([
+        [
+          'more names than the identity has {}',
+          { params: ['orderId', 'lineId'] },
+          [...at, 'params'],
+        ],
+        ['fewer names than the identity has {}', { params: [] }, [...at, 'params']],
+        ['a name twice', { params: ['orderId', 'orderId'] }, [...at, 'params']],
+        [
+          'null where the path has params',
+          { input: { ...anEndpoint.input, params: null } },
+          paramsAt,
+        ],
+        [
+          'a field named otherwise than the param',
+          { input: { ...anEndpoint.input, params: { type: 'object', fields: { id: idField } } } },
+          paramsAt,
+        ],
+        [
+          'a field beside the params',
+          {
+            input: {
+              ...anEndpoint.input,
+              params: { type: 'object', fields: { orderId: idField, lineId: idField } },
+            },
+          },
+          paramsAt,
+        ],
+        [
+          'an optional param',
+          {
+            input: {
+              ...anEndpoint.input,
+              params: { type: 'object', fields: { orderId: { ...idField, required: false } } },
+            },
+          },
+          [...paramsAt, 'fields', 'orderId'],
+        ],
+      ])('%s is malformed where it is', (_name, fields, expectedAt) => {
+        const result = serviceWith({
+          endpoints: { 'GET /orders/{}': { ...anEndpoint, ...fields } },
+        });
+
+        expect(result).toEqual(malformedAt(expectedAt));
+      });
+
+      test('a params object on a path without params is malformed at it', () => {
+        const result = serviceWith({
+          endpoints: {
+            'POST /orders': {
+              ...withoutParams,
+              input: { ...withoutParams.input, params: emptyPart },
+            },
+          },
+        });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'POST /orders', 'input', 'params']));
+      });
+
+      test('a tombstone names no params, so none are judged', () => {
+        const result = serviceWith({
+          endpoints: {
+            'GET /orders/{}': { lifecycle: 'retired', retiredIn: '1.0.0', name: 'getOrder' },
+          },
+        });
+
+        expect(result.kind).toBe('decoded');
+      });
+    });
 
     test('a nullable def is malformed at the def: nullable belongs to a use of it', () => {
       const tree: SchemaNode = { type: 'object', fields: {}, nullable: true };
@@ -1218,7 +1310,15 @@ describe('decodeSnapshot', () => {
           endpoints: {
             'GET /orders/{}': {
               ...anEndpoint,
-              input: { params: null, query: emptyPart, headers: emptyPart, body: aRef('missing') },
+              input: {
+                params: {
+                  type: 'object',
+                  fields: { orderId: { required: true, schema: { type: 'string' } } },
+                },
+                query: emptyPart,
+                headers: emptyPart,
+                body: aRef('missing'),
+              },
             },
           },
         }),
@@ -1752,7 +1852,10 @@ const formatOneFixture = `{
       "input": {
         "body": null,
         "headers": { "fields": {}, "type": "object" },
-        "params": { "fields": {}, "type": "object" },
+        "params": {
+          "fields": { "orderId": { "required": true, "schema": { "type": "string" } } },
+          "type": "object"
+        },
         "query": { "fields": {}, "type": "object" }
       },
       "lifecycle": "deprecated",

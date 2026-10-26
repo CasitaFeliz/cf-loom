@@ -78,7 +78,7 @@ const getOrder = {
   params: ['orderId'],
   guards: [],
   input: {
-    params: null,
+    params: { type: 'object', fields: { orderId: { required: true, schema: { type: 'string' } } } },
     query: { type: 'object', fields: {} },
     headers: { type: 'object', fields: {} },
     body: null,

@@ -1,7 +1,13 @@
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
-import { notAllowed, refused, refusedAcyclicId, refusedDuplicateId } from './not-allowed.ts';
+import {
+  notAllowed,
+  refused,
+  refusedAcyclicId,
+  refusedDuplicateId,
+  refusedNullableDef,
+} from './not-allowed.ts';
 import {
   type Failed,
   failed,
@@ -147,7 +153,8 @@ function offCycle(ancestor: Ancestor, node: Walked): Walked {
 
 /**
  * A schema with an id on a cycle is walked once: its def, or its failures, kept for every use,
- * each of which is a `ref` to it.
+ * each of which is a `ref` to it. A def is never nullable: `.nullable()` belongs to a use, so a
+ * schema that admits `null` is refused as a def, through `z.lazy()` or an intersection included.
  */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
@@ -164,6 +171,10 @@ function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   state.schemaById.set(ancestor.id, ancestor.schema);
   if (leadsBackWithNoNode(ancestor.id, node.value, state.defById)) {
     return dropOpenGroup(state, ancestor, notAllowed(ancestor.at, refused.nodelessCycle, ref));
+  }
+  if (node.value.nullable === true) {
+    const refusal = notAllowed(ancestor.at, refusedNullableDef(ancestor.id), ref);
+    return dropOpenGroup(state, ancestor, refusal);
   }
   state.nameBySchema.set(ancestor.schema, ancestor.id);
   state.defById.set(ancestor.id, node.value);
