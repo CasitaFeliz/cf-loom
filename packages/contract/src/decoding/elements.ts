@@ -8,21 +8,56 @@ import { semanticVersionText, stampText } from './texts.ts';
 
 const retired = { lifecycle: z.literal('retired'), retiredIn: semanticVersionText };
 
+const lifecycles = ['active', 'deprecated', 'retired'] as const;
+const withLifecycle = z.looseObject({ lifecycle: z.enum(lifecycles) });
+
+type FormName = (typeof lifecycles)[number] | 'tombstone';
+
+/** A Retired Element keeps its Group while it is still declared, and loses it as a tombstone. */
+function formNameOf(element: z.output<typeof withLifecycle>): FormName {
+  if (element.lifecycle !== 'retired') {
+    return element.lifecycle;
+  }
+  return Object.hasOwn(element, 'group') ? 'retired' : 'tombstone';
+}
+
+/** The issues of a parse as the issues of the schema that chose it, at the paths they have. */
+function parsedAs<Form extends z.core.$ZodType>(
+  form: Form,
+  element: unknown,
+  ctx: z.core.$RefinementCtx,
+): z.output<Form> {
+  const parsed = z.safeParse(form, element);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  for (const issue of parsed.error.issues) {
+    ctx.issues.push({ ...issue, input: element } as z.core.$ZodRawIssue);
+  }
+  return z.NEVER;
+}
+
 /**
  * A published Element: still declared with its lifecycle, a Deprecated one also with what only
  * Deprecation stamps, a Retired one with the version that first published it so, or its tombstone.
+ * Its lifecycle, and for a Retired one its Group, select the one form it is read as, so a failure
+ * names the key that breaks that form.
  */
 function published<
   Fields extends z.core.$ZodShape,
   Deprecation extends z.core.$ZodShape,
   Tombstone extends z.core.$ZodType,
 >(fields: Fields, deprecation: Deprecation, tombstone: Tombstone) {
-  return z.union([
-    z.strictObject({ ...fields, lifecycle: z.literal('active') }),
-    z.strictObject({ ...fields, ...deprecation, lifecycle: z.literal('deprecated') }),
-    z.strictObject({ ...fields, ...retired }),
+  const forms = {
+    active: z.strictObject({ ...fields, lifecycle: z.literal('active') }),
+    deprecated: z.strictObject({ ...fields, ...deprecation, lifecycle: z.literal('deprecated') }),
+    retired: z.strictObject({ ...fields, ...retired }),
     tombstone,
-  ]);
+  };
+  return z.pipe(
+    withLifecycle,
+    z.transform((element, ctx) => parsedAs(forms[formNameOf(element)], element, ctx)),
+  );
 }
 
 const messageTombstone = z.strictObject(retired);
