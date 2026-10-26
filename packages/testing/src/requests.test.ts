@@ -77,6 +77,18 @@ function latestPayment(fields: {
   });
 }
 
+/** A Private `latestPayment` that is Deprecated, which a Private Endpoint may be and stays live. */
+const deprecatedLatestPayment = defineEndpoint({
+  name: 'getLatestPayment',
+  method: 'GET',
+  path: '/payments/latest',
+  visibility: 'private',
+  description: 'The latest payment',
+  lifecycle: 'deprecated',
+  deprecatedAt: '2026-11-01T00:00:00Z',
+  success: { status: 200, body: z.object({ id: z.string() }) },
+});
+
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
 function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
@@ -164,7 +176,7 @@ function countingFake(options: { readonly baseUrl?: string } = {}) {
 }
 
 /** A fake of `getPayment` whose Provider also declares `latest`, which its Contract Package does not export. */
-function fakeBesides(latest: ReturnType<typeof latestPayment>) {
+function fakeBesides(latest: Endpoint) {
   const declared = [getPayment, capturePayment, getSummary, latest];
   const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
   const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
@@ -498,21 +510,25 @@ describe('fakeProvider: requests', () => {
     expect(taken.getFirst).toBe(0);
   });
 
-  test('a request a Private Endpoint wins is a mistake naming it, and takes no step', async () => {
-    const { fake, taken } = fakeBesides(
-      latestPayment({ visibility: 'private', lifecycle: 'active' }),
-    );
+  test.each([
+    ['Active', latestPayment({ visibility: 'private', lifecycle: 'active' })],
+    ['Deprecated', deprecatedLatestPayment],
+  ])(
+    'a request a %s Private Endpoint wins is a mistake naming it, and takes no step',
+    async (_, latest) => {
+      const { fake, taken } = fakeBesides(latest);
 
-    const answering = fake.fetch(
-      new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
-    );
+      const answering = fake.fetch(
+        new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+      );
 
-    await expect(answering).rejects.toThrow(FakeProviderError);
-    await expect(answering).rejects.toThrow(
-      'payments-service: the Provider does not export GET /payments/latest, which GET /payments/latest reaches',
-    );
-    expect(taken.getPayment).toBe(0);
-  });
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        'payments-service: the Provider does not export GET /payments/latest, which GET /payments/latest reaches',
+      );
+      expect(taken.getPayment).toBe(0);
+    },
+  );
 
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () =>
