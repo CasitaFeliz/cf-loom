@@ -779,21 +779,43 @@ describe('memory().messagesOf', () => {
     ]);
   });
 
-  test('lists nothing for a version the Service never published or sent', async () => {
+  test('lists nothing yet for a version the Service publishes or sends but has not', async () => {
+    const { broker, publisher } = await overMemory();
+    const beforeAnyPublish = broker.messagesOf(orderCreatedV2);
+    await publisher.publish('OrderCreated', { v2, v3 }, fact);
+
+    const notSentYet = broker.messagesOf(chargeCardV2);
+
+    expect([beforeAnyPublish, notSentYet]).toEqual([[], []]);
+  });
+
+  test.for([
+    ['a Retired Event version', orderCreatedV1, 'OrderCreated@1'],
+    ['a Deprecated Command version', chargeCardV1, 'ChargeCard@1'],
+  ] as const)('throws for %s, naming it', async ([, version, identity]) => {
     const { broker, publisher } = await overMemory();
     await publisher.publish('OrderCreated', { v2, v3 }, fact);
 
-    const neverPublishedOrSent = [orderCreatedV1, chargeCardV2].map((version) =>
+    const asked = () => broker.messagesOf(version);
+
+    expect(asked).toThrow(`${identity} is no Message Version the Service publishes or sends`);
+  });
+
+  test('lists nothing before the Service connects, whatever the declaration', () => {
+    const outside = defineEvent({
+      name: 'Elsewhere',
+      version: 1,
+      visibility: 'internal',
+      description: 'An event of no Contract here',
+      body: z.object({ id: z.string() }),
+    });
+    const broker = memory();
+
+    const lists = [orderCreatedV1, orderCreatedV2, outside].map((version) =>
       broker.messagesOf(version),
     );
 
-    expect(neverPublishedOrSent).toEqual([[], []]);
-  });
-
-  test('lists nothing before the Service connects', () => {
-    const broker = memory();
-
-    expect(broker.messagesOf(orderCreatedV2)).toEqual([]);
+    expect(lists).toEqual([[], [], []]);
   });
 
   test('leaves out a duplicate the Broker dropped', async () => {
@@ -806,7 +828,7 @@ describe('memory().messagesOf', () => {
     expect(recorded).toHaveLength(1);
   });
 
-  test('lists nothing for a Provided Event, even when the Service publishes an Event of its name and version', async () => {
+  test('throws for a Provided Event, even when the Service publishes an Event of its name and version', async () => {
     const paymentSettledV1 = providedEvent('payments-service', {
       name: 'PaymentSettled',
       version: 1,
@@ -849,13 +871,13 @@ describe('memory().messagesOf', () => {
     const { publisher } = await messaging(settling, broker);
     await publisher.publish('PaymentSettled', { v1: { paymentId: 'p-1' } }, fact);
 
-    const provided = broker.messagesOf(paymentSettledV1);
+    const asked = () => broker.messagesOf(paymentSettledV1);
 
-    expect(provided).toEqual([]);
+    expect(asked).toThrow('PaymentSettled@1 is no Message Version the Service publishes or sends');
     expect(broker.messagesOf(ownSettledV1)).toHaveLength(1);
   });
 
-  test('lists nothing for a declaration outside the Contract, whatever its name and version', async () => {
+  test('throws for a declaration outside the Contract, whatever its name and version', async () => {
     const outsideOrderCreatedV2 = defineEvent({
       name: 'OrderCreated',
       version: 2,
@@ -866,21 +888,13 @@ describe('memory().messagesOf', () => {
     const { broker, publisher } = await overMemory();
     await publisher.publish('OrderCreated', { v2, v3 }, fact);
 
-    const outside = broker.messagesOf(outsideOrderCreatedV2);
+    const asked = () => broker.messagesOf(outsideOrderCreatedV2);
 
-    expect(outside).toEqual([]);
+    expect(asked).toThrow('OrderCreated@2 is no Message Version the Service publishes or sends');
   });
 
   test('the lists of every Message Version partition messages, each in order (seed 305)', async () => {
-    const versions = [
-      orderCreatedV1,
-      orderCreatedV2,
-      orderCreatedV3,
-      grownV9,
-      grownV10,
-      chargeCardV1,
-      chargeCardV2,
-    ];
+    const versions = [orderCreatedV2, orderCreatedV3, grownV9, grownV10, chargeCardV2];
     const next = seededNext(305);
     for (let round = 0; round < 60; round += 1) {
       const { broker, publisher, sender } = await overMemory();

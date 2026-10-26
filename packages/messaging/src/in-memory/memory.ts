@@ -29,7 +29,8 @@ export function memory(): MemoryBroker {
     get messages() {
       return connection.messages();
     },
-    messagesOf: (message) => recordedOf(connection.messages(), listedVersions, message),
+    messagesOf: (message) =>
+      connected ? recordedOf(connection.messages(), listedVersions, message) : [],
     deliver: async (message, body, meta = {}) => {
       connection.assertOpen();
       const attempts = injectedAttemptsOf(connection.consumers(), { message, body, meta });
