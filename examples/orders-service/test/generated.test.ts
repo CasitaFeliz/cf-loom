@@ -107,10 +107,13 @@ describe('the Contract Package', () => {
     const files = filesOf(outDir);
 
     const events = Object.keys(files).filter((path) => path.startsWith('src/events/'));
-    const exported = [files['src/index.ts'], files['src/exported-snapshot.ts']].join('\n');
+    const sources = Object.keys(files)
+      .filter((path) => path.endsWith('.ts'))
+      .map((path) => files[path])
+      .join('\n');
 
     expect(events).toEqual(['src/events/order-created.v1.ts']);
-    expect(exported).toContain('OrderCreated@1');
-    expect(exported).not.toMatch(/ChargeCard|chargeOnCreated/i);
+    expect(files['src/index.ts']).toContain('orderCreatedV1: orderCreatedEventV1');
+    expect(sources).not.toMatch(/ChargeCard|chargeOnCreated/i);
   });
 });
