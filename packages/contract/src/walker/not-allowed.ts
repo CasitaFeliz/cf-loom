@@ -1,3 +1,4 @@
+import type { NotAllowed } from './nodes.ts';
 import { type Failed, failed, type Outline, type Reached } from './walked.ts';
 
 /** A construct as the Not allowed list writes it, and what the documents name instead. */
@@ -180,4 +181,12 @@ export function refusedStringFormat(format: string): Refused {
 /** One failure, as the walk of a schema returns it, with the node the walk was building. */
 export function notAllowed(at: Reached, construct: Refused, outline?: Outline): Failed {
   return failed([{ kind: 'not-allowed', ...at, ...construct }], outline);
+}
+
+/**
+ * Whether a refusal is of a cycle no id names, which has no identity to share: each declaration's
+ * walk meets it afresh, so it is told where that walk refused it.
+ */
+export function isUnnamedCycle({ construct }: NotAllowed): boolean {
+  return construct === refused.unnamedCycle.construct;
 }

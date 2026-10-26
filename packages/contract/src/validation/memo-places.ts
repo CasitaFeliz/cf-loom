@@ -6,7 +6,6 @@ import {
   type Site,
   sameSite,
   siteLocationOf,
-  siteTextOf,
 } from '../walker/index.ts';
 
 /**
@@ -14,22 +13,16 @@ import {
  * order, and with every site that reaches it, through the remembered schemas it is reached inside.
  */
 export type MemoPlaces = {
-  /** The first place the memo is reached at, among the places of one site when one is given. */
-  readonly firstOf: (memo: Memo, site?: Site) => Place;
+  readonly firstOf: (memo: Memo) => Place;
   readonly sitesOf: (memo: Memo) => readonly Site[];
 };
 
 /** The places of the memos of one walk, each settled once and kept. */
 export function memoPlaces(): MemoPlaces {
-  const firstBySite = new Map<string, Settling>();
+  const first = new Map<Memo, Place>();
   const sites = new Map<Memo, readonly Site[]>();
   return {
-    firstOf: (memo, site) => {
-      const key = site === undefined ? '' : siteTextOf(site);
-      const settling = firstBySite.get(key) ?? { site, first: new Map() };
-      firstBySite.set(key, settling);
-      return firstOf(settling, memo);
-    },
+    firstOf: (memo) => firstOf(first, memo),
     sitesOf: (memo) => {
       const known = sites.get(memo) ?? sitesOf(memo);
       sites.set(memo, known);
@@ -48,22 +41,18 @@ export function locationTextOf({ site, steps }: Place): string {
   return siteLocationOf(site, steps);
 }
 
-/** The first places settled so far, from the places of one site or of all. */
-type Settling = { readonly site: Site | undefined; readonly first: Map<Memo, Place> };
-
 /**
  * Memos settle in code point order of their first place: the smallest place any unsettled memo
  * is reached at is final, since a place inside a memo only extends that memo's.
  */
-function firstOf(settling: Settling, memo: Memo): Place {
-  const { first } = settling;
+function firstOf(first: Map<Memo, Place>, memo: Memo): Place {
   const settled = first.get(memo);
   if (settled !== undefined) {
     return settled;
   }
   const unsettled = new Set([...around(memo)].filter((other) => !first.has(other)));
   for (;;) {
-    const smallest = smallestReachOf(unsettled, settling);
+    const smallest = smallestReachOf(unsettled, first);
     first.set(smallest.memo, smallest.at);
     unsettled.delete(smallest.memo);
     if (smallest.memo === memo) {
@@ -75,10 +64,10 @@ function firstOf(settling: Settling, memo: Memo): Place {
 /** The smallest place any of the memos is reached at, among the reaches already placed. */
 function smallestReachOf(
   memos: ReadonlySet<Memo>,
-  settling: Settling,
+  first: ReadonlyMap<Memo, Place>,
 ): { readonly memo: Memo; readonly at: Place } {
   const placed = [...memos].flatMap((memo) =>
-    memo.reaches.map((reach) => ({ memo, at: placeOf(reach, settling) })),
+    memo.reaches.map((reach) => ({ memo, at: placeOf(reach, first) })),
   );
   const [smallest] = placed.filter(isPlaced).sort((left, right) => byLocation(left.at, right.at));
   if (smallest === undefined) {
@@ -88,9 +77,12 @@ function smallestReachOf(
 }
 
 /** The place a reach stands at once the memo it was made inside is placed, else none yet. */
-function placeOf(reach: Memo['reaches'][number], { site, first }: Settling): Place | undefined {
+function placeOf(
+  reach: Memo['reaches'][number],
+  first: ReadonlyMap<Memo, Place>,
+): Place | undefined {
   if (reach.within === undefined) {
-    return site === undefined || sameSite(site, reach.at.site) ? reach.at : undefined;
+    return reach.at;
   }
   const outer = first.get(reach.within);
   return outer === undefined ? undefined : movedFrom(reach.at, reach.within.at, outer);

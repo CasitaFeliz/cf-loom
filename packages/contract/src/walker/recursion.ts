@@ -3,6 +3,7 @@ import { leadsBackWithNoNode } from './children.ts';
 import { type Memos, startMemos } from './memos.ts';
 import type { NotAllowed, RefNode, SchemaNode } from './nodes.ts';
 import {
+  isUnnamedCycle,
   notAllowed,
   refused,
   refusedAcyclicId,
@@ -14,7 +15,6 @@ import {
   type Failed,
   failed,
   failuresOf,
-  type Loop,
   type Memo,
   type ReachedSchema,
   refusedBeside,
@@ -33,9 +33,10 @@ export type Entering = ReachedSchema & { readonly id: string | undefined };
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walked) => Walked;
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
+  /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
+  readonly forgetUnnamedCycles: () => void;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
-  readonly loopOf: ReadonlyMap<NotAllowed, Loop>;
 };
 
 /** A schema being walked, numbered in walk order, with the lowest number it reaches back to. */
@@ -70,8 +71,8 @@ export function startRecursion(compositions: readonly Composition[]): Recursion 
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
+    forgetUnnamedCycles: () => forgetUnnamedCycles(state),
     memoOf: state.memos.memoOf,
-    loopOf: state.memos.loopOf,
   };
 }
 
@@ -148,12 +149,17 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
     state.reportedBySchema.set(ancestor.schema, failure);
   }
   state.memos.raised(failure.failures);
-  state.memos.looped(failure.failures[0], [
-    closing.schema,
-    ...cycle.slice(1).map(({ schema }) => schema),
-  ]);
   state.memos.reached(entering.schema, entering.at);
   return failure;
+}
+
+function forgetUnnamedCycles(state: State): void {
+  for (const [schema, reported] of state.reportedBySchema) {
+    if (reported.failures.some(isUnnamedCycle)) {
+      state.reportedBySchema.delete(schema);
+      state.memos.forget(schema);
+    }
+  }
 }
 
 /** Whether the walk answers the schema from memory from now on: a def, or a failure kept for every use. */
@@ -193,7 +199,7 @@ function offCycle(ancestor: Ancestor, node: Walked): Walked {
  */
 function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   if (ancestor.id === undefined) {
-    return onUnnamedCycle(state, ancestor) ? withoutOutline(node) : node;
+    return isRemembered(state, ancestor.schema) ? withoutOutline(node) : node;
   }
   const ref: RefNode = { type: 'ref', name: ancestor.id };
   if (node.kind === 'not-allowed') {
@@ -236,11 +242,6 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
   state.openDefs.splice(0, state.openDefs.length, ...remaining);
   return failure;
-}
-
-/** Whether `metAgain` recorded the schema as lying on a cycle no id names. */
-function onUnnamedCycle(state: State, ancestor: Ancestor): boolean {
-  return state.reportedBySchema.has(ancestor.schema);
 }
 
 /**

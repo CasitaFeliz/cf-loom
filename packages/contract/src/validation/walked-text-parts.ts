@@ -39,7 +39,7 @@ export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const nodes = nodesOf(slots, walked);
   const [first, ...others] = [
     ...notSchemas,
-    ...notAllowedFailuresOf(walked.located.flatMap(failuresAt), walked),
+    ...notAllowedFailuresOf(walked.located.flatMap(failuresAt), walked.memoOf),
     ...textPartFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),

@@ -59,12 +59,6 @@ export type Reach = { readonly at: Reached; within: Memo | undefined };
  */
 export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
 
-/**
- * The schemas of a cycle no id names, as the walk that refused it entered them: the first is the
- * one it met again, so where the cycle closes from each is told by the steps around the cycle.
- */
-export type Loop = readonly [Memo, ...Memo[]];
-
 /** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
 export type Walker = {
   readonly schema: (schema: core.$ZodType, at: Under) => Walked;

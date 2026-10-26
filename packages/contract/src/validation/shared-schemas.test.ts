@@ -425,7 +425,7 @@ describe('failure lines: a cycle of two schemas no id names', () => {
 
   test.for([
     ['a first', 'b.a'],
-    ['the def first', 'b.a.b.a'],
+    ['the def first', 'b.c.back.b.a'],
   ] as const)(
     'holding a def that reaches back, its fields %s, tells the cycle where it closes',
     ([order, path]) => {
@@ -468,7 +468,60 @@ describe('failure lines: a cycle of two schemas no id names', () => {
       expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.${path} ${unnamedCycle}`]);
     },
   );
+
+  test.for([
+    ['the cycle', 'the def'],
+    ['the def', 'the cycle'],
+  ] as const)(
+    'reached through a def another declaration holds, declared %s first, is told as each declaration alone tells it',
+    (order) => {
+      const { cycle, def } = cycleThroughDef();
+      const declarations = {
+        'the cycle': answering('alpha', 'GET /a', cycle),
+        'the def': answering('gamma', 'GET /c', def),
+      };
+      const ordered = order.map((key) => declarations[key]);
+
+      const lines = linesOf(serviceWith(ordered));
+
+      const alone = ordered.flatMap((declaration) => linesOf(serviceWith([declaration])));
+      expect(cycleLinesOf(lines)).toEqual(cycleLinesOf(alone));
+    },
+  );
 });
+
+/** The lines that refuse a cycle no id names, in code point order. */
+function cycleLinesOf(lines: readonly string[]): readonly string[] {
+  return lines.filter((line) => line.includes(unnamedCycle)).sort();
+}
+
+/** `cycle` holding `second`, which holds the def `def` before `cycle` again; `def` reaches back to `cycle`. */
+function cycleThroughDef() {
+  const cycle: z.ZodType = z.object({
+    get b() {
+      return second;
+    },
+  });
+  const second: z.ZodType = z.object({
+    get c() {
+      return def;
+    },
+    get a() {
+      return cycle;
+    },
+  });
+  const def: z.ZodType = z
+    .object({
+      get back() {
+        return cycle;
+      },
+      get kids() {
+        return z.array(def);
+      },
+    })
+    .meta({ id: 'c' });
+  return { cycle, def };
+}
 
 type Next = () => number;
 
@@ -589,7 +642,12 @@ function poolOf(next: Next): readonly z.ZodType[] {
     },
   ];
   const drawn = Array.from({ length: 1 + Math.floor(next() * 3) }, () => pickOf(next, makers)());
-  return next() < 0.5 ? [...drawn, ...anUnnamedPair(next)] : drawn;
+  const withPair = next() < 0.5 ? [...drawn, ...anUnnamedPair(next)] : drawn;
+  if (next() < 0.5) {
+    return withPair;
+  }
+  const { cycle, def } = cycleThroughDef();
+  return [...withPair, cycle, def];
 }
 
 /** A body of a draw: a schema of the pool or one of its own, as is or wrapped. */
@@ -744,6 +802,15 @@ describe('failure lines: shared refused schemas, drawn at random', () => {
       return !alone.map(textOf).includes(textOf(line));
     });
     expect(misplaced).toEqual([]);
+  });
+
+  test.for(seeds)('draw %i: each cycle line is one its declaration alone prints', (seed) => {
+    const declarations = declarationsOf(seed);
+
+    const lines = linesOf(rootOf(declarations));
+
+    const alone = declarations.flatMap((declaration) => linesOf(rootOf([declaration])));
+    expect(cycleLinesOf(lines)).toEqual(cycleLinesOf(alone));
   });
 
   test.for(seeds)('draw %i: no line sits at a def', (seed) => {

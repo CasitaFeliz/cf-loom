@@ -47,6 +47,7 @@ export type {
   TupleNode,
 } from './nodes.ts';
 export { neutralAnnotations } from './nodes.ts';
+export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { shapeKey, shapeOf } from './shapes.ts';
@@ -65,7 +66,6 @@ export {
   valueStep,
   variantStep,
 } from './steps.ts';
-
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
-export type { LocatedSchema, Loop, Memo, Reach } from './walked.ts';
+export type { LocatedSchema, Memo } from './walked.ts';
