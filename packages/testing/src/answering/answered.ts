@@ -93,7 +93,11 @@ function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndp
 
 /** A code the Provider's Contract does not declare: 422, its message the code unless given, and a JSON body only when given. */
 function undeclaredRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
-  const { code, message = code, body } = answer;
+  const { code, message = code, headers, body } = answer;
+  if (headers !== undefined) {
+    const what = "r.unknownRejection takes headers only for a code the Provider's Contract declares";
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
   const what = `the scripted ${code} body is no JSON`;
   return builtOf(listed, what, () => {
     if (body !== undefined && !isJsonValue(body)) {

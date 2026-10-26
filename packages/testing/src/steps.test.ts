@@ -31,6 +31,19 @@ function paymentEndpointsOf<const Stage extends z.ZodType, const Reason extends 
     message: 'The payment is locked',
     body: z.object({ lockedAt: z.iso.datetime(), reason }),
   });
+  const throttled = defineRejection({
+    code: 'THROTTLED',
+    status: 429,
+    message: 'Too many requests',
+    headers: z.object({ 'retry-after': z.int() }),
+    body: z.object({ limit: z.int() }),
+  });
+  const unauthorized = defineRejection({
+    code: 'UNAUTHORIZED',
+    status: 401,
+    message: 'Sign in first',
+    headers: z.object({ 'www-authenticate': z.string() }),
+  });
   const getPayment = defineEndpoint({
     name: 'getPayment',
     method: 'GET',
@@ -72,7 +85,17 @@ function paymentEndpointsOf<const Stage extends z.ZodType, const Reason extends 
     input: { params: z.object({ paymentId: z.string() }), body: z.object({ amount: z.int() }) },
     success: { status: 200, body: z.object({ amount: z.int() }) },
   });
-  return { getPayment, cancelPayment, checkPayment, capturePayment };
+  const refundPayment = defineEndpoint({
+    name: 'refundPayment',
+    method: 'POST',
+    path: '/payments/:paymentId/refund',
+    visibility: 'internal',
+    description: 'Refunds a payment',
+    input: { params: z.object({ paymentId: z.string() }) },
+    success: { status: 204 },
+    rejections: [throttled, unauthorized],
+  });
+  return { getPayment, cancelPayment, checkPayment, capturePayment, refundPayment };
 }
 
 const declared = paymentEndpointsOf(openEnum(['pending', 'settled']), openEnum(['fraud']));
@@ -121,6 +144,7 @@ const paymentsDependency = defineDependency({
     paymentsDependencyPackage.endpoints.cancelPayment,
     paymentsDependencyPackage.endpoints.checkPayment,
     paymentsDependencyPackage.endpoints.capturePayment,
+    paymentsDependencyPackage.endpoints.refundPayment,
   ],
 });
 
@@ -241,6 +265,107 @@ describe('fakeProvider: steps', () => {
       message: 'The payment is locked',
       body,
     });
+  });
+
+  test('reject(code, { headers, body }) answers its headers as text beside its body, as its readers read them', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('refundPayment')
+      .otherwise((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }));
+
+    const response = await payments.fetch(new Request(`${at}/refund`, { method: 'POST' }));
+    const outcome = await payments.client().refundPayment({ params });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'THROTTLED',
+      status: 429,
+      message: 'Too many requests',
+      headers: { 'retry-after': 30 },
+      body: { limit: 5 },
+    });
+  });
+
+  test('reject(code, { headers }) answers the headers of a code that declares no body', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const challenge = 'Bearer realm="payments"';
+    payments
+      .on('refundPayment')
+      .otherwise((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': challenge } }));
+
+    const outcome = await payments.client().refundPayment({ params });
+
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'UNAUTHORIZED',
+      status: 401,
+      message: 'Sign in first',
+      headers: { 'www-authenticate': challenge },
+    });
+  });
+
+  test('a scripted Rejection header that breaks its reader or cannot travel is a mistake at headers', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('refundPayment')
+      .otherwise((r) =>
+        r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'Bearer\nrealm' } }),
+      );
+
+    const calling = payments.client().refundPayment({ params });
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: refundPayment: the scripted UNAUTHORIZED headers break their reader or cannot travel',
+        'payments-service: refundPayment: headers.www-authenticate invalid_format: The header value cannot travel as HTTP field text',
+      ].join('\n'),
+    );
+  });
+
+  test('unknownRejection of a code another Endpoint declares answers it with its declared headers', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { headers: { 'retry-after': 7 }, body: { limit: 1 } };
+    payments.on('cancelPayment').otherwise((r) => r.unknownRejection('THROTTLED', scripted));
+
+    const response = await payments.fetch(new Request(at, { method: 'DELETE' }));
+    const outcome = await payments.client().cancelPayment({ params });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('7');
+    expect(outcome).toMatchObject({ kind: 'unknown-rejection', code: 'THROTTLED' });
+  });
+
+  test('unknownRejection of a declared code with no headers, given some, is a mistake', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('cancelPayment')
+      .otherwise((r) => r.unknownRejection('NO_PAYMENT', { headers: { 'x-note': 'a' } }));
+
+    const calling = payments.client().cancelPayment({ params });
+
+    await expect(calling).rejects.toThrow(
+      [
+        'payments-service: cancelPayment: the scripted NO_PAYMENT headers break their reader or cannot travel',
+        'payments-service: cancelPayment: headers invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
+  test('unknownRejection of a code no Contract declares takes no headers', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('cancelPayment')
+      .otherwise((r) => r.unknownRejection('CARD_EXPIRED', { headers: { 'x-note': 'a' } }));
+
+    const calling = payments.client().cancelPayment({ params });
+
+    await expect(calling).rejects.toThrow(
+      "payments-service: cancelPayment: r.unknownRejection takes headers only for a code the Provider's Contract declares",
+    );
   });
 
   test('reject on invalid input answers its issues as the Provider’s Reader writes them, a code only that Reader declares included', async () => {

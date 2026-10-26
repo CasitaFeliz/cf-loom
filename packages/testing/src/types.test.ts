@@ -41,6 +41,19 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     message: 'The payment is locked',
     body: z.object({ lockedAt: z.iso.datetime() }),
   });
+  const throttled = defineRejection({
+    code: 'THROTTLED',
+    status: 429,
+    message: 'Too many requests',
+    headers: z.object({ 'retry-after': z.int() }),
+    body: z.object({ limit: z.int() }),
+  });
+  const unauthorized = defineRejection({
+    code: 'UNAUTHORIZED',
+    status: 401,
+    message: 'Sign in first',
+    headers: z.object({ 'www-authenticate': z.string() }),
+  });
   const getPayment = defineEndpoint({
     name: 'getPayment',
     method: 'GET',
@@ -72,7 +85,17 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     description: 'Every payment',
     success: { status: 200, body: z.array(z.string()) },
   });
-  return { getPayment, tagPayment, listPayments };
+  const refundPayment = defineEndpoint({
+    name: 'refundPayment',
+    method: 'POST',
+    path: '/payments/:paymentId/refund',
+    visibility: 'internal',
+    description: 'Refunds a payment',
+    input: { params: z.object({ paymentId: z.string() }) },
+    success: { status: 204 },
+    rejections: [throttled, unauthorized],
+  });
+  return { getPayment, tagPayment, listPayments, refundPayment };
 }
 
 const declared = paymentEndpointsOf(openEnum(['pending', 'settled']));
@@ -116,6 +139,7 @@ const paymentsDependency = defineDependency({
   endpoints: [
     paymentsDependencyPackage.endpoints.getPayment,
     paymentsDependencyPackage.endpoints.tagPayment,
+    paymentsDependencyPackage.endpoints.refundPayment,
   ],
 });
 
@@ -249,6 +273,29 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
+  test('reject takes { headers, body } for a code that declares headers, never a bare body or none', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('refundPayment')
+      .once((r) =>
+        r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }),
+      )
+      .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'Bearer' } }))
+      // @ts-expect-error a code that declares headers takes them
+      .once((r) => r.reject('UNAUTHORIZED'))
+      // @ts-expect-error a code that declares headers takes { headers, body }, not a bare body
+      .once((r) => r.reject('THROTTLED', { limit: 5 }))
+      // @ts-expect-error a code that declares a body takes it beside its headers
+      .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 } }))
+      // @ts-expect-error a code that declares no body takes none beside its headers
+      .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'B' }, body: {} }))
+      // @ts-expect-error a header is typed by its Reader
+      .otherwise((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 3 } }));
+
+    expect(payments.calls('refundPayment')).toEqual([]);
+  });
+
   test('reject takes no body for a code that declares none', () => {
     const payments = fakeProvider(paymentsDependency);
 
@@ -301,6 +348,6 @@ describe('fakeProvider: types', () => {
 
     expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDependency, 'x-api-key'>>();
     expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDependency>>();
-    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment']);
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
   });
 });

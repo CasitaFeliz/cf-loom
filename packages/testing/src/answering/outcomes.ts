@@ -4,6 +4,8 @@ import {
   type Checked,
   headerTextsOf,
   rejectionBodyReaderOf,
+  rejectionFieldsOf,
+  rejectionHeadersReaderOf,
   rejectionResponseOf,
   resolutionOf,
   successFieldsOf,
@@ -51,25 +53,29 @@ export function knownRejectionResponseOf(answer: KnownRejection, listed: ListedE
     const what = `the Endpoint answers no code ${answer.code}; ${sends}`;
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  return declaredRejectionResponseOf({ ...answer, rejection }, listed);
+  const { headers, body } = rejectionFieldsOf(rejection, answer.given);
+  return declaredRejectionResponseOf({ code: answer.code, rejection, headers, body }, listed);
 }
 
-/** A Rejection the Provider declares, as scripted: its message, when one replaces the declared one, and its body. */
+/** A Rejection the Provider declares, as scripted: its message, when one replaces the declared one, its headers and its body. */
 export type DeclaredAnswer = {
   readonly code: string;
   readonly rejection: AnswerableRejection;
   readonly message?: string;
+  readonly headers?: unknown;
   readonly body?: unknown;
 };
 
 /**
  * A Rejection the Provider declares, as `serve` sends it: its resolved code and status, its
- * message unless one is given, and its body written as its reader reads it.
+ * message unless one is given, its headers as text and its body, both written as their readers
+ * read them.
  */
 export function declaredRejectionResponseOf(
   declared: DeclaredAnswer,
   listed: ListedEndpoint,
 ): Response {
+  const headers = sentHeadersOf(declared, listed);
   const reader = rejectionBodyReaderOf(declared.rejection, listed.standards);
   const body = writtenPartOf('body', reader, { value: declared.body });
   if (body.kind === 'issues') {
@@ -78,7 +84,21 @@ export function declaredRejectionResponseOf(
   }
   const resolved = resolutionOf(declared.rejection, listed.standards);
   const message = declared.message ?? resolved.message;
-  return rejectionResponseOf({ ...resolved, message, body: body.value });
+  return rejectionResponseOf({ ...resolved, message, headers, body: body.value });
+}
+
+/** The headers a scripted Rejection sends, written as their reader reads them; what breaks it, or cannot travel, is the test's mistake. */
+function sentHeadersOf(declared: DeclaredAnswer, listed: ListedEndpoint) {
+  const reader = rejectionHeadersReaderOf(declared.rejection);
+  const written = writtenPartOf('headers', reader, { value: declared.headers });
+  const sent = fieldsOf(checkedValueOf(written));
+  const texts = headerTextsOf('headers', sent);
+  const issues = [...issuesOf(written), ...(texts.kind === 'issues' ? texts.issues : [])];
+  if (issues.length > 0) {
+    const what = `the scripted ${declared.code} headers break their reader or cannot travel`;
+    throw mistakeOf({ ...whoOf(listed), what, issues });
+  }
+  return sent;
 }
 
 function checkedValueOf(checked: Checked): unknown {

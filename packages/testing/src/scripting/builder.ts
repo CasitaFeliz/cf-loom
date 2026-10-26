@@ -15,15 +15,23 @@ type SuccessArguments<D extends AnyDependency, Name extends ListedName<D>> =
     : never;
 
 /**
- * What `r.reject` takes: each code the Endpoint answers paired with the body that code declares,
- * so a code not narrowed to one is refused.
+ * What `r.reject` takes: each code the Endpoint answers paired with what that code declares, its
+ * body, or `{ headers, body }` when it declares headers, so a code not narrowed to one is refused.
  */
 type RejectionArguments<D extends AnyDependency, Name extends ListedName<D>> =
   ReceivedRejection<D, Name> extends infer Received
     ? Received extends { readonly code: infer Code }
-      ? [code: Code, ...BodyArgumentsOf<Received>]
+      ? [code: Code, ...GivenArgumentsOf<Received>]
       : never
     : never;
+
+type GivenArgumentsOf<Received> = Received extends { readonly headers: infer Headers }
+  ? [given: { readonly headers: Headers } & BodyGivenOf<Received>]
+  : BodyArgumentsOf<Received>;
+
+type BodyGivenOf<Received> = Received extends { readonly body: infer Body }
+  ? { readonly body: Body }
+  : { readonly body?: never };
 
 type BodyArgumentsOf<Received> = Received extends { readonly body: infer Body }
   ? undefined extends Body
@@ -31,8 +39,15 @@ type BodyArgumentsOf<Received> = Received extends { readonly body: infer Body }
     : [body: Body]
   : [];
 
-/** What `r.unknownRejection` takes beside its code: the message its Envelope carries, and a body, none unless given. */
-type UnknownRejectionOptions = { readonly message?: string; readonly body?: unknown };
+/**
+ * What `r.unknownRejection` takes beside its code: the message its Envelope carries, and its
+ * headers and body, none unless given; headers only for a code the Provider's Contract declares.
+ */
+type UnknownRejectionOptions = {
+  readonly message?: string;
+  readonly headers?: Readonly<Record<string, unknown>>;
+  readonly body?: unknown;
+};
 
 /** What `r.fault` takes: a Fault as the Provider sends it, or a reserved code alone. */
 export type ScriptedFault =
@@ -50,7 +65,7 @@ export type ScriptedFault =
  */
 export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
   success(...success: SuccessArguments<D, Name>): ScriptedAnswer;
-  /** A code the Endpoint answers, with its body when it declares one. */
+  /** A code the Endpoint answers, with its body when it declares one, or `{ headers, body }` when it declares headers. */
   reject(...rejection: RejectionArguments<D, Name>): ScriptedAnswer;
   /** A code the Endpoint does not answer, as a later Provider might send it. */
   unknownRejection(code: string, options?: UnknownRejectionOptions): ScriptedAnswer;
@@ -63,7 +78,7 @@ export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
 /** The one builder every step receives; its Endpoint's types are laid over it where it is given. */
 export const stepBuilder = {
   success: (success?: unknown) => scriptedAnswerOf({ kind: 'success', success }),
-  reject: (code: string, body?: unknown) => scriptedAnswerOf({ kind: 'rejection', code, body }),
+  reject: (code: string, given?: unknown) => scriptedAnswerOf({ kind: 'rejection', code, given }),
   unknownRejection: (code: string, options: UnknownRejectionOptions = {}) =>
     scriptedAnswerOf({ ...options, kind: 'unknown-rejection', code }),
   fault: (fault: ScriptedFault) => {
