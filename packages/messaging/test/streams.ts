@@ -2,6 +2,7 @@ import type { ServiceContract } from '@cf-loom/contract';
 import {
   type BrokerPlan,
   brokerPlanOf,
+  providerOf,
   snapshotOf,
   validateRoot,
 } from '@cf-loom/contract/internal';
@@ -71,13 +72,18 @@ export async function arrangePlanOf(
   }
 }
 
-/** The Snapshot of a Service's Contract, each Provider of its Dependencies installed as a Contract Package at 1.0.0. */
+/** The Snapshot of a Service's Contract, each Provider whose Events it receives installed as a Contract Package at 1.0.0. */
 function serviceSnapshotOf(contract: ServiceContract) {
-  const contractPackages = (contract.dependencies ?? []).map(({ provider }) => ({
+  const received = (contract.groups ?? [])
+    .flatMap((group) => group.subscriptions ?? [])
+    .map(({ event }) => event);
+  const providers = new Set(received.map((event) => providerOf(event)));
+  providers.delete(undefined);
+  const contractPackages = [...providers].map((provider) => ({
     kind: 'identified' as const,
-    packageName: `@org/contract-${provider.name}`,
+    packageName: `@org/contract-${provider}`,
     version: '1.0.0',
-    contract: provider,
+    elements: received.filter((event) => providerOf(event) === provider),
     reaches: [],
   }));
   const validated = validateRoot(contract, {

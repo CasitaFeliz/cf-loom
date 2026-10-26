@@ -21,8 +21,8 @@ export function client<const D extends AnyDependency, Configured extends Configu
     inferFault: options.inferFault,
   };
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
-  const methods = (dependency.endpoints ?? []).map((endpoint) => {
-    const called = calledEndpointOf(endpoint, dependency.provider);
+  const methods = dependency.endpoints.map((endpoint) => {
+    const called = calledEndpointOf(endpoint);
     const method = methodOf(called, calling, deprecationWatchOf(called, onDeprecation));
     return [endpoint.name, method] as const;
   });

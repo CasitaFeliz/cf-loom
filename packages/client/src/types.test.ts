@@ -98,7 +98,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -116,7 +116,6 @@ const standards = providedStandardRejections({
 const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
 
 const ordersDependency = defineDependency({
-  provider: orders,
   endpoints: [orders.endpoints.getOrder, orders.endpoints.listOrders],
 });
 
@@ -138,24 +137,6 @@ describe('the client’s types', () => {
     // @ts-expect-error ping is exported but not listed
     const unlisted = () => orders.ping;
     expect(unlisted).toBeTypeOf('function');
-  });
-
-  test('a Dependency that lists no Endpoint gives a client with no methods', () => {
-    const empty = defineDependency({ provider: orders, endpoints: [] });
-
-    const emptyClient = client(empty, { baseUrl });
-
-    expectTypeOf(emptyClient).toEqualTypeOf<Readonly<Record<never, never>>>();
-    expect(Object.keys(emptyClient)).toEqual([]);
-  });
-
-  test('a Dependency written without a list gives a client with no methods', () => {
-    const noList = defineDependency({ provider: orders });
-
-    const noMethods = client(noList, { baseUrl });
-
-    expectTypeOf(noMethods).toEqualTypeOf<Readonly<Record<never, never>>>();
-    expect(Object.keys(noMethods)).toEqual([]);
   });
 
   test('a required header not given to client() stays required on each call', () => {

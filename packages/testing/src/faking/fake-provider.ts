@@ -7,13 +7,13 @@ import {
   type ListedName,
 } from '@cf-loom/client/internal';
 import type { Http, InputOf } from '@cf-loom/contract';
-import { fakedProviderOf } from '../provided/index.ts';
+import { fakedProviderOf, listedProviderOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
 import { throwMistakes } from './verify.ts';
 
-/** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
+/** Where a fake is reached: `https://<provider>.test`, its Endpoints' Provider, unless a test names another base URL. */
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
 
 /** What `payments.client()` takes: a client's options, its `fetch` and base URL the fake's own. */
@@ -47,14 +47,15 @@ export type FakeProvider<D extends AnyDependency> = {
 };
 
 /**
- * Fakes the Provider of a Dependency, checked against the Snapshot its Contract Package exports,
- * so it answers only what that Provider could.
+ * Fakes the Provider of a Dependency, checked against the exported Snapshot cut each listed
+ * Endpoint carries, so it answers only what that Provider could.
  */
 export function fakeProvider<const D extends AnyDependency>(
   dependency: D,
   options: FakeProviderOptions = {},
 ): FakeProvider<D> {
-  const base = baseUrlOf(options.baseUrl ?? `https://${dependency.provider.name}.test`);
+  const provider = listedProviderOf(dependency).name;
+  const base = baseUrlOf(options.baseUrl ?? `https://${provider}.test`);
   const faking: Faking = fakingOf(fakedProviderOf(dependency, base));
   const fetch = fakeFetchOf(faking);
   const fake: FakeProvider<D> = {

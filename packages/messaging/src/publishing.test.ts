@@ -1,7 +1,5 @@
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -11,7 +9,6 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
   type Broker,
   InvalidMessageError,
@@ -814,12 +811,6 @@ describe('memory().messagesOf', () => {
       description: 'A payment was settled',
       body: z.object({ paymentId: z.string() }),
     });
-    const payments = {
-      name: 'payments-service',
-      endpoints: {},
-      events: { paymentSettledV1 },
-      standardRejections: providedStandardRejections(),
-    } as const satisfies ContractPackage;
     const ownSettledV1 = defineEvent({
       name: 'PaymentSettled',
       version: 1,
@@ -843,7 +834,6 @@ describe('memory().messagesOf', () => {
           ],
         }),
       ],
-      dependencies: [defineDependency({ provider: payments })],
     });
     const broker = memory();
     const { publisher } = await messaging(settling, broker);

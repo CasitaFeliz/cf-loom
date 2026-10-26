@@ -8,8 +8,9 @@ import {
   notFound,
   openEnum,
   openEnumReader,
+  providedEndpoint,
 } from '@cf-loom/contract';
-import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { providedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -125,7 +126,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
   });
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -136,7 +137,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [
     paymentsDependencyPackage.endpoints.getPayment,
     paymentsDependencyPackage.endpoints.cancelPayment,
@@ -377,7 +377,7 @@ describe('fakeProvider: steps', () => {
     const calling = payments.client().cancelPayment({ params });
 
     await expect(calling).rejects.toThrow(
-      "payments-service: cancelPayment: r.unknownRejection takes headers only for a code the Provider's Contract declares",
+      'payments-service: cancelPayment: r.unknownRejection takes headers only for a code the listed Endpoints declare',
     );
   });
 
@@ -394,16 +394,18 @@ describe('fakeProvider: steps', () => {
       ),
     });
     const { invalidInput } = provider.standardRejections;
-    const dependency = defineDependency({
-      provider: {
-        ...provider,
-        standardRejections: {
-          ...provider.standardRejections,
-          invalidInput: { ...invalidInput, body: providersReader },
-        },
-      },
-      endpoints: [paymentsDependency.provider.endpoints.getPayment],
-    });
+    const standardRejections = {
+      ...provider.standardRejections,
+      invalidInput: { ...invalidInput, body: providersReader },
+    };
+    const written = provider.endpoints.getPayment;
+    const cut = structuredClone(providedSnapshotOf(written));
+    const getPayment = providedEndpoint(
+      { name: 'payments-service', standardRejections },
+      written,
+      cut,
+    );
+    const dependency = defineDependency({ endpoints: [getPayment] });
     const payments = fakeProvider(dependency);
     const issue = {
       in: 'body' as const,
@@ -504,10 +506,9 @@ describe('fakeProvider: steps', () => {
     );
   });
 
-  test('unknownRejection of a code an exported Endpoint the Dependency does not list declares answers it as declared', async () => {
+  test('a scripted unknownRejection whose code no listed Endpoint declares is answered with 422, even one an unlisted Endpoint declares', async () => {
     const dependency = defineDependency({
-      provider: paymentsDependency.provider,
-      endpoints: [paymentsDependency.provider.endpoints.capturePayment],
+      endpoints: [paymentsDependencyPackage.endpoints.capturePayment],
     });
     const payments = fakeProvider(dependency);
     const body = { lockedAt: '2026-10-19T10:00:00Z', reason: 'fraud' };
@@ -521,7 +522,10 @@ describe('fakeProvider: steps', () => {
       }),
     );
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'PAYMENT_LOCKED', message: 'PAYMENT_LOCKED', body },
+    });
   });
 
   test('unknownRejection of a declared code with no body, given a body, is a mistake', async () => {
@@ -680,43 +684,52 @@ describe('fakeProvider: steps', () => {
     expect(alone.headers.get('allow')).toBe('');
   });
 
-  test('fault({ code: METHOD_NOT_ALLOWED }) lists a method only an Endpoint the Provider does not export takes on that path', async () => {
-    const routed = { visibility: 'internal', success: { status: 204 } } as const;
-    const first = defineEndpoint({
-      ...routed,
-      name: 'getFirst',
-      method: 'GET',
-      path: '/p/:x/b',
-      description: 'Exported',
-      input: { params: z.object({ x: z.string() }) },
-    });
-    const zed = defineEndpoint({
-      ...routed,
-      name: 'postZed',
-      method: 'POST',
-      path: '/p/a/z',
-      description: 'Exported and listed',
-    });
-    const retired = defineEndpoint({
-      ...routed,
-      name: 'getRetired',
-      method: 'GET',
-      path: '/p/a/:y',
-      lifecycle: 'retired',
-      description: 'Retired, so not exported',
-      input: { params: z.object({ y: z.string() }) },
-    });
-    const provider = contractPackageOf({ getFirst: first, postZed: zed }, [first, zed, retired]);
-    const dependency = defineDependency({ provider, endpoints: [provider.endpoints.postZed] });
-    const payments = fakeProvider(dependency);
-    payments.on('postZed').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+  test.each([
+    { listed: ['getFirst', 'postZed'] as const, allow: 'GET' },
+    { listed: ['postZed'] as const, allow: '' },
+  ])(
+    'METHOD_NOT_ALLOWED’s Allow names the other methods the listed and shadowing Endpoints take on the path, listing $listed: $allow',
+    async ({ listed, allow }) => {
+      const routed = { visibility: 'internal', success: { status: 204 } } as const;
+      const first = defineEndpoint({
+        ...routed,
+        name: 'getFirst',
+        method: 'GET',
+        path: '/p/:x/b',
+        description: 'Exported',
+        input: { params: z.object({ x: z.string() }) },
+      });
+      const zed = defineEndpoint({
+        ...routed,
+        name: 'postZed',
+        method: 'POST',
+        path: '/p/a/z',
+        description: 'Exported and listed',
+      });
+      const retired = defineEndpoint({
+        ...routed,
+        name: 'getRetired',
+        method: 'GET',
+        path: '/p/a/:y',
+        lifecycle: 'retired',
+        description: 'Retired, so not exported',
+        input: { params: z.object({ y: z.string() }) },
+      });
+      const provider = contractPackageOf({ getFirst: first, postZed: zed }, [first, zed, retired]);
+      const endpoints = listed.map((name) => provider.endpoints[name]);
+      const dependency = defineDependency({
+        endpoints: endpoints as [typeof provider.endpoints.postZed],
+      });
+      const payments = fakeProvider(dependency);
+      payments.on('postZed').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
 
-    const response = await payments.fetch(
-      new Request('https://payments-service.test/p/a/z', { method: 'POST' }),
-    );
+      const response = await payments.fetch(
+        new Request('https://payments-service.test/p/a/z', { method: 'POST' }),
+      );
 
-    expect(response.headers.get('allow')).toBe('GET');
-  });
+      expect(response.headers.get('allow')).toBe(allow);
+    },
+  );
 
   test('an abort while a step waits rejects fetch with the signal’s reason', async () => {
     const payments = fakeProvider(paymentsDependency);

@@ -95,7 +95,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -109,7 +109,6 @@ const defaultStandards = providedStandardRejections();
 const orders = contractPackageOf({ searchOrders, createOrder, priceOrder }, defaultStandards);
 
 const ordersDependency = defineDependency({
-  provider: orders,
   endpoints: [
     orders.endpoints.searchOrders,
     orders.endpoints.createOrder,
@@ -124,7 +123,11 @@ function carrying(
 ): typeof orders.endpoints.searchOrders {
   const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(endpoint));
   change(cut);
-  return providedEndpoint('orders-service', endpoint, cut);
+  return providedEndpoint(
+    { name: 'orders-service', standardRejections: defaultStandards },
+    endpoint,
+    cut,
+  );
 }
 
 /** A client whose `fetch` records each request and answers `response`. */
@@ -439,13 +442,10 @@ describe('Input that cannot be sent', () => {
         invalidInput: { ...defaultStandards.invalidInput, body: olderReader },
       },
     );
-    const olderOrders = client(
-      defineDependency({ provider: older, endpoints: [older.endpoints.searchOrders] }),
-      {
-        baseUrl: 'http://orders.test',
-        fetch: async () => counted(),
-      },
-    );
+    const olderOrders = client(defineDependency({ endpoints: [older.endpoints.searchOrders] }), {
+      baseUrl: 'http://orders.test',
+      fetch: async () => counted(),
+    });
 
     const outcome = await olderOrders.searchOrders({
       params: { shopId: 's' },
@@ -542,7 +542,6 @@ describe('Input nested past the stack', () => {
   });
   const nestingPackage = contractPackageOf({ nest }, defaultStandards);
   const nesting = defineDependency({
-    provider: nestingPackage,
     endpoints: [nestingPackage.endpoints.nest],
   });
 
@@ -602,7 +601,6 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
   });
   const making = contractPackageOf({ makeOrder }, defaultStandards);
   const makingDependency = defineDependency({
-    provider: making,
     endpoints: [making.endpoints.makeOrder],
   });
 
@@ -706,7 +704,7 @@ describe('every header and query param the Provider reads reaches the request, w
   /** A client of the one Endpoint, called with an Input its types do not take. */
   function keyedClient(endpoint: Exportable, fetch: Http) {
     const provider = contractPackageOf({ readKeyed: endpoint }, defaultStandards);
-    const dependency = defineDependency({ provider, endpoints: [provider.endpoints.readKeyed] });
+    const dependency = defineDependency({ endpoints: [provider.endpoints.readKeyed] });
     return client(dependency, { baseUrl: 'http://orders.test', fetch }) as unknown as {
       readonly readKeyed: (input: unknown) => Promise<unknown>;
     };
@@ -792,7 +790,6 @@ describe('a number literal in exponent form, end to end against serve', () => {
   });
   const echoing = contractPackageOf({ echoLarge }, defaultStandards);
   const echoingDependency = defineDependency({
-    provider: echoing,
     endpoints: [echoing.endpoints.echoLarge],
   });
 
@@ -852,7 +849,6 @@ describe('several Guards, checked in Attachment order', () => {
   });
   const shops = contractPackageOf({ listShops }, defaultStandards);
   const shopsDependency = defineDependency({
-    provider: shops,
     endpoints: [shops.endpoints.listShops],
   });
   const shopsClient = () =>
@@ -907,7 +903,7 @@ describe('an Endpoint’s exported Snapshot cut, read when the client is created
   const { searchOrders: listed } = orders.endpoints;
 
   function creating(endpoint: typeof listed) {
-    const dependency = defineDependency({ provider: orders, endpoints: [endpoint] });
+    const dependency = defineDependency({ endpoints: [endpoint] });
     return () => client(dependency, { baseUrl: 'http://orders.test' });
   }
 

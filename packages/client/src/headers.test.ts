@@ -71,7 +71,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -85,7 +85,6 @@ const defaultStandards = providedStandardRejections();
 const orders = contractPackageOf({ getOrder, createOrder, ping }, defaultStandards);
 
 const ordersDependency = defineDependency({
-  provider: orders,
   endpoints: [orders.endpoints.getOrder, orders.endpoints.createOrder, orders.endpoints.ping],
 });
 
@@ -200,7 +199,7 @@ describe('headers given to client()', () => {
     const written = contractPackageOf({ trace: declared }, defaultStandards);
     const cut = JSON.stringify(providedSnapshotOf(written.endpoints.trace));
     const named = providedEndpoint(
-      'orders-service',
+      { name: 'orders-service', standardRejections: defaultStandards },
       {
         name: 'trace',
         method: 'GET',
@@ -212,10 +211,7 @@ describe('headers given to client()', () => {
       },
       JSON.parse(cut.replaceAll('x-trace', 'constructor')),
     );
-    const dependency = defineDependency({
-      provider: { ...written, endpoints: { trace: named } },
-      endpoints: [named],
-    });
+    const dependency = defineDependency({ endpoints: [named] });
     const { sent, fetch } = recorded();
     const traced = client(dependency, {
       baseUrl: 'http://orders.test',

@@ -65,7 +65,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   }
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -76,7 +76,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [paymentsDependencyPackage.endpoints.getPayment],
 });
 
@@ -483,12 +482,14 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toMatchObject({ name: 'FakeProviderError', cause: thrown });
   });
 
-  test('an Endpoint the Dependency does not list is a mistake', async () => {
+  test('a request no listed Endpoint matches is a mistake naming the request', async () => {
     const payments = fakeProvider(paymentsDependency);
 
     const answering = payments.fetch(new Request('https://payments-service.test/payments'));
 
-    await expect(answering).rejects.toThrow('the Dependency does not list GET /payments');
+    await expect(answering).rejects.toThrow(
+      'payments-service: no Endpoint the Dependency lists is GET /payments under /',
+    );
   });
 
   test('a path outside the base URL is a mistake', async () => {

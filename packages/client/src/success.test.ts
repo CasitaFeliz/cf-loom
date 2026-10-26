@@ -72,7 +72,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -86,7 +86,6 @@ const defaultStandards = providedStandardRejections();
 const orders = contractPackageOf({ getOrder, cancelOrder, orderTotal }, defaultStandards);
 
 const ordersDependency = defineDependency({
-  provider: orders,
   endpoints: [orders.endpoints.getOrder, orders.endpoints.cancelOrder, orders.endpoints.orderTotal],
 });
 
@@ -214,7 +213,6 @@ describe('a Success body nested past the stack', () => {
   });
   const nestingPackage = contractPackageOf({ nest }, defaultStandards);
   const nesting = defineDependency({
-    provider: nestingPackage,
     endpoints: [nestingPackage.endpoints.nest],
   });
 
@@ -308,7 +306,7 @@ describe('an Open Enum Success header', () => {
   });
   /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
   const trackOrderReader = providedEndpoint(
-    'orders-service',
+    { name: 'orders-service', standardRejections: defaultStandards },
     {
       name: 'trackOrder',
       method: 'GET',
@@ -329,7 +327,6 @@ describe('an Open Enum Success header', () => {
     trackOrder,
   ]);
   const trackingDependency = defineDependency({
-    provider: tracking,
     endpoints: [tracking.endpoints.trackOrder],
   });
 
@@ -364,7 +361,7 @@ describe('an Open Enum Success header', () => {
       success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
     });
     const stageOrderReader = providedEndpoint(
-      'orders-service',
+      { name: 'orders-service', standardRejections: defaultStandards },
       {
         name: 'stageOrder',
         method: 'GET',
@@ -385,7 +382,6 @@ describe('an Open Enum Success header', () => {
       stageOrder,
     ]);
     const stagingDependency = defineDependency({
-      provider: staging,
       endpoints: [staging.endpoints.stageOrder],
     });
     const stages = client(stagingDependency, {

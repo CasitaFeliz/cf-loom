@@ -1,7 +1,5 @@
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -13,7 +11,6 @@ import {
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
   type Broker,
   type BrokerConsumer,
@@ -74,15 +71,6 @@ const paymentSettledV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: {},
-  events: { paymentSettledV1 },
-  standardRejections: providedStandardRejections(),
-} as const satisfies ContractPackage;
-
-const paymentsDependency = defineDependency({ provider: payments });
-
 const notifyOnCreated = defineSubscription({
   name: 'notifyOnCreated',
   description: 'Notify on created',
@@ -106,7 +94,6 @@ const contract = defineService({
       subscriptions: [notifyOnCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDependency],
 });
 
 const readers = readersOf({
@@ -296,7 +283,7 @@ describe('consume', () => {
     ]);
   });
 
-  test('a Subscription to a Provider’s Event reads the Provider’s stream and subject', async () => {
+  test('a Subscription to a Provider’s Event consumes from that Provider’s stream and subject, with no Dependency', async () => {
     const { consumers } = await consuming();
 
     const settled = consumers.find(
@@ -320,7 +307,6 @@ describe('consume', () => {
     const listing = defineService({
       name: 'orders-service',
       groups: [group],
-      dependencies: [paymentsDependency],
     });
     const recording = aBroker();
     const { consume } = await messaging(listing, recording.broker);

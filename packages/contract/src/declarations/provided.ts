@@ -35,6 +35,10 @@ export type ProviderNameOf<Element> = Element extends { readonly [providerMark]:
 /** What a Group may list: an Element no Provider's Contract Package exports. */
 export type Own<Element> = Element & { readonly [providerMark]?: never };
 
+/** The Provider whose Contract Package exports a Provided Element, as its mark names it. */
+export function providerOf<Name extends string>(value: Provided<unknown, Name>): Name;
+/** The Provider whose Contract Package exports an Element; none for a Contract's own declaration. */
+export function providerOf(value: unknown): string | undefined;
 /** The Provider whose Contract Package exports an Element; none for a Contract's own declaration. */
 export function providerOf(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) {
@@ -49,9 +53,17 @@ export function carriedCutOf(endpoint: Endpoint): unknown {
   return Reflect.get(endpoint, exportedMark);
 }
 
+/** The Standard Rejections of its Provider a Provided Endpoint carries, as its type gives them. */
+export function carriedStandardRejectionsOf<Standards extends ProvidedStandardRejections>(
+  endpoint: ProvidedEndpoint<unknown, string, Standards>,
+): Standards;
 /** The Standard Rejections of its Provider a Provided Endpoint carries; none for any other Endpoint. */
 export function carriedStandardRejectionsOf(
   endpoint: Endpoint,
+): ProvidedStandardRejections | undefined;
+/** The Standard Rejections of its Provider a Provided Endpoint carries; none for any other Endpoint. */
+export function carriedStandardRejectionsOf(
+  endpoint: object,
 ): ProvidedStandardRejections | undefined {
   const carried: unknown = Reflect.get(endpoint, standardRejectionsMark);
   return carried === undefined ? undefined : (carried as ProvidedStandardRejections);

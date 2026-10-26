@@ -84,7 +84,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   }
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -98,7 +98,6 @@ const paymentsDependencyPackage = contractPackageOf(
   [getPayment, capturePayment],
 );
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [
     paymentsDependencyPackage.endpoints.getPayment,
     paymentsDependencyPackage.endpoints.capturePayment,
@@ -228,7 +227,6 @@ describe('fakeProvider and serve answer alike', () => {
       endpoints,
     );
     const dependency = defineDependency({
-      provider,
       endpoints: [provider.endpoints.getPayment],
     });
     const payments = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
@@ -277,7 +275,7 @@ describe('fakeProvider and serve answer alike', () => {
       };
       const providing = serve(root, { endpoints: handlers, guards: {} });
       const provider = contractPackageOf({ getFirst: first }, endpoints);
-      const dependency = defineDependency({ provider, endpoints: [provider.endpoints.getFirst] });
+      const dependency = defineDependency({ endpoints: [provider.endpoints.getFirst] });
       const paths = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
       paths.on('getFirst').otherwise((r) => r.success());
       const url = `http://payments.test${path}`;
@@ -392,7 +390,6 @@ const refundDependencyPackage = contractPackageOf({ refundPayment: packagedRefun
   refundPayment,
 ]);
 const refundDependency = defineDependency({
-  provider: refundDependencyPackage,
   endpoints: [refundDependencyPackage.endpoints.refundPayment],
 });
 

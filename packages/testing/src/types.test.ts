@@ -122,7 +122,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
   });
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -133,7 +133,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [
     paymentsDependencyPackage.endpoints.getPayment,
     paymentsDependencyPackage.endpoints.tagPayment,
@@ -223,15 +222,6 @@ describe('fakeProvider: types', () => {
     type UnlistedBuilder = StepBuilder<typeof paymentsDependency, 'getPayments'>;
 
     expectTypeOf<[UnlistedScript, UnlistedStep, UnlistedBuilder]>().not.toBeNever();
-  });
-
-  test('a Dependency written without a list gives on and calls no name', () => {
-    const payments = fakeProvider(defineDependency({ provider: paymentsDependency.provider }));
-
-    // @ts-expect-error getPayment is exported but not listed
-    const unlisted = () => payments.on('getPayment');
-
-    expect(unlisted).toBeTypeOf('function');
   });
 
   test('reject takes the Endpoint’s codes, the Provider’s Standard ones included, each with its body', () => {
