@@ -175,8 +175,7 @@ export type Change = {
   readonly difference: Difference;
 } & Classification;
 
-/** A Compatibility Check that compared, with its Changes in order and whether the Snapshot's hash moved. */
+/** A Compatibility Check that compared, with its Changes in order; a Snapshot with none is the Baseline's. */
 export type ComparedReport = {
   readonly changes: readonly Change[];
-  readonly hashChanged: boolean;
 };

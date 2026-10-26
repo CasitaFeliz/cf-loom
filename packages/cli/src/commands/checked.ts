@@ -58,6 +58,8 @@ export function siteOf(site: ChangeSite): string {
       return `codes.${tokenOf(site.code)}`;
     case 'subscription':
       return `subscriptions.${tokenOf(site.name)}`;
+    case 'dependency':
+      return `dependencies.${tokenOf(site.name)}`;
     case 'export':
       return `exports.${tokenOf(site.name)}`;
     case 'guard':

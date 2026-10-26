@@ -17,16 +17,21 @@ import { publishedSnapshotOf } from './merge.ts';
 import type { Change, ComparedReport } from './report.ts';
 import { subscriptionDifferencesOf } from './subscriptions.ts';
 
-/** The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified. */
+/**
+ * The Compatibility Check of a declared Snapshot against its Baseline: every Change, classified.
+ * A Snapshot whose published text differs from the Baseline's has at least one Change, or the
+ * check throws: a difference no rule names would otherwise pass for none.
+ */
 export function compatibilityReportOf(
   baseline: PublishedSnapshot,
   proposed: Snapshot,
 ): ComparedReport {
+  const changes = changesOf(baseline, proposed);
   const merged = publishedSnapshotOf(baseline, proposed, baseline.version);
-  return {
-    changes: changesOf(baseline, proposed),
-    hashChanged: hashedTextOf(merged) !== hashedTextOf(baseline),
-  };
+  if (changes.length === 0 && hashedTextOf(merged) !== hashedTextOf(baseline)) {
+    throw new Error('The Snapshot changed but no Change was found: a bug.');
+  }
+  return { changes };
 }
 
 function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {

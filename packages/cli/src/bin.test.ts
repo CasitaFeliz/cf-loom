@@ -2914,7 +2914,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     });
   });
 
-  test('an Application is checked against its Contract Package and has no Change, even when its Dependencies changed', async ({
+  test('an Application is checked against its Contract Package and reports its Dependencies as Neutral Changes', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, anApplicationRoot);
@@ -2932,7 +2932,7 @@ describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
     const checked = 'Checked against @org/contract-web-admin@1.0.0';
     expect(ran).toEqual({
       status: 0,
-      stdout: `${checked}\nNo Change against @org/contract-web-admin@1.0.0\n`,
+      stdout: `${checked}\ndependencies.orders-service removed: Neutral\nNo Change needs a Breaking Change Approval\n`,
       stderr: '',
     });
   });

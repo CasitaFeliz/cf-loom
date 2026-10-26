@@ -150,6 +150,37 @@ describe('compatibilityReportOf, Dependencies', () => {
   });
 });
 
+describe('compatibilityReportOf, every Dependency Change', () => {
+  test('is Neutral and allowed, and bumps patch', () => {
+    const from = {
+      'a-service': aDependency(),
+      'b-service': aDependency({ endpoints: [getPayment, listPayments] }),
+      'c-service': aDependency(),
+    };
+    const renamed = { id: getPayment.id, name: 'fetchPayment' };
+    const to = {
+      'b-service': aDependency({ against: '6.0.0', endpoints: [renamed] }),
+      'c-service': aDependency({ endpoints: [getPayment, listPayments] }),
+      'd-service': aDependency(),
+    };
+
+    const report = compatibilityReportOf(aBaseline(from), aProposed(to));
+
+    expect(new Set(report.changes.map(({ class: c, verdict }) => `${c} ${verdict}`))).toEqual(
+      new Set(['neutral allowed']),
+    );
+    expect(report.changes.map(({ difference }) => difference.kind)).toEqual([
+      'removed',
+      'against-changed',
+      'endpoint-removed',
+      'endpoint-renamed',
+      'endpoint-added',
+      'added',
+    ]);
+    expect(versionBumpOf(report, equalPeers)).toBe('patch');
+  });
+});
+
 describe('compatibilityReportOf, an Application’s Dependencies', () => {
   const application: ApplicationSnapshot = {
     format: 1,

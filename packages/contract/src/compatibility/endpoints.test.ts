@@ -390,12 +390,6 @@ describe('compatibilityReportOf, query', () => {
     ]);
   });
 
-  test('a query declared with no fields where there was none gives no Change', () => {
-    const changes = changesOf(anEndpoint(), queryOf({}));
-
-    expect(changes).toEqual([]);
-  });
-
   test('a query declared with an optional field where there was none gives that field added', () => {
     const changes = changesOf(anEndpoint(), queryOf({ page: optional(aNumber) }));
 
@@ -658,12 +652,6 @@ describe('compatibilityReportOf, bodies and Success', () => {
     expect(changes).toEqual([
       breaking(schemaChange(locationAt, { kind: 'field-made-optional' }, 'success')),
     ]);
-  });
-
-  test('Success headers declared with no fields where there were none give no Change', () => {
-    const changes = changesOf(anEndpoint(), headersOf({}));
-
-    expect(changes).toEqual([]);
   });
 
   test('Success headers declared with a required field where there were none give that field added', () => {

@@ -327,7 +327,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each([

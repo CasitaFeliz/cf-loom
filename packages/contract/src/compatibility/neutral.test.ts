@@ -16,6 +16,7 @@ import {
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
+  versionBumpOf,
 } from '../internal/index.ts';
 
 type Visibility = EndpointSnapshot['visibility'];
@@ -573,4 +574,70 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
 
     expect(changes).toEqual([]);
   });
+});
+
+describe('compatibilityReportOf, every Neutral Change', () => {
+  const unmoved = { baseline: { zod: '^4.1.0' }, proposed: { zod: '^4.1.0' } };
+  const guarded = anEndpoint({ guards: [{ guard: 'authenticated', qualifier: null }] });
+  const orderLocked = 'ORDER_LOCKED';
+  const answering = anEndpoint({ rejections: [orderLocked] });
+
+  const reports: readonly (readonly [string, PublishedServiceSnapshot, ServiceSnapshot])[] = [
+    [
+      'an Endpoint’s description and Group',
+      aBaseline({ endpoints: { [identity]: anEndpoint() } }),
+      aProposed({
+        endpoints: { [identity]: anEndpoint({ description: 'Reworded', group: 'archive' }) },
+      }),
+    ],
+    [
+      'an Endpoint’s Attachments',
+      aBaseline({ endpoints: { [identity]: guarded } }),
+      aProposed({ endpoints: { [identity]: anEndpoint({ guards: [] }) } }),
+    ],
+    [
+      'a Guard’s description, Guards, Qualifier, Context and origin',
+      aBaseline({ endpoints: { [identity]: guarded }, guards: { authenticated: aGuard() } }),
+      aProposed({
+        endpoints: { [identity]: guarded },
+        guards: {
+          authenticated: aGuard({
+            description: 'Reworded',
+            guards: ['session'],
+            qualifier: { type: 'string' },
+            context: anObject,
+            origin: '@org/definitions@5.0.0#authenticated',
+          }),
+        },
+      }),
+    ],
+    [
+      'a code’s message and origin',
+      aBaseline({ endpoints: { [identity]: answering }, codes: { [orderLocked]: aCode() } }),
+      aProposed({
+        endpoints: { [identity]: answering },
+        codes: { [orderLocked]: aCode({ message: 'Frozen', origin: '@org/definitions@2.0.0#x' }) },
+      }),
+    ],
+    [
+      'what a Retired Endpoint declares',
+      aBaseline({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } }),
+      aProposed({
+        endpoints: { [identity]: anEndpoint({ lifecycle: 'retired', description: 'Reworded' }) },
+      }),
+    ],
+  ];
+
+  test.each(reports)(
+    '%s is Neutral and allowed, and bumps patch on a Public site',
+    (_name, baseline, proposed) => {
+      const report = compatibilityReportOf(baseline, proposed);
+
+      expect(report.changes.length).toBeGreaterThan(0);
+      expect(new Set(report.changes.map(({ class: c, verdict }) => `${c} ${verdict}`))).toEqual(
+        new Set(['neutral allowed']),
+      );
+      expect(versionBumpOf(report, unmoved)).toBe('patch');
+    },
+  );
 });

@@ -266,7 +266,7 @@ describe('compatibilityReportOf, presence', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(elements)('adding a $name is Additive', ({ site, proposed }) => {
@@ -316,7 +316,7 @@ describe('compatibilityReportOf, presence', () => {
     ({ tombstone }) => {
       const report = compatibilityReportOf(aBaseline(tombstone()), aProposed());
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
@@ -505,7 +505,7 @@ describe('compatibilityReportOf, lifecycle', () => {
     ({ retired, proposed }) => {
       const report = compatibilityReportOf(aBaseline(retired()), aProposed(proposed('retired')));
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 });
@@ -819,13 +819,13 @@ describe('compatibilityReportOf, the report', () => {
     ]);
   });
 
-  test('a Definitions Package’s Snapshot gives no Element Change', () => {
+  test('a Snapshot that differs where no rule looks is a bug, so the check throws', () => {
     const baseline: PublishedDefinitionsSnapshot = { ...aDefinitions(), version: '4.2.0' };
     const proposed = aDefinitions({ defs: { money: emptyObject } });
 
-    const report = compatibilityReportOf(baseline, proposed);
+    const check = () => compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: true });
+    expect(check).toThrow('The Snapshot changed but no Change was found: a bug.');
   });
 
   test('a Dependency declared against a newer version is one Neutral Change', () => {
@@ -860,7 +860,7 @@ describe('compatibilityReportOf, the report', () => {
 
       const report = compatibilityReportOf(baseline, proposed);
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
@@ -870,7 +870,7 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(mismatches)('$name is a bug, so the check throws', ({ proposed, baseline }) => {

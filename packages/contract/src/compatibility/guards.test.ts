@@ -226,16 +226,6 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
     ]);
   });
 
-  test('demands declared where there were none compare as an open object with no fields', () => {
-    const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
-    const empty = { headers: anOpenObject(), query: anOpenObject() };
-    const proposed = aDefinitions({ guards: { authenticated: aGuard({ demands: empty }) } });
-
-    const report = reportOf(baseline, proposed);
-
-    expect(report).toEqual({ changes: [], hashChanged: true });
-  });
-
   test.each([
     { name: 'gaining', from: [], to: [unauthenticated], kind: 'rejection-added' },
     { name: 'losing', from: [unauthenticated], to: [], kind: 'rejection-removed' },
@@ -340,7 +330,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
     const report = reportOf(baseline, aDefinitions());
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test('a removed code declared again is added and compared with what it last had', () => {

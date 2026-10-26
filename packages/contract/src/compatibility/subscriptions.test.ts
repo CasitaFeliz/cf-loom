@@ -109,7 +109,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, aProposed());
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each([
@@ -184,7 +184,7 @@ describe('compatibilityReportOf, Subscriptions', () => {
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test('following a new Message Version with a new Subscription beside the old one adds only that Subscription', () => {

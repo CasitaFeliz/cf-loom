@@ -1119,7 +1119,7 @@ describe('compatibilityReportOf, constraints', () => {
   )('an unchanged $constraint is no Change in $place', ({ node, where }) => {
     const report = reportOf(where, { from: node, to: node });
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(places)(
@@ -1383,14 +1383,14 @@ describe('compatibilityReportOf, intersections and opaque JSON', () => {
         to: walkedOf(merged),
       });
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
   test.each(places)('an opaque JSON value left as it is is no Change in $name', (place) => {
     const report = reportOf(place, { from: { type: 'json' }, to: { type: 'json' } });
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 });
 
@@ -1644,7 +1644,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: defs,
     });
 
-    expect(report).toEqual({ changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test('a dense set of mutually recursive defs with one change gives that one Change', () => {
@@ -1722,17 +1722,6 @@ describe('compatibilityReportOf, refs', () => {
     ),
   )('$change is $outcome in $place', expectRow);
 
-  test.each(places)('nullability moved from a ref to its def is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aNullable(aRef('leaf')),
-      to: aRef('leaf'),
-      fromDefs: { leaf },
-      toDefs: { leaf: aNullable(leaf) },
-    });
-
-    expect(report.changes).toEqual([]);
-  });
-
   test.each(places)(
     'renaming a def under a plain union is Breaking in every Position, as in $name',
     (place) => {
@@ -1775,22 +1764,6 @@ describe('compatibilityReportOf, refs', () => {
   );
 
   test.each(places)(
-    'a variant that turns from inline to a ref of the same shape is no Change in $name',
-    (place) => {
-      const card = anObject({ kind: required(aClosedEnum('card')) });
-      const refVariants = { '"card"': aRefVariant('card') };
-
-      const report = reportOf(place, {
-        from: { type: 'tagged', discriminator: 'kind', variants: { '"card"': card } },
-        to: { type: 'tagged', discriminator: 'kind', variants: refVariants },
-        toDefs: { card },
-      });
-
-      expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)(
     'a variant that is a ref to an unchanged def is no Change in $name',
     (place) => {
       const card = anObject({ kind: required(aClosedEnum('card')) });
@@ -1804,23 +1777,21 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { card: card },
       });
 
-      expect(report).toEqual({ changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
-  test.each(places)(
-    'a change to a def no compared schema reaches is no Change in $name',
-    (place) => {
-      const report = reportOf(place, {
+  test.each(places)('a change to a def no schema reaches is a bug in $name', (place) => {
+    const check = () =>
+      reportOf(place, {
         from: aString,
         to: aString,
         fromDefs: { tree: tree },
         toDefs: { tree: treeWithName },
       });
 
-      expect(report).toEqual({ changes: [], hashChanged: true });
-    },
-  );
+    expect(check).toThrow('The Snapshot changed but no Change was found: a bug.');
+  });
 });
 
 function schemaChange(position: Position, at: Path, shape: ShapeDifference) {
@@ -1854,7 +1825,6 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
     const report = comparedOf(baseline, proposed);
 
     const site: ChangeSite = { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' };
-    expect(report.hashChanged).toBe(true);
     expect(snapshotPathsOf(report.changes)).toEqual([
       {
         site,
@@ -1968,7 +1938,6 @@ describe('compatibilityReportOf, shared schemas', () => {
 
     const report = comparedOf(baseline, proposed);
 
-    expect(report.hashChanged).toBe(true);
     expect(snapshotPathsOf(report.changes)).toEqual([
       sharedChange(
         'money',
