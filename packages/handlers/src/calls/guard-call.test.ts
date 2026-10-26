@@ -23,6 +23,20 @@ const unauthenticated = defineRejection({
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 
+const tokenExpired = defineRejection({
+  code: 'TOKEN_EXPIRED',
+  status: 401,
+  message: 'The token expired',
+  headers: z.object({ 'www-authenticate': z.string() }),
+});
+
+const bearer = defineGuard({
+  name: 'bearer',
+  description: 'A bearer token',
+  demands: { headers: z.object({ authorization: z.string() }) },
+  rejections: [tokenExpired],
+});
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
@@ -243,6 +257,40 @@ describe('a GuardHandler’s direct call', () => {
     const admission = await apiKeyHandler(apiKeyDemands, {});
 
     expect(admission).toStrictEqual({ kind: 'rejection', rejection: unauthenticated });
+  });
+
+  test('a Rejection with headers comes back as built with its headers parsed', async () => {
+    const challenge = 'Bearer error="invalid_token"';
+    const bearerHandler = handle(bearer, () =>
+      reject(tokenExpired, { headers: { 'www-authenticate': challenge } }),
+    );
+
+    const admission = await bearerHandler({ headers: { authorization: 'Bearer t' } }, {});
+
+    expect(admission).toStrictEqual({
+      kind: 'rejection',
+      rejection: tokenExpired,
+      headers: { 'www-authenticate': challenge },
+    });
+  });
+
+  test('a Rejection header that cannot travel throws InvalidOutcomeError at headers', async () => {
+    const bearerHandler = handle(bearer, () =>
+      reject(tokenExpired, { headers: { 'www-authenticate': 'Bearer\n' } }),
+    );
+
+    const issues = await issuesOf(() =>
+      bearerHandler({ headers: { authorization: 'Bearer t' } }, {}),
+    );
+
+    expect(issues).toEqual([
+      {
+        part: 'headers',
+        path: ['www-authenticate'],
+        code: 'invalid_format',
+        message: expect.any(String),
+      },
+    ]);
   });
 
   test('a Rejection the Guard does not list throws InvalidOutcomeError through a cast', async () => {

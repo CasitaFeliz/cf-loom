@@ -43,6 +43,21 @@ const orderLocked = defineRejection({
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 
+const sessionExpired = defineRejection({
+  code: 'SESSION_EXPIRED',
+  status: 401,
+  message: 'Sign in again',
+  headers: z.object({ 'www-authenticate': z.string().min(1) }),
+});
+
+const rateLimited = defineRejection({
+  code: 'RATE_LIMITED',
+  status: 429,
+  message: 'Slow down',
+  headers: z.object({ 'retry-after': z.int().min(0) }),
+  body: z.object({ limit: z.int() }),
+});
+
 const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
@@ -86,6 +101,16 @@ const createOrder = defineEndpoint({
     headers: z.object({ location: z.string().min(1) }),
     body: z.object({ id: z.uuid() }),
   },
+});
+
+const searchOrders = defineEndpoint({
+  name: 'searchOrders',
+  method: 'GET',
+  path: '/orders/search',
+  visibility: 'public',
+  description: 'Searches orders',
+  success: { status: 204 },
+  rejections: [sessionExpired, rateLimited],
 });
 
 const deleteOrder = defineEndpoint({
@@ -702,6 +727,141 @@ describe('an EndpointHandler’s Rejections', () => {
     ];
 
     expect(write).not.toThrow();
+  });
+});
+
+describe('an EndpointHandler’s Rejections with headers', () => {
+  test('a Rejection that declares headers and a body comes back with both, parsed', async () => {
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
+    );
+
+    const outcome = await searchOrdersHandler({}, {});
+
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      rejection: rateLimited,
+      headers: { 'retry-after': 30 },
+      body: { limit: 100 },
+    });
+  });
+
+  test('a Rejection that declares headers alone comes back with its headers and no body', async () => {
+    const challenge = 'Bearer realm="orders"';
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(sessionExpired, { headers: { 'www-authenticate': challenge } }),
+    );
+
+    const outcome = await searchOrdersHandler({}, {});
+
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      rejection: sessionExpired,
+      headers: { 'www-authenticate': challenge },
+    });
+  });
+
+  test('isRejectionOf narrows to the Rejection, its headers and body typed', async () => {
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
+    );
+
+    const outcome = await searchOrdersHandler({}, {});
+
+    expect(isRejectionOf(outcome, rateLimited) && outcome.headers).toEqual({ 'retry-after': 30 });
+    if (isRejectionOf(outcome, rateLimited)) {
+      expectTypeOf(outcome.headers).toEqualTypeOf<{ 'retry-after': number }>();
+      expectTypeOf(outcome.body).toEqualTypeOf<{ limit: number }>();
+    }
+  });
+
+  test('reject() of a Rejection with headers takes { headers, body } and refuses a bare body or none', () => {
+    const write = () => [
+      handle(searchOrders, () =>
+        reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
+      ),
+      handle(searchOrders, () =>
+        reject(sessionExpired, { headers: { 'www-authenticate': 'Bearer' } }),
+      ),
+      // @ts-expect-error a Rejection with headers takes { headers, body }, not a bare body
+      handle(searchOrders, () => reject(rateLimited, { limit: 100 })),
+      // @ts-expect-error a Rejection with headers takes its headers
+      handle(searchOrders, () => reject(sessionExpired)),
+      // @ts-expect-error a Rejection with a body takes it beside its headers
+      handle(searchOrders, () => reject(rateLimited, { headers: { 'retry-after': 30 } })),
+      // @ts-expect-error a Rejection without a body takes none beside its headers
+      handle(searchOrders, () => reject(sessionExpired, { headers: { 'www-authenticate': 'B' }, body: {} })),
+      // @ts-expect-error a header is typed by its schema
+      handle(searchOrders, () => reject(sessionExpired, { headers: { 'www-authenticate': 3 } })),
+    ];
+
+    expect(write).not.toThrow();
+  });
+
+  test('Rejection headers that break their schema throw InvalidOutcomeError at headers', async () => {
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(sessionExpired, { headers: { 'www-authenticate': '' } }),
+    );
+
+    const issues = await issuesOf(() => searchOrdersHandler({}, {}));
+
+    expect(issues).toEqual([
+      {
+        part: 'headers',
+        path: ['www-authenticate'],
+        code: 'too_small',
+        message: expect.any(String),
+      },
+    ]);
+  });
+
+  test('missing Rejection headers throw InvalidOutcomeError at headers', async () => {
+    const searchOrdersHandler = handle(searchOrders, () => reject(sessionExpired as never));
+
+    const issues = await issuesOf(() => searchOrdersHandler({}, {}));
+
+    expect(issues.map(({ part, code }) => ({ part, code }))).toEqual([
+      { part: 'headers', code: 'required' },
+    ]);
+  });
+
+  test.each([
+    ['above U+00FF', 'v€'],
+    ['with a line feed', 'v\n1'],
+    ['with a NUL', 'v\u00001'],
+    ['with a leading space', ' v1'],
+    ['with a trailing tab', 'v1\t'],
+  ])(
+    'a Rejection header value %s cannot travel, so the direct call throws InvalidOutcomeError at headers',
+    async (_case, challenge) => {
+      const searchOrdersHandler = handle(searchOrders, () =>
+        reject(sessionExpired, { headers: { 'www-authenticate': challenge } }),
+      );
+
+      const issues = await issuesOf(() => searchOrdersHandler({}, {}));
+
+      expect(issues).toEqual([
+        {
+          part: 'headers',
+          path: ['www-authenticate'],
+          code: 'invalid_format',
+          message: expect.any(String),
+        },
+      ]);
+    },
+  );
+
+  test('a Rejection’s body is checked beside its headers', async () => {
+    const searchOrdersHandler = handle(searchOrders, () =>
+      reject(rateLimited, { headers: { 'retry-after': -1 }, body: { limit: 'many' as never } }),
+    );
+
+    const issues = await issuesOf(() => searchOrdersHandler({}, {}));
+
+    expect(issues.map(({ part, path }) => ({ part, path }))).toEqual([
+      { part: 'headers', path: ['retry-after'] },
+      { part: 'body', path: ['limit'] },
+    ]);
   });
 });
 

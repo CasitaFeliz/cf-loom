@@ -301,6 +301,8 @@ export {
   pathSegmentsOf,
   readEndpointIdentity,
   readEventReference,
+  rejectionFieldsOf,
+  rejectionParts,
   resolutionOf,
   schemaOf,
   standardRejectionsOf,

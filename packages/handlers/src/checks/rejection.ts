@@ -2,15 +2,18 @@ import type { Endpoint, Guard, Rejection, StandardRejection } from '@cf-loom/con
 import {
   type AnswerableRejection,
   answerableRejectionsOf,
+  headerTextsOf,
+  isPlainObject,
   isRejection,
   isSameRejection,
   isStandardRejection,
   ownOf,
   parsedPartOf,
+  rejectionParts,
   schemaOf,
 } from '@cf-loom/contract/internal';
 import type { AnyRejection, BuiltRejection } from '../outcomes/index.ts';
-import { type Checked, mapValue } from './checked.ts';
+import { type Checked, checkedAll, mapValue } from './checked.ts';
 
 /** A Rejection an EndpointHandler may build: any its Endpoint answers but invalid input, the runtime's. */
 type EndpointRejection = Exclude<AnswerableRejection, StandardRejection<'invalidInput'>>;
@@ -62,23 +65,47 @@ function isAnsweredBy(answering: Endpoint | Guard, rejection: AnswerableRejectio
   return answerableRejectionsOf(answering).some((listed) => isSameRejection(listed, rejection));
 }
 
+/** A Rejection as its parts parse: the headers and body it declares, as its direct call returns them. */
+type ParsedRejection = {
+  readonly kind: 'rejection';
+  readonly rejection: AnswerableRejection;
+  readonly headers?: Readonly<Record<string, unknown>>;
+  readonly body?: unknown;
+};
+
 /**
- * A Rejection its Endpoint or Guard answers, with the body it declares and no other. The type
- * distributes over each Rejection it may be, which no single object literal states, so the
- * checked value is cast once here.
+ * A Rejection its Endpoint or Guard answers, with the headers and body it declares and no other,
+ * each header checked to travel as text. The type distributes over each Rejection it may be, which
+ * no single object literal states, so the checked value is cast once here.
  */
 function checkedBuilt<Answered extends EndpointRejection>(
   rejection: Answered,
   built: AnyRejection,
 ): Checked<BuiltRejection<Answered>> {
-  const schema = isRejection(rejection) ? schemaOf(rejection, 'body') : undefined;
-  const body = parsedPartOf('body', schema, { value: built.body });
-  return mapValue(body, (parsed) => {
-    const checked =
-      parsed === undefined
-        ? { kind: 'rejection', rejection }
-        : { kind: 'rejection', rejection, body: parsed };
-    return checked as unknown as BuiltRejection<Answered>;
+  const parsed = parsedRejectionOf(rejection, built);
+  if (parsed.kind === 'issues') {
+    return parsed;
+  }
+  const headers = headerTextsOf('headers', parsed.value.headers);
+  if (headers.kind === 'issues') {
+    return headers;
+  }
+  return { kind: 'value', value: parsed.value as unknown as BuiltRejection<Answered> };
+}
+
+/** The headers and body a Rejection was built with, each parsed with the schema its declaration gives it. */
+function parsedRejectionOf(
+  rejection: AnswerableRejection,
+  built: AnyRejection,
+): Checked<ParsedRejection> {
+  const checks = rejectionParts.map((part) => {
+    const schema = isRejection(rejection) ? schemaOf(rejection, part) : undefined;
+    return [part, parsedPartOf(part, schema, { value: built[part] })] as const;
+  });
+  return mapValue(checkedAll(Object.fromEntries(checks)), (parts) => {
+    const headers = isPlainObject(parts['headers']) ? { headers: parts['headers'] } : {};
+    const body = parts['body'] === undefined ? {} : { body: parts['body'] };
+    return { kind: 'rejection', rejection, ...headers, ...body };
   });
 }
 

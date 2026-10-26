@@ -72,6 +72,8 @@ export {
   isObjectPart,
   isSchema,
   partFieldOf,
+  rejectionFieldsOf,
+  rejectionParts,
   schemaOf,
   slotAt,
   successFieldsOf,
