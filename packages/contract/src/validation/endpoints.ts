@@ -44,7 +44,7 @@ export function endpointFailures(located: LocatedEndpoint): readonly Declaration
  * An Endpoint declares `deprecatedAt` exactly when it is Deprecated, a UTC instant to the second;
  * a lifecycle that is none is the lifecycle rule's finding alone.
  */
-export function deprecationFailures(located: LocatedEndpoint): readonly DeclarationFailure[] {
+function deprecationFailures(located: LocatedEndpoint): readonly DeclarationFailure[] {
   const written: unknown = located.endpoint.lifecycle;
   if (written === 'deprecated') {
     return instantFailures(located);

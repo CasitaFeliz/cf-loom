@@ -9,7 +9,6 @@ import {
   type TextPartNodes,
 } from '@cf-loom/contract/internal';
 import {
-  checkedDeprecationsOf,
   checkedTextPartsOf,
   contractOf,
   endpointHandlerOf,
@@ -68,7 +67,6 @@ export function servedContractOf(
 ): ServedContract {
   const contract = contractOf(root);
   const nodes = checkedTextPartsOf(contract);
-  checkedDeprecationsOf(contract);
   return {
     endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
     nodes,

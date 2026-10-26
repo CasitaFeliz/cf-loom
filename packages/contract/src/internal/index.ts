@@ -146,7 +146,6 @@ export type {
 } from '../validation/index.ts';
 export {
   definitionsPackageOf,
-  deprecationFailuresOf,
   exportNamesOf,
   failureLineOf,
   identityLineOf,
