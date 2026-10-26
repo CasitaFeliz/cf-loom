@@ -13,7 +13,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ## Canonical form
 
 - JSON, UTF-8, two-space indentation, a final newline. The heading comes first, in this order: `format`, `kind`, `name`, then `version` and `generator` where the file holds them; the other top-level keys follow, and every nested key, sorted by code point. The same Contract always produces the same bytes, apart from `version` and `generator`, which only a published or packaged file holds.
-- A Snapshot's JSON nests at most 256 levels, the outermost object being the first; `generate` fails on a Contract whose Snapshot would nest deeper, so every Snapshot it writes reads back.
+- A Snapshot's JSON nests at most 256 levels, the outermost object being the first; a Contract whose Snapshot would nest deeper is [Not allowed](packages/contract/README.md#not-allowed), so every Snapshot `generate` writes reads back.
 - The Snapshot writes one spelling for one shape. A text part (`input.query`, `input.headers`, `success.headers`, a Guard's `demands.headers` and `demands.query`) is always an open object, with no field when none is declared, so a part declared with `z.object({})` and one not declared write the same Snapshot. A def is never `nullable`: `.nullable()` belongs to a use, so `.meta({ id })` on a schema that admits `null` fails `generate` (see [Recursion](packages/contract/README.md#recursion) in the contract README); every `ref` to a def carries its own `nullable`.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Dependencies by Service, each Dependency's `endpoints` by `id`, and `enum.values` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a union's `options`, since zod's union returns the first option that parses, a Qualifier's list) keep it.
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Dependency's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
@@ -187,33 +187,33 @@ Every code that ever existed in the Contract stays here, with the status and bod
 
 ## Schemas
 
-Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion (see [Recursion](#recursion)). `generate` walks each schema's `_zod.def`, never `instanceof`, so `zod/mini` works too, and maps only the nodes and checks below; anything else fails `generate` (see [Refused constructs](packages/contract/README.md#refused-constructs) in the contract README).
+Every shape is written fully inline wherever it is used; `defs` and `ref` exist only for recursion (see [Recursion](#recursion)). Which zod construct becomes which node is in [Schemas](packages/contract/README.md#schemas) in the contract README, with what is [Not allowed](packages/contract/README.md#not-allowed) there.
 
-| Node | Fields | From zod |
-| --- | --- | --- |
-| `string` | `format?`, `formatOptions?`, `regex?`, `min?`, `max?` | `z.string()`, `z.uuid()`, `z.email()`, `z.iso.datetime()`… |
-| `number` | `int?`, `min?`, `max?`, `exclusiveMin?`, `exclusiveMax?`, `multipleOf?` | `z.number()`, `z.int()` |
-| `boolean` | | `z.boolean()` |
-| `enum` | `values`, `open` | `z.enum()`, `openEnum()`, `z.literal()`, a union of literals and closed enums, as one enum of all their values |
-| `object` | `fields` | `z.object()`, an intersection of objects |
-| `record` | `key`, `value` | `z.record()` or `z.partialRecord()` with a string key |
-| `array` | `items`, `min?`, `max?` | `z.array()` |
-| `tuple` | `items`, `rest?` | `z.tuple()` |
-| `union` | `options` | `z.union()` |
-| `tagged` | `discriminator`, `variants` (keyed by the canonical JSON of each discriminator value; each an `object`, or a `ref` to an `object` in `defs`) | `z.discriminatedUnion()` |
-| `allOf` | `items` | any other intersection |
-| `json` | | `z.json()`: any JSON value |
-| `ref` | `name` | a schema with an id on a cycle |
+| Node | Fields |
+| --- | --- |
+| `string` | `format?`, `formatOptions?`, `regex?`, `min?`, `max?` |
+| `number` | `int?`, `min?`, `max?`, `exclusiveMin?`, `exclusiveMax?`, `multipleOf?` |
+| `boolean` | |
+| `enum` | `values`, `open` |
+| `object` | `fields` |
+| `record` | `key`, `value` |
+| `array` | `items`, `min?`, `max?` |
+| `tuple` | `items`, `rest?` |
+| `union` | `options` |
+| `tagged` | `discriminator`, `variants` (keyed by the canonical JSON of each discriminator value; each an `object`, or a `ref` to an `object` in `defs`) |
+| `allOf` | `items` |
+| `json` | |
+| `ref` | `name` |
 
-- Only declared checks map to constraints: min and max length, an exact length (`min` equal to `max`), greater and less than (inclusive as `min` and `max`, exclusive as `exclusiveMin` and `exclusiveMax`), `multipleOf`, `int`, a known string format and `regex`. `z.int()` is `int: true` and nothing more: no safe-integer bounds are implied. A schema has at most one lower bound (`min` or `exclusiveMin`) and one upper bound (`max` or `exclusiveMax`); two checks that set one bound or any other constraint fail `generate`, `.positive().nonnegative()` included. `multipleOf` is greater than 0; a string's or array's `min` and `max` are non-negative integers; a lower bound never exceeds the upper one, nor equals it when either is exclusive. Only bounds are judged: bounds that admit no integer or no multiple, or a regex that matches nothing, are written as declared.
+- A node holds each constraint at most once: one lower bound (`min` or `exclusiveMin`), one upper bound (`max` or `exclusiveMax`), and one of every other (two checks that set one are [Not allowed](packages/contract/README.md#not-allowed)). An exact length is `min` equal to `max`. `multipleOf` is greater than 0; a string's or array's `min` and `max` are non-negative integers; a lower bound never exceeds the upper one, nor equals it when either is exclusive. Only bounds are judged: bounds that admit no integer or no multiple, or a regex that matches nothing, are written as declared.
 - The known string formats are the ones zod builds itself: `guid`, `uuid`, `email`, `url`, `emoji`, `nanoid`, `cuid`, `cuid2`, `ulid`, `xid`, `ksuid`, `datetime`, `date`, `time`, `duration`, `ipv4`, `ipv6`, `mac`, `cidrv4`, `cidrv6`, `base64`, `base64url`, `e164`, `credit_card`, `iban`, `jwt`, `hex`, `hostname`, `currency_code`, and the hash formats `<md5|sha1|sha256|sha384|sha512>_<hex|base64|base64url>` (`z.hash()`).
-- `format` carries its options as `formatOptions` (`{ "format": "datetime", "formatOptions": { "offset": true, "precision": 3 } }`): only the options zod reads for that format (`version`, `offset`, `local`, `precision`, `protocol`, `hostname`, `alg`, `delimiter`) and only where they differ from zod's default, so `z.mac()` and `z.mac({ delimiter: ':' })` are the same and `z.url({ normalize: false })` has none; a hash's encoding is part of its format name. A format is checked as zod checks it: it is compared with the format the author's own zod builds for those options, so its pattern is zod's own and no function of the author's stands in for it; a format zod builds from a regex (`hex`, `hostname`, `currency_code` and the hashes) is judged by that regex, by source and flags, and by its check, whose source text must be the one zod gives its own test of a regex.
+- `format` carries its options as `formatOptions` (`{ "format": "datetime", "formatOptions": { "offset": true, "precision": 3 } }`): only the options zod reads for that format (`version`, `offset`, `local`, `precision`, `protocol`, `hostname`, `alg`, `delimiter`) and only where they differ from zod's default, so `z.mac()` and `z.mac({ delimiter: ':' })` are the same and `z.url({ normalize: false })` has none; a hash's encoding is part of its format name.
 - `regex` stores `source` and `flags` as `RegExp.prototype.source` and `RegExp.prototype.flags` give them; two regexes are equal only if both are identical.
 - `enum.values` keep their JSON type: `true` and `"true"` are different values, and `variants` keys them by their canonical JSON (`true`, `"true"`), so they never collide.
-- An intersection of objects is one `object` only when every item is open and the keys they share have the same shape and requiredness (descriptions, examples and origins aside; the left item's are kept); otherwise `generate` fails. Prefer `.extend()`. The merged object, like the `enum` of a union of literals, carries only its own annotations, never those of its items or options; a merged object is `nullable` only when every item is, and the enum of a union of literals is `nullable` when any of its literals is.
-- `.describe()` and `.meta()` are allowed and only set a string `description`, `examples` and the recursion `id` (see [Recursion](#recursion)); any other `.meta()` key fails `generate`. Each example must be one its schema accepts.
+- An intersection of objects is written as one merged `object` (which intersections are, is in [Schemas](packages/contract/README.md#schemas) in the contract README). The merged object, like the `enum` of a union of literals, carries only its own annotations, never those of its items or options; a merged object is `nullable` only when every item is, and the enum of a union of literals is `nullable` when any of its literals is.
+- `.describe()` and `.meta()` set a string `description`, `examples` and the recursion `id` (see [Recursion](#recursion)), and nothing else ([Not allowed](packages/contract/README.md#not-allowed)).
 - Every node may carry `nullable`, `description`, `examples` and `origin` (see [Origin](#origin)). `description` and `examples` are Neutral.
-- A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate. `.required()` makes an optional field required again.
+- A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate.
 - A query param whose schema is an `array` is a list; anything else, and every path param, is a single value.
 - Open Enums are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums](packages/contract/README.md#open-enums) in the contract README).
 - The node names `binary` and `stream` are reserved: bodies are JSON (see [Shapes, not behavior](ARCHITECTURE.md#shapes-not-behavior) in ARCHITECTURE.md).
@@ -244,4 +244,4 @@ A schema with an id that lies on a cycle is written once under `defs`, keyed by 
 
 ### Not allowed
 
-A zod construct that maps to no node or check above fails `generate`; which constructs, and what to use instead, are in [Refused constructs](packages/contract/README.md#refused-constructs) in the contract README.
+A zod construct that maps to no node or check above fails `generate`; which constructs, and what to use instead, are in [Not allowed](packages/contract/README.md#not-allowed) in the contract README.

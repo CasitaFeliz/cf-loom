@@ -80,7 +80,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
 
 - `"type": "module"`: every `cf-loom` command exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
-- a scoped `name` such as `@org/orders-service`: the Contract of a Service or an Application is named after it without its scope, which must be kebab-case, and its Contract Package is `@org/contract-orders-service`;
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, in kebab-case, and its Contract Package is `@org/contract-orders-service`;
 - `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
 
 `zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
@@ -123,7 +123,7 @@ A project that emits with `tsc` sets `rewriteRelativeImportExtensions`, a `rootD
 
 ### Generate
 
-`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). A formatter must leave the files it writes as they are, and Git must keep their line endings LF: the rule, and the `.gitattributes` `init` writes for it, are under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
+`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). Which files a formatter must leave byte for byte, and the LF line endings that the `.gitattributes` `init` writes keeps, are described under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
 
 ### Implement
 
@@ -143,14 +143,14 @@ A Handler is called directly, with the Resources the test builds (see [Testing a
 
 #### Check in CI
 
-A CI job runs plain commands after the install and reads their exit status (see [Commands](packages/cli/README.md#commands)); `check` needs the npm login of [Set up](#set-up):
+A CI job runs plain commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
 
 ```sh
-cf-loom verify
-cf-loom check
+npx cf-loom verify
+npx cf-loom check
 ```
 
-`check` exits 0 when no Change needs a Breaking Change Approval, 2 when one does, 1 when a Change is refused or `generate` must run, and 3 on a tooling error. Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
+Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
 
 ```
 Checked against @org/contract-orders-service@1.0.0
@@ -181,8 +181,8 @@ A job that reads one document runs `cf-loom check --json`, whose `errors` hold w
 `cf-loom package` writes the Contract Package ready for `tsc`, and a Consumer installs that folder from disk (`link:` as billing-service's package.json has it, or `file:`) before anything is published:
 
 ```sh
-cf-loom package
-tsc -p .cf-loom/contract-package
+npx cf-loom package
+npx tsc -p .cf-loom/contract-package
 ```
 
 The folder's package.json is version `0.0.0`, so a Consumer that installs it records `against: '0.0.0'` for the Provider, and `check` and `publish` say that the registry does not list it (see [Configuration](packages/cli/README.md#configuration) in the CLI README), `publish` with exit 3:
