@@ -1,7 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -21,6 +20,7 @@ import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
 import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client, type DeprecationNotice } from './index.ts';
@@ -122,7 +122,7 @@ const refundOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -140,7 +140,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const defaultStandards = providedStandardRejections();
@@ -157,7 +165,13 @@ const orders = contractPackageOf(exported, defaultStandards, [
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [getOrderReader, createOrder, cancelOrder, archiveOrder, refundOrder],
+  endpoints: [
+    orders.endpoints.getOrder,
+    orders.endpoints.createOrder,
+    orders.endpoints.cancelOrder,
+    orders.endpoints.archiveOrder,
+    orders.endpoints.refundOrder,
+  ],
 });
 
 /** The Provider's Release: `refundOrder` not served yet, `archiveOrder` Retired. */
@@ -257,7 +271,7 @@ async function outcomesOfEndpointWith(method: Method) {
   try {
     const probeUrl = `http://127.0.0.1:${(probeServer.address() as AddressInfo).port}/`;
     const provider = contractPackageOf({ probe }, defaultStandards);
-    const probes = client(defineDependency({ provider, endpoints: [probe] }), {
+    const probes = client(defineDependency({ provider, endpoints: [provider.endpoints.probe] }), {
       baseUrl: probeUrl,
     });
     const rejection = await probes.probe({ params: { answer: 'rejection' } });

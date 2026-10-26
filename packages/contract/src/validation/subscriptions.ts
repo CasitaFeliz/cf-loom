@@ -3,6 +3,7 @@ import {
   isCommand,
   isEvent,
   isLive,
+  providerOf,
   reaches,
 } from '../declarations/index.ts';
 import {
@@ -45,8 +46,7 @@ function eventFailures(
   const identity = messageIdentityOf(event.name, event.version);
   const source = eventSourceOf(root, event);
   if (source === undefined) {
-    const message = `A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: ${identity}`;
-    return [failure(eventAt, 'subscription-event', message)];
+    return [failure(eventAt, 'subscription-event', unsourcedMessageOf(event, identity))];
   }
   if (source.kind === 'dependency' && !reaches('service', event.visibility)) {
     const message = `A Subscription receives another Service's Event only when it is Public or Internal: ${identity} is ${event.visibility}`;
@@ -70,4 +70,13 @@ function nameFailures(
       `A Subscription name is unique in the Service: ${nameOf(located)}`,
     ),
   );
+}
+
+/** Why no Event source holds an Event; a Provider's Event names the Provider, whichever Dependency is listed. */
+function unsourcedMessageOf(event: unknown, identity: string): string {
+  const message = `A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: ${identity}`;
+  const provider = providerOf(event);
+  return provider === undefined
+    ? message
+    : `${message} is ${provider}'s, and no listed Dependency's Contract Package exports it`;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { pingedV1, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   type ContractPackage,
@@ -10,6 +11,7 @@ import {
   defineGroup,
   defineSubscription,
   type Event,
+  providedEvent,
   type Subscription,
 } from '../index.ts';
 import { validateContract } from '../internal/index.ts';
@@ -22,7 +24,7 @@ const orderCreatedV1 = defineEvent({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
@@ -30,7 +32,7 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const paymentFailedV1 = defineEvent({
+const paymentFailedV1 = providedEvent('payments-service', {
   name: 'PaymentFailed',
   version: 1,
   visibility: 'internal',
@@ -184,8 +186,53 @@ describe('validateContract: Subscriptions', () => {
     );
   });
 
+  test('a Subscription to a Provider’s Event that no listed Dependency gives fails, naming the Provider', () => {
+    const onPinged = defineSubscription({
+      name: 'onPinged',
+      description: 'Receives it',
+      event: pingedV1,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onPinged]);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onPinged', 'event'],
+        'subscription-event',
+        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
+      ),
+    );
+  });
+
+  test('a Subscription to a Provider’s Event fails the same when the listed Dependency holds another copy of its Contract Package', () => {
+    const copy = providedEvent('ping-service', {
+      name: 'Pinged',
+      version: 1,
+      visibility: 'internal',
+      description: 'The ping-service was pinged',
+      body: z.object({ at: z.iso.datetime() }),
+    });
+    const provider = { ...pingService, events: { pingedV1: copy } };
+    const onCopy = defineSubscription({ name: 'onCopy', description: 'Receives it', event: copy });
+    const onPinged = defineSubscription({
+      name: 'onPinged',
+      description: 'Receives it',
+      event: pingedV1,
+    });
+
+    const result = validateSubscriptions([onCopy, onPinged], [orderCreatedV1], provider as never);
+
+    expect(result).toEqual(
+      failed(
+        ['groups', 'orders', 'subscriptions', 'onPinged', 'event'],
+        'subscription-event',
+        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
+      ),
+    );
+  });
+
   test('a Subscription to a Provider’s Private Event fails, even one the Provider exported', () => {
-    const privateEvent = defineEvent({
+    const privateEvent = providedEvent('payments-service', {
       name: 'PaymentRefunded',
       version: 1,
       visibility: 'private',
@@ -214,7 +261,7 @@ describe('validateContract: Subscriptions', () => {
   });
 
   test('a Subscription to a Provider’s Private Event fails even when the Provider bears the Service’s own name', () => {
-    const privateEvent = defineEvent({
+    const privateEvent = providedEvent('payments-service', {
       name: 'PaymentRefunded',
       version: 1,
       visibility: 'private',

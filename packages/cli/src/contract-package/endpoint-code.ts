@@ -21,7 +21,7 @@ import { partsLinesOf } from './schema-lines.ts';
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
-  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
+  snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
 ): SchemaFile {
   const { endpoint } = exported;
   const needs = loomNeeds();
@@ -32,16 +32,19 @@ export function endpointModuleOf(
     .map(({ code }) => siblingOf({ kind: 'rejection', code }));
   const file = packageModuleOf({
     path: fileOf({ kind: 'endpoint', name: endpoint.name }),
-    body: endpointBodyOf(exported, rejections, needs),
+    body: endpointBodyOf({ ...exported, provider: snapshot.name }, rejections, needs),
     siblings: [...guards, ...declared],
     needs,
   });
   return { file, defUses: [...needs.defs.values()] };
 }
 
-/** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */
+/**
+ * Its Success and Rejections as readers, since Consumers read them; its Guards attached, and the
+ * Provider that exports it named, so a Group never lists it as the Service's own.
+ */
 function endpointBodyOf(
-  { id, endpoint }: ExportedEndpoint,
+  { id, endpoint, provider }: ExportedEndpoint & { readonly provider: string },
   rejections: readonly ListedRejection[],
   needs: Needs,
 ): readonly string[] {
@@ -49,7 +52,7 @@ function endpointBodyOf(
   const reader: Writing = { mode: 'reader', needs };
   const listed = rejections.map(rejectionNameOf);
   return [
-    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.providedEndpoint({`,
+    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.providedEndpoint(${stringLiteralOf(provider)}, {`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),

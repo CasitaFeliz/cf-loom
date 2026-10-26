@@ -49,7 +49,7 @@ const notifyOnPaid = defineSubscription({
   event: orderPaidV1,
 });
 
-const paymentSettledV1 = providedEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',

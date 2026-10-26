@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -13,6 +12,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client, type Happened } from './index.ts';
@@ -56,7 +56,7 @@ const orderTotal = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -74,7 +74,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const defaultStandards = providedStandardRejections();
@@ -83,7 +91,7 @@ const orders = contractPackageOf({ getOrder, cancelOrder, orderTotal }, defaultS
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [getOrder, cancelOrder, orderTotal],
+  endpoints: [orders.endpoints.getOrder, orders.endpoints.cancelOrder, orders.endpoints.orderTotal],
 });
 
 const params = { params: { orderId: 'o-1' } };
@@ -208,9 +216,10 @@ describe('a Success body nested past the stack', () => {
     description: 'A deep body',
     success: { status: 200, body: tree },
   });
+  const nestingPackage = contractPackageOf({ nest }, defaultStandards);
   const nesting = defineDependency({
-    provider: contractPackageOf({ nest }, defaultStandards),
-    endpoints: [nest],
+    provider: nestingPackage,
+    endpoints: [nestingPackage.endpoints.nest],
   });
 
   test('is INVALID_OUTCOME with one malformed Issue at success.body, never a rejected call', async () => {
@@ -302,7 +311,7 @@ describe('an Open Enum Success header', () => {
     success: { status: 204, headers: z.object({ 'x-stage': openEnum(['packed', 'shipped']) }) },
   });
   /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
-  const trackOrderReader = providedEndpoint({
+  const trackOrderReader = providedEndpoint('orders-service', {
     name: 'trackOrder',
     method: 'GET',
     path: '/orders/:orderId/track',
@@ -321,7 +330,7 @@ describe('an Open Enum Success header', () => {
   ]);
   const trackingDependency = defineDependency({
     provider: tracking,
-    endpoints: [trackOrderReader],
+    endpoints: [tracking.endpoints.trackOrder],
   });
 
   function trackingAnswering(stage: string) {
@@ -354,7 +363,7 @@ describe('an Open Enum Success header', () => {
       input: { params: z.object({ orderId: z.string() }) },
       success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
     });
-    const stageOrderReader = providedEndpoint({
+    const stageOrderReader = providedEndpoint('orders-service', {
       name: 'stageOrder',
       method: 'GET',
       path: '/orders/:orderId/stage',
@@ -373,7 +382,7 @@ describe('an Open Enum Success header', () => {
     ]);
     const stagingDependency = defineDependency({
       provider: staging,
-      endpoints: [stageOrderReader],
+      endpoints: [staging.endpoints.stageOrder],
     });
     const stages = client(stagingDependency, {
       baseUrl: 'http://orders.test',

@@ -2,11 +2,12 @@ import type { Command } from './command.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
+import type { Own } from './provided.ts';
 import type { DeclaredFieldsRule, ListsSomethingRule } from './rules.ts';
 import type { Subscription } from './subscription.ts';
 
-/** A list a Group holds: never empty, since a list left out already means none. */
-type Listing<Item> = readonly [Item, ...Item[]];
+/** A list a Group holds: never empty, since a list left out already means none, and of its Contract's own Elements. */
+type Listing<Item> = readonly [Own<Item>, ...Own<Item>[]];
 
 /** What an author writes to declare a Group: a name, what it is for, and what it lists, of at least one kind. */
 type GroupDeclaration = {

@@ -8,13 +8,16 @@ import { schemaLineOf } from './schema-lines.ts';
 
 /**
  * An exported Event's Message Version rebuilt from its Snapshot entry with `providedEvent`, its
- * body a Reader schema, since its Subscribers read it.
+ * body a Reader schema, since its Subscribers read it, and marked as `provider`'s.
  */
-export function eventModuleOf({ name, version, event }: ExportedEvent): SchemaFile {
+export function eventModuleOf(
+  { name, version, event }: ExportedEvent,
+  provider: string,
+): SchemaFile {
   const declared = { kind: 'event', name, version } as const;
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    `export const ${bindingOf(declared)} = loom.providedEvent({`,
+    `export const ${bindingOf(declared)} = loom.providedEvent(${stringLiteralOf(provider)}, {`,
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${version},`,
     ...elementLinesOf(event),

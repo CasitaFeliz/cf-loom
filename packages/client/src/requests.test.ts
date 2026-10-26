@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -16,6 +15,7 @@ import { admit, handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
@@ -79,7 +79,7 @@ const priceOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -97,7 +97,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const defaultStandards = providedStandardRejections();
@@ -106,7 +114,11 @@ const orders = contractPackageOf({ searchOrders, createOrder, priceOrder }, defa
 
 const ordersDependency = defineDependency({
   provider: orders,
-  endpoints: [searchOrders, createOrder, priceOrder],
+  endpoints: [
+    orders.endpoints.searchOrders,
+    orders.endpoints.createOrder,
+    orders.endpoints.priceOrder,
+  ],
 });
 
 /** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
@@ -428,10 +440,13 @@ describe('Input that cannot be sent', () => {
         invalidInput: { ...defaultStandards.invalidInput, body: olderReader },
       },
     );
-    const olderOrders = client(defineDependency({ provider: older, endpoints: [searchOrders] }), {
-      baseUrl: 'http://orders.test',
-      fetch: async () => counted(),
-    });
+    const olderOrders = client(
+      defineDependency({ provider: older, endpoints: [older.endpoints.searchOrders] }),
+      {
+        baseUrl: 'http://orders.test',
+        fetch: async () => counted(),
+      },
+    );
 
     const outcome = await olderOrders.searchOrders({
       params: { shopId: 's' },
@@ -526,9 +541,10 @@ describe('Input nested past the stack', () => {
     input: { body: tree },
     success: { status: 204 },
   });
+  const nestingPackage = contractPackageOf({ nest }, defaultStandards);
   const nesting = defineDependency({
-    provider: contractPackageOf({ nest }, defaultStandards),
-    endpoints: [nest],
+    provider: nestingPackage,
+    endpoints: [nestingPackage.endpoints.nest],
   });
 
   test('is the Provider’s invalid-input Rejection, malformed at the body, and nothing is sent', async () => {
@@ -586,7 +602,10 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
     success: { status: 204 },
   });
   const making = contractPackageOf({ makeOrder }, defaultStandards);
-  const makingDependency = defineDependency({ provider: making, endpoints: [makeOrder] });
+  const makingDependency = defineDependency({
+    provider: making,
+    endpoints: [making.endpoints.makeOrder],
+  });
 
   test('a demand that fails gives only its Issues, though the body fails too', async () => {
     const makers = client(makingDependency, {
@@ -637,7 +656,7 @@ describe('every header and query param the Provider reads reaches the request, w
     readonly part: 'headers' | 'query';
     readonly name: string;
     readonly declaredBy: string;
-    readonly endpoint: ContractPackage['endpoints'][string];
+    readonly endpoint: Exportable;
   }[] = [
     {
       part: 'headers',
@@ -686,9 +705,9 @@ describe('every header and query param the Provider reads reaches the request, w
   ];
 
   /** A client of the one Endpoint, called with an Input its types do not take. */
-  function keyedClient(endpoint: ContractPackage['endpoints'][string], fetch: Http) {
+  function keyedClient(endpoint: Exportable, fetch: Http) {
     const provider = contractPackageOf({ readKeyed: endpoint }, defaultStandards);
-    const dependency = defineDependency({ provider, endpoints: [endpoint] });
+    const dependency = defineDependency({ provider, endpoints: [provider.endpoints.readKeyed] });
     return client(dependency, { baseUrl: 'http://orders.test', fetch }) as unknown as {
       readonly readKeyed: (input: unknown) => Promise<unknown>;
     };
@@ -774,7 +793,10 @@ describe('a number literal in exponent form, end to end against serve', () => {
     success: { status: 204, headers: z.object({ 'x-small': z.literal(1.5e-7) }) },
   });
   const echoing = contractPackageOf({ echoLarge }, defaultStandards);
-  const echoingDependency = defineDependency({ provider: echoing, endpoints: [echoLarge] });
+  const echoingDependency = defineDependency({
+    provider: echoing,
+    endpoints: [echoing.endpoints.echoLarge],
+  });
 
   test('travels as plain decimal both ways and reads back as its literal', async () => {
     const handlers = {
@@ -832,7 +854,10 @@ describe('several Guards, checked in Attachment order', () => {
     success: { status: 204 },
   });
   const shops = contractPackageOf({ listShops }, defaultStandards);
-  const shopsDependency = defineDependency({ provider: shops, endpoints: [listShops] });
+  const shopsDependency = defineDependency({
+    provider: shops,
+    endpoints: [shops.endpoints.listShops],
+  });
   const shopsClient = () =>
     client(shopsDependency, {
       baseUrl: 'http://shops.test',
@@ -883,7 +908,10 @@ describe('several Guards, checked in Attachment order', () => {
 
 describe('a Provider’s exported Snapshot, read when the client is created', () => {
   test('a Contract Package in a newer format is refused', () => {
-    const newer = defineDependency({ provider: inFormat(orders, 2), endpoints: [searchOrders] });
+    const newer = defineDependency({
+      provider: inFormat(orders, 2),
+      endpoints: [orders.endpoints.searchOrders],
+    });
 
     const create = () => client(newer, { baseUrl: 'http://orders.test' });
 
@@ -903,7 +931,7 @@ describe('a Provider’s exported Snapshot, read when the client is created', ()
   test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {
     const damaged = defineDependency({
       provider: inFormat(orders, '1'),
-      endpoints: [searchOrders],
+      endpoints: [orders.endpoints.searchOrders],
     });
 
     const create = () => client(damaged, { baseUrl: 'http://orders.test' });

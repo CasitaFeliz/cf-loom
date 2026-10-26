@@ -16,6 +16,7 @@ import {
   type Guard,
   notFound,
   openEnum,
+  providedEndpoint,
 } from '../index.ts';
 import { validateContract, walkSchemas } from '../internal/index.ts';
 
@@ -72,7 +73,7 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder],
 });
 
-const getPayment = defineEndpoint({
+const getPayment = providedEndpoint('payments-service', {
   name: 'getPayment',
   method: 'GET',
   path: '/payments/:paymentId',

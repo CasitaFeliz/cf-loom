@@ -177,7 +177,7 @@ Exit 1, the check failed:
 | --- | --- |
 | `<location> <rule>: <message>`, `<location> not allowed: <construct> (use <instead>)`, one per rule the root breaks | `generate`, `verify`, `package`, `check`, `broker-plan`, `openapi`, `asyncapi`, `publish` |
 | `endpoints.<name> is exported by no file under src/contract/` (`guards.<name>` for a Guard, `commands.<Name>@<version>` for a Command's Message Version, `subscriptions.<name>` for a Subscription) | `generate`, `verify` |
-| `<file> exports <name>, which no Group lists: list it in a Group or delete it`, for an Endpoint, an Event, a Command's Message Version or a Subscription that a file under `src/contract/` exports, once, at the first file in code point order; `<name>` is `default` for a default export | `generate`, `verify` |
+| `<file> exports <name>, which no Group lists: list it in a Group or delete it`, for an Endpoint, an Event, a Command's Message Version or a Subscription that a file under `src/contract/` exports, once, at the first file in code point order, never for what a Contract Package exports; `<name>` is `default` for a default export | `generate`, `verify` |
 | `<file> exports <name>, which the root does not list: list it in groups or delete it`, for a Group, in place of a line for each declaration it lists | `generate`, `verify` |
 | `guards.<name> is exported by no package the Contract's files import: import it from <package>`, for a Guard of a Definitions Package | `generate`, `verify` |
 | `<path> is the Handler of <element>, which is now <path>: run cf-loom generate`, for a Handler `generate` moves; `<element>` is `endpoints.fetchOrder`, `guards.apiKey`, `commands.ChargeCard@1` or `subscriptions.auditCreated` | `verify` |

@@ -33,7 +33,6 @@ export type {
   GroupedOf,
   IsOneLiteral,
   LiveOf,
-  ProvidedEvent,
   Refusal,
   SuccessValueOf,
 } from '../declarations/index.ts';
@@ -277,7 +276,6 @@ export {
   packageNamePartsOf,
   partFieldOf,
   pathSegmentsOf,
-  providerExportsOf,
   readEndpointIdentity,
   readEventReference,
   resolutionOf,

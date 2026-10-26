@@ -4357,6 +4357,48 @@ const archiveFile = lines([
   '});',
 ]);
 
+/**
+ * `service` with its Provider exporting an Endpoint, `getPayment`, which its Dependency lists, so a
+ * file under `src/contract/` re-exports what a Contract Package exports.
+ */
+function withProviderEndpoint(
+  service: Readonly<Record<string, string>>,
+): Readonly<Record<string, string>> {
+  return {
+    ...service,
+    'src/contract/payments.ts': payments
+      .replace(
+        'export const payments = {',
+        [
+          "export const getPayment = providedEndpoint('payments-service', {",
+          "  name: 'getPayment',",
+          "  method: 'GET',",
+          "  path: '/payments',",
+          "  visibility: 'internal',",
+          "  description: 'getPayment',",
+          '  success: { status: 200, body: z.object({ id: z.string() }) },',
+          '});',
+          '',
+          'export const payments = {',
+        ].join('\n'),
+      )
+      .replace(
+        'import { openEnumReader, providedEvent }',
+        'import { openEnumReader, providedEndpoint, providedEvent }',
+      )
+      .replace('endpoints: {},', 'endpoints: { getPayment },'),
+    'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+      .replace(
+        'import { paymentSettledV1, payments }',
+        'import { getPayment, paymentSettledV1, payments }',
+      )
+      .replace(
+        'defineDependency({ provider: payments })',
+        'defineDependency({ provider: payments, endpoints: [getPayment] })',
+      ),
+  };
+}
+
 describe('cf-loom generate and verify: a declaration the root does not reach', () => {
   test('an Endpoint exported under src/contract that no Group lists exits 1 naming its file, and writes nothing', () => {
     const project = aProject(withUnlistedEndpoint(aService()));
@@ -4528,41 +4570,54 @@ describe('cf-loom generate and verify: a declaration the root does not reach', (
   });
 
   test('a Provider’s Endpoint that a file under src/contract exports is not reported', () => {
-    const service = aMessagingService();
-    const project = aProject({
-      ...service,
-      'src/contract/payments.ts': payments
-        .replace(
-          'export const payments = {',
-          [
-            'export const getPayment = defineEndpoint({',
-            "  name: 'getPayment',",
-            "  method: 'GET',",
-            "  path: '/payments',",
-            "  visibility: 'internal',",
-            "  description: 'getPayment',",
-            '  success: { status: 200, body: z.object({ id: z.string() }) },',
-            '});',
-            '',
-            'export const payments = {',
-          ].join('\n'),
-        )
-        .replace('import { defineEvent,', 'import { defineEndpoint, defineEvent,')
-        .replace('endpoints: {},', 'endpoints: { getPayment },'),
-      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
-        .replace(
-          'import { paymentSettledV1, payments }',
-          'import { getPayment, paymentSettledV1, payments }',
-        )
-        .replace(
-          'defineDependency({ provider: payments })',
-          'defineDependency({ provider: payments, endpoints: [getPayment] })',
-        ),
-    });
+    const project = aProject(withProviderEndpoint(aMessagingService()));
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran).toMatchObject({ status: 0, stderr: '' });
+  });
+
+  test('a Group that lists a Provider’s Event exits 1 with the provided-element line, and writes nothing', () => {
+    const service = aMessagingService();
+    const project = aProject({
+      ...service,
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        "  description: 'Payments',\n",
+        "  description: 'Payments',\n  events: [paymentSettledV1],\n",
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "groups.payments.events.PaymentSettled@1 provided-element: A Group lists the Contract's own Elements: PaymentSettled@1 is payments-service's\n",
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+    expect(existsSync(join(project, 'src/readers.generated.ts'))).toBe(false);
+  });
+
+  test('a Group that lists a Provider’s Endpoint a file under src/contract re-exports exits 1 with the provided-element line', () => {
+    const service = withProviderEndpoint(aMessagingService());
+    const project = aProject({
+      ...service,
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        "  description: 'Payments',\n",
+        "  description: 'Payments',\n  endpoints: [getPayment],\n",
+      ),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "groups.payments.endpoints.GET /payments provided-element: A Group lists the Contract's own Elements: getPayment is payments-service's\n",
+    });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
 
   test('a declaration exported from two files is reported once, at the first file in code point order', () => {

@@ -3,23 +3,24 @@ import type { Visibility } from './element.ts';
 import type { Endpoint } from './endpoint.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
+import type { Provided } from './provided.ts';
 import type { DeclaredFieldsRule } from './rules.ts';
 import type { ProvidedStandardRejections } from './standard-rejections.ts';
 
 type ExportedVisibility = Exclude<Visibility, 'private'>;
 
-/** An Event as a Contract Package exports it: the declaration itself, which Subscriptions reference. */
-export type ProvidedEvent = Event & { readonly visibility: ExportedVisibility };
+/** An Event as a Contract Package exports it: the declaration itself, marked as its Provider's, which Subscriptions reference. */
+type ProvidedEvent = Provided<Event & { readonly visibility: ExportedVisibility }>;
 
 /**
- * The `contract` a Contract Package exports: its Public and Internal Elements, its version, and the
- * Snapshot cut to what it exports.
+ * The `contract` a Contract Package exports: its Public and Internal Elements, each its Provider's,
+ * its version, its Standard Rejections and the Snapshot cut to what it exports.
  */
 export type ContractPackage = {
   readonly name: string;
   readonly version: string;
   readonly endpoints: Readonly<
-    Record<string, Endpoint & { readonly visibility: ExportedVisibility }>
+    Record<string, Provided<Endpoint & { readonly visibility: ExportedVisibility }>>
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: ProvidedStandardRejections;

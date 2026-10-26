@@ -1,5 +1,4 @@
 import {
-  type ContractPackage,
   defineContract,
   defineDependency,
   defineEndpoint,
@@ -11,6 +10,7 @@ import {
 import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { FakeProviderError, fakeProvider } from './index.ts';
@@ -74,7 +74,7 @@ function latestPayment(fields: {
 }
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declared: readonly Endpoint[] = Object.values(endpoints),
 ) {
@@ -96,7 +96,15 @@ function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
   });
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
@@ -109,7 +117,7 @@ function inFormat(contractPackage: typeof payments, format: unknown): typeof pay
 
 const paymentsDependency = defineDependency({
   provider: payments,
-  endpoints: [getPayment, capturePayment],
+  endpoints: [payments.endpoints.getPayment, payments.endpoints.capturePayment],
 });
 
 const at = 'https://payments-service.test';
@@ -148,9 +156,10 @@ const tagPayment = defineEndpoint({
   success: { status: 204 },
 });
 
+const taggingDependencyPackage = contractPackageOf({ tagPayment });
 const taggingDependency = defineDependency({
-  provider: contractPackageOf({ tagPayment }),
-  endpoints: [tagPayment],
+  provider: taggingDependencyPackage,
+  endpoints: [taggingDependencyPackage.endpoints.tagPayment],
 });
 
 /** The Input of a tagPayment call, as a test that wrote to it would see it. */
@@ -372,7 +381,10 @@ describe('fakeProvider: requests', () => {
     async (_, latest) => {
       const declared = [getPayment, capturePayment, getSummary, latest];
       const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const dependency = defineDependency({ provider: provider, endpoints: [getPayment] });
+      const dependency = defineDependency({
+        provider: provider,
+        endpoints: [provider.endpoints.getPayment],
+      });
       const fake = fakeProvider(dependency);
       fake
         .on('getPayment')
@@ -408,7 +420,10 @@ describe('fakeProvider: requests', () => {
   });
 
   test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {
-    const newer = defineDependency({ provider: inFormat(payments, 2), endpoints: [getPayment] });
+    const newer = defineDependency({
+      provider: inFormat(payments, 2),
+      endpoints: [payments.endpoints.getPayment],
+    });
 
     const create = () => fakeProvider(newer);
 

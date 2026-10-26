@@ -8,6 +8,7 @@ import {
   defineSubscription,
   openEnum,
   openEnumReader,
+  providedEvent,
 } from '@cf-loom/contract';
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -65,7 +66,7 @@ const refundV1 = defineCommand({
 });
 
 /** A Provider's Event as its Contract Package declares it: its body a Reader. */
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
@@ -304,6 +305,33 @@ describe('consume', () => {
       (consumer) => consumer.durable === 'orders-service_notify-on-settled',
     );
 
+    expect(settled).toMatchObject({
+      stream: 'payments-service',
+      subject: 'payments-service.event.PaymentSettled.v1',
+    });
+  });
+
+  test('a Subscription to a Provider’s Event that a Group also lists still reads the Provider’s stream, never the Service’s own', async () => {
+    const group = defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, paymentSettledV1],
+      commands: [chargeCardV1, chargeCardV2, refundV1],
+      subscriptions: [notifyOnCreated, notifyOnSettled],
+    } as unknown as Parameters<typeof defineGroup>[0]);
+    const listing = defineContract({
+      name: 'orders-service',
+      groups: [group],
+      dependencies: [paymentsDependency],
+    });
+    const recording = aBroker();
+    const { consume } = await messaging(listing, recording.broker);
+
+    await consume({ ...handlers, readers });
+
+    const settled = recording.consumers.find(
+      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    );
     expect(settled).toMatchObject({
       stream: 'payments-service',
       subject: 'payments-service.event.PaymentSettled.v1',

@@ -742,7 +742,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
   });
 
-  test('an Event’s file declares it with providedEvent: its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
+  test('an Event’s file declares it with providedEvent: its Provider, its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
     const project = aProject(service);
 
     packageIn(project);
@@ -750,7 +750,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     const out = join(project, defaultOut);
     expect(read(out, 'src/events/order-placed.v1.ts')).toContain(
       [
-        'export const orderPlacedEventV1 = loom.providedEvent({',
+        "export const orderPlacedEventV1 = loom.providedEvent('orders-service', {",
         "  name: 'OrderPlaced',",
         '  version: 1,',
         "  visibility: 'internal',",
@@ -762,7 +762,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     );
     expect(read(out, 'src/events/order-placed.v2.ts')).toContain(
       [
-        'export const orderPlacedEventV2 = loom.providedEvent({',
+        "export const orderPlacedEventV2 = loom.providedEvent('orders-service', {",
         "  name: 'OrderPlaced',",
         '  version: 2,',
         "  visibility: 'internal',",
@@ -869,7 +869,9 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
     expect(read(out, 'src/index.ts')).toContain('    listOrders: listOrdersEndpoint,\n  },');
     const getOrder = read(out, 'src/endpoints/get-order.ts');
     expect(getOrder).toContain("import * as loom from '@cf-loom/contract';");
-    expect(getOrder).toContain('export const getOrderEndpoint = loom.providedEndpoint({');
+    expect(getOrder).toContain(
+      "export const getOrderEndpoint = loom.providedEndpoint('orders-service', {",
+    );
     expect(getOrder).toContain(
       '  guards: [userTokenGuard, { guard: permissionGuard, qualifier: ["orders:read"] }],',
     );
@@ -1211,6 +1213,46 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
     expect(snapshot.dependencies).toEqual({
       'orders-service': { against: '0.0.0', endpoints: [] },
     });
+  });
+
+  test('a Consumer whose Group lists the package’s Event fails generate, naming the Provider, and its type-check refuses the listing', () => {
+    const out = builtPackage();
+    expect(typeCheck(out).status).toBe(0);
+    const consumer = aSubscriber([]);
+    link(out, join(consumer, 'node_modules/@org/contract-orders-service'));
+    write(consumer, {
+      'src/contract/index.ts': lines([
+        "import { defineContract, defineDependency, defineGroup, defineSubscription } from '@cf-loom/contract';",
+        "import { contract as orders } from '@org/contract-orders-service';",
+        '',
+        'export const ordersDependency = defineDependency({ provider: orders });',
+        'export const auditPlaced = defineSubscription({',
+        "  name: 'auditPlaced',",
+        "  description: 'Audit placed',",
+        '  event: orders.events.orderPlacedV1,',
+        '});',
+        'export const contract = defineContract({',
+        "  name: 'billing-service',",
+        '  groups: [defineGroup({',
+        "    name: 'audits',",
+        "    description: 'Audits',",
+        '    events: [orders.events.orderPlacedV1],',
+        '    subscriptions: [auditPlaced],',
+        '  })],',
+        '  dependencies: [ordersDependency],',
+        '});',
+      ]),
+    });
+
+    const ran = cfLoom(consumer, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr:
+        "groups.audits.events.OrderPlaced@1 provided-element: A Group lists the Contract's own Elements: OrderPlaced@1 is orders-service's\n",
+    });
+    expect(typeCheck(consumer).status).not.toBe(0);
   });
 
   test('cfLoom.dependencies lists per Provider the Events its Subscriptions receive', () => {

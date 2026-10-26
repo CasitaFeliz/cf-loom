@@ -1,16 +1,20 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { ping, pingedV1, pingKey, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
+  type Contract,
   defineCommand,
   defineContract,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
+  defineGuard,
   defineSubscription,
   type Group,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { endpointsOf, eventsOf, validateContract } from '../internal/index.ts';
 
 const listOrders = defineEndpoint({
   name: 'listOrders',
@@ -257,4 +261,134 @@ describe('validateContract: each declaration in exactly one Group', () => {
 
     expect(result.kind).toBe('valid');
   });
+});
+
+/** A Contract of Groups with the Dependency on the ping-service its Endpoint gives, or none. */
+function aContract(groups: readonly Group[], dependencies: 'none' | 'ping-service' = 'none') {
+  const dependency = defineDependency({ provider: pingService, endpoints: [ping] });
+  return defineContract({
+    name: 'billing-service',
+    groups,
+    ...(dependencies === 'none' ? {} : { dependencies: [dependency] }),
+  });
+}
+
+function validateBilling(contract: Contract) {
+  return validateContract(contract, aRootPackage(contract));
+}
+
+function providedElementFailure(field: 'endpoints' | 'events', key: string, label: string) {
+  return {
+    kind: 'declaration',
+    at: ['groups', 'billing', field, key],
+    rule: 'provided-element',
+    message: `A Group lists the Contract's own Elements: ${label} is ping-service's`,
+  };
+}
+
+describe('validateContract: a Group lists the Contract’s own Elements', () => {
+  test.each(['none', 'ping-service'] as const)(
+    'a Group listing a Provider’s Event fails provided-element, with %s as a Dependency',
+    (dependencies) => {
+      const contract = aContract([aGroup('billing', { events: [pingedV1] })], dependencies);
+
+      const result = validateBilling(contract);
+
+      expect(result).toEqual({
+        kind: 'invalid',
+        failures: [providedElementFailure('events', 'Pinged@1', 'Pinged@1')],
+      });
+    },
+  );
+
+  test.each(['none', 'ping-service'] as const)(
+    'a Group listing a Provider’s Endpoint fails provided-element, with %s as a Dependency',
+    (dependencies) => {
+      const contract = aContract([aGroup('billing', { endpoints: [ping] })], dependencies);
+
+      const result = validateBilling(contract);
+
+      expect(result).toEqual({
+        kind: 'invalid',
+        failures: [providedElementFailure('endpoints', 'GET /ping', 'ping')],
+      });
+    },
+  );
+
+  test('the Guards of a Provider’s Endpoint that a Group lists add no failure', () => {
+    const apiKey = defineGuard({ name: pingKey.name, description: 'The billing-service’s key' });
+    const orders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders',
+      visibility: 'public',
+      description: 'Every order',
+      guards: [apiKey],
+      success: { status: 200, body: z.array(z.object({ id: z.uuid() })) },
+    });
+    const group = aGroup('billing', { endpoints: [orders, ping] });
+
+    const result = validateBilling(aContract([group], 'ping-service'));
+
+    expect(result).toEqual({
+      kind: 'invalid',
+      failures: [providedElementFailure('endpoints', 'GET /ping', 'ping')],
+    });
+  });
+
+  test('a Provider’s Element listed in two Groups fails once for each listing, never as Group membership', () => {
+    const groups = [
+      aGroup('billing', { events: [pingedV1] }),
+      aGroup('audit', { events: [pingedV1] }),
+    ];
+
+    const result = validateBilling(aContract(groups, 'ping-service'));
+
+    expect(result).toEqual({
+      kind: 'invalid',
+      failures: [
+        providedElementFailure('events', 'Pinged@1', 'Pinged@1'),
+        {
+          ...providedElementFailure('events', 'Pinged@1', 'Pinged@1'),
+          at: ['groups', 'audit', 'events', 'Pinged@1'],
+        },
+      ],
+    });
+  });
+
+  test('a Group that lists only a Provider’s Element lists something', () => {
+    const result = validateBilling(aContract([aGroup('billing', { events: [pingedV1] })]));
+
+    expect(result).not.toMatchObject({ failures: [{ rule: 'empty-group' }] });
+  });
+
+  test.each([
+    { endpoint: 'own', event: 'own', dependency: 'none' },
+    { endpoint: 'own', event: 'own', dependency: 'ping-service' },
+    { endpoint: 'own', event: 'provided', dependency: 'none' },
+    { endpoint: 'own', event: 'provided', dependency: 'ping-service' },
+    { endpoint: 'provided', event: 'own', dependency: 'none' },
+    { endpoint: 'provided', event: 'own', dependency: 'ping-service' },
+    { endpoint: 'provided', event: 'provided', dependency: 'none' },
+    { endpoint: 'provided', event: 'provided', dependency: 'ping-service' },
+  ] as const)(
+    'a Group of $endpoint Endpoint and $event Event, with $dependency as a Dependency: only the own ones are listed, and each Provider’s is one failure',
+    ({ endpoint, event, dependency }) => {
+      const endpoints = endpoint === 'own' ? [listOrders] : [ping];
+      const events = event === 'own' ? [orderCreatedV2] : [pingedV1];
+      const contract = aContract([aGroup('billing', { endpoints, events })], dependency);
+
+      const result = validateBilling(contract);
+
+      const expected = [
+        ...(endpoint === 'provided'
+          ? [providedElementFailure('endpoints', 'GET /ping', 'ping')]
+          : []),
+        ...(event === 'provided' ? [providedElementFailure('events', 'Pinged@1', 'Pinged@1')] : []),
+      ];
+      expect(result.kind === 'invalid' ? result.failures : []).toEqual(expected);
+      expect(endpointsOf(contract)).toEqual(endpoint === 'own' ? [listOrders] : []);
+      expect(eventsOf(contract)).toEqual(event === 'own' ? [orderCreatedV2] : []);
+    },
+  );
 });

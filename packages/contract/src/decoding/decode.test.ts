@@ -15,6 +15,7 @@ import {
   defineGuard,
   defineRejection,
   defineSubscription,
+  providedEvent,
 } from '../index.ts';
 import {
   canonicalTextOf,
@@ -1608,7 +1609,7 @@ function declaredSnapshot() {
     description: 'Charges the card',
     body: z.object({ amount: z.int() }),
   });
-  const paymentSettledV1 = defineEvent({
+  const paymentSettledV1 = providedEvent('payments-service', {
     name: 'PaymentSettled',
     version: 1,
     visibility: 'internal',

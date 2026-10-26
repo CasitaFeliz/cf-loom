@@ -2,7 +2,6 @@ import {
   type Committed as ContractCommitted,
   type Http as ContractHttp,
   type Issue as ContractIssue,
-  type ContractPackage,
   type ReservedCode as ContractReservedCode,
   defineContract,
   defineDependency,
@@ -17,6 +16,7 @@ import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contr
 import type { Http as ServerHttp } from '@cf-loom/server';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
@@ -82,7 +82,7 @@ const ping = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
+  const Endpoints extends Readonly<Record<string, Exportable>>,
   const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
@@ -100,7 +100,15 @@ function contractPackageOf<
   }
   const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf(name, endpoints);
+  return {
+    name,
+    version: '1.0.0',
+    endpoints: provided,
+    events: {},
+    standardRejections,
+    exportedSnapshot,
+  };
 }
 
 const standards = providedStandardRejections({
@@ -111,7 +119,10 @@ const standards = providedStandardRejections({
 
 const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
 
-const ordersDependency = defineDependency({ provider: orders, endpoints: [getOrder, listOrders] });
+const ordersDependency = defineDependency({
+  provider: orders,
+  endpoints: [orders.endpoints.getOrder, orders.endpoints.listOrders],
+});
 
 const baseUrl = 'http://orders.test';
 

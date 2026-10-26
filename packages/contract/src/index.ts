@@ -16,6 +16,7 @@ export type {
   IssueCode,
   Lifecycle,
   Method,
+  Provided,
   ProvidedContextOf,
   ProvidedStandardRejections,
   QualifiedAttachment,
