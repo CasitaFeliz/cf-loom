@@ -191,7 +191,7 @@ A declaration that a Service receives an Event, its own or one a listed Dependen
 _Avoid_: listener, binding
 
 **Provided Element**:
-An Element as its Provider's Contract Package exports it: rebuilt from the Snapshot, with Reader schemas where a Consumer reads, and marked as the Provider's; a Dependency selects it, a Subscription receives it, and a Group never lists it.
+An Element as its Provider's Contract Package exports it: rebuilt from the Snapshot, with Reader schemas where a Consumer reads, and marked as the Provider's, an Endpoint also carrying its exported Snapshot cut; a Dependency selects it, a Subscription receives it, and a Group never lists it.
 _Avoid_: imported Element, foreign Element, external Element, carried Element
 
 ### Implementation
@@ -235,7 +235,7 @@ _Avoid_: dispatcher, bus
 ### Compatibility
 
 **Snapshot**:
-A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports.
+A language-neutral description of a Contract or a Definitions Package, frozen when it is published and carried inside the published package. The **declared Snapshot** is what `generate` writes from the source; the **published Snapshot** is `snapshot.json`, which adds `version`, `generator` and the history, while `package` writes the declared Snapshot into its package with the `generator` of the CLI that runs it and without `version`; the **exported Snapshot** is the cut of whichever of them a Contract Package is generated from, to what the package exports; each Endpoint a Contract Package exports carries the exported Snapshot cut to it.
 _Avoid_: schema dump, manifest
 
 **Baseline**:

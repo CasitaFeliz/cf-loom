@@ -819,15 +819,6 @@ describe('memory().messagesOf', () => {
       endpoints: {},
       events: { paymentSettledV1 },
       standardRejections: providedStandardRejections(),
-      exportedSnapshot: {
-        format: 1,
-        defs: {},
-        endpoints: {},
-        events: {},
-        guards: {},
-        codes: {},
-        shadowing: {},
-      },
     } as const satisfies ContractPackage;
     const ownSettledV1 = defineEvent({
       name: 'PaymentSettled',

@@ -1,19 +1,19 @@
 import type { Endpoint } from '../declarations/index.ts';
 import type { TextPartNodes } from '../validation/index.ts';
 import { identityOf } from '../written/index.ts';
-import type { CodeSnapshot, EndpointSnapshot, ExportedSnapshot } from './types.ts';
+import type { CodeSnapshot, EndpointSnapshot, ExportedCut } from './types.ts';
 
 /**
- * An exported Endpoint's entry in its Provider's decoded exported Snapshot, found by identity;
- * every Endpoint a Contract Package exports has one, so a missing entry is a bug.
+ * An exported Endpoint's entry in the decoded exported Snapshot cut an Endpoint carries, found by
+ * identity; every Endpoint a Contract Package exports has one, so a missing entry is a bug.
  */
 export function exportedEntryOf(
   provider: string,
-  exported: ExportedSnapshot,
+  cut: ExportedCut,
   endpoint: Endpoint,
 ): EndpointSnapshot {
   const identity = identityOf(endpoint.method, endpoint.path);
-  const entry = exported.endpoints[identity];
+  const entry = cut.endpoints[identity];
   if (entry === undefined) {
     throw new Error(`The exported Snapshot of ${provider} has no ${identity}`);
   }
@@ -21,15 +21,11 @@ export function exportedEntryOf(
 }
 
 /**
- * A code's entry in its Provider's decoded exported Snapshot; every declared code an exported
- * Endpoint answers has one, so a missing entry is a bug.
+ * A code's entry in the decoded exported Snapshot cut an Endpoint carries; every declared code an
+ * exported Endpoint answers has one, so a missing entry is a bug.
  */
-export function exportedCodeOf(
-  provider: string,
-  exported: ExportedSnapshot,
-  code: string,
-): CodeSnapshot {
-  const entry = Object.hasOwn(exported.codes, code) ? exported.codes[code] : undefined;
+export function exportedCodeOf(provider: string, cut: ExportedCut, code: string): CodeSnapshot {
+  const entry = Object.hasOwn(cut.codes, code) ? cut.codes[code] : undefined;
   if (entry === undefined) {
     throw new Error(`The exported Snapshot of ${provider} has no code ${code}`);
   }

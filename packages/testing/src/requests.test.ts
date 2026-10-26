@@ -5,9 +5,10 @@ import {
   defineGuard,
   defineService,
   type Endpoint,
+  providedEndpoint,
 } from '@cf-loom/contract';
 import {
-  exportedSnapshotOf,
+  providedSnapshotOf,
   reservedResponseOf,
   snapshotOf,
   validateRoot,
@@ -106,51 +107,41 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const standardRejections = providedStandardRejections({
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
   });
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
 
-/** The Provider's Contract Package with an exported Snapshot of any shape, as a package built by another cf-loom might carry. */
-type Carrying = Omit<typeof payments, 'exportedSnapshot'> & { readonly exportedSnapshot: unknown };
-
-/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof payments, format: unknown): Carrying {
-  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot };
+/**
+ * The Provider's Contract Package as another cf-loom wrote it: its `getPayment` carrying the cut
+ * that `change` makes of a copy of its own.
+ */
+function withCut(change: (cut: Record<string, unknown>) => void): typeof payments {
+  const { getPayment: written } = payments.endpoints;
+  const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(written));
+  change(cut);
+  const getPayment = providedEndpoint('payments-service', written, cut);
+  return { ...payments, endpoints: { ...payments.endpoints, getPayment } };
 }
 
-/** The Provider's Contract Package with the entry of one of its Endpoints without `field`. */
-function withoutField(contractPackage: typeof payments, identity: string, field: string): Carrying {
-  const exportedSnapshot = structuredClone(contractPackage.exportedSnapshot);
-  const entry: Record<string, unknown> | undefined = Reflect.get(
-    exportedSnapshot.endpoints,
-    identity,
-  );
+/** The entry of `getPayment` in a cut. */
+function entryOf(cut: Record<string, unknown>): Record<string, unknown> {
+  const endpoints = cut['endpoints'] as Record<string, Record<string, unknown>>;
+  const entry = endpoints['GET /payments/{}'];
   if (entry === undefined) {
-    throw new Error(`The fixture has no ${identity}`);
+    throw new Error('The fixture has no GET /payments/{}');
   }
-  delete entry[field];
-  return { ...contractPackage, exportedSnapshot };
-}
-
-/** The Provider's Contract Package with `entry` under `key` of its exported Snapshot's `map`. */
-function withKey(map: 'endpoints' | 'shadowing', key: string, entry: unknown): Carrying {
-  const exportedSnapshot = structuredClone(payments.exportedSnapshot);
-  Reflect.set(exportedSnapshot[map], key, entry);
-  return { ...payments, exportedSnapshot };
+  return entry;
 }
 
 const paymentsDependency = defineDependency({
@@ -222,6 +213,65 @@ function fakeOverPaths() {
   const taken = { getFirst: 0 };
   fake.on('getFirst').otherwise((builder) => {
     taken.getFirst += 1;
+    return builder.success();
+  });
+  return { fake, taken };
+}
+
+/**
+ * A fake over a Provider that exports `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in
+ * that order, and also declares a Retired `GET /beta/latest` and a live Private `GET /beta/stats`,
+ * which only the cut of `getBeta`, not the first Endpoint, lists as `shadowing`.
+ */
+function fakeOverTwoEndpoints() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const getAlpha = defineEndpoint({
+    ...base,
+    name: 'getAlpha',
+    path: '/alpha/:x',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const getBeta = defineEndpoint({
+    ...base,
+    name: 'getBeta',
+    path: '/beta/:y',
+    visibility: 'internal',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const getBetaFirst = defineEndpoint({
+    ...base,
+    name: 'getBetaFirst',
+    path: '/beta/first',
+    visibility: 'internal',
+  });
+  const betaLatest = defineEndpoint({
+    ...base,
+    name: 'betaLatest',
+    path: '/beta/latest',
+    visibility: 'internal',
+    lifecycle: 'retired',
+  });
+  const betaStats = defineEndpoint({
+    ...base,
+    name: 'betaStats',
+    path: '/beta/stats',
+    visibility: 'private',
+  });
+  const exported = { getAlpha, getBeta, getBetaFirst };
+  const provider = contractPackageOf(exported, [...Object.values(exported), betaLatest, betaStats]);
+  const dependency = defineDependency({
+    provider,
+    endpoints: [provider.endpoints.getBeta, provider.endpoints.getBetaFirst],
+  });
+  const fake = fakeProvider(dependency);
+  const taken = { getBeta: 0, getBetaFirst: 0 };
+  fake.on('getBeta').otherwise((builder) => {
+    taken.getBeta += 1;
+    return builder.success();
+  });
+  fake.on('getBetaFirst').otherwise((builder) => {
+    taken.getBetaFirst += 1;
     return builder.success();
   });
   return { fake, taken };
@@ -530,6 +580,38 @@ describe('fakeProvider: requests', () => {
     },
   );
 
+  test('a request a Retired Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is answered RETIRED as serve answers it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/beta/latest'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request a live Private Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is a mistake naming it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const answering = fake.fetch(new Request('https://payments-service.test/beta/stats'));
+
+    await expect(answering).rejects.toThrow(FakeProviderError);
+    await expect(answering).rejects.toThrow(
+      'payments-service: the Provider does not export GET /beta/stats, which GET /beta/stats reaches',
+    );
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request an exported literal wins over an exported param is answered by that literal once, whichever cuts list it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    await fake.fetch(new Request('https://payments-service.test/beta/first'));
+    await fake.fetch(new Request('https://payments-service.test/beta/other'));
+
+    expect(taken).toEqual({ getBeta: 1, getBetaFirst: 1 });
+  });
+
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () =>
       fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/api?x=1' });
@@ -554,36 +636,41 @@ describe('fakeProvider: requests', () => {
   test.each([
     {
       given: 'in a format the fake does not read',
-      provider: inFormat(payments, 2),
+      damage: (cut: Record<string, unknown>) => {
+        cut['format'] = 2;
+      },
       refusal:
         "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
     },
     {
       given: 'with an Endpoint entry that lacks its name',
-      provider: withoutField(payments, 'GET /payments/{}', 'name'),
+      damage: (cut: Record<string, unknown>) => {
+        delete entryOf(cut)['name'];
+      },
       refusal:
         "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
     },
     {
       given: 'with a shadowing key that is no Endpoint’s identity',
-      provider: withKey('shadowing', 'garbage', { lifecycle: 'retired' }),
+      damage: (cut: Record<string, unknown>) => {
+        Reflect.set(cut['shadowing'] as object, 'garbage', { lifecycle: 'retired' });
+      },
       refusal:
         "payments-service's exported Snapshot is malformed: shadowing.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
     },
     {
       given: 'with an endpoints key that is no Endpoint’s identity',
-      provider: withKey(
-        'endpoints',
-        'garbage',
-        payments.exportedSnapshot.endpoints['GET /payments/{}'],
-      ),
+      damage: (cut: Record<string, unknown>) => {
+        Reflect.set(cut['endpoints'] as object, 'garbage', entryOf(cut));
+      },
       refusal:
         "payments-service's exported Snapshot is malformed: endpoints.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
     },
   ])(
-    'a Contract Package $given is a bug, refused when the fake is created',
-    ({ provider, refusal }) => {
-      const refused = defineDependency({ provider, endpoints: [payments.endpoints.getPayment] });
+    'an Endpoint whose exported Snapshot cut is $given is a bug, refused when the fake is created',
+    ({ damage, refusal }) => {
+      const provider = withCut(damage);
+      const refused = defineDependency({ provider, endpoints: [provider.endpoints.getPayment] });
 
       const create = () => fakeProvider(refused);
 

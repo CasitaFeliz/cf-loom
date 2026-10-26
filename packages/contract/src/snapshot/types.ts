@@ -151,12 +151,20 @@ export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapsh
 export type ShadowingSnapshot = Pick<EndpointSnapshot, 'lifecycle'>;
 
 /**
- * The Snapshot a Contract Package exports beside its `contract`: its exported Endpoints and Events
- * that are not Retired, with the Guards, codes and defs they reach, so no Private Element's shapes
- * reach a browser. Its `shadowing` keys, by identity, the declared Endpoints it does not export that
- * win a URL an exported one matches, so a fake routes a request an exported one matches as `serve` does.
+ * The Snapshot cut to everything a Contract Package exports: its Public and Internal Endpoints and
+ * Events that are not Retired, with the Guards, codes and defs they reach, so no Private Element's
+ * shapes reach a browser. `cf-loom package` writes the package's code from it.
  */
 export type ExportedSnapshot = Pick<
   ServiceSnapshot,
   'format' | 'defs' | 'endpoints' | 'events' | 'guards' | 'codes'
-> & { readonly shadowing: ByKey<ShadowingSnapshot> };
+>;
+
+/**
+ * The exported Snapshot cut to one Endpoint, as that Endpoint carries it: its entry and the Guards,
+ * codes and defs it reaches, with no Events, and under `shadowing`, keyed by identity, the other
+ * declared Endpoints that win a URL it matches, so a fake routes a request it matches as `serve` does.
+ */
+export type ExportedCut = Omit<ExportedSnapshot, 'events'> & {
+  readonly shadowing: ByKey<ShadowingSnapshot>;
+};

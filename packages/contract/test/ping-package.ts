@@ -10,15 +10,19 @@ import {
 export const pingKey = defineGuard({ name: 'apiKey', description: 'The ping-service’s API key' });
 
 /** An Endpoint as the ping-service's Contract Package exports it. */
-export const ping = providedEndpoint('ping-service', {
-  name: 'ping',
-  method: 'GET',
-  path: '/ping',
-  visibility: 'public',
-  description: 'Whether the ping-service is up',
-  guards: [pingKey],
-  success: { status: 200, body: z.object({ at: z.iso.datetime() }) },
-});
+export const ping = providedEndpoint(
+  'ping-service',
+  {
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Whether the ping-service is up',
+    guards: [pingKey],
+    success: { status: 200, body: z.object({ at: z.iso.datetime() }) },
+  },
+  undefined,
+);
 
 /** An Event's Message Version as the ping-service's Contract Package exports it. */
 export const pingedV1 = providedEvent('ping-service', {
@@ -43,14 +47,5 @@ export const pingService = {
     },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
   },
 } as const satisfies ContractPackage;

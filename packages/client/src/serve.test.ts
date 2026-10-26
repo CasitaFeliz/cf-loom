@@ -14,7 +14,7 @@ import {
   openEnumReader,
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
@@ -138,15 +138,13 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 

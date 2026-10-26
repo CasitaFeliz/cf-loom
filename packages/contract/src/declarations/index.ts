@@ -76,7 +76,13 @@ export {
   isSubscription,
 } from './predicates.ts';
 export type { Provided } from './provided.ts';
-export { providedEndpoint, providedEvent, providedRejection, providerOf } from './provided.ts';
+export {
+  carriedCutOf,
+  providedEndpoint,
+  providedEvent,
+  providedRejection,
+  providerOf,
+} from './provided.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';

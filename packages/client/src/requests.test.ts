@@ -8,8 +8,9 @@ import {
   type Http,
   openEnumReader,
   type ProvidedStandardRejections,
+  providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { providedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
@@ -93,15 +94,13 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 
@@ -118,27 +117,14 @@ const ordersDependency = defineDependency({
   ],
 });
 
-/** The Provider's Contract Package with an exported Snapshot of any shape, as a package built by another cf-loom might carry. */
-type Carrying = Omit<typeof orders, 'exportedSnapshot'> & { readonly exportedSnapshot: unknown };
-
-/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof orders, format: unknown): Carrying {
-  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot };
-}
-
-/** The Provider's Contract Package with the entry of one of its Endpoints without `field`. */
-function withoutField(contractPackage: typeof orders, identity: string, field: string): Carrying {
-  const exportedSnapshot = structuredClone(contractPackage.exportedSnapshot);
-  const entry: Record<string, unknown> | undefined = Reflect.get(
-    exportedSnapshot.endpoints,
-    identity,
-  );
-  if (entry === undefined) {
-    throw new Error(`The fixture has no ${identity}`);
-  }
-  delete entry[field];
-  return { ...contractPackage, exportedSnapshot };
+/** An Endpoint as another cf-loom wrote it: carrying the cut that `change` makes of a copy of its own. */
+function carrying(
+  endpoint: typeof orders.endpoints.searchOrders,
+  change: (cut: Record<string, unknown>) => void,
+): typeof orders.endpoints.searchOrders {
+  const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(endpoint));
+  change(cut);
+  return providedEndpoint('orders-service', endpoint, cut);
 }
 
 /** A client whose `fetch` records each request and answers `response`. */
@@ -917,50 +903,41 @@ describe('several Guards, checked in Attachment order', () => {
   });
 });
 
-describe('a Provider’s exported Snapshot, read when the client is created', () => {
-  test('a Contract Package in a newer format is refused', () => {
-    const newer = defineDependency({
-      provider: inFormat(orders, 2),
-      endpoints: [orders.endpoints.searchOrders],
+describe('an Endpoint’s exported Snapshot cut, read when the client is created', () => {
+  const { searchOrders: listed } = orders.endpoints;
+
+  function creating(endpoint: typeof listed) {
+    const dependency = defineDependency({ provider: orders, endpoints: [endpoint] });
+    return () => client(dependency, { baseUrl: 'http://orders.test' });
+  }
+
+  test('a cut in a newer format is refused, naming the Provider', () => {
+    const newer = carrying(listed, (cut) => {
+      cut['format'] = 2;
     });
 
-    const create = () => client(newer, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow(
+    expect(creating(newer)).toThrow(
       "orders-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
     );
   });
 
-  test('a Contract Package in a newer format is refused even when no Endpoint is listed', () => {
-    const newer = defineDependency({ provider: inFormat(orders, 2), endpoints: [] });
-
-    const create = () => client(newer, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow('is in format 2, newer than this cf-loom reads');
-  });
-
-  test('a Contract Package whose Endpoint entry lacks its name is refused as malformed', () => {
-    const damaged = defineDependency({
-      provider: withoutField(orders, 'GET /shops/{}/orders', 'name'),
-      endpoints: [orders.endpoints.searchOrders],
+  test('a cut whose Endpoint entry lacks its name is refused as malformed', () => {
+    const damaged = carrying(listed, (cut) => {
+      const endpoints = cut['endpoints'] as Record<string, Record<string, unknown>>;
+      delete endpoints['GET /shops/{}/orders']?.['name'];
     });
 
-    const create = () => client(damaged, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow(
+    expect(creating(damaged)).toThrow(
       "orders-service's exported Snapshot is malformed: endpoints.GET /shops/{}/orders.name is missing",
     );
   });
 
-  test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {
-    const damaged = defineDependency({
-      provider: inFormat(orders, '1'),
-      endpoints: [orders.endpoints.searchOrders],
+  test('a cut whose format is no whole number from 1 is refused as malformed', () => {
+    const damaged = carrying(listed, (cut) => {
+      cut['format'] = '1';
     });
 
-    const create = () => client(damaged, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow(
+    expect(creating(damaged)).toThrow(
       "orders-service's exported Snapshot is malformed: format is not a whole number from 1",
     );
   });

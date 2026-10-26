@@ -4344,7 +4344,7 @@ const paymentsWithEndpoint = paymentsSource
       "  visibility: 'internal',",
       "  description: 'getPayment',",
       '  success: { status: 200, body: z.object({ id: z.string() }) },',
-      '});',
+      '}, undefined);',
       '',
       'export const payments = {',
     ].join('\n'),

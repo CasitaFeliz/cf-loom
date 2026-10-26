@@ -129,23 +129,31 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder, editOrder],
 });
 
-const getPayment = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
-const listPayments = providedEndpoint('payments-service', {
-  name: 'listPayments',
-  method: 'GET',
-  path: '/payments',
-  visibility: 'public',
-  description: 'Every payment',
-  success: { status: 200, body: z.object({ count: z.int() }) },
-});
+const getPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+const listPayments = providedEndpoint(
+  'payments-service',
+  {
+    name: 'listPayments',
+    method: 'GET',
+    path: '/payments',
+    visibility: 'public',
+    description: 'Every payment',
+    success: { status: 200, body: z.object({ count: z.int() }) },
+  },
+  undefined,
+);
 
 const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
@@ -176,30 +184,25 @@ const payments = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
-  },
 } as const satisfies ContractPackage;
 
 /** The Contract Package of payments-service as installed beside the Roots under test: at 5.1.0. */
 const paymentsPackage = anInstalledContract(payments, { version: '5.1.0' });
 
 /** An Endpoint with the Provider's name as another package may export it: equal to getPayment, and not the same object. */
-const aGetPaymentOfItsOwn = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
+const aGetPaymentOfItsOwn = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
 
 const paymentsDependency = defineDependency({
   provider: payments,

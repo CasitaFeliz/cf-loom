@@ -7,8 +7,9 @@ import {
   defineService,
 } from '../src/index.ts';
 import {
-  type ExportedSnapshot,
-  exportedSnapshotOf,
+  type ExportedCut,
+  exportedCutOf,
+  type ServiceSnapshot,
   snapshotOf,
   validateRoot,
 } from '../src/internal/index.ts';
@@ -45,7 +46,7 @@ export const listOrders = defineEndpoint({
   success: { status: 200, body: z.array(z.string()) },
 });
 
-/** A Deprecated Endpoint, which the exported Snapshot keeps with its instant. */
+/** A Deprecated Endpoint, which its cut keeps with its instant. */
 export const oldOrder = defineEndpoint({
   name: 'oldOrder',
   method: 'GET',
@@ -67,8 +68,8 @@ export const orderPlaced = defineEvent({
   body: z.object({ orderId: z.string() }),
 });
 
-/** The exported Snapshot of `orders-service`: `getOrder`, `oldOrder` and `OrderPlaced@1`. */
-export function exportedOrders(): ExportedSnapshot {
+/** The declared Snapshot of `orders-service`: `getOrder`, `oldOrder` and `OrderPlaced@1`. */
+export function ordersSnapshot(): ServiceSnapshot {
   const group = defineGroup({
     name: 'orders',
     description: 'Orders',
@@ -84,5 +85,10 @@ export function exportedOrders(): ExportedSnapshot {
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  return exportedSnapshotOf(snapshot);
+  return snapshot;
+}
+
+/** The exported Snapshot of `orders-service` cut to `getOrder`. */
+export function exportedOrders(): ExportedCut {
+  return exportedCutOf(ordersSnapshot(), 'GET /orders/{}');
 }

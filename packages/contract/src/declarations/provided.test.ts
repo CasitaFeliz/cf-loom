@@ -87,14 +87,18 @@ const pinged = providedEvent('ping-service', {
   body: z.object({ at: z.iso.datetime() }),
 });
 
-const ping = providedEndpoint('ping-service', {
-  name: 'ping',
-  method: 'GET',
-  path: '/ping',
-  visibility: 'public',
-  description: 'Whether the ping-service is up',
-  success: { status: 200, body: z.object({ at: z.iso.datetime() }) },
-});
+const ping = providedEndpoint(
+  'ping-service',
+  {
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Whether the ping-service is up',
+    success: { status: 200, body: z.object({ at: z.iso.datetime() }) },
+  },
+  undefined,
+);
 
 const pingService = {
   name: 'ping-service',
@@ -110,15 +114,6 @@ const pingService = {
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
   },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
-  },
 } as const satisfies ContractPackage;
 
 /** The failures `generate` reports for a Group that lists these, as a cast lets an author write them. */
@@ -132,7 +127,7 @@ function failuresOfListing(lists: Readonly<Record<string, readonly unknown[]>>) 
 
 describe('the provided-Element constructors', () => {
   test('a provided Endpoint is the declaration, frozen and kept by identity, as defineEndpoint returns it', () => {
-    const endpoint = providedEndpoint('orders-service', trackOrder);
+    const endpoint = providedEndpoint('orders-service', trackOrder, undefined);
 
     expect(endpoint).toEqual(defineEndpoint(trackOrder));
     expect(endpoint.success.body).toBe(trackOrder.success.body);
@@ -156,10 +151,14 @@ describe('the provided-Element constructors', () => {
   });
 
   test('an Open Enum’s Reader compiles in a provided Endpoint’s Success body, a provided Event’s and a provided Rejection’s', () => {
-    const endpoint = providedEndpoint('orders-service', {
-      ...trackOrder,
-      success: { status: 200, body: z.object({ stage: openEnumReader(['packed', 'shipped']) }) },
-    });
+    const endpoint = providedEndpoint(
+      'orders-service',
+      {
+        ...trackOrder,
+        success: { status: 200, body: z.object({ stage: openEnumReader(['packed', 'shipped']) }) },
+      },
+      undefined,
+    );
     const event = providedEvent('orders-service', {
       ...orderPaid,
       body: z.object({ stage: openEnumReader(['packed', 'shipped']) }),
@@ -173,7 +172,7 @@ describe('the provided-Element constructors', () => {
   });
 
   test('a provided Endpoint types InputOf and SuccessOf as defineEndpoint does', () => {
-    const provided = providedEndpoint('orders-service', trackOrder);
+    const provided = providedEndpoint('orders-service', trackOrder, undefined);
     const defined = defineEndpoint(trackOrder);
 
     expectTypeOf<InputOf<typeof provided>>().toEqualTypeOf<InputOf<typeof defined>>();

@@ -7,7 +7,7 @@ import {
   type ProvidedStandardRejections,
   providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { providedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -70,15 +70,13 @@ function contractPackageOf<
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  const provided = providedEndpointsOf(name, endpoints);
+  const provided = providedEndpointsOf(name, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
     events: {},
     standardRejections,
-    exportedSnapshot,
   };
 }
 
@@ -199,23 +197,23 @@ describe('headers given to client()', () => {
       input: { headers: z.object({ 'x-trace': z.string().optional() }) },
       success: { status: 204 },
     });
-    const named = providedEndpoint('orders-service', {
-      name: 'trace',
-      method: 'GET',
-      path: '/trace',
-      visibility: 'public',
-      description: 'Traced',
-      input: { headers: z.object({ constructor: z.string().optional() }) },
-      success: { status: 204 },
-    });
     const written = contractPackageOf({ trace: declared }, defaultStandards);
-    const renamed = JSON.stringify(written.exportedSnapshot).replaceAll('x-trace', 'constructor');
-    const dependency = defineDependency({
-      provider: {
-        ...written,
-        endpoints: { trace: named },
-        exportedSnapshot: JSON.parse(renamed),
+    const cut = JSON.stringify(providedSnapshotOf(written.endpoints.trace));
+    const named = providedEndpoint(
+      'orders-service',
+      {
+        name: 'trace',
+        method: 'GET',
+        path: '/trace',
+        visibility: 'public',
+        description: 'Traced',
+        input: { headers: z.object({ constructor: z.string().optional() }) },
+        success: { status: 204 },
       },
+      JSON.parse(cut.replaceAll('x-trace', 'constructor')),
+    );
+    const dependency = defineDependency({
+      provider: { ...written, endpoints: { trace: named } },
       endpoints: [named],
     });
     const { sent, fetch } = recorded();

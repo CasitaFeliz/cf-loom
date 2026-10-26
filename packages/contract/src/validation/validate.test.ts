@@ -84,15 +84,19 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder],
 });
 
-const getPayment = providedEndpoint('payments-service', {
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
+const getPayment = providedEndpoint(
+  'payments-service',
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
 
 const payments = {
   name: 'payments-service',
@@ -107,15 +111,6 @@ const payments = {
     },
     notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
     notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: {
-    format: 1,
-    defs: {},
-    endpoints: {},
-    events: {},
-    guards: {},
-    codes: {},
-    shadowing: {},
   },
 } as const satisfies ContractPackage;
 

@@ -6,11 +6,11 @@ import type {
 } from '@cf-loom/contract';
 import {
   answerableByCodeOf,
-  type ExportedSnapshot,
   exportedCodeOf,
   exportedEntryOf,
   isRejection,
   type ObjectNode,
+  providedSnapshotOf,
   type ReadShape,
   rejectionShapeOf,
   successShapeOf,
@@ -58,12 +58,9 @@ export type CalledEndpoint = {
   readonly standards: ProvidedStandardRejections;
 };
 
-/** An Endpoint a Dependency lists, prepared for calling, its nodes read from its entry and its codes' in the Provider's exported Snapshot. */
-export function calledEndpointOf(
-  endpoint: Endpoint,
-  provider: ContractPackage,
-  exported: ExportedSnapshot,
-): CalledEndpoint {
+/** An Endpoint a Dependency lists, prepared for calling, its nodes read from its entry and its codes' in the exported Snapshot cut it carries. */
+export function calledEndpointOf(endpoint: Endpoint, provider: ContractPackage): CalledEndpoint {
+  const exported = providedSnapshotOf(endpoint);
   const entry = exportedEntryOf(provider.name, exported, endpoint);
   const standards = provider.standardRejections;
   const answered = answerableByCodeOf(endpoint, standards);

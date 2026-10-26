@@ -1,10 +1,13 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
+  type ExportedCut,
+  exportedCutOf,
   isDeclaredRejection,
   type ListedRejection,
   methodAndPathOf,
   ownRejectionsOf,
+  type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
@@ -18,11 +21,11 @@ import { declaredTextPartOf, partsLinesOf } from './schema-lines.ts';
 /**
  * An exported Endpoint rebuilt from its Snapshot entry and marked as the Service's, so its Input,
  * Success and Rejections type as the Service's do: its Input as declared, since Consumers write
- * what the Service reads.
+ * what the Service reads. It carries the exported Snapshot cut to it.
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
-  snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
 ): SchemaFile {
   const { endpoint } = exported;
   const packaged = { kind: 'endpoint', name: endpoint.name } as const;
@@ -37,6 +40,7 @@ export function endpointModuleOf(
     body: [
       providedOpeningOf(packaged, snapshot.name),
       ...endpointBodyOf(exported, rejections, needs),
+      closingLineOf(exportedCutOf(snapshot, exported.id)),
     ],
     siblings: [...guards, ...declared],
     needs,
@@ -62,8 +66,12 @@ function endpointBodyOf(
     ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
     ...(listed.length === 0 ? [] : [`  rejections: [${listed.join(', ')}],`]),
-    '});',
   ];
+}
+
+/** The close of the declaration, with the Endpoint's cut passed beside it. */
+function closingLineOf(cut: ExportedCut): string {
+  return `}, ${jsonLiteralOf(cut, 'indented')});`;
 }
 
 /** An Endpoint's Input as the author declared it: its text parts only when they declare something. */

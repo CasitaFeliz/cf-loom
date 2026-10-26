@@ -17,6 +17,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   endpointPathOf,
+  exportedCutOf,
   exportedSnapshotOf,
   type GuardSnapshot,
   matchOf,
@@ -126,6 +127,10 @@ function attaching(...guards: readonly string[]): EndpointSnapshot {
 /** A code a Rejection of the Service's own answers with. */
 const orderLocked = 'ORDER_LOCKED';
 
+const codeA = 'CODE_A';
+const codeB = 'CODE_B';
+const codeC = 'CODE_C';
+
 const privateEntry = anEndpointEntry({ name: 'purgeOrders', visibility: 'private' });
 
 const noFields = { type: 'object', fields: {} } as const;
@@ -152,7 +157,7 @@ describe('exportedSnapshotOf', () => {
     },
   );
 
-  test('the exported Snapshot holds format, defs, endpoints, events, guards, codes and shadowing, nothing of the heading but format', () => {
+  test('the exported Snapshot holds format, defs, endpoints, events, guards and codes, nothing of the heading but format, and no shadowing', () => {
     const snapshot = aServiceSnapshot();
 
     const cut = exportedSnapshotOf(snapshot);
@@ -164,7 +169,6 @@ describe('exportedSnapshotOf', () => {
       events: {},
       guards: {},
       codes: {},
-      shadowing: {},
     });
   });
 
@@ -549,7 +553,6 @@ describe('exportedSnapshotOf', () => {
       events: {},
       guards: { apiKey: snapshot.guards['apiKey'] },
       codes: { [orderLocked]: snapshot.codes[orderLocked] },
-      shadowing: {},
     });
   });
 
@@ -576,10 +579,71 @@ describe('exportedSnapshotOf', () => {
   });
 });
 
-describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not export', () => {
+describe('exportedCutOf', () => {
+  test('the cut of an exported Endpoint holds its entry, the Guards, codes and defs it reaches and its shadowing, with no events key', () => {
+    const snapshot = reachingSnapshot();
+
+    const cut = exportedCutOf(snapshot, 'GET /a');
+
+    expect(cut).toStrictEqual({
+      format: 1,
+      defs: { dA: aString },
+      endpoints: { 'GET /a': snapshot.endpoints['GET /a'] },
+      guards: { gA: snapshot.guards['gA'] },
+      codes: { [codeA]: snapshot.codes[codeA] },
+      shadowing: {},
+    });
+  });
+
+  test.each([
+    ['a Private Endpoint', 'GET /private'],
+    ['a Retired Endpoint', 'GET /retired'],
+    ['an Endpoint the Snapshot does not hold', 'GET /missing'],
+  ])('%s has no cut', (_, identity) => {
+    const endpoints = {
+      'GET /private': anEndpointEntry({ visibility: 'private' }),
+      'GET /retired': anEndpointEntry({ lifecycle: 'retired' }),
+    };
+
+    const cutting = () => exportedCutOf(aServiceSnapshot({ endpoints }), identity);
+
+    expect(cutting).toThrow(`${identity} is no Endpoint a Contract Package exports`);
+  });
+
+  test.each([
+    ['declared', declaredSnapshot],
+    ['shared Guards', sharedGuardsSnapshot],
+    ['reached codes', codeReachSnapshot],
+    ['Events', eventsSnapshot],
+    ['reaching', reachingSnapshot],
+  ])(
+    'the cuts of every Endpoint of a Contract with %s hold together the exported Snapshot’s Guards and codes, and with its Events’ defs, its defs',
+    (_, snapshotOf) => {
+      const snapshot = snapshotOf();
+      const whole = exportedSnapshotOf(snapshot);
+      const cuts = Object.keys(whole.endpoints).map((identity) =>
+        exportedCutOf(snapshot, identity),
+      );
+      const eventsOnly = exportedSnapshotOf({ ...snapshot, endpoints: {} });
+
+      const together = {
+        guards: Object.fromEntries(cuts.flatMap((cut) => Object.entries(cut.guards))),
+        codes: Object.fromEntries(cuts.flatMap((cut) => Object.entries(cut.codes))),
+        defs: Object.fromEntries([...cuts, eventsOnly].flatMap((cut) => Object.entries(cut.defs))),
+      };
+
+      expect(together).toEqual({ guards: whole.guards, codes: whole.codes, defs: whole.defs });
+    },
+  );
+});
+
+describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matches', () => {
   const exportedParam = anEndpointEntry({ params: ['paymentId'] });
 
   test.each([
+    { visibility: 'public', lifecycle: 'active' },
+    { visibility: 'public', lifecycle: 'deprecated' },
+    { visibility: 'internal', lifecycle: 'active' },
     { visibility: 'private', lifecycle: 'active' },
     { visibility: 'private', lifecycle: 'deprecated' },
     { visibility: 'private', lifecycle: 'retired' },
@@ -593,11 +657,29 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
         'GET /payments/latest': anEndpointEntry({ visibility, lifecycle }),
       };
 
-      const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+      const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
 
       expect(cut.shadowing).toStrictEqual({ 'GET /payments/latest': { lifecycle } });
     },
   );
+
+  test('an exported literal that beats the exported param is carried by the param’s cut and not the reverse', () => {
+    const endpoints = {
+      'GET /payments/{}': exportedParam,
+      'GET /payments/latest': anEndpointEntry(),
+    };
+    const snapshot = aServiceSnapshot({ endpoints });
+
+    const carried = {
+      byParam: exportedCutOf(snapshot, 'GET /payments/{}').shadowing,
+      byLiteral: exportedCutOf(snapshot, 'GET /payments/latest').shadowing,
+    };
+
+    expect(carried).toStrictEqual({
+      byParam: { 'GET /payments/latest': { lifecycle: 'active' } },
+      byLiteral: {},
+    });
+  });
 
   test.each([
     ['another path', 'GET /admin/stats'],
@@ -612,7 +694,7 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
         [identity]: anEndpointEntry({ visibility: 'private' }),
       };
 
-      const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+      const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
 
       expect(cut.shadowing).toStrictEqual({});
     },
@@ -624,19 +706,19 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
       'GET /payments/{}': anEndpointEntry({ visibility: 'private', params: ['paymentId'] }),
     };
 
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/latest');
 
     expect(cut.shadowing).toStrictEqual({});
   });
 
   test('a Private Endpoint that another Private one beats on the one URL it shares with an exported one is not carried', () => {
     const endpoints = {
-      'GET /p/{}/b': exportedParam,
+      'GET /p/{}/b': anEndpointEntry({ params: ['paymentId'] }),
       'GET /p/a/{}': anEndpointEntry({ visibility: 'private', params: ['rest'] }),
       'GET /p/a/b': anEndpointEntry({ visibility: 'private' }),
     };
 
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /p/{}/b');
 
     expect(Object.keys(cut.shadowing)).toEqual(['GET /p/a/b']);
   });
@@ -648,17 +730,9 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
       'GET /p/a/b': anEndpointEntry({ visibility: 'private' }),
     };
 
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /p/{}/{}');
 
     expect(Object.keys(cut.shadowing)).toEqual(['GET /p/a/{}', 'GET /p/a/b']);
-  });
-
-  test('a Contract Package that exports no Endpoint carries none under shadowing', () => {
-    const endpoints = { 'GET /payments/latest': anEndpointEntry({ visibility: 'private' }) };
-
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
-
-    expect(cut.shadowing).toStrictEqual({});
   });
 
   test('an Endpoint a published Snapshot holds only as a tombstone is never carried', () => {
@@ -675,27 +749,21 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
       },
     };
 
-    const cut = exportedSnapshotOf(published);
+    const cut = exportedCutOf(published, 'GET /payments/{}');
 
     expect(cut.shadowing).toStrictEqual({ 'GET /payments/first': { lifecycle: 'retired' } });
   });
 
-  test('on every URL an exported Endpoint matches, the winner among the exported and shadowing Endpoints is the winner among all declared ones', () => {
+  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', () => {
     const mismatches: string[] = [];
 
     for (const declared of declaredSetsOf(smallPaths, 4)) {
       const endpoints = Object.fromEntries(
         declared.map(([identity, visibility]) => [identity, anEndpointEntry({ visibility })]),
       );
-      const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
-      const all = declared.map(([identity]) => endpointPathOf(identity));
-      const exported = all.filter(({ identity }) => identity in cut.endpoints);
-      const carried = all.filter(({ identity }) => identity in cut.shadowing);
-      for (const url of smallUrls) {
-        const reachable = winnerAmong(exported, url) !== undefined;
-        if (reachable && winnerAmong([...exported, ...carried], url) !== winnerAmong(all, url)) {
-          mismatches.push(`${url} among ${declared.map(([id, vis]) => `${id} ${vis}`).join(', ')}`);
-        }
+      const snapshot = aServiceSnapshot({ endpoints });
+      for (const [identity] of declared.filter(([, visibility]) => visibility === 'public')) {
+        mismatches.push(...misroutedUrlsOf(snapshot, identity));
       }
     }
 
@@ -709,7 +777,7 @@ describe('exportedSnapshotOf, the declared Endpoints a Contract Package does not
       'GET /payments/alpha': anEndpointEntry({ visibility: 'private' }),
     };
 
-    const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
 
     expect(Object.keys(cut.shadowing)).toEqual(['GET /payments/zeta', 'GET /payments/alpha']);
   });
@@ -743,10 +811,46 @@ function declaredSetsOf(
   return [...without, ...exportedFirst, ...privateFirst];
 }
 
+/** The URLs an exported Endpoint matches that its cut routes to another winner than all the declared Endpoints do. */
+function misroutedUrlsOf(snapshot: ServiceSnapshot, identity: string): readonly string[] {
+  const all = Object.keys(snapshot.endpoints).map(endpointPathOf);
+  const own = endpointPathOf(identity);
+  const { shadowing } = exportedCutOf(snapshot, identity);
+  const routed = [own, ...all.filter((path) => path.identity in shadowing)];
+  const matched = smallUrls.filter((url) => winnerAmong([own], url) !== undefined);
+  const misrouted = matched.filter((url) => winnerAmong(routed, url) !== winnerAmong(all, url));
+  return misrouted.map(
+    (url) => `${url} through ${identity} among ${Object.keys(snapshot.endpoints)}`,
+  );
+}
+
 /** The identity of the Endpoint that wins a GET of `url` among `endpoints`, or none. */
 function winnerAmong(endpoints: readonly EndpointPath[], url: string): string | undefined {
   const match = matchOf(endpoints, new Request(`http://payments.test${url}`));
   return match.kind === 'matched' ? match.matched.identity : undefined;
+}
+
+/**
+ * A Service whose two Public Endpoints each reach a Guard, a code and a def of their own, whose
+ * Event reaches a def of its own, and whose Private Endpoint reaches one more of each.
+ */
+function reachingSnapshot(): ServiceSnapshot {
+  const reaching = (guard: string, code: string, def: string): EndpointSnapshot => ({
+    ...attaching(guard),
+    rejections: [code],
+    success: { status: 200, headers: noFields, body: aRef(def) },
+  });
+  return aServiceSnapshot({
+    endpoints: {
+      'GET /a': reaching('gA', codeA, 'dA'),
+      'GET /b': reaching('gB', codeB, 'dB'),
+      'DELETE /c': { ...reaching('gC', codeC, 'dC'), visibility: 'private' },
+    },
+    guards: { gA: aGuardEntry(), gB: aGuardEntry(), gC: aGuardEntry() },
+    codes: { [codeA]: aCode(), [codeB]: aCode(), [codeC]: aCode() },
+    events: { 'E@1': anEventEntry({ body: aRef('dE') }) },
+    defs: { dA: aString, dB: aString, dC: aString, dE: aString },
+  });
 }
 
 /** A Service with a Public Endpoint behind a Guard and a Private one with a code of its own. */

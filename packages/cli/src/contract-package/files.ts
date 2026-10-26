@@ -8,11 +8,7 @@ import { type DefUse, defsCodeOf, reachedDefUsesOf } from '../schema-code/index.
 import { endpointModuleOf } from './endpoint-code.ts';
 import { type ServiceEntry, serviceEntryOf, standardRejectionsModuleOf } from './entry-code.ts';
 import { eventModuleOf } from './event-code.ts';
-import {
-  exportedEndpointsOf,
-  exportedEventsOf,
-  exportedSnapshotModuleOf,
-} from './exported-snapshot.ts';
+import { exportedEndpointsOf, exportedEventsOf } from './exported-snapshot.ts';
 import { guardModuleOf } from './guard-code.ts';
 import { type ContractSnapshot, manifestOf, type Packaging, tsconfigOf } from './manifest.ts';
 import { type PackageFile, packageModuleOf, type SchemaFile } from './modules.ts';
@@ -59,7 +55,6 @@ function serviceSourcesOf(
   );
   return [
     serviceEntryOf({ name: snapshot.name, endpoints, events, defUses }),
-    exportedSnapshotModuleOf(exported),
     standardRejectionsModuleOf(snapshot),
     ...schemaFiles.map(({ file }) => file),
     ...defsFilesOf(exported, defUses),
@@ -70,7 +65,7 @@ function serviceSourcesOf(
 function schemaFilesOf(
   { endpoints, events }: Pick<ServiceEntry, 'endpoints' | 'events'>,
   exported: ExportedSnapshot,
-  snapshot: Pick<ServiceSnapshot, 'name' | 'standardRejections' | 'guards'>,
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
 ): readonly SchemaFile[] {
   return [
     ...endpoints.map((endpoint) => endpointModuleOf(endpoint, snapshot)),

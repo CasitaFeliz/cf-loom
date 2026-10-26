@@ -4,6 +4,7 @@ import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Rejection, RejectionDeclaration } from './rejection.ts';
 
 const providerMark = Symbol.for('@cf-loom/contract.provider');
+const exportedMark = Symbol.for('@cf-loom/contract.exported');
 
 /**
  * An Element as its Provider's Contract Package exports it: the Provider's, which a Dependency
@@ -23,15 +24,23 @@ export function providerOf(value: unknown): string | undefined {
   return typeof provider === 'string' ? provider : undefined;
 }
 
+/** The exported Snapshot cut a Provided Endpoint carries, as written; none for any other Endpoint. */
+export function carriedCutOf(endpoint: Endpoint): unknown {
+  return Reflect.get(endpoint, exportedMark);
+}
+
 /**
  * For generated code: an Endpoint a Contract Package exports, rebuilt from its Snapshot entry with
- * Reader schemas and marked as `provider`'s; it carries no author rule.
+ * Reader schemas, marked as `provider`'s and carrying `exported`, its Provider's exported Snapshot
+ * cut to it, which is `unknown` since the cf-loom that wrote it may be older than the one that
+ * reads it; it carries no author rule.
  */
 export function providedEndpoint<const Declaration extends EndpointDeclaration>(
   provider: string,
   declaration: Declaration,
+  exported: unknown,
 ): Provided<Endpoint<Declaration>> {
-  const marks = { [providerMark]: provider };
+  const marks = { [providerMark]: provider, [exportedMark]: exported };
   return freezeDeclaration('endpoint', declaration, marks) as Provided<Endpoint<Declaration>>;
 }
 

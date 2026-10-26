@@ -13,9 +13,8 @@ type ProvidedEvent = Provided<Event & { readonly visibility: ExportedVisibility 
 
 /**
  * The `contract` a Contract Package exports: its Public and Internal Elements, each its Provider's,
- * its Standard Rejections and the Snapshot cut to what it exports, which is `unknown` since the
- * cf-loom that wrote it may be older than the one that reads it. Its version is its package.json's,
- * which a Dependency on it records.
+ * each Endpoint carrying its exported Snapshot cut, and its Standard Rejections. Its version is its
+ * package.json's, which a Dependency on it records.
  */
 export type ContractPackage = {
   readonly name: string;
@@ -24,7 +23,6 @@ export type ContractPackage = {
   >;
   readonly events: Readonly<Record<string, ProvidedEvent>>;
   readonly standardRejections: ProvidedStandardRejections;
-  readonly exportedSnapshot: unknown;
 };
 
 type ElementOf<Elements> = Elements[keyof Elements];
