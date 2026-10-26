@@ -36,9 +36,9 @@ export function guardHandlerOf(
 }
 
 /**
- * The walked text parts of every Endpoint and Guard, which must be what `generate` accepts, the
- * headers of a Rejection judged too: `serve` walks those schemas itself and reads each request by
- * the nodes the walk gives.
+ * The walked text parts of every Endpoint and Guard, which must be what `generate` accepts, every
+ * Rejection's headers judged with them: `serve` holds every text part to the rules `generate`
+ * holds it to, and reads each request by the nodes the walk gives an Endpoint or a Guard.
  */
 export function checkedTextPartsOf(
   contract: ServiceContract,

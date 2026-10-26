@@ -220,6 +220,105 @@ describe('failure lines: a declaration with no usable name', () => {
     ]);
   });
 
+  test('a Guard whose name is no string sits at the exported Guard that lists it, not at its own export', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const outer = defineGuard({ name: 'outer', description: 'Outer', guards: [nameless] });
+    const root = defineDefinitions({});
+    const rootExports = { aa: nameless, outer };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.outer guards[0].name not-a-string: name is a string',
+    ]);
+  });
+
+  test('a Guard whose name is no string that no list holds sits at its export', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const root = defineDefinitions({});
+    const rootExports = { aa: nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'exports.aa name not-a-string: name is a string',
+    ]);
+  });
+
+  test('a Guard whose name is no string sits at the Guard an earlier Endpoint attaches, not at a later Endpoint', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const gone = defineGuard({ name: 'gone', description: 'Gone', guards: [nameless] });
+    const first = oneAnEndpoint('aaa', 'GET /a', { guards: [gone] });
+    const second = oneAnEndpoint('bbb', 'GET /b', { guards: [nameless] });
+
+    expect(linesOf(serviceOf(first, second))).toEqual([
+      'guards.gone guards[0].name not-a-string: name is a string',
+      'endpoints.GET /a (aaa) guards[0] guard-order: gone requires 5 earlier in guards',
+    ]);
+  });
+
+  test.for([
+    ['before', 'a', 'b'],
+    ['after', 'b', 'a'],
+  ] as const)(
+    'a Guard whose name is no string sits at the exported Guard that lists it, its export %s that Guard',
+    ([, listedExport, listingExport]) => {
+      const listed = defineGuard({ name: 5 as never, description: 'Listed' });
+      const listing = defineGuard({ name: 6 as never, description: 'Listing', guards: [listed] });
+      const root = defineDefinitions({});
+      const rootExports = { [listedExport]: listed, [listingExport]: listing };
+
+      expect(linesOf(root, { rootExports })).toEqual([
+        `exports.${listingExport} guards[0].name not-a-string: name is a string`,
+        `exports.${listingExport} name not-a-string: name is a string`,
+      ]);
+    },
+  );
+
+  test('a Rejection whose code is no string sits at the Endpoint that lists it, before its Guard', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const locker = defineGuard({ name: 'locker', description: 'Locks', rejections: [nameless] });
+    const lockThing = oneAnEndpoint('lockThing', 'POST /c', {
+      guards: [locker],
+      rejections: [nameless],
+    });
+
+    expect(linesOf(serviceOf(lockThing))).toEqual([
+      'endpoints.POST /c (lockThing) rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
+  test('a Rejection whose code is no string sits at the first exported Guard in member order that lists it, whichever Guard lists another', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const leaf = defineGuard({ name: 'a', description: 'A', rejections: [nameless] });
+    const middle = defineGuard({ name: 'c', description: 'C', guards: [leaf] });
+    const top = defineGuard({
+      name: 'b',
+      description: 'B',
+      guards: [middle],
+      rejections: [nameless],
+    });
+    const root = defineDefinitions({});
+    const rootExports = { a: leaf, b: top, c: middle, nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.a rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
+  test('a Rejection whose code is no string sits at a Guard before the Guard it lists', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const inner = defineGuard({ name: 'inner', description: 'Inner', rejections: [nameless] });
+    const outer = defineGuard({
+      name: 'outer',
+      description: 'Outer',
+      guards: [inner],
+      rejections: [nameless],
+    });
+    const root = defineDefinitions({});
+    const rootExports = { a: outer, b: inner, c: nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.outer rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
   test('an Event with no name and no version sits at the Group that lists it', () => {
     const nameless = defineEvent({
       visibility: 'internal',

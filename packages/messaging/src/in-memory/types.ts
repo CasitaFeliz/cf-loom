@@ -19,7 +19,13 @@ export type MemoryBroker = Broker & {
   readonly settled: () => Promise<void>;
   /** Every Message the Service published or sent, in the order the Broker took it, duplicates dropped. */
   readonly messages: readonly RecordedMessage[];
-  /** The Messages of one Message Version among `messages`, in the same order, each body typed by it; none before the Service connects, and none for a declaration the Service does not publish or send, a Provided Event's included. */
+  /**
+   * The Messages of one Message Version among `messages`, in the same order, each body typed by it:
+   * none before the Service connects, and none yet for a version it has not published or sent.
+   * Throws, once connected, for a declaration that is no live version of the Service's own Events
+   * nor the Active version of one of its own Commands: a Retired version, a Deprecated Command
+   * version, a Provided Event, or a declaration outside the Contract.
+   */
   readonly messagesOf: <const M extends Event | Command>(
     message: M,
   ) => readonly RecordedMessage<M>[];

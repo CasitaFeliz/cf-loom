@@ -24,10 +24,10 @@ export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
   inside,
+  locationBelowOf,
   movedFrom,
   placeNameOf,
   placeOf,
-  sameSite,
   siteLocationOf,
   siteTextOf,
 } from './location.ts';

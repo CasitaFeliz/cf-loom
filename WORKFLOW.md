@@ -66,10 +66,11 @@ the wrong place. It says whether a documented decision causes it, and offers two
 cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
 glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
 
-An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at
-once. When a third would trigger, the issue is held for the user with its state and what is still open, findings or
-questions, and the main session moves on to the next issue that does not depend on it. The user then decides as after
-round 2 ([Fix](#4-fix)): fix and merge, rework the plan, or split the issue (only the last two before a PR exists).
+An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at once. When
+a third would trigger, the issue is held for the user with its state and what is still open, findings or questions, and
+the main session moves on to the next issue that does not depend on it. A must-fix in an area that has already been
+through two Root-cause checks holds the issue for the user the same way. The user then decides as after round 2
+([Fix](#4-fix)): fix and merge, rework the plan, or split the issue (only the last two before a PR exists).
 
 ## 1. Plan
 
@@ -142,10 +143,12 @@ fields: **Kind**, a slip or one instance of a class, with the other instances fo
 this way (a gap in the plan, a missing concept, a misread document); and **Escalate**, yes when its fix would add a
 special case or the area was fixed in an earlier round.
 
-The main session merges the reports, removes duplicates, checks each finding against the code and sorts them in
-C27's order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. Once
-the round's fixes are pushed, it posts one comment on the PR for the round, listing every finding by lens as
-**fixed**, **asked** (with the user's answer) or **dismissed** (with the reason).
+The main session merges the reports, removes duplicates, checks each finding against the code and sorts them in C27's
+order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. The main
+session never fixes an Escalate finding without its check on its own judgment: when it believes the finding only
+completes an earlier Root-cause decision, it asks the user before the merge. Once the round's fixes are pushed, it posts
+one comment on the PR for the round, listing every finding by lens as **fixed**, **asked** (with the user's answer) or
+**dismissed** (with the reason).
 
 ## 4. Fix
 

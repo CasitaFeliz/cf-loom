@@ -62,7 +62,7 @@ Every shape is read in one of three Positions:
 - **Success**, and a Rejection's headers and body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes.
 
-Readers of a Read shape (a Success, a Rejection's headers or body, or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](packages/contract/README.md#not-allowed) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
+Readers of a Read shape (the headers and body of a Success or a Rejection, or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](packages/contract/README.md#not-allowed) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
