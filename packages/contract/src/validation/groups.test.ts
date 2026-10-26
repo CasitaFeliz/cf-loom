@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { summarized } from '../../test/failures.ts';
-import { ping, pingedV1, pingKey, pingService } from '../../test/ping-package.ts';
+import { ping, pingedV1, pingKey } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
@@ -262,7 +262,7 @@ describe('validateRoot: each declaration in exactly one Group', () => {
 
 /** A Contract of Groups with the Dependency on the ping-service its Endpoint gives, or none. */
 function aContract(groups: readonly Group[], dependencies: 'none' | 'ping-service' = 'none') {
-  const dependency = defineDependency({ provider: pingService, endpoints: [ping] });
+  const dependency = defineDependency({ endpoints: [ping] });
   return defineService({
     name: 'billing-service',
     groups,

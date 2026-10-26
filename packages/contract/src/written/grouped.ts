@@ -8,7 +8,7 @@ import type {
   ServiceContract,
   Subscription,
 } from '../declarations/index.ts';
-import { isGroup, providerOf } from '../declarations/index.ts';
+import { isGroup, isProvidedElement } from '../declarations/index.ts';
 import { fieldStep, indexStep, inside, type Place, placeOf, type Site } from '../walker/index.ts';
 import {
   fieldListings,
@@ -103,7 +103,9 @@ export function groupedOf(groups: readonly LocatedGroup[]): Grouped {
  * which a Group lists; a Provider's Element is not.
  */
 export function isListable(value: unknown): value is GroupedDeclarations[GroupedField] {
-  return isOwn(value) && groupedFields.some((field) => fieldListings[field].fits(value));
+  return (
+    !isProvidedElement(value) && groupedFields.some((field) => fieldListings[field].fits(value))
+  );
 }
 
 /** Every declaration a Group lists in one field that is the Contract's own, in its order, repeats included. */
@@ -131,20 +133,12 @@ export function declarationsListedBy(group: Group): readonly unknown[] {
   );
 }
 
-function isOwn(value: unknown): boolean {
-  return providerOf(value) === undefined;
-}
-
-function isProvided(value: unknown): boolean {
-  return providerOf(value) !== undefined;
-}
-
 function isOwnListing({ declaration }: { readonly declaration: unknown }): boolean {
-  return isOwn(declaration);
+  return !isProvidedElement(declaration);
 }
 
 function isProvidedListing({ declaration }: { readonly declaration: unknown }): boolean {
-  return isProvided(declaration);
+  return isProvidedElement(declaration);
 }
 
 /** A declaration of a Group's list and its position in the list as written. */

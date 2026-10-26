@@ -1,7 +1,5 @@
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -20,7 +18,6 @@ import {
 } from '@cf-loom/handlers';
 import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { providedStandardRejections } from '../../test/standard-rejections.ts';
 import { type ConsumedFault, InvalidMessageError, type Messaging, messaging } from '../index.ts';
 import { type MemoryBroker, memory } from './index.ts';
 
@@ -72,15 +69,6 @@ const paymentSettledV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid(), status: openEnumReader(statuses) }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: {},
-  events: { paymentSettledV1 },
-  standardRejections: providedStandardRejections(),
-} as const satisfies ContractPackage;
-
-const paymentsDependency = defineDependency({ provider: payments });
-
 const notifyOnCreated = defineSubscription({
   name: 'notifyOnCreated',
   description: 'Notify on created',
@@ -110,7 +98,6 @@ const contract = defineService({
       subscriptions: [notifyOnCreated, auditCreated, notifyOnSettled],
     }),
   ],
-  dependencies: [paymentsDependency],
 });
 
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });

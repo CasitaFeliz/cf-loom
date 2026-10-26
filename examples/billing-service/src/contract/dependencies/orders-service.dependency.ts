@@ -1,7 +1,4 @@
 import { defineDependency } from '@cf-loom/contract';
-import { contract as orders } from '@org/contract-orders-service';
+import { getOrderEndpoint } from '@org/contract-orders-service';
 
-export const ordersDependency = defineDependency({
-  provider: orders,
-  endpoints: [orders.endpoints.getOrder],
-});
+export const ordersDependency = defineDependency({ endpoints: [getOrderEndpoint] });

@@ -12,16 +12,23 @@ import {
 } from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
-import { elementLinesOf } from './element-lines.ts';
+import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
-import { bindingOf, fileOf, providedOpeningOf, siblingOf } from './names.ts';
+import {
+  bindingOf,
+  fileOf,
+  providedOpeningOf,
+  siblingOf,
+  standardRejectionsSibling,
+} from './names.ts';
 import { declaredTextPartOf, partsLinesOf } from './schema-lines.ts';
 
 /**
  * An exported Endpoint rebuilt from its Snapshot entry and marked as the Service's, so its Input,
  * Success and Rejections type as the Service's do: its Input as declared, since Consumers write
- * what the Service reads. It carries the exported Snapshot cut to it.
+ * what the Service reads. It carries the Service's Standard Rejections and the exported Snapshot
+ * cut to it, so a Consumer that imports it needs nothing else of the package.
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
@@ -38,14 +45,20 @@ export function endpointModuleOf(
   const file = packageModuleOf({
     path: fileOf(packaged),
     body: [
-      providedOpeningOf(packaged, snapshot.name),
+      ...deprecatedLinesOf(endpoint),
+      providedOpeningOf(packaged, providerTextOf(snapshot.name)),
       ...endpointBodyOf(exported, rejections, needs),
       closingLineOf(exportedCutOf(snapshot, exported.id)),
     ],
-    siblings: [...guards, ...declared],
+    siblings: [...guards, ...declared, standardRejectionsSibling],
     needs,
   });
   return { file, defUses: [...needs.defs.values()] };
+}
+
+/** The Provider an Endpoint is marked with: its name, and its Standard Rejections, which the module imports. */
+function providerTextOf(provider: string): string {
+  return `{ name: ${stringLiteralOf(provider)}, ${standardRejectionsSibling.name} }`;
 }
 
 /** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */

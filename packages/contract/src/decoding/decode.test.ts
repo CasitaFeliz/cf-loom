@@ -5,9 +5,7 @@ import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
@@ -2264,21 +2262,6 @@ function declaredSnapshot() {
     description: 'A payment was settled',
     body: z.object({ id: z.uuid() }),
   });
-  const payments = {
-    name: 'payments-service',
-    endpoints: {},
-    events: { paymentSettledV1 },
-    standardRejections: {
-      invalidInput: {
-        code: 'INVALID_INPUT',
-        status: 400,
-        message: 'Invalid input',
-        body: z.object({ issues: z.array(z.unknown()) }),
-      },
-      notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-    },
-  } as const satisfies ContractPackage;
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
   const root = defineService({
     name: 'orders-service',
@@ -2298,12 +2281,11 @@ function declaredSnapshot() {
           defineSubscription({
             name: 'notifyOnSettled',
             description: 'Receives it',
-            event: payments.events.paymentSettledV1,
+            event: paymentSettledV1,
           }),
         ],
       }),
     ],
-    dependencies: [defineDependency({ provider: payments })],
   });
   const validated = validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {

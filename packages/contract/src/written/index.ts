@@ -9,8 +9,6 @@ export {
 export type { Declarations } from './declarations.ts';
 export {
   declarationsOf,
-  providerExportsOf,
-  providerNameOf,
   standardRejectionsDeclarerOf,
   standardRejectionsSourceOf,
 } from './declarations.ts';
@@ -58,6 +56,7 @@ export type {
 } from './located.ts';
 export type { Member, Members } from './members.ts';
 export { memberGuardsOf, membersOf } from './members.ts';
+export type { EventSource } from './messaging.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
 export type { PackageNameParts } from './package-names.ts';
 export { packageNamePartsOf } from './package-names.ts';

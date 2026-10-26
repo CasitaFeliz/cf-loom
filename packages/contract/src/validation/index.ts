@@ -1,5 +1,4 @@
 export { oneOf } from './closed-values.ts';
-export { isContractPackage } from './dependencies.ts';
 export { exportNamesOf } from './export-names.ts';
 export type { Failure, NotAllowedFailure } from './failures.ts';
 export { failureLineOf } from './failures.ts';
@@ -30,8 +29,8 @@ export type {
 export { validateRoot } from './validate.ts';
 export type {
   ValidatedCode,
-  ValidatedDependency,
   ValidatedGuard,
+  ValidatedProvider,
   ValidatedSubscription,
 } from './validated.ts';
 export type { TextPartNodes } from './walked-text-parts.ts';

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { ping, pingedV1, pingService } from '../../test/ping-package.ts';
-import { defineDependency, defineEvent, defineGroup, defineService } from '../index.ts';
+import { pingedV1 } from '../../test/ping-package.ts';
+import { defineEvent, defineGroup, defineService } from '../index.ts';
 import { eventServiceOf } from '../internal/index.ts';
 
 const orderShippedV1 = defineEvent({
@@ -12,20 +12,19 @@ const orderShippedV1 = defineEvent({
   body: z.object({ orderId: z.uuid() }),
 });
 
-/** A Contract whose Group lists Events as a cast lets an author write them, and which depends on a Provider. */
-function aContractListing(events: readonly unknown[], provider: typeof pingService) {
+/** A Contract whose Group lists Events as a cast lets an author write them. */
+function aContractListing(events: readonly unknown[]) {
   const group = defineGroup({
     name: 'billing',
     description: 'Billing',
     events,
   } as unknown as Parameters<typeof defineGroup>[0]);
-  const dependency = defineDependency({ provider, endpoints: [ping] });
-  return defineService({ name: 'billing-service', groups: [group], dependencies: [dependency] });
+  return defineService({ name: 'billing-service', groups: [group] });
 }
 
 describe('eventServiceOf', () => {
   test('a Provider’s Event that a Group also lists is still the Provider’s', () => {
-    const contract = aContractListing([orderShippedV1, pingedV1], pingService);
+    const contract = aContractListing([orderShippedV1, pingedV1]);
 
     const service = eventServiceOf(contract, pingedV1);
 
@@ -33,7 +32,7 @@ describe('eventServiceOf', () => {
   });
 
   test('an Event a Group lists is the Contract’s own', () => {
-    const contract = aContractListing([orderShippedV1, pingedV1], pingService);
+    const contract = aContractListing([orderShippedV1, pingedV1]);
 
     const service = eventServiceOf(contract, orderShippedV1);
 

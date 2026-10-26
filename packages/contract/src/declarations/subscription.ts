@@ -30,7 +30,7 @@ type SubscribedEventRule<Declaration extends WrittenSubscription> =
 export type Subscription<Declaration extends SubscriptionDeclaration = SubscriptionDeclaration> =
   Readonly<Declaration> & { readonly kind: 'subscription' };
 
-/** Declares that a Service receives an Event, its own or one a listed Dependency's Provider exports. */
+/** Declares that a Service receives an Event, its own or one another Service's Contract Package exports. */
 export function defineSubscription<const Declaration extends WrittenSubscription>(
   declaration: Declaration &
     SubscribedEventRule<Declaration> &

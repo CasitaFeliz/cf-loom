@@ -82,16 +82,21 @@ export function packageLabelOf(identity: PackageIdentity): string {
 
 /** The line saying a package has no version, the one way any command says it. */
 export function noVersionLineOf(packageName: string): string {
-  return `${packageName} has no version in its package.json`;
+  return `${packageName} ${lackOf({ kind: 'unversioned', packageName })}`;
 }
 
 /** The one line saying what a package.json lacks to name its package. */
 export function identityLineOf(identity: Unidentified): string {
+  return `${packageLabelOf(identity)} ${lackOf(identity)}`;
+}
+
+/** What a package.json lacks to name its package, as the end of a sentence about the package. */
+export function lackOf(identity: Unidentified): string {
   switch (identity.kind) {
     case 'unnamed':
-      return `${identity.manifest} has no name`;
+      return 'has no name';
     case 'unversioned':
-      return noVersionLineOf(identity.packageName);
+      return 'has no version in its package.json';
   }
 }
 

@@ -1,65 +1,41 @@
-import type { Visibility } from './element.ts';
-import type { Endpoint } from './endpoint.ts';
-import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { Provided } from './provided.ts';
-import type { DeclaredFieldsRule } from './rules.ts';
-import type { ProvidedStandardRejections } from './standard-rejections.ts';
+import type { ProvidedEndpoint, ProviderNameOf } from './provided.ts';
+import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
 
-type ExportedVisibility = Exclude<Visibility, 'private'>;
-
-/** An Event as a Contract Package exports it: the declaration itself, marked as its Provider's, which Subscriptions reference. */
-type ProvidedEvent = Provided<Event & { readonly visibility: ExportedVisibility }>;
-
-/**
- * The `contract` a Contract Package exports: its Public and Internal Elements, each its Provider's,
- * each Endpoint carrying its exported Snapshot cut, and its Standard Rejections. Its version is its
- * package.json's, which a Dependency on it records.
- */
-export type ContractPackage = {
-  readonly name: string;
-  readonly endpoints: Readonly<
-    Record<string, Provided<Endpoint & { readonly visibility: ExportedVisibility }>>
-  >;
-  readonly events: Readonly<Record<string, ProvidedEvent>>;
-  readonly standardRejections: ProvidedStandardRejections;
+/** What an author writes to declare a Dependency: the Endpoints its owner calls, one or more, all one Provider's. */
+type DependencyDeclaration = {
+  readonly endpoints: readonly [ProvidedEndpoint, ...ProvidedEndpoint[]];
 };
 
-type ElementOf<Elements> = Elements[keyof Elements];
-
-/** What an author writes to declare a Dependency: the Provider's Contract Package, as imported, and the Endpoints it calls. */
-type DependencyDeclaration<Provider extends ContractPackage> = {
-  readonly provider: Provider;
-  readonly endpoints?: readonly ElementOf<Provider['endpoints']>[];
-};
-
-/**
- * What a Contract uses of one Provider: its Contract Package, as imported, with its Standard
- * Rejections and the Elements it exports, and the Endpoints it calls, as listed. The Events it
- * receives are its Subscriptions'.
- */
+/** What a Contract calls of one Provider: the Provided Endpoints it lists, each carrying its Provider. */
 export type Dependency<
-  Provider extends ContractPackage = ContractPackage,
-  Endpoints extends readonly Endpoint[] = readonly Endpoint[],
+  Endpoints extends readonly ProvidedEndpoint[] = readonly ProvidedEndpoint[],
 > = {
   readonly kind: 'dependency';
-  readonly provider: Provider;
-  readonly endpoints?: Endpoints;
+  readonly endpoints: Endpoints;
 };
 
-/** The Contract Package a declaration holds as its `provider`, which bounds the Endpoints it lists. */
-type ProviderOf<Declaration> = Declaration extends {
-  readonly provider: infer Provider extends ContractPackage;
-}
-  ? Provider
-  : ContractPackage;
+/** The names of the Providers whose Endpoints a declaration lists, as their types give them. */
+type ListedProvidersOf<Declaration extends DependencyDeclaration> = LiteralNames<
+  ProviderNameOf<Declaration['endpoints'][number]>
+>;
 
-/** Declares what a Contract uses of one Provider, so its client reaches no more. */
-export function defineDependency<
-  const Declaration extends DependencyDeclaration<ProviderOf<Declaration>>,
->(
+/** What a Dependency must also satisfy: its Endpoints are one Provider's, since one client calls one base URL. */
+type OneProviderRule<Declaration extends DependencyDeclaration> = [
+  ListedProvidersOf<Declaration>,
+] extends [never]
+  ? unknown
+  : IsOneLiteral<ListedProvidersOf<Declaration>> extends true
+    ? unknown
+    : {
+        readonly endpoints: `A Dependency lists one Provider's Endpoints: ${JoinedNames<ListedProvidersOf<Declaration>>}`;
+      };
+
+/** Declares the Endpoints a Contract calls of one Provider, so its client reaches no more. */
+export function defineDependency<const Declaration extends DependencyDeclaration>(
   declaration: Declaration &
-    NoInfer<DeclaredFieldsRule<Declaration, DependencyDeclaration<ProviderOf<Declaration>>>>,
-): Readonly<Declaration> & { readonly kind: 'dependency' } {
+    OneProviderRule<Declaration> &
+    NoInfer<DeclaredFieldsRule<Declaration, DependencyDeclaration>>,
+): Dependency<Declaration['endpoints']> {
   return freezeDeclaration('dependency', declaration);
 }

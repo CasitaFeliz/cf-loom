@@ -34,7 +34,7 @@ type GivenArgumentsOf<Value> = [Value] extends [undefined]
 
 /**
  * What `r.unknownRejection` takes beside its code: the message its Envelope carries, and its
- * headers and body, none unless given; headers only for a code the Provider's Contract declares.
+ * headers and body, none unless given; headers only for a code the listed Endpoints declare.
  */
 type UnknownRejectionOptions = {
   readonly message?: string;

@@ -3,14 +3,14 @@ import type { Failed } from '../child-process/index.ts';
 import type { NpmPlace } from './npm.ts';
 import { versionsOf } from './package-versions.ts';
 
-/** A Dependency's Provider, the package its Contract Package is and the version the Dependency is against. */
+/** A Provider a Contract uses, the package its Contract Package is and the version the Contract is against. */
 export type DependencyVersion = {
   readonly provider: string;
   readonly packageName: string;
   readonly version: string;
 };
 
-/** The versions of other packages a Contract is declared against: its Dependencies' and the Definitions Packages its origins name. */
+/** The versions of other packages a Contract is declared against: its Providers' and the Definitions Packages its origins name. */
 export type UsedVersions = {
   readonly dependencies: readonly DependencyVersion[];
   readonly origins: readonly OriginPackage[];

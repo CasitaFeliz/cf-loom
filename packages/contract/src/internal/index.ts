@@ -43,6 +43,7 @@ export type {
   SuccessValueOf,
 } from '../declarations/index.ts';
 export {
+  carriedStandardRejectionsOf,
   codeNameOf,
   follows,
   frozenCopyOf,
@@ -54,6 +55,7 @@ export {
   isGuard,
   isLive,
   isMethod,
+  isProvidedElement,
   isRejection,
   isReservedCode,
   isRoot,
@@ -62,6 +64,7 @@ export {
   isSubscription,
   kebabCase,
   lifecycleOf,
+  providerOf,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';
@@ -162,7 +165,6 @@ export {
   exportNamesOf,
   failureLineOf,
   identityLineOf,
-  isContractPackage,
   noVersionLineOf,
   oneOf,
   packageLabelOf,

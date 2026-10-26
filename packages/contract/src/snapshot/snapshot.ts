@@ -31,7 +31,7 @@ export function snapshotOf(validated: ValidRoot): Snapshot {
         format: writtenSnapshotFormat,
         kind: 'application',
         name: root.name,
-        dependencies: dependencySnapshotsOf(validated.declarations.dependencies),
+        dependencies: dependencySnapshotsOf(validated.declarations.providers),
       };
     case 'definitions':
       return definitionsSnapshotOf(validated);
@@ -55,7 +55,7 @@ function serviceSnapshotOf(validated: ValidRoot, root: ServiceContract): Service
     guards: guardSnapshotsOf(declarations.guards, sources),
     codes: codeSnapshotsOf(declarations.codes, sources),
     subscriptions: subscriptionSnapshotsOf(declarations.subscriptions),
-    dependencies: dependencySnapshotsOf(declarations.dependencies),
+    dependencies: dependencySnapshotsOf(declarations.providers),
   };
 }
 

@@ -253,7 +253,7 @@ describe('messaging() and close', () => {
     expect(recorded.connectedWith).toEqual([]);
   });
 
-  test('a Subscription whose Event neither a Group lists nor a listed Dependency’s Provider exports rejects messaging(), naming it', async () => {
+  test('a Subscription whose Event neither a Group lists nor another Service’s Contract Package exports rejects messaging(), naming it', async () => {
     const notifying = defineGroup({
       name: 'notifications',
       description: 'Notifications',
@@ -264,7 +264,7 @@ describe('messaging() and close', () => {
     const opening = messaging(unlisted, aBroker().broker);
 
     await expect(opening).rejects.toThrow(
-      "notifyOnCreated subscribes to an Event neither a Group lists nor a listed Dependency's Provider exports",
+      "notifyOnCreated subscribes to an Event neither a Group lists nor another Service's Contract Package exports",
     );
   });
 

@@ -1,12 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { summarized } from '../../test/failures.ts';
-import { pingedV1, pingService } from '../../test/ping-package.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineCommand,
-  defineDependency,
   defineEvent,
   defineGroup,
   defineService,
@@ -41,22 +38,6 @@ const paymentFailedV1 = providedEvent('payments-service', {
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  endpoints: {},
-  events: { paymentSettledV1, paymentFailedV1 },
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
-
 /** A Subscription the types refuse, as a cast lets an author write it. */
 function aSubscription(name: string, event: unknown): Subscription {
   const declaration = { name, description: 'Receives it', event };
@@ -66,7 +47,6 @@ function aSubscription(name: string, event: unknown): Subscription {
 function validateSubscriptions(
   subscriptions: readonly Subscription[],
   events: readonly Event[] = [orderCreatedV1],
-  provider: typeof payments = payments,
 ) {
   const ordersGroup = defineGroup({
     name: 'orders',
@@ -74,11 +54,7 @@ function validateSubscriptions(
     events,
     subscriptions,
   } as unknown as Parameters<typeof defineGroup>[0]);
-  const contract = defineService({
-    name: 'orders-service',
-    groups: [ordersGroup],
-    dependencies: [defineDependency({ provider })],
-  });
+  const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
   return summarized(
     validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' })),
   );
@@ -87,7 +63,7 @@ function validateSubscriptions(
 const notifyOnSettled = defineSubscription({
   name: 'notifyOnSettled',
   description: 'Receives it',
-  event: payments.events.paymentSettledV1,
+  event: paymentSettledV1,
 });
 
 function failed(location: string, rule: string, message: string) {
@@ -107,11 +83,11 @@ describe('validateRoot: Subscriptions', () => {
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event a listed Dependency’s Provider exports validates', () => {
+  test('a Subscription to an Event another Service’s Contract Package exports validates, with no Dependency', () => {
     const onFailed = defineSubscription({
       name: 'onFailed',
       description: 'Receives it',
-      event: payments.events.paymentFailedV1,
+      event: paymentFailedV1,
     });
 
     const result = validateSubscriptions([notifyOnSettled, onFailed]);
@@ -132,12 +108,12 @@ describe('validateRoot: Subscriptions', () => {
       failed(
         'subscriptions.auditOrders event',
         'subscription-event',
-        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: OrderCreated@1",
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: OrderCreated@1",
       ),
     );
   });
 
-  test('a Subscription to an Event of a Provider no Dependency lists fails', () => {
+  test('a Subscription to an Event no Group lists and no Provider marks fails', () => {
     const shippedV1 = defineEvent({
       name: 'Shipped',
       version: 1,
@@ -157,7 +133,7 @@ describe('validateRoot: Subscriptions', () => {
       failed(
         'subscriptions.onShipped event',
         'subscription-event',
-        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Shipped@1",
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: Shipped@1",
       ),
     );
   });
@@ -182,57 +158,12 @@ describe('validateRoot: Subscriptions', () => {
       failed(
         'subscriptions.onFailed event',
         'subscription-event',
-        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: PaymentFailed@1",
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: PaymentFailed@1",
       ),
     );
   });
 
-  test('a Subscription to a Provider’s Event that no listed Dependency gives fails, naming the Provider', () => {
-    const onPinged = defineSubscription({
-      name: 'onPinged',
-      description: 'Receives it',
-      event: pingedV1,
-    });
-
-    const result = validateSubscriptions([notifyOnSettled, onPinged]);
-
-    expect(result).toEqual(
-      failed(
-        'subscriptions.onPinged event',
-        'subscription-event',
-        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
-      ),
-    );
-  });
-
-  test('a Subscription to a Provider’s Event fails the same when the listed Dependency holds another copy of its Contract Package', () => {
-    const copy = providedEvent('ping-service', {
-      name: 'Pinged',
-      version: 1,
-      visibility: 'internal',
-      description: 'The ping-service was pinged',
-      body: z.object({ at: z.iso.datetime() }),
-    });
-    const provider = { ...pingService, events: { pingedV1: copy } };
-    const onCopy = defineSubscription({ name: 'onCopy', description: 'Receives it', event: copy });
-    const onPinged = defineSubscription({
-      name: 'onPinged',
-      description: 'Receives it',
-      event: pingedV1,
-    });
-
-    const result = validateSubscriptions([onCopy, onPinged], [orderCreatedV1], provider as never);
-
-    expect(result).toEqual(
-      failed(
-        'subscriptions.onPinged event',
-        'subscription-event',
-        "A Subscription's Event is the Service's own or one a listed Dependency's Provider exports: Pinged@1 is ping-service's, and no listed Dependency's Contract Package exports it",
-      ),
-    );
-  });
-
-  test('a Subscription to a Provider’s Private Event fails, even one the Provider exported', () => {
+  test('a Subscription to a Provider’s Private Event fails', () => {
     const privateEvent = providedEvent('payments-service', {
       name: 'PaymentRefunded',
       version: 1,
@@ -240,17 +171,13 @@ describe('validateRoot: Subscriptions', () => {
       description: 'A payment was refunded',
       body: z.object({ paymentId: z.uuid() }),
     });
-    const provider = {
-      ...payments,
-      events: { ...payments.events, paymentRefundedV1: privateEvent },
-    } as unknown as typeof payments;
     const onRefunded = defineSubscription({
       name: 'onRefunded',
       description: 'Receives it',
       event: privateEvent,
     });
 
-    const result = validateSubscriptions([notifyOnSettled, onRefunded], [orderCreatedV1], provider);
+    const result = validateSubscriptions([notifyOnSettled, onRefunded]);
 
     expect(result).toEqual(
       failed(
@@ -262,25 +189,20 @@ describe('validateRoot: Subscriptions', () => {
   });
 
   test('a Subscription to a Provider’s Private Event fails even when the Provider bears the Service’s own name', () => {
-    const privateEvent = providedEvent('payments-service', {
+    const privateEvent = providedEvent('orders-service', {
       name: 'PaymentRefunded',
       version: 1,
       visibility: 'private',
       description: 'A payment was refunded',
       body: z.object({ paymentId: z.uuid() }),
     });
-    const provider = {
-      ...payments,
-      name: 'orders-service',
-      events: { ...payments.events, paymentRefundedV1: privateEvent },
-    } as unknown as typeof payments;
     const onRefunded = defineSubscription({
       name: 'onRefunded',
       description: 'Receives it',
       event: privateEvent,
     });
 
-    const result = validateSubscriptions([onRefunded], [orderCreatedV1], provider);
+    const result = validateSubscriptions([onRefunded]);
 
     expect(result).toEqual(
       failed(

@@ -243,10 +243,7 @@ function aMessagingService({
     ...(messageNames.length > 0
       ? [importOf(`{ ${[...messageNames].sort().join(', ')} }`, './messages.ts')]
       : []),
-    importOf('{ payments }', paymentsSpecifier),
     importOf(`{ ${[...listed].sort().join(', ')} }`, './subscriptions.ts'),
-    '',
-    'const paymentsDependency = defineDependency({ provider: payments });',
     '',
     'const orders = defineGroup({',
     "  name: 'orders',",
@@ -257,7 +254,6 @@ function aMessagingService({
     'export const contract = defineService({',
     "  name: 'orders-service',",
     '  groups: [orders],',
-    '  dependencies: [paymentsDependency],',
     '});',
   ]);
   return {
@@ -500,8 +496,8 @@ describe('cf-loom broker-plan: what it refuses', () => {
   test('a Dependency written as the types refuse fails with its line, never as a Root that threw', () => {
     const service = aMessagingService();
     const root = (service['src/contract/index.ts'] ?? '').replace(
-      'defineDependency({ provider: payments })',
-      'defineDependency({ provider: payments, endpoints: [undefined] } as never)',
+      '  groups: [orders],',
+      '  groups: [orders],\n  dependencies: [defineDependency({ endpoints: [undefined] } as never)],',
     );
     const project = aProject({ ...service, 'src/contract/index.ts': root });
 
@@ -510,7 +506,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr: 'dependencies.payments-service endpoints[0] not-a-declaration: is not an Endpoint\n',
+      stderr: '(root) dependencies[0].endpoints[0] not-a-declaration: is not an Endpoint\n',
     });
   });
 

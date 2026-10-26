@@ -3,9 +3,9 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import { summarized } from '../../test/failures.ts';
+import { aProvider } from '../../test/providers.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineApplication,
   defineDefinitions,
   defineDependency,
@@ -85,7 +85,7 @@ const ordersGroup = defineGroup({
 });
 
 const getPayment = providedEndpoint(
-  'payments-service',
+  aProvider('payments-service'),
   {
     name: 'getPayment',
     method: 'GET',
@@ -97,22 +97,6 @@ const getPayment = providedEndpoint(
   },
   undefined,
 );
-
-const payments = {
-  name: 'payments-service',
-  endpoints: { getPayment },
-  events: {},
-  standardRejections: {
-    invalidInput: {
-      code: 'INVALID_INPUT',
-      status: 400,
-      message: 'Invalid input',
-      body: z.object({ issues: z.array(z.unknown()) }),
-    },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-} as const satisfies ContractPackage;
 
 describe('validateRoot', () => {
   test('a valid Contract finds the walked node of each declaration’s part', () => {
@@ -217,7 +201,7 @@ describe('validateRoot', () => {
         },
       ],
       standardRejectionsSource: installed,
-      dependencies: [],
+      providers: [],
       events: [],
       commands: [],
       subscriptions: [],
@@ -259,7 +243,7 @@ describe('validateRoot', () => {
   });
 
   test('a valid Application returns no schemas and no Elements', () => {
-    const paymentsDependency = defineDependency({ provider: payments, endpoints: [getPayment] });
+    const paymentsDependency = defineDependency({ endpoints: [getPayment] });
     const application = defineApplication({
       name: 'web-admin',
       dependencies: [paymentsDependency],
@@ -663,10 +647,7 @@ describe('validateRoot: the README’s examples', () => {
     description: 'Order lifecycle',
     endpoints: [readmeGetOrder, createOrder, updateOrder],
   });
-  const paymentsDependency = defineDependency({
-    provider: payments,
-    endpoints: [payments.endpoints.getPayment],
-  });
+  const paymentsDependency = defineDependency({ endpoints: [getPayment] });
   const contract = defineService({
     name: 'orders-service',
     standardRejections: definitions,

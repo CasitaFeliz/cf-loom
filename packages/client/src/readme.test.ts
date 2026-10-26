@@ -50,7 +50,7 @@ function contractPackageOf<
     throw new Error('The fixture is no Service');
   }
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -62,7 +62,6 @@ function contractPackageOf<
 const payments = contractPackageOf({ getPayment }, providedStandardRejections());
 
 const paymentsDependency = defineDependency({
-  provider: payments,
   endpoints: [payments.endpoints.getPayment],
 });
 

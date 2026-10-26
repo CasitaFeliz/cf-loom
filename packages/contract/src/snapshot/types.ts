@@ -94,7 +94,7 @@ export type SubscriptionSnapshot = {
 /** A Group by its name: what it is for, which is all a Snapshot keeps of it; each Element and Subscription it lists names it. */
 export type GroupSnapshot = { readonly description: string };
 
-/** What a Contract uses of one Provider: the version it relied on and the Endpoints it selects. */
+/** What a Contract uses of one Provider: the version it relied on and the Endpoints its Dependencies list. */
 export type DependencySnapshot = {
   readonly against: string;
   readonly endpoints: readonly { readonly id: string; readonly name: string }[];
@@ -147,7 +147,7 @@ export type DefinitionsSnapshot = Heading<'definitions'> & {
 /** A declared Snapshot, as `generate` writes it to `contract.snapshot.json`. */
 export type Snapshot = ServiceSnapshot | ApplicationSnapshot | DefinitionsSnapshot;
 
-/** A declared Endpoint a Contract Package does not export, as routing needs it: only whether it is Retired. */
+/** A declared Endpoint other than a cut's own, as routing needs it: only whether it is Retired. */
 export type ShadowingSnapshot = Pick<EndpointSnapshot, 'lifecycle'>;
 
 /**

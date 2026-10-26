@@ -103,7 +103,7 @@ function consumedCommandOf(service: string, command: Command): Consumed {
 function consumedSubscriptionOf(contract: ServiceContract, subscription: Subscription): Consumed {
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
-    const message = `${subscription.name} subscribes to an Event neither a Group lists nor a listed Dependency's Provider exports`;
+    const message = `${subscription.name} subscribes to an Event neither a Group lists nor another Service's Contract Package exports`;
     throw new Error(message);
   }
   return {

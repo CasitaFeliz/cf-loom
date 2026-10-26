@@ -42,7 +42,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   }
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -53,7 +53,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const paymentsDependencyPackage = contractPackageOf({ getPayment });
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [paymentsDependencyPackage.endpoints.getPayment],
 });
 

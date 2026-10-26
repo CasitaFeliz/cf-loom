@@ -60,7 +60,7 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
   }
   const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const provided = providedEndpointsOf(name, endpoints, snapshot);
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
   return {
     name,
     endpoints: provided,
@@ -71,7 +71,6 @@ function contractPackageOf<const Endpoints extends Readonly<Record<string, Expor
 
 const paymentsDependencyPackage = contractPackageOf({ getPayment, getSummary });
 const paymentsDependency = defineDependency({
-  provider: paymentsDependencyPackage,
   endpoints: [
     paymentsDependencyPackage.endpoints.getPayment,
     paymentsDependencyPackage.endpoints.getSummary,
@@ -182,7 +181,7 @@ describe('fake.verify()', () => {
     expect(thrown).toMatchObject({
       message: [
         '3 mistakes:',
-        'payments-service: no Endpoint it exports is GET /payments under /',
+        'payments-service: no Endpoint the Dependency lists is GET /payments under /',
         'payments-service: getPayment: 1 once step left unused',
         'payments-service: getSummary: 1 once step left unused',
       ].join('\n'),

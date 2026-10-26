@@ -3,10 +3,8 @@ import { inFields, placeOf } from '../walker/index.ts';
 import {
   type Declarations,
   identityOf,
-  type LocatedDependency,
   type LocatedEndpoint,
   packageNamePartsOf,
-  providerNameOf,
   textOf,
   writtenTextOf,
 } from '../written/index.ts';
@@ -31,14 +29,13 @@ export function packageNameFailures(
   return [failure(inFields(placeOf({ kind: 'root' }, root), 'name'), 'package-name', message)];
 }
 
-/** Group names, Endpoint names not Retired, Endpoint identities, Guard names and Providers are each unique. */
+/** Group names, Endpoint names not Retired, Endpoint identities and Guard names are each unique. */
 export function uniquenessFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return [
     ...uniqueGroupNames(declarations),
     ...uniqueEndpointNames(declarations),
     ...uniqueEndpointIdentities(declarations),
     ...uniqueGuardNames(declarations),
-    ...uniqueProviders(declarations),
   ];
 }
 
@@ -80,19 +77,6 @@ function uniqueGuardNames({ guards }: Declarations): readonly DeclarationFailure
       inFields(at, 'name'),
       'duplicate-guard-name',
       `A Guard name is unique across the Contract and its Definitions Packages: ${writtenTextOf(guard.name)}`,
-    ),
-  );
-}
-
-/** A Dependency whose provider has no name is the Dependency rule's, and repeats no other. */
-function uniqueProviders({ dependencies }: Declarations): readonly DeclarationFailure[] {
-  const providerOf = ({ dependency }: LocatedDependency) => providerNameOf(dependency);
-  const named = dependencies.filter((located) => providerOf(located) !== undefined);
-  return repeated(named, (located) => textOf(providerOf(located))).map((located) =>
-    failure(
-      located.at,
-      'duplicate-dependency',
-      `A Contract lists one Dependency per Provider: ${writtenTextOf(providerOf(located))}`,
     ),
   );
 }
