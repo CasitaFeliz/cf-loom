@@ -6,20 +6,20 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 ## Packages
 
-| Package | Used by | Provides |
+| Package | Used by | For |
 | --- | --- | --- |
-| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependency`, `openEnum`; `openEnumReader`, `providedEndpoint`, `providedEvent` and `providedRejection`, which generated code calls; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `readersOf`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission`, `CheckedOutcome`, `CheckedAdmission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`), `Pairing`, `Readers`, `CommandImplementation`, `EventImplementation`, `MessageMeta` and `MessageFault`; `WithResources`, `ResourcesOf` and `ResourcesNotAnnotated`; `EndpointCall`, `GuardCall` and `HandledRequest`, what a Handler is given beside its Input; `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMapOf`, `HandledBy` and `HandlerMap` types |
-| [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `BodyLimit`, `ServedFault` and `AnsweredRequest` types |
-| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
-| [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
-| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`, connecting a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError`, `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them |
-| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter: `jetstream`, whose `apply` applies a broker plan; the `JetStreamBrokerOptions`, `JetStreamBroker`, `BrokerPlan`, `BrokerPlanStream`, `BrokerPlanConsumer`, `BrokerLimits`, `StreamLimits`, `DurableConsumerLimits` and `Duration` types; `@nats-io/jetstream` and `@nats-io/nats-core` are optional peer dependencies |
-| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter: `memory`; the `MemoryBroker`, `RecordedMessage`, `DeliveryMeta` and `PendingMessage` types |
-| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `InvalidCall` types |
-| [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig` |
+| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declaring a Contract, an Application or a Definitions Package |
+| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | Implementing a Contract's Endpoints, Guards, Commands and Subscriptions, and calling the Handlers directly in tests |
+| [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | Answering a Contract's Endpoints over HTTP with their Handlers |
+| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The adapter that connects `serve` to `node:http` |
+| [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
+| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
+| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a broker plan |
+| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | The in-memory Broker adapter |
+| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
+| [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
 
-How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
+Each package's README lists what it exports. How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
 ## A first Service
 
@@ -79,11 +79,11 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Generate
 
-`cf-loom generate` writes the stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
+`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
 
 ### Implement
 
-Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
+Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its Stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
 
 ### Serve
 

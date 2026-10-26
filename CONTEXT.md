@@ -95,8 +95,12 @@ One of the three Rejections whose code, status and message come from a Definitio
 _Avoid_: generic error, built-in error
 
 **Fault**:
-A technical failure any Handler can produce and no Endpoint, Guard or Message declares (a database down, a timeout, a bug). It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it; over HTTP, a retryable one may say in whole seconds when to retry.
+A technical failure that no Endpoint, Guard or Message declares, produced by a Handler (a database down, a timeout, a bug) or by cf-loom's runtime, which sends some with a Reserved code. It says whether the change was committed (`committed`: `'no'`, `'yes'` or `'unknown'`), which alone decides whether retrying is safe, and whether the same request could succeed later (`retryable`), which says whether retrying is worth it; over HTTP, a retryable one may say in whole seconds when to retry.
 _Avoid_: error, server error, operation failure
+
+**Reserved code**:
+A code cf-loom's runtime answers outside the Contract, as a Fault that carries it: `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED`, `BODY_TOO_LARGE` and `INVALID_OUTCOME`. No Contract or Definitions Package declares one, and no Handler produces one.
+_Avoid_: the Caller's Fault, error code, reserved Fault
 
 **Envelope**:
 The body cf-loom defines, in which a Rejection or a Fault travels over HTTP.
@@ -132,6 +136,34 @@ _Avoid_: correlation id, event id
 The message system a Service's messaging runs on, through an adapter: it holds the Services' streams and durable consumers, and delivers Messages at least once.
 _Avoid_: bus, queue, message bus
 
+**Stream**:
+What the Broker stores Messages in: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the stream of the Service whose Event it takes.
+_Avoid_: topic, queue, log
+
+**Durable consumer**:
+The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
+_Avoid_: subscriber, queue group, cursor
+
+**Broker prefix**:
+An optional kebab-case name in front of every subject, stream and durable consumer name, so several environments can share one Broker. The Service's adapter and the commands that print plans take it; it is no part of a Contract or a Snapshot.
+_Avoid_: namespace, environment, prefix (alone)
+
+**Broker message id**:
+The id the Broker deduplicates a Message by, `<event|command>.<Name>.v<version>:<factId>` (`event.OrderCreated.v1:o-1`), which a Message Handler receives as `messageId`.
+_Avoid_: message id, dedup key
+
+**Transport header**:
+A header the calling code gives a `publish` or `send` call (`traceparent`, for one), which cf-loom passes to the Broker unread and hands to every Message Handler; it is no part of the Contract.
+_Avoid_: metadata, Message header
+
+**Delivery**:
+One Message as the Broker hands it to the Service, with how many times it has been delivered; a Message delivered again is another Delivery.
+_Avoid_: message, attempt
+
+**Settlement**:
+What a Delivery ends as, which the adapter applies to the Broker: `'acked'`, `'pending'` (left for redelivery), `'ended'` (never delivered again) or `'handed-back'` (returned unsettled while closing, for redelivery now).
+_Avoid_: ack, result
+
 **Release**:
 One deployed version of a Service. During a rollout two Releases of the same Service run side by side and exchange its Messages.
 _Avoid_: deployment, build, instance
@@ -165,7 +197,7 @@ What a GuardHandler answers: the request admitted with the Context its Guard pro
 _Avoid_: verdict, pass, result
 
 **Stub**:
-A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, and marks as such: an Endpoint or Guard stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler stub.
+A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Version or a Subscription not implemented yet, and marks as such: an Endpoint or Guard Stub answers the not-implemented Rejection, and `consume` does not pull for a Message Handler Stub.
 _Avoid_: placeholder, mock
 
 **Handler map**:
