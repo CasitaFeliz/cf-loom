@@ -6,7 +6,9 @@ import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
   defineEndpoint,
+  defineEvent,
   defineGroup,
+  defineGuard,
   defineRejection,
   defineService,
   type Endpoint,
@@ -16,6 +18,7 @@ import {
   nestingFailureOf,
   type Root,
   type RootPackage,
+  snapshotPathOf,
   validateRoot,
 } from '../internal/index.ts';
 
@@ -117,6 +120,123 @@ describe('failure lines: where a failure sits', () => {
 
     expect(linesOf(serviceOf(lockThing))).toEqual([
       'codes.LOCKED headers.Retry-After header-names: Header names are lower-case: Retry-After',
+    ]);
+  });
+});
+
+describe('failure lines: a Snapshot nested too deep', () => {
+  const orderLocked = 'ORDER_LOCKED';
+  const deep = (): unknown => {
+    let nested: unknown = {};
+    for (let depth = 0; depth < 300; depth++) {
+      nested = { inner: nested };
+    }
+    return nested;
+  };
+
+  test.for([
+    ['an Event', { events: { 'OrderCreated@1': { body: deep() } } }, 'events.OrderCreated@1'],
+    ['a Command', { commands: { 'ChargeCard@1': { body: deep() } } }, 'commands.ChargeCard@1'],
+    ['a code', { codes: { [orderLocked]: { body: deep() } } }, 'codes.ORDER_LOCKED'],
+    ['a Guard', { guards: { apiKey: { context: deep() } } }, 'guards.apiKey'],
+    ['an export', { exports: { money: { schema: deep() } } }, 'exports.money'],
+    ['a def', { defs: { tree: deep() } }, 'defs.tree'],
+    ['no Element', { heading: deep() }, '(root)'],
+  ] as const)('%s is named by its entry in the Snapshot', ([, snapshot, site]) => {
+    const failure = nestingFailureOf(snapshot);
+
+    expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
+      `${site} not allowed: JSON nested deeper than the 256 levels a Snapshot holds`,
+    );
+  });
+});
+
+describe('failure lines: steps and written values', () => {
+  test('a failure sits at the steps the Check names, so they spell the Snapshot path', () => {
+    const getThing = oneAnEndpoint('getThing', 'GET /things', {
+      success: { status: 200, body: z.object({ v: z.string().default('x') }) },
+    });
+    const root = serviceOf(getThing);
+
+    const validated = validateRoot(root, aRootPackage(root));
+
+    const steps =
+      validated.kind === 'invalid' ? validated.failures.map((f) => snapshotPathOf(f.steps)) : [];
+    expect(steps).toEqual([['success', 'body', 'fields', 'v']]);
+  });
+
+  test('a path that breaks the grammar is echoed quoted, so its spaces show', () => {
+    const odd = oneAnEndpoint('odd', 'GET /odd', { path: 'orders/x ' });
+
+    expect(linesOf(serviceOf(odd))).toEqual([
+      'endpoints.GET /orders/x  (odd) path canonical-path: A path starts with /: "orders/x "',
+      'endpoints.GET /orders/x  (odd) path canonical-path: A path segment is lower-case letters, digits and dashes: "x "',
+    ]);
+  });
+
+  test('a reserved code is echoed quoted', () => {
+    const reserved = defineRejection({ code: 'NO_SUCH_ENDPOINT', status: 410, message: 'Gone' });
+    const odd = oneAnEndpoint('odd', 'GET /odd', { rejections: [reserved] });
+
+    expect(linesOf(serviceOf(odd))).toEqual([
+      'codes.NO_SUCH_ENDPOINT code reserved-code: A code cf-loom answers as a Fault is reserved: "NO_SUCH_ENDPOINT"',
+    ]);
+  });
+});
+
+describe('failure lines: a declaration with no usable name', () => {
+  const groupOf = (...endpoints: readonly Endpoint[]) =>
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: endpoints as never,
+    });
+
+  test('a Rejection whose code is no string sits at the place that lists it', () => {
+    const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
+    const lockThing = oneAnEndpoint('lockThing', 'POST /c', { rejections: [nameless] });
+
+    expect(linesOf(serviceOf(lockThing))).toEqual([
+      'endpoints.POST /c (lockThing) rejections[0].code not-a-string: code is a string',
+    ]);
+  });
+
+  test('a Guard whose name is no string sits at the place that attaches it', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const guarded = oneAnEndpoint('guarded', 'GET /a', { guards: [nameless] });
+
+    expect(linesOf(serviceOf(guarded))).toEqual([
+      'endpoints.GET /a (guarded) guards[0].name not-a-string: name is a string',
+    ]);
+  });
+
+  test('an Event with no name and no version sits at the Group that lists it', () => {
+    const nameless = defineEvent({
+      visibility: 'internal',
+      description: 'An event',
+      body: z.object({ id: z.string() }),
+    } as never);
+    const group = defineGroup({ name: 'orders', description: 'Orders', events: [nameless] });
+
+    expect(linesOf(defineService({ name: 'orders-service', groups: [group] }))).toEqual([
+      'groups.orders events[0].name required-field: name is a required string',
+      'groups.orders events[0].version required-field: version is a required field',
+    ]);
+  });
+
+  test('an Endpoint whose path is no string sits at the Group that lists it', () => {
+    const odd = oneAnEndpoint('odd', 'GET /odd', { path: 5 });
+
+    expect(linesOf(defineService({ name: 'orders-service', groups: [groupOf(odd)] }))).toEqual([
+      'groups.orders endpoints[0].path not-a-string: path is a string',
+    ]);
+  });
+
+  test('an Endpoint with no method sits at the Group that lists it', () => {
+    const odd = oneAnEndpoint('odd', 'GET /odd', { method: undefined });
+
+    expect(linesOf(defineService({ name: 'orders-service', groups: [groupOf(odd)] }))).toEqual([
+      'groups.orders endpoints[0].method required-field: method is a required string',
     ]);
   });
 });

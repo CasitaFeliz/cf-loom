@@ -139,7 +139,7 @@ describe('validateRoot: what a Group lists', () => {
     const result = validateGroups([aGroup('orders', { [field]: [item] })]);
 
     expect(result).toEqual(
-      failed(`groups.orders ${field}[0]`, 'not-a-declaration', `${field}.0 is not ${noun}`),
+      failed(`groups.orders ${field}[0]`, 'not-a-declaration', `is not ${noun}`),
     );
   });
 

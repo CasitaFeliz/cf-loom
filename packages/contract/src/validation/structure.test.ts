@@ -64,7 +64,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(contract)).toEqual(
-      failed('(root) groups[0]', 'not-a-declaration', 'groups.0 is not a Group'),
+      failed('(root) groups[0]', 'not-a-declaration', 'is not a Group'),
     );
   });
 
@@ -88,7 +88,7 @@ describe('validateRoot: lists and their items', () => {
           kind: 'declaration',
           location: '(root) dependencies[0]',
           rule: 'not-a-declaration',
-          message: 'dependencies.0 is not a Dependency',
+          message: 'is not a Dependency',
         },
       ],
     });
@@ -102,7 +102,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups: [orders] }))).toEqual(
-      failed('groups.orders endpoints[0]', 'not-a-declaration', 'endpoints.0 is not an Endpoint'),
+      failed('groups.orders endpoints[0]', 'not-a-declaration', 'is not an Endpoint'),
     );
   });
 
@@ -113,7 +113,7 @@ describe('validateRoot: lists and their items', () => {
       failed(
         'endpoints.GET /orders (listOrders) rejections[0]',
         'not-a-declaration',
-        'rejections.0 is not a Rejection',
+        'is not a Rejection',
       ),
     );
   });
@@ -126,7 +126,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }))).toEqual(
-      failed('guards.tenant guards[0]', 'not-a-declaration', 'guards.0 is not a Guard'),
+      failed('guards.tenant guards[0]', 'not-a-declaration', 'is not a Guard'),
     );
   });
 
@@ -219,7 +219,7 @@ describe('validateRoot: lists and their items', () => {
     });
 
     expect(validateInPackage(defineService({ name: 'orders-service', groups }))).toEqual(
-      failed('(root) groups[0]', 'not-a-declaration', 'groups.0 is not a Group'),
+      failed('(root) groups[0]', 'not-a-declaration', 'is not a Group'),
     );
   });
 
@@ -251,13 +251,13 @@ describe('validateRoot: lists and their items', () => {
           kind: 'declaration',
           location: 'groups.orders endpoints[0]',
           rule: 'not-a-declaration',
-          message: 'endpoints.0 is not an Endpoint',
+          message: 'is not an Endpoint',
         },
         {
           kind: 'declaration',
           location: 'groups.sales endpoints[0]',
           rule: 'not-a-declaration',
-          message: 'endpoints.0 is not an Endpoint',
+          message: 'is not an Endpoint',
         },
       ],
     });

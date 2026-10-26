@@ -66,20 +66,22 @@ describe('validateRoot: canonical paths', () => {
   test('a path without a leading slash fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: 'orders' }));
 
-    expect(validated).toEqual(failedPath('GET /orders', 'A path starts with /: orders'));
+    expect(validated).toEqual(failedPath('GET /orders', 'A path starts with /: "orders"'));
   });
 
   test('a path with a trailing slash fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders/' }));
 
-    expect(validated).toEqual(failedPath('GET /orders', 'A path has no trailing slash: /orders/'));
+    expect(validated).toEqual(
+      failedPath('GET /orders', 'A path has no trailing slash: "/orders/"'),
+    );
   });
 
   test('a path with an empty segment fails', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/orders//latest' }));
 
     expect(validated).toEqual(
-      failedPath('GET /orders//latest', 'A path has no empty segment: /orders//latest'),
+      failedPath('GET /orders//latest', 'A path has no empty segment: "/orders//latest"'),
     );
   });
 
@@ -87,7 +89,10 @@ describe('validateRoot: canonical paths', () => {
     const validated = validateEndpoint(defineEndpoint({ ...listOrders, path: '/Orders' }));
 
     expect(validated).toEqual(
-      failedPath('GET /Orders', 'A path segment is lower-case letters, digits and dashes: Orders'),
+      failedPath(
+        'GET /Orders',
+        'A path segment is lower-case letters, digits and dashes: "Orders"',
+      ),
     );
   });
 
@@ -97,7 +102,7 @@ describe('validateRoot: canonical paths', () => {
     expect(validated).toEqual(
       failedPath(
         'GET /orders.json',
-        'A path segment is lower-case letters, digits and dashes: orders.json',
+        'A path segment is lower-case letters, digits and dashes: "orders.json"',
       ),
     );
   });
@@ -108,7 +113,7 @@ describe('validateRoot: canonical paths', () => {
     expect(validated).toEqual(
       failedPath(
         'GET /orders/id-:id',
-        'A path segment is lower-case letters, digits and dashes: id-:id',
+        'A path segment is lower-case letters, digits and dashes: "id-:id"',
       ),
     );
   });
@@ -123,7 +128,7 @@ describe('validateRoot: canonical paths', () => {
     );
 
     expect(validated).toEqual(
-      failedPath('GET /files/{}', 'A path param is written :camelCase: :file.json'),
+      failedPath('GET /files/{}', 'A path param is written :camelCase: ":file.json"'),
     );
   });
 
@@ -137,7 +142,7 @@ describe('validateRoot: canonical paths', () => {
     );
 
     expect(validated).toEqual(
-      failedPath('GET /orders/{}', 'A path param is written :camelCase: :'),
+      failedPath('GET /orders/{}', 'A path param is written :camelCase: ":"'),
     );
   });
 
@@ -152,7 +157,7 @@ describe('validateRoot: canonical paths', () => {
     );
 
     expect(validated).toEqual(
-      failedPath('GET /orders/{}', 'A path param is written :camelCase: :OrderId'),
+      failedPath('GET /orders/{}', 'A path param is written :camelCase: ":OrderId"'),
     );
   });
 
@@ -168,7 +173,7 @@ describe('validateRoot: canonical paths', () => {
     expect(validated).toEqual(
       failedPath(
         'GET /orders/{}/items/{}',
-        'A path param appears once: :id',
+        'A path param appears once: ":id"',
         'duplicate-path-param',
       ),
     );
@@ -191,19 +196,19 @@ describe('validateRoot: canonical paths', () => {
           kind: 'declaration',
           location: pathAt,
           rule: 'canonical-path',
-          message: 'A path starts with /: Orders/:id/',
+          message: 'A path starts with /: "Orders/:id/"',
         },
         {
           kind: 'declaration',
           location: pathAt,
           rule: 'canonical-path',
-          message: 'A path has no trailing slash: Orders/:id/',
+          message: 'A path has no trailing slash: "Orders/:id/"',
         },
         {
           kind: 'declaration',
           location: pathAt,
           rule: 'canonical-path',
-          message: 'A path segment is lower-case letters, digits and dashes: Orders',
+          message: 'A path segment is lower-case letters, digits and dashes: "Orders"',
         },
       ],
     });

@@ -156,11 +156,7 @@ function listingFailures({ at, list, noun, fits }: Listing): readonly Declaratio
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !fits(item))
     .map(({ index }) =>
-      failure(
-        inside(at, indexStep(index)),
-        'not-a-declaration',
-        `${field}.${index} is not ${noun}`,
-      ),
+      failure(inside(at, indexStep(index)), 'not-a-declaration', `is not ${noun}`),
     );
 }
 

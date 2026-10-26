@@ -7,6 +7,7 @@ import {
   partOf,
   segmentsOf,
   slotAt,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 import type { Nodes } from './schemas.ts';
@@ -85,10 +86,16 @@ function pathProblemsOf(path: string): readonly PathProblem[] {
   }
   const problems: PathProblem[] = [];
   if (!path.startsWith('/')) {
-    problems.push({ rule: 'canonical-path', message: `A path starts with /: ${path}` });
+    problems.push({
+      rule: 'canonical-path',
+      message: `A path starts with /: ${writtenTextOf(path)}`,
+    });
   }
   if (path.endsWith('/')) {
-    problems.push({ rule: 'canonical-path', message: `A path has no trailing slash: ${path}` });
+    problems.push({
+      rule: 'canonical-path',
+      message: `A path has no trailing slash: ${writtenTextOf(path)}`,
+    });
   }
   const segments = segmentsOf(path);
   for (const segment of segments) {
@@ -100,13 +107,15 @@ function pathProblemsOf(path: string): readonly PathProblem[] {
 
 function segmentProblems(segment: string, path: string): readonly PathProblem[] {
   if (segment === '') {
-    return [{ rule: 'canonical-path', message: `A path has no empty segment: ${path}` }];
+    return [
+      { rule: 'canonical-path', message: `A path has no empty segment: ${writtenTextOf(path)}` },
+    ];
   }
   if (segment.startsWith(':')) {
-    const message = `A path param is written :camelCase: ${segment}`;
+    const message = `A path param is written :camelCase: ${writtenTextOf(segment)}`;
     return follows(camelCase, segment.slice(1)) ? [] : [{ rule: 'canonical-path', message }];
   }
-  const message = `A path segment is lower-case letters, digits and dashes: ${segment}`;
+  const message = `A path segment is lower-case letters, digits and dashes: ${writtenTextOf(segment)}`;
   return literalSegment.test(segment) ? [] : [{ rule: 'canonical-path', message }];
 }
 
@@ -115,6 +124,6 @@ function duplicateParamProblems(segments: readonly string[]): readonly PathProbl
   const repeated = names.filter((name, index) => names.indexOf(name) !== index);
   return [...new Set(repeated)].map((name) => ({
     rule: 'duplicate-path-param',
-    message: `A path param appears once: ${name}`,
+    message: `A path param appears once: ${writtenTextOf(name)}`,
   }));
 }

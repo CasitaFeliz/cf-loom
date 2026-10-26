@@ -43,11 +43,6 @@ afterEach(() => {
 });
 
 /** A project in a temporary directory, with cf-loom and zod installed and the files given. */
-/** A name as a line writes it in a site: itself when plain, else as JSON. */
-function siteNameOf(name: string): string {
-  return /^[\w@/$-]+$/.test(name) ? name : JSON.stringify(name);
-}
-
 function aProject(files: Readonly<Record<string, string>> = {}, prefix = 'cf-loom-'): string {
   const project = mkdtempSync(join(tmpdir(), prefix));
   projects.push(project);
@@ -1170,11 +1165,11 @@ describe('cf-loom generate: what it refuses', () => {
   });
 
   test.for([
-    ['again', 'definitions'],
-    ['\uFF41', '\u{1D44E}'],
+    ['again', 'definitions', 'exports.definitions'],
+    ['\uFF41', '\u{1D44E}', 'exports."\u{1D44E}"'],
   ] as const)(
     'a Definitions Package’s Root file that exports its Definitions object as %s and %s fails definitions-export, naming the later name in code point order',
-    ([first, later]) => {
+    ([first, later, site]) => {
       const project = aProject({
         'cf-loom.config.ts': config,
         'package.json': JSON.stringify({ name: '@org/definitions', type: 'module' }),
@@ -1191,7 +1186,7 @@ describe('cf-loom generate: what it refuses', () => {
       expect(ran).toEqual({
         status: 1,
         stdout: '',
-        stderr: `src/definitions/index.ts: exports.${siteNameOf(later)} definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: its definitions once, not as ${later}\n`,
+        stderr: `src/definitions/index.ts: ${site} definitions-export: A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas: its definitions once, not as ${later}\n`,
       });
     },
   );

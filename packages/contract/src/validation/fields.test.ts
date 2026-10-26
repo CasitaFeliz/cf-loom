@@ -405,7 +405,7 @@ describe('validateRoot: required fields', () => {
     const endpoint = defineEndpoint(withoutField(listing, 'method'));
 
     expect(validateEndpoint(endpoint)).toEqual(
-      required('endpoints.undefined /orders (listOrders) method', 'method is a required string'),
+      required('groups.orders endpoints[0].method', 'method is a required string'),
     );
   });
 

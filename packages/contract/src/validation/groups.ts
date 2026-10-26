@@ -1,12 +1,12 @@
 import { type Group, type GroupedField, providerOf } from '../declarations/index.ts';
 import {
   type Declarations,
-  fieldListings,
   groupedFields,
   isEmptyField,
   type Listed,
   type LocatedGroup,
   listingsOf,
+  messageIdentityOf,
   providedListingsOf,
   textOf,
 } from '../written/index.ts';
@@ -23,15 +23,15 @@ const memberships: { readonly [Field in GroupedField]: Membership<Field> } = {
   endpoints: { noun: 'An Endpoint', labelOf: ({ declaration }) => textOf(declaration.name) },
   events: {
     noun: "An Event's Message Version",
-    labelOf: ({ declaration }) => fieldListings.events.keyOf(declaration),
+    labelOf: ({ declaration }) => messageIdentityOf(declaration.name, declaration.version),
   },
   commands: {
     noun: "A Command's Message Version",
-    labelOf: ({ declaration }) => fieldListings.commands.keyOf(declaration),
+    labelOf: ({ declaration }) => messageIdentityOf(declaration.name, declaration.version),
   },
   subscriptions: {
     noun: 'A Subscription',
-    labelOf: ({ declaration }) => fieldListings.subscriptions.keyOf(declaration),
+    labelOf: ({ declaration }) => textOf(declaration.name),
   },
 };
 

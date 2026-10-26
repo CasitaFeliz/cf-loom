@@ -510,8 +510,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 1,
       stdout: '',
-      stderr:
-        'dependencies.payments-service endpoints[0] not-a-declaration: endpoints.0 is not an Endpoint\n',
+      stderr: 'dependencies.payments-service endpoints[0] not-a-declaration: is not an Endpoint\n',
     });
   });
 

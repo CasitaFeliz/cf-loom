@@ -163,7 +163,7 @@ describe('validateRoot: Events and Commands', () => {
     const result = validateMessages([{ kind: 'event', name: 'OrderCreated', version: 1 }]);
 
     expect(result).toEqual(
-      failed('groups.orders events[0]', 'not-a-declaration', 'events.0 is not an Event'),
+      failed('groups.orders events[0]', 'not-a-declaration', 'is not an Event'),
     );
   });
 
@@ -255,7 +255,7 @@ describe('validateRoot: Events and Commands', () => {
     const result = validateMessages([], [anEvent({ name: 'ChargeCard' })]);
 
     expect(result).toEqual(
-      failed('groups.orders commands[0]', 'not-a-declaration', 'commands.0 is not a Command'),
+      failed('groups.orders commands[0]', 'not-a-declaration', 'is not a Command'),
     );
   });
 

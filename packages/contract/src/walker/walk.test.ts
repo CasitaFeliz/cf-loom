@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { refusalsOf } from '../../test/failures.ts';
-import { partsOf, type Step, walkSchemas } from '../internal/index.ts';
+import { type Step, walkSchemas } from '../internal/index.ts';
+
+/** The steps down the named parts of an Endpoint, as the Check names them. */
+function partsOf(...names: readonly ('input' | 'success' | 'body')[]): readonly Step[] {
+  return names.map((name) => ({ kind: 'part', name }));
+}
 
 function noOrigin() {
   return undefined;

@@ -249,7 +249,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
       failed(
         'dependencies.payments-service endpoints[1]',
         'not-a-declaration',
-        'endpoints.1 is not an Endpoint',
+        'is not an Endpoint',
       ),
     );
   });
@@ -310,7 +310,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       line: {
         location: 'dependencies.payments-service endpoints[0]',
         rule: 'not-a-declaration',
-        message: 'endpoints.0 is not an Endpoint',
+        message: 'is not an Endpoint',
       },
     },
     {
@@ -329,7 +329,7 @@ describe('validateRoot: a Dependency written as the types refuse', () => {
       line: {
         location: 'dependencies.payments-service endpoints[0]',
         rule: 'not-a-declaration',
-        message: 'endpoints.0 is not an Endpoint',
+        message: 'is not an Endpoint',
       },
     },
     {

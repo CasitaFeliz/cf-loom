@@ -42,11 +42,3 @@ export function memberGuardsOf(members: Members): readonly Guard[] {
   const guards = members.map((member) => (member.kind === 'guard' ? member.value : undefined));
   return [...new Set(guards.filter(isGuard))];
 }
-
-/** The Rejections among a package's members, each once. */
-export function memberRejectionsOf(members: Members): readonly Rejection[] {
-  const rejections = members.map((member) =>
-    member.kind === 'rejection' ? member.value : undefined,
-  );
-  return [...new Set(rejections.filter(isRejection))];
-}

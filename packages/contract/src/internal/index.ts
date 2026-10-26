@@ -193,23 +193,13 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
-  fieldStep,
   hashPartsOf,
-  indexStep,
   isHashFormat,
   isJsonValue,
-  itemsStep,
-  keyStep,
-  optionStep,
-  partsOf,
   reachedDefsOf,
-  restStep,
-  siteLocationOf,
   siteTextOf,
   snapshotPathOf,
   tokenOf,
-  valueStep,
-  variantStep,
   walkSchemas,
 } from '../walker/index.ts';
 export type {

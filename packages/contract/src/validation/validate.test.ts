@@ -583,7 +583,7 @@ describe('validateRoot', () => {
           kind: 'declaration',
           location: 'endpoints.POST /orders (createOrder) path',
           rule: 'canonical-path',
-          message: 'A path has no trailing slash: /orders/',
+          message: 'A path has no trailing slash: "/orders/"',
         },
         {
           kind: 'not-allowed',

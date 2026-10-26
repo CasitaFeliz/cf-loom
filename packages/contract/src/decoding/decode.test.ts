@@ -1685,6 +1685,24 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      ['a tuple item', { type: 'tuple', items: [aRef('missing')] }, ['defs', 'tree', 'items', 0]],
+      [
+        'a union option',
+        { type: 'union', options: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'options', 0],
+      ],
+      [
+        'an intersection’s item',
+        { type: 'allOf', items: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'items', 0],
+      ],
+    ])('a ref in %s to a def the Snapshot does not hold is malformed at the ref', (_, tree, at) => {
+      const result = serviceWith({ defs: { tree } });
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
       [
         'an Endpoint’s body',
         aService({

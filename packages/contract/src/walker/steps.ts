@@ -1,7 +1,16 @@
 import type { Path } from './nodes.ts';
 
 /** The parts of an Endpoint, a Guard or a Rejection that a difference sits under. */
-export type PartName = 'input' | 'success' | 'demands' | 'params' | 'query' | 'headers' | 'body';
+export type PartName =
+  | 'input'
+  | 'success'
+  | 'demands'
+  | 'params'
+  | 'query'
+  | 'headers'
+  | 'body'
+  | 'context'
+  | 'qualifier';
 
 /**
  * One step from a site to where a failure or a difference is, as the author wrote it: a part or

@@ -20,7 +20,7 @@ import {
 } from '../walker/index.ts';
 
 /** A node and where it sits in the Snapshot. */
-type LocatedNode = { readonly at: Path; readonly node: SchemaNode };
+type SnapshotNode = { readonly at: Path; readonly node: SchemaNode };
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, the code a
@@ -110,8 +110,8 @@ function exportUsesOf(snapshot: Used): readonly Use[] {
 }
 
 /** The node of each exported schema, at its export. */
-function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly LocatedNode[] {
-  const nodes: LocatedNode[] = [];
+function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly SnapshotNode[] {
+  const nodes: SnapshotNode[] = [];
   for (const [name, exported] of Object.entries(snapshot.exports)) {
     if (exported.kind === 'schema') {
       nodes.push(...partsAt(['exports', name], { schema: exported.schema }));
@@ -135,8 +135,8 @@ function declaredEndpointsOf(snapshot: Used): readonly Keyed<DeclaredEndpoint>[]
   return declared;
 }
 
-function refUsesOf(nodes: readonly LocatedNode[]): readonly Use[] {
-  const within: readonly LocatedNode[] = nodes.flatMap(({ at, node }) =>
+function refUsesOf(nodes: readonly SnapshotNode[]): readonly Use[] {
+  const within: readonly SnapshotNode[] = nodes.flatMap(({ at, node }) =>
     nodesWithin(node).map((inner) => ({
       at: [...at, ...snapshotPathOf(inner.at)],
       node: inner.node,
@@ -146,7 +146,7 @@ function refUsesOf(nodes: readonly LocatedNode[]): readonly Use[] {
   return refs.map(({ at, node }) => ({ kind: 'def', name: node.name, at }));
 }
 
-function isRefAt(located: LocatedNode): located is { at: Path; node: RefNode } {
+function isRefAt(located: SnapshotNode): located is { at: Path; node: RefNode } {
   return located.node.type === 'ref';
 }
 
@@ -168,14 +168,14 @@ function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoi
   ];
 }
 
-function endpointNodesOf(at: Path, { input, success }: DeclaredEndpoint): readonly LocatedNode[] {
+function endpointNodesOf(at: Path, { input, success }: DeclaredEndpoint): readonly SnapshotNode[] {
   return [
     ...partsAt([...at, 'input'], input),
     ...partsAt([...at, 'success'], { headers: success.headers, body: success.body }),
   ];
 }
 
-function messageNodesOf(snapshot: PublishedServiceSnapshot): readonly LocatedNode[] {
+function messageNodesOf(snapshot: PublishedServiceSnapshot): readonly SnapshotNode[] {
   return [
     ...declaredBodiesAt('events', snapshot.events),
     ...declaredBodiesAt('commands', snapshot.commands),
@@ -185,7 +185,7 @@ function messageNodesOf(snapshot: PublishedServiceSnapshot): readonly LocatedNod
 function declaredBodiesAt(
   section: string,
   messages: Readonly<Record<string, PublishedEvent | PublishedCommand>>,
-): readonly LocatedNode[] {
+): readonly SnapshotNode[] {
   return declaredMessagesOf(messages).map(([identity, { body }]) => ({
     at: [section, identity, 'body'],
     node: body,
@@ -219,7 +219,7 @@ function declaredSubscriptionsOf(
 }
 
 /** The parts that hold a node, each where it sits under `at`. */
-function partsAt(at: Path, parts: Parts): readonly LocatedNode[] {
+function partsAt(at: Path, parts: Parts): readonly SnapshotNode[] {
   const present = Object.entries(parts).filter(isPresent);
   return present.map(([key, node]) => ({ at: [...at, key], node }));
 }

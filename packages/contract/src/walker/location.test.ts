@@ -1,21 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import {
-  authorPathOf,
-  fieldStep,
-  indexStep,
-  itemsStep,
-  keyStep,
-  optionStep,
-  partsOf,
-  restStep,
-  type Site,
-  type Step,
-  siteLocationOf,
-  siteTextOf,
-  tokenOf,
-  valueStep,
-  variantStep,
-} from '../internal/index.ts';
+import { authorPathOf, type Site, type Step, siteTextOf, tokenOf } from '../internal/index.ts';
+
+const field = (name: string): Step => ({ kind: 'field', name });
+const part = (name: 'success' | 'body'): Step => ({ kind: 'part', name });
 
 describe('siteTextOf', () => {
   test.for([
@@ -34,7 +21,6 @@ describe('siteTextOf', () => {
     [{ kind: 'export', name: 'money' }, 'exports.money'],
     [{ kind: 'standard-rejection', name: 'notFound' }, 'standardRejections.notFound'],
     [{ kind: 'def', name: 'tree' }, 'defs.tree'],
-    [{ kind: 'definitions', label: '@org/definitions' }, '@org/definitions'],
     [{ kind: 'group', name: 'two words' }, 'groups."two words"'],
   ] as const satisfies readonly (readonly [Site, string])[])(
     'a site is named as the Check names it: %j',
@@ -47,19 +33,19 @@ describe('siteTextOf', () => {
 describe('authorPathOf', () => {
   test.for([
     ['no steps', [], null],
-    ['parts and fields', [...partsOf('success', 'body'), fieldStep('v')], 'success.body.v'],
+    ['parts and fields', [part('success'), part('body'), field('v')], 'success.body.v'],
+    ['an array', [field('orders'), { kind: 'items' }], 'orders[]'],
+    ['a tuple rest', [field('pair'), { kind: 'rest' }], 'pair[...]'],
+    ['a record', [field('tags'), { kind: 'key' }, { kind: 'value' }], 'tags{key}{}'],
     [
-      'an array',
-      [...partsOf('success', 'body'), fieldStep('orders'), itemsStep],
-      'success.body.orders[]',
+      'a variant',
+      [field('kind'), { kind: 'variant', discriminator: 'type', value: '"a"' }],
+      'kind<type="a">',
     ],
-    ['a tuple rest', [fieldStep('pair'), restStep], 'pair[...]'],
-    ['a record', [fieldStep('tags'), keyStep, valueStep], 'tags{key}{}'],
-    ['a variant', [fieldStep('kind'), variantStep('type', '"a"')], 'kind<type="a">'],
-    ['a tuple item', [fieldStep('pair'), indexStep(1)], 'pair[1]'],
-    ['a list position of a declaration', [fieldStep('rejections'), indexStep(0)], 'rejections[0]'],
-    ['a union option', [fieldStep('either'), optionStep(2)], 'either<|2>'],
-    ['a field that is no plain token', [fieldStep('Retry After')], '"Retry After"'],
+    ['a tuple item', [field('pair'), { kind: 'index', index: 1 }], 'pair[1]'],
+    ['a list position', [field('rejections'), { kind: 'index', index: 0 }], 'rejections[0]'],
+    ['a union option', [field('either'), { kind: 'option', index: 2 }], 'either<|2>'],
+    ['a field that is no plain token', [field('Retry After')], '"Retry After"'],
   ] as const satisfies readonly (readonly [string, readonly Step[], string | null])[])(
     'steps are written in the author’s terms: %s',
     ([, steps, text]) => {
@@ -69,27 +55,5 @@ describe('authorPathOf', () => {
 
   test('a text on a line is itself when it is plain and JSON otherwise', () => {
     expect([tokenOf('getOrder'), tokenOf('two words')]).toEqual(['getOrder', '"two words"']);
-  });
-});
-
-describe('siteLocationOf', () => {
-  test('a location is its site, then its steps', () => {
-    const site: Site = { kind: 'endpoint', identity: 'POST /b/{}', name: 'createThing' };
-
-    expect(siteLocationOf(site, [fieldStep('visibility')])).toBe(
-      'endpoints.POST /b/{} (createThing) visibility',
-    );
-  });
-
-  test('a location without steps is its site alone', () => {
-    expect(siteLocationOf({ kind: 'code', code: 'LOCKED' }, [])).toBe('codes.LOCKED');
-  });
-
-  test('a declaration listed by position is named by its holder and the position', () => {
-    const steps = [fieldStep('endpoints'), indexStep(2)];
-
-    expect(siteLocationOf({ kind: 'group', name: 'orders' }, steps)).toBe(
-      'groups.orders endpoints[2]',
-    );
   });
 });

@@ -57,7 +57,7 @@ export type {
   NamedDefinitions,
 } from './located.ts';
 export type { Member, Members } from './members.ts';
-export { memberGuardsOf, memberRejectionsOf, membersOf } from './members.ts';
+export { memberGuardsOf, membersOf } from './members.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
 export type { PackageNameParts } from './package-names.ts';
 export { packageNamePartsOf } from './package-names.ts';

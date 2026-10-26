@@ -75,6 +75,6 @@ function reservedFailures(at: Place, code: unknown): readonly DeclarationFailure
   if (!isReservedCode(code)) {
     return [];
   }
-  const message = `A code cf-loom answers as a Fault is reserved: ${textOf(code)}`;
+  const message = `A code cf-loom answers as a Fault is reserved: ${writtenTextOf(code)}`;
   return [failure(inFields(at, 'code'), 'reserved-code', message)];
 }

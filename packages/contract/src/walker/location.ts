@@ -23,8 +23,8 @@ type NamedSite = {
 
 /**
  * What a failure or a Change sits in, as the author declared it. The Check's `ChangeSite` is the
- * kinds a Change is found at, each with its Visibility; the Root, a recursive def and a
- * Definitions Package are sites of failures only.
+ * kinds a Change is found at, each with its Visibility; the Root and a recursive def are sites of
+ * failures only.
  */
 export type Site =
   | { readonly kind: 'root' }
@@ -33,10 +33,9 @@ export type Site =
   | CodeSite
   | NamedSite
   /** A recursive schema by its `.meta({ id })`, where a too-deep Snapshot value sits. */
-  | { readonly kind: 'def'; readonly name: string }
-  | { readonly kind: 'definitions'; readonly label: string };
+  | { readonly kind: 'def'; readonly name: string };
 
-/** The sites a Change is found at: every kind of site but the Root, a recursive def and a Definitions Package. */
+/** The sites a Change is found at: every kind of site but the Root and a recursive def. */
 export type ChangedSite = EndpointSite | MessageSite | CodeSite | NamedSite;
 
 /** A site as every line names it: `endpoints.GET /orders/{} (getOrder)`, `events.OrderCreated@2`, `(root)`. */
@@ -66,8 +65,6 @@ export function siteTextOf(site: Site): string {
       return `standardRejections.${tokenOf(site.name)}`;
     case 'def':
       return `defs.${tokenOf(site.name)}`;
-    case 'definitions':
-      return site.label;
   }
 }
 
@@ -91,7 +88,7 @@ export type Place = {
 /** What a place is called in a sentence: the field it is at, else the name of its site. */
 export function placeNameOf({ site, steps }: Place): string {
   const last = steps.at(-1);
-  if (last?.kind === 'field') {
+  if (last?.kind === 'field' || last?.kind === 'part') {
     return last.name;
   }
   return 'name' in site ? site.name : siteTextOf(site);

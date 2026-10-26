@@ -201,7 +201,7 @@ describe('validateRoot: reserved codes', () => {
       failed(
         `codes.${code} code`,
         'reserved-code',
-        `A code cf-loom answers as a Fault is reserved: ${code}`,
+        `A code cf-loom answers as a Fault is reserved: "${code}"`,
       ),
     );
   });
@@ -217,7 +217,7 @@ describe('validateRoot: reserved codes', () => {
       failed(
         'standardRejections.notFound code',
         'reserved-code',
-        'A code cf-loom answers as a Fault is reserved: NO_SUCH_ENDPOINT',
+        'A code cf-loom answers as a Fault is reserved: "NO_SUCH_ENDPOINT"',
       ),
     );
   });

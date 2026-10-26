@@ -2,7 +2,6 @@ import { expect } from 'vitest';
 import {
   authorPathOf,
   type Failure,
-  siteLocationOf,
   siteTextOf,
   type ValidatedRoot,
   type walkSchemas,
@@ -17,7 +16,9 @@ const snapshotSegment =
  * (listOrders) success.status`, and what it says, without the declaration it sits in.
  */
 export function summaryOf(failure: Failure) {
-  const location = siteLocationOf(failure.site, failure.steps);
+  const path = authorPathOf(failure.steps);
+  const site = siteTextOf(failure.site);
+  const location = path === null ? site : `${site} ${path}`;
   expect(location).not.toMatch(snapshotSegment);
   switch (failure.kind) {
     case 'declaration':
