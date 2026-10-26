@@ -12,17 +12,32 @@ export type Read<Output> =
   | { readonly kind: 'read'; readonly value: Output }
   | { readonly kind: 'refused'; readonly problems: readonly [Problem, ...Problem[]] };
 
-function problemOf(issue: $ZodIssue): Problem {
-  const at: Path = issue.path.map((step) => (typeof step === 'symbol' ? String(step) : step));
-  if (issue.code === 'unrecognized_keys') {
-    return { at: [...at, issue.keys[0] ?? ''], reason: issue.message };
+/** What the input holds at a path, counting only keys it has itself: undefined when it holds none. */
+function valueAtPath(input: unknown, path: readonly PropertyKey[]): unknown {
+  let value = input;
+  for (const step of path) {
+    if (typeof value !== 'object' || value === null || !Object.hasOwn(value, step)) {
+      return undefined;
+    }
+    value = Reflect.get(value, step);
   }
-  return { at, reason: issue.message };
+  return value;
+}
+
+/** Absence is a fact about the input, so it is worded before any message a schema wrote. */
+function problemOf(issue: $ZodIssue, input: unknown): Problem {
+  const at: Path = issue.path.map((step) => (typeof step === 'symbol' ? String(step) : step));
+  const reason = valueAtPath(input, issue.path) === undefined ? 'is missing' : issue.message;
+  if (issue.code === 'unrecognized_keys') {
+    return { at: [...at, issue.keys[0] ?? ''], reason };
+  }
+  return { at, reason };
 }
 
 /**
  * Reads a value with a schema, worded for whoever `definer` names, such as `its format`: every
- * decoder of a document goes through it, so no reason prints zod's own wording.
+ * decoder of a document goes through it, so no reason prints zod's own wording, and a value that
+ * is absent is missing, whatever the schema says of it.
  */
 export function readWith<Schema extends z.core.$ZodType>(
   schema: Schema,
@@ -33,7 +48,7 @@ export function readWith<Schema extends z.core.$ZodType>(
   if (parsed.success) {
     return { kind: 'read', value: parsed.data };
   }
-  const [first, ...later] = parsed.error.issues.map(problemOf);
+  const [first, ...later] = parsed.error.issues.map((issue) => problemOf(issue, input));
   const unworded = { at: [], reason: `is not a value ${definer} defines` };
   return { kind: 'refused', problems: [first ?? unworded, ...later] };
 }

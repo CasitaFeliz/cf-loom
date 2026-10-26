@@ -10,11 +10,10 @@ export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
 
-/** The broker plan calls a string a text; a text that is missing is left to cf-loom's own words. */
+/** The broker plan calls a string a text. */
 function wrongText(reason: string) {
   return {
-    error: (issue: $ZodRawIssue) =>
-      issue.code === 'invalid_type' && issue.input !== undefined ? reason : undefined,
+    error: (issue: $ZodRawIssue) => (issue.code === 'invalid_type' ? reason : undefined),
   };
 }
 

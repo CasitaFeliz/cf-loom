@@ -953,11 +953,11 @@ describe('what applying a broker plan refuses', () => {
     expect(service.opened).toHaveLength(0);
   });
 
-  test('apply refuses limits that are missing, without calling connect', async () => {
+  test('apply refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();
     const prefix = aPrefix();
     const broker = jetstream({ connect: service.connect, prefix });
-    const noLimits: BrokerLimits = Reflect.get({}, 'limits');
+    const noLimits = undefined as unknown as BrokerLimits;
 
     const error = await rejectionOf(broker.apply(anOrders(prefix).plan, noLimits));
 

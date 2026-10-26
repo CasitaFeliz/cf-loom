@@ -60,18 +60,40 @@ describe('readWith', () => {
     expect(firstProblemOf(read)).toEqual({ at: ['type'], reason: 'is missing' });
   });
 
-  test('a message function that answers nothing for a missing key leaves it to cf-loom’s words', () => {
-    const wrongText = (issue: { readonly input?: unknown }) =>
-      issue.input === undefined ? undefined : 'is not a text';
-    const schema = z.strictObject({ name: z.string({ error: wrongText }) });
+  test.for([
+    ['a check', z.string().refine(() => false, 'is not kebab-case')],
+    ['a custom schema', z.custom<string>(() => false, 'is not a semantic version')],
+    ['a type', z.string({ error: () => 'is not a text' })],
+    ['a type, as a union’s', z.union([z.string()], 'is not a text')],
+  ] as const)(
+    'a value that is not there is missing, whatever message the schema wrote for %s',
+    ([_, schema]) => {
+      const read = readWith(z.strictObject({ name: schema }), {}, 'its format');
 
-    const missing = readWith(schema, {}, 'its format');
-    const wrong = readWith(schema, { name: 1 }, 'its format');
+      expect(firstProblemOf(read)).toEqual({ at: ['name'], reason: 'is missing' });
+    },
+  );
 
-    expect([firstProblemOf(missing), firstProblemOf(wrong)]).toEqual([
-      { at: ['name'], reason: 'is missing' },
-      { at: ['name'], reason: 'is not a text' },
-    ]);
+  test('a value that is not there is missing at the root too', () => {
+    const read = readWith(z.object({}), undefined, 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: [], reason: 'is missing' });
+  });
+
+  test('a value that is there keeps the message the schema wrote for it', () => {
+    const schema = z.strictObject({ name: z.string({ error: () => 'is not a text' }) });
+
+    const read = readWith(schema, { name: 1 }, 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: ['name'], reason: 'is not a text' });
+  });
+
+  test('a key of the object that a prototype has, and the object has not, is missing', () => {
+    const schema = z.strictObject({ constructor: z.string() });
+
+    const read = readWith(schema, {}, 'its format');
+
+    expect(firstProblemOf(read)).toEqual({ at: ['constructor'], reason: 'is missing' });
   });
 
   test('a type no document of cf-loom holds says the value is none the definer defines', () => {
@@ -143,23 +165,30 @@ describe('readWith', () => {
     });
   });
 
+  test('a value no form of a union takes says so, of whoever defines the forms', () => {
+    const read = readWith(z.union([z.string(), z.number()]), true, 'the broker plan');
+
+    expect(firstProblemOf(read).reason).toBe('matches none of the forms the broker plan defines');
+  });
+
   test.for([
-    [
-      'a value no form of a union takes',
-      z.union([z.string(), z.number()]),
-      true,
-      'matches none of the forms',
-    ],
     [
       'a discriminator no option has',
       z.discriminatedUnion('type', [z.object({ type: z.literal('a') })]),
-      { type: 'z' },
-      'is not a value',
+      'is not "a"',
     ],
-  ] as const)('%s says so, of whoever defines the forms', ([_, schema, value, start]) => {
-    const read = readWith(schema, value, 'the broker plan');
+    [
+      'a discriminator among several options',
+      z.discriminatedUnion('type', [
+        z.object({ type: z.literal('a') }),
+        z.object({ type: z.literal('b') }),
+      ]),
+      'is none of "a", "b"',
+    ],
+  ] as const)('%s lists the values the options have', ([_, schema, reason]) => {
+    const read = readWith(schema, { type: 'z' }, 'its format');
 
-    expect(firstProblemOf(read).reason).toBe(`${start} the broker plan defines`);
+    expect(firstProblemOf(read)).toEqual({ at: ['type'], reason });
   });
 
   test('a check without a message says the value is none the definer defines', () => {

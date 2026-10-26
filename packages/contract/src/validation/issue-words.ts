@@ -15,34 +15,18 @@ const expectedTypes: Readonly<Record<string, string | undefined>> = {
   int: 'a whole number',
   boolean: 'true or false',
   array: 'a list',
-  tuple: 'a list',
   object: 'an object',
   record: 'an object',
-  null: 'null',
 } satisfies Partial<Record<Named<$ZodInvalidTypeExpected>, string>>;
 
 /** What a bound counts in the origins whose bounds are sizes, rather than values. */
 const sizeUnits: Readonly<Record<string, string | undefined>> = {
   array: 'item',
-  set: 'item',
   string: 'character',
-  file: 'byte',
 } satisfies Partial<Record<Named<$ZodIssueTooSmall['origin']>, string>>;
 
 function isNoValueOf(definer: string): string {
   return `is not a value ${definer} defines`;
-}
-
-function valueAt(input: unknown, key: string): unknown {
-  return typeof input === 'object' && input !== null ? Reflect.get(input, key) : undefined;
-}
-
-/** A value is missing when the key that should hold it holds nothing, or no option names it. */
-function isMissing(issue: $ZodRawIssue): boolean {
-  if (issue.code === 'invalid_union' && issue.discriminator !== undefined) {
-    return valueAt(issue.input, issue.discriminator) === undefined;
-  }
-  return issue.input === undefined;
 }
 
 function invalidTypeWords(issue: IssueOf<'invalid_type'>, definer: string): string {
@@ -54,9 +38,19 @@ function valueText(value: unknown): string {
   return typeof value === 'string' ? JSON.stringify(value) : String(value);
 }
 
-function invalidValueWords({ values }: IssueOf<'invalid_value'>): string {
+function valuesWords(values: readonly unknown[]): string {
   const allowed = values.map(valueText).join(', ');
   return values.length === 1 ? `is not ${allowed}` : `is none of ${allowed}`;
+}
+
+/** A union keyed by a discriminator lists the values its options have, as an enum does. */
+function invalidUnionWords(issue: IssueOf<'invalid_union'>, definer: string): string {
+  if ('options' in issue && Array.isArray(issue.options)) {
+    return valuesWords(issue.options);
+  }
+  return issue.errors.length === 0
+    ? isNoValueOf(definer)
+    : `matches none of the forms ${definer} defines`;
 }
 
 function sizeText(limit: number | bigint, unit: string): string {
@@ -90,14 +84,11 @@ function invalidFormatWords(issue: IssueOf<'invalid_format'>): string {
 }
 
 function wordsOf(issue: $ZodRawIssue, definer: string): string {
-  if (isMissing(issue)) {
-    return 'is missing';
-  }
   switch (issue.code) {
     case 'invalid_type':
       return invalidTypeWords(issue, definer);
     case 'invalid_value':
-      return invalidValueWords(issue);
+      return valuesWords(issue.values);
     case 'too_small':
       return tooSmallWords(issue);
     case 'too_big':
@@ -109,9 +100,7 @@ function wordsOf(issue: $ZodRawIssue, definer: string): string {
     case 'unrecognized_keys':
       return `is a key ${definer} does not define`;
     case 'invalid_union':
-      return issue.errors.length === 0
-        ? isNoValueOf(definer)
-        : `matches none of the forms ${definer} defines`;
+      return invalidUnionWords(issue, definer);
     case 'invalid_key':
       return `is a key that is not a value ${definer} defines`;
     case 'invalid_element':
@@ -123,7 +112,7 @@ function wordsOf(issue: $ZodRawIssue, definer: string): string {
 
 /**
  * Words each issue a schema did not word itself, one case for each of zod's issue codes, so zod's
- * own wording is never printed; a message a schema wrote keeps winning, as zod ranks them.
+ * own wording is never printed; a message a schema wrote for a value that is there keeps winning.
  */
 export function issueWordsOf(definer: string): (issue: $ZodRawIssue) => string {
   return (issue) => wordsOf(issue, definer);

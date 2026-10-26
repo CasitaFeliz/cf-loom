@@ -5,6 +5,7 @@ import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.
 import { byKey, inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText } from './texts.ts';
+import { declaredOrTombstone } from './tombstones.ts';
 
 const text = z.string();
 const codeList = inCanonicalOrder(text, byCodePoint);
@@ -38,10 +39,10 @@ const code = z.strictObject({
   removed: z.boolean(),
 });
 
-const subscription = z.union([
+const subscription = declaredOrTombstone(
   z.strictObject({ group: text, description: text, event: text }),
   z.strictObject({ event: text, removedIn: semanticVersionText }),
-]);
+);
 
 const dependencies = byKey(
   z.strictObject({
