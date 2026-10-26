@@ -1,8 +1,8 @@
 import type { Issue } from '../written/index.ts';
 import { isTextValue, textOfValue } from './text.ts';
 
-/** The parts whose headers travel: an Input's, or a Success's. */
-type HeaderPart = 'success.headers' | 'input.headers';
+/** The parts whose headers travel: an Input's, a Success's or a Rejection's. */
+type HeaderPart = 'success.headers' | 'input.headers' | 'headers';
 
 /** Headers as they travel: each as text, or every one that cannot travel, as Issues at its part. */
 export type HeaderTexts<Part extends HeaderPart> =
@@ -26,7 +26,7 @@ export function isHeaderText(text: string): boolean {
 }
 
 /**
- * The headers of a Success or an Input as they travel, each value as its text; one left
+ * The headers of a Success, a Rejection or an Input as they travel, each value as its text; one left
  * `undefined` is not sent, and one that cannot travel is an Issue at its part, by its name.
  */
 export function headerTextsOf<Part extends HeaderPart>(

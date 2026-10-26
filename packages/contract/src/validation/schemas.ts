@@ -152,11 +152,12 @@ function guardSlots({ at, guard }: LocatedGuard): readonly Slot[] {
   return guardParts.map((part) => slot(owned, part, writtenAt(guard, part)));
 }
 
-/** Each declaration of a code owns its body's slot; a valid Root has one per code. */
+/** Each declaration of a code owns its headers' and its body's slots; a valid Root has one declaration per code. */
 function codeSlots({ rejections }: LocatedCode): readonly Slot[] {
-  return rejections.map(({ at, rejection }) =>
+  return rejections.flatMap(({ at, rejection }) => [
+    slot({ at, owner: rejection }, 'headers', rejection.headers),
     slot({ at, owner: rejection }, 'body', rejection.body),
-  );
+  ]);
 }
 
 /** A shared schema sits under `exports` by the name it is exported as and owns its slot, being no declaration's part. */
