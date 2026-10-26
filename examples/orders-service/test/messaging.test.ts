@@ -37,15 +37,11 @@ async function placeOrder(): Promise<string> {
   return outcome.body.id;
 }
 
-function messagesOn(subject: string) {
-  return broker.messages.filter((message) => message.subject === subject);
-}
-
 describe('orders-service over the memory adapter', () => {
   test('a placed order publishes OrderCreated@1 with its id, customer and total under the Fact id <order id>:created', async () => {
     const orderId = await placeOrder();
 
-    const published = messagesOn('orders-service.event.OrderCreated.v1');
+    const published = broker.messagesOf(orderCreatedV1);
 
     expect(published).toMatchObject([
       {
@@ -58,7 +54,7 @@ describe('orders-service over the memory adapter', () => {
   test('OrderCreated reaches chargeOnCreated, which sends ChargeCard@1 under the Fact id <order id>:charge', async () => {
     const orderId = await placeOrder();
 
-    const sent = messagesOn('orders-service.command.ChargeCard.v1');
+    const sent = broker.messagesOf(chargeCardV1);
 
     expect(sent).toMatchObject([{ factId: `${orderId}:charge`, body: { orderId, total } }]);
   });
@@ -79,7 +75,7 @@ describe('orders-service over the memory adapter', () => {
     await broker.settled();
 
     expect(settlement).toBe('acked');
-    expect(messagesOn('orders-service.command.ChargeCard.v1')).toHaveLength(1);
+    expect(broker.messagesOf(chargeCardV1)).toHaveLength(1);
     expect(chargesOf(orderId)).toEqual([{ orderId, total }]);
   });
 

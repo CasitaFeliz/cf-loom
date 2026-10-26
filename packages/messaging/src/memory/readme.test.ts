@@ -152,7 +152,7 @@ async function createOrderHandler(
 }
 
 describe('the In memory section of the messaging README', () => {
-  test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages lists them, and deliver resolves acked', async () => {
+  test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages and messagesOf list them, and deliver resolves acked', async () => {
     const broker = memory();
     const running = await messaging(contract, broker);
     const resources = { publisher: running.publisher, sender: running.sender };
@@ -161,6 +161,7 @@ describe('the In memory section of the messaging README', () => {
     await createOrderHandler({ body: { total: 12 } }, { resources });
     await broker.settled();
     const messages = broker.messages.map(({ subject }) => subject);
+    const created = broker.messagesOf(orderCreatedV1).map(({ subject }) => subject);
     const settlement = await broker.deliver(
       payments.events.paymentSettledV1,
       { paymentId: PAYMENT_ID },
@@ -173,6 +174,7 @@ describe('the In memory section of the messaging README', () => {
       'orders-service.event.OrderCreated.v2',
       'orders-service.command.ChargeCard.v1',
     ]);
+    expect(created).toEqual(['orders-service.event.OrderCreated.v1']);
     expect(charged).toEqual([ORDER_ID]);
     expect(settlement).toBe('acked');
     expect(notified).toEqual([PAYMENT_ID]);

@@ -69,7 +69,7 @@ const paymentSettledV1 = providedEvent('payments-service', {
   version: 1,
   visibility: 'internal',
   description: 'A payment was settled',
-  body: z.object({ paymentId: z.uuid() }),
+  body: z.object({ paymentId: z.uuid(), status: openEnumReader(statuses) }),
 });
 
 const payments = {
@@ -243,18 +243,21 @@ const created = { orderId: ORDER_ID, status: 'paid' } as const;
 
 const charge = { orderId: ORDER_ID };
 
+const settledPayment = { paymentId: PAYMENT_ID, status: 'paid' } as const;
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('deliver()', () => {
-  test('deliver writes a body given as the Subscriber reads it back through the Reader, so the Handler reads { unknown } for an undeclared Open Enum value', async () => {
+  test('deliver writes a Provided Event’s body, as its Reader reads it, back through the Reader, so the Handler reads { unknown } for an undeclared Open Enum value', async () => {
     const { broker, received } = await running();
+    const refunded = { paymentId: PAYMENT_ID, status: { unknown: 'refunded' } };
 
-    await broker.deliver(orderCreatedV2, { orderId: ORDER_ID, status: { unknown: 'refunded' } });
+    await broker.deliver(paymentSettledV1, refunded);
 
-    const notified = received.find(({ handler }) => handler === 'notifyOnCreated');
-    expect(notified?.body).toEqual({ orderId: ORDER_ID, status: { unknown: 'refunded' } });
+    const notified = received.find(({ handler }) => handler === 'notifyOnSettled');
+    expect(notified?.body).toEqual(refunded);
   });
 
   test.each<[string, Implementation, string]>([
@@ -276,11 +279,11 @@ describe('deliver()', () => {
   test('deliver to a Provider’s Event reaches the Subscription to it', async () => {
     const { broker, received } = await running();
 
-    const settlement = await broker.deliver(paymentSettledV1, { paymentId: PAYMENT_ID });
+    const settlement = await broker.deliver(paymentSettledV1, settledPayment);
 
     expect(settlement).toBe('acked');
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
-      ['notifyOnSettled', { paymentId: PAYMENT_ID }],
+      ['notifyOnSettled', settledPayment],
     ]);
   });
 
@@ -349,10 +352,9 @@ describe('deliver()', () => {
     const directHandler = handle(readers.subscriptions.notifyOnSettled, (_body, meta) => {
       direct.push(meta);
     });
-    const settled = { paymentId: PAYMENT_ID };
 
-    await broker.deliver(paymentSettledV1, settled, { factId: 'f-1' });
-    await directHandler(settled, { factId: 'f-1' });
+    await broker.deliver(paymentSettledV1, settledPayment, { factId: 'f-1' });
+    await directHandler(settledPayment, { factId: 'f-1' });
 
     expect(received[0]?.meta.messageId).toBe(direct[0]?.messageId);
   });
@@ -519,7 +521,7 @@ describe('deliver()', () => {
 
   test('a body that breaks the Reader rejects deliver with InvalidInputError at body, and no Handler runs, not even a first Subscription’s', async () => {
     const { broker, received } = await running();
-    const wrong = { orderId: 'not-a-uuid', status: 'paid' };
+    const wrong = { orderId: 'not-a-uuid', status: 'paid' } as const;
 
     const rejection = await rejectionOf(broker.deliver(orderCreatedV2, wrong));
 
@@ -547,11 +549,15 @@ describe('deliver()', () => {
   });
 
   test.each([
-    ['a stub’s Subscription', paymentSettledV1, 'PaymentSettled@1'],
-    ['a Retired Command', refundV1, 'Refund@1'],
+    [
+      'a stub’s Subscription',
+      { element: paymentSettledV1, body: settledPayment },
+      'PaymentSettled@1',
+    ],
+    ['a Retired Command', { element: refundV1, body: charge }, 'Refund@1'],
   ])(
     'deliver to an Element nothing consumes rejects, naming it: %s',
-    async (_element, element, named) => {
+    async (_which, { element, body }, named) => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const broker = memory();
       const { consume } = await messaging(contract, broker);
@@ -565,7 +571,7 @@ describe('deliver()', () => {
         readers,
       });
 
-      const delivering = broker.deliver(element, {});
+      const delivering = broker.deliver(element, body);
 
       await expect(delivering).rejects.toThrow(`${named} has no consumer`);
     },
@@ -746,14 +752,15 @@ describe('pending and redeliver()', () => {
   });
 
   test('pending lists the wire body, not the form the Handler read', async () => {
-    const { broker, received } = await running(() => ({ notify: throwing }));
+    const { broker, received } = await running(() => ({ settled: throwing }));
+    const refunded = { paymentId: PAYMENT_ID, status: { unknown: 'refunded' } };
 
-    await broker.deliver(orderCreatedV2, { orderId: ORDER_ID, status: { unknown: 'refunded' } });
+    await broker.deliver(paymentSettledV1, refunded);
 
-    const read = received.find(({ handler }) => handler === 'notifyOnCreated')?.body;
-    expect(read).toEqual({ orderId: ORDER_ID, status: { unknown: 'refunded' } });
+    const read = received.find(({ handler }) => handler === 'notifyOnSettled')?.body;
+    expect(read).toEqual(refunded);
     expect(broker.pending.map(({ body }) => body)).toEqual([
-      { orderId: ORDER_ID, status: 'refunded' },
+      { paymentId: PAYMENT_ID, status: 'refunded' },
     ]);
   });
 
