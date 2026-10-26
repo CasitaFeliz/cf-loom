@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import type { IssueCode } from '../declarations/index.ts';
+import { isAbsentAt } from '../written/index.ts';
 
 /** One way a value broke its schema, inside the value: never the received value itself. */
 export type SchemaIssue = {
@@ -79,40 +80,13 @@ function schemaIssuesOf(issue: core.$ZodIssue, value: unknown): readonly SchemaI
       message: 'Unrecognized key',
     }));
   }
-  const code = isMissingAt(value, issue.path) ? 'required' : issueCodeOf(issue);
+  const code = isAbsentAt(value, issue.path) ? 'required' : issueCodeOf(issue);
   return [{ path, code, message: issue.message }];
 }
 
 /** A path key zod may hold as a symbol, which no Contract schema declares, spelled as text. */
 function pathKeyOf(key: PropertyKey): string | number {
   return typeof key === 'symbol' ? String(key) : key;
-}
-
-/**
- * Whether what an issue points at is missing, whatever zod calls it: the value itself, or a key its
- * parent object lacks; a present `undefined`, or one inside a list, is a value of the wrong type.
- */
-function isMissingAt(value: unknown, path: readonly PropertyKey[]): boolean {
-  const key = path.at(-1);
-  if (key === undefined) {
-    return value === undefined;
-  }
-  const parent = valueAt(value, path.slice(0, -1));
-  return isKeyed(parent) && !(key in parent);
-}
-
-function valueAt(value: unknown, path: readonly PropertyKey[]): unknown {
-  let current = value;
-  for (const key of path) {
-    current =
-      typeof current === 'object' && current !== null ? Reflect.get(current, key) : undefined;
-  }
-  return current;
-}
-
-/** An object whose fields are keys, a class instance included; never a list. */
-function isKeyed(value: unknown): value is object {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function issueCodeOf(issue: core.$ZodIssue): IssueCode {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { openEnumReader } from '../index.ts';
-import { encodedValueOf, parseValue } from '../internal/index.ts';
+import { encodedValueOf, parseValue, readWith } from '../internal/index.ts';
 
 const order = z.object({ id: z.uuid(), lines: z.array(z.object({ quantity: z.int().min(1) })) });
 
@@ -37,6 +37,45 @@ function seededNext(seed: number): () => number {
     return state / 2 ** 32;
   };
 }
+
+const withHole = Array.of<string>();
+withHole[1] = 'second';
+
+class Row {
+  readonly id = 'r-1';
+}
+
+class Priced {
+  get total(): unknown {
+    return 'three';
+  }
+}
+
+/** Each kind of input `isAbsentAt` tells apart, with a schema that points an issue at it. */
+const absenceRows: readonly (readonly [string, z.ZodType, unknown])[] = [
+  ['a key held with a value of the wrong type', z.object({ a: z.string() }), { a: 1 }],
+  ['a key the object lacks', z.object({ a: z.string() }), {}],
+  ['a key only the prototype has', z.object({ a: z.number() }), Object.create({ a: 'x' })],
+  ['a key below a key the object lacks', z.object({ in: z.object({ a: z.string() }) }), {}],
+  ['a key written as undefined', z.object({ a: z.string() }), { a: undefined }],
+  ['a key written as null', z.object({ a: z.string() }), { a: null }],
+  ['a record key written as undefined', z.record(z.string(), z.string()), { a: undefined }],
+  [
+    'a key written as undefined, of a union',
+    z.object({ a: z.union([z.string(), z.number()]) }),
+    { a: undefined },
+  ],
+  ['an item of a list of the wrong type', z.array(z.string()), ['a', 1]],
+  ['an item of a list written as undefined', z.array(z.string()), ['a', undefined]],
+  ['an item of a tuple written as undefined', z.tuple([z.string()]), [undefined]],
+  ['a hole of a list', z.array(z.string()), withHole],
+  ['the root, when it is a value of the wrong type', z.string(), 5],
+  ['the root, when it is null', z.string(), null],
+  ['the root, when it is undefined', z.string(), undefined],
+  ['the root, when it is no object', z.object({ a: z.string() }), 'text'],
+  ['a key a class instance lacks', z.object({ id: z.string(), total: z.number() }), new Row()],
+  ['a key a class instance only inherits', z.object({ total: z.number() }), new Priced()],
+];
 
 function codesOf(schema: z.ZodType, value: unknown): readonly string[] {
   const parsed = parseValue(schema, value);
@@ -108,34 +147,64 @@ describe('parseValue', () => {
     expect(parsed).toMatchObject({ kind: 'issues', issues: [{ path: ['t'], code: 'required' }] });
   });
 
-  test('a key present with undefined is invalid_type, in an object or a record', () => {
+  test('a key present with undefined is required, in an object, a record, a union or a discriminator', () => {
+    const discriminated = z.discriminatedUnion('t', [
+      z.object({ t: z.literal('a') }),
+      z.object({ t: z.literal('b') }),
+    ]);
+
     const codes = [
       ...codesOf(z.object({ name: z.string() }), { name: undefined }),
       ...codesOf(z.record(z.string(), z.string()), { a: undefined }),
+      ...codesOf(z.object({ id: z.union([z.string(), z.number()]) }), { id: undefined }),
+      ...codesOf(discriminated, { t: undefined }),
     ];
 
-    expect(codes).toEqual(['invalid_type', 'invalid_type']);
+    expect(codes).toEqual(['required', 'required', 'required', 'required']);
   });
 
-  test('undefined inside an array, a tuple or a Set is invalid_type', () => {
+  test('undefined in a list or a tuple, or a hole of a list, is required', () => {
     const codes = [
       ...codesOf(z.array(z.string()), ['a', undefined]),
       ...codesOf(z.tuple([z.string()]), [undefined]),
-      ...codesOf(z.set(z.string()), new Set([undefined])),
+      ...codesOf(z.array(z.string()), withHole),
     ];
 
-    expect(codes).toEqual(['invalid_type', 'invalid_type', 'invalid_type']);
+    expect(codes).toEqual(['required', 'required', 'required']);
   });
 
   test('a key missing on a class instance is required', () => {
-    class Row {
-      readonly id = 'r-1';
-    }
-
     const codes = codesOf(z.object({ id: z.string(), total: z.number() }), new Row());
 
     expect(codes).toEqual(['required']);
   });
+
+  test('a key a class instance only inherits, whose getter answers the wrong type, is required', () => {
+    const codes = codesOf(z.object({ total: z.number() }), new Priced());
+
+    expect(codes).toEqual(['required']);
+  });
+
+  test.for(absenceRows)(
+    'parseValue says required exactly where readWith says is missing: %s',
+    ([_, schema, value]) => {
+      const parsed = parseValue(schema, value);
+      const read = readWith(schema, value, 'its format');
+
+      const required =
+        parsed.kind === 'issues'
+          ? parsed.issues.filter((issue) => issue.code === 'required').map((issue) => issue.path)
+          : [];
+      const missing =
+        read.kind === 'refused'
+          ? read.problems
+              .filter((problem) => problem.reason === 'is missing')
+              .map((problem) => problem.at)
+          : [];
+
+      expect(required).toEqual(missing);
+    },
+  );
 
   test('a missing value is required', () => {
     const codes = codesOf(z.object({ id: z.string() }), undefined);

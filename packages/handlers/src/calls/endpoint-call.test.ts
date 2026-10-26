@@ -330,16 +330,16 @@ describe('an EndpointHandler’s Input', () => {
   });
 
   test.each([
-    ['required', withoutNote],
-    ['invalid_type', { ...validOrder, note: undefined }],
-    ['invalid_type', { ...validOrder, note: 7 }],
-    ['invalid_value', { ...validOrder, channel: 'fax' }],
-    ['invalid_format', { ...validOrder, email: 'nope' }],
-    ['too_small', { ...validOrder, quantity: 0 }],
-    ['too_big', { ...validOrder, quantity: 12 }],
-    ['not_multiple', { ...validOrder, quantity: 3 }],
-    ['unrecognized_key', { ...validOrder, options: { wrap: true } }],
-  ])('a body that fails as %s gets that code', async (code, broken) => {
+    ['required', 'a field left out', withoutNote],
+    ['required', 'a field left undefined', { ...validOrder, note: undefined }],
+    ['invalid_type', 'a field of the wrong type', { ...validOrder, note: 7 }],
+    ['invalid_value', 'a channel it does not list', { ...validOrder, channel: 'fax' }],
+    ['invalid_format', 'a malformed email', { ...validOrder, email: 'nope' }],
+    ['too_small', 'a quantity under its minimum', { ...validOrder, quantity: 0 }],
+    ['too_big', 'a quantity over its maximum', { ...validOrder, quantity: 12 }],
+    ['not_multiple', 'a quantity that is no multiple', { ...validOrder, quantity: 3 }],
+    ['unrecognized_key', 'a key it does not declare', { ...validOrder, options: { wrap: true } }],
+  ])('a body that fails as %s, with %s, gets that code', async (code, _what, broken) => {
     const body = broken as never;
 
     const issues = await issuesOf(() => created({ ...createInput, body }, {}));
