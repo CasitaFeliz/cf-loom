@@ -170,26 +170,6 @@ describe('handle', () => {
     ]);
   });
 
-  test("a Command's MessageHandler is not a Subscription's, nor another Command's, nor the reverse", () => {
-    const chargeCardHandler = handle(chargeCard, () => undefined);
-    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
-
-    const assignments = [
-      // @ts-expect-error a Handler is nominal over its Command
-      (): MessageHandler<typeof refundCard> => chargeCardHandler,
-      // @ts-expect-error a Command's Handler is not a Subscription's
-      (): MessageHandler<typeof notifyOnPaid> => chargeCardHandler,
-      // @ts-expect-error a Subscription's Handler is not a Command's
-      (): MessageHandler<typeof chargeCard> => notifyOnPaidHandler,
-    ];
-
-    expect(assignments.map((assign) => assign().element)).toEqual([
-      chargeCardV1,
-      chargeCardV1,
-      notifyOnPaidV1,
-    ]);
-  });
-
   test('a MessageHandler is assignable to the MessageHandler of no other pairing, whichever kind', () => {
     type Pairings = typeof chargeCard | typeof refundCard | typeof notifyOnPaid;
     type PairingsItIsAssignedTo<Target extends Pairing> = Target extends Pairing
