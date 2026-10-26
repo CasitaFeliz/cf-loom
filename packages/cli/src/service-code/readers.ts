@@ -60,7 +60,7 @@ const tableKeys = ['commands', 'subscriptions'] as const;
 
 type TableKey = (typeof tableKeys)[number];
 
-/** The table a pairing sits in and the name it has there, which the table lists and a stub passes. */
+/** The table a pairing sits in and the name it has there, which the table lists and a Stub passes. */
 function tableMemberOf(handled: MessageHandled): { readonly key: TableKey; readonly name: string } {
   switch (handled.kind) {
     case 'command':
@@ -70,7 +70,7 @@ function tableMemberOf(handled: MessageHandled): { readonly key: TableKey; reado
   }
 }
 
-/** Where a Message Handler's stub gets its pairing: the readers file's table, by kind and name. */
+/** Where a Message Handler's Stub gets its pairing: the readers file's table, by kind and name. */
 export function pairingTargetOf(handled: MessageHandled, readersFile: string): StubTarget {
   const imported = { kind: 'file', path: readersFile, name: readersTable } as const;
   const { key, name } = tableMemberOf(handled);

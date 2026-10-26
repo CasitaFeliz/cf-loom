@@ -78,7 +78,7 @@ A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [L
 
 ## In a browser (Applications)
 
-An Application (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README) calls its Providers from a browser with this same `client`. The package uses no Node API, only the web-standard `fetch`, `Request`, `Headers` and `URL`. The browser's own concerns of a Request, `credentials` for one, go through the `fetch` option (see [fetch and inferFault](#fetch-and-inferfault)):
+An Application (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README) calls its Providers from a browser with this same `client`. The package uses only web-standard APIs, no Node API. The browser's own concerns of a Request, `credentials` for one, go through the `fetch` option (see [fetch and inferFault](#fetch-and-inferfault)):
 
 ```ts
 const orders = client(ordersDependency, {
@@ -88,7 +88,7 @@ const orders = client(ordersDependency, {
 });
 ```
 
-- **Public Endpoints only.** An Application's Dependency lists Public Endpoints, since a browser runs outside the internal network; any other is a type error.
+- **Public Endpoints only.** An Application's Dependency lists Public Endpoints only, since an Application runs outside the internal network; any other is a type error (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README).
 - **CORS is the host's or the gateway's.** The client sets no CORS header and `serve` adds none to an Endpoint's own response; whatever wraps the handler `serve` returns, or the organization's gateway, does. A header such as `x-api-key` makes the browser send a preflight `OPTIONS` first, which `serve` answers `METHOD_NOT_ALLOWED`, or `NO_SUCH_ENDPOINT` on a path no Endpoint declares, unless the Service's `fallback`, the host or the gateway answers it (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README and [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md).
 - **A network failure is not retryable.** A browser reports a refused connection, a DNS failure and a request blocked by CORS alike as a bare `TypeError`, which tells nothing about whether the request went out, so the client infers `connection-failed`: `committed: 'unknown'`, `retryable: false` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). An organization that knows its network relaxes that with `inferFault`.
 

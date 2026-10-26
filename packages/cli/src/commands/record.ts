@@ -38,7 +38,7 @@ type WrittenFiles =
 /**
  * Reads every file under `src/` that starts with the line `generate` writes first, and the
  * Handlers the Handler maps among them import, against the layout and the disk. After a layout
- * changes or a Group is renamed, the map would otherwise import a fresh stub.
+ * changes or a Group is renamed, the map would otherwise import a fresh Stub.
  */
 export function recordOf(service: PlacedService): RecordRead {
   const { directory } = service.project;

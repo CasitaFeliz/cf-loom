@@ -495,7 +495,7 @@ describe('a Message Handler stub', () => {
     const call = stub(body, meta);
 
     await expect(call).rejects.toEqual(
-      new Error("notifyOnSettled's Handler is a stub, which consume never runs"),
+      new Error("notifyOnSettled's Handler is a Stub, which consume never runs"),
     );
   });
 

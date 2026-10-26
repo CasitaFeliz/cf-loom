@@ -24,7 +24,7 @@ import { returnedOf } from './implementation.ts';
 /** An implementation as the runtime calls it, whatever Element it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Element, its implementation, and whether it is a stub. */
+/** What a Handler was written with: its Element, its implementation, and whether it is a Stub. */
 export type Written<Answering extends HandledElement> = {
   readonly element: Answering;
   readonly implementation: Implementation;

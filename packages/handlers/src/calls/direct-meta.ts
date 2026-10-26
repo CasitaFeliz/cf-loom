@@ -2,7 +2,7 @@ import type { Command, Event } from '@cf-loom/contract';
 import { brokerMessageIdOf } from '@cf-loom/contract/internal';
 import type { MessageMeta } from './message-run.ts';
 
-/** The meta a direct call takes: each part left out is defaulted by `defaultedMetaOf`. */
+/** The meta a direct call of a Message Handler takes: each part left out is defaulted as `deliver` defaults it. */
 export type DirectMeta = Partial<MessageMeta>;
 
 /** A Message's first attempt, as a direct call and the in-memory `deliver` give it: attempt 1, not the last. */

@@ -35,7 +35,7 @@ export const notFound: StandardRejection<'notFound'> = freezeDeclaration('standa
   name: 'notFound',
 });
 
-/** The Rejection cf-loom's runtime answers for a Handler that is still a stub. */
+/** The Rejection cf-loom's runtime answers for a Handler that is still a Stub. */
 export const notImplemented: StandardRejection<'notImplemented'> = freezeDeclaration(
   'standard-rejection',
   {

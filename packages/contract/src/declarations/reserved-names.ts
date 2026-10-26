@@ -1,6 +1,6 @@
 /**
  * The words code cannot declare or import a binding by: ECMAScript's reserved words, strict mode's
- * included, `eval` and `arguments`, and `handle`, which every stub imports.
+ * included, `eval` and `arguments`, and `handle`, which every Stub imports.
  */
 const reservedWords = [
   'arguments',

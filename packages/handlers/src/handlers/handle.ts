@@ -207,6 +207,6 @@ const notImplementedStub: Implementation = () => reject(notImplemented);
 
 function messageStubOf(element: MessageElement): Implementation {
   return () => {
-    throw new Error(`${elementNameOf(element)}'s Handler is a stub, which consume never runs`);
+    throw new Error(`${elementNameOf(element)}'s Handler is a Stub, which consume never runs`);
   };
 }

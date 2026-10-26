@@ -99,7 +99,7 @@ A technical failure that no Endpoint, Guard or Message declares, produced by a H
 _Avoid_: error, server error, operation failure
 
 **Reserved code**:
-A code cf-loom's runtime answers outside the Contract, as a Fault that carries it: `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED`, `BODY_TOO_LARGE` and `INVALID_OUTCOME`. No Contract or Definitions Package declares one, and no Handler produces one.
+A code cf-loom's runtime answers outside the Contract, as a Fault that carries it, one of those listed in [Over HTTP](ARCHITECTURE.md#over-http). No Contract or Definitions Package declares one, and no Handler produces one.
 _Avoid_: the Caller's Fault, error code, reserved Fault
 
 **Envelope**:
@@ -145,7 +145,7 @@ The Broker's named, persistent position of one Subscription, or of one Command's
 _Avoid_: subscriber, queue group, cursor
 
 **Broker prefix**:
-An optional kebab-case name in front of every subject, stream and durable consumer name, so several environments can share one Broker. The Service's adapter and the commands that print plans take it; it is no part of a Contract or a Snapshot.
+An optional kebab-case name in front of every subject, stream and durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it; it is no part of a Contract or a Snapshot.
 _Avoid_: namespace, environment, prefix (alone)
 
 **Broker message id**:
@@ -158,7 +158,7 @@ _Avoid_: metadata, Message header
 
 **Delivery**:
 One Message as the Broker hands it to the Service, with how many times it has been delivered; a Message delivered again is another Delivery.
-_Avoid_: message, attempt
+_Avoid_: message
 
 **Settlement**:
 What a Delivery ends as, which the adapter applies to the Broker: `'acked'`, `'pending'` (left for redelivery), `'ended'` (never delivered again) or `'handed-back'` (returned unsettled while closing, for redelivery now).

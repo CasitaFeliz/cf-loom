@@ -18,7 +18,7 @@ export type ImportedPackage = {
   readonly identity: PackageIdentity;
   /**
    * The first, in code point order, of the specifiers that are no relative path the project's own
-   * files import it by, which a stub imports from; none when only other packages import it.
+   * files import it by, which a Stub imports from; none when only other packages import it.
    */
   readonly specifier: string | undefined;
   /** The package.json paths of the packages whose files import it, `project` for the project's own. */
@@ -143,7 +143,7 @@ async function exportsOf(url: string): Promise<Readonly<Record<string, unknown>>
   }
 }
 
-/** A specifier a stub can import from too: a package name or one of the package's own `imports`, never a relative path. */
+/** A specifier a Stub can import from too: a package name or one of the package's own `imports`, never a relative path. */
 function isNamed(specifier: string): boolean {
   return !specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.includes(':');
 }
