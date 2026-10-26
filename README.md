@@ -65,13 +65,57 @@ src/
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 .cf-loom/
 └── contract-package/                      the Contract Package cf-loom package writes; built, never edited
+cf-loom.config.ts                          optional: where the Handlers and the generated files sit
+contract.snapshot.json                     the declared Snapshot generate writes; committed, never edited
 ```
 
-The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in an optional `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
+The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in an optional `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. `contract.snapshot.json` is committed, so every change to the Contract shows in review, and `.cf-loom/` holds only output. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
 A Definitions Package is laid out the same way under `src/definitions/`: its Root `index.ts` exports its Definitions object (`init` names it `definitions`) and every Guard, Rejection and schema Services import, and nothing else, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services import.
 
 The examples in the package READMEs follow this layout and leave out imports of `zod`, `@cf-loom/contract` and sibling files.
+
+### Set up
+
+A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
+
+- `"type": "module"`: every `cf-loom` command exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
+- a scoped `name` such as `@org/orders-service`: the Contract of a Service or an Application is named after it without its scope, which must be kebab-case, and its Contract Package is `@org/contract-orders-service`;
+- `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
+
+`zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
+
+| For | Install |
+| --- | --- |
+| Every package | `@cf-loom/contract` and `zod`; `@cf-loom/cli` as a devDependency |
+| A Service or a Definitions Package | `typescript` as a devDependency |
+| A Service | `@types/node` as a devDependency |
+| Endpoints | `@cf-loom/handlers` and `@cf-loom/server` |
+| Messages | `@cf-loom/handlers` and `@cf-loom/messaging`; on JetStream also `@nats-io/jetstream`, `@nats-io/nats-core` and a transport such as `@nats-io/transport-node`, all on one version (see [JetStream](packages/messaging/README.md#jetstream)) |
+| Calling a Provider | `@cf-loom/client`, and the Provider's Contract Package as an ordinary dependency |
+| Tests of a Consumer | `@cf-loom/testing` as a devDependency |
+| A Definitions Package | `@cf-loom/contract` and `zod` as `peerDependencies` too (see [Definitions Packages](packages/contract/README.md#definitions-packages)) |
+
+Use TypeScript 7, the version cf-loom is built and tested with; 5.x does not type-check a Message Handler. `publish` builds a Service's Contract Package with the `tsc` of the `typescript` installed in the project. Relative imports name the `.ts` file, which `tsc` accepts only with `allowImportingTsExtensions` (it reports TS5097 on each import otherwise), and a Service needs `@types/node` named in `types`, which defaults to none. `init` writes no `tsconfig.json`; this one type-checks a Service that Node runs from source:
+
+```json
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
+```
+
+A project that emits with `tsc` sets `rewriteRelativeImportExtensions`, a `rootDir` and an `outDir` in place of `allowImportingTsExtensions` and `noEmit`. Put `.cf-loom/` in `.gitignore`.
+
+`check` and `publish` read the registry through the `npm` on your `PATH`, so they need an npm login that can read the scope's registry, even before the first publish; `generate`, `verify` and `package` run offline (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Declare
 
@@ -79,7 +123,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 ### Generate
 
-`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
+`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). A formatter must leave the files it writes as they are, and Git must keep their line endings LF: the rule, and the `.gitattributes` `init` writes for it, are under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
 
 ### Implement
 
@@ -96,3 +140,55 @@ A Handler is called directly, with the Resources the test builds (see [Testing a
 ### Publish
 
 `cf-loom package` writes the Contract Package to `.cf-loom/contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package; when to publish is the organization's (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
+
+#### Check in CI
+
+A CI job runs plain commands after the install and reads their exit status (see [Commands](packages/cli/README.md#commands)); `check` needs the npm login of [Set up](#set-up):
+
+```sh
+cf-loom verify
+cf-loom check
+```
+
+`check` exits 0 when no Change needs a Breaking Change Approval, 2 when one does, 1 when a Change is refused or `generate` must run, and 3 on a tooling error. Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
+
+```
+Checked against @org/contract-orders-service@1.0.0
+endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.placedAt: Breaking, needs a Breaking Change Approval
+Would publish @org/contract-orders-service@2.0.0 (major)
+```
+
+and stderr says `1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it`. A Neutral Change needs none, and `check` exits 0:
+
+```
+Checked against @org/contract-billing-service@1.0.0
+subscriptions.draftInvoiceOnCreated description-changed: Neutral
+No Change needs a Breaking Change Approval
+Would publish @org/contract-billing-service@1.0.1 (patch)
+```
+
+A refused Change fails the check whatever Approval is given: here an Event's body lost a field, which only a new Message Version may change (see [Messages](COMPATIBILITY.md#messages) in COMPATIBILITY.md). `check` exits 1 and stderr says `The check failed: 1 Change(s) refused`:
+
+```
+Checked against @org/contract-orders-service@1.0.0
+events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused; make the change in a new Message Version
+```
+
+A job that reads one document runs `cf-loom check --json`, whose `errors` hold what stderr says (see [--json](packages/cli/README.md#--json) in the CLI README).
+
+#### Trying a Contract Package before publishing
+
+`cf-loom package` writes the Contract Package ready for `tsc`, and a Consumer installs that folder from disk (`link:` as billing-service's package.json has it, or `file:`) before anything is published:
+
+```sh
+cf-loom package
+tsc -p .cf-loom/contract-package
+```
+
+The folder's package.json is version `0.0.0`, so a Consumer that installs it records `against: '0.0.0'` for the Provider, and `check` and `publish` say that the registry does not list it (see [Configuration](packages/cli/README.md#configuration) in the CLI README), `publish` with exit 3:
+
+```
+dependencies.orders-service is against @org/contract-orders-service@0.0.0, which the registry does not list: install a published version
+```
+
+Once the Provider is published, install that version in the Consumer: `check` and `publish` stop on the stale Snapshot, with exit 1, until `cf-loom generate` records it.

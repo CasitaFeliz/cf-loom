@@ -62,7 +62,7 @@ Every shape is read in one of three Positions:
 - **Success**, and a Rejection's body: the Service writes, the Caller reads. Breaking is whatever makes the Service guarantee less.
 - **Message**: written at one time and read at another by any Release: old or new publisher, old or new Subscriber, queued or replayed. A Message change takes the stronger of the Input and Success classes.
 
-Readers of a Read shape (a Success, a Rejection body or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
+Readers of a Read shape (a Success, a Rejection body or a Message body) ignore fields they do not know. Objects are open: a Contract declares no strict object (see [Refused constructs](packages/contract/README.md#refused-constructs) in the contract README). Headers follow one more rule (see [Headers, path and query](#headers-path-and-query)).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -101,7 +101,7 @@ A union of literals is an enum (see [Schemas](SNAPSHOT.md#schemas) in SNAPSHOT.m
 
 ### Constraints
 
-Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`. Each is compared on its own: `min` and `exclusiveMin` are one lower bound, and `max` and `exclusiveMax` one upper bound (see [Schemas](SNAPSHOT.md#schemas)); whether one `multipleOf` is a multiple of another is judged exactly, on its decimal digits. When one constraint tightens and another relaxes, together the Changes are Breaking in every Position.
+Constraints are `min`, `max`, `exclusiveMin`, `exclusiveMax`, item counts, `int`, `multipleOf`, `format` with its options, and `regex`; an exact length is `min` equal to `max`. Each is compared on its own: `min` and `exclusiveMin` are one lower bound, and `max` and `exclusiveMax` one upper bound (see [Schemas](SNAPSHOT.md#schemas)); whether one `multipleOf` is a multiple of another is judged exactly, on its decimal digits. When one constraint tightens and another relaxes, `check` reports two Changes, and in every Position at least one is Breaking (in Message both are).
 
 | Change | Input | Success | Message |
 | --- | --- | --- | --- |
@@ -142,7 +142,7 @@ Descriptions, a Group's included, examples, a Rejection's message, key order, an
 
 ### Not allowed in a Contract
 
-A Contract describes shapes, not behavior. Only the nodes and checks listed in [Schemas](SNAPSHOT.md#schemas) are allowed; `generate` fails on anything else, defaults, transforms, refinements, coercion and custom validation included (see [Not allowed](SNAPSHOT.md#not-allowed) in SNAPSHOT.md).
+A Contract describes shapes, not behavior. Only the nodes and checks listed in [Schemas](SNAPSHOT.md#schemas) are allowed; `generate` fails on anything else, defaults, transforms, refinements, coercion and custom validation included (see [Refused constructs](packages/contract/README.md#refused-constructs) in the contract README).
 
 ### Rejections
 
