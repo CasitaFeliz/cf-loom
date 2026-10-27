@@ -2,8 +2,8 @@ import type { Defs, Path, SchemaNode } from '../walker/index.ts';
 import { declaredEndpointsOf, declaredMessagesOf, type SchemaHolder } from './declared.ts';
 import {
   declaredCodesOf,
+  heldFormerInputsOf,
   type MessageTombstone,
-  type RemovedCode,
   removedCodesOf,
 } from './published.ts';
 import type {
@@ -28,21 +28,26 @@ type Parts = Readonly<Record<string, SchemaNode | null>>;
 
 /**
  * Where a Snapshot's `ref`s resolve: its own `defs` for every declared node, and for each removed
- * code its own `defs`, which its headers, body and defs name.
+ * code and each former Input its own `defs`, which its parts and defs name.
  */
 export function defScopesOf(snapshot: SchemaHolder): readonly DefScope[] {
   const own = { at: ['defs'], defs: snapshot.defs, nodes: declaredNodesOf(snapshot) };
-  const removed = removedCodesOf(snapshot.codes).map(([code, held]) => removedScopeOf(code, held));
-  return [own, ...removed];
+  const removed = removedCodesOf(snapshot.codes).map(([code, { headers, body, defs }]) =>
+    historyScopeOf(['codes', code, 'defs'], defs, partsAt(['codes', code], { headers, body })),
+  );
+  const former = heldFormerInputsOf(snapshot).map(({ input, defs }, index) =>
+    historyScopeOf(
+      ['formerInputs', index, 'defs'],
+      defs,
+      partsAt(['formerInputs', index, 'input'], input),
+    ),
+  );
+  return [own, ...removed, ...former];
 }
 
-function removedScopeOf(code: string, { headers, body, defs }: RemovedCode): DefScope {
-  const at = ['codes', code, 'defs'];
-  return {
-    at,
-    defs,
-    nodes: [...partsAt(['codes', code], { headers, body }), ...partsAt(at, defs)],
-  };
+/** A history entry's scope: its own defs at `at`, which its parts and those defs name. */
+function historyScopeOf(at: Path, defs: Defs, parts: readonly SnapshotNode[]): DefScope {
+  return { at, defs, nodes: [...parts, ...partsAt(at, defs)] };
 }
 
 /** The node of each exported schema, at its export. */

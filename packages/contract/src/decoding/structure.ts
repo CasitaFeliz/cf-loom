@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { PublishedSnapshot } from '../snapshot/index.ts';
-import { byCodePoint } from '../walker/index.ts';
+import type { FormerInput, PublishedSnapshot } from '../snapshot/index.ts';
+import { byCodePoint, canonicalJson } from '../walker/index.ts';
 import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.ts';
 import { byKey, inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
@@ -57,6 +57,33 @@ const subscription = declaredOrTombstone(
   z.strictObject({ event: text, removedIn: semanticVersionText }),
 );
 
+/** Format 1's former Input: an Endpoint's query and body as a version declared them, with the defs its `ref`s name. */
+const formerInput = z.strictObject({
+  endpoint: text,
+  removedIn: semanticVersionText,
+  input: z.strictObject({ query: objectNode, body: schemaNode.nullable() }),
+  defs: byKey(def),
+});
+
+/** A Service's former Inputs: by Endpoint in code point order, each Endpoint's in the order recorded, each `removedIn` once. */
+const formerInputs = z.array(formerInput).superRefine((held, ctx) => {
+  const isOrdered = held.every((former, index) => {
+    const previous = held[index - 1];
+    return previous === undefined || byCodePoint(previous.endpoint, former.endpoint) <= 0;
+  });
+  if (!isOrdered || !isEachRemovedInOnce(held)) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'is not by Endpoint in code point order, each Endpoint’s removedIn once',
+    });
+  }
+});
+
+function isEachRemovedInOnce(held: readonly FormerInput[]): boolean {
+  const recorded = held.map(({ endpoint, removedIn }) => canonicalJson([endpoint, removedIn]));
+  return new Set(recorded).size === recorded.length;
+}
+
 const dependencies = byKey(
   z.strictObject({
     against: semanticVersionText,
@@ -87,6 +114,7 @@ const service = z.strictObject({
   codes: byKey(publishedCode),
   subscriptions: byKey(subscription),
   dependencies,
+  formerInputs,
 });
 
 const application = z.strictObject({ ...heading, kind: z.literal('application'), dependencies });

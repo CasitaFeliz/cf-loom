@@ -4,6 +4,7 @@ import {
   declaredMessagesOf,
   declaredSubscriptionsOf,
   defScopesOf,
+  heldFormerInputsOf,
   type Keyed,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
@@ -19,8 +20,8 @@ import {
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, with the defs it resolves in, a code an
- * Endpoint or Guard lists, the code a Standard Rejection resolved to, a Guard, or the Group a
- * declared Element or Subscription names.
+ * Endpoint or Guard lists, the code a Standard Rejection resolved to, a Guard, the Group a
+ * declared Element or Subscription names, or the Endpoint a former Input was of.
  */
 export type Use =
   | {
@@ -30,14 +31,14 @@ export type Use =
       readonly defs: Defs;
     }
   | {
-      readonly kind: 'code' | 'standard-code' | 'guard' | 'group';
+      readonly kind: 'code' | 'standard-code' | 'guard' | 'group' | 'endpoint';
       readonly name: string;
       readonly at: Path;
     };
 
 type Used = PublishedServiceSnapshot | PublishedDefinitionsSnapshot;
 
-/** Every name a Service's or a Definitions Package's Snapshot uses: its refs, codes, Guards, then Groups. */
+/** Every name a Service's or a Definitions Package's Snapshot uses: its refs, codes, Guards, Groups, then Endpoints. */
 export function usesOf(snapshot: Used): readonly Use[] {
   const endpoints = declaredEndpointsOf(snapshot);
   const guards = Object.entries(snapshot.guards);
@@ -66,6 +67,11 @@ export function usesOf(snapshot: Used): readonly Use[] {
     ),
     ...exportUsesOf(snapshot),
     ...groupUsesOf(snapshot),
+    ...heldFormerInputsOf(snapshot).map(({ endpoint }, index) => ({
+      kind: 'endpoint' as const,
+      name: endpoint,
+      at: ['formerInputs', index, 'endpoint'],
+    })),
   ];
 }
 

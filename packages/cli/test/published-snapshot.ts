@@ -54,6 +54,7 @@ const serviceBody = {
   codes: standardCodes,
   subscriptions: {},
   dependencies: {},
+  formerInputs: [],
 } as const;
 
 const applicationBody = { kind: 'application', dependencies: {} } as const;

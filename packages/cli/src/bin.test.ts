@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodeSnapshot, zodPeerRange } from '@cf-loom/contract/internal';
+import { decodeSnapshot, publishedSnapshotOf, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
@@ -2953,7 +2953,8 @@ function publishedAs(
   more: Readonly<Record<string, unknown>> = {},
 ): ServedVersion {
   const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
-  const published = { ...snapshot, ...more, version, generator: '@cf-loom/cli@0.0.0' };
+  const history = snapshot.kind === 'service' ? { formerInputs: [] } : {};
+  const published = { ...snapshot, ...history, ...more, version, generator: '@cf-loom/cli@0.0.0' };
   const declared = { kind: snapshot.kind, name: snapshot.name };
   const snapshotJson = canonicalTextOf(published);
   return aVersion(version, { declared, snapshotJson, peers: publishedPeers });
@@ -4586,6 +4587,71 @@ function publishedWithOtherPeer(project: string, range: string): ServedVersion {
   const peerDependencies = { ...publishedPeers, '@org/other': range };
   return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 }
+
+/** `aRootReading` a body of an `id` and the fields given. */
+function aRootReadingBody(fields: string): Files {
+  return aRootReading(`{ body: z.object({ id: z.string()${fields} }) }`);
+}
+
+/**
+ * A project published as 1.0.0 reading an optional `note` number, then as 1.1.0 without it, with
+ * the former Input that publish keeps, now reading `note` as `note` says.
+ */
+async function aProjectDeclaringNoteAgain(lab: Lab, note: string) {
+  const project = await aGeneratedProject(lab, aRootReadingBody(', note: z.number().optional()'));
+  const first = JSON.parse(read(project, 'contract.snapshot.json'));
+  const published = publishedAs(project, '1.0.0');
+  write(project, aRootReadingBody(''));
+  await generateIn(lab, project);
+  const second = JSON.parse(read(project, 'contract.snapshot.json'));
+  const heading = { version: '1.0.0', generator: '@cf-loom/cli@0.0.0' };
+  const baseline = publishedSnapshotOf({ ...first, ...heading, formerInputs: [] }, second, {
+    ...heading,
+    version: '1.1.0',
+  });
+  const removed = publishedAs(project, '1.1.0', { formerInputs: baseline.formerInputs });
+  write(project, aRootReadingBody(`, note: ${note}`));
+  await generateIn(lab, project);
+  return { project, served: servedAs(ordersPackage, published, removed) };
+}
+
+describe.concurrent('cf-loom check, a former Input', () => {
+  test('check after a publish that removed an optional body field exits 2 for a version that declares it again with another type, its line naming removedIn', async ({
+    lab,
+  }) => {
+    const changed = await aProjectDeclaringNoteAgain(lab, 'z.string().optional()');
+
+    const { ran } = await checkedAgainst(lab, changed);
+
+    expect(ran.status).toBe(2);
+    expect(ran.stdout.split('\n')).toEqual([
+      `Checked against ${ordersPackage}@1.1.0`,
+      'endpoints.POST /ping (ping) schema field-added at input.body.note required=false: Additive',
+      `endpoints.POST /ping (ping) schema type-changed at input.body.note removedIn="1.1.0" from=number to=string: ${needsApproval}`,
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
+      '',
+    ]);
+  });
+
+  test('check --json carries removedIn on the Difference found against a former Input', async ({
+    lab,
+  }) => {
+    const changed = await aProjectDeclaringNoteAgain(lab, 'z.string().optional()');
+
+    const { ran } = await checkedAgainst(lab, changed, '--json');
+
+    expect(JSON.parse(ran.stdout).changes[1]).toMatchObject({
+      difference: {
+        kind: 'schema',
+        at: ['input', 'body', 'fields', 'note'],
+        shape: { kind: 'type-changed', from: 'number', to: 'string' },
+        removedIn: '1.1.0',
+      },
+      path: 'input.body.note',
+      class: 'breaking',
+    });
+  });
+});
 
 describe.concurrent('cf-loom check, the version publish would take', () => {
   const wouldPublish = (version: string, why: string) =>

@@ -121,7 +121,14 @@ function aCommand(): CommandSnapshot {
 }
 
 function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
-  return { ...heading, version: '3.4.0', generator: publishedBy, endpoints: {}, ...fields };
+  return {
+    ...heading,
+    version: '3.4.0',
+    generator: publishedBy,
+    formerInputs: [],
+    endpoints: {},
+    ...fields,
+  };
 }
 
 function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {

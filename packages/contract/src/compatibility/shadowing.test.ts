@@ -95,6 +95,7 @@ function aBaseline(
     ...heading,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: Object.fromEntries([...published, ...retired]),
   };
 }

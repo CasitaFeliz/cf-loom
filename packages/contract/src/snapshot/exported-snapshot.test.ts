@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { aRootPackage } from '../../test/root-package.ts';
-import { publishedAt } from '../../test/snapshots.ts';
+import { publishedServiceAt } from '../../test/snapshots.ts';
 import {
   defineDefinitions,
   defineEndpoint,
@@ -520,7 +520,7 @@ describe('exportedSnapshotOf', () => {
   test('a published Snapshot’s tombstones and still-declared Retired Elements are left out of the exported Snapshot', () => {
     const published: PublishedServiceSnapshot = {
       ...aServiceSnapshot(),
-      ...publishedAt('3.4.0'),
+      ...publishedServiceAt('3.4.0'),
       commands: {},
       subscriptions: {},
       endpoints: {
@@ -738,7 +738,7 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
   test('an Endpoint a published Snapshot holds only as a tombstone is never carried', () => {
     const published: PublishedServiceSnapshot = {
       ...aServiceSnapshot(),
-      ...publishedAt('3.4.0'),
+      ...publishedServiceAt('3.4.0'),
       commands: {},
       subscriptions: {},
       events: {},

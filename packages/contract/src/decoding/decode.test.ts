@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
-import { publishedAt, schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedServiceAt, schemaExports } from '../../test/snapshots.ts';
 import {
   defineCommand,
   defineEndpoint,
@@ -85,6 +85,7 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
+    formerInputs: [],
     standardRejections,
     groups: { orders: { description: 'Order lifecycle' } },
     defs: {},
@@ -366,7 +367,7 @@ describe('decodeSnapshot', () => {
 
     test('a Snapshot built from a Contract decodes once it has a version and a generator', () => {
       const snapshot = declaredSnapshot();
-      const published = { ...snapshot, ...publishedAt('1.0.0') };
+      const published = { ...snapshot, ...publishedServiceAt('1.0.0') };
 
       const result = decodedFrom(published);
 
@@ -2101,6 +2102,148 @@ describe('decodeSnapshot', () => {
       });
     });
 
+    describe('a former Input names an Endpoint the Snapshot declares, and its refs the defs it holds', () => {
+      const orders = 'POST /orders';
+      const aFormerInput = (fields: object = {}) => ({
+        endpoint: orders,
+        removedIn: '3.2.0',
+        input: { query: emptyPart, body: anObjectOf(stringNode) },
+        defs: {},
+        ...fields,
+      });
+      const withFormerInputs = (formerInputs: readonly object[], fields: object = {}) =>
+        serviceWith({ endpoints: { [orders]: withoutParams }, formerInputs, ...fields });
+
+      test('a former Input decodes with the defs its query and body reached, though the Snapshot holds none', () => {
+        const published = aService({
+          endpoints: { [orders]: withoutParams },
+          formerInputs: [
+            {
+              endpoint: orders,
+              removedIn: '3.2.0',
+              input: { query: emptyPart, body: anObjectOf(aRef('tree')) },
+              defs: { tree: treeDef },
+            },
+          ],
+        });
+
+        const result = roundTrip(published);
+
+        expect(result).toEqual({ kind: 'decoded', snapshot: published });
+      });
+
+      test.each([
+        ['does not hold', {}],
+        ['holds as a tombstone', { [orders]: endpointTombstone }],
+        [
+          'holds Retired',
+          { [orders]: { ...withoutParams, lifecycle: 'retired', retiredIn: '3.0.0' } },
+        ],
+      ])(
+        'a former Input naming an Endpoint the Snapshot %s is malformed at the endpoint',
+        (_name, endpoints) => {
+          const result = serviceWith({ endpoints, formerInputs: [aFormerInput()] });
+
+          expect(result).toEqual(
+            malformedAt(
+              ['formerInputs', 0, 'endpoint'],
+              `names an Endpoint the Snapshot does not hold declared and not Retired: ${orders}`,
+            ),
+          );
+        },
+      );
+
+      test('a former Input whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const body = anObjectOf(aRef('tree'));
+
+        const result = withFormerInputs([aFormerInput({ input: { query: emptyPart, body } })], {
+          defs: { tree: treeDef },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'input', 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a former Input’s def that leads back to itself with no node between is malformed at the def', () => {
+        const result = withFormerInputs([aFormerInput({ defs: { tree: aRef('tree') } })]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'defs', 'tree'],
+            'leads back to itself through refs, unions and allOfs alone',
+          ),
+        );
+      });
+
+      test('former Inputs out of Endpoint order are malformed at formerInputs', () => {
+        const other = 'GET /orders';
+        const endpoints = { [orders]: withoutParams, [other]: withoutParams };
+
+        const result = serviceWith({
+          endpoints,
+          formerInputs: [aFormerInput(), aFormerInput({ endpoint: other })],
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs'],
+            'is not by Endpoint in code point order, each Endpoint’s removedIn once',
+          ),
+        );
+      });
+
+      test('one Endpoint’s former Inputs with a removedIn twice are malformed at formerInputs', () => {
+        const result = withFormerInputs([
+          aFormerInput(),
+          aFormerInput({ removedIn: '3.3.0' }),
+          aFormerInput(),
+        ]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs'],
+            'is not by Endpoint in code point order, each Endpoint’s removedIn once',
+          ),
+        );
+      });
+
+      test('a published Service Snapshot without formerInputs is malformed at formerInputs: it is missing', () => {
+        const { formerInputs: _formerInputs, ...published } = aService();
+
+        const result = decodedFrom(published);
+
+        expect(result).toEqual(malformedAt(['formerInputs'], 'is missing'));
+      });
+
+      test('a former Input carrying headers is malformed at headers: its format does not define it', () => {
+        const input = { query: emptyPart, headers: emptyPart, body: null };
+
+        const result = withFormerInputs([aFormerInput({ input })]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'input', 'headers'],
+            'is a key its format does not define',
+          ),
+        );
+      });
+
+      test('formerInputs on a Definitions Package or an Application is malformed: its format does not define it', () => {
+        const snapshots = [aDefinitions(), anApplication()];
+
+        const results = snapshots.map((snapshot) => decodedFrom({ ...snapshot, formerInputs: [] }));
+
+        expect(results).toEqual([
+          malformedAt(['formerInputs'], 'is a key its format does not define'),
+          malformedAt(['formerInputs'], 'is a key its format does not define'),
+        ]);
+      });
+    });
+
     test.each<[string, SchemaNode]>([
       ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
       ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
@@ -2550,6 +2693,22 @@ const formatOneFixture = `{
     }
   },
   "format": 1,
+  "formerInputs": [
+    {
+      "defs": {
+        "note": { "fields": { "text": { "required": true, "schema": { "type": "string" } } }, "type": "object" }
+      },
+      "endpoint": "GET /orders/{}",
+      "input": {
+        "body": null,
+        "query": {
+          "fields": { "note": { "required": false, "schema": { "name": "note", "type": "ref" } } },
+          "type": "object"
+        }
+      },
+      "removedIn": "3.3.0"
+    }
+  ],
   "generator": "@cf-loom/cli@2.1.0",
   "groups": { "orders": { "description": "Order lifecycle" } },
   "guards": {

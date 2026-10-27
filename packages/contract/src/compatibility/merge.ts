@@ -19,12 +19,13 @@ import {
   type SubscriptionTombstone,
 } from '../snapshot/index.ts';
 import { defsReachedOf } from '../walker/index.ts';
+import { formerInputsMerged } from './former-inputs.ts';
 import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts';
 
 /**
  * The published Snapshot `publish` writes at a version by a CLI: the declared Snapshot with the
- * Baseline's history merged in (`retiredIn`, tombstones, removed codes and removed Subscriptions),
- * in canonical order.
+ * Baseline's history merged in (`retiredIn`, tombstones, removed codes, removed Subscriptions and
+ * former Inputs), in canonical order.
  */
 export function publishedSnapshotOf(
   baseline: PublishedServiceSnapshot | undefined,
@@ -97,6 +98,7 @@ function serviceMerged(
     commands: messagesMerged(baseline?.commands, proposed.commands, version),
     codes: codesMerged(baseline, proposed.codes, version),
     subscriptions: subscriptionsMerged(baseline?.subscriptions, proposed.subscriptions, version),
+    formerInputs: formerInputsMerged(baseline, proposed, version),
   };
 }
 

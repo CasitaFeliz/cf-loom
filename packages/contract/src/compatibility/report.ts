@@ -75,6 +75,8 @@ export type Difference =
       readonly at: readonly Step[];
       readonly position: Position;
       readonly shape: ShapeDifference;
+      /** The version that first published a field of the former Input it was found against removed; absent when found against the Baseline's own shape. */
+      readonly removedIn?: string;
     }
   /** A shared schema, a Guard or a Rejection gone from its Definitions Package. */
   | { readonly kind: 'removed' }

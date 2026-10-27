@@ -8,6 +8,7 @@ import type {
   DefinitionsSnapshot,
   EndpointSnapshot,
   EventSnapshot,
+  InputSnapshot,
   ServiceSnapshot,
   Snapshot,
   SubscriptionSnapshot,
@@ -58,6 +59,19 @@ export type RemovedCode = CodeSnapshot & {
 /** A code in a published Snapshot: declared, or removed with its history. */
 export type PublishedCode = CodeSnapshot | RemovedCode;
 
+/**
+ * An Endpoint's query and body as the versions before `removedIn` declared them, kept once a
+ * publish removed a field from them, with the defs they reached then, which their `ref`s name:
+ * Callers built on those versions still send this Input, so what the Endpoint declares again is
+ * compared with it.
+ */
+export type FormerInput = {
+  readonly endpoint: string;
+  readonly removedIn: string;
+  readonly input: Pick<InputSnapshot, 'query' | 'body'>;
+  readonly defs: ByKey<SchemaNode>;
+};
+
 /** The published Snapshot of a Service: its declared Snapshot with its heading and the history only the Baseline knows. */
 export type PublishedServiceSnapshot = Omit<
   ServiceSnapshot,
@@ -69,6 +83,8 @@ export type PublishedServiceSnapshot = Omit<
     readonly commands: ByKey<PublishedCommand>;
     readonly codes: ByKey<PublishedCode>;
     readonly subscriptions: ByKey<SubscriptionSnapshot | SubscriptionTombstone>;
+    /** The former Inputs of its Endpoints, by Endpoint in code point order, each Endpoint's in the order recorded. */
+    readonly formerInputs: readonly FormerInput[];
   };
 
 /** The published Snapshot of an Application: its Dependencies at a version. */
@@ -120,6 +136,19 @@ export function removedCodesOf(
     }
   }
   return removed;
+}
+
+/** The former Inputs a Snapshot holds: a published Service Snapshot's, and none in any other. */
+export function heldFormerInputsOf(snapshot: Snapshot | PublishedSnapshot): readonly FormerInput[] {
+  return 'formerInputs' in snapshot ? snapshot.formerInputs : [];
+}
+
+/** An Endpoint's former Inputs, oldest first. */
+export function formerInputsOf(
+  snapshot: PublishedServiceSnapshot,
+  endpoint: string,
+): readonly FormerInput[] {
+  return snapshot.formerInputs.filter((former) => former.endpoint === endpoint);
 }
 
 /** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */
