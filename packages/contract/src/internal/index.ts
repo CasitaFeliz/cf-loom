@@ -197,6 +197,7 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
+  formatConstructorOf,
   hashPartsOf,
   isHashFormat,
   isJsonValue,
