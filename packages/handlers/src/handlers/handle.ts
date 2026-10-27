@@ -5,12 +5,12 @@ import {
   answerOf,
   type DirectMeta,
   defaultedMetaOf,
-  elementNameOf,
   endpointRunOf,
   guardRunOf,
   type Implementation,
+  identityOf,
   isPairing,
-  type MessageElement,
+  type MessageHandled,
   type MessageWritten,
   messageAnswerOf,
   messageRunOf,
@@ -44,7 +44,7 @@ import {
 type HandleTarget = Endpoint | Guard | Pairing;
 
 /** What `handle()` may be given: a target, or a bare Command or Subscription, which its types refuse. */
-type HandleArgument = HandleTarget | MessageElement;
+type HandleArgument = HandleTarget | MessageHandled;
 
 /** What a bare Command or Subscription is told: its Handler is written for its pairing in the readers file. */
 type BareMessageRefusal =
@@ -72,7 +72,7 @@ type HandlerOf<Target extends HandleArgument, Resources extends object> = Target
       : never;
 
 /** The type `handle()` takes a target as: itself, or the refusal for a Command or Subscription that is not paired. */
-type TargetOf<Target extends HandleArgument> = Target extends MessageElement
+type TargetOf<Target extends HandleArgument> = Target extends MessageHandled
   ? BareMessageRefusal
   : Target;
 
@@ -90,7 +90,7 @@ function handleImplementation<
 function stubOf<Target extends HandleArgument>(
   target: TargetOf<Target>,
 ): HandlerOf<Target, NoResources> {
-  const implementation = isPairing(target) ? messageStubOf(target.element) : notImplementedStub;
+  const implementation = isPairing(target) ? messageStubOf(target.declaration) : notImplementedStub;
   return handlerOf(target, { implementation, stub: true }) as HandlerOf<Target, NoResources>;
 }
 
@@ -104,14 +104,14 @@ export const handle = Object.assign(handleImplementation, {
   stub: stubOf,
 });
 
-/** The Handler of an Element: its direct call, carrying its `element`, kept with what it was written with. */
+/** The Handler of a declaration: its direct call, carrying its `declaration`, kept with what it was written with. */
 function handlerOf(
   target: unknown,
   how: Pick<Written<Endpoint>, 'implementation' | 'stub'>,
 ): AnyHandler {
   const written = writtenFor(target, how);
   const handler: AnyHandler = Object.freeze(
-    Object.assign(directCallOf(written), { element: written.element }),
+    Object.assign(directCallOf(written), { declaration: written.declaration }),
   );
   register(handler, written);
   return handler;
@@ -122,13 +122,13 @@ function writtenFor(
   how: Pick<Written<Endpoint>, 'implementation' | 'stub'>,
 ): AnyWritten {
   if (isEndpoint(target)) {
-    return { element: target, ...how };
+    return { declaration: target, ...how };
   }
   if (isGuard(target)) {
-    return { element: target, ...how };
+    return { declaration: target, ...how };
   }
   if (isPairing(target)) {
-    return { element: target.element, pairing: target, ...how };
+    return { declaration: target.declaration, pairing: target, ...how };
   }
   throw new Error(
     'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>',
@@ -159,7 +159,7 @@ function endpointCallOf(written: Written<Endpoint>) {
   return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
     const given = { input, context: call.context, request: requestOf(call) };
     const run = await endpointRunOf(written, { ...given, resources: last?.resources });
-    return answerOf(written.element, run);
+    return answerOf(written.declaration, run);
   };
 }
 
@@ -168,7 +168,7 @@ function guardCallOf(written: Written<Guard>) {
     const { qualifier } = call;
     const given = { demands, context: call.context, qualifier, request: requestOf(call) };
     const run = await guardRunOf(written, { ...given, resources: last?.resources });
-    return answerOf(written.element, run);
+    return answerOf(written.declaration, run);
   };
 }
 
@@ -181,8 +181,8 @@ function requestOf({ request }: DirectCallGiven): HandledRequest {
 }
 
 function messageCallOf(written: MessageWritten) {
-  const { element } = written;
-  const message = isCommand(element) ? element : element.event;
+  const { declaration } = written;
+  const message = isCommand(declaration) ? declaration : declaration.event;
   return async (body: unknown, given: DirectMeta = {}, last?: DirectLastGiven) => {
     const meta = defaultedMetaOf(message, given);
     const run = await messageRunOf(
@@ -190,14 +190,14 @@ function messageCallOf(written: MessageWritten) {
       { body, meta, resources: last?.resources },
       checkedBody,
     );
-    return messageAnswerOf(written.element, run);
+    return messageAnswerOf(written.declaration, run);
   };
 }
 
 const notImplementedStub: Implementation = () => reject(notImplemented);
 
-function messageStubOf(element: MessageElement): Implementation {
+function messageStubOf(declaration: MessageHandled): Implementation {
   return () => {
-    throw new Error(`${elementNameOf(element)}'s Handler is a Stub, which consume never runs`);
+    throw new Error(`${identityOf(declaration)}'s Handler is a Stub, which consume never runs`);
   };
 }

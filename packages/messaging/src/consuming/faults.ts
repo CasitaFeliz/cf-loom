@@ -2,12 +2,12 @@ import type { Command, Subscription } from '@cf-loom/contract';
 import { issueLineOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
-  elementNameOf,
   failureCauseOf,
   failureLineOf,
   type HandlerFailure,
   type HandlerFaultBase,
   hookFailureOf,
+  identityOf,
   logOf,
 } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
@@ -15,7 +15,7 @@ import type { Consumed } from '../subjects/index.ts';
 
 /**
  * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
- * the Command's Message Version it handles as `element`, with its name or identity as `identity`,
+ * the Command's Message Version it handles as `declaration`, with its name or identity as `identity`,
  * the Message, then why.
  */
 export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
@@ -59,22 +59,22 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
   }
 }
 
-/** What a fault says of where it came from: the Element handled, the Message and which attempt. */
+/** What a fault says of where it came from: the declaration handled, the Message and which attempt. */
 export type About = Pick<
   ConsumedFault,
-  'element' | 'identity' | 'subject' | 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'
+  'declaration' | 'identity' | 'subject' | 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'
 >;
 
 /** The delivery a fault speaks of: the Message's ids and which attempt. */
 type Delivered = Pick<Delivery, 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'>;
 
-/** Where a delivery went: the Element its consumer handles, its subject, the Message's ids and which attempt. */
+/** Where a delivery went: the declaration its consumer handles, its subject, the Message's ids and which attempt. */
 export function aboutOf(
-  { element, subject }: Pick<Consumed, 'element' | 'subject'>,
+  { declaration, subject }: Pick<Consumed, 'declaration' | 'subject'>,
   { messageId, factId, deliveryCount, lastAttempt }: Delivered,
 ): About {
-  const identity = elementNameOf(element);
-  return { element, identity, subject, messageId, factId, deliveryCount, lastAttempt };
+  const identity = identityOf(declaration);
+  return { declaration, identity, subject, messageId, factId, deliveryCount, lastAttempt };
 }
 
 /** A fault on the console: each of its lines, then its cause when it has one. */
@@ -94,7 +94,7 @@ function causeOf(fault: ConsumedFault): unknown {
   }
 }
 
-/** What names a Message in a line: the Element handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
+/** What names a Message in a line: the declaration handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
 function sourceOf(about: About): string {
   const { identity, subject, messageId, factId, deliveryCount, lastAttempt } = about;
   const attempt = lastAttempt ? `attempt ${deliveryCount}, the last` : `attempt ${deliveryCount}`;

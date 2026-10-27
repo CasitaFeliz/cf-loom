@@ -1,13 +1,13 @@
 import type * as core from 'zod/v4/core';
 import type { Checked, Issue } from '../checks/index.ts';
 import { type Fault, isFault } from '../outcomes/index.ts';
-import type { MessageElement } from './elements.ts';
+import type { MessageHandled } from './handled.ts';
 import { returnedOf } from './implementation.ts';
 import type { Pairing } from './pairing.ts';
 import type { Written } from './run.ts';
 
 /** What a Message Handler was written with: its Command or Subscription, the pairing that gives the Reader schema it reads a body with, its implementation, and whether it is a Stub. */
-export type MessageWritten = Written<MessageElement> & { readonly pairing: Pairing };
+export type MessageWritten = Written<MessageHandled> & { readonly pairing: Pairing };
 
 /** What a Message Handler receives beside its body: the Message's ids, which attempt this is, whether it is the last, the transport headers it was published with, and the signal that tells it to stop. */
 export type MessageMeta = {
@@ -54,7 +54,7 @@ export async function messageRunOf(
 }
 
 async function messageCallOf(
-  { element, pairing, implementation }: MessageWritten,
+  { declaration, pairing, implementation }: MessageWritten,
   { body, meta, resources }: MessageGiven,
   readBody: BodyReading,
 ): Promise<MessageRun> {
@@ -63,7 +63,7 @@ async function messageCallOf(
     return { kind: 'invalid-input', issues: checked.issues };
   }
   const run = () => implementation(checked.value, meta, { resources });
-  const returned = await returnedOf(element, run, isAnswered);
+  const returned = await returnedOf(declaration, run, isAnswered);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', cause: returned.cause };
   }

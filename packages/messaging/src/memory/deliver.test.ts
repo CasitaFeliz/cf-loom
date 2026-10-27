@@ -103,14 +103,14 @@ const contract = defineService({
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: {
-    notifyOnCreated: { element: notifyOnCreated, reader: readerV2 },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: readerV2 },
     auditCreated: {
-      element: auditCreated,
+      declaration: auditCreated,
       reader: z.object({ orderId: z.uuid(), status: readerV2.shape.status }),
     },
-    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
   },
 });
 
@@ -526,13 +526,13 @@ describe('deliver()', () => {
   test.each([
     [
       'a stub’s Subscription',
-      { element: paymentSettledV1, body: settledPayment },
+      { declaration: paymentSettledV1, body: settledPayment },
       'PaymentSettled@1',
     ],
-    ['a Retired Command', { element: refundV1, body: charge }, 'Refund@1'],
+    ['a Retired Command', { declaration: refundV1, body: charge }, 'Refund@1'],
   ])(
     'deliver to an Element nothing consumes rejects, naming it: %s',
-    async (_which, { element, body }, named) => {
+    async (_which, { declaration, body }, named) => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const inMemory = await memory(contract);
       await inMemory.consume(
@@ -548,7 +548,7 @@ describe('deliver()', () => {
         {},
       );
 
-      const delivering = inMemory.deliver(element, body);
+      const delivering = inMemory.deliver(declaration, body);
 
       await expect(delivering).rejects.toThrow(`${named} has no consumer`);
     },
@@ -627,7 +627,7 @@ describe('pending and redeliver()', () => {
 
       expect(inMemory.pending).toEqual([
         {
-          element: notifyOnCreated,
+          declaration: notifyOnCreated,
           identity: 'notifyOnCreated',
           subject: 'orders-service.event.OrderCreated.v2',
           messageId: 'event.OrderCreated.v2:o-1',
@@ -640,12 +640,12 @@ describe('pending and redeliver()', () => {
     },
   );
 
-  test('a pending Message’s element is the same declaration its fault names', async () => {
+  test('a pending Message’s declaration is the one its fault names', async () => {
     const { inMemory, faults } = await running(() => ({ notify: throwing }));
 
     await inMemory.deliver(orderCreatedV2, created, { factId: 'o-1' });
 
-    const named = { element: notifyOnCreated, identity: 'notifyOnCreated' };
+    const named = { declaration: notifyOnCreated, identity: 'notifyOnCreated' };
     expect(inMemory.pending).toMatchObject([named]);
     expect(faults).toMatchObject([named]);
   });
@@ -779,7 +779,7 @@ describe('pending and redeliver()', () => {
 
     expect(inMemory.pending).toMatchObject([
       {
-        element: chargeCardV1,
+        declaration: chargeCardV1,
         identity: 'ChargeCard@1',
         subject: 'orders-service.command.ChargeCard.v1',
         body: charge,

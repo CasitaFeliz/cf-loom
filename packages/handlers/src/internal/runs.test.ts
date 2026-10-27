@@ -81,8 +81,8 @@ const notifyOnPaidV1 = defineSubscription({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: orderBody } },
 });
 
 const chargeCard = readers.commands.chargeCardV1;
@@ -352,11 +352,11 @@ describe('isStub', () => {
   });
 });
 
-describe('mappedHandlerOf, by the Element a Handler was written for', () => {
-  test('a Handler is found for its own Element, not another, and a plain function never', () => {
+describe('mappedHandlerOf, by the declaration a Handler was written for', () => {
+  test('a Handler is found for its own declaration, not another, and a plain function never', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
-    const lookalike = Object.assign(() => undefined, { element: getOrder });
+    const lookalike = Object.assign(() => undefined, { declaration: getOrder });
 
     const written = [
       isFoundFor(getOrderHandler, getOrder),
@@ -397,7 +397,7 @@ describe('runMessage', () => {
   const shipping = readersOf({
     commands: {
       shipV1: {
-        element: shippedV1,
+        declaration: shippedV1,
         reader: z.object({ orderId: z.uuid(), status: openEnumReader(statuses) }),
       },
     },
@@ -429,7 +429,7 @@ describe('runMessage', () => {
   });
 
   test('runMessage given a value handle() did not return throws', () => {
-    const lookalike = Object.assign(() => undefined, { element: chargeCardV1 });
+    const lookalike = Object.assign(() => undefined, { declaration: chargeCardV1 });
 
     const run = () => runMessage(lookalike, { body: {}, meta, resources: undefined });
 
@@ -450,7 +450,7 @@ describe('a run given a value nested past the stack', () => {
     body: tree,
   });
   const nesting = readersOf({
-    commands: { nestV1: { element: nestV1, reader: tree } },
+    commands: { nestV1: { declaration: nestV1, reader: tree } },
     subscriptions: {},
   }).commands.nestV1;
   const nest = defineEndpoint({
@@ -530,7 +530,7 @@ describe('a run given a value nested past the stack', () => {
 });
 
 describe('mappedHandlerOf, by its key', () => {
-  test('mappedHandlerOf names the key of a missing Handler, or of one written for another Element', () => {
+  test('mappedHandlerOf names the key of a missing Handler, or of one written for another declaration', () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const at = { map: 'commands', key: 'chargeCardV1' } as const;
 
@@ -561,9 +561,9 @@ describe('mappedHandlerOf, by its key', () => {
   });
 });
 
-/** Whether `mappedHandlerOf` finds a Handler for an Element in a map that holds it. */
-function isFoundFor(handler: unknown, element: Parameters<typeof mappedHandlerOf>[2]): boolean {
-  return errorMessageOf(() => mappedHandlerOf({ handler }, anyKey, element)) === undefined;
+/** Whether `mappedHandlerOf` finds a Handler for a declaration in a map that holds it. */
+function isFoundFor(handler: unknown, declaration: Parameters<typeof mappedHandlerOf>[2]): boolean {
+  return errorMessageOf(() => mappedHandlerOf({ handler }, anyKey, declaration)) === undefined;
 }
 
 const anyKey = { map: 'endpoints', key: 'handler' } as const;

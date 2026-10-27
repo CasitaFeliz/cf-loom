@@ -1,10 +1,14 @@
 import type { Fault } from '../outcomes/index.ts';
-import type { HandledElement } from './elements.ts';
 import { faultLineOf, logOf } from './errors.ts';
+import type { Handled } from './handled.ts';
 
-/** Which Handler a Fault came from, as both hooks name it: its declaration, and the name it goes by in lines and metrics. */
-export type HandlerFaultBase<Element extends HandledElement> = {
-  readonly element: Element;
+/**
+ * Where a Fault came from, as both hooks name it: its `declaration` and the name it goes by in
+ * lines and metrics, `identity`. The `declaration` is what the Handler was written for, except on
+ * a Guard's Fault, where it is the Endpoint the Guard was attached to.
+ */
+export type HandlerFaultBase<Declaration extends Handled> = {
+  readonly declaration: Declaration;
   readonly identity: string;
 };
 

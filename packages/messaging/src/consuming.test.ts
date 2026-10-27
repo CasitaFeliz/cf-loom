@@ -98,12 +98,12 @@ const contract = defineService({
 
 const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardV1, reader: orderReader },
-    chargeCardV2: { element: chargeCardV2, reader: orderReader },
+    chargeCardV1: { declaration: chargeCardV1, reader: orderReader },
+    chargeCardV2: { declaration: chargeCardV2, reader: orderReader },
   },
   subscriptions: {
-    notifyOnCreated: { element: notifyOnCreated, reader: orderReader },
-    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: orderReader },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
   },
 });
 
@@ -384,7 +384,7 @@ describe('consume', () => {
 
   test('a Handler written for another pairing than the Handler map’s throws, naming its key', async () => {
     const looseReader = z.looseObject({});
-    const written = handle({ element: notifyOnCreated, reader: looseReader }, () => undefined);
+    const written = handle({ declaration: notifyOnCreated, reader: looseReader }, () => undefined);
     const { consume } = await messaging(contract, aBroker().broker);
 
     const consumingWritten = consume(
@@ -492,7 +492,7 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('pending');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
@@ -571,7 +571,7 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('ended');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
@@ -597,7 +597,7 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('pending');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
@@ -630,7 +630,7 @@ describe('a Message delivered', () => {
     expect(received).toEqual([]);
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
@@ -662,13 +662,13 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('onServiceFault receives the declaration as element, and names a Subscription by name and a Command by its identity', async () => {
+  test('onServiceFault receives the Subscription or Command as its declaration, and names a Subscription by name and a Command by its identity', async () => {
     const { deliver, faults } = await consuming();
 
     await deliver(created, {});
     await deliver(chargeCard, {});
 
-    expect(faults.map(({ element, identity }) => [element, identity])).toEqual([
+    expect(faults.map(({ declaration, identity }) => [declaration, identity])).toEqual([
       [notifyOnCreated, 'notifyOnCreated'],
       [chargeCardV2, 'ChargeCard@2'],
     ]);
@@ -777,7 +777,7 @@ describe('a Message whose body is nested past the stack', () => {
     groups: [defineGroup({ name: 'nesting', description: 'Nesting', commands: [nestV1] })],
   });
   const nestReaders = readersOf({
-    commands: { nestV1: { element: nestV1, reader: tree } },
+    commands: { nestV1: { declaration: nestV1, reader: tree } },
     subscriptions: {},
   });
 

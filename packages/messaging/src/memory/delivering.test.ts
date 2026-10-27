@@ -102,12 +102,12 @@ const contract = defineService({
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: {
-    notifyOnV1: { element: notifyOnV1, reader: orderBody },
-    notifyOnCreated: { element: notifyOnCreated, reader: readerV2 },
-    auditCreated: { element: auditCreated, reader: readerV2 },
-    onAudited: { element: onAudited, reader: z.object({ orderId: z.uuid() }) },
+    notifyOnV1: { declaration: notifyOnV1, reader: orderBody },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: readerV2 },
+    auditCreated: { declaration: auditCreated, reader: readerV2 },
+    onAudited: { declaration: onAudited, reader: z.object({ orderId: z.uuid() }) },
   },
 });
 
@@ -492,7 +492,7 @@ describe('memory(): what the Service publishes and sends', () => {
     await expect(settling).rejects.toThrow('onAudited');
     expect(received).toEqual([]);
     expect(faults).toMatchObject([
-      { kind: 'invalid-body', element: onAudited, identity: 'onAudited' },
+      { kind: 'invalid-body', declaration: onAudited, identity: 'onAudited' },
     ]);
     expect(inMemory.pending).toEqual([]);
   });

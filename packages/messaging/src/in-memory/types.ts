@@ -66,7 +66,7 @@ export type DeliveryMeta = {
 
 /** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */
 export type PendingMessage = {
-  readonly element: Subscription | Command;
+  readonly declaration: Subscription | Command;
   /** `notifyOnSettled` for a Subscription, `ChargeCard@1` for a Command's Message Version. */
   readonly identity: string;
   readonly subject: string;

@@ -151,7 +151,7 @@ function pullingCharge(
 /** The Handlers `consume` needs for Orders’ plan: one for its Command, which does nothing. */
 function chargeHandlers() {
   const readers = readersOf({
-    commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+    commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
     subscriptions: {},
   });
   return {

@@ -74,8 +74,8 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
 
 let server: NatsServer;
@@ -704,7 +704,7 @@ describe('consuming over jetstream()', () => {
     const billingReaders = readersOf({
       commands: {},
       subscriptions: {
-        notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+        notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
       },
     });
     const handlers = {
@@ -1138,7 +1138,7 @@ describe('consuming over jetstream()', () => {
     await sleep(2_500);
     expect(troubles).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         durable: 'orders-service_notify-on-created',
         stream: 'orders-service',

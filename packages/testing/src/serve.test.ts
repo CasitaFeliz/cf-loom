@@ -363,7 +363,7 @@ describe('fakeProvider and serve answer alike', () => {
     expect(serviceFaults).toEqual([
       {
         kind: 'invalid-outcome',
-        element: expect.objectContaining({ name: 'getPayment' }),
+        declaration: expect.objectContaining({ name: 'getPayment' }),
         identity: 'getPayment',
         issues: [
           {

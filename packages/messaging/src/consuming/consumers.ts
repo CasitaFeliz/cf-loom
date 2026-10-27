@@ -1,5 +1,5 @@
 import type { HandlerMap } from '@cf-loom/handlers';
-import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
+import { identityOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
 import type { Consumed } from '../subjects/index.ts';
 import type { DeliveryEnds } from './deadline.ts';
 import type { CoreConsumer, Received } from './details.ts';
@@ -33,22 +33,22 @@ export function consumersOf(
 ): readonly CoreConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
-    ...mappedMessageHandlerOf(handlers, consumed.at, consumed.element),
+    ...mappedMessageHandlerOf(handlers, consumed.at, consumed.declaration),
   }));
   for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
     console.warn(
-      `${elementNameOf(consumed.element)}'s Handler is a Stub: consume does not pull its Messages`,
+      `${identityOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`,
     );
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))
     .map(({ consumed, handler, reader }) => {
-      const { durable, stream, subject, element } = consumed;
-      const identity = elementNameOf(element);
+      const { durable, stream, subject, declaration } = consumed;
+      const identity = identityOf(declaration);
       const settle = received(
         (delivery) => settlementOf({ consumed, handler, resources }, delivery, { report, ends }),
         { identity, subject },
       );
-      return { durable, stream, subject, element, identity, reader, settle };
+      return { durable, stream, subject, declaration, identity, reader, settle };
     });
 }

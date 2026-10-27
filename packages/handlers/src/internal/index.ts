@@ -9,13 +9,13 @@ export type {
 } from '../calls/index.ts';
 export {
   defaultedMetaOf,
-  elementNameOf,
   failureCauseOf,
   failureLineOf,
   faultLineOf,
   faultLogOf,
   firstAttempt,
   hookFailureOf,
+  identityOf,
   logOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';

@@ -230,7 +230,7 @@ describe('serve: onServiceFault', () => {
     })(get('/orders/thrown'));
 
     expect(faults).toStrictEqual([
-      { element: getOrder, identity: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
+      { declaration: getOrder, identity: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
     ]);
   });
 
@@ -249,7 +249,7 @@ describe('serve: onServiceFault', () => {
 
     expect(faults).toStrictEqual([
       {
-        element: getOrder,
+        declaration: getOrder,
         identity: 'getOrder',
         guard: apiKey,
         kind: 'thrown',

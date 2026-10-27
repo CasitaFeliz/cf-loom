@@ -42,7 +42,7 @@ const contract = defineService({
 
 const readers = readersOf({
   commands: {},
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
 
 const prefix = 'c';

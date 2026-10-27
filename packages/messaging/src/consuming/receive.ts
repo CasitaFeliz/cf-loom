@@ -10,7 +10,7 @@ import { type About, aboutOf, type ConsumedFault, type Report } from './faults.t
 /** A pulled Subscription or Command Version, the Handler the map holds for it and the Resources it runs with. */
 export type Pulled = {
   readonly consumed: Consumed;
-  readonly handler: { readonly element: Consumed['element'] };
+  readonly handler: { readonly declaration: Consumed['declaration'] };
   readonly resources: unknown;
 };
 

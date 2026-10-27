@@ -64,8 +64,8 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
 
 const handlers = {
@@ -625,7 +625,7 @@ async function consumingReported(options: Parameters<typeof messaging>[2] = {}) 
 }
 
 describe('onBrokerTrouble', () => {
-  test('a consumer the adapter reports failing reaches onBrokerTrouble with its Element, identity, durable consumer, stream and cause', async () => {
+  test('a consumer the adapter reports failing reaches onBrokerTrouble with its declaration, identity, durable consumer, stream and cause', async () => {
     const troubles: BrokerTrouble[] = [];
     const { notifying, troubled } = await consumingReported({
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
@@ -637,7 +637,7 @@ describe('onBrokerTrouble', () => {
     await vi.waitFor(() => expect(troubles).toHaveLength(1));
     expect(troubles).toEqual([
       {
-        element: notifyOnCreated,
+        declaration: notifyOnCreated,
         identity: 'notifyOnCreated',
         durable: 'orders-service_notify-on-created',
         stream: 'orders-service',
@@ -658,7 +658,7 @@ describe('onBrokerTrouble', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     expect(troubles[1]).toEqual({
-      element: notifyOnCreated,
+      declaration: notifyOnCreated,
       identity: 'notifyOnCreated',
       durable: 'orders-service_notify-on-created',
       stream: 'orders-service',
@@ -750,9 +750,9 @@ describe('onBrokerTrouble', () => {
       }
     }
 
-    const named = (element: object, identity: string, durable: string) =>
+    const named = (declaration: object, identity: string, durable: string) =>
       Array.from({ length: copies.length }, () => ({
-        element,
+        declaration,
         identity,
         durable,
         stream: 'orders-service',

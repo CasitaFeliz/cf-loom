@@ -34,4 +34,4 @@ export type MessageHandler<Target extends Pairing, Resources extends object = No
   meta?: DirectMeta,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &
-  HandledBy<Target['element'], Resources>;
+  HandledBy<Target['declaration'], Resources>;

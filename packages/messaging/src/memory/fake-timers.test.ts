@@ -25,7 +25,7 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
   subscriptions: {},
 });
 

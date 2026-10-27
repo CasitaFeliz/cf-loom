@@ -116,8 +116,10 @@ describe('the messaging README', () => {
       notifications: { send: async (orderId) => void received.push(orderId) },
     };
     const readers = readersOf({
-      commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
-      subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV2.body } },
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
+      subscriptions: {
+        notifyOnCreated: { declaration: notifyOnCreated, reader: orderCreatedV2.body },
+      },
     });
     const notifyOnCreatedHandler = handle(
       readers.subscriptions.notifyOnCreated,

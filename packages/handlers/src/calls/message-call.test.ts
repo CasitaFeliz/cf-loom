@@ -64,10 +64,10 @@ const notifyOnSettled = defineSubscription({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: readBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: readBody } },
   subscriptions: {
-    notifyOnPaid: { element: notifyOnPaid, reader: readBody },
-    notifyOnSettled: { element: notifyOnSettled, reader: notifyOnSettled.event.body },
+    notifyOnPaid: { declaration: notifyOnPaid, reader: readBody },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: notifyOnSettled.event.body },
   },
 });
 
@@ -89,7 +89,7 @@ const nestV1 = defineCommand({
 });
 
 const nesting = readersOf({
-  commands: { nestV1: { element: nestV1, reader: tree } },
+  commands: { nestV1: { declaration: nestV1, reader: tree } },
   subscriptions: {},
 }).commands.nestV1;
 

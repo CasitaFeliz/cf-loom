@@ -177,13 +177,13 @@ const contract = defineService({
 
 const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body },
-    chargeCardV2: { element: chargeCardV2, reader: chargeCardV2.body },
-    refundV1: { element: refundV1, reader: refundV1.body },
-    shipV1: { element: shipV1, reader: shipV1.body },
-    shipV2: { element: shipV2, reader: shipV2.body },
+    chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body },
+    chargeCardV2: { declaration: chargeCardV2, reader: chargeCardV2.body },
+    refundV1: { declaration: refundV1, reader: refundV1.body },
+    shipV1: { declaration: shipV1, reader: shipV1.body },
+    shipV2: { declaration: shipV2, reader: shipV2.body },
   },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV3.body } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderCreatedV3.body } },
 });
 
 /** A stub for every Command's Message Version the Contract declares, none Retired. */
@@ -361,7 +361,7 @@ describe('publish and send types', () => {
     expectTypeOf<BrokerTrouble['kind']>().toEqualTypeOf<'pull-failed' | 'recovered'>();
     expectTypeOf<Extract<BrokerTrouble, { kind: 'pull-failed' }>['cause']>().toBeUnknown();
     expectTypeOf<Omit<BrokerTrouble, 'kind' | 'cause'>>().toEqualTypeOf<{
-      readonly element: BrokerTrouble['element'];
+      readonly declaration: BrokerTrouble['declaration'];
       readonly identity: string;
       readonly durable: string;
       readonly stream: string;
@@ -462,8 +462,8 @@ describe('publish and send types', () => {
         resources.notifications.send();
       },
     );
-    const bare: HandledBy<typeof readers.subscriptions.notifyOnCreated.element> = notifying;
-    const bareNever: HandledBy<typeof readers.subscriptions.notifyOnCreated.element, never> =
+    const bare: HandledBy<typeof readers.subscriptions.notifyOnCreated.declaration> = notifying;
+    const bareNever: HandledBy<typeof readers.subscriptions.notifyOnCreated.declaration, never> =
       notifying;
     const inferred = { commands, subscriptions: { notifyOnCreated: bare }, readers };
     const inferredNever = { commands, subscriptions: { notifyOnCreated: bareNever }, readers };

@@ -18,15 +18,15 @@ import {
   isOutcome,
   thrownFault,
 } from '../outcomes/index.ts';
-import type { HandledElement } from './elements.ts';
+import type { Handled } from './handled.ts';
 import { returnedOf } from './implementation.ts';
 
-/** An implementation as the runtime calls it, whatever Element it was written for. */
+/** An implementation as the runtime calls it, whatever declaration it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Element, its implementation, and whether it is a Stub. */
-export type Written<Answering extends HandledElement> = {
-  readonly element: Answering;
+/** What a Handler was written with: its declaration, its implementation, and whether it is a Stub. */
+export type Written<Answering extends Handled> = {
+  readonly declaration: Answering;
   readonly implementation: Implementation;
   readonly stub: boolean;
 };
@@ -82,7 +82,7 @@ async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answ
 }
 
 async function endpointCallOf(
-  { element: endpoint, implementation }: Written<Endpoint>,
+  { declaration: endpoint, implementation }: Written<Endpoint>,
   given: EndpointGiven,
 ): Promise<EndpointRun> {
   const checked = checkedGiven(() => checkedEndpointCall(endpoint, given));
@@ -100,7 +100,7 @@ async function endpointCallOf(
 }
 
 async function guardCallOf(
-  { element: guard, implementation }: Written<Guard>,
+  { declaration: guard, implementation }: Written<Guard>,
   given: GuardGiven,
 ): Promise<GuardRun> {
   const checked = checkedGiven(() => checkedGuardCall(guard, given));

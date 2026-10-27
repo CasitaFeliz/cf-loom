@@ -464,7 +464,7 @@ describe('serve: Guards', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        element: updateOrder,
+        declaration: updateOrder,
         identity: 'updateOrder',
         guard: userToken,
         issues: [
@@ -493,7 +493,7 @@ describe('serve: Guards', () => {
     expect(faults).toMatchObject([
       {
         kind: 'runtime-bug',
-        element: misattached,
+        declaration: misattached,
         identity: 'misattached',
         guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],

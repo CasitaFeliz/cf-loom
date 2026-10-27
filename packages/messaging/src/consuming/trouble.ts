@@ -44,9 +44,9 @@ export function troubledOf(
     if (handed === undefined) {
       throw new Error(`${consumer.durable} is no Durable consumer messaging handed this Broker`);
     }
-    const { element, identity, durable, stream } = handed;
+    const { declaration, identity, durable, stream } = handed;
     if (!closing.aborted) {
-      void tell({ element, identity, durable, stream, ...change });
+      void tell({ declaration, identity, durable, stream, ...change });
     }
   };
 }
@@ -70,7 +70,7 @@ async function logBrokerTrouble(trouble: BrokerTrouble): Promise<void> {
   }
 }
 
-/** What names a durable consumer in a line: the Element it is pulled for, its name and its stream. */
+/** What names a durable consumer in a line: the declaration it is pulled for, its name and its stream. */
 function sourceOf({ identity, durable, stream }: BrokerTrouble): string {
   return `${identity} ${durable} ${stream}`;
 }

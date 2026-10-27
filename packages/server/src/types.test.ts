@@ -123,8 +123,8 @@ describe('serve: the Handler map, typed by the Contract', () => {
     expect(serving).toBeTypeOf('function');
   });
 
-  test('a wrapper that carries an element is a type error', () => {
-    const wrapped = Object.assign(() => findOrderHandler({}, {}), { element: findOrder });
+  test('a wrapper that carries a declaration is a type error', () => {
+    const wrapped = Object.assign(() => findOrderHandler({}, {}), { declaration: findOrder });
 
     const serving = () =>
       serve(

@@ -11,8 +11,9 @@ import {
 } from '@cf-loom/handlers/internal';
 
 /**
- * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint as `element`
- * with its name as `identity`, the Guard when its GuardHandler produced it, then how it failed.
+ * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint the request
+ * matched as `declaration`, with its name as `identity`, also when a Guard's Handler produced it,
+ * which `guard` then names; then how it failed.
  */
 export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard } & (
     | HandlerFailure
@@ -21,7 +22,7 @@ export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard 
   );
 
 /** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-export type FaultedBy = Pick<ServedFault, 'element' | 'identity' | 'guard'>;
+export type FaultedBy = Pick<ServedFault, 'declaration' | 'identity' | 'guard'>;
 
 /**
  * One request answered, for metrics and tracing: its method, and the Endpoint it matched with that

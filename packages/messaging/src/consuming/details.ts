@@ -30,7 +30,7 @@ export const leftPending: Settled = {
 
 /**
  * A consumer as the core built it: the Durable consumer, Stream and subject it is pulled through,
- * the Element it consumes, its identity, the Reader its Handler reads with, and `settle`; the
+ * the declaration it consumes, its identity, the Reader its Handler reads with, and `settle`; the
  * core names a trouble report from it and `memory()` delivers through it, and a Broker is handed
  * only the `BrokerConsumer` made of it.
  */
@@ -38,7 +38,7 @@ export type CoreConsumer = {
   readonly durable: string;
   readonly stream: string;
   readonly subject: string;
-  readonly element: Subscription | Command;
+  readonly declaration: Subscription | Command;
   readonly identity: string;
   readonly reader: core.$ZodType;
   readonly settle: Settle;

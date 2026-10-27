@@ -206,7 +206,7 @@ describe('memory types', () => {
   test('messages and pending list read-only records', () => {
     expectTypeOf(inMemory.messages).toEqualTypeOf<readonly RecordedMessage[]>();
     expectTypeOf(inMemory.pending).toEqualTypeOf<readonly PendingMessage[]>();
-    expectTypeOf<PendingMessage['element']>().toEqualTypeOf<Subscription | Command>();
+    expectTypeOf<PendingMessage['declaration']>().toEqualTypeOf<Subscription | Command>();
     expectTypeOf<RecordedMessage['body']>().toEqualTypeOf<unknown>();
     expectTypeOf<PendingMessage['body']>().toEqualTypeOf<unknown>();
     expect(inMemory.messages).toEqual([]);

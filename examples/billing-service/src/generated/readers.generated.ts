@@ -5,6 +5,6 @@ import { readersOf } from '@cf-loom/handlers';
 export const readers = readersOf({
   commands: {},
   subscriptions: {
-    draftInvoiceOnCreated: { element: draftInvoiceOnCreatedSubscription, reader: draftInvoiceOnCreatedSubscription.event.body },
+    draftInvoiceOnCreated: { declaration: draftInvoiceOnCreatedSubscription, reader: draftInvoiceOnCreatedSubscription.event.body },
   },
 });

@@ -21,7 +21,7 @@ import {
 export type ServedAttachment = {
   readonly guard: Guard;
   readonly qualifier: unknown;
-  readonly handler: { readonly element: Guard };
+  readonly handler: { readonly declaration: Guard };
 };
 
 /** What every declared Endpoint is matched by: its method and its path's segments. */
@@ -34,7 +34,7 @@ type Declared = {
 /** A live Endpoint, ready to answer: its Handler, its Attachments and its `deprecatedAt`. */
 export type LiveEndpoint = Declared & {
   readonly kind: 'live';
-  readonly handler: { readonly element: Endpoint };
+  readonly handler: { readonly declaration: Endpoint };
   readonly attachments: readonly ServedAttachment[];
   readonly deprecatedAt: string | undefined;
 };

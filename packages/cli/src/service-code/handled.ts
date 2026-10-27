@@ -21,11 +21,11 @@ export type PlacedMessage = MessageHandled & { readonly group: string };
  */
 export type Handled = DeclarationHandled | PlacedMessage;
 
-/** Whether an Element is wanted by its lifecycle: `isLive` for one with a Handler, its opposite for one without. */
-type Wanted = (element: { readonly lifecycle?: string | undefined }) => boolean;
+/** Whether a declaration is wanted by its lifecycle: `isLive` for one with a Handler, its opposite for one without. */
+type Wanted = (declaration: { readonly lifecycle?: string | undefined }) => boolean;
 
 /**
- * Every Element the Handler map holds a Handler for, kind by kind, each kind in its map's order:
+ * Every declaration the Handler map holds a Handler for, kind by kind, each kind in its map's order:
  * the Endpoints and Commands' Message Versions that are not Retired, every Guard and every
  * Subscription.
  */
@@ -43,8 +43,8 @@ export function retiredHandledOf(snapshot: ServiceSnapshot): readonly Handled[] 
   return [...endpointsOf(snapshot, isRetired), ...commandsOf(snapshot, isRetired)];
 }
 
-function isRetired(element: { readonly lifecycle?: string | undefined }): boolean {
-  return !isLive(element);
+function isRetired(declaration: { readonly lifecycle?: string | undefined }): boolean {
+  return !isLive(declaration);
 }
 
 /** The Endpoints the lifecycle wants, by name. */

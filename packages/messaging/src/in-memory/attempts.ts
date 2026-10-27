@@ -76,18 +76,18 @@ function attemptsOf(
   });
 }
 
-function consumes({ element }: CoreConsumer, message: Event | Command): boolean {
+function consumes({ declaration }: CoreConsumer, message: Event | Command): boolean {
   if (isCommand(message)) {
-    return element === message;
+    return declaration === message;
   }
-  return isSubscription(element) && element.event === message;
+  return isSubscription(declaration) && declaration.event === message;
 }
 
 /** The body as it travels to a consumer, written back through its Reader; one that breaks it throws as a direct call does. */
-function writtenBodyOf({ element, reader }: CoreConsumer, body: unknown): unknown {
+function writtenBodyOf({ declaration, reader }: CoreConsumer, body: unknown): unknown {
   const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
-    throw new InvalidInputError(element, written.issues);
+    throw new InvalidInputError(declaration, written.issues);
   }
   return written.value;
 }

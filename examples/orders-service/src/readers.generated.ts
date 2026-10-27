@@ -9,9 +9,9 @@ export const orderCreatedReaderV1 = z.object({ customerId: z.uuid(), orderId: z.
 
 export const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardCommandV1, reader: chargeCardReaderV1 },
+    chargeCardV1: { declaration: chargeCardCommandV1, reader: chargeCardReaderV1 },
   },
   subscriptions: {
-    chargeOnCreated: { element: chargeOnCreatedSubscription, reader: orderCreatedReaderV1 },
+    chargeOnCreated: { declaration: chargeOnCreatedSubscription, reader: orderCreatedReaderV1 },
   },
 });

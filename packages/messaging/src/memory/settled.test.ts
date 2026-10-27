@@ -62,10 +62,10 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: {
-    notifyOnCreated: { element: notifyOnCreated, reader: orderBody },
-    onAudited: { element: onAudited, reader: z.object({ orderId: z.uuid() }) },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody },
+    onAudited: { declaration: onAudited, reader: z.object({ orderId: z.uuid() }) },
   },
 });
 
@@ -173,7 +173,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(inMemory.settled());
 
     expect(rejection?.cause).toEqual({
-      element: notifyOnCreated,
+      declaration: notifyOnCreated,
       identity: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
       messageId: 'event.OrderCreated.v1:o-1',
@@ -307,7 +307,7 @@ describe('settled()', () => {
       ].join('\n'),
     );
     expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
-    expect(inMemory.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+    expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
   });
 
   test('an onServiceFault that rejects leaves pending a Message it would have ended, and makes settled() reject', async () => {
@@ -328,7 +328,7 @@ describe('settled()', () => {
       ].join('\n'),
     );
     expect(rejection?.cause).toMatchObject({ kind: 'returned', identity: 'notifyOnCreated' });
-    expect(inMemory.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+    expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
   });
 
   test('a Message a Handler publishes while messaging is closing is left pending, its Handler never run, and settled() resolves', async () => {

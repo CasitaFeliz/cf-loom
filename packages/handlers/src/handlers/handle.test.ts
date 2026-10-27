@@ -93,10 +93,10 @@ const notifyOnPaidV1 = defineSubscription({
 
 const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardV1, reader: statusReader },
-    refundCardV1: { element: refundCardV1, reader: statusReader },
+    chargeCardV1: { declaration: chargeCardV1, reader: statusReader },
+    refundCardV1: { declaration: refundCardV1, reader: statusReader },
   },
-  subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: statusReader } },
+  subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: statusReader } },
 });
 
 const chargeCard = readers.commands.chargeCardV1;
@@ -109,30 +109,30 @@ const handleRefusal =
   'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
 
 describe('handle', () => {
-  test('a Handler returned by handle() is a function that carries its Element', () => {
+  test('a Handler returned by handle() is a function that carries its declaration', () => {
     const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID }));
 
     expect(typeof getOrderHandler).toBe('function');
-    expect(getOrderHandler.element).toBe(getOrder);
+    expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
   test('handle() given something that is no Endpoint, Guard or paired Command or Subscription throws', () => {
-    const notAnElement = { ...getOrder };
+    const copiedEndpoint = { ...getOrder };
 
-    const write = () => handle(notAnElement, () => success({ id: ORDER_ID }));
+    const write = () => handle(copiedEndpoint, () => success({ id: ORDER_ID }));
 
     expect(write).toThrow(handleRefusal);
   });
 
-  test("a Message Handler carries the Root's own Command or Subscription as its element", () => {
+  test("a Message Handler carries the Root's own Command or Subscription as its declaration", () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const notifyOnPaidStub = handle.stub(notifyOnPaid);
 
-    const elements = [chargeCardHandler.element, notifyOnPaidStub.element];
+    const declarations = [chargeCardHandler.declaration, notifyOnPaidStub.declaration];
 
-    expect(elements).toEqual([chargeCardV1, notifyOnPaidV1]);
-    expect(elements[0]).toBe(chargeCardV1);
-    expect(elements[1]).toBe(notifyOnPaidV1);
+    expect(declarations).toEqual([chargeCardV1, notifyOnPaidV1]);
+    expect(declarations[0]).toBe(chargeCardV1);
+    expect(declarations[1]).toBe(notifyOnPaidV1);
   });
 
   test('handle() given a bare Command or Subscription is a type error and throws', () => {
@@ -152,14 +152,14 @@ describe('handle', () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
 
     expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
-    expect(chargeCardHandler.element).toBe(chargeCardV1);
+    expect(chargeCardHandler.declaration).toBe(chargeCardV1);
   });
 
   test("handle() of a Subscription's pairing returns a MessageHandler of that pairing", () => {
     const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
 
     expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
   });
 
   test('handle.stub() of a pairing returns a MessageHandler taking no Resources', () => {
@@ -168,7 +168,7 @@ describe('handle', () => {
 
     expectTypeOf(chargeCardStub).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
     expectTypeOf(notifyOnPaidStub).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
-    expect([chargeCardStub.element, notifyOnPaidStub.element]).toEqual([
+    expect([chargeCardStub.declaration, notifyOnPaidStub.declaration]).toEqual([
       chargeCardV1,
       notifyOnPaidV1,
     ]);
@@ -209,7 +209,7 @@ describe('handle', () => {
       { ...meta, headers: { traceparent: '00-abc-def-01' } },
     );
     expectTypeOf<MessageMeta['headers']>().toEqualTypeOf<Readonly<Record<string, string>>>();
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
   });
 
   test('a direct call without lastAttempt gives the Handler lastAttempt false', async () => {
@@ -284,7 +284,7 @@ describe('handle', () => {
 
     expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
     expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
   });
 
   test('an Endpoint implementation that takes no parameters keeps its literal types', () => {
@@ -300,7 +300,7 @@ describe('handle', () => {
     const echoSmallHandler = handle(echoSmall, () => success({ headers: { 'x-small': 1.5e-7 } }));
 
     expectTypeOf(echoSmallHandler).toEqualTypeOf<EndpointHandler<typeof echoSmall>>();
-    expect(echoSmallHandler.element).toBe(echoSmall);
+    expect(echoSmallHandler.declaration).toBe(echoSmall);
   });
 
   test('a Handler written for an Endpoint or a Guard has its Handler type', () => {
@@ -309,7 +309,7 @@ describe('handle', () => {
 
     expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(apiKeyHandler).toEqualTypeOf<GuardHandler<typeof apiKey>>();
-    expect(apiKeyHandler.element).toBe(apiKey);
+    expect(apiKeyHandler.declaration).toBe(apiKey);
   });
 
   test('an implementation returning any value but nothing or a Fault is a type error', () => {
@@ -325,16 +325,16 @@ describe('handle', () => {
 
     expectTypeOf(endpointStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(guardStub).toEqualTypeOf<GuardHandler<typeof apiKey>>();
-    expect(guardStub.element).toBe(apiKey);
+    expect(guardStub.declaration).toBe(apiKey);
   });
 
   test('a Handler of one Endpoint is not a Handler of another', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    // @ts-expect-error a Handler is nominal over its Element
+    // @ts-expect-error a Handler is nominal over its declaration
     const findOrderHandler: EndpointHandler<typeof findOrder> = getOrderHandler;
 
-    expect(findOrderHandler.element).toBe(getOrder);
+    expect(findOrderHandler.declaration).toBe(getOrder);
   });
 
   test('a Handler of one Guard is not a Handler of another', () => {
@@ -349,7 +349,7 @@ describe('handle', () => {
     // @ts-expect-error a Handler is nominal over its Guard
     const tenantKeyHandler: GuardHandler<typeof tenantKey> = apiKeyHandler;
 
-    expect(tenantKeyHandler.element).toBe(apiKey);
+    expect(tenantKeyHandler.declaration).toBe(apiKey);
   });
 
   test('an implementation that returns no Outcome answers the Fault, a TypeError as cause', async () => {
@@ -392,7 +392,7 @@ describe('handle and Resources', () => {
     );
 
     expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder, OrdersTaken>>();
-    expect(getOrderHandler.element).toBe(getOrder);
+    expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
   test('a direct call without the Resources the Handler takes is a type error, and one that takes none needs no last argument', () => {
@@ -508,7 +508,7 @@ describe('handle and Resources', () => {
       }),
     ];
 
-    expect(handlers.map(({ element }) => element)).toEqual([
+    expect(handlers.map(({ declaration }) => declaration)).toEqual([
       getOrder,
       chargeCardV1,
       notifyOnPaidV1,
@@ -597,7 +597,7 @@ describe('ResourcesOf', () => {
       readonly orders: Orders;
       readonly callers: Callers;
     }>();
-    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+    expect(handlers.endpoints.getOrder.declaration).toBe(getOrder);
   });
 
   test('an implementation typed by its last parameter gives a Handler that takes those Resources', () => {
@@ -662,7 +662,7 @@ describe('ResourcesOf', () => {
     expectTypeOf(handlers[4]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     expectTypeOf(handlers[5]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
     /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
-    expect(handlers.map(({ element }) => element)).toEqual([
+    expect(handlers.map(({ declaration }) => declaration)).toEqual([
       getOrder,
       apiKey,
       chargeCardV1,
@@ -708,7 +708,7 @@ describe('ResourcesOf', () => {
     expectTypeOf(takers.guard).not.toExtend<HandledBy<typeof apiKey, Alien>>();
     expectTypeOf(takers.command).not.toExtend<HandledBy<typeof chargeCardV1, Alien>>();
     expectTypeOf(takers.subscription).not.toExtend<HandledBy<typeof notifyOnPaidV1, Alien>>();
-    expect(takers.endpoint.element).toBe(getOrder);
+    expect(takers.endpoint.declaration).toBe(getOrder);
   });
 
   test('a Handler that takes none, left out, unannotated or a Stub, fits a map of any Resources, every kind alike', () => {
@@ -739,7 +739,7 @@ describe('ResourcesOf', () => {
     expectTypeOf(takers[9]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
     expectTypeOf(takers[10]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
     expectTypeOf(takers[11]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
-    expect(takers.map(({ element }) => element)).toHaveLength(12);
+    expect(takers.map(({ declaration }) => declaration)).toHaveLength(12);
   });
 
   test('a Handler typed by its brand alone makes ResourcesOf name the cause', () => {
@@ -753,7 +753,7 @@ describe('ResourcesOf', () => {
     const handlers = { endpoints: { getOrder: bare } };
 
     expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unspecified);
-    expect(bare.element).toBe(getOrder);
+    expect(bare.declaration).toBe(getOrder);
   });
 
   test('a brand alone names Resources of never, which no Handler that takes some fits', () => {
@@ -776,7 +776,7 @@ describe('ResourcesOf', () => {
     expectTypeOf(takesNone).toExtend<HandledBy<typeof getOrder, NoResources>>();
     expectTypeOf(handle.stub(getOrder)).toExtend<HandledBy<typeof getOrder, NoResources>>();
     expectTypeOf(takesSome).not.toExtend<HandledBy<typeof getOrder, NoResources>>();
-    expect(takesNone.element).toBe(getOrder);
+    expect(takesNone.declaration).toBe(getOrder);
   });
 
   test('a Handler or a table typed any makes ResourcesOf name the cause', () => {
@@ -789,7 +789,7 @@ describe('ResourcesOf', () => {
       unreadable,
     );
     /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
-    expect(copied.element).toBe(getOrder);
+    expect(copied.declaration).toBe(getOrder);
   });
 
   test('a Handler map that holds its readers counts only its Handlers', () => {
@@ -859,7 +859,7 @@ describe('ResourcesOf', () => {
     expectTypeOf<
       ResourcesOf<{ endpoints: Record<never, never>; guards: Record<never, never> }>
     >().toEqualTypeOf<Readonly<Record<never, never>>>();
-    expect(handlers.guards.apiKey.element).toBe(apiKey);
+    expect(handlers.guards.apiKey.declaration).toBe(apiKey);
   });
 
   test('the Resources of Handlers that take the same key are the intersection of what they take', () => {
@@ -880,15 +880,15 @@ describe('ResourcesOf', () => {
     expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
       readonly orders: Orders & Narrow['orders'];
     }>();
-    expect(handlers.endpoints.findOrder.element).toBe(findOrder);
+    expect(handlers.endpoints.findOrder.declaration).toBe(findOrder);
   });
 });
 
 describe('readersOf', () => {
   test('readersOf returns the table and each of its pairings frozen', () => {
     const table = readersOf({
-      commands: { chargeCardV1: { element: chargeCardV1, reader: statusReader } },
-      subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: statusReader } },
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: statusReader } },
+      subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: statusReader } },
     });
 
     const frozen = [
@@ -904,30 +904,34 @@ describe('readersOf', () => {
 
   test('readersOf keeps each pairing as written, typed by its Reader', () => {
     const table = readersOf({
-      commands: { chargeCardV1: { element: chargeCardV1, reader: statusReader } },
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: statusReader } },
       subscriptions: {},
     });
 
     expectTypeOf(table.commands.chargeCardV1.reader).toEqualTypeOf<typeof statusReader>();
-    expect(table.commands.chargeCardV1.element).toBe(chargeCardV1);
+    expect(table.commands.chargeCardV1.declaration).toBe(chargeCardV1);
   });
 
   test.each([
-    ['an Endpoint', 'commands.x', { commands: { x: { element: getOrder, reader: statusReader } } }],
+    [
+      'an Endpoint',
+      'commands.x',
+      { commands: { x: { declaration: getOrder, reader: statusReader } } },
+    ],
     [
       'a copy of a Command',
       'commands.x',
-      { commands: { x: { element: { ...chargeCardV1 }, reader: statusReader } } },
+      { commands: { x: { declaration: { ...chargeCardV1 }, reader: statusReader } } },
     ],
     [
       'a Command with no zod schema',
       'commands.x',
-      { commands: { x: { element: chargeCardV1, reader: { _zod: {} } } } },
+      { commands: { x: { declaration: chargeCardV1, reader: { _zod: {} } } } },
     ],
     [
       'a Subscription with no Reader',
       'subscriptions.x',
-      { subscriptions: { x: { element: notifyOnPaidV1 } } },
+      { subscriptions: { x: { declaration: notifyOnPaidV1 } } },
     ],
   ])('readersOf given %s names the key it refuses', (_what, key, pairing) => {
     const pair = () => readersOf({ commands: {}, subscriptions: {}, ...pairing } as never);
@@ -963,7 +967,7 @@ describe('HandlerMap', () => {
 
     expectTypeOf(generated).toExtend<HandlerMap>();
     const { notifyOnPaid: mapped } = map.subscriptions;
-    expect(mapped?.element).toBe(notifyOnPaidV1);
+    expect(mapped?.declaration).toBe(notifyOnPaidV1);
   });
 
   test('refuses a map whose commands hold the Handler of an Endpoint', () => {
@@ -976,7 +980,7 @@ describe('HandlerMap', () => {
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
-    expect(generated.commands.chargeCardV1.element).toBe(getOrder);
+    expect(generated.commands.chargeCardV1.declaration).toBe(getOrder);
   });
 
   test('takes the map handlers.generated.ts exports, Handlers by name', () => {
@@ -991,7 +995,7 @@ describe('HandlerMap', () => {
     const map: HandlerMap = generated;
 
     expectTypeOf(generated).toExtend<HandlerMap>();
-    expect(map.guards['apiKey']?.element).toBe(apiKey);
+    expect(map.guards['apiKey']?.declaration).toBe(apiKey);
   });
 
   test('refuses a map whose Handler is no Handler', () => {
@@ -1026,12 +1030,12 @@ describe('HandlerMap', () => {
       commands: {},
       subscriptions: {},
       readers: {
-        commands: { chargeCardV1: { element: getOrder, reader: statusReader } },
+        commands: { chargeCardV1: { declaration: getOrder, reader: statusReader } },
         subscriptions: {},
       },
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
-    expect(generated.readers.commands.chargeCardV1.element).toBe(getOrder);
+    expect(generated.readers.commands.chargeCardV1.declaration).toBe(getOrder);
   });
 });

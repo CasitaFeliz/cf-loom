@@ -86,10 +86,10 @@ const charged: string[] = [];
 const notified: string[] = [];
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
   subscriptions: {
-    chargeOnCreated: { element: chargeOnCreated, reader: orderCreatedV2.body },
-    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+    chargeOnCreated: { declaration: chargeOnCreated, reader: orderCreatedV2.body },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
   },
 });
 
