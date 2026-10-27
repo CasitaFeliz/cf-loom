@@ -166,8 +166,9 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
 type Place = { readonly owner: number | undefined; readonly put: Put };
 
 /**
- * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place when the proposed side is written inline, else
- * a `ref` to its def, held as the Snapshot declares it or named apart, built once.
+ * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place
+ * when the proposed side is written inline, else a `ref` to its def, held as the Snapshot declares
+ * it or named apart, built once.
  */
 function placePair(walk: Walk, pair: NodePair, place: Place): void {
   const followed = followedPairOf(pair, walk.defs);

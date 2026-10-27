@@ -58,9 +58,9 @@ export function followedRefOf(ref: RefNode, defs: Defs): ResolvedRef {
 
 /**
  * A def a former Input's graft meets, in the order it meets them: a pair of a former node and a
- * proposed def, by its `PairKey`, with whether a field is grafted into its body
- * and the pairs its body reaches; or a def only the former Input reaches, copied as it was. `base`
- * is the name of the def it comes from.
+ * proposed def, by its `PairKey`, with whether a field is grafted into its body and the pairs its
+ * body reaches; or a def only the former Input reaches, copied as it was. `base` is the name of the
+ * def it comes from.
  */
 type DefSource =
   | {

@@ -18,14 +18,9 @@ export function hopOf(pair: NodePair, defs: BothDefs): NodePair {
   };
 }
 
-/** Whether a pair is entered for the first time within its root schema, recording it as entered. */
-export function isFirstEntered(entered: Entered, { baseline, proposed }: NodePair): boolean {
-  const proposedEntered = entered.get(baseline) ?? new Set<SchemaNode>();
-  if (proposedEntered.has(proposed)) {
-    return false;
-  }
-  entered.set(baseline, proposedEntered.add(proposed));
-  return true;
+/** Whether a pair was already entered within its root schema. */
+export function hasEntered(entered: Entered, { baseline, proposed }: NodePair): boolean {
+  return entered.get(baseline)?.has(proposed) === true;
 }
 
 /**

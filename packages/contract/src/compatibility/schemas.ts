@@ -12,7 +12,7 @@ import {
   type NodePairOf,
   typeChanged,
 } from './findings.ts';
-import { type Entered, hopOf, isFirstEntered } from './refs.ts';
+import { type Entered, hasEntered, hopOf } from './refs.ts';
 import type { Difference, EndpointPosition, Position } from './report.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
@@ -112,7 +112,12 @@ function findingsWithin(
     return [...own, ...typeFindingsOf(pair, defs)];
   }
   const hop = hopOf(pair, defs);
-  return isFirstEntered(place.entered, hop) ? [...own, { kind: 'hop', pair: hop }] : own;
+  if (hasEntered(place.entered, hop)) {
+    return own;
+  }
+  const proposedEntered = place.entered.get(hop.baseline) ?? new Set<SchemaNode>();
+  place.entered.set(hop.baseline, proposedEntered.add(hop.proposed));
+  return [...own, { kind: 'hop', pair: hop }];
 }
 
 /**
