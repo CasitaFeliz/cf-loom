@@ -203,10 +203,12 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
+  formatConstructorOf,
   hashPartsOf,
   isHashFormat,
   isJsonValue,
   reachedDefsOf,
+  refusalsIn,
   siteTextOf,
   snapshotPathOf,
   tokenOf,

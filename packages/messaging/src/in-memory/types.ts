@@ -1,11 +1,7 @@
-import type { Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
-import type * as core from 'zod/v4/core';
+import type { BodyOf, Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
 import type { Settlement } from '../broker/index.ts';
 import type { Messaging } from '../messaging/index.ts';
 import type { GivenHeaders } from '../sending/index.ts';
-
-/** The body a Message Version's writer writes, what `publish` or `send` takes for it; a Provided Event's is its Reader's. */
-type WrittenBodyOf<M extends Event | Command> = core.output<M['body']>;
 
 /**
  * What `memory()` resolves to: one `Messaging` that keeps everything in memory and delivers one
@@ -40,7 +36,7 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
    */
   readonly deliver: <const M extends Event | Command>(
     message: M,
-    body: WrittenBodyOf<M>,
+    body: BodyOf<M>,
     meta?: DeliveryMeta,
   ) => Promise<Settlement>;
   /**
@@ -58,7 +54,7 @@ export type RecordedMessage<M extends Event | Command = Event | Command> = {
   readonly messageId: string;
   readonly factId: string;
   readonly headers: Readonly<Record<string, string>>;
-  readonly body: WrittenBodyOf<M>;
+  readonly body: BodyOf<M>;
 };
 
 /** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out, an `undefined` one left out. */

@@ -78,7 +78,7 @@ export function walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker)
     return failed(failuresOf([notAllowed(at, recordKey.refusal), value]), record);
   }
   if (value.kind === 'not-allowed') {
-    return failed(value.failures, record);
+    return failed(value.tree, record);
   }
   return walked({ type: 'record', key: recordKey.node, value: value.value });
 }
@@ -97,7 +97,7 @@ export function walkIntersection(
     walker.schema(def.right, inside(at, indexStep(1))),
   ]);
   if (items.kind === 'not-allowed') {
-    return failed(items.failures, { type: 'allOf' });
+    return failed(items.tree, { type: 'allOf' });
   }
   const [left, right] = items.value;
   if (left?.type === 'object' && right?.type === 'object') {

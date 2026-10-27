@@ -1,5 +1,8 @@
 import {
+  type BodyOf,
+  defineCommand,
   defineEndpoint,
+  defineEvent,
   defineGuard,
   defineRejection,
   defineSubscription,
@@ -15,7 +18,10 @@ import {
   type DirectMeta,
   handle,
   isRejectionOf,
+  type MessageHandler,
+  type MessageImplementation,
   type MessageMeta,
+  type ReceivedBodyOf,
   type ResourcesOf,
   readersOf,
   reject,
@@ -188,6 +194,42 @@ const notifyOnSettledHandler = handle(
   },
 );
 
+const orderCreatedV2 = defineEvent({
+  name: 'OrderCreated',
+  version: 2,
+  visibility: 'internal',
+  description: 'An order was placed',
+  body: z.object({ orderId: z.string(), status: openEnum(['pending', 'paid']) }),
+});
+
+const chargeOnCreatedSubscription = defineSubscription({
+  name: 'chargeOnCreated',
+  description: 'Charge on created',
+  event: orderCreatedV2,
+});
+
+const chargeCardV1 = defineCommand({
+  name: 'ChargeCard',
+  version: 1,
+  description: 'Charges the order’s card',
+  body: z.object({ orderId: z.string(), method: openEnum(['card', 'transfer']) }),
+});
+
+const ownReaders = readersOf({
+  commands: {
+    chargeCardV1: {
+      element: chargeCardV1,
+      reader: z.object({ orderId: z.string(), method: openEnumReader(['card', 'transfer']) }),
+    },
+  },
+  subscriptions: {
+    chargeOnCreated: {
+      element: chargeOnCreatedSubscription,
+      reader: z.object({ orderId: z.string(), status: openEnumReader(['pending', 'paid']) }),
+    },
+  },
+});
+
 describe('the handlers README', () => {
   test("the direct call of a Subscription's Message Handler receives its body and its meta defaulted", async () => {
     const settled = { paymentId: 'pay-1', method: { unknown: 'wallet' } };
@@ -287,5 +329,40 @@ describe('the handlers README', () => {
       Pick<Resources, 'orders' | 'callers' | 'permissions' | 'notifications'>
     >();
     expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+  });
+
+  test("ReceivedBodyOf of a Subscription's pairing has the Unknown case its own Event's writer type lacks", () => {
+    type Created = ReceivedBodyOf<typeof ownReaders.subscriptions.chargeOnCreated>;
+    const statusOf = (body: Created) => body.status;
+
+    const handler = handle(ownReaders.subscriptions.chargeOnCreated, (body) => {
+      statusOf(body);
+    });
+
+    expectTypeOf<Created>().toEqualTypeOf<{
+      orderId: string;
+      status: 'pending' | 'paid' | { unknown: string };
+    }>();
+    expectTypeOf<Created>().not.toEqualTypeOf<BodyOf<typeof orderCreatedV2>>();
+    expectTypeOf<BodyOf<typeof orderCreatedV2>>().toExtend<Created>();
+    expect(handler.element).toBe(chargeOnCreatedSubscription);
+  });
+
+  test('a Message Handler’s implementation receives ReceivedBodyOf of its pairing, a Command’s and a Subscription’s', () => {
+    type Charge = typeof ownReaders.commands.chargeCardV1;
+    type Created = typeof ownReaders.subscriptions.chargeOnCreated;
+
+    expectTypeOf<Parameters<MessageImplementation<Charge>>[0]>().toEqualTypeOf<
+      ReceivedBodyOf<Charge>
+    >();
+    expectTypeOf<Parameters<MessageHandler<Created>>[0]>().toEqualTypeOf<ReceivedBodyOf<Created>>();
+    expectTypeOf<Parameters<MessageImplementation<Created>>[0]>().toEqualTypeOf<
+      ReceivedBodyOf<Created>
+    >();
+    expectTypeOf<Parameters<MessageHandler<Charge>>[0]>().toEqualTypeOf<ReceivedBodyOf<Charge>>();
+    expectTypeOf<ReceivedBodyOf<Charge>>().toEqualTypeOf<{
+      orderId: string;
+      method: 'card' | 'transfer' | { unknown: string };
+    }>();
   });
 });

@@ -16,7 +16,7 @@ import {
 export function walkArray(def: core.$ZodArrayDef, at: Reached, walker: Walker): Walked {
   const items = walker.schema(def.element, inside(at, itemsStep));
   if (items.kind === 'not-allowed') {
-    return failed(items.failures, { type: 'array' });
+    return failed(items.tree, { type: 'array' });
   }
   return walked({ type: 'array', items: items.value });
 }

@@ -4,6 +4,7 @@ import { summaryOf } from '../../test/failures.ts';
 import { aProvider } from '../../test/providers.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
+  type BodyOf,
   defineCommand,
   defineDependency,
   defineEndpoint,
@@ -167,6 +168,17 @@ describe('the provided-Element constructors', () => {
     });
 
     expect([endpoint.kind, event.kind, rejection.kind]).toEqual(['endpoint', 'event', 'rejection']);
+  });
+
+  test('BodyOf of a provided Event is what its Reader reads, the Unknown case included', () => {
+    const event = providedEvent('orders-service', {
+      ...orderPaid,
+      body: z.object({ stage: openEnumReader(['packed', 'shipped']) }),
+    });
+
+    expectTypeOf<BodyOf<typeof event>>().toEqualTypeOf<{
+      stage: 'packed' | 'shipped' | { unknown: string };
+    }>();
   });
 
   test('a provided Endpoint types InputOf and SuccessOf as defineEndpoint does', () => {

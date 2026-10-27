@@ -5,10 +5,10 @@ import { declarationsOf, type ObjectPart } from '../written/index.ts';
 import type { Failure } from './failures.ts';
 import { paramsFailures } from './paths.ts';
 import {
-  failuresAt,
   locatedSchemasOf,
   type Nodes,
   nodesOf,
+  refusalsAt,
   schemaSlotsAmong,
   textSlotsOf,
 } from './schemas.ts';
@@ -39,7 +39,7 @@ export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const nodes = nodesOf(slots, walked);
   const [first, ...others] = [
     ...notSchemas,
-    ...notAllowedFailuresOf(walked.located.flatMap(failuresAt), walked.memoOf),
+    ...notAllowedFailuresOf(refusalsAt(walked.located), walked.memoOf),
     ...textPartFailures(nodes),
     ...declarations.endpoints.flatMap((endpoint) => paramsFailures(endpoint, nodes)),
     ...declarations.endpoints.flatMap((endpoint) => conflictFailures(endpoint, nodes)),

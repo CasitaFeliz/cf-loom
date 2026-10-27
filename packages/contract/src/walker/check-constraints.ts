@@ -1,6 +1,7 @@
-import { type DeclaredCheck, refusedCheck } from './check-defs.ts';
+import type { DeclaredCheck } from './check-defs.ts';
+import { refusedCheck } from './check-names.ts';
 import type { NumberNode, Regex, SchemaNode, StringNode } from './nodes.ts';
-import { notAllowed, refusedName } from './not-allowed.ts';
+import { notAllowed } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
 import { type Reached, type Walked, walked } from './walked.ts';
 
@@ -32,7 +33,7 @@ export function constraintOfType(type: SchemaNode['type'] | undefined): Constrai
     case 'json':
     case 'ref':
     case undefined:
-      return refusedConstraint;
+      return refusedHere;
   }
 }
 
@@ -47,14 +48,15 @@ function stringConstraint(check: DeclaredCheck, at: Reached): Constraint<StringN
   return formatOf(check, at);
 }
 
-function lengthConstraint({ def: check }: DeclaredCheck, at: Reached): Constraint<Bounds> {
-  switch (check.check) {
+function lengthConstraint(check: DeclaredCheck, at: Reached): Constraint<Bounds> {
+  const { def } = check;
+  switch (def.check) {
     case 'min_length':
-      return walked({ min: check.minimum });
+      return walked({ min: def.minimum });
     case 'max_length':
-      return walked({ max: check.maximum });
+      return walked({ max: def.maximum });
     case 'length_equals':
-      return walked({ min: check.length, max: check.length });
+      return walked({ min: def.length, max: def.length });
     case 'less_than':
     case 'greater_than':
     case 'multiple_of':
@@ -65,31 +67,31 @@ function lengthConstraint({ def: check }: DeclaredCheck, at: Reached): Constrain
     case 'size_equals':
     case 'string_format':
     case 'property':
+    case 'properties':
     case 'mime_type':
     case 'overwrite':
     case 'custom':
     case 'describe':
     case 'meta':
-      return notAllowed(at, refusedCheck(check));
+      return refusedHere(check, at);
   }
 }
 
-function numberConstraint({ def: check }: DeclaredCheck, at: Reached): Constraint<NumberNode> {
-  switch (check.check) {
+function numberConstraint(check: DeclaredCheck, at: Reached): Constraint<NumberNode> {
+  const { def } = check;
+  switch (def.check) {
     case 'greater_than':
       return walked(
-        check.inclusive ? { min: Number(check.value) } : { exclusiveMin: Number(check.value) },
+        def.inclusive ? { min: Number(def.value) } : { exclusiveMin: Number(def.value) },
       );
     case 'less_than':
       return walked(
-        check.inclusive ? { max: Number(check.value) } : { exclusiveMax: Number(check.value) },
+        def.inclusive ? { max: Number(def.value) } : { exclusiveMax: Number(def.value) },
       );
     case 'multiple_of':
-      return walked({ multipleOf: Number(check.value) });
+      return walked({ multipleOf: Number(def.value) });
     case 'number_format':
-      return check.format === 'safeint'
-        ? walked({ int: true })
-        : notAllowed(at, refusedName(check.format));
+      return def.format === 'safeint' ? walked({ int: true }) : refusedHere(check, at);
     case 'bigint_format':
     case 'max_size':
     case 'min_size':
@@ -99,17 +101,28 @@ function numberConstraint({ def: check }: DeclaredCheck, at: Reached): Constrain
     case 'length_equals':
     case 'string_format':
     case 'property':
+    case 'properties':
     case 'mime_type':
     case 'overwrite':
     case 'custom':
     case 'describe':
     case 'meta':
-      return notAllowed(at, refusedCheck(check));
+      return refusedHere(check, at);
   }
 }
 
-function refusedConstraint({ def }: DeclaredCheck, at: Reached): Constraint<never> {
-  return notAllowed(at, refusedCheck(def));
+/**
+ * A check a node does not take, refused by the name its own type gives it: a string format the
+ * string node refuses is refused as it would, any other by its row.
+ */
+function refusedHere(check: DeclaredCheck, at: Reached): Constraint<never> {
+  if (check.def.check === 'string_format') {
+    const onString = formatOf(check, at);
+    if (onString.kind === 'not-allowed') {
+      return onString;
+    }
+  }
+  return notAllowed(at, refusedCheck(check.def));
 }
 
 function regexOf(pattern: RegExp): Regex {
