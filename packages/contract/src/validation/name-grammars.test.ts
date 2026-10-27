@@ -1,12 +1,17 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
+  defineApplication,
   defineDefinitions,
+  defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
+  defineRejection,
   defineService,
+  defineSubscription,
 } from '../index.ts';
 import {
   codeNameOf,
@@ -146,4 +151,167 @@ describe('validateRoot: names are words', () => {
     expect(fromCodeNames).toEqual(messageNames);
     expect(fromKebabs).toEqual(messageNames);
   });
+});
+
+const listOrders = {
+  name: 'listOrders',
+  method: 'GET',
+  path: '/orders',
+  visibility: 'public',
+  description: 'Every order',
+  success: { status: 200, body: z.array(z.object({})) },
+} as const;
+
+const orderCreated = {
+  name: 'OrderCreated',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was placed',
+  body: z.object({}),
+} as const;
+
+/** A Service of one Group, which lists what the declaration lists, as a cast lets an author write it. */
+function aServiceOf(group: Record<string, unknown>, name = 'orders-service'): Root {
+  const declaration = { name: 'orders', description: 'Orders', ...group };
+  const orders = defineGroup(declaration as unknown as Parameters<typeof defineGroup>[0]);
+  return defineService({ name, groups: [orders] });
+}
+
+function anEndpointWith(declaration: Record<string, unknown>) {
+  return defineEndpoint({ ...listOrders, ...declaration });
+}
+
+/** A name of a grammar with exactly `length` characters, and a name of its kind that breaks its pattern. */
+const kebabWith = (length: number) => 'a'.repeat(length);
+const camelWordsWith = (length: number) => 'a'.repeat(length);
+const pascalWordsWith = (length: number) => `A${'a'.repeat(length - 1)}`;
+const upperSnakeWith = (length: number) => 'A'.repeat(length);
+
+type CappedName = {
+  readonly noun: string;
+  readonly grammar: string;
+  readonly nameWith: (length: number) => string;
+  readonly breakingPattern: string;
+  readonly place: (name: string) => string;
+  readonly rootWith: (name: string) => Root;
+};
+
+const cappedNames: readonly CappedName[] = [
+  {
+    noun: 'A Service name',
+    grammar: 'kebab-case',
+    nameWith: kebabWith,
+    breakingPattern: 'A'.repeat(70),
+    place: () => '(root) name',
+    rootWith: (name) => aServiceOf({ endpoints: [defineEndpoint(listOrders)] }, name),
+  },
+  {
+    noun: 'An Application name',
+    grammar: 'kebab-case',
+    nameWith: kebabWith,
+    breakingPattern: 'A'.repeat(70),
+    place: () => '(root) name',
+    rootWith: (name) => defineApplication({ name, dependencies: [] }),
+  },
+  {
+    noun: 'A Group name',
+    grammar: 'kebab-case',
+    nameWith: kebabWith,
+    breakingPattern: 'A'.repeat(70),
+    place: (name) => `groups.${name} name`,
+    rootWith: (name) => aServiceOf({ name, endpoints: [defineEndpoint(listOrders)] }),
+  },
+  {
+    noun: 'An Endpoint name',
+    grammar: 'camelCase words',
+    nameWith: camelWordsWith,
+    breakingPattern: 'A'.repeat(70),
+    place: (name) => `endpoints.GET /orders (${name}) name`,
+    rootWith: (name) => aServiceOf({ endpoints: [anEndpointWith({ name })] }),
+  },
+  {
+    noun: 'A Guard name',
+    grammar: 'camelCase words',
+    nameWith: camelWordsWith,
+    breakingPattern: 'A'.repeat(70),
+    place: (name) => `guards.${name} name`,
+    rootWith: (name) => {
+      const guard = defineGuard({ name, description: 'A guard' });
+      return aServiceOf({ endpoints: [anEndpointWith({ guards: [guard] })] });
+    },
+  },
+  {
+    noun: 'A Subscription name',
+    grammar: 'camelCase words',
+    nameWith: camelWordsWith,
+    breakingPattern: 'A'.repeat(70),
+    place: (name) => `subscriptions.${name} name`,
+    rootWith: (name) => {
+      const event = defineEvent(orderCreated);
+      const subscription = defineSubscription({ name, description: 'Receives it', event });
+      return aServiceOf({ events: [event], subscriptions: [subscription] });
+    },
+  },
+  {
+    noun: 'A Message name',
+    grammar: 'PascalCase words',
+    nameWith: pascalWordsWith,
+    breakingPattern: 'A'.repeat(70),
+    place: (name) => `events.${name}@1 name`,
+    rootWith: (name) => aServiceOf({ events: [defineEvent({ ...orderCreated, name })] }),
+  },
+  {
+    noun: 'A Rejection code',
+    grammar: 'UPPER_SNAKE_CASE',
+    nameWith: upperSnakeWith,
+    breakingPattern: 'a'.repeat(70),
+    place: (code) => `codes.${code} code`,
+    rootWith: (code) => {
+      const rejection = defineRejection({ code, status: 409, message: 'Locked' });
+      return aServiceOf({ endpoints: [anEndpointWith({ rejections: [rejection] })] });
+    },
+  },
+];
+
+function validateCapped(root: Root) {
+  return summarized(validateRoot(root, aRootPackage(root)));
+}
+
+function failedAt(location: string, message: string) {
+  return {
+    kind: 'invalid',
+    failures: [{ kind: 'declaration', location, rule: 'name-grammar', message }],
+  };
+}
+
+describe('validateRoot: names have at most 64 characters', () => {
+  test.for(cappedNames)('$noun of 64 characters validates', ({ nameWith, rootWith }) => {
+    const root = rootWith(nameWith(64));
+
+    expect(validateCapped(root).kind).toBe('valid');
+  });
+
+  test.for(cappedNames)(
+    '$noun of 65 characters fails, naming its length',
+    ({ noun, nameWith, place, rootWith }) => {
+      const name = nameWith(65);
+
+      const validated = validateCapped(rootWith(name));
+
+      expect(validated).toEqual(
+        failedAt(place(name), `${noun} is at most 64 characters: "${name}" (65 characters)`),
+      );
+    },
+  );
+
+  test.for(cappedNames)(
+    '$noun that breaks its pattern and the cap gets the pattern sentence alone',
+    ({ noun, grammar, breakingPattern, place, rootWith }) => {
+      const validated = validateCapped(rootWith(breakingPattern));
+
+      expect(validated).toEqual(
+        failedAt(place(breakingPattern), `${noun} is ${grammar}: "${breakingPattern}"`),
+      );
+    },
+  );
 });

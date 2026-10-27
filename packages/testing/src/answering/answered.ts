@@ -10,6 +10,7 @@ import {
   rejectionResponseOf,
   reservedCodes,
   reservedResponseOf,
+  ruleOf,
   sendableRetryAfterOf,
   travelingFaultOf,
   upperSnakeCase,
@@ -144,7 +145,7 @@ function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | un
     return `${code} is a Reserved code, which r.reserved answers`;
   }
   if (!follows(upperSnakeCase, code)) {
-    return `${code} is no ${upperSnakeCase.name}, so no Contract can declare it`;
+    return `${code} is no ${ruleOf(upperSnakeCase)}, so no Contract can declare it`;
   }
   return undefined;
 }

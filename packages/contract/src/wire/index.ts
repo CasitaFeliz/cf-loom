@@ -14,6 +14,7 @@ export {
   brokerHeadersOf,
   brokerMessageIdHeader,
   brokerMessageIdOf,
+  brokerPrefixRule,
   durableNameOf,
   factIdHeader,
   isBrokerPrefix,
