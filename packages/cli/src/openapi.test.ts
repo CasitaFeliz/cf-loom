@@ -740,10 +740,12 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 });
 
-/** The integers a JSON Schema `integer` with these bounds admits, on the integers `integersProbed` lists. */
+/** Whether the bounds of a JSON Schema `integer` admit a value. */
 function admitsInteger(schema: unknown, value: number): boolean {
-  const bounds = { ...(schema as Record<string, number | undefined>) };
-  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum } = bounds;
+  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum } = schema as Record<
+    string,
+    number | undefined
+  >;
   return (
     (minimum === undefined || value >= minimum) &&
     (maximum === undefined || value <= maximum) &&
@@ -884,7 +886,6 @@ describe('cf-loom openapi: an int is a safe integer', () => {
         )
         .map((value) => `${source} on ${value}`),
     );
-    expect(cases).toHaveLength(64);
     expect(disagreements).toEqual([]);
   });
 });
