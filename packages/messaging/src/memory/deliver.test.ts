@@ -650,17 +650,6 @@ describe('pending and redeliver()', () => {
     expect(faults).toMatchObject([named]);
   });
 
-  test('a pending Message and its fault carry the name and no identity', async () => {
-    const { inMemory, faults } = await running(() => ({ notify: throwing }));
-
-    await inMemory.deliver(orderCreatedV2, created, { factId: 'o-1' });
-
-    for (const record of [inMemory.pending[0], faults[0]]) {
-      expect(record).toHaveProperty('name', 'notifyOnCreated');
-      expect(record).not.toHaveProperty('identity');
-    }
-  });
-
   test('an Event two Subscriptions take, one ending it and one acknowledging, makes settled() reject with the one Fault’s line', async () => {
     const ending = () => fault({ committed: 'no', retryable: false, message: 'Not notified' });
     const { inMemory, publisher } = await running(() => ({ notify: ending }));

@@ -11,7 +11,10 @@ import {
   type WithResources,
 } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
-import { type ServeOptions, serve } from './index.ts';
+import { type ServedFault, type ServeOptions, serve } from './index.ts';
+
+/** Every key any member of a union of records holds. */
+type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
 
 const apiKey = defineGuard({ name: 'apiKey', description: 'A key per Caller' });
 
@@ -61,6 +64,14 @@ const contract = defineService({
 const getOrderHandler = handle(getOrder, () => success());
 const findOrderHandler = handle(findOrder, () => success());
 const apiKeyHandler = handle(apiKey, () => admit());
+
+describe('serve: what onServiceFault receives', () => {
+  test('a ServedFault holds the Endpoint, its name, the Guard, and how it failed, and no more', () => {
+    expectTypeOf<KeysOfEach<ServedFault>>().toEqualTypeOf<
+      'declaration' | 'name' | 'guard' | 'kind' | 'fault' | 'cause' | 'issues'
+    >();
+  });
+});
 
 describe('serve: the Handler map, typed by the Contract', () => {
   test('a map that lacks an Endpoint’s Handler is a type error', () => {

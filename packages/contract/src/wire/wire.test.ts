@@ -373,7 +373,7 @@ describe('allowedMethodsOf', () => {
   });
 });
 
-describe('the reserved codes and statuses', () => {
+describe('the Reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
     expect(Object.entries(reservedCodeFaults)).toEqual([
       ['RETIRED', { status: 410, committed: 'no', message: 'The Endpoint is retired' }],

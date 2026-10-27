@@ -5,7 +5,7 @@ import { connect } from '@nats-io/transport-node';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
 import { droppedUnder, stopServerUnder, withMethods } from '../../test/connections.ts';
-import { arrangeDurableConsumersOf, durableConsumerInfoOf } from '../../test/durables.ts';
+import { arrangeDurableConsumersOf, durableConsumerInfoOf } from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, planOf } from '../../test/streams.ts';

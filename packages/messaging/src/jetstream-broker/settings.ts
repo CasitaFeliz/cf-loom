@@ -1,6 +1,6 @@
 import type { BrokerPlan } from '@cf-loom/contract/internal';
 import type { StreamConfig } from '@nats-io/jetstream';
-import type { DurableConsumerSettings } from './durable-shape.ts';
+import type { DurableConsumerSettings } from './durable-consumer-shape.ts';
 import { durableConsumerConfigOf, streamConfigOf } from './nats-config.ts';
 import {
   durableConsumerSettingNames,

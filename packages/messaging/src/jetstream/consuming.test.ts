@@ -21,7 +21,7 @@ import {
   arrangeDurableConsumersOf,
   dropDurableConsumer,
   durableConsumerInfoOf,
-} from '../../test/durables.ts';
+} from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
@@ -198,7 +198,7 @@ async function arrangeOrders(
 }
 
 /** The plan with only the Durable consumers named kept, to arrange some of Orders’ Durable consumers and not others. */
-function onlyDurablesOf(plan: BrokerPlan, ...names: readonly string[]): BrokerPlan {
+function onlyDurableConsumersOf(plan: BrokerPlan, ...names: readonly string[]): BrokerPlan {
   const kept = Object.entries(plan.durableConsumers).filter(([name]) => names.includes(name));
   return { ...plan, durableConsumers: Object.fromEntries(kept) };
 }
@@ -430,7 +430,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -471,7 +471,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -481,7 +481,7 @@ describe('consuming over jetstream()', () => {
     );
     await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-77' });
     await messagingOfOrders.consume(handlersOf(received), {}).catch(() => undefined);
-    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.chargeDurable));
 
     await messagingOfOrders.consume(handlersOf(received), {});
 
@@ -570,7 +570,10 @@ describe('consuming over jetstream()', () => {
       const orders = anOrders(prefix);
       await arrangePlanOf(server.url, contract, prefix);
       const plan = planOf(contract, prefix);
-      await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+      await arrangeDurableConsumersOf(
+        server.url,
+        onlyDurableConsumersOf(plan, orders.chargeDurable),
+      );
       await arrangeDurableConsumer(server.url, orders.stream, {
         ...config(orders),
         durable_name: orders.notifyDurable,
@@ -602,7 +605,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.chargeDurable));
     await arrangeDurableConsumer(server.url, orders.stream, {
       ack_policy: 'explicit',
       filter_subjects: [orders.created],
@@ -621,7 +624,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     const handlers = {

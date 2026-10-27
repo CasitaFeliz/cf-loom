@@ -22,6 +22,7 @@ import {
   type Broker,
   type BrokerConnection,
   type BrokerTrouble,
+  type CloseAbortedError,
   type CloseOptions,
   type ConsumedFault,
   type ConsumeOptions,
@@ -35,6 +36,9 @@ import {
   type ServiceStream,
   type Settlement,
 } from './index.ts';
+
+/** Every key any member of a union of records holds. */
+type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
 
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
@@ -642,6 +646,36 @@ describe('the options, typed by what they declare', () => {
     ) => consume(map, options);
 
     expect([overOptions, overMap]).toHaveLength(2);
+  });
+});
+
+describe('the records a Service reads', () => {
+  test('a ConsumedFault holds the declaration, its name, the Message and how it failed, and no more', () => {
+    expectTypeOf<KeysOfEach<ConsumedFault>>().toEqualTypeOf<
+      | 'declaration'
+      | 'name'
+      | 'subject'
+      | 'messageId'
+      | 'factId'
+      | 'deliveryCount'
+      | 'lastAttempt'
+      | 'kind'
+      | 'issues'
+      | 'fault'
+      | 'cause'
+    >();
+  });
+
+  test('a BrokerTrouble holds the declaration, its name, the Durable consumer’s name, its Stream and why, and no more', () => {
+    expectTypeOf<KeysOfEach<BrokerTrouble>>().toEqualTypeOf<
+      'declaration' | 'name' | 'durable' | 'stream' | 'kind' | 'cause'
+    >();
+  });
+
+  test('a Message CloseAbortedError hands back holds its name, subject and ids, and no more', () => {
+    expectTypeOf<keyof CloseAbortedError['handedBack'][number]>().toEqualTypeOf<
+      'name' | 'subject' | 'messageId' | 'factId'
+    >();
   });
 });
 

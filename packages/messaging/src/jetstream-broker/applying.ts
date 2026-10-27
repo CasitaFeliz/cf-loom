@@ -6,7 +6,7 @@ import {
 import type { JetStreamManager } from '@nats-io/jetstream';
 import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
-import { applyDurableConsumer } from './durable-applying.ts';
+import { applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { JetStreamConnecting } from './jetstream.ts';
 import type { BrokerLimits } from './limits.ts';
 import { type ResolvedPlan, settingsOf } from './settings.ts';

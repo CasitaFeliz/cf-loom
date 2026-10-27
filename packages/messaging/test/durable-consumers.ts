@@ -34,9 +34,9 @@ export async function arrangeDurableConsumersOf(
   plan: BrokerPlan,
   settings: Partial<ConsumerConfig> = {},
 ): Promise<void> {
-  for (const [name, durable] of Object.entries(plan.durableConsumers)) {
-    const shape = { ack_policy: 'explicit', filter_subject: durable.subject } as const;
-    await arrangeDurableConsumer(url, durable.stream, {
+  for (const [name, durableConsumer] of Object.entries(plan.durableConsumers)) {
+    const shape = { ack_policy: 'explicit', filter_subject: durableConsumer.subject } as const;
+    await arrangeDurableConsumer(url, durableConsumer.stream, {
       ...shape,
       ...settings,
       durable_name: name,

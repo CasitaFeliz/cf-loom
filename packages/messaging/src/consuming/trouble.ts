@@ -74,7 +74,7 @@ async function logBrokerTrouble(trouble: BrokerTrouble): Promise<void> {
   }
 }
 
-/** What names a Durable consumer in a line: the declaration it is pulled for, its name and its stream. */
+/** What names a Durable consumer in a line: the declaration's `name`, its `durable` and its stream. */
 function sourceOf({ name, durable, stream }: BrokerTrouble): string {
   return `${name} ${durable} ${stream}`;
 }

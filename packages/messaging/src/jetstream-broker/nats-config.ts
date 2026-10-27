@@ -1,6 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import type { StreamConfig } from '@nats-io/jetstream';
-import { type DurableConsumerSettings, durableConsumerShapeOf } from './durable-shape.ts';
+import { type DurableConsumerSettings, durableConsumerShapeOf } from './durable-consumer-shape.ts';
 import type { NatsDurableConsumerLimits, NatsStreamLimits, SetLimits } from './reading-limits.ts';
 
 /** A stream's limits as the NATS settings nats.js takes, the same for creating the stream and for updating it. */

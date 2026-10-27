@@ -1,6 +1,6 @@
 import { type ConsumerConfig, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
 import { type Applied, isApiError, refusedBy } from './applied.ts';
-import type { DurableConsumerSettings } from './durable-shape.ts';
+import type { DurableConsumerSettings } from './durable-consumer-shape.ts';
 import type { PlannedDurableConsumer } from './settings.ts';
 
 type Held = 'no-stream' | 'no-durable-consumer' | 'held';

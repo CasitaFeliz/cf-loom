@@ -207,6 +207,16 @@ describe('memory types', () => {
     expectTypeOf(inMemory.messages).toEqualTypeOf<readonly RecordedMessage[]>();
     expectTypeOf(inMemory.pending).toEqualTypeOf<readonly PendingMessage[]>();
     expectTypeOf<PendingMessage['declaration']>().toEqualTypeOf<Subscription | Command>();
+    expectTypeOf<keyof PendingMessage>().toEqualTypeOf<
+      | 'declaration'
+      | 'name'
+      | 'subject'
+      | 'messageId'
+      | 'factId'
+      | 'deliveryCount'
+      | 'headers'
+      | 'body'
+    >();
     expectTypeOf<RecordedMessage['body']>().toEqualTypeOf<unknown>();
     expectTypeOf<PendingMessage['body']>().toEqualTypeOf<unknown>();
     expect(inMemory.messages).toEqual([]);

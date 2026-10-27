@@ -678,15 +678,6 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('a ConsumedFault carries its name and no identity', async () => {
-    const { deliver, faults } = await consuming();
-
-    await deliver(created, {});
-
-    expect(faults[0]).toHaveProperty('name', 'notifyOnCreated');
-    expect(faults[0]).not.toHaveProperty('identity');
-  });
-
   test('without onServiceFault, an ended Message is logged one line per Issue with its subject, broker message id and Fact id, never the value', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { broker, deliver } = aBroker();

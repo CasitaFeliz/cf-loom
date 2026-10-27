@@ -21,7 +21,7 @@ import {
   arrangeDurableConsumer,
   durableConsumerConfigOf,
   durableConsumerInfoOf,
-} from '../../test/durables.ts';
+} from '../../test/durable-consumers.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, planOf, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
@@ -224,17 +224,17 @@ describe('applyBrokerPlan', () => {
     const plan = planOf(longest, prefix);
     const connecting = { connect: aConnect().connect };
     const [stream = ''] = Object.keys(plan.streams);
-    const durables = Object.entries(plan.durableConsumers);
+    const durableConsumers = Object.entries(plan.durableConsumers);
 
     await applyBrokerPlan(connecting, plan, testLimits);
 
     const streamApplied = await streamConfigOf(server.url, stream);
-    const durablesApplied = await Promise.all(
-      durables.map(([name]) => durableConsumerConfigOf(server.url, stream, name)),
+    const configsApplied = await Promise.all(
+      durableConsumers.map(([name]) => durableConsumerConfigOf(server.url, stream, name)),
     );
-    const names = [stream, ...durables.map(([name]) => name)];
+    const names = [stream, ...durableConsumers.map(([name]) => name)];
     expect(streamApplied.name).toBe(stream);
-    expect(durablesApplied.map((config) => config.durable_name)).toEqual(names.slice(1));
+    expect(configsApplied.map((config) => config.durable_name)).toEqual(names.slice(1));
     expect(names.map((name) => name.length).sort((a, b) => a - b)).toEqual([129, 220, 225]);
   });
 
@@ -309,12 +309,12 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({
       max_age: 7200 * nanosPerSecond,
       duplicate_window: 120 * nanosPerSecond,
     });
-    expect(durable).toMatchObject({
+    expect(config).toMatchObject({
       ack_wait: 120 * nanosPerSecond,
       max_deliver: 9,
       max_ack_pending: 100,
@@ -378,7 +378,7 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({
       retention: 'interest',
       max_age: 604_800 * nanosPerSecond,
@@ -387,7 +387,7 @@ describe('applyBrokerPlan', () => {
       storage: 'file',
       max_bytes: 1_000_000,
     });
-    expect(durable).toMatchObject({
+    expect(config).toMatchObject({
       deliver_policy: 'all',
       ack_wait: 30 * nanosPerSecond,
       max_deliver: 5,
@@ -405,7 +405,7 @@ describe('applyBrokerPlan', () => {
     const connection = await service.connect();
     await jetStreamClientOf(connection).publish(orders.created, '{}');
     const first = await streamInfoOf(server.url, orders.stream);
-    const firstDurable = await durableConsumerConfigOf(
+    const firstConfig = await durableConsumerConfigOf(
       server.url,
       orders.stream,
       orders.chargeDurable,
@@ -414,7 +414,7 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, orders.plan, testLimits);
 
     const again = await streamInfoOf(server.url, orders.stream);
-    const againDurable = await durableConsumerConfigOf(
+    const againConfig = await durableConsumerConfigOf(
       server.url,
       orders.stream,
       orders.chargeDurable,
@@ -422,7 +422,7 @@ describe('applyBrokerPlan', () => {
     expect(again.config).toEqual(first.config);
     expect(again.state.messages).toBe(first.state.messages);
     expect(first.state.messages).toBe(1);
-    expect(againDurable).toEqual(firstDurable);
+    expect(againConfig).toEqual(firstConfig);
   });
 
   test('applyBrokerPlan creates a Durable consumer on a stream the same plan creates', async () => {
@@ -497,13 +497,13 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, plan, testLimits);
 
     const stream = await streamConfigOf(server.url, 'unprefixed-orders');
-    const durable = await durableConsumerConfigOf(
+    const config = await durableConsumerConfigOf(
       server.url,
       'unprefixed-orders',
       'unprefixed-orders_command_B_v1',
     );
     expect(stream.subjects).toEqual(['unprefixed-orders.event.A.v1']);
-    expect(durable.filter_subject).toBe('unprefixed-orders.event.A.v1');
+    expect(config.filter_subject).toBe('unprefixed-orders.event.A.v1');
   });
 
   test('"unlimited" reaches NATS as no limit: max age 0, max deliver -1 and max ack pending -1', async () => {
@@ -522,9 +522,9 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream.max_age).toBe(0);
-    expect(durable).toMatchObject({ max_deliver: -1, max_ack_pending: -1 });
+    expect(config).toMatchObject({ max_deliver: -1, max_ack_pending: -1 });
   });
 
   test('a duration of a year reaches NATS exactly, in nanoseconds', async () => {
@@ -570,9 +570,9 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({ max_age: 604_800 * nanosPerSecond, num_replicas: 1 });
-    expect(durable.ack_wait).toBe(30 * nanosPerSecond);
+    expect(config.ack_wait).toBe(30 * nanosPerSecond);
   });
 
   test('an undefined entry for a stream, a Durable consumer or a name the plan does not list leaves the defaults in place', async () => {
@@ -608,9 +608,9 @@ describe('applyBrokerPlan', () => {
 
     await applyBrokerPlan(connecting, orders.plan, limits);
 
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.ack_wait).toBe(30 * nanosPerSecond);
-    expect(durable.backoff).toEqual([
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.ack_wait).toBe(30 * nanosPerSecond);
+    expect(config.backoff).toEqual([
       30 * nanosPerSecond,
       60 * nanosPerSecond,
       300 * nanosPerSecond,
@@ -632,9 +632,9 @@ describe('applyBrokerPlan', () => {
       durableConsumers: { [orders.chargeDurable]: { ackWait: '2m' } },
     });
 
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.ack_wait).toBe(120 * nanosPerSecond);
-    expect(durable.backoff ?? []).toEqual([]);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.ack_wait).toBe(120 * nanosPerSecond);
+    expect(config.backoff ?? []).toEqual([]);
   });
 });
 
@@ -653,8 +653,8 @@ describe('applyBrokerPlan on a Durable consumer cf-loom cannot pull from', () =>
 
     await applyBrokerPlan(connecting, orders.plan, testLimits);
 
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.headers_only ?? false).toBe(false);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.headers_only ?? false).toBe(false);
   });
 
   test('applyBrokerPlan clears the priority groups, policy and timeout of an existing Durable consumer', async () => {
@@ -673,10 +673,10 @@ describe('applyBrokerPlan on a Durable consumer cf-loom cannot pull from', () =>
 
     await applyBrokerPlan(connecting, orders.plan, testLimits);
 
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.priority_groups ?? []).toEqual([]);
-    expect(durable.priority_policy ?? 'none').toBe('none');
-    expect(durable.priority_timeout ?? 0).toBe(0);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.priority_groups ?? []).toEqual([]);
+    expect(config.priority_policy ?? 'none').toBe('none');
+    expect(config.priority_timeout ?? 0).toBe(0);
   });
 
   test('applyBrokerPlan sets filter_subject on a Durable consumer filtered on its subject through filter_subjects, and leaves filter_subjects unset', async () => {
@@ -692,9 +692,9 @@ describe('applyBrokerPlan on a Durable consumer cf-loom cannot pull from', () =>
 
     await applyBrokerPlan(connecting, orders.plan, testLimits);
 
-    const durable = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.filter_subject).toBe(orders.charge);
-    expect(durable.filter_subjects ?? []).toEqual([]);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.filter_subject).toBe(orders.charge);
+    expect(config.filter_subjects ?? []).toEqual([]);
   });
 
   test.each<[string, (orders: Orders) => Partial<ConsumerConfig>]>([
