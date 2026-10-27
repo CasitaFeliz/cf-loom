@@ -170,6 +170,42 @@ describe('invoiceFor', () => {
     },
   );
 
+  test('the fake records the api key the client sends, as getOrder’s Input', async () => {
+    const { fake, client } = fakeOrders();
+    fake.on('getOrder').otherwise((r) => r.success(paidOrder));
+
+    await client.getOrder({ params: { orderId: ORDER_ID } });
+
+    expect(fake.calls('getOrder')).toEqual([
+      { params: { orderId: ORDER_ID }, headers: { 'x-api-key': 'billing-key' } },
+    ]);
+  });
+
+  test('a step answers UNAUTHENTICATED, with its www-authenticate header, from the api key the client sent', async () => {
+    const fake = fakeProvider(ordersDependency);
+    const challenge = 'ApiKey realm="orders-service"';
+    fake
+      .on('getOrder')
+      .otherwise((r, { headers }) =>
+        headers['x-api-key'] === 'orders-key'
+          ? r.success(paidOrder)
+          : r.reject('UNAUTHENTICATED', { headers: { 'www-authenticate': challenge } }),
+      );
+    const wrongKey = fake.client({ headers: { 'x-api-key': 'WRONG' } });
+    const rightKey = fake.client({ headers: { 'x-api-key': 'orders-key' } });
+
+    const refused = await wrongKey.getOrder({ params: { orderId: ORDER_ID } });
+    const admitted = await rightKey.getOrder({ params: { orderId: ORDER_ID } });
+
+    expect(refused).toMatchObject({
+      kind: 'rejection',
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      headers: { 'www-authenticate': challenge },
+    });
+    expect(admitted.kind).toBe('success');
+  });
+
   test('a scripted order that breaks orders-service’s Contract fails the test', async () => {
     const { fake, client } = fakeOrders();
     const badTotal = { amount: 4200, currency: 'EURO' };

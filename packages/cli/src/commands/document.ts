@@ -1,5 +1,5 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
-import { builtOf, type Run } from '../project/index.ts';
+import { builtOf } from '../project/index.ts';
 import {
   committedStopOf,
   done,
@@ -8,6 +8,7 @@ import {
   type Stopped,
   toolingError,
 } from './exit.ts';
+import type { Run } from './run.ts';
 
 /** The Snapshot of a Service whose committed file is what `generate` would write. */
 export type CommittedService = {
@@ -29,7 +30,7 @@ export async function committedServiceOf(
   run: Run,
   noDocumentLineOf: (root: string) => string,
 ): Promise<CommittedService | Stopped> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

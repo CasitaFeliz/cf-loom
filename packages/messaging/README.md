@@ -165,7 +165,7 @@ The interface assumes JetStream semantics: the core refuses what NATS would not 
 - Its NATS packages, `@nats-io/jetstream` and `@nats-io/nats-core`, are optional peer dependencies (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md); keep every `@nats-io/*` package on one version, since `@nats-io/jetstream` pins `@nats-io/nats-core` exactly.
 - `prefix` is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md, and `jetstream` is nats.js's own JetStream options, a JetStream domain, an API prefix or a request timeout, which cf-loom hands to its JetStream client and manager unchanged, with no defaults of its own except `checkAPI: false` on the manager, so no `$JS.API.INFO` is requested.
 - `applyBrokerPlan` (see [Applying the plan](#applying-the-plan)) takes `connect` and `jetstream` the same way, as a `JetStreamConnecting`, and no `prefix`: it reads it from the plan; it rejects with an error naming the Stream or Durable consumer it could not apply, with the client's error as `cause`, where `messaging()` rejects with it unchanged.
-- `jetstream()` throws on a `prefix` that is not kebab-case, `''` included: leave it undefined for none.
+- `jetstream()` throws on a `prefix` that is not kebab-case of at most 64 characters, `''` included: leave it undefined for none.
 
 #### At connect
 

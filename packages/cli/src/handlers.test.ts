@@ -1856,7 +1856,8 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     ]);
   });
 
-  test('a stale Handler map stays when a file cannot be written, and the Handlers moved are said', () => {
+  /** A Service whose Handlers move and whose Handler map moves, while a folder blocks its readers file. */
+  function aProjectWhoseReadersCannotBeWritten(): string {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     const layout =
@@ -1864,6 +1865,11 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     write(project, withLayout({}, layout));
     rmSync(join(project, 'src/readers.generated.ts'));
     mkdirSync(join(project, 'src/readers.generated.ts'));
+    return project;
+  }
+
+  test('a stale Handler map stays when a file cannot be written, and the Handlers moved and the files written are said', () => {
+    const project = aProjectWhoseReadersCannotBeWritten();
 
     const ran = cfLoom(project, 'generate');
 
@@ -1871,9 +1877,90 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     expect(ran.stdout).toContain(
       `${movedLine('src/endpoints/orders/get-order.handler.ts', 'src/http/orders/get-order.handler.ts')}\n`,
     );
+    expect(ran.stdout.split('\n').filter((line) => line.startsWith('Wrote'))).toEqual([
+      'Wrote contract.snapshot.json',
+      'Wrote src/generated/handlers.generated.ts',
+    ]);
     expect(ran.stderr).toMatch(/^src\/readers\.generated\.ts cannot be written: [^\n]+\n$/);
     expect(existsSync(join(project, 'src/handlers.generated.ts'))).toBe(true);
   });
+
+  test('generate --json keeps the Handlers it moved and the files it wrote beside the file it could not write', () => {
+    const project = aProjectWhoseReadersCannotBeWritten();
+
+    const ran = cfLoom(project, 'generate', '--json');
+
+    const [line] = ran.stderr.split('\n');
+    const [document] = ran.stdout.split('\n');
+    expect(ran.status).toBe(3);
+    expect(JSON.parse(document ?? '')).toEqual({
+      format: 1,
+      status: 3,
+      errors: [line],
+      moved: [
+        {
+          from: 'src/endpoints/orders/create-order.handler.ts',
+          to: 'src/http/orders/create-order.handler.ts',
+        },
+        {
+          from: 'src/endpoints/orders/get-order.handler.ts',
+          to: 'src/http/orders/get-order.handler.ts',
+        },
+      ],
+      wrote: ['contract.snapshot.json', 'src/generated/handlers.generated.ts'],
+    });
+  });
+
+  /** Runs `generate` in a Service with a stale generated file that can be deleted and one in a folder that cannot, which sorts after it. */
+  function generatedWithLockedStaleFile(...args: string[]) {
+    const stale = `${header}\nexport {};\n`;
+    const project = aProject({
+      ...aService(),
+      'src/a.generated.ts': stale,
+      'src/locked/old.generated.ts': stale,
+    });
+    chmodSync(join(project, 'src/locked'), 0o555);
+    try {
+      return cfLoom(project, 'generate', ...args);
+    } finally {
+      chmodSync(join(project, 'src/locked'), 0o755);
+    }
+  }
+
+  const lockedLine = /^src\/locked\/old\.generated\.ts cannot be deleted: [^\n]+\n$/;
+
+  test.skipIf(isRoot)(
+    'a stale generated file that cannot be deleted is said after every file was written and the stale one before it was deleted (skipped as root)',
+    () => {
+      const ran = generatedWithLockedStaleFile();
+
+      expect(ran.status).toBe(3);
+      expect(ran.stdout.split('\n')).toEqual([
+        ...ran.stdout.split('\n').filter((line) => line.startsWith('Wrote')),
+        'Deleted src/a.generated.ts',
+        '',
+      ]);
+      expect(ran.stdout).toContain('Wrote contract.snapshot.json\n');
+      expect(ran.stderr).toMatch(lockedLine);
+    },
+  );
+
+  test.skipIf(isRoot)(
+    'generate --json keeps the files it wrote and deleted beside the stale file it could not delete (skipped as root)',
+    () => {
+      const ran = generatedWithLockedStaleFile('--json');
+
+      const [line] = ran.stderr.split('\n');
+      expect(ran.stderr).toMatch(lockedLine);
+      expect(JSON.parse(ran.stdout)).toMatchObject({
+        status: 3,
+        errors: [line],
+        moved: [],
+        wrote: expect.arrayContaining(['contract.snapshot.json']),
+        deleted: ['src/a.generated.ts'],
+      });
+    },
+  );
 
   test('a Handler the author moved to its new path by hand is kept and imported', () => {
     const project = aProject(aService());

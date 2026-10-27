@@ -7,6 +7,7 @@ import {
   pathSegmentsOf,
   standardRejectionsOf,
   type TextPartNodes,
+  writtenTextOf,
 } from '@cf-loom/contract/internal';
 import {
   checkedTextPartsOf,
@@ -84,9 +85,8 @@ function bodyLimitOf(given: unknown): number {
   if (typeof given === 'number' && Number.isSafeInteger(given) && given >= 0) {
     return given;
   }
-  const named = typeof given === 'string' ? JSON.stringify(given) : String(given);
   throw new Error(
-    `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+    `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${writtenTextOf(given)}`,
   );
 }
 

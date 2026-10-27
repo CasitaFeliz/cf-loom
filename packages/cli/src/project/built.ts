@@ -17,7 +17,6 @@ import { type Committed, committedOf } from './committed.ts';
 import { fileOfIn } from './failure-files.ts';
 import { type Invalid, invalid, type ProjectFailure, type Tooling, tooling } from './failures.ts';
 import { type DeclaredRoot, type Project, projectOf } from './project.ts';
-import type { Run } from './run.ts';
 
 /**
  * What every command builds before it writes: the project, its valid Root, the declared Snapshot
@@ -56,8 +55,8 @@ export function isBuiltService(built: BuiltProject): built is BuiltService {
  * Builds the declared Snapshot of the project where the command runs, offline, from its source and
  * its installed packages alone; the committed file is read only for its bytes and its format.
  */
-export async function builtOf(run: Run): Promise<Built> {
-  const read = await projectOf(run.cwd);
+export async function builtOf(cwd: string): Promise<Built> {
+  const read = await projectOf(cwd);
   if (read.kind === 'tooling') {
     return read;
   }

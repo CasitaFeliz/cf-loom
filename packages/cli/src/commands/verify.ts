@@ -4,7 +4,6 @@ import {
   builtOf,
   committedComparisonOf,
   isBuiltService,
-  type Run,
   snapshotFile,
 } from '../project/index.ts';
 import type { HandlerPath } from '../service-code/index.ts';
@@ -14,6 +13,7 @@ import { noFileLinesOf, type PlacedService, placedOf } from './handler-files.ts'
 import { pendingLineOf } from './placement.ts';
 import { type RecordRead, recordOf } from './record.ts';
 import { serviceFilesOf } from './regenerated.ts';
+import type { Run } from './run.ts';
 import { stubsOf } from './stubs.ts';
 import { unreachedLinesOf } from './unreached.ts';
 
@@ -22,7 +22,7 @@ import { unreachedLinesOf } from './unreached.ts';
  * behind by a Contract change.
  */
 export async function verify(run: Run): Promise<Exit> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }

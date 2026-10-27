@@ -80,7 +80,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
 
 - `"type": "module"`: every `cf-loom` command exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
-- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, in kebab-case, and its Contract Package is `@org/contract-orders-service`;
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, in kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
 - `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
 
 `zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:

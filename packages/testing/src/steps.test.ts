@@ -639,6 +639,41 @@ describe('fakeProvider: steps', () => {
     ]);
   });
 
+  test('r.fault with retryAfter answers 503 with Retry-After, and the client’s Fault carries committed, retryable and retryAfter ’30’', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('getPayment')
+      .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
+      .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }));
+
+    const response = await payments.fetch(new Request(at));
+    const outcome = await payments.client().getPayment({ params });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'provider',
+      status: 503,
+      committed: 'no',
+      retryable: true,
+      retryAfter: '30',
+    });
+  });
+
+  test('r.fault with retryAfter 0 sends Retry-After 0', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('getPayment')
+      .otherwise((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 0 }));
+
+    const response = await payments.fetch(new Request(at));
+    const outcome = await payments.client().getPayment({ params });
+
+    expect(response.headers.get('retry-after')).toBe('0');
+    expect(outcome).toMatchObject({ kind: 'fault', retryAfter: '0' });
+  });
+
   test.each([
     ['RETIRED', 410, 'no'],
     ['NO_SUCH_ENDPOINT', 404, 'no'],
@@ -646,10 +681,10 @@ describe('fakeProvider: steps', () => {
     ['BODY_TOO_LARGE', 413, 'no'],
     ['INVALID_OUTCOME', 500, 'unknown'],
   ] as const)(
-    'fault({ code: %s }) answers its status and its committed',
+    'r.reserved(%s) answers its status and its committed',
     async (code, status, committed) => {
       const payments = fakeProvider(paymentsDependency);
-      payments.on('getPayment').otherwise((r) => r.fault({ code }));
+      payments.on('getPayment').otherwise((r) => r.reserved(code));
 
       const response = await payments.fetch(new Request(at));
       const outcome = await payments.client().getPayment({ params });
@@ -666,10 +701,10 @@ describe('fakeProvider: steps', () => {
     },
   );
 
-  test('fault({ code: METHOD_NOT_ALLOWED }) carries Allow with the other methods the listed and shadowing Endpoints take on that path', async () => {
+  test('r.reserved(METHOD_NOT_ALLOWED) carries Allow with the other methods the listed and shadowing Endpoints take on that path', async () => {
     const payments = fakeProvider(paymentsDependency);
-    payments.on('getPayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
-    payments.on('capturePayment').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+    payments.on('getPayment').otherwise((r) => r.reserved('METHOD_NOT_ALLOWED'));
+    payments.on('capturePayment').otherwise((r) => r.reserved('METHOD_NOT_ALLOWED'));
 
     const shared = await payments.fetch(new Request(at));
     const alone = await payments.fetch(
@@ -721,7 +756,7 @@ describe('fakeProvider: steps', () => {
         endpoints: endpoints as [typeof provider.endpoints.postZed],
       });
       const payments = fakeProvider(dependency);
-      payments.on('postZed').otherwise((r) => r.fault({ code: 'METHOD_NOT_ALLOWED' }));
+      payments.on('postZed').otherwise((r) => r.reserved('METHOD_NOT_ALLOWED'));
 
       const response = await payments.fetch(
         new Request('https://payments-service.test/p/a/z', { method: 'POST' }),
