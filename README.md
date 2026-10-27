@@ -195,7 +195,7 @@ Run with `-e`, as GitHub Actions runs a `bash` step, the job fails when `verify`
 
 Before cf-loom 1.0.0, run `check --prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
 
-Exit 2 means an Approver must give a Breaking Change Approval, and nothing records one, so the job above passes on it and the Approval is the review process's: it must require reviews from the owners of `contract.snapshot.json` (see [Breaking Change Approval](COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md), or a Breaking Change merges on a green job. cf-loom enforces nothing here; a job that must stay red until an Approval is the organization's own, reading `check --json`. Removing a Success field is such a Change:
+Exit 2 means an Approver must give a Breaking Change Approval. Nothing records one, so the job above passes on it, and your organization's review process must enforce the Approval, or a Breaking Change merges on a green job (see [Breaking Change Approval](COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md); required reviews of `contract.snapshot.json` are one way. cf-loom enforces nothing here; a job that must stay red until an Approval is the organization's own, reading `check --json`. Removing a Success field is such a Change:
 
 ```
 Checked against @org/contract-orders-service@1.0.0
