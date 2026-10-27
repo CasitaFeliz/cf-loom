@@ -1,6 +1,6 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { byCodePoint, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
-import { byCommandName } from './code-names.ts';
+import { byNameInCode } from './code-names.ts';
 
 /** An Endpoint or a Guard, whose Stub imports its declaration. */
 export type DeclarationHandled =
@@ -69,7 +69,7 @@ function commandsOf(snapshot: ServiceSnapshot, wanted: Wanted): readonly Handled
       ...nameAndVersionOf(identity),
       group: command.group,
     }))
-    .sort(byCommandName);
+    .sort(byNameInCode);
 }
 
 /** Each Subscription, in the canonical Snapshot's order: it has no lifecycle, so it always has a Handler. */
