@@ -11,6 +11,7 @@ import {
   type ObjectNode,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
+  type RemovedCode,
   type SchemaNode,
   type Step,
 } from '../internal/index.ts';
@@ -81,6 +82,10 @@ function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
     body: null,
     ...fields,
   };
+}
+
+function aRemovedCode(fields: Partial<RemovedCode> = {}): RemovedCode {
+  return { ...aCode(), removedIn: '3.2.0', defs: {}, ...fields };
 }
 
 function reportOf(baseline: PublishedDefinitionsSnapshot, proposed: DefinitionsSnapshot) {
@@ -351,7 +356,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
   test('a removed code not declared again is carried with no Change', () => {
     const baseline = aBaselineDefinitions({
-      codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) },
+      codes: { [orderLocked]: aRemovedCode() },
     });
 
     const report = reportOf(baseline, aDefinitions());
@@ -361,7 +366,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
 
   test('a removed code declared again is added and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
-      codes: { [orderLocked]: aCode({ status: 409, removedIn: '3.2.0' }) },
+      codes: { [orderLocked]: aRemovedCode({ status: 409 }) },
     });
     const proposed = aDefinitions({ codes: { [orderLocked]: aCode({ status: 422 }) } });
 
@@ -373,11 +378,70 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     ]);
   });
 
+  describe('a removed code whose body reaches a recursive def, declared again', () => {
+    const ref: SchemaNode = { type: 'ref', name: 'tree' };
+    const body = anOpenObject({ tree: required(ref) });
+    const treeWith = (...labels: string[]): ObjectNode =>
+      anOpenObject({
+        children: required({ type: 'array', items: ref }),
+        ...Object.fromEntries(labels.map((label) => [label, required(aString)])),
+      });
+
+    function declaredAgain(held: { removedWith: ObjectNode; since: ObjectNode; now: ObjectNode }) {
+      const baseline = aBaselineDefinitions({
+        defs: { tree: held.since },
+        codes: {
+          [orderLocked]: aRemovedCode({ body, defs: { tree: held.removedWith } }),
+          [orderGone]: aCode({ body }),
+        },
+      });
+      const proposed = aDefinitions({
+        defs: { tree: held.now },
+        codes: { [orderLocked]: aCode({ body }), [orderGone]: aCode({ body }) },
+      });
+      return changesOf(baseline, proposed).filter(
+        ({ site }) => site.kind === 'code' && site.code === orderLocked,
+      );
+    }
+
+    test('whose def lost a field since it was removed is Breaking, as against the version that removed it', () => {
+      const changes = declaredAgain({
+        removedWith: treeWith('label'),
+        since: treeWith(),
+        now: treeWith(),
+      });
+
+      expect(changes).toEqual([
+        additive(codeSite(orderLocked), { kind: 'added' }),
+        breaking(codeSite(orderLocked), {
+          kind: 'schema',
+          position: 'success',
+          at: [
+            { kind: 'part', name: 'body' },
+            { kind: 'field', name: 'tree' },
+            { kind: 'field', name: 'label' },
+          ],
+          shape: { kind: 'field-removed' },
+        }),
+      ]);
+    });
+
+    test('with the def it was removed with is only added, though the Snapshot’s def of that name has since grown a field', () => {
+      const changes = declaredAgain({
+        removedWith: treeWith('label'),
+        since: treeWith('label', 'note'),
+        now: treeWith('label'),
+      });
+
+      expect(changes).toEqual([additive(codeSite(orderLocked), { kind: 'added' })]);
+    });
+  });
+
   test('a Standard Rejection resolving to a code a user Rejection once used is added and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ status: 409, removedIn: '3.2.0' }),
+        [orderGone]: aRemovedCode({ status: 409 }),
       },
     });
     const proposed = aDefinitions({
