@@ -14,10 +14,10 @@ export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
 export {
   nestingFailureOf,
+  nestingProblemOf,
   nodeNestingLimit,
   snapshotNestingLimit,
   tooDeepNodePathOf,
-  tooDeepPathOf,
 } from './nesting.ts';
 export { codeNodesOf, inputNodesOf } from './nodes.ts';
 export { originPackagesOf } from './origin-packages.ts';

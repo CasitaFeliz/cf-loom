@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { exportedOrders, getOrder, oldOrder, ordersSnapshot } from '../../test/orders-exported.ts';
 import { aProvider } from '../../test/providers.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { providedEndpoint } from '../index.ts';
 import {
+  decodeSnapshot,
   exportedCutOf,
   exportedSnapshotOf,
   providedSnapshotOf,
@@ -292,5 +294,102 @@ describe('providedSnapshotOf', () => {
     expect(read).toThrow(
       "orders-service's exported Snapshot is malformed: codes.gone.removedIn is a key its format does not define",
     );
+  });
+});
+
+/** An array of arrays, `levels` deep counting the outermost, of strings, built without recursion. */
+function nestedArrays(levels: number): object {
+  let nested: object = { type: 'string' };
+  for (let level = 1; level < levels; level++) {
+    nested = { type: 'array', items: nested };
+  }
+  return nested;
+}
+
+describe('providedSnapshotOf refuses a cut nested past the levels a Snapshot holds', () => {
+  /** The exported cut with a def nesting `levels` levels below the cut, which is level 1. */
+  function nestedCut(levels: number) {
+    return changed((copy) => {
+      copy['defs'] = { ...(copy['defs'] as object), deep: nestedArrays(levels - 2) };
+    });
+  }
+
+  test.each([257, 20_000])(
+    'a cut nested %i levels is refused as malformed at its deepest path',
+    (levels) => {
+      const read = () => providedSnapshotOf(nestedCut(levels));
+
+      const at = ['defs', 'deep', ...Array<string>(254).fill('items')].join('.');
+      expect(read).toThrow(
+        `orders-service's exported Snapshot is malformed: ${at} nests deeper than 256 levels`,
+      );
+    },
+  );
+
+  test('a cut nested exactly 256 levels is read', () => {
+    const read = providedSnapshotOf(nestedCut(256));
+
+    expect(read.defs['deep']).toStrictEqual(nestedArrays(254));
+  });
+});
+
+describe('the Snapshot decoders never throw for a value JSON.parse returns', () => {
+  /** JSON text `depth` containers deep, maps and arrays by turn, holding `width` objects at its bottom. */
+  function wideAndDeep(width: number, depth: number): string {
+    const opening: string[] = [];
+    for (let level = 1; level < depth; level++) {
+      opening.push(level % 2 === 0 ? '[' : '{"a":');
+    }
+    const closing = opening.map((open) => (open === '[' ? ']' : '}')).reverse();
+    const bottom = `[${Array<string>(width).fill('{}').join(',')}]`;
+    return `${opening.join('')}${bottom}${closing.join('')}`;
+  }
+
+  /** What a decoder does with a value: reads it, refuses it as malformed, or anything else it throws. */
+  function outcomeOf(read: () => unknown): string {
+    try {
+      read();
+      return 'read';
+    } catch (e) {
+      return e instanceof Error && e.message.includes(' is malformed: ') ? 'malformed' : String(e);
+    }
+  }
+
+  test('random wide and deep values are decoded or refused, through decodeSnapshot and providedSnapshotOf', {
+    timeout: 60_000,
+  }, () => {
+    const next = seededNext(340);
+    const drawn = Array.from({ length: 8 }, () => ({
+      width: Math.floor(next() * 300_000),
+      depth: 1 + Math.floor(next() * 20_000),
+    }));
+    const values = [{ width: 300_000, depth: 1 }, { width: 0, depth: 20_000 }, ...drawn].map(
+      ({ width, depth }) => wideAndDeep(width, depth),
+    );
+
+    const decoded = values.map((value) => {
+      const text = JSON.stringify({ ...orders, kind: 'service' }).replace(
+        /}$/,
+        `,"extra":${value}}`,
+      );
+      return outcomeOf(() => {
+        const result = decodeSnapshot(text);
+        if (result.kind !== 'malformed' && result.kind !== 'decoded') {
+          throw new Error(result.kind);
+        }
+      });
+    });
+    const provided = values.map((value) =>
+      outcomeOf(() =>
+        providedSnapshotOf(
+          changed((copy) => {
+            copy['defs'] = { deep: JSON.parse(value) };
+          }),
+        ),
+      ),
+    );
+
+    expect(new Set(decoded)).toEqual(new Set(['read']));
+    expect(new Set(provided)).toEqual(new Set(['malformed']));
   });
 });

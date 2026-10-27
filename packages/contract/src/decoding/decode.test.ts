@@ -3033,3 +3033,48 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     },
   );
 });
+
+describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_000 }, () => {
+  const width = 300_000;
+  const wideArray = () => Array.from({ length: width }, () => ({}));
+  const wideMap = () => Object.fromEntries(Array.from({ length: width }, (_, i) => [`k${i}`, {}]));
+
+  test.each([
+    { what: 'an array', wide: wideArray },
+    { what: 'a map', wide: wideMap },
+  ])(
+    'a Snapshot holding $what of 300,000 objects where its format holds one decodes',
+    ({ wide }) => {
+      const published = aService({ defs: { a: { type: 'json', examples: [wide()] } } });
+
+      const result = decodeSnapshot(JSON.stringify(published));
+
+      expect(result.kind).toBe('decoded');
+    },
+  );
+
+  test.each([
+    { what: 'an array', wide: wideArray },
+    { what: 'a map', wide: wideMap },
+  ])(
+    'a Snapshot holding $what of 300,000 objects at a key its format does not define is malformed there',
+    ({ wide }) => {
+      const result = decodedFrom({ ...aService(), extra: wide() });
+
+      expect(result).toEqual(malformedAt(['extra'], 'is a key its format does not define'));
+    },
+  );
+
+  test('a published Snapshot whose json body example holds 150,000 items, as generate wrote it, decodes back', () => {
+    const items = Array.from({ length: 150_000 }, (_, i) => ({ i }));
+    const schema = z.json().meta({ examples: [items] });
+    const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
+    const node = located?.walked.kind === 'walked' ? located.walked.value : stringNode;
+    const published = aService({ defs: { a: node } });
+
+    const result = roundTrip(published);
+
+    expect(node.type).toBe('json');
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+});
