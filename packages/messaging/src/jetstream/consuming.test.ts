@@ -295,7 +295,7 @@ async function aConsumingWithFailingPulls(
     replacing: recordingPulls(pulls),
     ...(onBrokerTrouble === undefined ? {} : { onBrokerTrouble }),
   });
-  await orders.consume(handlersOf([]));
+  await orders.consume(handlersOf([]), {});
   await dropDurable(server.url, names.stream, names.notifyDurable);
   await dropDurable(server.url, names.stream, names.chargeDurable);
   const pulledBefore = pulls.length;
@@ -374,7 +374,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-73' });
 
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-74' });
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
@@ -400,7 +400,7 @@ describe('consuming over jetstream()', () => {
       { factId: 'f-75' },
     );
 
-    const consuming = messagingOfOrders.consume(handlersOf(received));
+    const consuming = messagingOfOrders.consume(handlersOf(received), {});
 
     await expect(consuming).rejects.toThrow(
       `The durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
@@ -417,7 +417,7 @@ describe('consuming over jetstream()', () => {
     await arrangePlanOf(server.url, contract, prefix);
     const messagingOfOrders = await aMessaging(prefix);
 
-    const consuming = messagingOfOrders.consume(handlersOf([]));
+    const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
     const error = await consuming.catch((rejected: unknown) => rejected);
     expect(error).toBeInstanceOf(Error);
@@ -441,10 +441,10 @@ describe('consuming over jetstream()', () => {
       { factId: 'f-76' },
     );
     await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-77' });
-    await messagingOfOrders.consume(handlersOf(received)).catch(() => undefined);
+    await messagingOfOrders.consume(handlersOf(received), {}).catch(() => undefined);
     await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
 
-    await messagingOfOrders.consume(handlersOf(received));
+    await messagingOfOrders.consume(handlersOf(received), {});
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
     expect(received.map(({ handler }) => handler).sort()).toEqual([
@@ -460,7 +460,7 @@ describe('consuming over jetstream()', () => {
     const messagingOfOrders = await aMessaging(prefix);
     await dropStream(server.url, orders.stream);
 
-    const consuming = messagingOfOrders.consume(handlersOf([]));
+    const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
     await expect(consuming).rejects.toThrow(
       `The stream ${orders.stream}, which the durable consumer ${orders.notifyDurable} reads, does not exist: ${apply}`,
@@ -538,7 +538,7 @@ describe('consuming over jetstream()', () => {
       });
       const messagingOfOrders = await aMessaging(prefix);
 
-      const consuming = messagingOfOrders.consume(handlersOf([]));
+      const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
       await expect(consuming).rejects.toThrow(
         `The durable consumer ${orders.notifyDurable} ${difference(orders)}: ${apply}`,
@@ -552,7 +552,7 @@ describe('consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
 
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
     await vi.waitFor(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
@@ -571,7 +571,7 @@ describe('consuming over jetstream()', () => {
     });
     const messagingOfOrders = await aMessaging(prefix);
 
-    const consuming = messagingOfOrders.consume(handlersOf([]));
+    const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
     await expect(consuming).resolves.toBeUndefined();
   });
@@ -590,7 +590,7 @@ describe('consuming over jetstream()', () => {
       commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
     };
 
-    await messagingOfOrders.consume(handlers);
+    await messagingOfOrders.consume(handlers, {});
     await messagingOfOrders.publisher.publish(
       'OrderCreated',
       { v1: { orderId: 'o-1' } },
@@ -620,7 +620,7 @@ describe('consuming over jetstream()', () => {
     const opened = await messaging(unprefixed, jetstream({ connect: aConnect().connect }));
     onTestFinished(() => opened.close());
 
-    await opened.consume(handlersOf(received));
+    await opened.consume(handlersOf(received), {});
     await opened.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-79' });
 
     await vi.waitFor(() => expect(received).toHaveLength(1));
@@ -676,7 +676,7 @@ describe('consuming over jetstream()', () => {
       readers: billingReaders,
     };
 
-    const consuming = opened.consume(handlers);
+    const consuming = opened.consume(handlers, {});
 
     await expect(consuming).rejects.toThrow('jetstream is not enabled');
   });
@@ -686,7 +686,7 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await orders.publisher.publish(
       'OrderCreated',
@@ -721,11 +721,11 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const overJetstream: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(overJetstream));
+    await orders.consume(handlersOf(overJetstream), {});
     const overMemory: Received[] = [];
     const inMemory = await messaging(contract, memory());
     onTestFinished(() => inMemory.close());
-    await inMemory.consume(handlersOf(overMemory));
+    await inMemory.consume(handlersOf(overMemory), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
@@ -745,11 +745,11 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const overJetstream: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(overJetstream));
+    await orders.consume(handlersOf(overJetstream), {});
     const overMemory: Received[] = [];
     const inMemory = await messaging(contract, memory());
     onTestFinished(() => inMemory.close());
-    await inMemory.consume(handlersOf(overMemory));
+    await inMemory.consume(handlersOf(overMemory), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
@@ -769,7 +769,7 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await publishRaw(names.created, { orderId: 'o-1' }, [
       ['Nats-Msg-Id', 'event.OrderCreated.v1:o-1'],
@@ -804,7 +804,7 @@ describe('consuming over jetstream()', () => {
       const consoleSpies = spiesOnConsole();
       const received: Received[] = [];
       const orders = await aMessaging(prefix);
-      await orders.consume(handlersOf(received));
+      await orders.consume(handlersOf(received), {});
 
       await publishRaw(names.created, { orderId: 'o-1' }, ids);
 
@@ -828,7 +828,7 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-85' });
 
@@ -845,7 +845,7 @@ describe('consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     const failing = () => fault({ committed: 'no', retryable: false, message: 'cannot be done' });
-    await orders.consume(handlersOf(received, { notify: failing }));
+    await orders.consume(handlersOf(received, { notify: failing }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-86' });
 
@@ -865,7 +865,7 @@ describe('consuming over jetstream()', () => {
       }
       return undefined;
     };
-    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+    await orders.consume(handlersOf(received, { notify: throwingOnce }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-87' });
 
@@ -882,7 +882,7 @@ describe('consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
-    await orders.consume(handlersOf([], { notify: failing }));
+    await orders.consume(handlersOf([], { notify: failing }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
@@ -903,7 +903,7 @@ describe('consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
-    await orders.consume(handlersOf(received, { notify: failing }));
+    await orders.consume(handlersOf(received, { notify: failing }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
@@ -920,7 +920,7 @@ describe('consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
-    await orders.consume(handlersOf([], { notify: failing }));
+    await orders.consume(handlersOf([], { notify: failing }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
@@ -943,7 +943,7 @@ describe('consuming over jetstream()', () => {
       }
       return undefined;
     };
-    await orders.consume(handlersOf(received, { notify: throwingOnce }));
+    await orders.consume(handlersOf(received, { notify: throwingOnce }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-91' });
 
@@ -966,7 +966,7 @@ describe('consuming over jetstream()', () => {
       }
       return undefined;
     };
-    await orders.consume(handlersOf(received, { notify: refusingOnce }));
+    await orders.consume(handlersOf(received, { notify: refusingOnce }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
 
@@ -987,7 +987,7 @@ describe('consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const gate = aGate();
-    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-93' });
 
@@ -1009,7 +1009,7 @@ describe('consuming over jetstream()', () => {
       const first = (body as { orderId: string }).orderId === 'o-1' && meta.deliveryCount === 1;
       return first ? gate.opened : undefined;
     };
-    await orders.consume(handlersOf(received, { notify: holdingTheFirstDelivery }));
+    await orders.consume(handlersOf(received, { notify: holdingTheFirstDelivery }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-94' });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-95' });
@@ -1028,7 +1028,7 @@ describe('consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const gate = aGate();
-    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+    await orders.consume(handlersOf([], { notify: () => gate.opened }), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-96' });
 
@@ -1047,7 +1047,7 @@ describe('consuming over jetstream()', () => {
     const holdingTheFirst = ({ body }: Received) => {
       return (body as { orderId: string }).orderId === 'o-1' ? firstGate.opened : undefined;
     };
-    await orders.consume(handlersOf(received, { notify: holdingTheFirst }));
+    await orders.consume(handlersOf(received, { notify: holdingTheFirst }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-95' });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-96' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
@@ -1070,6 +1070,7 @@ describe('consuming over jetstream()', () => {
     const gate = aGate();
     await orders.consume(
       handlersOf(received, { notify: () => gate.opened, charge: () => gate.opened }),
+      {},
     );
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-97' });
@@ -1087,7 +1088,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix, {
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
 
     await dropDurable(server.url, names.stream, names.notifyDurable);
@@ -1117,7 +1118,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix, {
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-99' });
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
     await dropDurable(server.url, names.stream, names.notifyDurable);
@@ -1155,7 +1156,7 @@ describe('consuming over jetstream()', () => {
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
     onTestFinished(() => orders.close());
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     const names = anOrders(prefix);
     await vi.waitFor(async () => {
       const notify = await durableInfoOf(own.url, names.stream, names.notifyDurable);
@@ -1190,7 +1191,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix, {
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
 
     await orders.connections[0]?.close();
@@ -1223,7 +1224,7 @@ describe('consuming over jetstream()', () => {
       replacing: losingEveryNotifyPull,
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     await vi.waitFor(() => expect([troubles.length, lost]).toEqual([1, 2]), { timeout: 4_000 });
 
     await orders.connections[0]?.close();
@@ -1265,7 +1266,7 @@ describe('consuming over jetstream()', () => {
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
     });
 
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
 
     await vi.waitFor(() => expect(pulled).toBeGreaterThan(steps.length + 1), { timeout: 20_000 });
     expect(troubles.map(({ kind }) => kind)).toEqual(changesOf([...steps, 'answered']));
@@ -1275,7 +1276,7 @@ describe('consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-101' });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-102' });
@@ -1293,7 +1294,7 @@ describe('closing while consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     const gate = aGate();
-    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-105' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
     await waitUntilPulling(names.stream, names.chargeDurable);
@@ -1312,7 +1313,7 @@ describe('closing while consuming over jetstream()', () => {
       delivered: { consumer_seq: 0 },
     });
     const next = await aMessaging(prefix);
-    await next.consume(handlersOf(received));
+    await next.consume(handlersOf(received), {});
     await vi.waitFor(() =>
       expect(received.map(({ handler }) => handler)).toContain('ChargeCard@1'),
     );
@@ -1325,7 +1326,7 @@ describe('closing while consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     const gate = aGate();
-    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-107' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
     const closing = orders.close();
@@ -1349,7 +1350,7 @@ describe('closing while consuming over jetstream()', () => {
     onTestFinished(() => proxy.stop());
     const received: Received[] = [];
     const orders = await aMessaging(prefix, { servers: proxy.url });
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
     proxy.hold();
     await publishRaw(names.created, { orderId: 'o-1' }, [
@@ -1367,7 +1368,7 @@ describe('closing while consuming over jetstream()', () => {
 
     expect(received).toEqual([]);
     const next = await aMessaging(prefix);
-    await next.consume(handlersOf(received));
+    await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 4_000 });
     expect(received[0]?.meta.deliveryCount).toBe(2);
   }, 10_000);
@@ -1378,7 +1379,7 @@ describe('closing while consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     const gate = aGate();
-    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-112' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
@@ -1386,7 +1387,7 @@ describe('closing while consuming over jetstream()', () => {
 
     await expect(closing).rejects.toBeInstanceOf(CloseAbortedError);
     const next = await aMessaging(prefix);
-    await next.consume(handlersOf(received));
+    await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
     expect(received[1]?.meta.deliveryCount).toBe(2);
   }, 10_000);
@@ -1400,7 +1401,7 @@ describe('closing while consuming over jetstream()', () => {
       onServiceFault: (consumed) => void faults.push(consumed),
     });
     const gate = aGate();
-    await orders.consume(handlersOf([], { notify: () => gate.opened }));
+    await orders.consume(handlersOf([], { notify: () => gate.opened }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-113' });
     await vi.waitFor(() => expect(faults).toHaveLength(1), { timeout: 4_000 });
 
@@ -1415,7 +1416,7 @@ describe('closing while consuming over jetstream()', () => {
     await arrangeOrders(prefix);
     const timersBefore = activeTimers();
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
     await waitUntilPulling(names.stream, names.chargeDurable);
 
@@ -1448,7 +1449,7 @@ describe('closing while consuming over jetstream()', () => {
     const orders = await aMessaging(prefix, { replacing: holdingTheSearch });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-108' });
     holding = true;
-    const consuming = orders.consume(handlersOf(received));
+    const consuming = orders.consume(handlersOf(received), {});
 
     const closing = orders.close();
     search.open();
@@ -1465,7 +1466,7 @@ describe('closing while consuming over jetstream()', () => {
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
     const gate = aGate();
-    await orders.consume(handlersOf(received, { notify: () => gate.opened }));
+    await orders.consume(handlersOf(received, { notify: () => gate.opened }), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-109' });
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
@@ -1475,7 +1476,7 @@ describe('closing while consuming over jetstream()', () => {
     await orders.close();
 
     const next = await aMessaging(prefix);
-    await next.consume(handlersOf(received));
+    await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
   }, 10_000);
@@ -1487,7 +1488,7 @@ describe('pulling over jetstream()', () => {
     await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
     const received: Received[] = [];
     const orders = await aMessaging(prefix);
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-110' });
 
@@ -1516,7 +1517,7 @@ describe('pulling over jetstream()', () => {
     });
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-111' });
 
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 6_000 });
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
@@ -1545,7 +1546,7 @@ describe('pulling over jetstream()', () => {
       },
     });
     const orders = await aMessaging(prefix, { replacing: recordingSubscriptions });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
 
     recording = true;
     await vi.waitFor(() => expect(subscriptions.length).toBeGreaterThanOrEqual(8), {
@@ -1576,7 +1577,7 @@ describe('pulling over jetstream()', () => {
     });
     recording = true;
 
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
 
     await vi.waitFor(() => expect(subjects.length).toBeGreaterThanOrEqual(2));
     expect(subjects.filter((subject) => !subject.startsWith('svc_in.'))).toEqual([]);
@@ -1589,7 +1590,7 @@ describe('pulling over jetstream()', () => {
     const removed = vi.spyOn(EventTarget.prototype, 'removeEventListener');
     const pulls: RecordedPull[] = [];
     const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
 
     await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(8), { timeout: 5_000 });
 
@@ -1617,7 +1618,7 @@ describe('pulling over jetstream()', () => {
     const received: Received[] = [];
     const ofNotify = () => pulls.filter(({ subject }) => subject.endsWith(names.notifyDurable));
 
-    await orders.consume(handlersOf(received));
+    await orders.consume(handlersOf(received), {});
 
     await vi.waitFor(() => expect(ofNotify().length).toBeGreaterThanOrEqual(4), { timeout: 5_000 });
     const sentAt = ofNotify().map(({ at }) => at);
@@ -1632,7 +1633,7 @@ describe('pulling over jetstream()', () => {
     await arrangeOrders(prefix);
     const pulls: RecordedPull[] = [];
     const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
-    await orders.consume(handlersOf([]));
+    await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
     const pulledBefore = pulls.length;
 
@@ -1658,7 +1659,7 @@ describe('pulling over jetstream()', () => {
       const pulls: RecordedPull[] = [];
       const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
 
-      await orders.consume(handlersOf([]));
+      await orders.consume(handlersOf([]), {});
 
       await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(2));
       expect(new Set(pulls.map(({ expires }) => expires))).toEqual(new Set([seconds * oneSecond]));

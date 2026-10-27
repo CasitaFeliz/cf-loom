@@ -24,9 +24,8 @@ import type {
 
 declare const handled: unique symbol;
 
-/** What only a Handler `handle()` returned for one Element carries: its Element, the Resources it takes, and a brand no hand-made value has; `Resources` left out is unspecified, which `ResourcesOf` refuses. */
-// biome-ignore lint/suspicious/noExplicitAny: Resources unspecified, which ResourcesOf refuses by name
-export type HandledBy<Element, Resources = any> = {
+/** What only a Handler `handle()` returned for one Element carries: its Element, the Resources it takes, and a brand no hand-made value has; `Resources` left out is `never`, unspecified, which `ResourcesOf` refuses and no Handler that takes some fits. */
+export type HandledBy<Element, Resources = never> = {
   readonly element: Element;
   readonly [handled]: Element;
 } & TakesResources<Resources>;

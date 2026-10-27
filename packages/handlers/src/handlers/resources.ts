@@ -55,9 +55,13 @@ type UnionToIntersection<Union> = (
   ? Intersection
   : never;
 
-/** What a map's Resources hold when a Handler's are unreadable, which would erase every other: the cause, by name. */
+/** What a map's Resources hold when a Handler types its own as `any`, which would erase every other: the cause, by name. */
 type AnyResourcesRefusal =
-  Refusal<"A Handler's Resources are unreadable: typed any, or in a map annotated HandlerMapOf<typeof contract> without the Service's Resources; type them, as Needs<…> does, or annotate HandlerMapOf<typeof contract, Resources>">;
+  Refusal<"A Handler's Resources are unreadable: typed any; type them, as Needs<…> does">;
+
+/** What a map's Resources hold when a Handler's are `never`, left out of `HandledBy` or `HandlerMapOf`: the cause, by name. */
+type UnspecifiedResourcesRefusal =
+  Refusal<"A Handler's Resources are unspecified: its brand alone, HandledBy<typeof getOrder>, or a map annotated HandlerMapOf<typeof contract> without the Service's Resources; annotate HandlerMapOf<typeof contract, Resources>, NoResources when the Service has none">;
 
 /** The Resources one Handler takes, read off its brand; distributes, so a Handler that takes none never narrows the others. */
 type ResourcesOfHandler<Handler> = 0 extends 1 & Handler
@@ -66,11 +70,11 @@ type ResourcesOfHandler<Handler> = 0 extends 1 & Handler
     ? HandedResourcesOf<Resources>
     : never;
 
-/** The Resources a map hands one Handler: none when it takes none or `never` (`serve`'s constraint), the cause when `any`. */
+/** The Resources a map hands one Handler: none when it takes none, the cause when `any` or `never`. */
 type HandedResourcesOf<Resources> = 0 extends 1 & Resources
   ? AnyResourcesRefusal
   : [Resources] extends [never]
-    ? never
+    ? UnspecifiedResourcesRefusal
     : keyof Resources extends never
       ? never
       : Resources;

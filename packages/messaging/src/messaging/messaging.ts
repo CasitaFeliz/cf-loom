@@ -1,6 +1,6 @@
 import type { ServiceContract } from '@cf-loom/contract';
-import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
-import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
+import type { HandlerMapOf, NoResources, ResourcesOf } from '@cf-loom/handlers';
+import type { ResourcesField } from '@cf-loom/handlers/internal';
 import type { Broker } from '../broker/index.ts';
 import {
   type BrokerTroubleHook,
@@ -34,9 +34,7 @@ export type Messaging<C extends ServiceContract> = {
     const Handlers extends Pick<HandlerMapOf<C, never>, 'commands' | 'subscriptions' | 'readers'>,
   >(
     handlers: Handlers,
-    ...options: CallArgument<
-      ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>
-    >
+    options: ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>,
   ) => Promise<void>;
   /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back each delivery still settling, closes, and rejects naming them. */
   readonly close: (options?: CloseOptions) => Promise<void>;
@@ -58,7 +56,7 @@ export async function messaging<const C extends ServiceContract>(
   return {
     publisher: { publish: (...call: Parameters<typeof publish>) => life.tracked(publish(...call)) },
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
-    consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object> = {}) =>
+    consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object>) =>
       life.consume(
         (lived) => consumersOf(subjects.consumed, handlers, { report, resources, ...lived }),
         tellTrouble,

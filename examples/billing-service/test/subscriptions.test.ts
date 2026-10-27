@@ -26,7 +26,7 @@ describe('draftInvoiceOnCreated over the memory adapter', () => {
   beforeEach(async () => {
     broker = memory();
     running = await messaging(contract, broker);
-    await running.consume(handlers);
+    await running.consume(handlers, {});
   });
 
   afterEach(async () => {

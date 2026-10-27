@@ -24,6 +24,7 @@ import {
   type MessageHandler,
   type MessageImplementation,
   type MessageMeta,
+  type NoResources,
   type Pairing,
   type ResourcesNotAnnotated,
   type ResourcesOf,
@@ -568,8 +569,9 @@ describe('ResourcesOf', () => {
   type Resources = { readonly orders: Orders; readonly callers: Callers };
   type Alien = { readonly db: number };
   type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
-  const unreadable =
-    "A Handler's Resources are unreadable: typed any, or in a map annotated HandlerMapOf<typeof contract> without the Service's Resources; type them, as Needs<…> does, or annotate HandlerMapOf<typeof contract, Resources>";
+  const unreadable = "A Handler's Resources are unreadable: typed any; type them, as Needs<…> does";
+  const unspecified =
+    "A Handler's Resources are unspecified: its brand alone, HandledBy<typeof getOrder>, or a map annotated HandlerMapOf<typeof contract> without the Service's Resources; annotate HandlerMapOf<typeof contract, Resources>, NoResources when the Service has none";
   const keyless =
     'The last parameter takes Resources with no key: name what it reads, as Needs<…> does, or leave it out';
   const plain = "HandlerMapOf takes the Contract's own type, typeof contract, not ServiceContract";
@@ -750,8 +752,31 @@ describe('ResourcesOf', () => {
     );
     const handlers = { endpoints: { getOrder: bare } };
 
-    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unreadable);
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unspecified);
     expect(bare.element).toBe(getOrder);
+  });
+
+  test('a brand alone names Resources of never, which no Handler that takes some fits', () => {
+    expectTypeOf<HandledBy<typeof getOrder>>().toEqualTypeOf<HandledBy<typeof getOrder, never>>();
+    expectTypeOf<HandledBy<typeof getOrder>>().not.toExtend<
+      HandledBy<typeof getOrder, Resources>
+    >();
+    expectTypeOf<HandledBy<typeof getOrder>>().not.toExtend<
+      HandledBy<typeof getOrder, NoResources>
+    >();
+    expect(getOrder.name).toBe('getOrder');
+  });
+
+  test('NoResources is the Resources of a Service with none: only Handlers that take none fit', () => {
+    const takesNone = handle(getOrder, () => reject(notFound));
+    const takesSome = handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+
+    expectTypeOf(takesNone).toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expectTypeOf(handle.stub(getOrder)).toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expectTypeOf(takesSome).not.toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expect(takesNone.element).toBe(getOrder);
   });
 
   test('a Handler or a table typed any makes ResourcesOf name the cause', () => {

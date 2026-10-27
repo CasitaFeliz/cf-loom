@@ -91,14 +91,19 @@ async function running(
   const started = await messaging(contract, broker, options);
   const connection = { broker, ...started };
   const { charge, notify } = handlers(connection);
-  await started.consume({
-    commands: { chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)) },
-    subscriptions: {
-      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
-      onAudited: handle(readers.subscriptions.onAudited, () => undefined),
+  await started.consume(
+    {
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
+        onAudited: handle(readers.subscriptions.onAudited, () => undefined),
+      },
+      readers,
     },
-    readers,
-  });
+    {},
+  );
   return connection;
 }
 

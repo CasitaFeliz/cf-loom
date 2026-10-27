@@ -61,20 +61,23 @@ const charge = { orderId: 'o-1' };
 async function running(chargeCard: (orderId: string, deliveryCount: number) => Promise<void>) {
   const broker = memory();
   const started = await messaging(contract, broker, { onServiceFault: () => undefined });
-  await started.consume({
-    commands: {
-      chargeCardV1: handle(
-        readers.commands.chargeCardV1,
-        async ({ orderId }, { deliveryCount }) => {
-          await chargeCard(orderId, deliveryCount);
-        },
-      ),
+  await started.consume(
+    {
+      commands: {
+        chargeCardV1: handle(
+          readers.commands.chargeCardV1,
+          async ({ orderId }, { deliveryCount }) => {
+            await chargeCard(orderId, deliveryCount);
+          },
+        ),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+      },
+      readers,
     },
-    subscriptions: {
-      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
-    },
-    readers,
-  });
+    {},
+  );
   return { broker, ...started };
 }
 

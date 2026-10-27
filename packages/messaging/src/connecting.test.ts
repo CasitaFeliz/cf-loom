@@ -183,7 +183,7 @@ function aLoggingBroker(held: {
 async function consumingWith(notifying: (typeof handlers.subscriptions)['notifyOnCreated']) {
   const recording = aBroker();
   const opened = await messaging(contract, recording.broker);
-  await opened.consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
+  await opened.consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } }, {});
   return { ...recording, ...opened };
 }
 
@@ -405,7 +405,7 @@ describe('messaging() and close', () => {
     });
     const { publisher, consume, close } = await messaging(contract, broker);
     publish = () => publisher.publish('OrderCreated', { v1: body }, { factId: 'f-6' });
-    await consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } });
+    await consume({ ...handlers, subscriptions: { notifyOnCreated: notifying } }, {});
     const consumer = consumers.find(
       (candidate) => candidate.subject === 'orders-service.event.OrderCreated.v1',
     );
@@ -450,7 +450,7 @@ describe('messaging() and close', () => {
     const gate = aGate();
     const { broker, log } = aLoggingBroker({ consume: gate.opened });
     const { consume, close } = await messaging(contract, broker);
-    const consuming = consume(handlers);
+    const consuming = consume(handlers, {});
 
     const closing = close();
     gate.open();
@@ -463,9 +463,9 @@ describe('messaging() and close', () => {
     const gate = aGate();
     const { broker, log } = aLoggingBroker({ consume: gate.opened });
     const { consume } = await messaging(contract, broker);
-    const first = consume(handlers);
+    const first = consume(handlers, {});
 
-    const second = consume(handlers);
+    const second = consume(handlers, {});
     gate.open();
     await first;
 
@@ -491,7 +491,7 @@ describe('messaging() and close', () => {
       (opened: Opened) => opened.publisher.publish('OrderCreated', { v1: body }, { factId: 'f-7' }),
     ],
     ['sending', (opened: Opened) => opened.sender.send('ChargeCard', body, { factId: 'f-8' })],
-    ['consuming', (opened: Opened) => opened.consume(handlers)],
+    ['consuming', (opened: Opened) => opened.consume(handlers, {})],
   ])(
     '%s after close throws messaging is closed, and nothing reaches the broker',
     async (_name, call) => {
@@ -560,7 +560,7 @@ describe('messaging() and close', () => {
     const publishing = publisher.publish('OrderCreated', { v1: body }, { factId: 'f-11' });
     const closing = close();
 
-    const consuming = consume(handlers);
+    const consuming = consume(handlers, {});
     gate.open();
     await Promise.all([publishing, closing]);
 
@@ -587,9 +587,9 @@ describe('messaging() and close', () => {
   test('a consume the broker rejects can be retried', async () => {
     const { broker, recorded } = aBroker({ consumes: 1 });
     const { consume } = await messaging(contract, broker);
-    const failed = await consume(handlers).catch((e: unknown) => e);
+    const failed = await consume(handlers, {}).catch((e: unknown) => e);
 
-    await consume(handlers);
+    await consume(handlers, {});
 
     expect(failed).toEqual(new Error('no such durable consumer'));
     expect(recorded.consumers).toHaveLength(2);
@@ -601,7 +601,7 @@ describe('messaging() and close', () => {
     const { publish } = publisher;
     const { send } = sender;
 
-    await consume(handlers);
+    await consume(handlers, {});
     await publish('OrderCreated', { v1: body }, { factId: 'f-13' });
     await send('ChargeCard', body, { factId: 'f-14' });
     await close();
@@ -616,7 +616,7 @@ describe('messaging() and close', () => {
 async function consumingReported(options: Parameters<typeof messaging>[2] = {}) {
   const recording = aBroker();
   const opened = await messaging(contract, recording.broker, options);
-  await opened.consume(handlers);
+  await opened.consume(handlers, {});
   const notifying = recording.recorded.consumers.find(
     (consumer) => consumer.subject === 'orders-service.event.OrderCreated.v1',
   ) as BrokerConsumer;
@@ -942,7 +942,7 @@ describe('close and a Handler’s wait', () => {
     const { consume, close } = await messaging(contract, recording.broker, {
       onServiceFault: () => new Promise(() => undefined),
     });
-    await consume({ ...handlers, subscriptions: { notifyOnCreated: throwing } });
+    await consume({ ...handlers, subscriptions: { notifyOnCreated: throwing } }, {});
     const delivered = recording.deliver(created, body);
     const stopping = new AbortController();
 

@@ -1,6 +1,6 @@
 import type { Http, ServiceContract } from '@cf-loom/contract';
-import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
-import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
+import type { HandlerMapOf, NoResources, ResourcesOf } from '@cf-loom/handlers';
+import type { ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
 import { answerOf } from './answer.ts';
 import {
@@ -49,12 +49,12 @@ export function serve<
 >(
   contract: C,
   handlers: Handlers,
-  ...options: CallArgument<ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>>
+  options: ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>,
 ): Http;
 export function serve(
   contract: ServiceContract,
   handlers: ServedHandlers,
-  options: ServeOptions<object> = {},
+  options: ServeOptions<object>,
 ): Http {
   const served = servedContractOf(contract, handlers, options);
   return async (request) => {

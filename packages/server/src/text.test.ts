@@ -58,14 +58,18 @@ const contract = defineService({
   ],
 });
 
-const http = serve(contract, {
-  endpoints: {
-    getPage: handle(getPage, (input) => success({ received: input as never })),
-    search: handle(search, (input) => success({ received: input as never })),
-    lookup: handle(lookup, (input) => success({ received: input as never })),
+const http = serve(
+  contract,
+  {
+    endpoints: {
+      getPage: handle(getPage, (input) => success({ received: input as never })),
+      search: handle(search, (input) => success({ received: input as never })),
+      lookup: handle(lookup, (input) => success({ received: input as never })),
+    },
+    guards: { tenant: handle(tenant, () => admit()) },
   },
-  guards: { tenant: handle(tenant, () => admit()) },
-});
+  {},
+);
 
 /** What every Handler here answers: the Input it received, part by part. */
 type Echo = { readonly received: Readonly<Record<string, Readonly<Record<string, unknown>>>> };

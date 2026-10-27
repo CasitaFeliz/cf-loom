@@ -33,12 +33,12 @@ type OwnTypeOf<C extends ServiceContract, Table> = ServiceContract extends C
 /**
  * The Handler map a Service's Contract needs, with the Service's Resources: one Handler for each Endpoint
  * not Retired, each Guard those attach, each Command's Message Version not Retired and each Subscription,
- * keyed by name in code, with the `readers`; each Handler takes some of `Resources`. `generate` writes
- * `satisfies HandlerMapOf<typeof contract>`; a map annotated without `Resources` hides what its Handlers
- * take, which `ResourcesOf`, `serve` and `consume` refuse.
+ * keyed by name in code, with the `readers`; each Handler takes some of `Resources`, `NoResources` for a
+ * Service with none. `Resources` left out is `never`, unspecified: the shape every Handler fits, which
+ * `generate` writes as `satisfies HandlerMapOf<typeof contract>` and `serve` and `consume` constrain on,
+ * and no type for a value, which `ResourcesOf`, `serve` and `consume` refuse.
  */
-// biome-ignore lint/suspicious/noExplicitAny: Resources unspecified, the satisfies target generate writes
-export type HandlerMapOf<C extends ServiceContract, Resources = any> = {
+export type HandlerMapOf<C extends ServiceContract, Resources = never> = {
   readonly endpoints: OwnTypeOf<
     C,
     { readonly [E in LiveEndpointsOf<C> as E['name']]: HandledBy<E, Resources> }

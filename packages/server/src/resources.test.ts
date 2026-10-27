@@ -156,7 +156,7 @@ describe('serve: Resources', () => {
   test('without the Resources its Endpoint and Guard Handlers take is a type error', () => {
     const missing = () => [
       // @ts-expect-error the Handlers take orders and callers
-      serve(contract, handlers),
+      serve(contract, handlers, {}),
       // @ts-expect-error the options must hold the Resources
       serve(contract, handlers, { maxBodyBytes: 1 }),
       // @ts-expect-error callers is missing
@@ -182,7 +182,7 @@ describe('serve: Resources', () => {
       guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
     };
 
-    const served = [serve(contract, bare), serve(contract, bare, { maxBodyBytes: 1 })];
+    const served = [serve(contract, bare, {}), serve(contract, bare, { maxBodyBytes: 1 })];
 
     expect(served).toHaveLength(2);
   });

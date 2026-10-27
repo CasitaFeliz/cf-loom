@@ -176,11 +176,14 @@ async function consuming(
     },
     ...options,
   });
-  await consume({
-    commands: { ...handlers.commands, ...replaced.commands },
-    subscriptions: { ...handlers.subscriptions, ...replaced.subscriptions },
-    readers,
-  });
+  await consume(
+    {
+      commands: { ...handlers.commands, ...replaced.commands },
+      subscriptions: { ...handlers.subscriptions, ...replaced.subscriptions },
+      readers,
+    },
+    {},
+  );
   return { ...recording, faults, close };
 }
 
@@ -311,7 +314,7 @@ describe('consume', () => {
     const recording = aBroker();
     const { consume } = await messaging(listing, recording.broker);
 
-    await consume({ ...handlers, readers });
+    await consume({ ...handlers, readers }, {});
 
     const settled = recording.consumers.find(
       (consumer) => consumer.durable === 'orders-service_notify-on-settled',
@@ -358,7 +361,7 @@ describe('consume', () => {
       const { [key]: _missing, ...kept } = handlers[map] as Record<string, unknown>;
       const { consume } = await messaging(contract, aBroker().broker);
 
-      const consumingAll = consume({ ...handlers, [map]: kept });
+      const consumingAll = consume({ ...handlers, [map]: kept }, {});
 
       await expect(consumingAll).rejects.toThrow(`${named} has no Handler in the Handler map`);
     },
@@ -372,7 +375,7 @@ describe('consume', () => {
     const { consume } = await messaging(contract, aBroker().broker);
 
     // @ts-expect-error notifyOnSettled holds the Handler of notifyOnCreated
-    const swapping = consume({ ...handlers, subscriptions: swapped });
+    const swapping = consume({ ...handlers, subscriptions: swapped }, {});
 
     await expect(swapping).rejects.toThrow(
       'subscriptions.notifyOnSettled holds the Handler written for notifyOnCreated',
@@ -384,10 +387,13 @@ describe('consume', () => {
     const written = handle({ element: notifyOnCreated, reader: looseReader }, () => undefined);
     const { consume } = await messaging(contract, aBroker().broker);
 
-    const consumingWritten = consume({
-      ...handlers,
-      subscriptions: { ...handlers.subscriptions, notifyOnCreated: written },
-    });
+    const consumingWritten = consume(
+      {
+        ...handlers,
+        subscriptions: { ...handlers.subscriptions, notifyOnCreated: written },
+      },
+      {},
+    );
 
     await expect(consumingWritten).rejects.toThrow(
       'subscriptions.notifyOnCreated holds a Handler written for another pairing than readers.subscriptions.notifyOnCreated: run cf-loom generate',
@@ -403,7 +409,7 @@ describe('consume', () => {
       const { [key]: _missing, ...kept } = readers[table] as Record<string, unknown>;
       const { consume } = await messaging(contract, aBroker().broker);
 
-      const consumingAll = consume({ ...handlers, readers: { ...readers, [table]: kept } });
+      const consumingAll = consume({ ...handlers, readers: { ...readers, [table]: kept } }, {});
 
       await expect(consumingAll).rejects.toThrow(
         `readers.${table}.${key} is not in the Handler map: run cf-loom generate`,
@@ -415,7 +421,7 @@ describe('consume', () => {
     const inherited: typeof handlers.subscriptions = Object.create(handlers.subscriptions);
     const { consume } = await messaging(contract, aBroker().broker);
 
-    const inheriting = consume({ ...handlers, subscriptions: inherited });
+    const inheriting = consume({ ...handlers, subscriptions: inherited }, {});
 
     await expect(inheriting).rejects.toThrow(
       'subscriptions.notifyOnCreated has no Handler in the Handler map',
@@ -433,9 +439,9 @@ describe('consume', () => {
 
   test('consuming twice throws', async () => {
     const { consume } = await messaging(contract, aBroker().broker);
-    await consume(handlers);
+    await consume(handlers, {});
 
-    const again = consume(handlers);
+    const again = consume(handlers, {});
 
     await expect(again).rejects.toThrow('consume() was already called on this messaging');
   });
@@ -521,14 +527,17 @@ describe('a Message delivered', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker);
-    await consume({
-      ...handlers,
-      subscriptions: {
-        ...handlers.subscriptions,
-        ...receiving(() => fault({ committed: 'no', retryable: true, message: 'card 503' }))
-          .subscriptions,
+    await consume(
+      {
+        ...handlers,
+        subscriptions: {
+          ...handlers.subscriptions,
+          ...receiving(() => fault({ committed: 'no', retryable: true, message: 'card 503' }))
+            .subscriptions,
+        },
       },
-    });
+      {},
+    );
 
     await deliver(created, body, { deliveryCount: 2 });
     await deliver(created, body, { deliveryCount: 3, lastAttempt: true });
@@ -669,7 +678,7 @@ describe('a Message delivered', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker);
-    await consume(handlers);
+    await consume(handlers, {});
 
     await deliver(created, { orderId: 'secret-value', status: 7 });
 
@@ -699,19 +708,22 @@ describe('a Message delivered', () => {
     });
     const { broker, deliver } = aBroker();
     const { consume } = await messaging(contract, broker);
-    await consume({
-      commands: {
-        ...handlers.commands,
-        chargeCardV2: handle(readers.commands.chargeCardV2, () => refused),
+    await consume(
+      {
+        commands: {
+          ...handlers.commands,
+          chargeCardV2: handle(readers.commands.chargeCardV2, () => refused),
+        },
+        subscriptions: {
+          ...handlers.subscriptions,
+          ...receiving(() => {
+            throw error;
+          }).subscriptions,
+        },
+        readers,
       },
-      subscriptions: {
-        ...handlers.subscriptions,
-        ...receiving(() => {
-          throw error;
-        }).subscriptions,
-      },
-      readers,
-    });
+      {},
+    );
 
     await deliver(chargeCard, body);
     await deliver(created, body);
@@ -734,7 +746,7 @@ describe('a Message delivered', () => {
         throw error;
       },
     });
-    await consume(handlers);
+    await consume(handlers, {});
 
     const settlement = await deliver(created, {});
 
@@ -778,15 +790,18 @@ describe('a Message whose body is nested past the stack', () => {
         faults.push(consumedFault);
       },
     });
-    await consume({
-      commands: {
-        nestV1: handle(nestReaders.commands.nestV1, (given) => {
-          received.push(given);
-        }),
+    await consume(
+      {
+        commands: {
+          nestV1: handle(nestReaders.commands.nestV1, (given) => {
+            received.push(given);
+          }),
+        },
+        subscriptions: {},
+        readers: nestReaders,
       },
-      subscriptions: {},
-      readers: nestReaders,
-    });
+      {},
+    );
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 
     const settlement = await deliver(

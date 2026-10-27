@@ -7,8 +7,15 @@ import {
   defineService,
   notFound,
 } from '@cf-loom/contract';
-import { admit, fault, type HandlerMapOf, handle, reject, success } from '@cf-loom/handlers';
-import type { NoResources } from '@cf-loom/handlers/internal';
+import {
+  admit,
+  fault,
+  type HandlerMapOf,
+  handle,
+  type NoResources,
+  reject,
+  success,
+} from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type AnsweredRequest, type ServedFault, type ServeOptions, serve } from './index.ts';
@@ -148,7 +155,7 @@ describe('serve: onServiceFault', () => {
   test('without it, the console receives each issue’s part, path and code, never the received value', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await serve(contract, handlers)(get('/orders/leaky'));
+    await serve(contract, handlers, {})(get('/orders/leaky'));
 
     expect(logged).toHaveBeenCalledTimes(1);
     const line = String(logged.mock.calls[0]?.[0]);
@@ -159,7 +166,7 @@ describe('serve: onServiceFault', () => {
   test('without it, a throw is logged as the Handler threw, with its cause', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await serve(contract, handlers)(get('/orders/thrown'));
+    await serve(contract, handlers, {})(get('/orders/thrown'));
 
     expect(logged).toHaveBeenCalledWith('getOrder: the Handler threw', new Error('a bug'));
   });
@@ -168,7 +175,7 @@ describe('serve: onServiceFault', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const broken = handle(apiKey, () => admit({ callerId: 7 } as never));
 
-    await serve(contract, { ...handlers, guards: { apiKey: broken } })(get('/orders/o-1'));
+    await serve(contract, { ...handlers, guards: { apiKey: broken } }, {})(get('/orders/o-1'));
 
     expect(String(logged.mock.calls[0]?.[0])).toMatch(
       /^getOrder apiKey: context\.callerId invalid_type: /,
@@ -178,7 +185,7 @@ describe('serve: onServiceFault', () => {
   test('without it, the console receives a returned Fault with its message', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    await serve(contract, handlers)(get('/orders/down'));
+    await serve(contract, handlers, {})(get('/orders/down'));
 
     expect(logged).toHaveBeenCalledWith('getOrder: Internal error');
   });
@@ -533,10 +540,14 @@ describe('serve: the Deprecation header', () => {
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [scheduled] })],
     });
-    const http = serve(service, {
-      endpoints: { scheduled: handle(scheduled, () => success()) },
-      guards: {},
-    });
+    const http = serve(
+      service,
+      {
+        endpoints: { scheduled: handle(scheduled, () => success()) },
+        guards: {},
+      },
+      {},
+    );
 
     const response = await http(get('/scheduled'));
 
@@ -544,7 +555,7 @@ describe('serve: the Deprecation header', () => {
   });
 
   test('an Active Endpoint’s response carries none', async () => {
-    const response = await serve(contract, handlers)(get('/orders'));
+    const response = await serve(contract, handlers, {})(get('/orders'));
 
     expect(response.headers.get('deprecation')).toBeNull();
   });

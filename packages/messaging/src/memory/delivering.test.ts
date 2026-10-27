@@ -161,7 +161,7 @@ async function running(
   received: Received[] = [],
 ) {
   const { broker, faults, started } = await connected();
-  await started.consume(handlersOf(received, replaced(started)));
+  await started.consume(handlersOf(received, replaced(started)), {});
   return { broker, faults, received, ...started };
 }
 
@@ -350,7 +350,7 @@ describe('memory(): what the Service publishes and sends', () => {
     const { broker, started } = await connected();
     await started.publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-35' });
 
-    await started.consume(handlersOf(received));
+    await started.consume(handlersOf(received), {});
     await broker.settled();
 
     expect(broker.messages).toHaveLength(2);

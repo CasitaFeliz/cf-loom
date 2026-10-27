@@ -86,11 +86,14 @@ async function aMessaging(server: NatsServer, settings: Settings = {}) {
   const started = await messaging(contract, jetstream({ connect: connectService, prefix }));
   const handler = settings.consuming;
   if (handler !== undefined) {
-    await started.consume({
-      commands: {},
-      subscriptions: { notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, handler) },
-      readers,
-    });
+    await started.consume(
+      {
+        commands: {},
+        subscriptions: { notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, handler) },
+        readers,
+      },
+      {},
+    );
     await vi.waitFor(async () => {
       const durable = `${prefix}_orders-service_notify-on-created`;
       const info = await durableInfoOf(server.url, `${prefix}_orders-service`, durable);
