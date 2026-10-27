@@ -1,6 +1,8 @@
 import type * as core from 'zod/v4/core';
 import type { AttachedGuardOf } from './attachment.ts';
+import type { Command } from './command.ts';
 import type { Endpoint } from './endpoint.ts';
+import type { Event } from './event.ts';
 import type { Guard, QualifiedGuard } from './guard.ts';
 import type { Rejection } from './rejection.ts';
 import type { AddedStandardRejectionName, StandardRejection } from './standard-rejections.ts';
@@ -91,6 +93,9 @@ export type SuccessOf<Target extends Endpoint> = {
     ? ReceivedShapeOf<Target['success']>[Part]
     : Target['success'][Part];
 };
+
+/** A Message Version's body, typed by its `body` schema: what `publish` or `send` takes for the Service's own. */
+export type BodyOf<Message extends Event | Command> = Output<Message['body']>;
 
 /**
  * The headers and body a Success or a Rejection declares, as whoever reads them receives them:

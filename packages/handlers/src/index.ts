@@ -15,6 +15,7 @@ export type {
   MessageHandler,
   MessageImplementation,
   Readers,
+  ReceivedBodyOf,
   ResourcesNotAnnotated,
   ResourcesOf,
   WithResources,
