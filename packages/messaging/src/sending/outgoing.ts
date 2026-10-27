@@ -1,5 +1,10 @@
 import type { Command, Event } from '@cf-loom/contract';
-import { brokerMessageIdOf, jsonBytesOf, messageIdentityOf } from '@cf-loom/contract/internal';
+import {
+  brokerHeaderBytesOf,
+  brokerMessageIdOf,
+  jsonBytesOf,
+  messageIdentityOf,
+} from '@cf-loom/contract/internal';
 import { checkedMessageBody } from '@cf-loom/handlers/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
 import type { PublishedVersion, SentVersion } from '../subjects/index.ts';
@@ -17,8 +22,9 @@ export type Outgoing = { readonly version: Event | Command; readonly message: Ou
 type Parsed = { readonly value: unknown; readonly invalid: readonly InvalidPart[] };
 
 /**
- * The Messages of one call, sharing one Fact id: the Fact id, the headers, each version's header
- * bytes and each body checked in one pass, so every refused part is listed together and nothing leaves.
+ * The Messages of one call in the order they are sent, largest first, sharing one Fact id: the
+ * Fact id, the headers, each version's header bytes and each body checked in one pass, so every
+ * refused part is listed together and nothing leaves.
  */
 export function outgoingOf(given: readonly Given[], options: MessageOptions): readonly Outgoing[] {
   const { factId } = options;
@@ -37,7 +43,7 @@ export function outgoingOf(given: readonly Given[], options: MessageOptions): re
   if (invalid.length > 0) {
     throw new InvalidMessageError(invalid);
   }
-  return versions.map(({ version, messageId, parsed }) => ({
+  const outgoing = versions.map(({ version, messageId, parsed }) => ({
     version: version.message,
     message: {
       subject: version.subject,
@@ -47,6 +53,17 @@ export function outgoingOf(given: readonly Given[], options: MessageOptions): re
       body: jsonBytesOf(parsed.value),
     },
   }));
+  return outgoing.toSorted(byLargestFirst);
+}
+
+/** Larger first, so a Message too large for the Broker is the first refused; the sort is stable, so equals keep version order. */
+function byLargestFirst(left: Outgoing, right: Outgoing): number {
+  return bytesOf(right.message) - bytesOf(left.message);
+}
+
+/** The bytes a Broker counts against its size limits: the broker headers and the body. */
+function bytesOf(message: OutgoingMessage): number {
+  return brokerHeaderBytesOf(message) + message.body.byteLength;
 }
 
 function parsedBodyOf(version: Event | Command, body: unknown): Parsed {

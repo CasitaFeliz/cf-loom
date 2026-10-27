@@ -205,9 +205,9 @@ describe('memory(): what the Service publishes and sends', () => {
     await broker.settled();
 
     expect(received.map(({ handler, body }) => [handler, body])).toEqual([
-      ['notifyOnV1', v1Body],
       ['notifyOnCreated', v2Body],
       ['auditCreated', v2Body],
+      ['notifyOnV1', v1Body],
     ]);
   });
 
@@ -370,18 +370,18 @@ describe('memory(): what the Service publishes and sends', () => {
 
     expect(broker.messages).toEqual([
       {
-        subject: 'orders-service.event.OrderCreated.v1',
-        messageId: 'event.OrderCreated.v1:o-1:created',
-        factId: 'o-1:created',
-        headers,
-        body: v1Body,
-      },
-      {
         subject: 'orders-service.event.OrderCreated.v2',
         messageId: 'event.OrderCreated.v2:o-1:created',
         factId: 'o-1:created',
         headers,
         body: v2Body,
+      },
+      {
+        subject: 'orders-service.event.OrderCreated.v1',
+        messageId: 'event.OrderCreated.v1:o-1:created',
+        factId: 'o-1:created',
+        headers,
+        body: v1Body,
       },
       {
         subject: 'orders-service.command.ChargeCard.v1',

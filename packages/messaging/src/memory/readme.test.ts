@@ -147,10 +147,10 @@ describe('the In memory section of the messaging README', () => {
     );
     await running.close();
 
-    expect(messages).toEqual([
+    expect(messages.toSorted()).toEqual([
+      'orders-service.command.ChargeCard.v1',
       'orders-service.event.OrderCreated.v1',
       'orders-service.event.OrderCreated.v2',
-      'orders-service.command.ChargeCard.v1',
     ]);
     expect(created).toEqual(['orders-service.event.OrderCreated.v1']);
     expect(charged).toEqual([ORDER_ID]);

@@ -8,7 +8,7 @@ import type { MessageOptions, Published, Sent } from './types.ts';
 /** The broker connection publishing and sending go through, which throws once messaging is closed. */
 type ConnectionOf = () => BrokerConnection;
 
-/** `publish`: every live version of the named Event, checked, then sent in version order. */
+/** `publish`: every live version of the named Event, checked, then sent largest first, by broker header and body bytes, versions of the same size in version order. */
 export function publishOf(subjects: Subjects, connectionOf: ConnectionOf) {
   return async (name: string, bodies: unknown, options: MessageOptions): Promise<Published> => {
     const connection = connectionOf();

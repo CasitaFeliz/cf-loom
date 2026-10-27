@@ -142,6 +142,13 @@ async function messagesIn(stream: string): Promise<number> {
   return (await manager.streams.info(stream)).state.messages;
 }
 
+/** Sets the largest Message, headers and body together, a stream stores, with the NATS client as an organization's tooling would. */
+async function limitMessageSize(stream: string, bytes: number): Promise<void> {
+  const manager = await jetstreamManager(await aConnection());
+  // biome-ignore lint/style/useNamingConvention: nats.js spells the setting `max_msg_size`
+  await manager.streams.update(stream, { max_msg_size: bytes });
+}
+
 async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
   return call.then(
     () => undefined,
@@ -176,6 +183,35 @@ describe('publishing over jetstream()', () => {
         traceparent: '00-abc-def-01',
       },
     });
+  });
+
+  test('an OrderCreated whose newest version is larger than max_payload is sent as no version, and retrying the same Fact id fails the same way', async () => {
+    const { publisher, stream } = await aMessaging();
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o'.repeat(1_100_000), total: 12 } };
+
+    const first = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+    const retry = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+
+    expect(first).toBeInstanceOf(MessageNotSentError);
+    expect(first).toMatchObject({ factId: 'o-1', sent: [] });
+    expect(retry).toMatchObject({ factId: 'o-1', sent: [] });
+    await expect(messagesIn(stream)).resolves.toBe(0);
+  });
+
+  test('an OrderCreated whose newest version is larger than the stream’s max_msg_size is sent as no version, refused by the server', async () => {
+    const { publisher, stream } = await aMessaging();
+    await limitMessageSize(stream, 2_000);
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o'.repeat(3_000), total: 12 } };
+
+    const error = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect(error).toMatchObject({
+      factId: 'o-1',
+      sent: [],
+      cause: { message: expect.stringContaining('message size exceeds maximum allowed') },
+    });
+    await expect(messagesIn(stream)).resolves.toBe(0);
   });
 
   test('send stores the Command’s body on its prefixed subject with its broker message id', async () => {
@@ -319,7 +355,7 @@ describe('publishing over jetstream()', () => {
     expect(first).toEqual({ factId: 'o-1:created', duplicates: [] });
     expect(again).toEqual({
       factId: 'o-1:created',
-      duplicates: ['OrderCreated@1', 'OrderCreated@2'],
+      duplicates: ['OrderCreated@2', 'OrderCreated@1'],
     });
     await expect(messagesIn(stream)).resolves.toBe(2);
   });

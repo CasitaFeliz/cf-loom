@@ -103,6 +103,44 @@ const contract = defineService({
   ],
 });
 
+const sizedBody = z.object({ note: z.string() });
+
+/** An Event of three versions whose message ids take as many bytes each, so only their bodies order them by size. */
+const sizedService = defineService({
+  name: 'sized-service',
+  groups: [
+    defineGroup({
+      name: 'sized',
+      description: 'Sized',
+      events: [
+        defineEvent({
+          name: 'Sized',
+          version: 2,
+          visibility: 'internal',
+          lifecycle: 'deprecated',
+          description: 'Sized, the first',
+          body: sizedBody,
+        }),
+        defineEvent({
+          name: 'Sized',
+          version: 3,
+          visibility: 'internal',
+          lifecycle: 'deprecated',
+          description: 'Sized, the second',
+          body: sizedBody,
+        }),
+        defineEvent({
+          name: 'Sized',
+          version: 4,
+          visibility: 'internal',
+          description: 'Sized, the third',
+          body: sizedBody,
+        }),
+      ],
+    }),
+  ],
+});
+
 const v2 = { orderId: ORDER_ID, total: 12 };
 
 const v3 = {
@@ -137,6 +175,25 @@ function aBroker(failingAt?: number) {
   return { broker, published, error };
 }
 
+/** A broker that records what messaging publishes, refusing each Message whose body takes more than `limit` bytes. */
+function aBrokerRefusingOver(limit: number) {
+  const published: OutgoingMessage[] = [];
+  const broker: Broker = {
+    connect: async () => ({
+      publish: async (message) => {
+        if (message.body.byteLength > limit) {
+          throw new Error('message size exceeds maximum allowed');
+        }
+        published.push(message);
+        return { duplicate: false };
+      },
+      consume: async () => undefined,
+      close: async () => undefined,
+    }),
+  };
+  return { broker, published };
+}
+
 async function opened(failingAt?: number) {
   const recording = aBroker(failingAt);
   const { publisher, sender, close } = await messaging(contract, recording.broker);
@@ -167,15 +224,55 @@ async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
 }
 
 describe('publisher.publish', () => {
-  test('publish sends one Message per Active and Deprecated version, in version order, on <service>.event.<Name>.v<n> whatever Group lists each version', async () => {
+  test('publish sends one Message per Active and Deprecated version on <service>.event.<Name>.v<n> whatever Group lists each version', async () => {
     const { publisher, published } = await opened();
 
     await publisher.publish('OrderCreated', { v2, v3 }, fact);
 
-    expect(published.map((message) => message.subject)).toEqual([
+    expect(published.map((message) => message.subject).toSorted()).toEqual([
       'orders-service.event.OrderCreated.v2',
       'orders-service.event.OrderCreated.v3',
     ]);
+  });
+
+  test('publish sends the largest Message of a call first, versions of the same size in version order', async () => {
+    const { broker, published } = aBroker();
+    const { publisher } = await messaging(sizedService, broker);
+    const bodies = { v2: { note: 'a' }, v3: { note: 'abcdef' }, v4: { note: 'b' } };
+
+    await publisher.publish('Sized', bodies, fact);
+
+    expect(published.map((message) => message.subject)).toEqual([
+      'sized-service.event.Sized.v3',
+      'sized-service.event.Sized.v2',
+      'sized-service.event.Sized.v4',
+    ]);
+  });
+
+  test('a Broker that refuses each Message over a limit takes every version of a call or none, the largest first (seed 327)', async () => {
+    const next = seededNext(327);
+    for (let round = 0; round < 200; round += 1) {
+      const total = Number('1'.repeat(1 + Math.floor(next() * 15)));
+      const currency = 'c'.repeat(Math.floor(next() * 60));
+      const bodies = {
+        v2: { orderId: ORDER_ID, total },
+        v3: { ...v3, total: { amount: 1, currency } },
+      };
+      const limit = 60 + Math.floor(next() * 140);
+      const { broker, published } = aBrokerRefusingOver(limit);
+      const { publisher } = await messaging(contract, broker);
+
+      const refused = await rejectionOf(publisher.publish('OrderCreated', bodies, fact));
+
+      const sizes = published.map((message) => message.body.byteLength);
+      const sent = refused instanceof MessageNotSentError ? refused.sent : undefined;
+      const wholeOrNone = [
+        { published: 2, sent: undefined },
+        { published: 0, sent: [] },
+      ];
+      expect(wholeOrNone).toContainEqual({ published: published.length, sent });
+      expect(sizes).toEqual(sizes.toSorted((left, right) => right - left));
+    }
   });
 
   test('a Retired version is never sent, even given a body', async () => {
@@ -194,7 +291,7 @@ describe('publisher.publish', () => {
 
     await publisher.publish('OrderCreated', { v2: withExtra, v3 }, fact);
 
-    expect(published.map(decoded)).toEqual([v2, v3]);
+    expect(published.map(decoded)).toEqual([v3, v2]);
   });
 
   test('the Fact id given is the Fact id every Message of the call is sent with', async () => {
@@ -211,8 +308,8 @@ describe('publisher.publish', () => {
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1:created' });
 
     expect(published.map((message) => message.messageId)).toEqual([
-      'event.OrderCreated.v2:o-1:created',
       'event.OrderCreated.v3:o-1:created',
+      'event.OrderCreated.v2:o-1:created',
     ]);
   });
 
@@ -232,7 +329,7 @@ describe('publisher.publish', () => {
 
     expect(again).toEqual({
       factId: 'o-1:created',
-      duplicates: ['OrderCreated@2', 'OrderCreated@3'],
+      duplicates: ['OrderCreated@3', 'OrderCreated@2'],
     });
     expect(broker.messages).toHaveLength(2);
   });
@@ -524,7 +621,7 @@ describe('publisher.publish', () => {
     ]);
   });
 
-  test('a Broker that fails on the second version rejects publish with MessageNotSentError naming the Fact id and the version sent, the Broker’s error as cause', async () => {
+  test('a Broker that fails on the second Message sent rejects publish with MessageNotSentError naming the Fact id and the one sent, the Broker’s error as cause', async () => {
     const { publisher, error } = await opened(2);
 
     const thrown = await rejectionOf(
@@ -533,9 +630,9 @@ describe('publisher.publish', () => {
 
     expect(thrown).toBeInstanceOf(MessageNotSentError);
     expect(thrown).toMatchObject({
-      message: 'OrderCreated with Fact id o-1:created was not sent whole; sent: OrderCreated@2',
+      message: 'OrderCreated with Fact id o-1:created was not sent whole; sent: OrderCreated@3',
       factId: 'o-1:created',
-      sent: ['OrderCreated@2'],
+      sent: ['OrderCreated@3'],
       cause: error,
     });
   });
@@ -547,9 +644,9 @@ describe('publisher.publish', () => {
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' });
 
     expect(published.map((message) => message.messageId)).toEqual([
-      'event.OrderCreated.v2:o-1',
-      'event.OrderCreated.v2:o-1',
       'event.OrderCreated.v3:o-1',
+      'event.OrderCreated.v3:o-1',
+      'event.OrderCreated.v2:o-1',
     ]);
   });
 
