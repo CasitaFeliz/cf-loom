@@ -141,6 +141,8 @@ A Handler is called directly, with the Resources the test builds (see [Testing a
 
 `cf-loom package` writes the Contract Package to `.cf-loom/contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package; when to publish is the organization's (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
 
+Until cf-loom 1.0.0, publish only prereleases: run `npx cf-loom check --prerelease` and `npx cf-loom publish --prerelease`. A plain `publish` publishes 1.0.0 for a package never published, and promotes a prerelease Baseline to a version that is not one. [Before cf-loom 1.0.0](packages/cli/README.md#before-cf-loom-100) in the CLI README says why, and what to do when an upgraded cf-loom refuses a Baseline an older one published.
+
 #### Check in CI
 
 A CI job runs plain commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
@@ -149,6 +151,8 @@ A CI job runs plain commands after the install and reads their exit status, whic
 npx cf-loom verify
 npx cf-loom check
 ```
+
+Before cf-loom 1.0.0, `check` takes `--prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
 
 Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
 
