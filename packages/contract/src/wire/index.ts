@@ -39,7 +39,6 @@ export { brokerNeedsOf } from './broker-needs.ts';
 export { jsonContentType, jsonMediaType } from './content-type.ts';
 export {
   deprecatedAtOfHeader,
-  deprecationHeader,
   deprecationHeaderOf,
   withDeprecation,
 } from './deprecation.ts';

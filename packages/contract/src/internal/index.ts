@@ -47,6 +47,7 @@ export type {
 export {
   carriedStandardRejectionsOf,
   codeNameOf,
+  deprecationHeader,
   follows,
   frozenCopyOf,
   isCommand,
@@ -250,7 +251,6 @@ export {
   brokerPrefixRule,
   committedValues,
   deprecatedAtOfHeader,
-  deprecationHeader,
   deprecationHeaderOf,
   discardBodyOf,
   durableNameOf,
