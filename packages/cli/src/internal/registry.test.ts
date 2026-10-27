@@ -291,20 +291,27 @@ describe.concurrent('baselineOf', () => {
     expect(baselineIn(read).snapshot.version).toBe('1.0.0');
   });
 
-  test('the Baseline names the highest stable version listed beside it', async ({ lab }) => {
+  test('a read without --against says that the version was chosen as the Baseline', async ({
+    lab,
+  }) => {
     const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0'), aVersion('2.0.0-rc.1'));
 
     const { read } = await readOrders(lab, served);
 
-    expect(baselineIn(read)).toMatchObject({ stable: '1.1.0', chosen: 'baseline' });
+    expect(baselineIn(read).chosen).toBe('baseline');
   });
 
-  test('the highest stable version listed is named beside a Baseline below it', async ({ lab }) => {
-    const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0', { cfLoom: null }));
+  test('--against names the version read, and the read says it was named', async ({ lab }) => {
+    const registry = await lab.aRegistry(ordersWith(aVersion('1.0.0'), aVersion('1.1.0')));
+    const npm = lab.aPlace({ userConfig: loginTo(registry) });
 
-    const { read } = await readOrders(lab, served);
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: '1.0.0',
+    });
 
-    expect(baselineIn(read)).toMatchObject({ stable: '1.1.0', chosen: 'baseline' });
+    expect(baselineIn(read).chosen).toBe('against');
     expect(baselineIn(read).snapshot.version).toBe('1.0.0');
   });
 
@@ -332,14 +339,11 @@ describe.concurrent('baselineOf', () => {
     expect(baselineIn(read).snapshot.version).toBe('1.1.0');
   });
 
-  test('a package with only prereleases has the highest one as its Baseline, and no stable version', async ({
-    lab,
-  }) => {
+  test('a package with only prereleases has the highest one as its Baseline', async ({ lab }) => {
     const served = ordersWith(aVersion('1.0.0-rc.2'), aVersion('1.0.0-rc.1'));
 
     const { read, registry } = await readOrders(lab, served);
 
-    expect(baselineIn(read)).toMatchObject({ stable: undefined });
     expect(baselineIn(read).snapshot.version).toBe('1.0.0-rc.2');
     expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, '1.0.0-rc.2')]);
   });
@@ -1692,35 +1696,37 @@ function packDestinationIn(calls: readonly string[]): string {
   return destination;
 }
 
+/** The versions of a listing that cf-loom published, lowest first. */
+function publishedIn(listing: readonly Listed[]): readonly string[] {
+  return listing.filter(({ byCfLoom }) => byCfLoom).map(({ version }) => version);
+}
+
+/** Reads the Baseline of a package that lists these versions, through an npm that records its calls. */
+async function readListing(lab: Lab, listing: readonly Listed[]) {
+  const versions = listing.map(({ version, byCfLoom }) =>
+    aVersion(version, byCfLoom ? {} : { cfLoom: null }),
+  );
+  const registry = await lab.aRegistry(ordersWith(...versions));
+  const recording = aRecordingNpm(lab);
+  const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
+  const query = { packageName: ordersPackage, declared: orders, against: undefined };
+  return { read: await baselineOf(npm, query), registry, recording };
+}
+
+const listings = everyListing().map((listing) => [listingText(listing), listing] as const);
+const withBaseline = listings.filter(([, listing]) => publishedIn(listing).length > 0);
+const withoutBaseline = listings.filter(([, listing]) => publishedIn(listing).length === 0);
+
 describe.concurrent('baselineOf, among every list of up to four versions', () => {
-  test.for(everyListing().map((listing) => [listingText(listing), listing] as const))(
+  test.for(withBaseline)(
     'the Baseline of %s is the highest stable version cf-loom published, else its highest prerelease',
     async ([, listing], { lab }) => {
-      const served = ordersWith(
-        ...listing.map(({ version, byCfLoom }) =>
-          aVersion(version, byCfLoom ? {} : { cfLoom: null }),
-        ),
-      );
-      const registry = await lab.aRegistry(served);
-      const recording = aRecordingNpm(lab);
-      const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
-
-      const read = await baselineOf(npm, {
-        packageName: ordersPackage,
-        declared: orders,
-        against: undefined,
-      });
+      const { read, registry, recording } = await readListing(lab, listing);
 
       const versions = listing.map(({ version }) => version);
-      const published = listing.filter(({ byCfLoom }) => byCfLoom).map(({ version }) => version);
+      const published = publishedIn(listing);
       const stable = published.filter(isStableVersion);
-      const expected = (stable.length > 0 ? stable : published).at(-1);
-      if (expected === undefined) {
-        const why = { kind: 'none-published', highest: versions.at(-1) };
-        expect(read).toEqual({ kind: 'no-baseline', packageName: ordersPackage, why, versions });
-        expect(tarballsRequested(registry)).toEqual([]);
-        return;
-      }
+      const [expected = ''] = (stable.length > 0 ? stable : published).toReversed();
       const triedFirst = versions.filter(isStableVersion).reverse();
       const triedThen = versions.filter((version) => !isStableVersion(version)).reverse();
       const tried = [...triedFirst, ...triedThen];
@@ -1729,6 +1735,18 @@ describe.concurrent('baselineOf, among every list of up to four versions', () =>
       expect(versionsViewedIn(recording.calls())).toEqual(
         tried.slice(0, tried.indexOf(expected) + 1),
       );
+    },
+  );
+
+  test.for(withoutBaseline)(
+    '%s has no Baseline, naming the highest version and every one listed',
+    async ([, listing], { lab }) => {
+      const { read, registry } = await readListing(lab, listing);
+
+      const versions = listing.map(({ version }) => version);
+      const why = { kind: 'none-published', highest: versions.at(-1) };
+      expect(read).toEqual({ kind: 'no-baseline', packageName: ordersPackage, why, versions });
+      expect(tarballsRequested(registry)).toEqual([]);
     },
   );
 });

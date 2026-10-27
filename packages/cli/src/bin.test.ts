@@ -4942,27 +4942,55 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
     });
   });
 
+  const noneReason = 'none of its versions was published by cf-loom, the highest 0.0.0';
+
   test('a package none of whose versions cf-loom published has no Baseline, and its first version is 1.0.0', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
     const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
 
-    const lines = await checkedAgainst(lab, { project, served });
-    const json = await checkedAgainst(lab, { project, served }, '--json');
+    const { ran } = await checkedAgainst(lab, { project, served });
 
-    const reason = 'none of its versions was published by cf-loom, the highest 0.0.0';
-    expect(lines.ran).toEqual({
+    expect(ran).toEqual({
       status: 0,
-      stdout: `${ordersPackage} has no Baseline: ${reason}\n${wouldPublish('1.0.0', 'first version')}\n`,
+      stdout: `${ordersPackage} has no Baseline: ${noneReason}\n${wouldPublish('1.0.0', 'first version')}\n`,
       stderr: '',
     });
-    expect(JSON.parse(json.ran.stdout)).toMatchObject({
+  });
+
+  test('check --json of a package none of whose versions cf-loom published has no Baseline, the highest version as stable, and the reason', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { project, served }, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({
       baseline: null,
       stable: '0.0.0',
-      reason,
+      reason: noneReason,
       version: '1.0.0',
       tag: 'latest',
+    });
+  });
+
+  test('a prerelease Baseline below a version a person published is promoted to the major above that version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const baseline = publishedAs(project, '1.0.0-0');
+    const served = servedAs(ordersPackage, baseline, ...handPublished('1.0.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version cf-loom published: the first is 2.0.0)`;
+    const above = 'above 1.0.0, which cf-loom did not publish';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\n${wouldPublish('2.0.0', above)}\n`,
+      stderr: '',
     });
   });
 
@@ -5841,6 +5869,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       meanwhile: ['1.0.0', '1.0.2', '2.0.0-0'],
       byHand: ['1.0.2'],
       appears: '1.0.2',
+    },
+    {
+      name: 'two versions published meanwhile, of which the line names the higher',
+      listed: ['1.0.0'],
+      meanwhile: ['1.0.0', '1.0.2', '1.1.0'],
+      byHand: ['1.0.2'],
+      appears: '1.1.0',
     },
     {
       name: 'a preview published meanwhile above a stable Baseline',

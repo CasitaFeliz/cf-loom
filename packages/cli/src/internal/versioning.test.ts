@@ -261,14 +261,29 @@ describe('derivedVersionOf', () => {
     expect(derived).toMatchObject({ version: '3.0.0', why });
   });
 
-  test('nothing changed over a stable Baseline with a version cf-loom did not publish above it is nothing to publish, and --force publishes the major above that version', () => {
-    const listed = ['1.0.0', '1.0.1'];
-    const unchanged = derivedVersionOf(derivingFrom(listed, 'unchanged', { baseline: '1.0.0' }));
-    const forcing = { baseline: '1.0.0', force: true };
-    const forced = derivedVersionOf(derivingFrom(listed, 'unchanged', forcing));
+  test('nothing changed over a stable Baseline with a version cf-loom did not publish above it is nothing to publish', () => {
+    const derived = derivedVersionOf(
+      derivingFrom(['1.0.0', '1.0.1'], 'unchanged', { baseline: '1.0.0' }),
+    );
 
-    expect(unchanged).toEqual({ kind: 'unchanged', baseline: '1.0.0' });
-    expect(forced).toMatchObject({ kind: 'version', version: '2.0.0' });
+    expect(derived).toEqual({ kind: 'unchanged', baseline: '1.0.0' });
+  });
+
+  test('--force over a stable Baseline with a version cf-loom did not publish above it publishes the major above that version', () => {
+    const forcing = { baseline: '1.0.0', force: true };
+
+    const derived = derivedVersionOf(derivingFrom(['1.0.0', '1.0.1'], 'unchanged', forcing));
+
+    expect(derived).toMatchObject({ kind: 'version', version: '2.0.0' });
+  });
+
+  test('a prerelease Baseline below 1.0.0 is promoted to 1.0.0 when nothing changed', () => {
+    const derived = derivedVersionOf(derivingFrom(['0.1.0-0'], 'unchanged'));
+
+    expect(derived).toMatchObject({
+      version: '1.0.0',
+      why: { kind: 'promotes', baseline: '0.1.0-0' },
+    });
   });
 
   test('a prerelease Baseline above a version cf-loom did not publish is promoted when nothing changed', () => {
@@ -342,12 +357,16 @@ describe('derivedVersionOf, the dist-tag', () => {
     expect(derived).toMatchObject({ kind: 'version', tag: 'latest' });
   });
 
-  test('a first prerelease takes the latest dist-tag, with nothing listed or a placeholder listed', () => {
-    const none = derivedVersionOf(derivingWithNoBaseline([], { prerelease: true }));
-    const placeholder = derivedVersionOf(derivingWithNoBaseline(['0.0.0'], { prerelease: true }));
+  test('a first prerelease takes the latest dist-tag with nothing listed', () => {
+    const derived = derivedVersionOf(derivingWithNoBaseline([], { prerelease: true }));
 
-    expect(none).toMatchObject({ kind: 'version', version: '1.0.0-0', tag: 'latest' });
-    expect(placeholder).toMatchObject({ kind: 'version', version: '1.0.0-0', tag: 'latest' });
+    expect(derived).toMatchObject({ kind: 'version', version: '1.0.0-0', tag: 'latest' });
+  });
+
+  test('a first prerelease takes the latest dist-tag with a placeholder listed', () => {
+    const derived = derivedVersionOf(derivingWithNoBaseline(['0.0.0'], { prerelease: true }));
+
+    expect(derived).toMatchObject({ kind: 'version', version: '1.0.0-0', tag: 'latest' });
   });
 
   test('a second prerelease over a placeholder takes the tag the first took', () => {
@@ -451,6 +470,7 @@ function seededNext(seed: number): () => number {
 /** Versions in semantic order, lowest first, which a draw lists some of. */
 const pool: readonly string[] = [
   '0.0.0',
+  '0.1.0-0',
   '1.0.0-0',
   '1.0.0-rc.1',
   '1.0.0',
@@ -508,7 +528,28 @@ function isPrereleaseVersion(version: string): boolean {
   return version.includes('-');
 }
 
-/** What a derivation of a draw breaks: nothing published over a Baseline that changed, not-above over a Baseline that is no prerelease, or a version that is listed or not above a stable one. */
+/** The `<n>` of a prerelease `<numbers>-<n>`, when it is digits only; an identifier with a letter sorts above every number. */
+function counterOf(version: string): number | undefined {
+  const identifier = version.split('-')[1] ?? '';
+  return /^\d+$/.test(identifier) ? Number(identifier) : undefined;
+}
+
+/** Whether a version is above the Baseline: higher numbers, or the same numbers as a version that is not a prerelease over a prerelease, or as a higher counter. */
+function isAboveBaseline(version: string, baseline: string): boolean {
+  if (isAbove(version, baseline)) {
+    return true;
+  }
+  if (numbersOf(version).join() !== numbersOf(baseline).join()) {
+    return false;
+  }
+  if (!isPrereleaseVersion(version)) {
+    return isPrereleaseVersion(baseline);
+  }
+  const [counter, baselineCounter] = [counterOf(version), counterOf(baseline)];
+  return counter !== undefined && baselineCounter !== undefined && counter > baselineCounter;
+}
+
+/** What a derivation of a draw breaks: nothing published over a Baseline that changed, not-above over a Baseline that is no prerelease, or a version that is listed, not above a stable one or not above the Baseline. */
 function brokenBy({ baseline, versions }: Draw, derived: Derived): readonly string[] {
   switch (derived.kind) {
     case 'unchanged':
@@ -521,7 +562,11 @@ function brokenBy({ baseline, versions }: Draw, derived: Derived): readonly stri
       const stable = versions.filter((version) => !isPrereleaseVersion(version));
       const below = stable.filter((version) => !isAbove(derived.version, version));
       const listed = versions.includes(derived.version) ? ['it is listed'] : [];
-      return [...listed, ...below.map((version) => `it is not above ${version}`)];
+      const notAbove =
+        baseline !== undefined && !isAboveBaseline(derived.version, baseline)
+          ? [`it is not above the Baseline ${baseline}`]
+          : [];
+      return [...listed, ...below.map((version) => `it is not above ${version}`), ...notAbove];
     }
   }
 }
