@@ -55,8 +55,10 @@ export function serve<
 >(
   contract: C,
   handlers: Handlers,
-  ...options: CallArgument<ServedOptionsOf<Handlers>> &
-    ([] | [Given & NoInfer<DeclaredFieldsRule<Given, ServeOptions<object>>>])
+  ...options: CallArgument<
+    ServedOptionsOf<Handlers>,
+    Given & NoInfer<DeclaredFieldsRule<Given, ServeOptions<object>>>
+  >
 ): Http;
 export function serve(
   contract: ServiceContract,

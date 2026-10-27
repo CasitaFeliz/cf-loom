@@ -16,6 +16,7 @@ import {
   type BrokerTrouble,
   type CloseOptions,
   type ConsumedFault,
+  type ConsumeOptions,
   type ConsumeRun,
   type ConsumerTrouble,
   type Delivery,
@@ -466,6 +467,22 @@ describe('the options, typed by what they declare', () => {
 
     // @ts-expect-error onServiceFault is a field of messaging(), not of consume
     const consuming = () => consume(handlers, options);
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume accepts options that may be undefined when no Message Handler takes Resources', () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
+    const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
+    const forwarding = (options?: ConsumeOptions) => consume(handlers, options);
+    const maybe = undefined as ConsumeOptions | undefined;
+
+    const consuming = () => [
+      consume(handlers, undefined),
+      consume(handlers, maybe),
+      forwarding(),
+      forwarding({}),
+    ];
 
     expect(consuming).toBeTypeOf('function');
   });

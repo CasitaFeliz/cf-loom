@@ -217,6 +217,20 @@ describe('serve: the options, typed by what they declare', () => {
     expect(served).toBeTypeOf('function');
   });
 
+  test('options that may be undefined are accepted when no Handler takes Resources', () => {
+    const forwarding = (options?: ServeOptions) => serve(contract, handlers, options);
+    const maybe = undefined as ServeOptions | undefined;
+
+    const served = [
+      serve(contract, handlers, undefined),
+      serve(contract, handlers, maybe),
+      forwarding(),
+      forwarding({ maxBodyBytes: 1_024 }),
+    ];
+
+    expect(served).toHaveLength(4);
+  });
+
   test('resources are still required when a Handler takes them, given through a variable too', () => {
     const options = { maxBodyBytes: 1_024 };
     const mistyped = { resources: { clock: 'tick' } };

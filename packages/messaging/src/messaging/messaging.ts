@@ -41,8 +41,10 @@ export type Messaging<C extends ServiceContract> = {
     const Given extends ConsumedOptionsOf<Handlers> = ConsumedOptionsOf<Handlers>,
   >(
     handlers: Handlers,
-    ...options: CallArgument<ConsumedOptionsOf<Handlers>> &
-      ([] | [Given & NoInfer<DeclaredFieldsRule<Given, ConsumeOptions<object>>>])
+    ...options: CallArgument<
+      ConsumedOptionsOf<Handlers>,
+      Given & NoInfer<DeclaredFieldsRule<Given, ConsumeOptions<object>>>
+    >
   ) => Promise<void>;
   /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back each delivery still settling, closes, and rejects naming them. */
   readonly close: (options?: CloseOptions) => Promise<void>;

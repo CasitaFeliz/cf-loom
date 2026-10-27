@@ -31,8 +31,9 @@ export type ResourcesField<Resources extends object> = keyof Resources extends n
   ? { readonly resources?: Resources }
   : { readonly resources: Resources };
 
-/** A last argument that may be left out when every field it holds is optional. */
-export type CallArgument<Call> = Partial<Call> extends Call ? [call?: Call] : [call: Call];
+/** A last argument, of the type `Element`, that may be left out when every field `Call` holds is optional. */
+export type CallArgument<Call, Element = Call> =
+  Partial<Call> extends Call ? [call?: Element] : [call: Element];
 
 type UnionToIntersection<Union> = (
   Union extends unknown
