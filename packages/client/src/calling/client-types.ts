@@ -63,7 +63,10 @@ export type ClientOptions<D extends AnyDependency, Configured extends Configured
   readonly onDeprecation?: OnDeprecation;
 };
 
-/** Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console. */
+/**
+ * Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console; it may be
+ * async and is not awaited.
+ */
 export type OnDeprecation = (notice: DeprecationNotice) => void;
 
 /** An Input's headers, those given to `client()` no longer required. */
