@@ -1,5 +1,46 @@
-import type { Defs } from '../walker/index.ts';
-import type { EnteredKey } from './refs.ts';
+import { type Defs, resolvedRefOf, type SchemaNode } from '../walker/index.ts';
+import type { BothDefs, NodePair } from './findings.ts';
+
+/**
+ * The key of a pair the graft follows: each side by the name of the def its `ref` stands for, or
+ * by the node itself when written inline.
+ */
+export type PairKey = {
+  readonly baseline: string | SchemaNode;
+  readonly proposed: string | SchemaNode;
+};
+
+/** A pair as the graft follows it: each `ref` resolved to its def, and the key to meet the pair by. */
+export type FollowedPair = { readonly pair: NodePair; readonly key: PairKey };
+
+/**
+ * A pair with each `ref` followed through alias defs to the def it stands for, nullable when the
+ * `ref` is and keyed by its name, since the graft writes only destinations; a side written inline
+ * stays and is its own key.
+ */
+export function followedPairOf(pair: NodePair, defs: BothDefs): FollowedPair {
+  const baseline = resolvedSideOf(pair.baseline, defs.baseline);
+  const proposed = resolvedSideOf(pair.proposed, defs.proposed);
+  return {
+    pair: { baseline: baseline.node, proposed: proposed.node },
+    key: { baseline: baseline.key, proposed: proposed.key },
+  };
+}
+
+/** One side of a pair as the graft follows it: the schema it stands for, and its key. */
+type ResolvedSide = { readonly node: SchemaNode; readonly key: string | SchemaNode };
+
+function resolvedSideOf(node: SchemaNode, defs: Defs): ResolvedSide {
+  if (node.type !== 'ref') {
+    return { node, key: node };
+  }
+  const resolved = resolvedRefOf(node, defs);
+  if (resolved === undefined) {
+    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
+  }
+  const { name, def, nullable } = resolved;
+  return { node: nullable ? { ...def, nullable: true } : def, key: name };
+}
 
 /**
  * A def a former Input's graft meets, in the order it meets them: a pair of a former node and a
@@ -10,7 +51,7 @@ import type { EnteredKey } from './refs.ts';
 type DefSource =
   | {
       readonly kind: 'pair';
-      readonly key: EnteredKey;
+      readonly key: PairKey;
       readonly base: string;
       grafts: boolean;
       readonly reaches: number[];
@@ -65,7 +106,7 @@ export function namedDefs(recorded: GraftDefs, declared: Defs): GraftDefs {
 }
 
 /** The pair a walk meets by its key, inside the body of the pair `owner` when it sits in one. */
-export function pairMet(defs: GraftDefs, key: EnteredKey, owner: number | undefined): MetDef {
+export function pairMet(defs: GraftDefs, key: PairKey, owner: number | undefined): MetDef {
   const index = sourceIndexOf(defs, (source) => source.kind === 'pair' && isKey(source.key, key), {
     kind: 'pair',
     key,
@@ -118,7 +159,7 @@ function isFirstMet(defs: GraftDefs, index: number): boolean {
   return isFirst;
 }
 
-function isKey(key: EnteredKey, other: EnteredKey): boolean {
+function isKey(key: PairKey, other: PairKey): boolean {
   return key.baseline === other.baseline && key.proposed === other.proposed;
 }
 

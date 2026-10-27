@@ -15,13 +15,13 @@ import {
 import type { BothDefs, Finding, NodePair } from './findings.ts';
 import {
   copyMet,
+  followedPairOf,
   type GraftDefs,
   graftRecorded,
   namedDefs,
   pairMet,
   recordingDefs,
 } from './graft-names.ts';
-import { followedOf } from './refs.ts';
 import { findingsOf } from './schemas.ts';
 
 /** What a former Input is rewritten onto: an Endpoint's query and body as proposed, and the defs their `ref`s name. */
@@ -170,12 +170,12 @@ type Place = { readonly owner: number | undefined; readonly put: Put };
  * a `ref` to its def, held as the Snapshot declares it or named apart, built once.
  */
 function placePair(walk: Walk, pair: NodePair, place: Place): void {
-  const followed = followedOf(pair, walk.defs, []);
-  if (followed.kind !== 'entered' || pair.proposed.type !== 'ref') {
+  const followed = followedPairOf(pair, walk.defs);
+  if (pair.proposed.type !== 'ref') {
     pushGraft(walk, followed.pair, place);
     return;
   }
-  const { index, name, isBuilt } = pairMet(walk.met, followed.entered, place.owner);
+  const { index, name, isBuilt } = pairMet(walk.met, followed.key, place.owner);
   const chain = { nullable: followed.pair.proposed.nullable === true };
   place.put(name === undefined ? pair.proposed : refNamed(pair.proposed, name, chain));
   if (isBuilt) {

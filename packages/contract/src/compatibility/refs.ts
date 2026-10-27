@@ -1,56 +1,29 @@
-import {
-  type Defs,
-  type RefNode,
-  reachedDefsOf,
-  resolvedRefOf,
-  type SchemaNode,
-  shapeKey,
-} from '../walker/index.ts';
+import { type Defs, reachedDefsOf, type SchemaNode, shapeKey } from '../walker/index.ts';
 import { type BothDefs, type NodePair, shapeKeyBesidesNullability } from './findings.ts';
 
 /**
- * The key of a pair of schemas compared where a `ref` was followed: each side by the name of the
- * def it reaches, or by the node itself when that side is written inline.
+ * The pairs of schemas a hop entered within a root schema, by their nodes: a def by its node in
+ * its Snapshot's defs, a schema written inline by itself.
  */
-export type EnteredKey = {
-  readonly baseline: string | SchemaNode;
-  readonly proposed: string | SchemaNode;
-};
+export type Entered = Map<SchemaNode, Set<SchemaNode>>;
 
 /**
- * A pair with every `ref` followed into its Snapshot's defs, through alias defs, nullable when the
- * `ref` or a def on the way is. It is `entered` the first time it is met within a root schema, and
- * `settled` when it was already entered within the same root schema, so any difference in it was
- * found there and only its nullability is left to compare.
+ * A pair holding a `ref`, one hop on: each `ref` becomes the def it names in its Snapshot's defs,
+ * itself a `ref` when that def is an alias def, and a side written inline stays. `undefined` when
+ * the hop's pair was already entered within the root schema, since any difference in it was found
+ * where it was first met; otherwise the hop's pair is recorded as entered.
  */
-export type Followed =
-  | { readonly kind: 'inline'; readonly pair: NodePair }
-  | { readonly kind: 'entered'; readonly pair: NodePair; readonly entered: EnteredKey }
-  | { readonly kind: 'settled'; readonly pair: NodePair };
-
-/** One side of a pair with its `ref`s followed: the schema it stands for, and the key to enter it by. */
-type Side = { readonly node: SchemaNode; readonly key: string | SchemaNode };
-
-/**
- * Follows the `ref`s of a pair into both Snapshots' defs, so a def is compared as if written
- * inline. A pair already `entered` within the root schema compares no further, since any
- * difference in it was found where it was first met.
- */
-export function followedOf(
-  pair: NodePair,
-  defs: BothDefs,
-  entered: readonly EnteredKey[],
-): Followed {
-  if (pair.baseline.type !== 'ref' && pair.proposed.type !== 'ref') {
-    return { kind: 'inline', pair };
+export function hopOf(pair: NodePair, defs: BothDefs, entered: Entered): NodePair | undefined {
+  const hop = {
+    baseline: defOf(pair.baseline, defs.baseline),
+    proposed: defOf(pair.proposed, defs.proposed),
+  };
+  const proposedEntered = entered.get(hop.baseline) ?? new Set<SchemaNode>();
+  if (proposedEntered.has(hop.proposed)) {
+    return undefined;
   }
-  const baseline = sideOf(pair.baseline, defs.baseline);
-  const proposed = sideOf(pair.proposed, defs.proposed);
-  const key = { baseline: baseline.key, proposed: proposed.key };
-  const resolved = { baseline: baseline.node, proposed: proposed.node };
-  return hasEntered(entered, key)
-    ? { kind: 'settled', pair: resolved }
-    : { kind: 'entered', pair: resolved, entered: key };
+  entered.set(hop.baseline, proposedEntered.add(hop.proposed));
+  return hop;
 }
 
 /**
@@ -73,20 +46,14 @@ function hasSameDef(name: string, defs: BothDefs): boolean {
   );
 }
 
-function sideOf(node: SchemaNode, defs: Defs): Side {
-  return node.type === 'ref' ? followRef(node, defs) : { node, key: node };
-}
-
-/** A `ref` followed through alias defs to the schema it stands for: one that reaches none is a bug. */
-function followRef(ref: RefNode, defs: Defs): Side {
-  const resolved = resolvedRefOf(ref, defs);
-  if (resolved === undefined) {
-    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
+/** The def a `ref` names, or the node itself when it is written inline: a name with no def is a bug. */
+function defOf(node: SchemaNode, defs: Defs): SchemaNode {
+  if (node.type !== 'ref') {
+    return node;
   }
-  const { name, def, nullable } = resolved;
-  return { node: nullable ? { ...def, nullable: true } : def, key: name };
-}
-
-function hasEntered(entered: readonly EnteredKey[], key: EnteredKey): boolean {
-  return entered.some((pair) => pair.baseline === key.baseline && pair.proposed === key.proposed);
+  const def = defs[node.name];
+  if (def === undefined) {
+    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
+  }
+  return def;
 }
