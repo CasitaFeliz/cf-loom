@@ -150,14 +150,25 @@ function isReadableFault(fault: ScriptedFaultCase): boolean {
   );
 }
 
-/** Whether a Fault's retryAfter, if it has one, travels as Retry-After: whole seconds from 0, on a retryable Fault. */
-function hasSendableRetryAfter(fault: ScriptedFaultCase): boolean {
+/** How a retryAfter of the table is named in a refusal: a string quoted, a number as written. */
+function namedRetryAfter(seconds: unknown): string {
+  return typeof seconds === 'string' ? JSON.stringify(seconds) : String(seconds);
+}
+
+/**
+ * Why a readable Fault's retryAfter cannot travel as Retry-After, if it cannot: first it is no
+ * whole number of seconds from 0, then the Fault is not retryable.
+ */
+function retryAfterRefusalOf(fault: ScriptedFaultCase): string | undefined {
   if (!('retryAfter' in fault)) {
-    return true;
+    return undefined;
   }
   const seconds = fault.retryAfter;
   const isWhole = typeof seconds === 'number' && Number.isSafeInteger(seconds) && seconds >= 0;
-  return isWhole && fault.retryable === true;
+  if (!isWhole) {
+    return `retryAfter is no whole number of seconds from 0: got ${namedRetryAfter(seconds)}`;
+  }
+  return fault.retryable === true ? undefined : 'retryAfter is given only to a retryable Fault';
 }
 
 describe('fakeProvider: a test’s mistakes', () => {
@@ -208,7 +219,9 @@ describe('fakeProvider: a test’s mistakes', () => {
   );
 
   test.each(
-    scriptedFaults.filter((fault) => isReadableFault(fault) && !hasSendableRetryAfter(fault)),
+    scriptedFaults.filter(
+      (fault) => isReadableFault(fault) && retryAfterRefusalOf(fault) !== undefined,
+    ),
   )(
     'r.fault(%j) is a mistake naming the retryAfter rule, since no Retry-After could carry it',
     async (scripted) => {
@@ -221,23 +234,28 @@ describe('fakeProvider: a test’s mistakes', () => {
         .catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(FakeProviderError);
-      expect(firstLineOf(error)).toMatch(
-        /^payments-service: getPayment: r\.fault: retryAfter (is no whole number of seconds from 0: got |is given only to a retryable Fault)/,
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.fault: ${retryAfterRefusalOf(scripted)}`,
       );
     },
   );
 
   test.each([
-    [-1, 'retryAfter is no whole number of seconds from 0: got -1'],
-    [1.5, 'retryAfter is no whole number of seconds from 0: got 1.5'],
-    ['30', 'retryAfter is no whole number of seconds from 0: got "30"'],
-    [Number.NaN, 'retryAfter is no whole number of seconds from 0: got NaN'],
-    [2 ** 53, 'retryAfter is no whole number of seconds from 0: got 9007199254740992'],
+    { label: '-1', given: -1, named: '-1' },
+    { label: '1.5', given: 1.5, named: '1.5' },
+    { label: '"30"', given: '30', named: '"30"' },
+    { label: 'NaN', given: Number.NaN, named: 'NaN' },
+    { label: '2 ** 53', given: 2 ** 53, named: '9007199254740992' },
+    { label: '{}', given: {}, named: 'an object' },
+    { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
+    { label: '[1]', given: [1], named: 'a list' },
+    { label: '1n', given: 1n, named: '1' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
   ])(
-    'r.fault with retryAfter %j is a mistake naming the retryAfter rule',
-    async (retryAfter, rule) => {
+    'r.fault with retryAfter $label is a mistake naming the retryAfter rule',
+    async ({ given, named }) => {
       const payments = fakeProvider(paymentsDependency);
-      const scripted = { committed: 'no', retryable: true, retryAfter };
+      const scripted = { committed: 'no', retryable: true, retryAfter: given };
       payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
 
       const error = await payments
@@ -246,7 +264,9 @@ describe('fakeProvider: a test’s mistakes', () => {
         .catch((e: unknown) => e);
 
       expect(error).toBeInstanceOf(FakeProviderError);
-      expect(firstLineOf(error)).toBe(`payments-service: getPayment: r.fault: ${rule}`);
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.fault: retryAfter is no whole number of seconds from 0: got ${named}`,
+      );
     },
   );
 
@@ -267,7 +287,9 @@ describe('fakeProvider: a test’s mistakes', () => {
   });
 
   test.each(
-    scriptedFaults.filter((fault) => isReadableFault(fault) && hasSendableRetryAfter(fault)),
+    scriptedFaults.filter(
+      (fault) => isReadableFault(fault) && retryAfterRefusalOf(fault) === undefined,
+    ),
   )('r.fault(%j) answers a Fault the Caller reads', async (scripted) => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
@@ -495,7 +517,9 @@ describe('fakeProvider: a test’s mistakes', () => {
       .getPayment({ params })
       .catch((e: unknown) => e);
 
-    expect(firstLineOf(error)).toMatch(/^payments-service: getPayment: the scripted /);
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: the scripted answer cannot be sent',
+    );
     expect(error).toMatchObject({ cause: expect.objectContaining({ message: 'Unreadable' }) });
   });
 

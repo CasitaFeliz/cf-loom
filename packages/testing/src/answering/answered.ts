@@ -10,7 +10,7 @@ import {
   rejectionResponseOf,
   reservedCodes,
   reservedResponseOf,
-  retryAfterProblemOf,
+  sendableRetryAfterOf,
   travelingFaultOf,
   upperSnakeCase,
   writtenTextOf,
@@ -68,12 +68,11 @@ function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
       "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  const problem = retryAfterProblemOf(answer);
-  if (problem !== undefined) {
-    throw mistakeOf({ ...whoOf(listed), what: `r.fault: ${problem}` });
+  const sendable = sendableRetryAfterOf(answer);
+  if (sendable.kind === 'refused') {
+    throw mistakeOf({ ...whoOf(listed), what: `r.fault: ${sendable.message}` });
   }
-  const { retryAfter } = answer;
-  return { ...fault, retryAfter: typeof retryAfter === 'number' ? retryAfter : undefined };
+  return { ...fault, retryAfter: sendable.retryAfter };
 }
 
 /**

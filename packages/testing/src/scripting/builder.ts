@@ -49,9 +49,9 @@ type UnknownRejectionOptions = {
 };
 
 /**
- * What `r.fault` takes: a Fault as a Handler's `fault()` takes it, so as the Provider sends it; a
- * retryable one may say, in whole seconds from 0, when to retry, and one that is not takes no
- * `retryAfter`.
+ * What `r.fault` takes: a Fault as a Handler's `fault()` takes it, `cause` aside, so as the Provider
+ * sends it; a retryable one may say, in whole seconds from 0, when to retry, and one that is not
+ * takes no `retryAfter`.
  */
 export type ScriptedFault = RetryAfterGiven & {
   readonly committed: Committed;

@@ -2,8 +2,8 @@ import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   parsedPartOf,
   parsedShapeOf,
-  retryAfterProblemOf,
   schemaOf,
+  sendableRetryAfterOf,
   shapeFieldsOf,
   successShapeOf,
 } from '@cf-loom/contract/internal';
@@ -59,12 +59,21 @@ export function checkedAdmission(
 
 /** A Fault a Handler built, sendable: its `retryAfter`, if any, one `Retry-After` can carry. */
 function checkedFault(built: Fault): Checked<Fault> {
-  const message = retryAfterProblemOf(built);
-  if (message === undefined) {
-    return { kind: 'value', value: built };
+  const sendable = sendableRetryAfterOf(built);
+  switch (sendable.kind) {
+    case 'sendable':
+      return { kind: 'value', value: built };
+    case 'refused': {
+      const { message } = sendable;
+      const issue = {
+        part: 'fault',
+        path: ['retryAfter'],
+        code: 'invalid_value',
+        message,
+      } as const;
+      return { kind: 'issues', issues: [issue] };
+    }
   }
-  const issue = { part: 'fault', path: ['retryAfter'], code: 'invalid_value', message } as const;
-  return { kind: 'issues', issues: [issue] };
 }
 
 /** The Success member of what a direct call returns. */

@@ -1,4 +1,5 @@
 import type { ReservedCode } from '../declarations/index.ts';
+import { writtenTextOf } from '../written/index.ts';
 import { jsonContentType } from './content-type.ts';
 import {
   faultEnvelopeOf,
@@ -15,7 +16,7 @@ export type SentSuccess = {
   readonly body?: unknown;
 };
 
-/** What of a Fault the Service produced travels: never a code, which only the runtime's reserved Faults carry. */
+/** What of a Fault the Service produced travels: never a code, which only Reserved codes carry. */
 export type SentFault = Omit<TravelingFault, 'code'>;
 
 /** A Rejection as it is sent: its code, status and message resolved, its declared headers as checked, and its body when it has one. */
@@ -78,25 +79,32 @@ export type RetryAfterGiven =
   | { readonly retryable: true; readonly retryAfter?: number }
   | { readonly retryable: false; readonly retryAfter?: never };
 
+/** What a Fault's `retryAfter` comes to: the seconds `Retry-After` carries, if any, or why none can. */
+export type SendableRetryAfter =
+  | { readonly kind: 'sendable'; readonly retryAfter: number | undefined }
+  | { readonly kind: 'refused'; readonly message: string };
+
 /**
- * Why a Fault's `retryAfter` cannot be sent as `Retry-After`, or none: it is a whole number of
+ * A Fault's `retryAfter` as `Retry-After` can carry it, or why it cannot: it is a whole number of
  * seconds from 0, on a retryable Fault only.
  */
-export function retryAfterProblemOf({
+export function sendableRetryAfterOf({
   retryable,
   retryAfter,
 }: {
   readonly retryable: boolean;
   readonly retryAfter?: unknown;
-}): string | undefined {
+}): SendableRetryAfter {
   if (retryAfter === undefined) {
-    return undefined;
+    return { kind: 'sendable', retryAfter };
   }
   if (typeof retryAfter !== 'number' || !Number.isSafeInteger(retryAfter) || retryAfter < 0) {
-    const named = typeof retryAfter === 'string' ? JSON.stringify(retryAfter) : String(retryAfter);
-    return `retryAfter is no whole number of seconds from 0: got ${named}`;
+    const message = `retryAfter is no whole number of seconds from 0: got ${writtenTextOf(retryAfter)}`;
+    return { kind: 'refused', message };
   }
-  return retryable ? undefined : 'retryAfter is given only to a retryable Fault';
+  return retryable
+    ? { kind: 'sendable', retryAfter }
+    : { kind: 'refused', message: 'retryAfter is given only to a retryable Fault' };
 }
 
 /** The status a Fault the Service produced travels with: 503 when retryable, else 500. */
@@ -105,7 +113,7 @@ export function faultStatusOf({ retryable }: Pick<SentFault, 'retryable'>): numb
 }
 
 /**
- * The response of a reserved code, the only Fault that travels with one: its status, its
+ * The response of a Reserved code, the only Fault that travels with one: its status, its
  * `committed`, never retryable, its fixed text.
  */
 export function reservedResponseOf(code: ReservedCode): Response {

@@ -61,14 +61,19 @@ export {
   sharedUrlOf,
   unmatchedText,
 } from './match.ts';
-export type { RetryAfterGiven, SentRejection, SentSuccess } from './responses.ts';
+export type {
+  RetryAfterGiven,
+  SendableRetryAfter,
+  SentRejection,
+  SentSuccess,
+} from './responses.ts';
 export {
   faultResponseOf,
   faultStatusOf,
   methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
-  retryAfterProblemOf,
+  sendableRetryAfterOf,
   successResponseOf,
 } from './responses.ts';
 export { isTextValue, textOfValue } from './text.ts';

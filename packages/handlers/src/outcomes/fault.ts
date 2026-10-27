@@ -2,7 +2,7 @@ import type { Committed } from '@cf-loom/contract';
 import {
   internalError,
   type RetryAfterGiven,
-  retryAfterProblemOf,
+  sendableRetryAfterOf,
 } from '@cf-loom/contract/internal';
 
 /** What every Fault carries: whether the change was committed, its message and its `cause`. */
@@ -46,9 +46,9 @@ export function fault({
   cause,
   retryAfter,
 }: FaultGiven & { readonly retryAfter?: number }): Fault {
-  const problem = retryAfterProblemOf({ retryable, retryAfter });
-  if (problem !== undefined) {
-    throw new Error(`fault(): ${problem}`);
+  const sendable = sendableRetryAfterOf({ retryable, retryAfter });
+  if (sendable.kind === 'refused') {
+    throw new Error(`fault(): ${sendable.message}`);
   }
   const built: Fault = { kind: 'fault', committed, retryable, message: message ?? internalError };
   const caused = cause === undefined ? built : { ...built, cause };
