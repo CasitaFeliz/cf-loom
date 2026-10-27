@@ -187,6 +187,27 @@ function installedDefinitions(
   };
 }
 
+/**
+ * The source of a chain of `count` recursive ids, each an object holding itself and the next by
+ * `next`, the innermost holding `innermost`: built by a loop, since Node cannot load the chain
+ * written out.
+ */
+function nestedDefs(count: number, innermost = 'z.boolean()'): string {
+  return [
+    '(() => {',
+    `  let next: z.ZodType = ${innermost};`,
+    `  for (let index = ${count - 1}; index >= 0; index--) {`,
+    '    const held = next;',
+    '    const level: z.ZodType = z',
+    '      .object({ self: z.lazy(() => level).optional(), next: held })',
+    "      .meta({ id: 'level' + index });",
+    '    next = level;',
+    '  }',
+    '  return next;',
+    '})()',
+  ].join('\n');
+}
+
 /** Names `@org/definitions` as the project Root's `standardRejections`. */
 function takeStandardRejections(project: string): void {
   write(project, {
@@ -560,6 +581,36 @@ describe('cf-loom generate', () => {
       status: 3,
       stdout: '',
       stderr: `cf-loom.config.ts: ${key} is no field of the configuration: it takes layout\n`,
+    });
+  });
+
+  test('generate writes the Snapshot of a Contract whose Endpoint reaches 3,000 nested defs, and package writes its Contract Package', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ body: nestedDefs(3_000) }),
+    });
+
+    const generated = cfLoom(project, 'generate');
+    const packaged = cfLoom(project, 'package', '--out', 'out');
+
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+    const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
+    expect(Object.keys(snapshot.defs)).toHaveLength(3_000);
+    expect(packaged).toMatchObject({ status: 0, stderr: '' });
+    expect(existsSync(join(project, 'out/package.json'))).toBe(true);
+  });
+
+  test('a Contract nested 3,000 defs deep fails generate on its own refusal, never on the stack', () => {
+    const body = nestedDefs(3_000, 'z.date()');
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = `src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body${'.next'.repeat(3_000)}`;
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `${at} not allowed: z.date() (use z.iso.datetime())\n`,
     });
   });
 
