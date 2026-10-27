@@ -25,8 +25,8 @@ export type VersionMetadata = {
 /** A version whose package.json carries no `cfLoom`: it was not published by cf-loom, so it is no Baseline. */
 export type NotPublishedByCfLoom = { readonly kind: 'not-cf-loom' };
 
-/** The version of a package a Baseline is read from, and the declared Snapshot it must be the Baseline of. */
-export type BaselineSource = {
+/** A version of a package and the Snapshot its tarball must hold: the kind and name it declares, at its version. */
+export type ExpectedSnapshot = {
   readonly spec: string;
   readonly version: string;
   readonly declared: Pick<Snapshot, 'kind' | 'name'>;
@@ -61,7 +61,7 @@ function keysPrintedIn(printed: unknown): readonly unknown[] {
 
 /** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
 export function metadataFrom(
-  source: BaselineSource,
+  source: ExpectedSnapshot,
   printed: unknown,
 ): VersionMetadata | NotPublishedByCfLoom | Failed {
   const { spec, version, declared } = source;

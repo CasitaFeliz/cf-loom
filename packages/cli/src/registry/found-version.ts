@@ -2,7 +2,7 @@ import { type Failed, failed } from '../child-process/index.ts';
 import type { Choice } from './against.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import {
-  type BaselineSource,
+  type ExpectedSnapshot,
   metadataFrom,
   type NotPublishedByCfLoom,
   type VersionMetadata,
@@ -11,7 +11,7 @@ import {
 /** A version that carries `cfLoom`, with the metadata read from it. */
 export type Found = {
   readonly kind: 'found';
-  readonly source: BaselineSource;
+  readonly source: ExpectedSnapshot;
   readonly metadata: VersionMetadata;
 };
 
@@ -21,7 +21,7 @@ export type NoneFound = { readonly kind: 'none-found' };
 /** The package and declared Snapshot a version's metadata is read for. */
 type DeclaredPackage = {
   readonly packageName: string;
-  readonly declared: BaselineSource['declared'];
+  readonly declared: ExpectedSnapshot['declared'];
 };
 
 /** Reads the metadata of what the Check chose, to find the version cf-loom published among it. */
@@ -67,13 +67,13 @@ async function firstFoundIn(
   return { kind: 'none-found' };
 }
 
-function sourceOf(version: string, { packageName, declared }: DeclaredPackage): BaselineSource {
+function sourceOf(version: string, { packageName, declared }: DeclaredPackage): ExpectedSnapshot {
   return { spec: `${packageName}@${version}`, version, declared };
 }
 
 async function foundAt(
   npm: NpmPlace,
-  source: BaselineSource,
+  source: ExpectedSnapshot,
 ): Promise<Found | NotPublishedByCfLoom | Failed> {
   const metadata = await metadataOf(npm, source);
   return metadata.kind === 'metadata' ? { kind: 'found', source, metadata } : metadata;
@@ -81,7 +81,7 @@ async function foundAt(
 
 async function metadataOf(
   npm: NpmPlace,
-  source: BaselineSource,
+  source: ExpectedSnapshot,
 ): Promise<VersionMetadata | NotPublishedByCfLoom | Failed> {
   const { spec } = source;
   const fields = ['version', 'cfLoom', 'peerDependencies', 'dist'];
