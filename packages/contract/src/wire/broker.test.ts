@@ -1,8 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { seededNext } from '../../test/random-schemas.ts';
-import { elementName, pascalCase } from '../declarations/index.ts';
-import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
+import { aRootPackage } from '../../test/root-package.ts';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+} from '../index.ts';
 import {
   brokerHeaderBytesOf,
   brokerHeadersOf,
@@ -19,9 +25,11 @@ import {
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,
+  siteTextOf,
   streamNameOf,
   subjectOf,
   transportHeaderFitOf,
+  validateRoot,
 } from '../internal/index.ts';
 
 const orderCreatedV2 = defineEvent({
@@ -460,25 +468,50 @@ describe('the Wire protocol over the broker', () => {
   });
 });
 
-/** Names of one grammar of every length up to `limit`, with the capitals each can have. */
-function namesUpTo(limit: number, nameWith: (length: number, capitals: number) => string) {
+const candidateLengths = Array.from({ length: 100 }, (_, index) => index + 1);
+
+/** Subscription names of every length up to 100 characters, with every number of capitals each can have. */
+function subscriptionCandidates(): readonly string[] {
   const names: string[] = [];
-  for (let length = 1; length <= limit; length += 1) {
-    for (let capitals = 0; capitals <= length / 2; capitals += 1) {
-      names.push(nameWith(length, capitals));
+  for (const length of candidateLengths) {
+    for (let capitals = 0; capitals <= (length - 1) / 2; capitals += 1) {
+      names.push(`${'a'.repeat(length - 2 * capitals)}${'Bb'.repeat(capitals)}`);
     }
   }
   return names;
 }
 
-const kebabNameWith = (length: number) => 'a'.repeat(length);
-const camelNameWith = (length: number, capitals: number) =>
-  `${'a'.repeat(length - 2 * capitals)}${'Bb'.repeat(capitals)}`;
-const pascalNameWith = (length: number) => `A${'a'.repeat(length - 1)}`;
+const serviceCandidates = candidateLengths.map((length) => 'a'.repeat(length));
+const commandCandidates = candidateLengths.map((length) => `A${'a'.repeat(length - 1)}`);
 
-/** Every name of a kind the grammar accepts, out of those up to 100 characters long. */
-function acceptedNames(grammar: Parameters<typeof follows>[0], names: readonly string[]) {
-  return names.filter((name) => follows(grammar, name));
+/** The Subscription names and Command names, out of the candidates, that `generate` accepts in a Service. */
+function acceptedNamesOf(subscriptionNames: readonly string[], commandNames: readonly string[]) {
+  const subscriptions = subscriptionNames.map((name) =>
+    defineSubscription({ name, description: 'Receives it', event: orderCreatedV2 }),
+  );
+  const commands = commandNames.map((name) =>
+    defineCommand({ name, version: 1, description: 'A command', body: z.object({}) }),
+  );
+  const group = defineGroup({
+    name: 'orders',
+    description: 'Orders',
+    events: [orderCreatedV2],
+    commands,
+    subscriptions,
+  } as unknown as Parameters<typeof defineGroup>[0]);
+  const root = defineService({ name: 'orders-service', groups: [group] });
+  const validated = validateRoot(root, aRootPackage(root));
+  const failures = validated.kind === 'invalid' ? validated.failures : [];
+  const refusedSites = new Set<string>();
+  for (const broken of failures) {
+    if (broken.kind === 'declaration' && broken.rule === 'name-grammar') {
+      refusedSites.add(siteTextOf(broken.site));
+    }
+  }
+  return {
+    subscriptions: subscriptionNames.filter((name) => !refusedSites.has(`subscriptions.${name}`)),
+    commands: commandNames.filter((name) => !refusedSites.has(`commands.${name}@1`)),
+  };
 }
 
 /** The names a Broker's names are made of, besides its prefix. */
@@ -502,16 +535,17 @@ const natsNameLimit = 255;
 
 describe('the names derived from names the grammars accept', () => {
   test('every Stream and Durable consumer name at the longest names fits what NATS allows', () => {
-    const [service = ''] = acceptedNames(kebabCase, namesUpTo(100, kebabNameWith)).slice(-1);
-    const [command = ''] = acceptedNames(pascalCase, namesUpTo(100, pascalNameWith)).slice(-1);
-    const subscriptions = acceptedNames(elementName, namesUpTo(100, camelNameWith));
+    const service = serviceCandidates.filter((name) => follows(kebabCase, name)).at(-1) ?? '';
+    const accepted = acceptedNamesOf(subscriptionCandidates(), commandCandidates);
+    const command = accepted.commands.at(-1) ?? '';
 
-    const derived = subscriptions.flatMap((subscription) =>
+    const derived = accepted.subscriptions.flatMap((subscription) =>
       derivedNamesOf(service, { service, subscription, command }),
     );
 
     expect(derived.filter((name) => name.length > natsNameLimit)).toEqual([]);
-    expect(derived.length).toBeGreaterThan(subscriptions.length);
+    expect(command).not.toBe('');
+    expect(derived.length).toBe(accepted.subscriptions.length * 3);
   });
 
   test('any names the grammars accept, under any prefix one accepts, derive names NATS allows', () => {
@@ -522,17 +556,23 @@ describe('the names derived from names the grammars accept', () => {
       subscription: randomName(next, 'camel'),
       command: randomName(next, 'pascal'),
     }));
-    const accepted = draws.filter(
+    const accepted = acceptedNamesOf(
+      draws.map(({ subscription }) => subscription),
+      draws.map(({ command }) => command),
+    );
+    const subscriptions = new Set(accepted.subscriptions);
+    const commands = new Set(accepted.commands);
+    const acceptedDraws = draws.filter(
       ({ prefix, service, subscription, command }) =>
         (prefix === null || isBrokerPrefix(prefix)) &&
         follows(kebabCase, service) &&
-        follows(elementName, subscription) &&
-        follows(pascalCase, command),
+        subscriptions.has(subscription) &&
+        commands.has(command),
     );
 
-    const derived = accepted.flatMap(({ prefix, ...named }) => derivedNamesOf(prefix, named));
+    const derived = acceptedDraws.flatMap(({ prefix, ...named }) => derivedNamesOf(prefix, named));
 
-    expect(accepted.length).toBeGreaterThan(300);
+    expect(acceptedDraws.length).toBeGreaterThan(300);
     expect(derived.filter((name) => name.length > natsNameLimit)).toEqual([]);
   });
 });
