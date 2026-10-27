@@ -1,4 +1,8 @@
-import { type BrokerPlan, decodeBrokerPlan } from '@cf-loom/contract/internal';
+import {
+  type BrokerPlan,
+  type DeclaredFieldsRule,
+  decodeBrokerPlan,
+} from '@cf-loom/contract/internal';
 import type { JetStreamManager } from '@nats-io/jetstream';
 import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
@@ -12,8 +16,8 @@ import { managerOf } from './stream-check.ts';
 type Checked = ResolvedPlan | { readonly kind: 'refused'; readonly message: string };
 
 /** Applies a Service's broker plan under the Broker prefix the plan names; the organization calls it, `messaging()` never does. */
-export async function applyBrokerPlan(
-  connecting: JetStreamConnecting,
+export async function applyBrokerPlan<const Given = unknown>(
+  connecting: JetStreamConnecting & Given & NoInfer<DeclaredFieldsRule<Given, JetStreamConnecting>>,
   plan: BrokerPlan,
   limits: BrokerLimits,
 ): Promise<void> {

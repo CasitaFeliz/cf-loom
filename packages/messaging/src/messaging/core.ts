@@ -1,4 +1,5 @@
 import type { ServiceContract } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, NoResources, ResourcesOf } from '@cf-loom/handlers';
 import type { ResourcesField } from '@cf-loom/handlers/internal';
 import {
@@ -31,9 +32,10 @@ export type Messaging<C extends ServiceContract> = {
   readonly sender: CommandSender<C>;
   readonly consume: <
     const Handlers extends Pick<HandlerMapOf<C, never>, 'commands' | 'subscriptions' | 'readers'>,
+    const Given extends ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>,
   >(
     handlers: Handlers,
-    options: ConsumeOptions<ResourcesOf<Pick<Handlers, 'commands' | 'subscriptions'>>>,
+    options: Given & NoInfer<DeclaredFieldsRule<Given, ConsumeOptions<object>>>,
   ) => Promise<void>;
   /** Stops consuming, waits for what is in flight and closes the connection; once `signal` aborts, it hands back each delivery still settling, closes, and rejects naming them. */
   readonly close: (options?: CloseOptions) => Promise<void>;

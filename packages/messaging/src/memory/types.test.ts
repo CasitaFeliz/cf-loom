@@ -13,7 +13,13 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type Messaging, messaging } from '../index.ts';
+import {
+  type BrokerTrouble,
+  type ConsumedFault,
+  type Messaging,
+  type MessagingOptions,
+  messaging,
+} from '../index.ts';
 import {
   type DeliveryMeta,
   type MemoryMessaging,
@@ -99,6 +105,37 @@ describe('memory types', () => {
       messaging(contract, inMemory);
 
     expect(connecting).toBeTypeOf('function');
+  });
+
+  test('memory() refuses an options variable holding a declared hook and a misspelled one', () => {
+    const options = { onServiceFault: () => undefined, onBrokerTrubble: () => undefined };
+
+    // @ts-expect-error onBrokerTrubble is not a declared field
+    const opening = () => memory(contract, options);
+
+    expect(opening).toBeTypeOf('function');
+  });
+
+  test('memory() accepts an options variable holding only declared fields, or none', () => {
+    const options = { onServiceFault: () => undefined, onBrokerTrouble: () => undefined };
+    const typed: MessagingOptions = {};
+
+    const opening = [memory(contract, options), memory(contract, typed), memory(contract)];
+
+    expect(opening).toHaveLength(3);
+  });
+
+  test('memory() gives a hook written inline in its options its parameter types', () => {
+    const opening = memory(contract, {
+      onServiceFault: (fault) => {
+        expectTypeOf(fault).toEqualTypeOf<ConsumedFault>();
+      },
+      onBrokerTrouble: (trouble) => {
+        expectTypeOf(trouble).toEqualTypeOf<BrokerTrouble>();
+      },
+    });
+
+    expect(opening).toBeInstanceOf(Promise);
   });
 
   test('deliver takes an Event or a Command and resolves to acked, pending or ended', () => {
