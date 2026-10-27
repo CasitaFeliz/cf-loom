@@ -45,6 +45,7 @@ export type {
 export {
   carriedStandardRejectionsOf,
   codeNameOf,
+  elementName,
   follows,
   frozenCopyOf,
   isCommand,
@@ -64,6 +65,7 @@ export {
   isSubscription,
   kebabCase,
   lifecycleOf,
+  pascalCase,
   providerOf,
   standardRejectionNames,
   upperSnakeCase,
@@ -227,6 +229,7 @@ export {
   brokerHeadersOf,
   brokerMessageIdHeader,
   brokerMessageIdOf,
+  brokerPrefixRule,
   committedValues,
   deprecatedAtOfHeader,
   deprecationHeader,

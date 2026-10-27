@@ -120,7 +120,10 @@ export function durableNameOf(service: string, consumed: DurableConsumed): strin
   }
 }
 
-/** Whether a text may prefix a Broker's names: kebab-case, as a Service name, so it holds no `_`, `.`, `*` or `>`. */
+/** What a Broker prefix is, as every refusal of one says it: `kebab-case of at most 64 characters, such as staging`. */
+export const brokerPrefixRule = `${kebabCase.name} of at most ${kebabCase.maxLength} characters, such as staging`;
+
+/** Whether a text may prefix a Broker's names: kebab-case of at most 64 characters, as a Service name, so it holds no `_`, `.`, `*` or `>`. */
 export function isBrokerPrefix(text: string): boolean {
   return follows(kebabCase, text);
 }

@@ -167,13 +167,13 @@ describe('reading a broker plan', () => {
     expect(decodeBrokerPlan(value)).toEqual(malformed(reason));
   });
 
-  test.each(['stag_ing', 'a.b', 'Staging', ''])(
-    'a plan whose prefix "%s" is not kebab-case is malformed',
+  test.each(['stag_ing', 'a.b', 'Staging', '', 'a'.repeat(65)])(
+    'a plan whose prefix "%s" is not a Broker prefix is malformed',
     (prefix) => {
       const plan = { prefix, streams: {}, consumers: {} };
 
       expect(decodeBrokerPlan(plan)).toEqual(
-        malformed('prefix is not kebab-case, such as staging'),
+        malformed('prefix is not kebab-case of at most 64 characters, such as staging'),
       );
     },
   );

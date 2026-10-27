@@ -25,6 +25,7 @@ export {
   elementName,
   follows,
   isReserved,
+  isTooLong,
   kebabCase,
   pascalCase,
   upperSnakeCase,
