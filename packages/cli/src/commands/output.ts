@@ -1,5 +1,5 @@
-import type { Ending, ExitStatus, Finding } from '../project/index.ts';
-import type { Exit } from './exit.ts';
+import type { Exit, ExitStatus } from './exit.ts';
+import type { Ending, Finding } from './run.ts';
 
 /** How a command prints: its lines, or one JSON document on stdout. */
 export type Output = 'lines' | 'json';
@@ -49,9 +49,12 @@ function statusOf(ranked: readonly Ranked[]): ExitStatus {
 }
 
 function stderrOf(ranked: readonly Ranked[]): readonly string[] {
-  return ranking.flatMap((rank) =>
-    ranked.filter(({ status }) => status === rank).flatMap(({ stderr }) => stderr),
-  );
+  const lines: string[] = [];
+  for (const rank of ranking) {
+    const ofRank = ranked.filter(({ status }) => status === rank);
+    lines.push(...ofRank.flatMap(({ stderr }) => stderr));
+  }
+  return lines;
 }
 
 /**

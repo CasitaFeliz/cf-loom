@@ -4,6 +4,7 @@ import {
   type Called,
   crashedExitOf,
   type Exit,
+  type Finding,
   type Output,
   printedExitOf,
   printerTo,
@@ -12,7 +13,6 @@ import {
   statusAfterPrinting,
   usageError,
 } from './commands/index.ts';
-import type { Finding } from './project/index.ts';
 
 const optionTypes = {
   out: { type: 'string' },
@@ -121,18 +121,18 @@ async function exitOf(
   }
   const { called } = read;
   const findings: Finding[] = [];
-  const found = (finding: Finding) => {
+  const report = (finding: Finding) => {
     findings.push(finding);
     if (called.output === 'lines') {
       print(finding.lines ?? []);
     }
   };
-  const printed = (exit: Exit) => printedExitOf(reportedExitOf(findings, exit), called.output);
+  const printedOf = (exit: Exit) => printedExitOf(reportedExitOf(findings, exit), called.output);
   try {
-    const run = { cwd: process.cwd(), env: process.env, found };
-    return printed(await runCommand(called, run));
+    const run = { cwd: process.cwd(), env: process.env, report };
+    return printedOf(await runCommand(called, run));
   } catch (e) {
-    return printed(crashedExitOf(e));
+    return printedOf(crashedExitOf(e));
   }
 }
 

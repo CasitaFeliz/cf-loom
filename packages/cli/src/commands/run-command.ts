@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { isBrokerPrefix } from '@cf-loom/contract/internal';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
-import type { Run } from '../project/index.ts';
 import { asyncApiCommand } from './asyncapi.ts';
 import { brokerPlanCommand } from './broker-plan.ts';
 import { check } from './check.ts';
@@ -12,6 +11,7 @@ import { openApiCommand } from './openapi.ts';
 import type { Output } from './output.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
 import { publish } from './publish.ts';
+import type { Run } from './run.ts';
 import { helpExitOf, usageError, versionExit } from './usage.ts';
 import { verify } from './verify.ts';
 

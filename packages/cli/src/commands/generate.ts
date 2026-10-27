@@ -1,5 +1,5 @@
 import { contractExportsOf } from '../loading/index.ts';
-import { type BuiltService, builtOf, isBuiltService, type Run } from '../project/index.ts';
+import { type BuiltService, builtOf, isBuiltService } from '../project/index.ts';
 import {
   deleteFiles,
   type FileMove,
@@ -11,6 +11,7 @@ import { checkFailed, done, type Exit, failureExitOf, toolingError } from './exi
 import { noFileLinesOf, placedOf } from './handler-files.ts';
 import { recordOf } from './record.ts';
 import { serviceFilesOf, snapshotFileOf } from './regenerated.ts';
+import type { Run } from './run.ts';
 import { stubsOf } from './stubs.ts';
 import { unreachedLinesOf } from './unreached.ts';
 
@@ -19,12 +20,12 @@ import { unreachedLinesOf } from './unreached.ts';
  * review; a Service also gets its Handler map, its readers and its missing Handlers' Stubs.
  */
 export async function generate(run: Run): Promise<Exit> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }
   if (!isBuiltService(built)) {
-    return writtenExit(run, { moves: [], stale: [] }, [snapshotFileOf(built)]);
+    return appliedExit(run, { moves: [], stale: [] }, [snapshotFileOf(built)]);
   }
   return await generateService(run, built);
 }
@@ -64,27 +65,24 @@ async function generateService(run: Run, built: BuiltService): Promise<Exit> {
     return toolingError(moved.message);
   }
   const files = [snapshotFileOf(service), ...regenerated.files, ...stubs.stubs];
-  return writtenExit(run, { moves: moved.moves, stale: record.stale }, files);
+  return appliedExit(run, { moves: moved.moves, stale: record.stale }, files);
 }
 
 /** What `generate` does besides writing: the Handlers it moves and the stale files it deletes. */
 type Changes = { readonly moves: readonly FileMove[]; readonly stale: readonly string[] };
 
-/**
- * Reports the Handlers moved, writes the files, then deletes the stale ones, so no file is deleted
- * before its replacement is written; each step is reported with what it did before it failed.
- */
-function writtenExit(run: Run, { moves, stale }: Changes, files: readonly GeneratedFile[]): Exit {
-  run.found({ lines: movedLinesOf(moves), fields: { moved: movedOf(moves) } });
+/** The exit of the changes `generate` applies, in an order that deletes no file before its replacement is written. */
+function appliedExit(run: Run, { moves, stale }: Changes, files: readonly GeneratedFile[]): Exit {
+  run.report({ lines: movedLinesOf(moves), fields: { moved: movedOf(moves) } });
   const written = writeFiles(run.cwd, files);
   const wrote = written.paths.map((path) => `Wrote ${path}`);
-  run.found({ lines: wrote, fields: { wrote: written.paths } });
+  run.report({ lines: wrote, fields: { wrote: written.paths } });
   if (written.kind === 'failed') {
     return toolingError(written.message);
   }
   const deleted = deleteFiles(run.cwd, stale);
   const removed = deleted.paths.map((path) => `Deleted ${path}`);
-  run.found({ lines: removed, fields: { deleted: deleted.paths } });
+  run.report({ lines: removed, fields: { deleted: deleted.paths } });
   return deleted.kind === 'failed' ? toolingError(deleted.message) : done([], {});
 }
 

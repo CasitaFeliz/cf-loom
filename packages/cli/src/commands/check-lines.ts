@@ -1,8 +1,8 @@
 import { type PeerRangeMove, siteTextOf, tokenOf } from '@cf-loom/contract/internal';
-import type { Ending } from '../project/index.ts';
 import { type Derived, type DerivedVersion, firstStableOf, type Why } from '../versioning/index.ts';
 import { type Checked, reasonOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
+import type { Ending } from './run.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
 const jsonFields = new Set(['value']);

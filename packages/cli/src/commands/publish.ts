@@ -1,5 +1,5 @@
 import { canonicalTextOf, publishedSnapshotOf } from '@cf-loom/contract/internal';
-import { type Run, runningGeneratorOf } from '../project/index.ts';
+import { runningGeneratorOf } from '../project/index.ts';
 import type { Derived, DerivedVersion, DeriveOptions } from '../versioning/index.ts';
 import { comparedLinesOf, notAboveOf, nothingToPublishOf, wouldPublishOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
@@ -8,6 +8,7 @@ import { derivedCheckedOf } from './derivation.ts';
 import { checkFailed, done, type Exit, toolingError } from './exit.ts';
 import { type Prepared, preparedOf } from './prepared.ts';
 import { type PublishMode, publishedPackageOf, type ToPublish } from './published-package.ts';
+import type { Run } from './run.ts';
 
 /** How `publish` was asked to run: publish even when nothing changed, as a prerelease of the version it derives, and stopping before `npm publish`. */
 export type PublishOptions = DeriveOptions & { readonly dryRun: boolean };
@@ -26,12 +27,12 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
   }
   const checked = derivedCheckedOf(prepared, options);
   const { derivation } = checked;
-  run.found({
+  run.report({
     lines: comparedLinesOf(checked),
     fields: { ...checkedDocumentOf(checked), published: false },
   });
   if (derivation.kind === 'refused') {
-    run.found({ ending: endingOf(checked.changes) });
+    run.report({ ending: endingOf(checked.changes) });
   }
   if (prepared.unlisted.length > 0) {
     return { status: 3, stdout: [], stderr: prepared.unlisted };
@@ -85,7 +86,7 @@ async function putExit(run: Run, { prepared, checked, derived, mode }: Ready): P
       return { status: 3, stdout: [], stderr: [put.message, ...left] };
     case 'published': {
       const published = `Published ${checked.packageName}@${derived.version}`;
-      run.found({ lines: [published], fields: { published: true } });
+      run.report({ lines: [published], fields: { published: true } });
       return { status: 0, stdout: [], stderr: left };
     }
     case 'built': {

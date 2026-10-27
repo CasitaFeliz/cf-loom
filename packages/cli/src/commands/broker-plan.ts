@@ -1,5 +1,5 @@
 import { type BrokerPlan, brokerPlanOf } from '@cf-loom/contract/internal';
-import { builtOf, type Run } from '../project/index.ts';
+import { builtOf } from '../project/index.ts';
 import {
   committedStopOf,
   done,
@@ -8,6 +8,7 @@ import {
   type Stopped,
   toolingError,
 } from './exit.ts';
+import type { Run } from './run.ts';
 
 /** The broker plan of a Service, with its name for the line that says the plan is empty. */
 type Planned = { readonly kind: 'planned'; readonly service: string; readonly plan: BrokerPlan };
@@ -25,7 +26,7 @@ export async function brokerPlanCommand(run: Run, prefix: string | null): Promis
 }
 
 async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Stopped> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

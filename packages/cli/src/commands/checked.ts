@@ -1,7 +1,7 @@
-import type { Ending } from '../project/index.ts';
 import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
 import type { CheckedChange } from './checked-change.ts';
 import type { Derivation } from './derivation.ts';
+import type { Ending } from './run.ts';
 
 /** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
 type Against =

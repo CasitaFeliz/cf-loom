@@ -6,4 +6,3 @@ export type { FileOf, ProjectFailure, Tooling } from './failures.ts';
 export { runningCliOf, runningGeneratorOf } from './generator.ts';
 export type { Project } from './project.ts';
 export { declaredRootOf } from './project.ts';
-export type { Ending, ExitStatus, Finding, Run } from './run.ts';

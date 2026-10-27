@@ -1,5 +1,5 @@
 import { firstLineOf } from '../child-process/index.ts';
-import type { ExitStatus } from '../project/index.ts';
+import type { ExitStatus } from './exit.ts';
 import { printedLineOf } from './printed-line.ts';
 
 /** How writing to a stream ended: written, closed by its reader, or failed. */
