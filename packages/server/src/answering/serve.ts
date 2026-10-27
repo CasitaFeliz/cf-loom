@@ -1,4 +1,5 @@
 import type { Http, ServiceContract } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { CallArgument, NoResources, ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
@@ -39,6 +40,10 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
   readonly onAnswered?: ServeHook<AnsweredRequest>;
 };
 
+/** The options `serve` takes for a Handler map: the Resources its Handlers take, and the operational fields. */
+type ServedOptionsOf<Handlers extends Pick<HandlerMapOf<ServiceContract>, 'endpoints' | 'guards'>> =
+  ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>;
+
 /**
  * Answers a Contract's Endpoints with their Handlers over web-standard HTTP, handing each the
  * Service's Resources, after checking the Service is assembled as the Contract says.
@@ -46,10 +51,12 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
 export function serve<
   const C extends ServiceContract,
   const Handlers extends Pick<HandlerMapOf<C>, 'endpoints' | 'guards'>,
+  const Given extends ServedOptionsOf<Handlers> = ServedOptionsOf<Handlers>,
 >(
   contract: C,
   handlers: Handlers,
-  ...options: CallArgument<ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>>
+  ...options: CallArgument<ServedOptionsOf<Handlers>> &
+    ([] | [Given & NoInfer<DeclaredFieldsRule<Given, ServeOptions<object>>>])
 ): Http;
 export function serve(
   contract: ServiceContract,
