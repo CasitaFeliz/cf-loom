@@ -146,6 +146,20 @@ function recording(response: () => Response, baseUrl: string | URL = 'http://ord
 const counted = () => Response.json({ count: 1 });
 
 describe('what a call sends', () => {
+  test('a fetch that refuses a this of its own, as a browser’s does, is called and answers', async () => {
+    const browserFetch = function (this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve(Response.json({ count: 1 }));
+    };
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: browserFetch });
+
+    const outcome = await orders.searchOrders({ params: { shopId: 's-1' }, query: { ids: ['1'] } });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { count: 1 } });
+  });
+
   test('the Request fetch receives never follows a redirect', async () => {
     const { orders, sent } = recording(counted);
 

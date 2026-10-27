@@ -45,9 +45,10 @@ export function methodOf(
     const sent = requestOf(called.endpoint, calling.base, ready.input);
     const request = signal === undefined ? sent : new Request(sent, { signal });
     const inferring = { signal, inferFault: calling.inferFault };
+    const send = calling.fetch;
     let response: Response;
     try {
-      response = await calling.fetch(request);
+      response = await send(request);
     } catch (e) {
       return thrownFaultOf(e, inferring) ?? rethrown(e);
     }
