@@ -709,8 +709,8 @@ describe('cf-loom generate: the Handler map', () => {
     expect(read(project, 'src/handlers.generated.ts')).toBe(
       lines([
         header,
-        importOf('chargeCardV1CommandHandler', './commands/payments/charge-card.v1.handler.ts'),
-        importOf('chargeCardV2CommandHandler', './commands/payments/charge-card.v2.handler.ts'),
+        importOf('chargeCardCommandHandlerV1', './commands/payments/charge-card.v1.handler.ts'),
+        importOf('chargeCardCommandHandlerV2', './commands/payments/charge-card.v2.handler.ts'),
         contractImport('./contract/index.ts'),
         importOf('createOrderEndpointHandler', './endpoints/orders/create-order.handler.ts'),
         importOf('getOrderEndpointHandler', './endpoints/orders/get-order.handler.ts'),
@@ -737,8 +737,8 @@ describe('cf-loom generate: the Handler map', () => {
         '    legacyKey: legacyKeyGuardHandler,',
         '  },',
         '  commands: {',
-        '    chargeCardV1: chargeCardV1CommandHandler,',
-        '    chargeCardV2: chargeCardV2CommandHandler,',
+        '    chargeCardV1: chargeCardCommandHandlerV1,',
+        '    chargeCardV2: chargeCardCommandHandlerV2,',
         '  },',
         '  subscriptions: {',
         '    auditCreated: auditCreatedSubscriptionHandler,',
@@ -771,6 +771,34 @@ describe('cf-loom generate: the Handler map', () => {
       ]),
     );
   });
+
+  test('a Handler map written before the version came last keeps a Command’s Handler at its path, writes no stub, and imports it under its new local', () => {
+    const project = aProject(aMessagingService());
+    cfLoom(project, 'generate');
+    const handler = implement(project, 'src/commands/payments/charge-card.v1.handler.ts', 'IMPL');
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text
+        .replaceAll('chargeCardCommandHandlerV1', 'chargeCardV1CommandHandler')
+        .replaceAll('chargeCardCommandHandlerV2', 'chargeCardV2CommandHandler'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: lines([
+        'Wrote contract.snapshot.json',
+        'Wrote src/handlers.generated.ts',
+        'Wrote src/readers.generated.ts',
+      ]),
+      stderr: '',
+    });
+    expect(read(project, 'src/commands/payments/charge-card.v1.handler.ts')).toBe(handler);
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      importOf('chargeCardCommandHandlerV1', './commands/payments/charge-card.v1.handler.ts'),
+    );
+    expect(cfLoom(project, 'verify')).toMatchObject({ status: 0, stderr: '' });
+  });
 });
 describe('cf-loom generate: readers.generated.ts', () => {
   test('it writes a Reader for each own Event and Command Message Version, a Retired Event excepted, in code point order', () => {
@@ -783,7 +811,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
       lines([
         header,
         importOf(
-          '{ chargeCardV1 as chargeCardV1Command, chargeCardV2 as chargeCardV2Command, refundCardV1 as refundCardV1Command }',
+          '{ chargeCardV1 as chargeCardCommandV1, chargeCardV2 as chargeCardCommandV2, refundCardV1 as refundCardCommandV1 }',
           './contract/messages.ts',
         ),
         importOf(
@@ -797,20 +825,20 @@ describe('cf-loom generate: readers.generated.ts', () => {
         'export type TreeDefReader = { children: Array<TreeDefReader>; label: string };',
         'export const treeDefReader: z.ZodType<TreeDefReader> & z.core.$ZodTypeDiscriminable = z.lazy(() => z.object({ children: z.array(treeDefReader), label: z.string() }));',
         '',
-        'export const chargeCardV1Reader = z.object({ orderId: z.uuid() });',
-        'export const chargeCardV2Reader = z.object({ cents: z.int(), orderId: z.uuid() });',
-        'export const orderCreatedV1Reader = z.object({ orderId: z.uuid() });',
-        "export const orderCreatedV2Reader = z.object({ items: treeDefReader, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
-        'export const refundCardV1Reader = z.object({ orderId: z.uuid() });',
+        'export const chargeCardReaderV1 = z.object({ orderId: z.uuid() });',
+        'export const chargeCardReaderV2 = z.object({ cents: z.int(), orderId: z.uuid() });',
+        'export const orderCreatedReaderV1 = z.object({ orderId: z.uuid() });',
+        "export const orderCreatedReaderV2 = z.object({ items: treeDefReader, orderId: z.uuid(), status: loom.openEnumReader(['paid', 'pending']) });",
+        'export const refundCardReaderV1 = z.object({ orderId: z.uuid() });',
         '',
         'export const readers = readersOf({',
         '  commands: {',
-        '    chargeCardV1: { element: chargeCardV1Command, reader: chargeCardV1Reader },',
-        '    chargeCardV2: { element: chargeCardV2Command, reader: chargeCardV2Reader },',
-        '    refundCardV1: { element: refundCardV1Command, reader: refundCardV1Reader },',
+        '    chargeCardV1: { element: chargeCardCommandV1, reader: chargeCardReaderV1 },',
+        '    chargeCardV2: { element: chargeCardCommandV2, reader: chargeCardReaderV2 },',
+        '    refundCardV1: { element: refundCardCommandV1, reader: refundCardReaderV1 },',
         '  },',
         '  subscriptions: {',
-        '    auditCreated: { element: auditCreatedSubscription, reader: orderCreatedV2Reader },',
+        '    auditCreated: { element: auditCreatedSubscription, reader: orderCreatedReaderV2 },',
         '    notifyOnSettled: { element: notifyOnSettledSubscription, reader: notifyOnSettledSubscription.event.body },',
         '  },',
         '});',
@@ -832,7 +860,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
       project,
       lines([
         probeImportOf('generated', 'src/readers.generated.ts'),
-        `const body = generated.orderCreatedV2Reader.parse(${JSON.stringify(body)});`,
+        `const body = generated.orderCreatedReaderV2.parse(${JSON.stringify(body)});`,
         'console.log(JSON.stringify(body));',
       ]),
     );
@@ -856,7 +884,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
         'const { chargeCardV2 } = generated.readers.commands;',
         'console.log(JSON.stringify([',
         '  chargeCardV2.element === messages.chargeCardV2,',
-        '  chargeCardV2.reader === generated.chargeCardV2Reader,',
+        '  chargeCardV2.reader === generated.chargeCardReaderV2,',
         ']));',
       ]),
     );
@@ -876,7 +904,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
         'const { auditCreated } = generated.readers.subscriptions;',
         'console.log(JSON.stringify([',
         '  auditCreated.element === subscriptions.auditCreated,',
-        '  auditCreated.reader === generated.orderCreatedV2Reader,',
+        '  auditCreated.reader === generated.orderCreatedReaderV2,',
         ']));',
       ]),
     );
@@ -932,7 +960,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
 
     expect(read(project, 'src/readers.generated.ts')).toContain(
       importOf(
-        '{ shipOrderV1 as shipOrderV1Command }',
+        '{ shipOrderV1 as shipOrderCommandV1 }',
         './contract/commands/ship-order.v1.command.ts',
       ),
     );
@@ -1029,16 +1057,49 @@ describe('cf-loom generate: readers.generated.ts', () => {
     expect(ran).toMatchObject({ status: 0, stderr: '' });
     const map = read(project, 'src/handlers.generated.ts');
     const readers = read(project, 'src/readers.generated.ts');
-    expect(map.match(/^ {4}ship\w+: \w+CommandHandler,$/gm)).toEqual([
-      '    shipOrderV1: shipOrderV1CommandHandler,',
-      '    shipOrderV10: shipOrderV10CommandHandler,',
-      '    shipV1: shipV1CommandHandler,',
+    expect(map.match(/^ {4}ship\w+: \w+CommandHandlerV\d+,$/gm)).toEqual([
+      '    shipOrderV1: shipOrderCommandHandlerV1,',
+      '    shipOrderV10: shipOrderCommandHandlerV10,',
+      '    shipV1: shipCommandHandlerV1,',
     ]);
-    expect(readers.match(/^ {4}ship\w+: \{ element: \w+Command,/gm)).toEqual([
-      '    shipOrderV1: { element: shipOrderV1Command,',
-      '    shipOrderV10: { element: shipOrderV10Command,',
-      '    shipV1: { element: shipV1Command,',
+    expect(readers.match(/^ {4}ship\w+: \{ element: \w+CommandV\d+,/gm)).toEqual([
+      '    shipOrderV1: { element: shipOrderCommandV1,',
+      '    shipOrderV10: { element: shipOrderCommandV10,',
+      '    shipV1: { element: shipCommandV1,',
     ]);
+  });
+
+  test('Readers are declared in the order the table lists their Commands, whatever word comes before the version', () => {
+    const project = aProject(
+      aMessagingService({
+        commands: '[chargeCardV1, chargeCardV2, refundCardV1, shipTrackV1, shipV1]',
+      }),
+    );
+    const ship = (name: string) =>
+      lines([
+        `export const ${name.charAt(0).toLowerCase()}${name.slice(1)}V1 = defineCommand({`,
+        `  name: '${name}',`,
+        '  version: 1,',
+        `  description: '${name}',`,
+        '  body: z.object({ orderId: z.uuid() }),',
+        '});',
+      ]);
+    edit(project, 'src/contract/messages.ts', (text) =>
+      [text, ship('Ship'), ship('ShipTrack')].join('\n'),
+    );
+    edit(project, 'src/contract/index.ts', (text) =>
+      text.replace('  refundCardV1,\n', '  refundCardV1,\n  shipTrackV1,\n  shipV1,\n'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const readers = read(project, 'src/readers.generated.ts');
+    expect(readers.match(/^export const ship\w*ReaderV1\b/gm)).toEqual([
+      'export const shipTrackReaderV1',
+      'export const shipReaderV1',
+    ]);
+    expect(readers.match(/^ {4}ship\w+: \{/gm)).toEqual(['    shipTrackV1: {', '    shipV1: {']);
   });
 
   test('a Retired Command’s Message Version is still paired, so its Handler compiles until it is deleted', () => {
@@ -3104,34 +3165,72 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(checked).toEqual({ status: 0, stdout: '' });
   });
 
-  test.each(['chargeCardV1', 'readersOf', 'z', 'readers', 'orderCreatedV2Reader', 'treeDefReader'])(
-    'a Subscription named %s generates a Service that passes tsc',
-    (name) => {
-      const service = aMessagingService({
-        subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
-      });
-      const project = aProject({
-        ...service,
-        'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
-        'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+  test.each([
+    'chargeCardV1',
+    'chargeCardCommandV1',
+    'readersOf',
+    'z',
+    'readers',
+    'orderCreatedV2Reader',
+    'orderCreatedReaderV2',
+    'treeDefReader',
+  ])('a Subscription named %s generates a Service that passes tsc', (name) => {
+    const service = aMessagingService({
+      subscriptions: ['notifyOnSettled', 'auditCreated', `${name}Subscription`],
+    });
+    const project = aProject({
+      ...service,
+      'src/contract/subscriptions.ts': `${subscriptions}\nexport const ${name} = defineSubscription({ name: '${name}', description: 'Name', event: orderCreatedV2 });\n`,
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '').replace(
+        "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
+        lines([
+          'import {',
+          '  auditCreated,',
+          `  ${name} as ${name}Subscription,`,
+          '  notifyOnSettled,',
+          "} from './subscriptions.ts';",
+        ]).trimEnd(),
+      ),
+      'tsconfig.json': tsconfig,
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran.status).toBe(0);
+    expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+  });
+
+  test('an Endpoint named like a Command’s Handler local generates a Service that passes tsc', () => {
+    const service = aMessagingService();
+    const project = aProject({
+      ...service,
+      'src/contract/endpoints/orders/charge-card-command-handler-v1.endpoint.ts': anEndpoint({
+        name: 'chargeCardCommandHandlerV1',
+        path: '/charge-card',
+      }),
+      'src/contract/index.ts': (service['src/contract/index.ts'] ?? '')
+        .replace(
           "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
           lines([
-            'import {',
-            '  auditCreated,',
-            `  ${name} as ${name}Subscription,`,
-            '  notifyOnSettled,',
-            "} from './subscriptions.ts';",
+            "import { auditCreated, notifyOnSettled } from './subscriptions.ts';",
+            importOf(
+              '{ chargeCardCommandHandlerV1 }',
+              './endpoints/orders/charge-card-command-handler-v1.endpoint.ts',
+            ),
           ]).trimEnd(),
-        ),
-        'tsconfig.json': tsconfig,
-      });
+        )
+        .replace('  endpoints: [', '  endpoints: [chargeCardCommandHandlerV1, '),
+      'tsconfig.json': tsconfig,
+    });
 
-      const ran = cfLoom(project, 'generate');
+    const ran = cfLoom(project, 'generate');
 
-      expect(ran.status).toBe(0);
-      expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
-    },
-  );
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    expect(read(project, 'src/handlers.generated.ts')).toContain(
+      '    chargeCardCommandHandlerV1: chargeCardCommandHandlerV1EndpointHandler,',
+    );
+    expect(typeCheck(project)).toEqual({ status: 0, stdout: '' });
+  });
 
   describe('a declaration exported under another name', () => {
     test('an Endpoint exported under another name generates a stub that imports it under its name, and passes tsc', () => {
@@ -3487,7 +3586,7 @@ describe('cf-loom generate: the Service type-checks', () => {
       const readers = read(project, 'src/readers.generated.ts');
       expect(readers).toContain(
         importOf(
-          '{ chargeCardNext as chargeCardV2Command, chargeCardV1 as chargeCardV1Command, refundCardV1 as refundCardV1Command }',
+          '{ chargeCardNext as chargeCardCommandV2, chargeCardV1 as chargeCardCommandV1, refundCardV1 as refundCardCommandV1 }',
           './contract/messages.ts',
         ),
       );

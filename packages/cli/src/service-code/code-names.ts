@@ -17,43 +17,60 @@ export function pairingNameOf(handled: MessageHandled): string {
   }
 }
 
-/** Orders Commands' Message Versions by name in code, as the Handler map and the readers list them. */
-export function byCommandName(left: MessageVersion, right: MessageVersion): number {
+/** Orders Message Versions by name in code, as the Handler map, the readers table and the Readers list them. */
+export function byNameInCode(left: MessageVersion, right: MessageVersion): number {
   return byCodePoint(codeNameOf(left), codeNameOf(right));
 }
 
-/** The name of an own Message Version's Reader schema: `orderCreatedV2Reader`. */
+/** The name of an own Message Version's Reader schema: `orderCreatedReaderV2`. */
 export function readerNameOf(message: MessageVersion): string {
-  return `${codeNameOf(message)}Reader`;
+  return codeNameOf(message, 'Reader');
 }
 
 type HandlerKind = Handled['kind'];
 
-/** What ends the Handler map's local name of a Handler, by kind, so locals of two kinds never meet. */
-const localSuffixes: Readonly<Record<HandlerKind, string>> = {
+type SuffixedKind = Exclude<HandlerKind, 'command'>;
+
+/**
+ * What ends the Handler map's local name of a Handler that carries no version, by kind, so locals
+ * of two kinds never meet.
+ */
+const localSuffixes: Readonly<Record<SuffixedKind, string>> = {
   endpoint: 'EndpointHandler',
   guard: 'GuardHandler',
-  command: 'CommandHandler',
   subscription: 'SubscriptionHandler',
 };
 
-const handlerKinds = Object.keys(localSuffixes).filter(isHandlerKind);
+const suffixedKinds = Object.keys(localSuffixes).filter(isSuffixedKind);
 
-function isHandlerKind(key: string): key is HandlerKind {
+function isSuffixedKind(key: string): key is SuffixedKind {
   return Object.hasOwn(localSuffixes, key);
 }
 
-/** The Handler map's local name of a Handler: its name in code, suffixed by its kind. */
+/** The Handler map's local name of a Handler: its name in code with its kind's word, the version last. */
 export function handlerLocalOf(handled: Handled): string {
-  return `${nameInCodeOf(handled)}${localSuffixes[handled.kind]}`;
+  switch (handled.kind) {
+    case 'command':
+      return codeNameOf(handled, 'CommandHandler');
+    case 'endpoint':
+    case 'guard':
+    case 'subscription':
+      return `${nameInCodeOf(handled)}${localSuffixes[handled.kind]}`;
+  }
 }
 
 /** The kind and the name in code a Handler map's local name was made of. */
 export type LocalParts = { readonly kind: HandlerKind; readonly name: string };
 
+const commandLocal = /^(.+)CommandHandlerV([0-9]+)$/;
+
 /** What a local name was made of, or nothing when it is no Handler's; the inverse of `handlerLocalOf`. */
 export function localPartsOf(local: string): LocalParts | undefined {
-  for (const kind of handlerKinds) {
+  const command = commandLocal.exec(local);
+  if (command !== null) {
+    return { kind: 'command', name: `${command[1]}V${command[2]}` };
+  }
+  for (const kind of suffixedKinds) {
     const suffix = localSuffixes[kind];
     if (local.endsWith(suffix) && local.length > suffix.length) {
       return { kind, name: local.slice(0, -suffix.length) };
@@ -75,13 +92,13 @@ export function nameInCodeOf(handled: Handled): string {
 }
 
 /**
- * The name the readers file imports a Command's Message Version or a Subscription under, suffixed
- * by its kind so it never meets a Reader, a def or another kind's import: `chargeCardV1Command`.
+ * The name the readers file imports a Command's Message Version or a Subscription under, with its
+ * kind's word so it never meets a Reader, a def or another kind's import: `chargeCardCommandV1`.
  */
 export function importAliasOf(handled: MessageHandled): string {
   switch (handled.kind) {
     case 'command':
-      return `${pairingNameOf(handled)}Command`;
+      return codeNameOf(handled, 'Command');
     case 'subscription':
       return `${pairingNameOf(handled)}Subscription`;
   }

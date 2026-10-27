@@ -1,10 +1,5 @@
-import { kebabCaseOf } from '@cf-loom/contract/internal';
-import {
-  camelCaseOf,
-  camelCaseOfCode,
-  kebabCaseOfCode,
-  messageVersionStemOf,
-} from '../source-text/index.ts';
+import { codeNameOf, kebabCaseOf } from '@cf-loom/contract/internal';
+import { camelCaseOfCode, kebabCaseOfCode, messageVersionStemOf } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFolders, packagePaths } from './paths.ts';
 
@@ -49,7 +44,7 @@ export function bindingOf(declared: PackagedDeclaration): string {
     case 'rejection':
       return `${camelCaseOfCode(declared.code)}Rejection`;
     case 'event':
-      return `${camelCaseOf(declared.name)}EventV${declared.version}`;
+      return codeNameOf(declared, 'Event');
   }
 }
 
