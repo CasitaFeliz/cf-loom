@@ -61,18 +61,21 @@ const unionIsRefused =
 
 /**
  * How much longer a shape may take at eight times the size: three times the growth of the size.
- * Linear code measures 6 to 10 times longer, and a quadratic one 50 times or more.
+ * Linear code measures 3 to 20 times longer, and 30 or more now and then on a loaded host, which
+ * `growthOf` measures again; the quadratic code these tests were written for measures 48 times or
+ * more, every time.
  */
 const linearGrowth = 24;
 
 /**
  * The bound of the hub test, which is higher: the walker copies the failures of a failing def on
- * every use of it, so the hub takes about 22 times longer at eight times the size.
+ * every use of it, so the hub measures 13 to 27 times longer at eight times the size, and 60 or
+ * more now and then on a loaded host, against 65 for the code before #316.
  */
 const hubGrowth = 32;
 
-/** A growth test builds and times seven runs of its shape, which a loaded runner may stretch. */
-const growthTimeout = 30_000;
+/** A growth test builds and times its shape up to three times over, which a loaded runner may stretch. */
+const growthTimeout = 60_000;
 
 /** A recursive def holding a date, as a function so each test has a schema of its own. */
 function dateTree() {
@@ -889,7 +892,7 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, count / 8, count);
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
     const lines = told(count)();
 
     const firstPlace = `success.body.f00000${'.next'.repeat(count - 1)}.at`;
@@ -931,7 +934,7 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, count / 8, count);
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
     const lines = told(count)();
 
     expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.holder.f000000.at ${date}`]);
@@ -983,7 +986,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, count / 8, count);
+    const growth = growthOf(told, { small: count / 8, large: count }, hubGrowth);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
@@ -1017,7 +1020,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, count / 8, count);
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
     const lines = told(count)();
 
     expect(lines).toHaveLength(1);
