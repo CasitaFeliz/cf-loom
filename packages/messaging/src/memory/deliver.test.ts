@@ -556,6 +556,31 @@ describe('deliver()', () => {
     await expect(delivering).rejects.toThrow('ChargeCard@1 has no consumer');
   });
 
+  test('deliver stops once its own Messages have settled: what their Handlers send stays lined up, and close() lists it as pending', async () => {
+    const charged: string[] = [];
+    const { inMemory } = await running((connection) => ({
+      notify: async () => {
+        await connection.sender.send('ChargeCard', charge, { factId: 'f-1' });
+        await connection.sender.send('ChargeCard', charge, { factId: 'f-2' });
+        return undefined;
+      },
+      charge: () => {
+        charged.push('charged');
+        return undefined;
+      },
+    }));
+
+    await inMemory.deliver(orderCreatedV2, created);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await inMemory.close();
+
+    expect(charged).toEqual([]);
+    expect(inMemory.pending.map(({ messageId }) => messageId)).toEqual([
+      'command.ChargeCard.v1:f-1',
+      'command.ChargeCard.v1:f-2',
+    ]);
+  });
+
   test('deliver waits for the Messages already lined up', async () => {
     const gate = aGate();
     const entered = Promise.withResolvers<void>();
@@ -945,7 +970,6 @@ describe('pending and redeliver()', () => {
   });
 
   test('a Message a Handler publishes during redeliver() is covered by settled()', async () => {
-    const gate = aGate();
     const charged: string[] = [];
     const { inMemory } = await running((connection) => ({
       notify: async (_body, meta) => {
@@ -955,8 +979,7 @@ describe('pending and redeliver()', () => {
         await connection.sender.send('ChargeCard', charge, { factId: 'f-50' });
         return undefined;
       },
-      charge: async () => {
-        await gate.opened;
+      charge: () => {
         charged.push('charged');
         return undefined;
       },
@@ -965,12 +988,41 @@ describe('pending and redeliver()', () => {
     await rejectionOf(inMemory.settled());
 
     await inMemory.redeliver();
+    await new Promise((resolve) => setTimeout(resolve, 20));
     const chargedMeanwhile = [...charged];
-    const settling = inMemory.settled();
-    gate.open();
-    await settling;
+    await inMemory.settled();
 
     expect(chargedMeanwhile).toEqual([]);
     expect(charged).toEqual(['charged']);
+  });
+
+  test('redeliver stops once the Messages it lined up have settled: what their Handlers send stays lined up, and close() lists it as pending', async () => {
+    const charged: string[] = [];
+    const { inMemory } = await running((connection) => ({
+      notify: async (_body, meta) => {
+        if (meta.deliveryCount === 1) {
+          throw boom;
+        }
+        await connection.sender.send('ChargeCard', charge, { factId: 'f-1' });
+        await connection.sender.send('ChargeCard', charge, { factId: 'f-2' });
+        return undefined;
+      },
+      charge: () => {
+        charged.push('charged');
+        return undefined;
+      },
+    }));
+    await inMemory.deliver(orderCreatedV2, created);
+    await rejectionOf(inMemory.settled());
+    await inMemory.redeliver();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await inMemory.close();
+
+    expect(charged).toEqual([]);
+    expect(inMemory.pending.map(({ messageId }) => messageId)).toEqual([
+      'command.ChargeCard.v1:f-1',
+      'command.ChargeCard.v1:f-2',
+    ]);
   });
 });

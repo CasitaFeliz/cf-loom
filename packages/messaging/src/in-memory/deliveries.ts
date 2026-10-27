@@ -24,9 +24,9 @@ export class Deliveries {
 
   /**
    * Lines deliveries up without running them: they run while `settled()`, `deliver()` or
-   * `redeliver()` drives the line. A cut drops them, and `settled()` reports it, while a delivery
-   * that fails on its own reaches the runtime, as nothing waits for it. Once the line is left,
-   * nothing is lined up: each is pending at once.
+   * `redeliver()` drives the line, the last two through their own deliveries only. A cut drops
+   * them, and `settled()` reports it, while a delivery that fails on its own reaches the runtime,
+   * as nothing waits for it. Once the line is left, nothing is lined up: each is pending at once.
    */
   lineUp(attempts: readonly Attempt[]): void {
     for (const attempt of attempts) {
@@ -38,15 +38,15 @@ export class Deliveries {
     }
   }
 
-  /** Lines deliveries up and runs the line until they settle: the most severe settlement, or the cut that dropped one. */
+  /** Lines deliveries up and runs the line through them, those lined up before them first: the most severe settlement, or the cut that dropped one. */
   async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement> {
     const lined = attempts.map((attempt) => this.#lined(attempt));
-    void this.#line.drive();
+    void this.#line.driveLined();
     const settlements = await Promise.all(lined);
     return bySeverity.find((settlement) => settlements.includes(settlement)) ?? 'acked';
   }
 
-  /** Lines every Message pending now up again, each for the consumer it is pending for, runs the line and waits for them. */
+  /** Lines every Message pending now up again, each for the consumer it is pending for, runs the line through them and waits for them. */
   async redeliver(): Promise<void> {
     const pending = this.#pending.attempts();
     const lined = pending.map((attempt) =>
@@ -55,13 +55,13 @@ export class Deliveries {
         () => undefined,
       ),
     );
-    void this.#line.drive();
+    void this.#line.driveLined();
     await Promise.all(lined);
   }
 
   /** Runs the line until nothing is lined up, then rejects if anything failed since the last time. */
   async settled(): Promise<void> {
-    await this.#line.drive();
+    await this.#line.driveAll();
     this.#failures.report();
   }
 

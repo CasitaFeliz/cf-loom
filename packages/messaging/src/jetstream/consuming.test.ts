@@ -771,7 +771,7 @@ describe('consuming over jetstream()', () => {
     await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
-    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    expect(overMemory).toHaveLength(1);
     const seenOf = (received: Received[]) => {
       return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
     };
@@ -796,7 +796,7 @@ describe('consuming over jetstream()', () => {
     await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
-    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    expect(overMemory).toHaveLength(1);
     const seenOf = (received: Received[]) => {
       return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
     };

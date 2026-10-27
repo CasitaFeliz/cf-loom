@@ -32,8 +32,9 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
     message: M,
   ) => readonly RecordedMessage<M>[];
   /**
-   * Delivers the Messages already lined up, then one new Message as attempt 1: an Event reaches
-   * every Subscription to it, a Command its Message Handler; resolves to the most severe settlement. Its body is typed as its Message
+   * Delivers the Messages already lined up, then one new Message as attempt 1, and stops there:
+   * an Event reaches every Subscription to it, a Command its Message Handler; resolves to the most
+   * severe settlement, what the Handlers publish or send waiting for `settled()`. Its body is typed as its Message
    * Version's writer writes it and is written back through each consumer's Reader. A Handler that
    * awaits it never settles.
    */
@@ -44,7 +45,7 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
   ) => Promise<Settlement>;
   /**
    * Delivers every pending Message again, each to the consumer it is pending for alone, as attempt
-   * `deliveryCount + 1`.
+   * `deliveryCount + 1`, and stops there: what the Handlers publish or send waits for `settled()`.
    */
   readonly redeliver: () => Promise<void>;
   /** The Messages a Handler left unacknowledged, which `memory()` never delivers again on its own. */

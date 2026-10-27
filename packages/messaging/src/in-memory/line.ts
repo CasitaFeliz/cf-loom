@@ -28,6 +28,7 @@ export class DeliveryLine {
   readonly #lined: LinedUp[] = [];
   readonly #onCut: (cut: Error) => void;
   #running: PromiseWithResolvers<void> | undefined;
+  #budget = 0;
   #started = 0;
 
   constructor(onCut: (cut: Error) => void) {
@@ -45,10 +46,14 @@ export class DeliveryLine {
     });
   }
 
-  /** Runs what is lined up, and what the deliveries line up meanwhile, until nothing is; resolves once the line is idle. */
-  drive(): Promise<void> {
-    const running = this.#running ?? this.#begin();
-    return running.promise;
+  /** Runs every delivery lined up, and those the deliveries line up meanwhile, until none is; resolves once the line is idle. */
+  driveAll(): Promise<void> {
+    return this.#drive(Number.POSITIVE_INFINITY);
+  }
+
+  /** Runs the deliveries lined up now and none lined up after them, so what they line up waits; resolves once they ran. */
+  driveLined(): Promise<void> {
+    return this.#drive(this.#lined.length);
   }
 
   /** Leaves every delivery still lined up unrun, each answering as it was told to. */
@@ -56,6 +61,12 @@ export class DeliveryLine {
     for (const { leave } of this.#lined.splice(0)) {
       leave();
     }
+  }
+
+  #drive(budget: number): Promise<void> {
+    this.#budget = Math.max(this.#budget, budget);
+    const running = this.#running ?? this.#begin();
+    return running.promise;
   }
 
   #begin(): PromiseWithResolvers<void> {
@@ -66,15 +77,19 @@ export class DeliveryLine {
   }
 
   async #drain(running: PromiseWithResolvers<void>): Promise<void> {
-    while (this.#lined.length > 0) {
+    while (this.#lined.length > 0 && this.#budget > 0) {
       if (this.#started === limit) {
         this.#cut();
         break;
       }
       this.#started += 1;
+      this.#budget -= 1;
       await this.#lined.shift()?.run();
     }
-    this.#started = 0;
+    this.#budget = 0;
+    if (this.#lined.length === 0) {
+      this.#started = 0;
+    }
     this.#running = undefined;
     running.resolve();
   }

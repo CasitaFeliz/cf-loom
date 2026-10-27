@@ -9,9 +9,9 @@ import type { MemoryMessaging } from './types.ts';
 
 /**
  * Runs a Contract's messaging in memory, for tests: no Broker, Messages delivered one at a time in
- * publish order, and only while the test waits for `settled()`, `deliver()` or `redeliver()`,
- * none of the organization's broker configuration modeled. Resolves to its `Messaging` and what a
- * test drives and watches it with.
+ * publish order, and only while the test waits for `settled()`, `deliver()` or `redeliver()`, the
+ * last two through their own Messages, none of the organization's broker configuration modeled.
+ * Resolves to its `Messaging` and what a test drives and watches it with.
  */
 export async function memory<const C extends ServiceContract>(
   contract: C,
