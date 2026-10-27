@@ -1,5 +1,5 @@
 import type { SchemaNode, ServiceSnapshot } from '@cf-loom/contract/internal';
-import { byCodePoint, isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
+import { isLive, nameAndVersionOf } from '@cf-loom/contract/internal';
 import {
   addModulesOf,
   type DefUse,
@@ -9,7 +9,7 @@ import {
   reachedDefUsesOf,
   zodExpressionOf,
 } from '../schema-code/index.ts';
-import { type MessageVersion, readerNameOf } from './code-names.ts';
+import { byNameInCode, type MessageVersion, readerNameOf } from './code-names.ts';
 
 /** An own Message Version a Reader is written for, by its kind's key in the Snapshot and identity. */
 export type Readable = {
@@ -48,7 +48,7 @@ function readerLinesOf(readables: readonly Readable[], needs: Needs): readonly s
 }
 
 /**
- * Every own Message Version a Reader is written for, in code point order of its Reader: each
+ * Every own Message Version a Reader is written for, in code point order of its name in code: each
  * Event that is not Retired, since no Subscription reads a Retired one, and each Command's, whose
  * Handler compiles as long as it is declared.
  */
@@ -60,9 +60,7 @@ function readablesOf(snapshot: ServiceSnapshot): readonly Readable[] {
       readableOf('commands', identity, body),
     ),
   ];
-  return readables.sort((left, right) =>
-    byCodePoint(readerNameOf(left.message), readerNameOf(right.message)),
-  );
+  return readables.sort((left, right) => byNameInCode(left.message, right.message));
 }
 
 function readableOf(kind: Readable['kind'], identity: string, body: SchemaNode): Readable {
