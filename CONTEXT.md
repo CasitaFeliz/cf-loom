@@ -209,11 +209,11 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name in code: an Endpoint's, a Guard's or a Subscription's name, a Command's Message Version's `chargeCardV1`; ending `satisfies HandlerMapOf` of the Contract, or typed `HandlerMapOf` of the Contract and the Service's Resources, so a missing or misplaced Handler is a type error; with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, drops one only once its file is gone, and deletes the map and the readers it wrote at a path the layout no longer names once it has written them where it does. The author only deletes a file or moves it off its path.
+The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name in code: an Endpoint's, a Guard's or a Subscription's name, a Command's Message Version's `chargeCardV1`; ending `satisfies HandlerMapOf` of the Contract, or typed `HandlerMapOf` of the Contract and the Service's Resources, so a missing or misplaced Handler is a type error; with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, drops one only once its file is gone, and deletes the map and the Readers file it wrote at a path the layout no longer names once it has written them where it does. The author only deletes a file or moves it off its path.
 _Avoid_: registry, router
 
 **Pairing**:
-A Command's Message Version or a Subscription together with the Reader its Message Handler reads, as the readers file holds it; `handle` takes it for a Message Handler, never the bare declaration.
+A Command's Message Version or a Subscription together with the Reader its Message Handler reads, as the Readers file holds it; `handle` takes it for a Message Handler, never the bare declaration.
 _Avoid_: wiring, mapping
 
 **Readers file**:
@@ -247,7 +247,7 @@ _Avoid_: dispatcher, bus
 ### Testing
 
 **Fake Provider**:
-What `fakeProvider` builds from a Dependency: a Provider that answers as scripted, checked against the Provider's Snapshot, so it can never answer what the Provider could not.
+What `fakeProvider` builds from a Dependency to stand in for its Provider: it answers as scripted, checked against the Provider's Snapshot, so it can never answer what the Provider could not.
 _Avoid_: mock, test double
 
 **Script**:
@@ -259,7 +259,7 @@ One scripted answer: the function a Fake Provider runs for a request of an Endpo
 _Avoid_: answer (alone), reply
 
 **Mistake**:
-A misuse of a Fake Provider in a test, such as a request no listed Endpoint matches or a Step no request took: it throws `FakeProviderError`, and `verify()` throws it again.
+A misuse of a Fake Provider in a test, such as a request no listed Endpoint matches, which throws `FakeProviderError` out of `fetch`, or a Step no request took, which `verify()` reports; `verify()` throws every Mistake again.
 _Avoid_: error (alone), failure
 
 ### Compatibility
@@ -289,7 +289,7 @@ Where a shape is read, which decides what makes a change to it Breaking: Input (
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:
-The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change and gives it a Verdict; with no Baseline, its declared Snapshot is judged alone as the whole history, for the numbering of its Message Versions.
+The comparison of a Contract or a Definitions Package against its Baseline that classifies each Difference as a Breaking, Additive or Neutral Change and gives it a Verdict; with no Baseline, its declared Snapshot is judged alone as the whole history, for the numbering of its Message Versions.
 _Avoid_: diff, lint, compatibility review
 
 **Difference**:
@@ -297,15 +297,15 @@ What differs between the Baseline and the proposed Snapshot at one site; the Com
 _Avoid_: delta
 
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing or renaming an export of a Definitions Package, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
+A Difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing or renaming an export of a Definitions Package, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:
-A difference no existing Consumer or running Release can fail on, but that a Consumer can notice.
+A Difference no existing Consumer or running Release can fail on, but that a Consumer can notice.
 _Avoid_: non-breaking change, safe change
 
 **Neutral Change**:
-A difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
+A Difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
 _Avoid_: patch change, cosmetic change
 
 **Verdict**:

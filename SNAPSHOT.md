@@ -16,7 +16,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 - A Snapshot's JSON nests at most 256 levels, the outermost object being the first, and a schema node at most 252 levels, its root the first; a node's root sits at most 4 keys below the outermost object, so the rest of the Snapshot, such as a Qualifier's value, has the 256 and a node keeps within them wherever the merge keeps it, a removed code's and a former Input's defs included; a Contract that breaks either limit is [Not allowed](packages/contract/README.md#not-allowed), so every Snapshot `generate` writes, and every Snapshot `publish` merges from it, reads back.
 - The Snapshot writes one spelling for one shape. A text part (`input.query`, `input.headers`, `success.headers`, a code's `headers`, a Guard's `demands.headers` and `demands.query`) is always an open object, with no field when none is declared, so a part declared with `z.object({})` and one not declared write the same Snapshot. A def is never `nullable`: `.nullable()` belongs to a use, so `.meta({ id })` on a schema that admits `null` fails `generate` (see [Recursion](packages/contract/README.md#recursion) in the contract README); every `ref` to a def carries its own `nullable`.
 - Arrays whose order means nothing are sorted: Rejection codes by code, Providers by Service, each Provider's `endpoints` by `id`, and `enum.values` and `allOf.items` by the canonical JSON of each item. Arrays whose order matters (an Endpoint's Guards, a Guard's `guards`, an Endpoint's `params`, a tuple's items, a union's `options`, since zod's union returns the first option that parses, a Qualifier's list) keep it. `formerInputs` is sorted by `endpoint`, each Endpoint's in the order its former Inputs were recorded, oldest first.
-- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Provider's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
+- The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every Difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Provider's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
 
 ## Top level
 
@@ -158,7 +158,13 @@ A published Service Snapshot's `formerInputs` holds, for each Endpoint, a former
 },
 "events": {
   "OrderCreated@2": {
-    "body": { "fields": { "orderId": { "required": true, "schema": { "type": "string" } } }, "type": "object" },
+    "body": {
+      "fields": {
+        "orderId": { "required": true, "schema": { "type": "string" } },
+        "total": { "required": true, "schema": { "type": "number" } }
+      },
+      "type": "object"
+    },
     "description": "An order was placed, with its total",
     "group": "orders",
     "lifecycle": "active",
@@ -297,7 +303,7 @@ Every shape is written fully inline wherever it is used; `defs` and `ref` exist 
 - Every node may carry `nullable`, `description`, `examples` and `origin` (see [Origin](#origin)). `description` and `examples` are Neutral.
 - A field is `{ "required": true | false, "schema": … }`; optional and nullable are separate.
 - A query param whose schema is an `array` is a list; anything else, and every path param, is a single value.
-- Open Enums are stored with `open: true`; the reader and writer types are generated from that (see [Open Enums](packages/contract/README.md#open-enums) in the contract README).
+- Open Enums are stored with `open: true`; the Reader and writer types are generated from that (see [Open Enums](packages/contract/README.md#open-enums) in the contract README).
 - The node names `binary` and `stream` are reserved: bodies are JSON (see [Shapes, not behavior](ARCHITECTURE.md#shapes-not-behavior) in ARCHITECTURE.md).
 
 ### JSON Schema
