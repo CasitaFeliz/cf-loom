@@ -22,6 +22,7 @@ import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
 import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
+import { anNpmRecording } from '../test/npm-recording.ts';
 import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
@@ -4582,10 +4583,14 @@ const projectEntries = [
 
 /** What `publish` left behind: the folders in its staging place, and any entry at the project's top level that is not the project's. */
 function leftBehindIn(project: string): string[] {
-  const folder = join(project, stagingFolder);
-  const staged = existsSync(folder) ? readdirSync(folder) : [];
   const strays = readdirSync(project).filter((name) => !projectEntries.includes(name));
-  return [...staged, ...strays];
+  return [...leftStagedIn(project), ...strays];
+}
+
+/** The folders `publish` left in its staging place. */
+function leftStagedIn(project: string): string[] {
+  const folder = join(project, stagingFolder);
+  return existsSync(folder) ? readdirSync(folder) : [];
 }
 
 /** Installs a zod of another version in the project: its files as they are, its package.json naming `version`. */
@@ -6503,6 +6508,72 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     },
   );
 
+  test.for([
+    ['a file named with an accented letter', { 'docs/café.md': '# Café\n' }, 'ASCII'],
+    ['a file with a colon in its name', { 'docs/a:b.md': '# A\n' }, 'ASCII'],
+    ['a Snapshot.json beside its snapshot.json', { 'Snapshot.json': '{}\n' }, 'more than one'],
+  ] as const)(
+    'a Definitions Package with %s fails publish with exit 3 and puts nothing, since check could not read its tarball',
+    async ([, extra, why], { lab }) => {
+      const manifest = { files: ['dist', 'docs', 'Snapshot.json'] };
+      const project = await aGeneratedProject(lab, { ...aBuiltDefinitions(manifest), ...extra });
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} });
+
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      expect(ran).toMatchObject({ status: 3, stdout: checked });
+      expect(ran.stderr).toMatch(new RegExp(`^@org/definitions@1\\.0\\.0.* ${why}`));
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftStagedIn(project)).toEqual([]);
+    },
+  );
+
+  test('publish packs the staged package once and gives npm that tarball, whose bytes the registry stores and check then reads as the Baseline', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aBuiltDefinitions());
+    const registry = await lab.aRegistry({});
+    const recording = anNpmRecording(lab.aFolder());
+    const userConfig = loginTo(registry);
+    const env = { ...lab.anNpmEnvironment({ userConfig, path: recording.path }), ...recording.env };
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const calls = recording.calls().filter(({ args }) => !args.includes('--dry-run'));
+    const packs = calls.filter(({ args }) => args[0] === 'pack');
+    const [publish] = calls.filter(({ args }) => args[0] === 'publish');
+    expect(packs).toHaveLength(1);
+    const destination = packs[0]!.args[packs[0]!.args.indexOf('--pack-destination') + 1]!;
+    expect(dirname(publish!.args[1]!)).toBe(destination);
+    expect(publish!.args[1]).toMatch(/\.tgz$/);
+    const stored = createHash('sha512').update(registry.published[0]!.tarball).digest('hex');
+    expect(publish!.publishedSha512).toBe(stored);
+    const checked = await cfLoomWith(project, env, 'check');
+    expect(checked).toMatchObject({ status: 0, stderr: '' });
+    expect(checked.stdout).toContain('Checked against @org/definitions@1.0.0');
+  });
+
+  test('a Definitions Package’s publishConfig.registry still decides where its version is put', async ({
+    lab,
+  }) => {
+    const reading = await lab.aRegistry({});
+    const publishing = await lab.aRegistry({});
+    const publishConfig = { registry: `${publishing.url}/` };
+    const project = await aGeneratedProject(lab, aBuiltDefinitions({ publishConfig }));
+    const publishingLogin = `//${publishing.host}/:_authToken=${token}\n`;
+    const env = lab.anNpmEnvironment({
+      userConfig: `${defaultLoginTo(reading)}${publishingLogin}`,
+    });
+
+    const ran = await cfLoomWith(project, env, 'publish');
+
+    expect(ran).toMatchObject({ status: 0, stderr: '' });
+    const distTags = { latest: '1.0.0' };
+    expect(putsOf(publishing)).toEqual([{ name: '@org/definitions', version: '1.0.0', distTags }]);
+    expect(putRequestsOf(reading)).toEqual([]);
+  });
+
   test('a Definitions Package’s own lifecycle scripts do not run', async ({ lab }) => {
     const scripts = {
       prepack: 'exit 1',
@@ -6776,6 +6847,24 @@ describe.concurrent('cf-loom publish --dry-run', { timeout: publishTimeout }, ()
     expect(ran.status).toBe(0);
     expect(putRequestsOf(registry)).toEqual([]);
     expect(leftBehindIn(project)).toEqual([]);
+  });
+
+  test('a Definitions Package whose tarball check could not read fails a dry run with exit 3 too', async ({
+    lab,
+  }) => {
+    const manifest = { files: ['dist', 'docs'] };
+    const project = await aGeneratedProject(lab, {
+      ...aBuiltDefinitions(manifest),
+      'docs/café.md': '# Café\n',
+    });
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+    expect(ran.status).toBe(3);
+    expect(ran.stdout).not.toContain('Would publish');
+    expect(ran.stderr).toMatch(/^@org\/definitions@1\.0\.0's tarball cannot be read: has a /);
+    expect(putRequestsOf(registry)).toEqual([]);
+    expect(leftStagedIn(project)).toEqual([]);
   });
 
   test('a Definitions Package whose dist is missing still exits 3 on a dry run', async ({
