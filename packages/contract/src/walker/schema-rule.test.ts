@@ -555,6 +555,19 @@ describe('the refusals of one schema', () => {
     expectTypeOf<RefusalsOf<typeof schema>>().toEqualTypeOf<'not allowed: z.bigint()'>();
   });
 
+  test("a bigint format of one literal that no row names is refused by zod's ids", () => {
+    type Int128 = z.ZodBigInt & {
+      readonly _zod: {
+        readonly def: { readonly check: 'bigint_format'; readonly format: 'int128' };
+      };
+    };
+    type Schema = z.ZodObject<{ f: Int128 }>;
+
+    expectTypeOf<
+      RefusalsOf<Schema>
+    >().toEqualTypeOf<'not allowed: a zod check "bigint_format" of format "int128"'>();
+  });
+
   test('several refusals are joined by a semicolon, so a list-valued name reads as one item', () => {
     const schema = z.object({ a: z.custom<string>(), b: z.date() });
     const joined =

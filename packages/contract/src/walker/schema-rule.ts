@@ -129,8 +129,8 @@ type OwnRefusalKey<Schema, Type extends DefType> = Treatments[Type] extends {
 
 /**
  * What `checkNames` names a refused def that is its own check, when its row names it alone: a
- * custom check, or a bigint format of one literal. A format the type does not tell apart is left to
- * `defTypes`, so a schema is refused once.
+ * custom check, or a bigint format of one literal, by zod's ids when no row lists it. A format the
+ * type does not tell apart is left to `defTypes`, so a schema is refused once.
  */
 type OwnCheckName<Def> = Def extends { readonly check: 'custom' }
   ? (typeof checkNames)['custom']['refine']
@@ -138,7 +138,7 @@ type OwnCheckName<Def> = Def extends { readonly check: 'custom' }
     ? IsOneLiteral<Format> extends true
       ? Format extends keyof (typeof checkNames)['bigint_format']
         ? (typeof checkNames)['bigint_format'][Format]
-        : never
+        : `a zod check "bigint_format" of format "${Format & string}"`
       : never
     : never;
 
