@@ -310,7 +310,7 @@ Path params, query params and headers are a Contract's text parts, the schemas t
 | Construct | Becomes | Where it may appear | The Check |
 | --- | --- | --- | --- |
 | `z.string()`, with `.min()`, `.max()`, `.length()`, `.regex()` or a format zod builds (`z.uuid()`, `z.email()`, `z.iso.datetime()`, …) | `string` | anywhere | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints) |
-| `z.number()` and `z.int()` (`int` and nothing more: no safe-integer bounds are implied), with `.min()`, `.max()`, `.gt()`, `.gte()`, `.lt()`, `.lte()` or `.multipleOf()` | `number` | anywhere | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints) |
+| `z.number()` and `z.int()` (`int` is a safe integer, as [Schemas](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#schemas) in SNAPSHOT.md says), with `.min()`, `.max()`, `.gt()`, `.gte()`, `.lt()`, `.lte()` or `.multipleOf()` | `number` | anywhere | [Constraints](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#constraints) |
 | `z.boolean()` | `boolean` | anywhere | [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields) |
 | `z.enum()`, `z.literal()`, a `z.union()` of literals and closed enums (one enum of all their values) | `enum`, closed | anywhere | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) |
 | `openEnum([…])` (see [Open Enums](#open-enums)) | `enum`, open | anywhere but under a plain union or an intersection that is not of open objects, and as a record's key | [Enums, literals and unions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#enums-literals-and-unions) |
