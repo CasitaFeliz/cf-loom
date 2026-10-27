@@ -1,4 +1,3 @@
-import { removedCodesOf } from '../snapshot/index.ts';
 import {
   type Defs,
   nodesWithin,
@@ -11,11 +10,9 @@ import {
   declaredMessagesOf,
   declaredSubscriptionsOf,
   type Keyed,
-  locatedNodesOf,
-  partsAt,
-  type SnapshotNode,
   type Used,
-} from './located.ts';
+} from './declared.ts';
+import { type DefScope, defScopesOf, type SnapshotNode } from './def-scopes.ts';
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, with the defs it resolves in, a code an
@@ -40,8 +37,7 @@ export function usesOf(snapshot: Used): readonly Use[] {
   const endpoints = declaredEndpointsOf(snapshot);
   const guards = Object.entries(snapshot.guards);
   return [
-    ...refUsesOf(locatedNodesOf(snapshot, endpoints), snapshot.defs),
-    ...removedCodeRefUsesOf(snapshot),
+    ...defScopesOf(snapshot).flatMap(refUsesOf),
     ...endpoints.flatMap(([identity, { rejections }]) =>
       namesAt(['endpoints', identity, 'rejections'], rejections, 'code'),
     ),
@@ -115,7 +111,7 @@ function namesAt(
   return names.map((name, index) => ({ kind, name, at: [...at, index] }));
 }
 
-function refUsesOf(nodes: readonly SnapshotNode[], defs: Defs): readonly Use[] {
+function refUsesOf({ nodes, defs }: DefScope): readonly Use[] {
   const within: readonly SnapshotNode[] = nodes.flatMap(({ at, node }) =>
     nodesWithin(node).map((inner) => ({
       at: [...at, ...snapshotPathOf(inner.at)],
@@ -124,17 +120,6 @@ function refUsesOf(nodes: readonly SnapshotNode[], defs: Defs): readonly Use[] {
   );
   const refs = within.filter(isRefAt);
   return refs.map(({ at, node }) => ({ kind: 'def', name: node.name, at, defs }));
-}
-
-/** The `ref`s of a removed code and of its defs, which name the defs it holds and never the Snapshot's. */
-function removedCodeRefUsesOf(snapshot: Used): readonly Use[] {
-  return removedCodesOf(snapshot.codes).flatMap(([code, { headers, body, defs }]) => {
-    const nodes = [
-      ...partsAt(['codes', code], { headers, body }),
-      ...partsAt(['codes', code, 'defs'], defs),
-    ];
-    return refUsesOf(nodes, defs);
-  });
 }
 
 function isRefAt(located: SnapshotNode): located is { at: Path; node: RefNode } {

@@ -78,7 +78,7 @@ function cutOf(
   const reachedCodes = reachedCodesOf(
     { endpoints: keptEndpoints, guards: Object.values(guards) },
     {
-      ownCodesOf: (endpoint) => declaredCodesOf(ownRejectionsOf(endpoint, snapshot)),
+      ownCodesOf: (endpoint) => listedCodesOf(ownRejectionsOf(endpoint, snapshot)),
       answeredBy: ({ rejections }) => rejections,
     },
   );
@@ -150,7 +150,7 @@ function isKeyedExported<Declared extends Exportable>(
 }
 
 /** The codes an Endpoint lists itself, the Standard not-found Rejection left out. */
-function declaredCodesOf(listed: readonly ListedRejection[]): readonly string[] {
+function listedCodesOf(listed: readonly ListedRejection[]): readonly string[] {
   return listed.filter(isDeclaredRejection).map(({ code }) => code);
 }
 

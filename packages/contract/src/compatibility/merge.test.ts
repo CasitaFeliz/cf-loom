@@ -562,7 +562,6 @@ describe('publishedSnapshotOf', () => {
     expect(published.codes[orderLocked]).toEqual(
       aRemovedCode({ body, removedIn: '3.5.0', defs: { tree: aTree({ label: true }) } }),
     );
-    expect(published.defs).toEqual({ tree: aTree({ label: false }) });
   });
 
   test('a removed code keeps its own defs when the proposed Snapshot drops that def', () => {
@@ -578,7 +577,29 @@ describe('publishedSnapshotOf', () => {
     expect(published.codes[orderLocked]).toEqual(
       aRemovedCode({ body, removedIn: '3.5.0', defs: { tree: aTree({ label: true }) } }),
     );
-    expect(published.defs).toEqual({});
+  });
+
+  test('the Snapshot’s defs are the proposed Snapshot’s, whatever its removed codes reach', () => {
+    const body = reaching('tree');
+    const baseline = aBaseline({
+      defs: { tree: aTree({ label: true }) },
+      codes: {
+        [orderLocked]: aCode({ body }),
+        [orderPaid]: aCode({ body }),
+        [oldCode]: aCode({ body }),
+      },
+    });
+    const proposed = aProposed({
+      defs: { tree: aTree({ label: false }) },
+      codes: { [orderPaid]: aCode({ body }) },
+    });
+    const dropping = aProposed({ codes: {} });
+
+    const changed = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+    const dropped = publishedSnapshotOf(baseline, dropping, publishedAt('3.5.0'));
+
+    expect(changed.defs).toEqual({ tree: aTree({ label: false }) });
+    expect(dropped.defs).toEqual({});
   });
 
   test('a removed code answered again is published as declared, with no removedIn or defs', () => {
@@ -596,7 +617,6 @@ describe('publishedSnapshotOf', () => {
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes[orderLocked]).toEqual(aCode({ body }));
-    expect(published.defs).toEqual({ tree: aTree({ label: false }) });
   });
 
   test('a removed Subscription becomes a tombstone with its Event and removedIn the version, and no description or Group', () => {
@@ -669,7 +689,6 @@ describe('publishedSnapshotOf', () => {
     expect(published.codes[oldCode]).toEqual(
       aRemovedCode({ body, removedIn: '4.3.0', defs: { tree: aTree({ label: true }) } }),
     );
-    expect(published.defs).toEqual({ tree: aTree({ label: false }) });
   });
 
   test('an Application’s published Snapshot is its declared one at the version', () => {

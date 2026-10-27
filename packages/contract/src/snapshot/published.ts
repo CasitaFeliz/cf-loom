@@ -48,7 +48,7 @@ export type PackagedSnapshot = Snapshot & { readonly generator: string };
 
 /**
  * A code no Endpoint answers any more, kept with what it last had, removed in the version that
- * first left it out, and with the defs its body and headers reached then, which its `ref`s name.
+ * first left it out, and with the defs its body reached then, which its `ref`s name.
  */
 export type RemovedCode = CodeSnapshot & {
   readonly removedIn: string;

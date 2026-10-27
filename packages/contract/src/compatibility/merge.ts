@@ -111,7 +111,7 @@ function definitionsMerged(
 
 /**
  * A code no Endpoint answers any more stays with what it last had, removed in the version that
- * first left it out, and with the defs its body and headers reached in the Baseline, so a later
+ * first left it out, and with the defs its body reached in the Baseline, so a later
  * version that changes a def of that name does not change what the code last had.
  */
 function codesMerged(

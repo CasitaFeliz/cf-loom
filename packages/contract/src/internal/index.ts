@@ -198,7 +198,6 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
-  defsReachedOf,
   hashPartsOf,
   isHashFormat,
   isJsonValue,

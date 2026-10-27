@@ -160,7 +160,7 @@ Codes:
 
 - A code is declared once across the Contract and the Definitions Packages it uses (see [Rejections](packages/contract/README.md#rejections) in the contract README), so it has one status, one headers shape, one body and one message.
 - A Rejection's status is 4xx, except the not-implemented Standard Rejection, which is 501; `generate` fails on any other.
-- The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status, headers and body it last had, the defs they reached included, as a kept code is: another status is Breaking, and its headers and body follow the rules of a Success.
+- The Snapshot remembers every code that ever existed in the Contract; a removed code declared again is compared with the status, headers and body it last had, the defs its body reached included, as a kept code is: another status is Breaking, and its headers and body follow the rules of a Success.
 - Codes cf-loom answers outside the Contract are reserved, and no Contract or Definitions Package may declare them; they travel as Faults and are listed in [Over HTTP](ARCHITECTURE.md#over-http) in ARCHITECTURE.md. A new Reserved code only comes with a cf-loom major.
 
 Standard Rejections:
