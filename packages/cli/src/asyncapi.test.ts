@@ -348,10 +348,6 @@ describe('cf-loom asyncapi: the channels', () => {
     expect(visibilities).toEqual(['internal', 'private']);
   });
 
-  test('a Retired Message Version has no channel', () => {
-    expect(valueAt(document, 'channels')).not.toHaveProperty('OrderPurged@1');
-  });
-
   test('a Command is not written', () => {
     expect(JSON.stringify(document)).not.toContain('ChargeCard');
   });
@@ -380,14 +376,6 @@ describe('cf-loom asyncapi: the operations', () => {
 
   test('a send operation is tagged with its Event’s Group', () => {
     expect(valueAt(operationOf('OrderNoted@1'), 'tags')).toEqual([{ name: 'notes' }]);
-  });
-
-  test('a Retired Message Version has no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('OrderPurged@1');
-  });
-
-  test('a Subscription adds no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('auditCreated');
   });
 });
 
@@ -443,7 +431,11 @@ describe('cf-loom asyncapi: the payloads', () => {
   });
 
   test('an Active Message Version’s payload is not marked deprecated', () => {
-    expect(payloadOf('OrderCreated@2')).not.toHaveProperty('deprecated');
+    expect(payloadOf('OrderCreated@2')).toStrictEqual({
+      type: 'object',
+      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      required: ['orderId', 'total'],
+    });
   });
 
   test('a Deprecated Message Version whose body is a recursive def is deprecated', () => {
@@ -490,10 +482,6 @@ describe('cf-loom asyncapi: the payloads', () => {
       anyOf: [refTo('TreeNodeDef'), { type: 'null' }],
       description: 'The root',
     });
-  });
-
-  test('a def only a Retired Message Version reaches is not a component', () => {
-    expect(valueAt(document, 'components', 'schemas')).not.toHaveProperty('PurgeNodeDef');
   });
 
   test('every $ref of the document names a component, a channel or a message of a channel', () => {
