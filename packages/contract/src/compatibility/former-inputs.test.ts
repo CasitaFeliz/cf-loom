@@ -341,6 +341,7 @@ describe('compatibilityReportOf: an Endpoint’s former Inputs', () => {
 
     expect(lines).toEqual([
       'neutral annotation-changed at input.body.right',
+      'neutral annotation-changed at input.body.right.child',
       'additive field-added at input.body.right.label',
       'breaking type-changed at input.body.right.label removedIn=1.1.0',
     ]);

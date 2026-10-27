@@ -6,7 +6,7 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { Child } from './children.ts';
+export type { Child, ResolvedRef } from './children.ts';
 export {
   childrenOf,
   defsReachedOf,
