@@ -177,7 +177,6 @@ export {
   walkedTextPartsOf,
 } from '../validation/index.ts';
 export type {
-  BigintFormats,
   Catchalls,
   Defs,
   DefTypes,

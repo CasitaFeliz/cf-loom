@@ -10,6 +10,7 @@ export type Flavor = {
   readonly name: 'zod' | 'zod/mini';
   readonly api: Readonly<Record<string, unknown>>;
   readonly nodes: () => Readonly<Record<NodeName, core.$ZodType>>;
+  readonly objectOf: (field: core.$ZodType) => core.$ZodType;
 };
 
 /** A check zod builds, by the spelling that builds it. */
@@ -27,6 +28,7 @@ export type SweptMethods = Swept & { readonly called: readonly string[] };
 export const zodFlavor: Flavor = {
   name: 'zod',
   api: z,
+  objectOf: (field) => z.object({ field }),
   nodes: () => ({
     string: z.string(),
     number: z.number(),
@@ -40,6 +42,7 @@ export const zodFlavor: Flavor = {
 export const miniFlavor: Flavor = {
   name: 'zod/mini',
   api: zm,
+  objectOf: (field) => zm.object({ field }),
   nodes: () => ({
     string: zm.string(),
     number: zm.number(),
@@ -51,6 +54,11 @@ export const miniFlavor: Flavor = {
 };
 
 export const flavors: readonly Flavor[] = [zodFlavor, miniFlavor];
+
+/** The check as the schema it also is, when its def has a type: a format schema is its own check. */
+export function asSchema(check: core.$ZodCheck): core.$ZodType | undefined {
+  return check instanceof core.$ZodType ? check : undefined;
+}
 
 /** The schema with a check added, as `.check()` adds it. */
 export function checked(schema: core.$ZodType, check: core.$ZodCheck): core.$ZodType {

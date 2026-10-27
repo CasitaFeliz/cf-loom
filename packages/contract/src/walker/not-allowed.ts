@@ -89,8 +89,6 @@ export const refused = {
     construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
   },
   bigint: { construct: 'z.bigint()' },
-  int64: { construct: 'z.int64()' },
-  uint64: { construct: 'z.uint64()' },
   symbol: { construct: 'z.symbol()' },
   void: { construct: 'z.void()' },
   never: { construct: 'z.never()' },

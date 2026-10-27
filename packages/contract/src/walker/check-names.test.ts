@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as zm from 'zod/mini';
 import * as core from 'zod/v4/core';
 import {
+  asSchema,
   checked,
   type Flavor,
   flavors,
@@ -350,6 +351,30 @@ describe('a refused zod check', () => {
     },
   );
 
+  test.each(flavors)(
+    'a schema that is its own check reads the name of the check ($name)',
+    (flavor) => {
+      const differing: string[] = [];
+      let own = 0;
+
+      for (const { name, check } of sweepExports(flavor).checks) {
+        const schema = asSchema(check);
+        if (schema === undefined) {
+          continue;
+        }
+        own += 1;
+        const asField = constructsOf(flavor.objectOf(schema));
+        const asCheck = constructsOf(checked(flavor.nodes().boolean, check));
+        if (asField.length > 0 && JSON.stringify(asField) !== JSON.stringify(asCheck)) {
+          differing.push(name);
+        }
+      }
+
+      expect(own).toBeGreaterThan(40);
+      expect(differing).toEqual([]);
+    },
+  );
+
   test.each([
     ['z.custom()', z.custom<string>()],
     ['z.instanceof()', z.instanceof(Date)],
@@ -366,6 +391,15 @@ describe('a refused zod check', () => {
   ])('%s as a schema is named by its own call, not as z.bigint()', (name, schema) => {
     expect(constructsOf(z.object({ field: schema }))).toEqual([name]);
     expect(constructsOf(onBoolean(schema))).toEqual([name]);
+  });
+
+  test("a bigint format zod adds later reads zod's ids as a schema and as a check", () => {
+    const schema = z.int64();
+    Object.assign(schema._zod.def, { format: 'int128' });
+    const ids = ['a zod check "bigint_format" of format "int128"'];
+
+    expect(constructsOf(z.object({ field: schema }))).toEqual(ids);
+    expect(constructsOf(onBoolean(schema))).toEqual(ids);
   });
 
   test('z.url() reads every call that builds a url', () => {

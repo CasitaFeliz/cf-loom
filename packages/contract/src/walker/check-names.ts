@@ -57,7 +57,7 @@ export const checkNames = {
     float32: 'z.float32()',
     float64: 'z.float64()',
   },
-  bigint_format: { int64: refused.int64.construct, uint64: refused.uint64.construct },
+  bigint_format: { int64: 'z.int64()', uint64: 'z.uint64()' },
   max_size: '.max() or z.maxSize()',
   min_size: '.min(), .nonempty() or z.minSize()',
   size_equals: '.size()',

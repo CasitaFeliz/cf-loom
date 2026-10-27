@@ -18,7 +18,6 @@ import {
   type ServiceContract,
 } from '../index.ts';
 import {
-  type BigintFormats,
   type Catchalls,
   type DefTypes,
   type PipeRefusals,
@@ -383,6 +382,8 @@ const refusedRows = {
   bigint: [
     { name: 'z.bigint()', schema: z.object({ f: z.bigint() }) },
     { name: 'z.bigint()', schema: z.object({ f: z.coerce.bigint() }) },
+    { name: 'z.int64()', schema: z.object({ f: z.int64() }) },
+    { name: 'z.uint64()', schema: z.object({ f: z.uint64() }) },
   ],
   symbol: [{ name: 'z.symbol()', schema: z.object({ f: z.symbol() }) }],
   void: [{ name: 'z.void()', schema: z.object({ f: z.void() }) }],
@@ -429,12 +430,6 @@ const catchallRows = {
     { name: '.catchall()', schema: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) },
   ],
 } as const satisfies Record<Exclude<keyof Catchalls, 'unknown'> | 'other', readonly RefusedRow[]>;
-
-/** Each bigint format the table words has rows: its own call, not `z.bigint()`. */
-const bigintFormatRows = {
-  int64: [{ name: 'z.int64()', schema: z.object({ f: z.int64() }) }],
-  uint64: [{ name: 'z.uint64()', schema: z.object({ f: z.uint64() }) }],
-} as const satisfies Record<keyof BigintFormats, readonly RefusedRow[]>;
 
 /** Coercion, refused beside the node its type still builds. */
 const coerceRows = [
@@ -508,7 +503,6 @@ type RefusedRows =
   | RowsOf<typeof refusedRows>
   | RowsOf<typeof pipeRows>
   | RowsOf<typeof catchallRows>
-  | RowsOf<typeof bigintFormatRows>
   | (typeof coerceRows)[number]
   | RowsOf<typeof refusedInsideRows>;
 
@@ -516,7 +510,6 @@ const everyRefusedRow: readonly RefusedRow[] = [
   ...Object.values(refusedRows).flat(),
   ...Object.values(pipeRows).flat(),
   ...Object.values(catchallRows).flat(),
-  ...Object.values(bigintFormatRows).flat(),
   ...coerceRows,
   ...Object.values(refusedInsideRows).flat(),
 ];
@@ -553,6 +546,25 @@ type Misnamed<Row extends RefusedRow> = Row extends unknown
     ? never
     : Row['name']
   : never;
+
+describe('the refusals of one schema', () => {
+  test('a bigint format the types cannot tell apart is one refusal, named as its type', () => {
+    const format: z.ZodBigIntFormat = z.int64();
+    const schema = z.object({ f: format });
+
+    expectTypeOf<RefusalsOf<typeof schema>>().toEqualTypeOf<'not allowed: z.bigint()'>();
+  });
+
+  test('several refusals are joined by a semicolon, so a list-valued name reads as one item', () => {
+    const schema = z.object({ a: z.custom<string>(), b: z.date() });
+    const joined =
+      'not allowed: .refine(), z.custom() or z.instanceof(); z.date() (use z.iso.datetime())';
+    const reversed =
+      'not allowed: z.date() (use z.iso.datetime()); .refine(), z.custom() or z.instanceof()';
+
+    expectTypeOf<RefusalsOf<typeof schema>>().toExtend<typeof joined | typeof reversed>();
+  });
+});
 
 describe('every construct the types refuse', () => {
   test('each type error names the construct its row names, and no row is left without one', () => {

@@ -1,10 +1,10 @@
 import type * as core from 'zod/v4/core';
 import { checksOf, type DeclaredCheck } from './check-defs.ts';
+import { refusedCheck } from './check-names.ts';
 import { type CheckedAt, constrain } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import {
-  bigintRefusalKeyOf,
   type Def,
   defTypes,
   isKnownDefType,
@@ -38,7 +38,7 @@ export function walkDefinition(schema: core.$ZodType, at: Reached, walker: Walke
 
 /**
  * A schema's walk with its own checks judged, whether it built its node or failed. A format
- * schema's own check is part of its type, so a refused type's is not refused again.
+ * schema is named by its own check, so a refused type's is not judged again beside it.
  */
 export function withOwnChecks(
   schema: core.$ZodType,
@@ -110,6 +110,11 @@ function walkedNodeOf({ schema, at }: ReachedSchema, def: WalkedDef, walker: Wal
   }
 }
 
+/** What a refused def is refused as: a def that is its own check, by that check, else by its type. */
+function refusalOf(def: RefusedDef): Refused {
+  return 'check' in def ? refusedCheck(def) : refused[defTypes[def.type].refuses];
+}
+
 /**
  * A refused def type, worded as `defTypes` says, beside what lies inside it: a wrapper stands for
  * the schema inside, a map's key and value sit at their own places as a record's do, a pipe's
@@ -117,7 +122,7 @@ function walkedNodeOf({ schema, at }: ReachedSchema, def: WalkedDef, walker: Wal
  */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: what lies inside each refused zod type
 function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
-  const refusal = refused[defTypes[def.type].refuses];
+  const refusal = refusalOf(def);
   switch (def.type) {
     case 'pipe':
       return refusedAround({ refusal: pipeRefusal(def), inside: pipeSchemasOf(def) }, at, walker);
@@ -142,8 +147,6 @@ function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
       return refusedAround({ refusal, inside: [def.valueType] }, at, walker);
     case 'function':
       return refusedAround({ refusal, inside: [def.input, def.output] }, at, walker);
-    case 'bigint':
-      return notAllowed(at, refused[bigintRefusalKeyOf('format' in def ? def.format : undefined)]);
     case 'transform':
     case 'custom':
     case 'date':
@@ -151,6 +154,7 @@ function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
     case 'undefined':
     case 'any':
     case 'unknown':
+    case 'bigint':
     case 'symbol':
     case 'void':
     case 'never':
