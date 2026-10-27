@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type Messaging, messaging } from '@cf-loom/messaging';
-import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
+import { type MemoryMessaging, memory } from '@cf-loom/messaging/memory';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { chargesOf } from '../src/charges/charges.ts';
 import { chargeCardV1 } from '../src/contract/commands/orders/charge-card.v1.command.ts';
@@ -13,13 +12,11 @@ import type { Resources } from '../src/resources.ts';
 const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 const total = { amount: 1500, currency: 'EUR' };
 const context = { apiKey: { callerId: 'billing-service' } };
-let broker: MemoryBroker;
-let running: Messaging<typeof contract>;
+let running: MemoryMessaging<typeof contract>;
 let resources: Resources;
 
 beforeEach(async () => {
-  broker = memory();
-  running = await messaging(contract, broker);
+  running = await memory(contract);
   resources = { publisher: running.publisher, sender: running.sender };
   await running.consume(handlers, { resources });
 });
@@ -32,16 +29,16 @@ afterEach(async () => {
 async function placeOrder(): Promise<string> {
   const input = { body: { customerId: CUSTOMER_ID, total } };
   const outcome = await createOrderHandler(input, { context }, { resources });
-  await broker.settled();
+  await running.settled();
   if (outcome.kind !== 'success') throw new Error('the order was not placed');
   return outcome.body.id;
 }
 
-describe('orders-service over the memory adapter', () => {
+describe('orders-service over memory()', () => {
   test('a placed order publishes OrderCreated@1 with its id, customer and total under the Fact id <order id>:created', async () => {
     const orderId = await placeOrder();
 
-    const published = broker.messagesOf(orderCreatedV1);
+    const published = running.messagesOf(orderCreatedV1);
 
     expect(published).toMatchObject([
       {
@@ -54,7 +51,7 @@ describe('orders-service over the memory adapter', () => {
   test('OrderCreated reaches chargeOnCreated, which sends ChargeCard@1 under the Fact id <order id>:charge', async () => {
     const orderId = await placeOrder();
 
-    const sent = broker.messagesOf(chargeCardV1);
+    const sent = running.messagesOf(chargeCardV1);
 
     expect(sent).toMatchObject([{ factId: `${orderId}:charge`, body: { orderId, total } }]);
   });
@@ -71,11 +68,13 @@ describe('orders-service over the memory adapter', () => {
     const orderId = await placeOrder();
     const body = { orderId, customerId: CUSTOMER_ID, total };
 
-    const settlement = await broker.deliver(orderCreatedV1, body, { factId: `${orderId}:created` });
-    await broker.settled();
+    const settlement = await running.deliver(orderCreatedV1, body, {
+      factId: `${orderId}:created`,
+    });
+    await running.settled();
 
     expect(settlement).toBe('acked');
-    expect(broker.messagesOf(chargeCardV1)).toHaveLength(1);
+    expect(running.messagesOf(chargeCardV1)).toHaveLength(1);
     expect(chargesOf(orderId)).toEqual([{ orderId, total }]);
   });
 
@@ -83,8 +82,8 @@ describe('orders-service over the memory adapter', () => {
     const orderId = randomUUID();
     const body = { orderId, total };
 
-    const first = await broker.deliver(chargeCardV1, body, { factId: `${orderId}:charge` });
-    const second = await broker.deliver(chargeCardV1, body, { factId: `${orderId}:charge` });
+    const first = await running.deliver(chargeCardV1, body, { factId: `${orderId}:charge` });
+    const second = await running.deliver(chargeCardV1, body, { factId: `${orderId}:charge` });
 
     expect([first, second]).toEqual(['acked', 'acked']);
     expect(chargesOf(orderId)).toEqual([{ orderId, total }]);

@@ -1,14 +1,17 @@
-import { messageIdentityOf, ownOf } from '@cf-loom/contract/internal';
-import type { BrokerConnection } from '../broker/index.ts';
+import { brokerHeaderBytesOf, messageIdentityOf, ownOf } from '@cf-loom/contract/internal';
+import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
 import { publishedVersionsOf, type Subjects, sentVersionOf } from '../subjects/index.ts';
 import { MessageNotSentError } from './errors.ts';
 import { type Outgoing, outgoingOf } from './outgoing.ts';
 import type { MessageOptions, Published, Sent } from './types.ts';
 
-/** The broker connection publishing and sending go through, which throws once messaging is closed. */
-type ConnectionOf = () => BrokerConnection;
+/** What publishing and sending need of a connection. */
+type PublishingConnection = Pick<BrokerConnection, 'publish'>;
 
-/** `publish`: every live version of the named Event, checked, then sent in version order. */
+/** The connection publishing and sending go through, which throws once messaging is closed. */
+type ConnectionOf = () => PublishingConnection;
+
+/** `publish`: every live version of the named Event, checked, then sent largest first, by broker header and body bytes, versions of the same size in version order. */
 export function publishOf(subjects: Subjects, connectionOf: ConnectionOf) {
   return async (name: string, bodies: unknown, options: MessageOptions): Promise<Published> => {
     const connection = connectionOf();
@@ -16,9 +19,19 @@ export function publishOf(subjects: Subjects, connectionOf: ConnectionOf) {
       version,
       body: ownOf(bodies, `v${version.message.version}`),
     }));
-    const duplicates = await sentInOrder(connection, name, outgoingOf(given, options));
+    const outgoing = outgoingOf(given, options).toSorted(byLargestFirst);
+    const duplicates = await sentInOrder(connection, name, outgoing);
     return { factId: options.factId, duplicates };
   };
+}
+
+/** Orders Messages by the bytes a Broker counts against its size limits, broker headers and body; the sort is stable, so equals keep their order. */
+function byLargestFirst(left: Outgoing, right: Outgoing): number {
+  return bytesOf(right.message) - bytesOf(left.message);
+}
+
+function bytesOf(message: OutgoingMessage): number {
+  return brokerHeaderBytesOf(message) + message.body.byteLength;
 }
 
 /** `send`: the named Command's one Active version. */
@@ -36,7 +49,7 @@ export function sendOf(subjects: Subjects, connectionOf: ConnectionOf) {
  * of those the Broker dropped as duplicates.
  */
 async function sentInOrder(
-  connection: BrokerConnection,
+  connection: PublishingConnection,
   name: string,
   outgoing: readonly Outgoing[],
 ): Promise<readonly string[]> {

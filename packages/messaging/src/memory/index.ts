@@ -1,6 +1,6 @@
 export type {
   DeliveryMeta,
-  MemoryBroker,
+  MemoryMessaging,
   PendingMessage,
   RecordedMessage,
 } from '../in-memory/index.ts';

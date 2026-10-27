@@ -1,5 +1,6 @@
-import type { BrokerConnection, BrokerConsumer, ConsumeRun, Delivery } from '../broker/index.ts';
+import type { BrokerConnection, ConsumeRun, Delivery } from '../broker/index.ts';
 import {
+  type CoreConsumer,
   type DeliveryEnds,
   leftPending,
   type Named,
@@ -12,6 +13,11 @@ import {
 } from '../consuming/index.ts';
 import { CloseAbortedError, type CloseOptions, MessagingClosedError } from './closed.ts';
 import { InFlight } from './in-flight.ts';
+
+/** The core's view of one connection: a Broker's, as `messaging()` runs it, or the memory's own, to which the core hands each consumer as it built it. */
+export type CoreConnection = Pick<BrokerConnection, 'publish' | 'close'> & {
+  readonly consume: (consumers: readonly CoreConsumer[], run: ConsumeRun) => Promise<void>;
+};
 
 /** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
@@ -33,24 +39,24 @@ type State =
 export type ConsumerLife = { readonly received: Received; readonly ends: DeliveryEnds };
 
 /**
- * The life of one messaging over its broker connection: publishing while open or closing, since a
+ * The life of one messaging over its connection: publishing while open or closing, since a
  * Handler running may still publish; consuming once; and closed the moment nothing is in flight,
  * the deliveries settling, a `publish`, a `send`, a `consume` or a trouble report, or once `close`'s
  * signal aborts, handing back each delivery still settling. The core, not the adapter, keeps what
  * is in flight.
  */
 export class MessagingLife {
-  readonly #connection: BrokerConnection;
+  readonly #connection: CoreConnection;
   #state: State = { kind: 'open', consumption: 'none' };
   readonly #closing = new AbortController();
   readonly #inFlight = new InFlight(() => this.#endedIfIdle());
 
-  constructor(connection: BrokerConnection) {
+  constructor(connection: CoreConnection) {
     this.#connection = connection;
   }
 
-  /** The broker connection to publish and send through, until messaging is closed. */
-  connectionOf(): BrokerConnection {
+  /** The connection to publish and send through, until messaging is closed. */
+  connectionOf(): CoreConnection {
     switch (this.#state.kind) {
       case 'open':
       case 'closing':
@@ -71,7 +77,7 @@ export class MessagingLife {
    * rejects them leaves `consume` to retry.
    */
   async consume(
-    consumersOf: (life: ConsumerLife) => readonly BrokerConsumer[],
+    consumersOf: (life: ConsumerLife) => readonly CoreConsumer[],
     tellTrouble: TroubleTell,
   ): Promise<void> {
     const state = this.#state;
@@ -90,8 +96,8 @@ export class MessagingLife {
       ends: { closing, handingBack: this.#inFlight.handingBack },
     });
     this.#consumption('taken');
-    const track = (telling: Promise<void>) => void this.tracked(telling);
-    const run: ConsumeRun = { closing, troubled: troubledOf(closing, tellTrouble, track) };
+    const tracked: TroubleTell = (trouble) => this.tracked(tellTrouble(trouble));
+    const run: ConsumeRun = { closing, troubled: troubledOf(consumers, closing, tracked) };
     try {
       await this.tracked(this.#connection.consume(consumers, run));
     } catch (e) {
@@ -101,7 +107,7 @@ export class MessagingLife {
   }
 
   /**
-   * Stops consuming, waits for everything in flight and closes the broker connection; once a call's
+   * Stops consuming, waits for everything in flight and closes the connection; once a call's
    * `signal` aborts, it hands back each delivery still settling instead. Called again, the same promise.
    */
   close({ signal }: CloseOptions = {}): Promise<void> {
@@ -160,7 +166,7 @@ export class MessagingLife {
     closed.then(forget, forget);
   }
 
-  /** Closes the broker connection once closing ended; stopped, after handing back each delivery still settling, naming it. */
+  /** Closes the connection once closing ended; stopped, after handing back each delivery still settling, naming it. */
   async #closedAfter(end: Ended): Promise<void> {
     if (end.kind === 'idle') {
       await this.#connection.close();

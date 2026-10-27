@@ -26,10 +26,12 @@ import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
 import {
+  type Broker,
   type BrokerTrouble,
   CloseAbortedError,
   type ConsumedFault,
   DeadlineError,
+  type Delivery,
   messaging,
 } from '../index.ts';
 import { memory } from '../memory/index.ts';
@@ -386,6 +388,43 @@ describe('consuming over jetstream()', () => {
     );
   });
 
+  test('a Broker wrapping jetstream()’s consumers, each { ...consumer, receive }, delivers every Message to its Handler and closes, with no unhandled rejection', async () => {
+    const prefix = aPrefix();
+    await arrangeOrders(prefix);
+    const inner = jetstream({ connect: aConnect().connect, prefix });
+    const wrapped: Broker = {
+      connect: async (service) => {
+        const connection = await inner.connect(service);
+        return {
+          publish: (message) => connection.publish(message),
+          consume: (consumers, run) => {
+            const traced = consumers.map((consumer) => ({
+              ...consumer,
+              receive: (delivery: Delivery) => consumer.receive(delivery),
+            }));
+            return connection.consume(traced, run);
+          },
+          close: () => connection.close(),
+        };
+      },
+    };
+    const unhandled: unknown[] = [];
+    const remember = (reason: unknown) => void unhandled.push(reason);
+    process.on('unhandledRejection', remember);
+    onTestFinished(() => void process.off('unhandledRejection', remember));
+    const received: Received[] = [];
+    const orders = await messaging(contract, wrapped);
+    await orders.consume(handlersOf(received), {});
+
+    await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-2' });
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    await orders.close();
+    await aWhile();
+
+    expect(unhandled).toEqual([]);
+  });
+
   test('consume rejects naming each durable consumer that does not exist and the stream it reads, and pulls from none', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
@@ -723,15 +762,16 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(overJetstream), {});
     const overMemory: Received[] = [];
-    const inMemory = await messaging(contract, memory());
+    const inMemory = await memory(contract);
     onTestFinished(() => inMemory.close());
     await inMemory.consume(handlersOf(overMemory), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
-    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    expect(overMemory).toHaveLength(1);
     const seenOf = (received: Received[]) => {
       return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
     };
@@ -747,15 +787,16 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(overJetstream), {});
     const overMemory: Received[] = [];
-    const inMemory = await messaging(contract, memory());
+    const inMemory = await memory(contract);
     onTestFinished(() => inMemory.close());
     await inMemory.consume(handlersOf(overMemory), {});
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
-    await vi.waitFor(() => expect(overMemory).toHaveLength(1));
+    expect(overMemory).toHaveLength(1);
     const seenOf = (received: Received[]) => {
       return { factId: received[0]?.meta.factId, headers: received[0]?.meta.headers };
     };

@@ -734,10 +734,44 @@ describe('onBrokerTrouble', () => {
     expect(troubles).toEqual([]);
   });
 
-  test('troubled given a consumer the core did not build throws, naming no adapter', async () => {
-    const { troubled } = await consumingReported({ onBrokerTrouble: () => undefined });
+  test('troubled given a copy of a consumer the core handed it reaches onBrokerTrouble named as that consumer', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { recorded, troubled } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    const copies: readonly ((consumer: BrokerConsumer) => BrokerConsumer)[] = [
+      (consumer) => ({ ...consumer }),
+      (consumer) => ({ ...consumer, receive: (delivery) => consumer.receive(delivery) }),
+    ];
+
+    for (const consumer of recorded.consumers) {
+      for (const copy of copies) {
+        troubled({ consumer: copy(consumer), kind: 'recovered' });
+      }
+    }
+
+    const named = (element: object, identity: string, durable: string) =>
+      Array.from({ length: copies.length }, () => ({
+        element,
+        identity,
+        durable,
+        stream: 'orders-service',
+        kind: 'recovered',
+      }));
+    await vi.waitFor(() => expect(troubles).toHaveLength(4));
+    expect(troubles).toEqual([
+      ...named(chargeCardV1, 'ChargeCard@1', 'orders-service_command_ChargeCard_v1'),
+      ...named(notifyOnCreated, 'notifyOnCreated', 'orders-service_notify-on-created'),
+    ]);
+  });
+
+  test('troubled given a Durable consumer the core did not hand this consume throws, naming it, and reaches no hook', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { troubled, close } = await consumingReported({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
     const stranger: BrokerConsumer = {
-      durable: 'orders-service_notify-on-created',
+      durable: 'billing-service_notify-on-created',
       stream: 'orders-service',
       subject: 'orders-service.event.OrderCreated.v1',
       receive: async () => 'acked',
@@ -746,8 +780,12 @@ describe('onBrokerTrouble', () => {
     const reporting = () => troubled({ consumer: stranger, kind: 'recovered' });
 
     expect(reporting).toThrow(
-      new Error('a BrokerConsumer the core did not build was reported to it'),
+      new Error(
+        'billing-service_notify-on-created is no Durable consumer messaging handed this Broker',
+      ),
     );
+    await close();
+    expect(troubles).toEqual([]);
   });
 });
 

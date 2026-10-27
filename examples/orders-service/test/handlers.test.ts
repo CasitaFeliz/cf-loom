@@ -1,6 +1,6 @@
 import { notFound } from '@cf-loom/contract';
 import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
-import { type Messaging, messaging } from '@cf-loom/messaging';
+import type { Messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { unauthenticated } from '@org/definitions';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -21,7 +21,7 @@ let running: Messaging<typeof contract>;
 let resources: Resources;
 
 beforeAll(async () => {
-  running = await messaging(contract, memory());
+  running = await memory(contract);
   resources = { publisher: running.publisher, sender: running.sender };
 });
 

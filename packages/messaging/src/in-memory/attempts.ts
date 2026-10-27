@@ -7,13 +7,13 @@ import {
 } from '@cf-loom/contract/internal';
 import { InvalidInputError } from '@cf-loom/handlers';
 import { defaultedMetaOf, firstAttempt, writtenMessageBody } from '@cf-loom/handlers/internal';
-import type { BrokerConsumer, Delivery } from '../broker/index.ts';
-import { consumerDetailsOf } from '../consuming/index.ts';
+import type { Delivery } from '../broker/index.ts';
+import type { CoreConsumer } from '../consuming/index.ts';
 import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
 /** One delivery to one consumer: the Delivery it receives. */
-export type Attempt = { readonly consumer: BrokerConsumer; readonly delivery: Delivery };
+export type Attempt = { readonly consumer: CoreConsumer; readonly delivery: Delivery };
 
 /** The Delivery of a Message the first time a consumer receives it, with no wait: memory models no broker configuration. */
 export function firstDeliveryOf({
@@ -38,7 +38,7 @@ type Injection = {
  * them, checked all together so that a body one Reader refuses delivers nothing.
  */
 export function injectedAttemptsOf(
-  consumers: readonly BrokerConsumer[],
+  consumers: readonly CoreConsumer[],
   injection: Injection,
 ): readonly Attempt[] {
   return attemptsOf(reachedBy(consumers, injection.message), injection);
@@ -46,9 +46,9 @@ export function injectedAttemptsOf(
 
 /** The consumers a Message Version reaches: a Command's Message Handler, or the Subscriptions to an Event. */
 function reachedBy(
-  consumers: readonly BrokerConsumer[],
+  consumers: readonly CoreConsumer[],
   message: Event | Command,
-): readonly BrokerConsumer[] {
+): readonly CoreConsumer[] {
   const reached = consumers.filter((consumer) => consumes(consumer, message));
   if (reached.length === 0) {
     const named = messageIdentityOf(message.name, message.version);
@@ -59,7 +59,7 @@ function reachedBy(
 }
 
 function attemptsOf(
-  reached: readonly BrokerConsumer[],
+  reached: readonly CoreConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
   const { headers: given = {}, ...ids } = meta;
@@ -76,8 +76,7 @@ function attemptsOf(
   });
 }
 
-function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {
-  const { element } = consumerDetailsOf(consumer);
+function consumes({ element }: CoreConsumer, message: Event | Command): boolean {
   if (isCommand(message)) {
     return element === message;
   }
@@ -85,8 +84,7 @@ function consumes(consumer: BrokerConsumer, message: Event | Command): boolean {
 }
 
 /** The body as it travels to a consumer, written back through its Reader; one that breaks it throws as a direct call does. */
-function writtenBodyOf(consumer: BrokerConsumer, body: unknown): unknown {
-  const { element, reader } = consumerDetailsOf(consumer);
+function writtenBodyOf({ element, reader }: CoreConsumer, body: unknown): unknown {
   const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
     throw new InvalidInputError(element, written.issues);
