@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import {
   aContractProject,
   aDefinitionsPackage,
@@ -30,6 +31,10 @@ afterAll(removeFixtures);
 const mediaType = 'application/json';
 
 const defsPrefix = '#/components/schemas/';
+
+/** The smallest and the largest integer zod's `z.int()` admits. */
+const safeMinimum = -9007199254740991;
+const safeMaximum = 9007199254740991;
 
 /** The schema of the Input body of the OpenAPI operation on a path and method. */
 function inputBodyOf(path: string, method: string): unknown {
@@ -681,7 +686,10 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     expect(committed).toContain('"origin": "@org/definitions@4.2.0#money"');
     expect(total).toEqual({
       type: 'object',
-      properties: { amount: { type: 'integer' }, currency: { type: 'string' } },
+      properties: {
+        amount: { type: 'integer', minimum: safeMinimum, maximum: safeMaximum },
+        currency: { type: 'string' },
+      },
       required: ['amount', 'currency'],
     });
   });
@@ -729,6 +737,155 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
 
     expect(refs.length).toBeGreaterThan(0);
     expect(missing).toEqual([]);
+  });
+});
+
+/** The integers a JSON Schema `integer` with these bounds admits, on the integers `integersProbed` lists. */
+function admitsInteger(schema: unknown, value: number): boolean {
+  const bounds = { ...(schema as Record<string, number | undefined>) };
+  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum } = bounds;
+  return (
+    (minimum === undefined || value >= minimum) &&
+    (maximum === undefined || value <= maximum) &&
+    (exclusiveMinimum === undefined || value > exclusiveMinimum) &&
+    (exclusiveMaximum === undefined || value < exclusiveMaximum)
+  );
+}
+
+/** The properties of the body of `POST /ints`, an object of the schemas declared, as `openapi` prints them. */
+function intsPrinted(fields: Readonly<Record<string, string>>): Readonly<Record<string, unknown>> {
+  const declared = Object.entries(fields).map(([name, schema]) => `${name}: ${schema},`);
+  const project = aGeneratedProject(
+    aRootProject([
+      "import { defineService, defineEndpoint, defineGroup } from '@cf-loom/contract';",
+      "import { z } from 'zod';",
+      'export const postInts = defineEndpoint({',
+      "  name: 'postInts', method: 'POST', path: '/ints', visibility: 'public',",
+      `  description: 'Posts', input: { body: z.object({ ${declared.join(' ')} }) }, success: { status: 204 },`,
+      '});',
+      "const group = defineGroup({ name: 'ints', description: 'Ints', endpoints: [postInts] });",
+      "export const contract = defineService({ name: 'orders-service', groups: [group] });",
+    ]),
+  );
+  const printed = JSON.parse(cfLoom(project, 'openapi').stdout);
+  const body = valueAt(printed, 'paths', '/ints', 'post', 'requestBody', 'content', mediaType);
+  return valueAt(body, 'schema', 'properties') as Readonly<Record<string, unknown>>;
+}
+
+type Bound = { readonly method: 'min' | 'max' | 'gt' | 'lt'; readonly value: number };
+
+/** The ways an int may bound one side: none, inside the safe range, at its end, and beyond it. */
+const lowerBounds: readonly (readonly Bound[])[] = [
+  [],
+  [{ method: 'min', value: -5 }],
+  [{ method: 'min', value: safeMinimum }],
+  [{ method: 'gt', value: -5 }],
+  [{ method: 'gt', value: safeMinimum }],
+  [{ method: 'min', value: -5e20 }],
+  [{ method: 'gt', value: -5e20 }],
+  [{ method: 'gt', value: safeMinimum - 1 }],
+];
+
+const upperBounds: readonly (readonly Bound[])[] = [
+  [],
+  [{ method: 'max', value: 5 }],
+  [{ method: 'max', value: safeMaximum }],
+  [{ method: 'lt', value: 5 }],
+  [{ method: 'lt', value: safeMaximum }],
+  [{ method: 'max', value: 5e20 }],
+  [{ method: 'lt', value: 5e20 }],
+  [{ method: 'lt', value: safeMaximum + 1 }],
+];
+
+/** The integers around every bound above, inside and beyond the safe range. */
+const integersProbed: readonly number[] = [
+  0,
+  1,
+  4,
+  5,
+  6,
+  2 ** 53,
+  2 ** 60,
+  1e20,
+  5e20,
+  safeMaximum - 1,
+  safeMaximum,
+].flatMap((value) => [value, -value]);
+
+/** The source of `z.int()` with the bounds, and the zod schema it declares. */
+function anInt(bounds: readonly Bound[]): { source: string; schema: z.ZodNumber } {
+  let source = 'z.int()';
+  let schema: z.ZodNumber = z.int();
+  for (const { method, value } of bounds) {
+    source += `.${method}(${value})`;
+    schema = schema[method](value);
+  }
+  return { source, schema };
+}
+
+describe('cf-loom openapi: an int is a safe integer', () => {
+  test('an int with no bounds is a safe integer in JSON Schema', () => {
+    const printed = intsPrinted({ bare: 'z.int()' });
+
+    expect(printed['bare']).toEqual({
+      type: 'integer',
+      minimum: safeMinimum,
+      maximum: safeMaximum,
+    });
+  });
+
+  test('an int keeps its own lower bound and takes the safe upper bound', () => {
+    const printed = intsPrinted({ low: 'z.int().min(0)' });
+
+    expect(printed['low']).toEqual({ type: 'integer', minimum: 0, maximum: safeMaximum });
+  });
+
+  test('an int’s own exclusive bounds stand in for the safe bounds on their side', () => {
+    const printed = intsPrinted({ between: 'z.int().gt(0).lt(100)' });
+
+    expect(printed['between']).toEqual({
+      type: 'integer',
+      exclusiveMinimum: 0,
+      exclusiveMaximum: 100,
+    });
+  });
+
+  test('an int bound beyond the safe range is replaced by the safe bound', () => {
+    const printed = intsPrinted({
+      inclusive: 'z.int().min(-5e20).max(1e20)',
+      exclusive: 'z.int().gt(-5e20).lt(1e20)',
+    });
+
+    expect([printed['inclusive'], printed['exclusive']]).toEqual([
+      { type: 'integer', minimum: safeMinimum, maximum: safeMaximum },
+      { type: 'integer', minimum: safeMinimum, maximum: safeMaximum },
+    ]);
+  });
+
+  test('a number that is not an int has no implied bounds', () => {
+    const printed = intsPrinted({ ratio: 'z.number()' });
+
+    expect(printed['ratio']).toEqual({ type: 'number' });
+  });
+
+  test('an int’s JSON Schema admits exactly the integers its zod schema admits', () => {
+    const cases = lowerBounds.flatMap((lower) =>
+      upperBounds.map((upper) => anInt([...lower, ...upper])),
+    );
+    const fields = Object.fromEntries(cases.map(({ source }, index) => [`int${index}`, source]));
+
+    const printed = intsPrinted(fields);
+
+    const disagreements = cases.flatMap(({ source, schema }, index) =>
+      integersProbed
+        .filter(
+          (value) =>
+            admitsInteger(printed[`int${index}`], value) !== schema.safeParse(value).success,
+        )
+        .map((value) => `${source} on ${value}`),
+    );
+    expect(cases).toHaveLength(64);
+    expect(disagreements).toEqual([]);
   });
 });
 
@@ -854,7 +1011,12 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
       in: 'query',
       required: false,
       description: 'The page',
-      schema: { type: 'integer', description: 'The page' },
+      schema: {
+        type: 'integer',
+        minimum: safeMinimum,
+        maximum: safeMaximum,
+        description: 'The page',
+      },
     });
   });
 
@@ -958,7 +1120,12 @@ describe('cf-loom openapi: the responses', () => {
         description: 'Seconds to wait; An HTTP-date',
         schema: {
           oneOf: [
-            { type: 'integer', description: 'Seconds to wait' },
+            {
+              type: 'integer',
+              minimum: safeMinimum,
+              maximum: safeMaximum,
+              description: 'Seconds to wait',
+            },
             { type: 'string', description: 'An HTTP-date' },
           ],
         },

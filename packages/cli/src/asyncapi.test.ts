@@ -395,7 +395,10 @@ describe('cf-loom asyncapi: the payloads', () => {
   test('a message’s payload is the JSON Schema of the Event’s body', () => {
     expect(payloadOf('OrderCreated@2')).toEqual({
       type: 'object',
-      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      properties: {
+        orderId: { type: 'string', format: 'uuid' },
+        total: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      },
       required: ['orderId', 'total'],
     });
   });
