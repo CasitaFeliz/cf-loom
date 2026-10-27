@@ -35,7 +35,7 @@ A Service places its Handler files, and the two files `generate` regenerates, wi
 | `command` | a Command's Handler, one per Message Version | `{group}`, `{name}`, `{version}` | `src/commands/{group}/{name}.v{version}.handler.ts` |
 | `subscription` | a Subscription's Handler | `{group}`, `{name}` | `src/subscriptions/{group}/{name}.handler.ts` |
 | `handlerMap` | the Handler map | none | `src/handlers.generated.ts` |
-| `readers` | the readers | none | `src/readers.generated.ts` |
+| `readers` | the Readers file | none | `src/readers.generated.ts` |
 
 A path may hold the variables its field takes, each written in braces. `{group}` is the name of the Group that lists the declaration; `{name}` is the declaration's name in kebab-case, as files are named (`getOrder` is `get-order` and the Command `ChargeCard` is `charge-card`); `{version}` is the Message Version's number. With `endpoint: 'src/billing/{name}.handler.ts'`, the Endpoint `getOrder` has its Handler at `src/billing/get-order.handler.ts`.
 
