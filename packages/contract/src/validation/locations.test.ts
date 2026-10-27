@@ -13,10 +13,19 @@ import {
   type Endpoint,
 } from '../index.ts';
 import {
+  type ApplicationSnapshot,
+  type CodeSnapshot,
+  type CommandSnapshot,
+  type EndpointSnapshot,
+  type EventSnapshot,
   failureLineOf,
+  type GuardSnapshot,
   nestingFailureOf,
   type Root,
   type RootPackage,
+  type SchemaNode,
+  type ServiceSnapshot,
+  type Snapshot,
   snapshotPathOf,
   validateRoot,
 } from '../internal/index.ts';
@@ -123,58 +132,148 @@ describe('failure lines: where a failure sits', () => {
   });
 });
 
-describe('failure lines: a Snapshot nested too deep', () => {
+describe('failure lines: a schema nested too deep', () => {
+  const part = { type: 'object', fields: {} } as const;
+  const standardRejections = {
+    invalidInput: 'INVALID_INPUT',
+    notFound: 'NOT_FOUND',
+    notImplemented: 'NOT_IMPLEMENTED',
+  } as const;
   const orderLocked = 'ORDER_LOCKED';
-  const deep = (): unknown => {
-    let nested: unknown = {};
-    for (let depth = 0; depth < 300; depth++) {
-      nested = { inner: nested };
+  const message = 'a schema nested deeper than the 252 levels a Snapshot holds';
+
+  /** A schema of `containers` objects one inside the other, the innermost a string. */
+  const nested = (containers: number): SchemaNode => {
+    let node: SchemaNode = { type: 'string' };
+    for (let level = 1; level < containers; level++) {
+      node = { type: 'array', items: node };
     }
-    return nested;
+    return node;
   };
 
-  test.for([
-    ['an Event', { events: { 'OrderCreated@1': { body: deep() } } }, 'events.OrderCreated@1'],
-    ['a Command', { commands: { 'ChargeCard@1': { body: deep() } } }, 'commands.ChargeCard@1'],
-    ['a code', { codes: { [orderLocked]: { body: deep() } } }, 'codes.ORDER_LOCKED'],
-    ['a Guard', { guards: { apiKey: { context: deep() } } }, 'guards.apiKey'],
-    ['an export', { exports: { money: { schema: deep() } } }, 'exports.money'],
-    ['a def', { defs: { tree: deep() } }, 'defs.tree'],
-    ['no Element', { heading: deep() }, '(root)'],
-  ] as const)('%s is named by its entry in the Snapshot', ([, snapshot, site]) => {
+  const service = (fields: Partial<ServiceSnapshot>): ServiceSnapshot => ({
+    format: 1,
+    kind: 'service',
+    name: 'orders-service',
+    standardRejections,
+    groups: {},
+    defs: {},
+    endpoints: {},
+    events: {},
+    commands: {},
+    guards: {},
+    codes: {},
+    subscriptions: {},
+    dependencies: {},
+    ...fields,
+  });
+
+  const anEndpoint = (input: Partial<EndpointSnapshot['input']>): EndpointSnapshot => ({
+    name: 'getThing',
+    group: 'things',
+    visibility: 'public',
+    lifecycle: 'active',
+    description: 'd',
+    params: [],
+    guards: [],
+    input: { params: null, query: part, headers: part, body: null, ...input },
+    success: { status: 200, headers: part, body: null },
+    rejections: [],
+  });
+
+  const aCode = (body: SchemaNode): CodeSnapshot => ({
+    origin: 'local',
+    status: 409,
+    message: 'Locked',
+    headers: part,
+    body,
+  });
+
+  const aGuard = (context: SchemaNode): GuardSnapshot => ({
+    origin: 'local',
+    description: 'd',
+    guards: [],
+    qualifier: null,
+    demands: { headers: part, query: part },
+    context,
+    rejections: [],
+  });
+
+  const anEvent = (body: SchemaNode): EventSnapshot => ({
+    group: 'orders',
+    visibility: 'internal',
+    lifecycle: 'active',
+    description: 'd',
+    body,
+  });
+
+  const aCommand = (body: SchemaNode): CommandSnapshot => ({
+    group: 'orders',
+    lifecycle: 'active',
+    description: 'd',
+    body,
+  });
+
+  const cases = (schema: SchemaNode): readonly (readonly [string, Snapshot, string])[] => [
+    [
+      'an Event',
+      service({ events: { 'OrderCreated@1': anEvent(schema) } }),
+      'events.OrderCreated@1',
+    ],
+    [
+      'a Command',
+      service({ commands: { 'ChargeCard@1': aCommand(schema) } }),
+      'commands.ChargeCard@1',
+    ],
+    ['a code', service({ codes: { [orderLocked]: aCode(schema) } }), 'codes.ORDER_LOCKED'],
+    ['a Guard', service({ guards: { apiKey: aGuard(schema) } }), 'guards.apiKey'],
+    [
+      'an Endpoint',
+      service({ endpoints: { 'GET /things': anEndpoint({ body: schema }) } }),
+      'endpoints.GET /things (getThing)',
+    ],
+    ['a def', service({ defs: { tree: schema } }), 'defs.tree'],
+    [
+      'an export',
+      {
+        format: 1,
+        kind: 'definitions',
+        name: '@org/definitions',
+        standardRejections,
+        defs: {},
+        exports: { money: { kind: 'schema', schema } },
+        guards: {},
+        codes: {},
+      },
+      'exports.money',
+    ],
+  ];
+
+  test.for(cases(nested(253)))('%s is named by its entry in the Snapshot', ([, snapshot, site]) => {
     const failure = nestingFailureOf(snapshot);
 
     expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
-      `${site} not allowed: JSON nested deeper than the 256 levels a Snapshot holds`,
+      `${site} not allowed: ${message}`,
     );
   });
 
-  describe('a def nests two levels deeper where a removed code would hold it', () => {
-    const wrapped = (levels: number): unknown => {
-      let nested: unknown = {};
-      for (let depth = 0; depth < levels; depth++) {
-        nested = { inner: nested };
-      }
-      return nested;
+  test.for(cases(nested(252)))('%s nested to 252 levels is allowed', ([, snapshot]) => {
+    const failure = nestingFailureOf(snapshot);
+
+    expect(failure).toBeUndefined();
+  });
+
+  test('an Application holds no schema, so nothing nests too deep in it', () => {
+    const application: ApplicationSnapshot = {
+      format: 1,
+      kind: 'application',
+      name: 'web-app',
+      dependencies: {},
     };
 
-    test('a def that fits the limit but not once a removed code holds it is named by its entry', () => {
-      const snapshot = { defs: { tree: wrapped(252) } };
+    const failure = nestingFailureOf(application);
 
-      const failure = nestingFailureOf(snapshot);
-
-      expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
-        'defs.tree not allowed: JSON nested deeper than the 256 levels a Snapshot holds',
-      );
-    });
-
-    test('a def that fits the limit once a removed code holds it is allowed', () => {
-      const snapshot = { defs: { tree: wrapped(251) } };
-
-      const failure = nestingFailureOf(snapshot);
-
-      expect(failure).toBeUndefined();
-    });
+    expect(failure).toBeUndefined();
   });
 });
 
@@ -455,19 +554,5 @@ describe('failure lines: Standard Rejections and the Snapshot', () => {
     expect(linesOf(definitions)).toEqual([
       'standardRejections.notFound code name-grammar: A Rejection code is UPPER_SNAKE_CASE: "not-found"',
     ]);
-  });
-
-  test('a Snapshot nested too deep is named by the Element it sits in', () => {
-    let nested: unknown = {};
-    for (let depth = 0; depth < 300; depth++) {
-      nested = { inner: nested };
-    }
-    const snapshot = { endpoints: { 'GET /things/{}': { name: 'getThing', input: nested } } };
-
-    const failure = nestingFailureOf(snapshot);
-
-    expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
-      'endpoints.GET /things/{} (getThing) not allowed: JSON nested deeper than the 256 levels a Snapshot holds',
-    );
   });
 });

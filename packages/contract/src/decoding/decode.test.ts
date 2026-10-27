@@ -2310,25 +2310,73 @@ describe('decodeSnapshot', () => {
     });
 
     test('a Snapshot nested to 256 levels is read', () => {
-      const body = nestedArrays(252);
-      const codes = { ...standardCodes, [orderLocked]: { ...aCode, body } };
+      const endpoint = {
+        ...anEndpoint,
+        success: { ...anEndpoint.success, body: nestedArrays(251) },
+      };
 
-      const result = serviceWith({ codes });
-
-      expect(result.kind).toBe('decoded');
-    });
-
-    test('a def that fits 256 levels once a removed code holds it is read', () => {
-      const result = serviceWith({ defs: { a: nestedArrays(251) } });
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
 
       expect(result.kind).toBe('decoded');
     });
 
-    test('a def that nests past 256 levels once a removed code holds it is malformed at its deepest path', () => {
-      const result = serviceWith({ defs: { a: nestedArrays(252) } });
+    describe('a schema nests at most 252 levels, its root the first', () => {
+      const itemsDown = (levels: number) => Array<string>(levels).fill('items');
+      const tooDeep = 'a schema nests deeper than 252 levels';
 
-      const at = ['defs', 'a', ...Array<string>(252).fill('items')];
-      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+      test.each([
+        { where: 'a def', nest: (body: SchemaNode) => ({ defs: { a: body } }) },
+        {
+          where: 'a code’s body',
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+          }),
+        },
+      ])('$where of 252 levels is read', ({ nest }) => {
+        const result = serviceWith(nest(nestedArrays(251)));
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test.each([
+        { where: 'a def', at: ['defs', 'a'], nest: (body: SchemaNode) => ({ defs: { a: body } }) },
+        {
+          where: 'a code’s body',
+          at: ['codes', orderLocked, 'body'],
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+          }),
+        },
+      ])('$where of 253 levels is malformed at its deepest path', ({ at, nest }) => {
+        const result = serviceWith(nest(nestedArrays(252)));
+
+        expect(result).toEqual(malformedAt([...at, ...itemsDown(252)], tooDeep));
+      });
+
+      test('a removed code’s def of 252 levels is read', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(251) } } };
+
+        const result = serviceWith({ codes });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a removed code’s def of 253 levels is malformed at its deepest path', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(252) } } };
+
+        const result = serviceWith({ codes });
+
+        const at = ['codes', gone, 'defs', 'a', ...itemsDown(252)];
+        expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+      });
+
+      test('a schema of 253 levels is judged after the structure, so a structure that breaks is reported first', () => {
+        const result = serviceWith({ version: 'latest', defs: { a: nestedArrays(252) } });
+
+        expect(result).toEqual(malformedAt(['version']));
+      });
     });
 
     test('only the first problem is reported, with its path', () => {

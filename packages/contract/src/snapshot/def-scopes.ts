@@ -1,19 +1,18 @@
+import type { Defs, Path, SchemaNode } from '../walker/index.ts';
+import { declaredEndpointsOf, declaredMessagesOf, type SchemaHolder } from './declared.ts';
 import {
   declaredCodesOf,
-  type PublishedCommand,
-  type PublishedDefinitionsSnapshot,
-  type PublishedEvent,
-  type PublishedServiceSnapshot,
+  type MessageTombstone,
   type RemovedCode,
   removedCodesOf,
-} from '../snapshot/index.ts';
-import type { Defs, Path, SchemaNode } from '../walker/index.ts';
-import {
-  type DeclaredEndpoint,
-  declaredEndpointsOf,
-  declaredMessagesOf,
-  type Used,
-} from './declared.ts';
+} from './published.ts';
+import type {
+  ByKey,
+  CommandSnapshot,
+  DefinitionsSnapshot,
+  EndpointSnapshot,
+  EventSnapshot,
+} from './types.ts';
 
 /** A node and where it sits in the Snapshot. */
 export type SnapshotNode = { readonly at: Path; readonly node: SchemaNode };
@@ -31,7 +30,7 @@ type Parts = Readonly<Record<string, SchemaNode | null>>;
  * Where a Snapshot's `ref`s resolve: its own `defs` for every declared node, and for each removed
  * code its own `defs`, which its headers, body and defs name.
  */
-export function defScopesOf(snapshot: Used): readonly DefScope[] {
+export function defScopesOf(snapshot: SchemaHolder): readonly DefScope[] {
   const own = { at: ['defs'], defs: snapshot.defs, nodes: declaredNodesOf(snapshot) };
   const removed = removedCodesOf(snapshot.codes).map(([code, held]) => removedScopeOf(code, held));
   return [own, ...removed];
@@ -47,7 +46,9 @@ function removedScopeOf(code: string, { headers, body, defs }: RemovedCode): Def
 }
 
 /** The node of each exported schema, at its export. */
-function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly SnapshotNode[] {
+function exportedSchemasOf(
+  snapshot: Pick<DefinitionsSnapshot, 'exports'>,
+): readonly SnapshotNode[] {
   const nodes: SnapshotNode[] = [];
   for (const [name, exported] of Object.entries(snapshot.exports)) {
     if (exported.kind === 'schema') {
@@ -58,7 +59,7 @@ function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly Sna
 }
 
 /** Every schema node a Snapshot holds besides the removed codes', each where it sits. */
-function declaredNodesOf(snapshot: Used): readonly SnapshotNode[] {
+function declaredNodesOf(snapshot: SchemaHolder): readonly SnapshotNode[] {
   return [
     ...partsAt(['defs'], snapshot.defs),
     ...(snapshot.kind === 'definitions' ? exportedSchemasOf(snapshot) : []),
@@ -76,23 +77,26 @@ function declaredNodesOf(snapshot: Used): readonly SnapshotNode[] {
   ];
 }
 
-function endpointNodesOf(at: Path, { input, success }: DeclaredEndpoint): readonly SnapshotNode[] {
+function endpointNodesOf(at: Path, { input, success }: EndpointSnapshot): readonly SnapshotNode[] {
   return [
     ...partsAt([...at, 'input'], input),
     ...partsAt([...at, 'success'], { headers: success.headers, body: success.body }),
   ];
 }
 
-function messageNodesOf(snapshot: PublishedServiceSnapshot): readonly SnapshotNode[] {
+function messageNodesOf(messages: {
+  readonly events: ByKey<EventSnapshot | MessageTombstone>;
+  readonly commands: ByKey<CommandSnapshot | MessageTombstone>;
+}): readonly SnapshotNode[] {
   return [
-    ...declaredBodiesAt('events', snapshot.events),
-    ...declaredBodiesAt('commands', snapshot.commands),
+    ...declaredBodiesAt('events', messages.events),
+    ...declaredBodiesAt('commands', messages.commands),
   ];
 }
 
 function declaredBodiesAt(
   section: string,
-  messages: Readonly<Record<string, PublishedEvent | PublishedCommand>>,
+  messages: ByKey<EventSnapshot | CommandSnapshot | MessageTombstone>,
 ): readonly SnapshotNode[] {
   return declaredMessagesOf(messages).map(([identity, { body }]) => ({
     at: [section, identity, 'body'],

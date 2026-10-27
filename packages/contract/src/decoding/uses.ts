@@ -1,18 +1,21 @@
 import {
+  type DefScope,
+  declaredEndpointsOf,
+  declaredMessagesOf,
+  declaredSubscriptionsOf,
+  defScopesOf,
+  type Keyed,
+  type PublishedDefinitionsSnapshot,
+  type PublishedServiceSnapshot,
+  type SnapshotNode,
+} from '../snapshot/index.ts';
+import {
   type Defs,
   nodesWithin,
   type Path,
   type RefNode,
   snapshotPathOf,
 } from '../walker/index.ts';
-import {
-  declaredEndpointsOf,
-  declaredMessagesOf,
-  declaredSubscriptionsOf,
-  type Keyed,
-  type Used,
-} from './declared.ts';
-import { type DefScope, defScopesOf, type SnapshotNode } from './def-scopes.ts';
 
 /**
  * A name a Snapshot uses, and where: a `ref`'s def, with the defs it resolves in, a code an
@@ -31,6 +34,8 @@ export type Use =
       readonly name: string;
       readonly at: Path;
     };
+
+type Used = PublishedServiceSnapshot | PublishedDefinitionsSnapshot;
 
 /** Every name a Service's or a Definitions Package's Snapshot uses: its refs, codes, Guards, then Groups. */
 export function usesOf(snapshot: Used): readonly Use[] {

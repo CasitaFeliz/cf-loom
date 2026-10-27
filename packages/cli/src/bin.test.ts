@@ -1509,14 +1509,14 @@ function aRootNestedIn(arrays: number): Files {
 const nestedBeyondArrays = 8;
 
 describe('cf-loom generate: how deep a Snapshot nests', () => {
-  test('a Contract whose Snapshot would nest past 256 levels fails generate, naming the Endpoint it sits in', () => {
+  test('a Contract with a schema nested past 252 levels fails generate, naming the Endpoint it sits in', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(260) });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toMatch(
-      /^endpoints\.GET \/ping \(ping\) not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n$/,
+      /^endpoints\.GET \/ping \(ping\) not allowed: a schema nested deeper than the 252 levels a Snapshot holds\n$/,
     );
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });

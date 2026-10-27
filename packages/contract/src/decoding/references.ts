@@ -1,8 +1,11 @@
-import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
+import {
+  defScopesOf,
+  type PublishedApplicationSnapshot,
+  type PublishedSnapshot,
+} from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
-import { defScopesOf } from './def-scopes.ts';
 import { paramProblemsOf } from './params.ts';
 import {
   codeStatusProblemsOf,
