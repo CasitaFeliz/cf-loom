@@ -80,8 +80,8 @@ function recordedMethodOf(method: string): Method | 'HEAD' | '_OTHER' {
   return isMethod(method) || method === 'HEAD' ? method : '_OTHER';
 }
 
-/** A hook of `serve`: it receives what it hears of, and the Request it came from. */
-export type ServeHook<Heard> = (heard: Heard, request: Request) => void | Promise<void>;
+/** Called with what `serve` heard and the Request it came from; what it returns is awaited, then ignored. */
+export type ServeHook<Heard> = (heard: Heard, request: Request) => unknown;
 
 /** Hands a Service's Fault and its Request to its hook, or the Fault to the console without one; a hook that fails is logged. */
 export async function reportServedFault(

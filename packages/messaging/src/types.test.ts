@@ -373,6 +373,19 @@ describe('publish and send types', () => {
     expect(options.onBrokerTrouble).toBeTypeOf('function');
   });
 
+  test('an onBrokerTrouble and an onServiceFault may be written as expressions that return a value', () => {
+    const failing = new Set<string>();
+
+    const options: MessagingOptions = {
+      onBrokerTrouble: (trouble) =>
+        trouble.kind === 'pull-failed' ? failing.add(trouble.name) : failing.delete(trouble.name),
+      onServiceFault: (fault) => failing.add(fault.name),
+    };
+
+    expect(options.onBrokerTrouble).toBeTypeOf('function');
+    expect(options.onServiceFault).toBeTypeOf('function');
+  });
+
   test('close takes an optional signal', () => {
     expectTypeOf<Messaging<typeof contract>['close']>().toEqualTypeOf<
       (options?: CloseOptions) => Promise<void>
