@@ -1,9 +1,9 @@
-import type { Run } from '../project/index.ts';
-import { comparedLinesOf, linesOf, notAboveOf } from './check-lines.ts';
+import type { Ending, Run } from '../project/index.ts';
+import { closingLinesOf, comparedLinesOf, notAboveOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
 import { checkedDocumentOf } from './checked-document.ts';
 import { derivedCheckedOf } from './derivation.ts';
-import type { Exit } from './exit.ts';
+import { done, type Exit, toolingError } from './exit.ts';
 import { preparedOf } from './prepared.ts';
 
 /** How `check` was asked to run: the version or dist-tag to compare with instead of the highest version, and whether to derive a prerelease. */
@@ -20,17 +20,18 @@ export async function check(run: Run, { against, prerelease }: CheckOptions): Pr
   if (prepared.kind === 'stopped') {
     return prepared.exit;
   }
-  const exit = exitOf(derivedCheckedOf(prepared, { force: false, prerelease }));
-  return { ...exit, stderr: [...exit.stderr, ...prepared.unlisted] };
+  const checked = derivedCheckedOf(prepared, { force: false, prerelease });
+  const ending = endingOf(checked.changes);
+  run.found({ lines: comparedLinesOf(checked), fields: checkedDocumentOf(checked), ending });
+  run.found({ ending: { status: 0, stderr: prepared.unlisted } });
+  return closedExitOf(checked, ending);
 }
 
-/** How `check` ends: a version that would not be above the Baseline is a tooling error, as it is for `publish`; else the Changes decide. */
-function exitOf(checked: Checked): Exit {
+/** How `check` closes: a version that would not be above the Baseline is a tooling error, as it is for `publish`; else it says what `publish` would take. */
+function closedExitOf(checked: Checked, { status }: Ending): Exit {
   const { derivation } = checked;
   if (derivation.kind === 'derived' && derivation.derived.kind === 'not-above') {
-    const stderr = [notAboveOf(checked.packageName, derivation.derived)];
-    return { status: 3, stdout: comparedLinesOf(checked), stderr };
+    return toolingError(notAboveOf(checked.packageName, derivation.derived));
   }
-  const { status, stderr } = endingOf(checked.changes);
-  return { status, stdout: linesOf(checked, status), stderr, document: checkedDocumentOf(checked) };
+  return done(closingLinesOf(checked, status), {});
 }

@@ -4895,6 +4895,30 @@ describe.concurrent('cf-loom check, the version publish would take', {
       `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     );
   });
+
+  test('check --json over a version that would not be above the Baseline keeps the Changes beside the error', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const line = `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand`;
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(`${line}\n`);
+    expect(documentOf(ran)).toMatchObject({
+      format: 1,
+      status: 3,
+      errors: [line],
+      package: ordersPackage,
+      baseline: '1.1.0-rc.1',
+      stable: '1.0.0',
+      changes: [expect.objectContaining({ class: 'additive', verdict: 'allowed' })],
+      bump: 'minor',
+      version: null,
+      tag: null,
+    });
+  });
 });
 
 describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {

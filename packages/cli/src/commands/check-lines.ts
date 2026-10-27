@@ -1,6 +1,7 @@
 import { type PeerRangeMove, siteTextOf, tokenOf } from '@cf-loom/contract/internal';
+import type { Ending } from '../project/index.ts';
 import { type Derived, type DerivedVersion, firstStableOf, type Why } from '../versioning/index.ts';
-import { type Checked, type Ending, reasonOf } from './checked.ts';
+import { type Checked, reasonOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
 
 /** Fields whose value is a JSON value, written as JSON so `1` and `"1"` differ. */
@@ -110,13 +111,8 @@ function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }
     : ` (version from ${against.stable})`;
 }
 
-/** The lines `check` prints on stdout: the Baseline it used, every Change, the peer ranges that moved, and how it closes. */
-export function linesOf(checked: Checked, status: Ending['status']): readonly string[] {
-  return [...comparedLinesOf(checked), ...closingLinesOf(checked, status)];
-}
-
 /** How `check` closes: that no Change needs an Approval, then the version `publish` would take. */
-function closingLinesOf(checked: Checked, status: Ending['status']): readonly string[] {
+export function closingLinesOf(checked: Checked, status: Ending['status']): readonly string[] {
   const { packageName, against, changes, derivation } = checked;
   const needsNoApproval = against.kind === 'baseline' && changes.length > 0 && status === 0;
   const approval = needsNoApproval ? ['No Change needs a Breaking Change Approval'] : [];

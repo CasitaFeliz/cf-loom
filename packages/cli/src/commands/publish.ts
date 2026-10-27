@@ -25,7 +25,7 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
     return prepared.exit;
   }
   const checked = derivedCheckedOf(prepared, options);
-  run.progress(comparedLinesOf(checked));
+  run.found({ lines: comparedLinesOf(checked) });
   if (prepared.unlisted.length > 0) {
     return { status: 3, stdout: [], stderr: prepared.unlisted };
   }
