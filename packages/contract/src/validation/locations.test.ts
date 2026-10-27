@@ -148,6 +148,34 @@ describe('failure lines: a Snapshot nested too deep', () => {
       `${site} not allowed: JSON nested deeper than the 256 levels a Snapshot holds`,
     );
   });
+
+  describe('a def nests two levels deeper where a removed code would hold it', () => {
+    const wrapped = (levels: number): unknown => {
+      let nested: unknown = {};
+      for (let depth = 0; depth < levels; depth++) {
+        nested = { inner: nested };
+      }
+      return nested;
+    };
+
+    test('a def that fits the limit but not once a removed code holds it is named by its entry', () => {
+      const snapshot = { defs: { tree: wrapped(252) } };
+
+      const failure = nestingFailureOf(snapshot);
+
+      expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
+        'defs.tree not allowed: JSON nested deeper than the 256 levels a Snapshot holds',
+      );
+    });
+
+    test('a def that fits the limit once a removed code holds it is allowed', () => {
+      const snapshot = { defs: { tree: wrapped(251) } };
+
+      const failure = nestingFailureOf(snapshot);
+
+      expect(failure).toBeUndefined();
+    });
+  });
 });
 
 describe('failure lines: steps and written values', () => {
