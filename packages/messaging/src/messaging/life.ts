@@ -90,8 +90,8 @@ export class MessagingLife {
       ends: { closing, handingBack: this.#inFlight.handingBack },
     });
     this.#consumption('taken');
-    const track = (telling: Promise<void>) => void this.tracked(telling);
-    const run: ConsumeRun = { closing, troubled: troubledOf(closing, tellTrouble, track) };
+    const tracked: TroubleTell = (trouble) => this.tracked(tellTrouble(trouble));
+    const run: ConsumeRun = { closing, troubled: troubledOf(consumers, closing, tracked) };
     try {
       await this.tracked(this.#connection.consume(consumers, run));
     } catch (e) {

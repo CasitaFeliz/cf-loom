@@ -34,8 +34,9 @@ export type ConsumeRun = {
   readonly closing: AbortSignal;
   /**
    * Called once when a consumer stops being pulled from, with why, and once when its pulls are
-   * answered again; the core drops what comes once `closing` has aborted. Returns at once; a
-   * consumer the core did not build throws.
+   * answered again, naming it by its `durable`, as the core named it; the core drops what comes
+   * once `closing` has aborted. Returns at once; a `durable` the core did not hand this `consume`
+   * throws.
    */
   readonly troubled: (trouble: ConsumerTrouble) => void;
 };

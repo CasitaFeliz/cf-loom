@@ -5,7 +5,7 @@ import {
   type HandlerFaultBase,
   hookFailureOf,
 } from '@cf-loom/handlers/internal';
-import type { ConsumerTrouble } from '../broker/index.ts';
+import type { BrokerConsumer, ConsumerTrouble } from '../broker/index.ts';
 import { consumerDetailsOf } from './details.ts';
 
 /**
@@ -29,26 +29,27 @@ export function troubleTellOf(onBrokerTrouble: BrokerTroubleHook | undefined): T
 }
 
 /**
- * The `troubled` an adapter reports to: it names the consumer at once, so one the core did not
- * build throws to the adapter, and hands the telling to `track`; once `closing` aborted, it tells nothing.
+ * The `troubled` an adapter reports to: it names the consumer by its Durable consumer among
+ * `consumers`, so one the core did not hand the Broker throws to the adapter, and tells the
+ * Service without waiting; once `closing` aborted, it tells nothing.
  */
 export function troubledOf(
+  consumers: readonly BrokerConsumer[],
   closing: AbortSignal,
   tell: TroubleTell,
-  track: (telling: Promise<void>) => void,
 ): (trouble: ConsumerTrouble) => void {
-  return (trouble) => {
-    const named = brokerTroubleOf(trouble);
+  const byDurable = new Map(consumers.map((consumer) => [consumer.durable, consumer]));
+  return ({ consumer, ...change }) => {
+    const handed = byDurable.get(consumer.durable);
+    if (handed === undefined) {
+      throw new Error(`${consumer.durable} is no Durable consumer messaging handed this Broker`);
+    }
+    const { element, identity } = consumerDetailsOf(handed);
+    const { durable, stream } = handed;
     if (!closing.aborted) {
-      track(tell(named));
+      void tell({ element, identity, durable, stream, ...change });
     }
   };
-}
-
-/** The `BrokerTrouble` of an adapter's report, its consumer named by the core; one the core did not build throws. */
-function brokerTroubleOf({ consumer, ...change }: ConsumerTrouble): BrokerTrouble {
-  const { element, identity } = consumerDetailsOf(consumer);
-  return { element, identity, durable: consumer.durable, stream: consumer.stream, ...change };
 }
 
 function hookedOf(onBrokerTrouble: BrokerTroubleHook): TroubleTell {
