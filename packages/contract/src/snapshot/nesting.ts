@@ -16,19 +16,25 @@ export const snapshotNestingLimit = 256;
 export const nodeNestingLimit = 252;
 
 /**
- * A schema `generate` would write nested deeper than the decoder reads back, refused at the Element
- * the too-deep value sits in, since the inner path is no author's term.
+ * A Snapshot `generate` would write nested deeper than the decoder reads back, a schema first and
+ * then the file, refused at the Element the too-deep value sits in, since the inner path is no
+ * author's term.
  */
 export function nestingFailureOf(snapshot: Snapshot): NotAllowedFailure | undefined {
-  const at = tooDeepNodePathOf(snapshot);
-  if (at === undefined) {
-    return undefined;
+  const schema = tooDeepNodePathOf(snapshot);
+  if (schema !== undefined) {
+    const construct = `a schema nested deeper than the ${nodeNestingLimit} levels a Snapshot holds`;
+    return failureAt(snapshot, schema, construct);
   }
-  const construct = `a schema nested deeper than the ${nodeNestingLimit} levels a Snapshot holds`;
-  const site = siteOfPath(snapshot, at);
+  const file = tooDeepPathOf(snapshot);
+  const construct = `JSON nested deeper than the ${snapshotNestingLimit} levels a Snapshot holds`;
+  return file === undefined ? undefined : failureAt(snapshot, file, construct);
+}
+
+function failureAt(snapshot: Snapshot, at: Path, construct: string): NotAllowedFailure {
   return {
     kind: 'not-allowed',
-    site,
+    site: siteOfPath(snapshot, at),
     steps: [],
     construct,
     declaration: undefined,

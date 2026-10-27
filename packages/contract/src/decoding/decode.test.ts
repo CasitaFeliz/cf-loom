@@ -19,9 +19,11 @@ import {
   canonicalTextOf,
   type DecodedSnapshot,
   decodeSnapshot,
+  defScopesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
+  nodeNestingLimit,
   type ObjectNode,
   type Path,
   type PublishedApplicationSnapshot,
@@ -33,6 +35,7 @@ import {
   type SchemaNode,
   type ServiceSnapshot,
   type Snapshot,
+  snapshotNestingLimit,
   snapshotOf,
   validateRoot,
   walkSchemas,
@@ -2760,6 +2763,18 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     }
     return value as readonly unknown[];
   }
+
+  test('no schema node of an example’s Snapshot sits deeper than a node of the nesting limit leaves room for', () => {
+    const keys = snapshotNestingLimit - nodeNestingLimit;
+
+    const roots = publishedSnapshots().flatMap(([, snapshot]) =>
+      snapshot.kind === 'application'
+        ? []
+        : defScopesOf(snapshot).flatMap(({ nodes }) => nodes.map(({ at }) => at.length)),
+    );
+
+    expect(Math.max(...roots)).toBe(keys);
+  });
 
   test('an intersection of a schema with itself, as generate writes it, decodes', () => {
     const schema = z.intersection(z.string(), z.string());

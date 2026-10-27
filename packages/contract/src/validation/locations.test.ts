@@ -132,7 +132,7 @@ describe('failure lines: where a failure sits', () => {
   });
 });
 
-describe('failure lines: a schema nested too deep', () => {
+describe('failure lines: a Snapshot nested too deep', () => {
   const part = { type: 'object', fields: {} } as const;
   const standardRejections = {
     invalidInput: 'INVALID_INPUT',
@@ -261,6 +261,31 @@ describe('failure lines: a schema nested too deep', () => {
     const failure = nestingFailureOf(snapshot);
 
     expect(failure).toBeUndefined();
+  });
+
+  describe('a Qualifier value, which is no schema, nests with the file', () => {
+    const qualified = (levels: number): Snapshot => {
+      let qualifier: unknown = 'admin';
+      for (let level = 0; level < levels; level++) {
+        qualifier = [qualifier];
+      }
+      const guards = [{ guard: 'apiKey', qualifier }];
+      return service({ endpoints: { 'GET /things': { ...anEndpoint({}), guards } } });
+    };
+
+    test('a Qualifier value past 256 levels of the file is named by its Endpoint', () => {
+      const failure = nestingFailureOf(qualified(252));
+
+      expect(failure === undefined ? undefined : failureLineOf(failure)).toBe(
+        'endpoints.GET /things (getThing) not allowed: JSON nested deeper than the 256 levels a Snapshot holds',
+      );
+    });
+
+    test('a Qualifier value to 256 levels of the file is allowed', () => {
+      const failure = nestingFailureOf(qualified(251));
+
+      expect(failure).toBeUndefined();
+    });
   });
 
   test('an Application holds no schema, so nothing nests too deep in it', () => {

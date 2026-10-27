@@ -8,10 +8,12 @@ import {
   canonicalTextOf,
   type DefinitionsSnapshot,
   decodeSnapshot,
+  defScopesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   hashedTextOf,
   isRemoved,
+  nodeNestingLimit,
   type PublishedApplicationSnapshot,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
@@ -23,6 +25,7 @@ import {
   type ServiceSnapshot,
   type Snapshot,
   type SubscriptionSnapshot,
+  snapshotNestingLimit,
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
@@ -278,6 +281,11 @@ function aGeneratedProposed(next: () => number): ServiceSnapshot {
   }
   const defs = Object.entries(drawn).filter(([name]) => reached.has(name));
   return aProposed({ defs: Object.fromEntries(defs), codes });
+}
+
+/** How many keys below the outermost object the root of each schema node of a Snapshot sits. */
+function rootDepthsOf(snapshot: ServiceSnapshot | PublishedServiceSnapshot): readonly number[] {
+  return defScopesOf(snapshot).flatMap(({ nodes }) => nodes.map(({ at }) => at.length));
 }
 
 type Step = {
@@ -757,6 +765,18 @@ describe('publishedSnapshotOf', () => {
           expect(published.codes[code], `seed ${seed}, ${code}`).toEqual(was);
         }
       }
+    }
+  });
+
+  test('no schema node of a Snapshot sits deeper than a node of the nesting limit leaves room for, for any history', () => {
+    const keys = snapshotNestingLimit - nodeNestingLimit;
+    for (const [seed, steps] of histories()) {
+      const depths = steps.flatMap(({ proposed, published }) => [
+        ...rootDepthsOf(proposed),
+        ...rootDepthsOf(published),
+      ]);
+
+      expect(Math.max(...depths), `seed ${seed}`).toBeLessThanOrEqual(keys);
     }
   });
 
