@@ -262,7 +262,7 @@ describe('fakeProvider and serve answer alike', () => {
       getPayment: handle(getPayment, () => success({ headers, body })),
       capturePayment: handle(capturePayment, () => success()),
     };
-    const providing = serve(root, { endpoints: handlers, guards: {} });
+    const providing = serve(root, { endpoints: handlers, guards: {} }, {});
     const provider = contractPackageOf(
       { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
       endpoints,
@@ -314,7 +314,7 @@ describe('fakeProvider and serve answer alike', () => {
         getFirst: handle(first, () => success()),
         getHidden: handle(hidden, () => success()),
       };
-      const providing = serve(root, { endpoints: handlers, guards: {} });
+      const providing = serve(root, { endpoints: handlers, guards: {} }, {});
       const provider = contractPackageOf({ getFirst: first }, endpoints);
       const dependency = defineDependency({ endpoints: [provider.endpoints.getFirst] });
       const paths = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
@@ -446,6 +446,7 @@ const servedRefund = serve(
     endpoints: { refundPayment: handle(refundPayment, () => success()) },
     guards: { merchant: handle(merchant, () => admit()), region: handle(region, () => admit()) },
   },
+  {},
 );
 
 /** A call's Input as a Caller passes it to `refundPayment`. */

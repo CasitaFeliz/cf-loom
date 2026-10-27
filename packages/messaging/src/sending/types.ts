@@ -1,11 +1,10 @@
-import type { Command, Event, ServiceContract } from '@cf-loom/contract';
+import type { BodyOf, Command, Event, ServiceContract } from '@cf-loom/contract';
 import type {
   DeclaredFieldsRule,
   GroupedOf,
   IsOneLiteral,
   Refusal,
 } from '@cf-loom/contract/internal';
-import type * as core from 'zod/v4/core';
 import type { GivenHeaders } from './checks.ts';
 
 /**
@@ -40,7 +39,7 @@ type VersionsOf<C extends ServiceContract, Name> = Extract<OwnEventOf<C>, { read
 
 /** One required body per live version of the named Event, keyed `v<n>`. */
 type LiveBodiesOf<C extends ServiceContract, Name> = {
-  readonly [E in LiveOf<VersionsOf<C, Name>> as `v${E['version']}`]: core.output<E['body']>;
+  readonly [E in LiveOf<VersionsOf<C, Name>> as `v${E['version']}`]: BodyOf<E>;
 };
 
 /** A Retired version's key, `never`, so passing one is a type error even outside an object literal. */
@@ -74,7 +73,7 @@ type SentNameOf<C extends ServiceContract> = ActiveOf<OwnCommandOf<C>>['name'];
 /** The body of a Command's one Active version; a Command with more than one, which `cf-loom generate` refuses, takes none. */
 type SentBodyOf<C extends ServiceContract, Name> =
   IsOneLiteral<ActiveCommandOf<C, Name>> extends true
-    ? core.output<ActiveCommandOf<C, Name>['body']>
+    ? BodyOf<ActiveCommandOf<C, Name>>
     : Refusal<`send() takes a Command with one Active version, which ${Name & string} is not: cf-loom generate refuses it`>;
 
 /** What a Service publishes its Events with: one body for each Active and Deprecated version of the named Event. */

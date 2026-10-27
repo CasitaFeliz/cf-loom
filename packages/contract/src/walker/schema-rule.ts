@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { IsOneLiteral, JoinedNames, Refusal } from '../declarations/index.ts';
+import type { checkNames } from './check-names.ts';
 import type {
   catchalls,
   DefOfType,
@@ -126,6 +127,26 @@ type OwnRefusalKey<Schema, Type extends DefType> = Treatments[Type] extends {
     : Key
   : BesideRefusalKey<Schema, Type>;
 
+/**
+ * What `checkNames` names a refused def that is its own check, when its row names it alone: a
+ * custom check, or a bigint format of one literal, by zod's ids when no row lists it. A format the
+ * type does not tell apart is left to `defTypes`, so a schema is refused once.
+ */
+type OwnCheckName<Def> = Def extends { readonly check: 'custom' }
+  ? (typeof checkNames)['custom']['refine']
+  : Def extends { readonly check: 'bigint_format'; readonly format: infer Format }
+    ? IsOneLiteral<Format> extends true
+      ? Format extends keyof (typeof checkNames)['bigint_format']
+        ? (typeof checkNames)['bigint_format'][Format]
+        : `a zod check "bigint_format" of format "${Format & string}"`
+      : never
+    : never;
+
+/** How the Not allowed list words a refused schema: by its own check if it is one, else by its type. */
+type OwnRefusalText<Schema, Type extends DefType> = [OwnCheckName<DefOf<Schema>>] extends [never]
+  ? TextOf<OwnRefusalKey<Schema, Type>>
+  : OwnCheckName<DefOf<Schema>>;
+
 /** The schemas under a def's key: one, a list of them or a getter of one. */
 type SchemasUnder<Value> = Value extends core.$ZodType
   ? Value
@@ -175,7 +196,7 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
         : Type extends DefType
           ? [OwnRefusalKey<Schema, Type>] extends [never]
             ? RefusedIn<ChildrenOf<Schema, DefOf<Schema>, Type>, Remaining[Depth]>
-            : TextOf<OwnRefusalKey<Schema, Type>>
+            : OwnRefusalText<Schema, Type>
           : never
       : never
     : never;
@@ -188,4 +209,4 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
  */
 export type SchemaRule<Schema> = [RefusedIn<Schema>] extends [never]
   ? unknown
-  : Refusal<`not allowed: ${JoinedNames<RefusedIn<Schema>>}`>;
+  : Refusal<`not allowed: ${JoinedNames<RefusedIn<Schema>, '; '>}`>;

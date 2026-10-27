@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineEvent } from '../index.ts';
+import { type BodyOf, defineEvent, openEnum } from '../index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -234,5 +234,25 @@ describe('defineEvent', () => {
     expectTypeOf(orderCreatedV1.version).toEqualTypeOf<1>();
     expectTypeOf(orderCreatedV1.lifecycle).toEqualTypeOf<'deprecated'>();
     expect(orderCreatedV1.lifecycle).toBe('deprecated');
+  });
+});
+
+describe('BodyOf', () => {
+  test('BodyOf of an own Event is what its writer writes, without the Unknown case', () => {
+    const orderCreatedV2 = defineEvent({
+      name: 'OrderCreated',
+      version: 2,
+      visibility: 'internal',
+      description: 'An order was placed',
+      body: z.object({ orderId: z.uuid(), status: openEnum(['pending', 'paid']) }),
+    });
+
+    expectTypeOf<BodyOf<typeof orderCreatedV2>>().toEqualTypeOf<{
+      orderId: string;
+      status: 'pending' | 'paid';
+    }>();
+    expectTypeOf<{ orderId: string; status: { unknown: string } }>().not.toExtend<
+      BodyOf<typeof orderCreatedV2>
+    >();
   });
 });

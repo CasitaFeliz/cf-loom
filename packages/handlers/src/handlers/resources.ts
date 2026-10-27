@@ -1,3 +1,5 @@
+import type { Refusal } from '@cf-loom/contract/internal';
+
 /** The Resources of a Handler that takes none: an empty object type, which a union of Resources never absorbs as it would `unknown`. */
 export type NoResources = Readonly<Record<never, never>>;
 
@@ -22,18 +24,28 @@ export type ResourcesLast<Last = object> = { readonly resources?: object } & {
 /** The last parameter of an implementation that leaves it unannotated: `resources` optional, since it takes none, and typed to name the fix. */
 export type LastNotAnnotated = { readonly resources?: ResourcesNotAnnotated };
 
-/** The Resources an implementation takes: its last parameter's `resources` when it requires them, none otherwise. */
+/** The Resources an implementation takes: its last parameter's `resources` when it requires them, none otherwise; the cause, by name, when they hold no key. */
 export type TakenResourcesOf<Last extends ResourcesLast> =
-  Last extends WithResources<object> ? Last['resources'] : NoResources;
+  Last extends WithResources<object>
+    ? keyof Last['resources'] extends never
+      ? Refusal<'The last parameter takes Resources with no key: name what it reads, as Needs<…> does, or leave it out'>
+      : Last['resources']
+    : NoResources;
+
+declare const resourcesTaken: unique symbol;
+
+/** The Resources a Handler takes, as its brand carries them: in a parameter position, so a Handler that takes some of a Service's Resources is a Handler for all of them. */
+export type TakesResources<Resources> = {
+  readonly [resourcesTaken]: (resources: Resources) => void;
+};
 
 /** `resources`, required exactly when some Handler takes one. */
 export type ResourcesField<Resources extends object> = keyof Resources extends never
   ? { readonly resources?: Resources }
   : { readonly resources: Resources };
 
-/** A last argument, of the type `Element`, that may be left out when every field `Call` holds is optional. */
-export type CallArgument<Call, Element = Call> =
-  Partial<Call> extends Call ? [call?: Element] : [call: Element];
+/** A last argument that may be left out when every field it holds is optional. */
+export type CallArgument<Call> = Partial<Call> extends Call ? [call?: Call] : [call: Call];
 
 type UnionToIntersection<Union> = (
   Union extends unknown
@@ -43,28 +55,29 @@ type UnionToIntersection<Union> = (
   ? Intersection
   : never;
 
-type CallOf<Handler> = Handler extends (first: never, second: never, ...call: infer Call) => unknown
-  ? Call[0]
-  : never;
-
 /** What a map's Resources hold when a Handler types its own as `any`, which would erase every other: the cause, by name. */
-type AnyResourcesRefusal = {
-  readonly 'A Handler types its Resources as any: type them, as Needs<…> does': never;
-};
+type AnyResourcesRefusal =
+  Refusal<"A Handler's Resources are unreadable: typed any; type them, as Needs<…> does">;
 
-/** The Resources one Handler takes, none for a Handler that takes none; distributes, so a Handler that takes none never narrows the others. */
-type ResourcesOfHandler<Handler> = Handler extends unknown
-  ? NonNullable<CallOf<Handler>> extends { readonly resources?: infer Resources }
-    ? HandedResourcesOf<NonNullable<Resources>>
-    : never
-  : never;
+/** What a map's Resources hold when a Handler's are `never`, left out of `HandledBy` or `HandlerMapOf`: the cause, by name. */
+type UnspecifiedResourcesRefusal =
+  Refusal<"A Handler's Resources are unspecified: its brand alone, HandledBy<typeof getOrder>, or a map annotated HandlerMapOf<typeof contract> without the Service's Resources; annotate HandlerMapOf<typeof contract, Resources>, NoResources when the Service has none">;
 
-/** The Resources a map hands one Handler: none when it takes none, the refusal when `any`. */
+/** The Resources one Handler takes, read off its brand; distributes, so a Handler that takes none never narrows the others. */
+type ResourcesOfHandler<Handler> = 0 extends 1 & Handler
+  ? AnyResourcesRefusal
+  : Handler extends TakesResources<infer Resources>
+    ? HandedResourcesOf<Resources>
+    : never;
+
+/** The Resources a map hands one Handler: none when it takes none, the cause when `any` or `never`. */
 type HandedResourcesOf<Resources> = 0 extends 1 & Resources
   ? AnyResourcesRefusal
-  : keyof Resources extends never
-    ? never
-    : Resources;
+  : [Resources] extends [never]
+    ? UnspecifiedResourcesRefusal
+    : keyof Resources extends never
+      ? never
+      : Resources;
 
 type HandlersIn<Handlers> = {
   [Map in keyof Handlers]: Handlers[Map][keyof Handlers[Map]];

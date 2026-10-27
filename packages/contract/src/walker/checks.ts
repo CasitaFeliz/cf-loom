@@ -1,7 +1,8 @@
 import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
 import { type Constraint, type ConstraintOf, constraintOfType } from './check-constraints.ts';
-import { type DeclaredCheck, isConditional, nameOfCheck } from './check-defs.ts';
+import { type DeclaredCheck, isConditional } from './check-defs.ts';
+import { isKnownCheckKind, refusedCheck } from './check-names.ts';
 import type { NotAllowed } from './nodes.ts';
 import {
   notAllowed,
@@ -11,7 +12,15 @@ import {
   refusedCheckOnOptional,
   refusedRepeatedCheck,
 } from './not-allowed.ts';
-import { failed, type Outline, outlineOf, type Reached, type Walked, walked } from './walked.ts';
+import {
+  type FailureTree,
+  failed,
+  type Outline,
+  outlineOf,
+  type Reached,
+  type Walked,
+  walked,
+} from './walked.ts';
 
 /** What a schema is whose checks are judged: any schema, or the wrapper of a field. */
 export type CheckedKind = 'schema' | 'optional' | 'nonoptional';
@@ -36,7 +45,7 @@ export function constrain(
     ...emptinessFailuresOf(constrainedOutline, at),
   ];
   if (walkedSchema.kind === 'not-allowed') {
-    return failed([...walkedSchema.failures, ...failures], constrainedOutline);
+    return failed([walkedSchema.tree, ...failures], constrainedOutline);
   }
   if (failures.length > 0) {
     return failed(failures, constrainedOutline);
@@ -75,19 +84,27 @@ function refusedOnWiderSchema<Node>(
     if (constraint.kind === 'not-allowed') {
       return constraint;
     }
-    return notAllowed(at, refusal(nameOfCheck(check.def)));
+    return notAllowed(at, refusal(refusedCheck(check.def).construct));
   };
 }
 
-/** What each check sets, or why it is refused: a conditional check is refused on any type. */
+/**
+ * What each check sets, or why it is refused: a check of a kind zod added after this walker was
+ * written, and a conditional check, are refused on any type.
+ */
 function constraintsOf<Node>(
   constraintOf: ConstraintOf<Node>,
   checks: readonly DeclaredCheck[],
   at: Reached,
 ): readonly Constraint<Node>[] {
-  return checks.map((check) =>
-    isConditional(check) ? notAllowed(at, refused.conditionalCheck) : constraintOf(check, at),
-  );
+  return checks.map((check) => {
+    if (!isKnownCheckKind(check.def.check)) {
+      return notAllowed(at, refusedCheck(check.def));
+    }
+    return isConditional(check)
+      ? notAllowed(at, refused.conditionalCheck)
+      : constraintOf(check, at);
+  });
 }
 
 /** The node with every constraint that was walked set on it. */
@@ -109,12 +126,12 @@ function failuresOfConstraints(
   constraints: readonly Walked<object>[],
   nodeKeys: readonly string[],
   at: Reached,
-): NotAllowed[] {
-  const failures: NotAllowed[] = [];
+): FailureTree {
+  const failures: (NotAllowed | FailureTree)[] = [];
   const taken = new Set(nodeKeys.map(slotOf));
   for (const constraint of constraints) {
     if (constraint.kind === 'not-allowed') {
-      failures.push(...constraint.failures);
+      failures.push(constraint.tree);
       continue;
     }
     if (Object.values(constraint.value).some(isNonFinite)) {

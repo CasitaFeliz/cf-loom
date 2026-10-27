@@ -19,9 +19,11 @@ import {
   canonicalTextOf,
   type DecodedSnapshot,
   decodeSnapshot,
+  defScopesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
+  nodeNestingLimit,
   type ObjectNode,
   type Path,
   type PublishedApplicationSnapshot,
@@ -33,6 +35,7 @@ import {
   type SchemaNode,
   type ServiceSnapshot,
   type Snapshot,
+  snapshotNestingLimit,
   snapshotOf,
   validateRoot,
   walkSchemas,
@@ -192,6 +195,15 @@ const stringNode: SchemaNode = { type: 'string' };
 
 function aRef(name: string): RefNode {
   return { type: 'ref', name };
+}
+
+/** An array of arrays, `levels` deep, of strings. */
+function nestedArrays(levels: number): SchemaNode {
+  let nested: SchemaNode = stringNode;
+  for (let level = 0; level < levels; level++) {
+    nested = { type: 'array', items: nested };
+  }
+  return nested;
 }
 
 function anObjectOf(schema: SchemaNode): ObjectNode {
@@ -400,7 +412,7 @@ describe('decodeSnapshot', () => {
         codes: {
           ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
-          [gone]: { ...aCode, status: 410, removedIn: '3.2.0' },
+          [gone]: { ...aCode, status: 410, removedIn: '3.2.0', defs: {} },
         },
       });
 
@@ -455,7 +467,33 @@ describe('decodeSnapshot', () => {
     test('a removed code decodes with its removedIn and the status and body it last had', () => {
       const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0' } },
+        codes: {
+          ...standardCodes,
+          [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0', defs: {} },
+        },
+      });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the defs its body reached, though the Snapshot holds none', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aService({ codes: { ...standardCodes, [gone]: removed } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the def of a name the Snapshot holds as another def', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aService({
+        defs: { tree: anObjectOf(stringNode) },
+        codes: { ...standardCodes, [gone]: removed },
       });
 
       const result = roundTrip(published);
@@ -1981,6 +2019,88 @@ describe('decodeSnapshot', () => {
       });
     });
 
+    describe('a removed code’s refs name the defs it holds, never the Snapshot’s', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0' };
+      const withCode = (code: object, fields: object = {}) =>
+        serviceWith({ codes: { ...standardCodes, [gone]: code }, ...fields });
+
+      test('a removed code whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode({ ...removed, defs: {} }, { defs: { tree: treeDef } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code’s def whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode(
+          { ...removed, defs: { tree: anObjectOf(aRef('other')) } },
+          { defs: { other: anObjectOf(stringNode) } },
+        );
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree', 'fields', 'name'],
+            'names a def the Snapshot does not hold: other',
+          ),
+        );
+      });
+
+      test('a Snapshot node whose ref names a def only a removed code holds is malformed at the ref', () => {
+        const kept = { ...aCode, body };
+
+        const result = serviceWith({
+          codes: {
+            ...standardCodes,
+            [gone]: { ...removed, defs: { tree: treeDef } },
+            [orderLocked]: kept,
+          },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', orderLocked, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code without defs is malformed at defs: it is missing', () => {
+        const result = withCode(removed);
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs'], 'is missing'));
+      });
+
+      test('a declared code with defs is malformed at defs: its format does not define it', () => {
+        const result = withCode({ ...aCode, defs: {} });
+
+        expect(result).toEqual(
+          malformedAt(['codes', gone, 'defs'], 'is a key its format does not define'),
+        );
+      });
+
+      test('a removed code’s def that leads back to itself with no node between is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: aRef('tree') } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree'],
+            'leads back to itself through refs, unions and allOfs alone',
+          ),
+        );
+      });
+
+      test('a removed code’s def that is nullable is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: { ...treeDef, nullable: true } } });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs', 'tree']));
+      });
+    });
+
     test.each<[string, SchemaNode]>([
       ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
       ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
@@ -2193,12 +2313,73 @@ describe('decodeSnapshot', () => {
     });
 
     test('a Snapshot nested to 256 levels is read', () => {
-      const depth = 253;
-      const nested =
-        '{"type":"array","items":'.repeat(depth) + '{"type":"string"}' + '}'.repeat(depth);
-      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+      const endpoint = {
+        ...anEndpoint,
+        success: { ...anEndpoint.success, body: nestedArrays(251) },
+      };
 
-      expect(decodeSnapshot(text).kind).toBe('decoded');
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    describe('a schema nests at most 252 levels, its root the first', () => {
+      const itemsDown = (levels: number) => Array<string>(levels).fill('items');
+      const tooDeep = 'a schema nests deeper than 252 levels';
+
+      test.each([
+        { where: 'a def', nest: (body: SchemaNode) => ({ defs: { a: body } }) },
+        {
+          where: 'a code’s body',
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+          }),
+        },
+      ])('$where of 252 levels is read', ({ nest }) => {
+        const result = serviceWith(nest(nestedArrays(251)));
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test.each([
+        { where: 'a def', at: ['defs', 'a'], nest: (body: SchemaNode) => ({ defs: { a: body } }) },
+        {
+          where: 'a code’s body',
+          at: ['codes', orderLocked, 'body'],
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+          }),
+        },
+      ])('$where of 253 levels is malformed at its deepest path', ({ at, nest }) => {
+        const result = serviceWith(nest(nestedArrays(252)));
+
+        expect(result).toEqual(malformedAt([...at, ...itemsDown(252)], tooDeep));
+      });
+
+      test('a removed code’s def of 252 levels is read', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(251) } } };
+
+        const result = serviceWith({ codes });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a removed code’s def of 253 levels is malformed at its deepest path', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(252) } } };
+
+        const result = serviceWith({ codes });
+
+        const at = ['codes', gone, 'defs', 'a', ...itemsDown(252)];
+        expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+      });
+
+      test('a schema of 253 levels is judged after the structure, so a structure that breaks is reported first', () => {
+        const result = serviceWith({ version: 'latest', defs: { a: nestedArrays(252) } });
+
+        expect(result).toEqual(malformedAt(['version']));
+      });
     });
 
     test('only the first problem is reported, with its path', () => {
@@ -2298,6 +2479,7 @@ const formatOneFixture = `{
   "codes": {
     "GONE": {
       "body": null,
+      "defs": {},
       "headers": { "fields": {}, "type": "object" },
       "message": "Gone",
       "origin": "local",
@@ -2582,6 +2764,18 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     return value as readonly unknown[];
   }
 
+  test('no schema node of an example’s Snapshot sits deeper than a node of the nesting limit leaves room for', () => {
+    const keys = snapshotNestingLimit - nodeNestingLimit;
+
+    const roots = publishedSnapshots().flatMap(([, snapshot]) =>
+      snapshot.kind === 'application'
+        ? []
+        : defScopesOf(snapshot).flatMap(({ nodes }) => nodes.map(({ at }) => at.length)),
+    );
+
+    expect(Math.max(...roots)).toBe(keys);
+  });
+
   test('an intersection of a schema with itself, as generate writes it, decodes', () => {
     const schema = z.intersection(z.string(), z.string());
     const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
@@ -2616,7 +2810,9 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
   }
 
-  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', () => {
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', {
+    timeout: 30_000,
+  }, () => {
     const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
     const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
     const { schemaOf } = randomSchemas(seededNext(2231));

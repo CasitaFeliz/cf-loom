@@ -1,6 +1,14 @@
 import type * as core from 'zod/v4/core';
 import type { NotAllowed } from './nodes.ts';
-import type { Composition, Memo, Reach, Reached, ReachedSchema } from './walked.ts';
+import {
+  type Composition,
+  type FailureTree,
+  type Memo,
+  type Reach,
+  type Reached,
+  type ReachedSchema,
+  refusalsIn,
+} from './walked.ts';
 
 /** Where the walk's records stood when a schema was entered: what comes after was raised inside it. */
 export type Start = {
@@ -18,7 +26,7 @@ export type Memos = {
   /** A remembered schema reached at a place, its first entry aside. */
   readonly reached: (schema: core.$ZodType, at: Reached) => void;
   /** Refusals the walk returns, the first time each is returned being where it was raised. */
-  readonly raised: (refusals: readonly NotAllowed[]) => void;
+  readonly raised: (tree: FailureTree) => void;
   readonly start: () => Start;
   /** A remembered schema's walk closed: it claims what was raised and reached during it, since `start`. */
   readonly close: (closed: ReachedSchema, start: Start) => void;
@@ -33,7 +41,7 @@ type State = {
   readonly earlyReaches: Map<core.$ZodType, Reach[]>;
   readonly memoOf: Map<NotAllowed, Memo>;
   readonly raised: NotAllowed[];
-  readonly logged: Set<NotAllowed>;
+  readonly logged: Set<NotAllowed | FailureTree>;
   readonly reaches: Reach[];
   readonly compositions: readonly Composition[];
 };
@@ -51,7 +59,7 @@ export function startMemos(compositions: readonly Composition[]): Memos {
   };
   return {
     reached: (schema, at) => reached(state, schema, at),
-    raised: (refusals) => logRaised(state, refusals),
+    raised: (tree) => logRaised(state, tree),
     start: () => ({
       raised: state.raised.length,
       compositions: compositions.length,
@@ -80,12 +88,9 @@ function earlyReachesOf(state: State, schema: core.$ZodType): Reach[] {
   return known;
 }
 
-function logRaised(state: State, refusals: readonly NotAllowed[]): void {
-  for (const refusal of refusals) {
-    if (!state.logged.has(refusal)) {
-      state.logged.add(refusal);
-      state.raised.push(refusal);
-    }
+function logRaised(state: State, tree: FailureTree): void {
+  for (const refusal of refusalsIn(tree, state.logged)) {
+    state.raised.push(refusal);
   }
 }
 

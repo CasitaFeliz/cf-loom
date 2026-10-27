@@ -18,6 +18,7 @@ import {
   type PublishedCode,
   type PublishedEndpoint,
   type PublishedServiceSnapshot,
+  type RemovedCode,
   type SchemaNode,
   type ServiceSnapshot,
   snapshotOf,
@@ -99,6 +100,10 @@ function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
     body: null,
     ...fields,
   };
+}
+
+function aRemovedCode(fields: Partial<RemovedCode> = {}): RemovedCode {
+  return { ...aCode(), removedIn: '3.2.0', defs: {}, ...fields };
 }
 
 function anEvent(): EventSnapshot {
@@ -389,7 +394,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('a removed code not declared again is carried with no Change', () => {
-    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) } });
+    const baseline = aBaseline({ codes: { [orderLocked]: aRemovedCode() } });
     const proposed = aProposed();
 
     const report = reportOf(baseline, proposed);
@@ -514,7 +519,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
 
 describe('compatibilityReportOf, a removed code declared again', () => {
   const removedBody = anOpenObject({ id: required(aString), note: required(aString) });
-  const removed = aCode({ removedIn: '3.2.0', body: removedBody });
+  const removed = aRemovedCode({ body: removedBody });
 
   function declaredAgain(code: CodeSnapshot): readonly Change[] {
     const baseline = aBaseline({ codes: { [orderLocked]: removed } });
@@ -552,6 +557,66 @@ describe('compatibilityReportOf, a removed code declared again', () => {
 
   test('with the status and body it last had it gives no Change at its code', () => {
     const changes = declaredAgain(aCode({ body: removedBody }));
+
+    expect(changes).toEqual([]);
+  });
+});
+
+describe('compatibilityReportOf, a removed code declared again, whose body reaches a recursive def', () => {
+  const ref: SchemaNode = { type: 'ref', name: 'tree' };
+  const body = anOpenObject({ tree: required(ref) });
+  const treeWith = (...labels: string[]): ObjectNode =>
+    anOpenObject({
+      children: required({ type: 'array', items: ref }),
+      ...Object.fromEntries(labels.map((label) => [label, required(aString)])),
+    });
+  const orderPaid = 'ORDER_PAID';
+
+  function declaredAgain(held: { removedWith: ObjectNode; since: ObjectNode; now: ObjectNode }) {
+    const baseline = aBaseline({
+      defs: { tree: held.since },
+      codes: {
+        [orderLocked]: aRemovedCode({ body, defs: { tree: held.removedWith } }),
+        [orderPaid]: aCode({ body }),
+      },
+    });
+    const proposed = aProposed({
+      ...answering(orderLocked),
+      defs: { tree: held.now },
+      codes: { [orderLocked]: aCode({ body }), [orderPaid]: aCode({ body }) },
+    });
+    return codeChangesOf(baseline, proposed).filter(
+      ({ site }) => site.kind === 'code' && site.code === orderLocked,
+    );
+  }
+
+  const labelRemoved = {
+    kind: 'schema',
+    position: 'success',
+    at: [
+      { kind: 'part', name: 'body' },
+      { kind: 'field', name: 'tree' },
+      { kind: 'field', name: 'label' },
+    ],
+    shape: { kind: 'field-removed' },
+  } as const;
+
+  test('whose def lost a field since it was removed is Breaking, as against the version that removed it', () => {
+    const changes = declaredAgain({
+      removedWith: treeWith('label'),
+      since: treeWith(),
+      now: treeWith(),
+    });
+
+    expect(changes).toEqual([breaking(codeSite(orderLocked, 'public'), labelRemoved)]);
+  });
+
+  test('with the def it was removed with gives no Change, though the Snapshot’s def of that name has since grown a field', () => {
+    const changes = declaredAgain({
+      removedWith: treeWith('label'),
+      since: treeWith('label', 'note'),
+      now: treeWith('label'),
+    });
 
     expect(changes).toEqual([]);
   });
@@ -641,7 +706,7 @@ describe('compatibilityReportOf, Standard Rejections', () => {
       ...publishedAnswering(notFound),
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ removedIn: '3.2.0', status: 409 }),
+        [orderGone]: aRemovedCode({ status: 409 }),
       },
     });
     const proposed = aProposed({

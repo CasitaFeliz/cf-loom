@@ -30,4 +30,4 @@ process.on('SIGTERM', () => {
   server.close();
   void running.close();
 });
-await running.consume(handlers);
+await running.consume(handlers, {});

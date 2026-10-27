@@ -156,14 +156,14 @@ describe('serve: Guards', () => {
   test('a Guard’s Context reaches the EndpointHandler and the Guards that list it, with the Qualifier', async () => {
     calls.length = 0;
 
-    const response = await serve(contract, handlers)(put(ORDER_ID));
+    const response = await serve(contract, handlers, {})(put(ORDER_ID));
 
     expect(await response.json()).toEqual({ by: 'u-1', granted: ['u-1', 'orders:edit'] });
     expect(calls).toEqual(['userToken', 'permission', 'updateOrder']);
   });
 
   test('Guards run before the Endpoint’s Input: a missing demanded header is answered, a bad param is not', async () => {
-    const response = await serve(contract, handlers)(put('nope', {}));
+    const response = await serve(contract, handlers, {})(put('nope', {}));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
@@ -210,7 +210,11 @@ describe('serve: Guards', () => {
     const busy = handle(userToken, () =>
       fault({ committed: 'no', retryable: true, retryAfter: 30 }),
     );
-    const http = serve(contract, { ...handlers, guards: { ...handlers.guards, userToken: busy } });
+    const http = serve(
+      contract,
+      { ...handlers, guards: { ...handlers.guards, userToken: busy } },
+      {},
+    );
 
     const response = await http(put(ORDER_ID));
 
@@ -221,7 +225,11 @@ describe('serve: Guards', () => {
   test('a GuardHandler’s Rejection stops the request with its declared status', async () => {
     calls.length = 0;
 
-    const response = await serve(contract, handlers)(put(ORDER_ID, { authorization: 'Bearer x' }));
+    const response = await serve(
+      contract,
+      handlers,
+      {},
+    )(put(ORDER_ID, { authorization: 'Bearer x' }));
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
@@ -231,7 +239,11 @@ describe('serve: Guards', () => {
   });
 
   test('a Guard’s 401 carries the www-authenticate header its Rejection declares', async () => {
-    const response = await serve(contract, handlers)(put(ORDER_ID, { authorization: 'Bearer x' }));
+    const response = await serve(
+      contract,
+      handlers,
+      {},
+    )(put(ORDER_ID, { authorization: 'Bearer x' }));
 
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toBe(challenge);
@@ -241,10 +253,14 @@ describe('serve: Guards', () => {
     const limited = handle(listOrders, () =>
       reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
     );
-    const http = serve(contract, {
-      ...handlers,
-      endpoints: { ...handlers.endpoints, listOrders: limited },
-    });
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        endpoints: { ...handlers.endpoints, listOrders: limited },
+      },
+      {},
+    );
     const request = new Request('http://test/orders', {
       headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
     });
@@ -263,10 +279,14 @@ describe('serve: Guards', () => {
     const limited = handle(listOrders, () =>
       reject(rateLimited, { headers: wider, body: { limit: 100 } }),
     );
-    const http = serve(contract, {
-      ...handlers,
-      endpoints: { ...handlers.endpoints, listOrders: limited },
-    });
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        endpoints: { ...handlers.endpoints, listOrders: limited },
+      },
+      {},
+    );
     const request = new Request('http://test/orders', {
       headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
     });
@@ -281,10 +301,14 @@ describe('serve: Guards', () => {
     const broken = handle(userToken, () =>
       reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer\nrealm' } }),
     );
-    const http = serve(contract, {
-      ...handlers,
-      guards: { ...handlers.guards, userToken: broken },
-    });
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        guards: { ...handlers.guards, userToken: broken },
+      },
+      {},
+    );
 
     const response = await http(put(ORDER_ID));
 
@@ -296,7 +320,7 @@ describe('serve: Guards', () => {
   test('a GuardHandler’s Rejection is answered though a later Guard’s demands fail', async () => {
     const request = new Request('http://test/orders', { headers: { authorization: 'Bearer x' } });
 
-    const response = await serve(contract, handlers)(request);
+    const response = await serve(contract, handlers, {})(request);
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
@@ -319,7 +343,7 @@ describe('serve: Guards', () => {
     const headers = { authorization: 'Bearer x', 'content-type': 'application/json' };
     const init = { method: 'POST', headers, body, duplex: 'half' } as RequestInit;
 
-    await serve(contract, handlers)(new Request('http://test/notes', init));
+    await serve(contract, handlers, {})(new Request('http://test/notes', init));
 
     expect(pulls).toBe(0);
   });
@@ -329,7 +353,7 @@ describe('serve: Guards', () => {
       ...handlers,
       guards: { ...handlers.guards, userToken: handle.stub(userToken) },
     };
-    const http = serve(contract, stubbed);
+    const http = serve(contract, stubbed, {});
 
     const valid = await http(put(ORDER_ID));
     const invalid = await http(put(ORDER_ID, {}));
@@ -354,6 +378,7 @@ describe('serve: Guards', () => {
     await serve(
       contract,
       served,
+      {},
     )(
       new Request('http://test/notes', {
         method: 'POST',
@@ -389,6 +414,7 @@ describe('serve: Guards', () => {
     const response = await serve(
       rooted,
       stubbed,
+      {},
     )(new Request('http://test/notes', { method: 'POST', headers, body }));
 
     expect(response.status).toBe(501);
@@ -403,7 +429,7 @@ describe('serve: Guards', () => {
       endpoints: { ...handlers.endpoints, updateOrder: handle.stub(updateOrder) },
     };
 
-    const response = await serve(contract, stubbed)(put(ORDER_ID));
+    const response = await serve(contract, stubbed, {})(put(ORDER_ID));
 
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({

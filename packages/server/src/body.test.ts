@@ -62,7 +62,7 @@ const handlers = {
   guards: {},
 };
 
-const http = serve(contract, handlers);
+const http = serve(contract, handlers, {});
 
 const order = { email: 'a@example.com', quantity: 2 };
 const json = { 'content-type': 'application/json', 'x-request-id': 'r-1' };

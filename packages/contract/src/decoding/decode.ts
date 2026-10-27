@@ -2,10 +2,12 @@ import type { z } from 'zod';
 import {
   canonicalSnapshotOf,
   type NamedFormat,
+  nodeNestingLimit,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormatOf,
   snapshotNestingLimit,
+  tooDeepNodePathOf,
   tooDeepPathOf,
 } from '../snapshot/index.ts';
 import { readWith } from '../validation/index.ts';
@@ -78,6 +80,11 @@ function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): Deco
   const structured = readWith(structure, json, formatDefiner);
   if (structured.kind === 'refused') {
     return { kind: 'malformed', ...structured.problems[0] };
+  }
+  const tooDeep = tooDeepNodePathOf(structured.value);
+  if (tooDeep !== undefined) {
+    const reason = `a schema nests deeper than ${nodeNestingLimit} levels`;
+    return { kind: 'malformed', at: tooDeep, reason };
   }
   const problem = heldProblemOf(structured.value);
   if (problem !== undefined) {

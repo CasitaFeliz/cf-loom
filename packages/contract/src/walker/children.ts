@@ -57,6 +57,12 @@ export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonl
   return [...new Set(refs.map(({ name }) => name))];
 }
 
+/** The defs the nodes reach through `ref`s, directly or through other defs, keyed and ordered as in `defs`. */
+export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
+  const reached = new Set(reachedDefsOf(nodes, defs));
+  return Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
+}
+
 /**
  * Whether a def leads back to itself through `ref`s, `union` options and `allOf` items alone,
  * with no other node between, which zod's parse never ends on; a `ref` to a name with no def

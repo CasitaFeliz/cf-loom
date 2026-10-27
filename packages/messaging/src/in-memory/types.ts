@@ -1,61 +1,60 @@
-import type { Command, Event, Subscription } from '@cf-loom/contract';
-import type * as core from 'zod/v4/core';
-import type { Broker, Settlement } from '../broker/index.ts';
+import type { BodyOf, Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
+import type { Settlement } from '../broker/index.ts';
+import type { Messaging } from '../messaging/index.ts';
 import type { GivenHeaders } from '../sending/index.ts';
 
-/** The body a Message Version's writer writes, what `publish` or `send` takes for it; a Provided Event's is its Reader's. */
-type WrittenBodyOf<M extends Event | Command> = core.output<M['body']>;
-
 /**
- * What `memory()` returns: a `Broker` that keeps everything in memory, serves one connection and
- * delivers one Message at a time, which a test drives and watches.
+ * What `memory()` resolves to: one `Messaging` that keeps everything in memory and delivers one
+ * Message at a time while a test waits for `settled()`, `deliver()` or `redeliver()`, and what a
+ * test drives and watches it with.
  */
-export type MemoryBroker = Broker & {
+export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
   /**
-   * Waits until nothing is in flight, Messages Handlers publish or send meanwhile included; rejects
-   * when a Handler threw or returned a Fault, a Message was ended, an `onServiceFault` threw or deliveries were cut
-   * since the last `settled()`.
+   * Delivers every Message lined up, Messages Handlers publish or send meanwhile included, and
+   * waits until none is left; rejects when a Handler threw or returned a Fault, a Message was
+   * ended, an `onServiceFault` threw or deliveries were cut since the last `settled()`.
    */
   readonly settled: () => Promise<void>;
-  /** Every Message the Service published or sent, in the order the Broker took it, duplicates dropped. */
+  /** Every Message the Service published or sent, in the order it was taken, duplicates dropped. */
   readonly messages: readonly RecordedMessage[];
   /**
    * The Messages of one Message Version among `messages`, in the same order, each body typed by it:
-   * none before the Service connects, and none yet for a version it has not published or sent.
-   * Throws, once connected, for a declaration that is no live version of the Service's own Events
-   * nor the Active version of one of its own Commands: a Retired version, a Deprecated Command
-   * version, a Provided Event, or a declaration outside the Contract.
+   * none yet for a version the Service has not published or sent. Throws for a declaration that is
+   * no live version of the Service's own Events nor the Active version of one of its own
+   * Commands: a Retired version, a Deprecated Command version, a Provided Event, or a declaration
+   * outside the Contract.
    */
   readonly messagesOf: <const M extends Event | Command>(
     message: M,
   ) => readonly RecordedMessage<M>[];
   /**
-   * Delivers one new Message as attempt 1: an Event reaches every Subscription to it, a Command its
-   * Message Handler; resolves to the most severe settlement. Its body is typed as its Message
+   * Delivers the Messages already lined up, then one new Message as attempt 1, and stops there:
+   * an Event reaches every Subscription to it, a Command its Message Handler; resolves to the most
+   * severe settlement, what the Handlers publish or send waiting for `settled()`. Its body is typed as its Message
    * Version's writer writes it and is written back through each consumer's Reader. A Handler that
    * awaits it never settles.
    */
   readonly deliver: <const M extends Event | Command>(
     message: M,
-    body: WrittenBodyOf<M>,
+    body: BodyOf<M>,
     meta?: DeliveryMeta,
   ) => Promise<Settlement>;
   /**
    * Delivers every pending Message again, each to the consumer it is pending for alone, as attempt
-   * `deliveryCount + 1`.
+   * `deliveryCount + 1`, and stops there: what the Handlers publish or send waits for `settled()`.
    */
   readonly redeliver: () => Promise<void>;
-  /** The Messages a Handler left unacknowledged, which the Broker never delivers again on its own. */
+  /** The Messages a Handler left unacknowledged, which `memory()` never delivers again on its own. */
   readonly pending: readonly PendingMessage[];
 };
 
-/** A Message as the Broker took it: its subject, ids and transport headers, and its body parsed from its JSON, typed by its Message Version when it is known. */
+/** A Message as `memory()` took it: its subject, ids and transport headers, and its body parsed from its JSON, typed by its Message Version when it is known. */
 export type RecordedMessage<M extends Event | Command = Event | Command> = {
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;
   readonly headers: Readonly<Record<string, string>>;
-  readonly body: WrittenBodyOf<M>;
+  readonly body: BodyOf<M>;
 };
 
 /** What `deliver` may set: the Fact id, random when left out; the broker message id, `<event|command>.<Name>.v<n>:<factId>` when left out, refused as a Fact id is and counted in the broker headers' bytes; the transport headers, `{}` when left out, an `undefined` one left out. */

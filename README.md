@@ -15,7 +15,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a broker plan |
-| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | The in-memory Broker adapter |
+| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
 
@@ -23,7 +23,7 @@ Each package's README lists what it exports. How the packages relate to each oth
 
 ## A first Service
 
-Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through the in-memory adapter in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' Message Handler for `ChargeCard` handle.
+Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through `memory()` in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' Message Handler for `ChargeCard` handle.
 
 ### Layout
 
@@ -60,7 +60,7 @@ src/
 ├── commands/orders/charge-card.v1.handler.ts
 ├── subscriptions/orders/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  the Handler map, carrying the `readers`; regenerated, never edited
-├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
+├── readers.generated.ts                   the readers: Reader schemas of the Service's own Events and Commands, with the type of each recursive def, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 .cf-loom/
@@ -135,7 +135,7 @@ Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](p
 
 ### Test
 
-A Handler is called directly, with the Resources the test builds (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through the [in-memory adapter](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@cf-loom/testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
+A Handler is called directly, with the Resources the test builds (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through [`memory()`](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@cf-loom/testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
 
 ### Publish
 

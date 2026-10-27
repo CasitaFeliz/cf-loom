@@ -94,12 +94,13 @@ function comparedDifferencesOf(
   switch (code.kind) {
     case 'kept': {
       const { baseline, proposed } = code;
+      const reached = codeDefsOf(baseline, defs);
       const headers = { baseline: baseline.headers, proposed: proposed.headers };
       const bodies = { baseline: baseline.body, proposed: proposed.body };
       return [
         ...statusDifferencesOf(baseline.status, proposed.status),
-        ...textPartDifferencesOf(headers, defs, { position: 'success', at: partsOf('headers') }),
-        ...bodyDifferencesOf(bodies, defs, { position: 'success', at: partsOf('body') }),
+        ...textPartDifferencesOf(headers, reached, { position: 'success', at: partsOf('headers') }),
+        ...bodyDifferencesOf(bodies, reached, { position: 'success', at: partsOf('body') }),
         ...codeNeutralOf(baseline, proposed),
       ];
     }
@@ -107,6 +108,11 @@ function comparedDifferencesOf(
     case 'removed':
       return [];
   }
+}
+
+/** The defs a code's `ref`s name on each side: a removed code's Baseline side is its own, as it was removed. */
+function codeDefsOf(baseline: PublishedCode, defs: BothDefs): BothDefs {
+  return isRemoved(baseline) ? { ...defs, baseline: baseline.defs } : defs;
 }
 
 /**
