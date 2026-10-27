@@ -150,8 +150,9 @@ shows its state; a fold hides it in the accumulator's shape.
 
 **C13. Names come from the vocabulary.** A thing is called what [CONTEXT.md](CONTEXT.md) calls it, in camelCase or
 PascalCase: a Contract, an Element, an Endpoint, a Guard, an Outcome, a Rejection, a Fault, a Message Version, a Fact
-id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_. A new concept gets its word
-in CONTEXT.md with the change that introduces it. *Why:* one word per concept lets the code, the documents and the
+id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_ as a name for that entry's own
+thing (`request` is no violation in `HandledRequest`, which is no Command). A new concept gets its word in CONTEXT.md
+with the change that introduces it. *Why:* one word per concept lets the code, the documents and the
 people say the same thing.
 
 **C14. No vague names.** Not `one`, `entry`, `item`, `common`, `data`, `info`, `result2`, `tmp`; a single letter only

@@ -20,7 +20,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 - No `docs/` folder: a compatibility rule goes in `COMPATIBILITY.md`, an architecture concern in `ARCHITECTURE.md`.
 - Each rule lives in one document; the others link to it.
 - The documents describe the current design only, never the history of decisions. A changed decision replaces the old text.
-- Use the glossary's terms, capitalized, and never its _Avoid_ words.
+- Use the glossary's terms, capitalized, and never an _Avoid_ word as a name for its entry's own thing.
 
 ## Repository
 
