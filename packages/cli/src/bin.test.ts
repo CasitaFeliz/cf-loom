@@ -4008,7 +4008,7 @@ function aRootAnswering(codes: readonly string[]): Files {
 }
 
 /** `aRoot` whose Endpoint answers a Rejection whose body is the recursive schema `tree`. */
-function aRootAnsweringATree(): Files {
+function aRootAnsweringRecursively(): Files {
   const root = aRoot();
   const tree =
     "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree' });";
@@ -5455,7 +5455,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   test('publishing a version that removes a Rejection with a recursive body writes a snapshot.json the next check reads', async ({
     lab,
   }) => {
-    const answering = await aGeneratedProject(lab, aRootAnsweringATree());
+    const answering = await aGeneratedProject(lab, aRootAnsweringRecursively());
     const baseline = publishedAs(answering, '1.0.0');
     const project = await aGeneratedProject(lab, aRoot());
 
