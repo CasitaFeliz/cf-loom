@@ -274,4 +274,23 @@ describe('providedSnapshotOf', () => {
       "orders-service's exported Snapshot is malformed: codes.gone.headers is missing",
     );
   });
+
+  test('a removed code is refused as malformed, since no Endpoint answers a code a cut holds', () => {
+    const damaged = changed((copy) => {
+      const gone = {
+        origin: 'local',
+        status: 410,
+        message: 'Gone',
+        body: null,
+        removedIn: '3.2.0',
+      };
+      copy['codes'] = { gone: { ...gone, headers: { type: 'object', fields: {} }, defs: {} } };
+    });
+
+    const read = () => providedSnapshotOf(damaged);
+
+    expect(read).toThrow(
+      "orders-service's exported Snapshot is malformed: codes.gone.removedIn is a key its format does not define",
+    );
+  });
 });

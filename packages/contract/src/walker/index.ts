@@ -7,6 +7,7 @@ export {
   isJsonValue,
 } from './canonical-json.ts';
 export {
+  defsReachedOf,
   leadsBackWithNoNode,
   nodesReachedFrom,
   nodesWithin,

@@ -1,10 +1,25 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
+export type { Keyed, SchemaHolder } from './declared.ts';
+export {
+  declaredEndpointsOf,
+  declaredMessagesOf,
+  declaredSubscriptionsOf,
+} from './declared.ts';
+export type { DefScope, SnapshotNode } from './def-scopes.ts';
+export { defScopesOf } from './def-scopes.ts';
 export { exportedCodeOf, exportedEntryOf, textPartNodesOf } from './exported.ts';
 export { exportedCutOf, exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
-export { nestingFailureOf, snapshotNestingLimit, tooDeepPathOf } from './nesting.ts';
+export {
+  nestingFailureOf,
+  nodeNestingLimit,
+  snapshotNestingLimit,
+  tooDeepNodePathOf,
+  tooDeepPathOf,
+} from './nesting.ts';
+export { codeNodesOf } from './nodes.ts';
 export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
@@ -23,9 +38,16 @@ export type {
   PublishedHeading,
   PublishedServiceSnapshot,
   PublishedSnapshot,
+  RemovedCode,
   SubscriptionTombstone,
 } from './published.ts';
-export { isDeclared, isRemoved, isSubscriptionTombstone } from './published.ts';
+export {
+  declaredCodesOf,
+  isDeclared,
+  isRemoved,
+  isSubscriptionTombstone,
+  removedCodesOf,
+} from './published.ts';
 export type { SemanticVersionParts, VersionBump } from './semantic-version.ts';
 export { caretLineOf, isSemanticVersion, semanticVersionPartsOf } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';
