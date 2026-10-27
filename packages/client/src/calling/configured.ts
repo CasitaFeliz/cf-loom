@@ -1,62 +1,45 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
-import { notSentFaultOf, type ReceivedFault } from '../inference/index.ts';
 import { abortableOf } from './abortable.ts';
 import type { CallOptions } from './client-types.ts';
 
 /** The headers given to `client()`, each a value or a function called per request. */
 export type ConfiguredHeaders = Readonly<Record<string, unknown>>;
 
-/** What a call gives the headers of `client()` to complete: those it passes, and its signal. */
-export type Passing = {
-  readonly passed: unknown;
-  readonly signal: AbortSignal | undefined;
-};
-
-/** A call's headers, or the Fault of its signal, aborted before they were all there. */
-export type Headed =
-  | { readonly kind: 'headed'; readonly headers: unknown }
-  | { readonly kind: 'not-sent'; readonly fault: ReceivedFault };
-
 /**
  * A call's headers with those given to `client()` that its Endpoint declares and the call did not
- * pass, a function among them called now with the call's signal and raced against it; what it
- * throws reaches the Caller, unless the signal was aborted by then.
+ * pass, a function among them called now with the call's options and raced against its signal; it
+ * rejects with what the function throws, or with the signal's reason once it is aborted.
  */
 export async function withConfiguredHeaders(
   called: CalledEndpoint,
   configured: ConfiguredHeaders,
-  { passed, signal }: Passing,
-): Promise<Headed> {
+  { passed, call }: { readonly passed: unknown; readonly call: CallOptions },
+): Promise<unknown> {
   const missing = Object.entries(configured).filter(
     ([name]) => called.inputHeaderNames.has(name) && ownOf(passed, name) === undefined,
   );
   if (missing.length === 0) {
-    return { kind: 'headed', headers: passed };
+    return passed;
   }
   const headers: Record<string, unknown> = isFields(passed) ? { ...passed } : {};
-  try {
-    for (const [name, value] of missing) {
-      headers[name] = isHeaderFunction(value) ? await headerValueOf(value, signal) : value;
-    }
-  } catch (error) {
-    if (signal?.aborted) {
-      return { kind: 'not-sent', fault: notSentFaultOf(signal) };
-    }
-    throw error;
+  for (const [name, value] of missing) {
+    headers[name] = isHeaderFunction(value) ? await headerValueOf(value, call) : value;
   }
-  return { kind: 'headed', headers };
+  return headers;
 }
 
-/** A header function's value, the call's options given and the wait cut short by the signal. */
+/** A header function's value, never asked for once the signal is aborted and cut short by its abort. */
 async function headerValueOf(
   header: (call: CallOptions) => unknown,
-  signal: AbortSignal | undefined,
+  call: CallOptions,
 ): Promise<unknown> {
+  const { signal } = call;
   if (signal === undefined) {
-    return await header({});
+    return await header(call);
   }
-  return await abortableOf(Promise.resolve(header({ signal })), signal);
+  signal.throwIfAborted();
+  return await abortableOf(Promise.resolve(header(call)), signal);
 }
 
 function isHeaderFunction(value: unknown): value is (call: CallOptions) => unknown {

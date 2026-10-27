@@ -391,6 +391,25 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
+  test('what the Input throws while it is read gets the not-sent Fault once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const { orders, calls } = unsent();
+    const input = {
+      params: {
+        get shopId(): string {
+          controller.abort();
+          throw new Error('the Input could not be read');
+        },
+      },
+      query: { ids: ['1'] },
+    } as never;
+
+    const outcome = await orders.searchOrders(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(calls()).toBe(0);
+  });
+
   test('a broken constraint is the Provider’s invalid-input Rejection, marked source client, and nothing is sent', async () => {
     const { orders, calls } = unsent();
 

@@ -47,7 +47,7 @@ Headers an Endpoint or its Guards demand are typed, with lower-case names. Those
 
 - A header given to `client()` is a value, or a function called per request with the call's options, `{ signal? }`, which may be async, to refresh a token and cancel it with the call (`signal` is absent when the call has none, so pass `call` on as it is, not `{ signal: call.signal }`). Its type is the Input's type for that name, across every listed Endpoint that declares it.
 - Its name must be one some listed Endpoint's Input declares. It is sent only to an Endpoint whose Input declares it.
-- A header the call passes wins, and the function is then not called. The call stops waiting for a function when its signal is aborted, and returns its Fault (see [What a call sends](#what-a-call-sends)); what the function throws or rejects with after that is dropped. Otherwise what a function throws reaches the calling code unchanged.
+- A header the call passes wins, and the function is then not called. The call stops waiting for a function when its signal is aborted, calls no other, and returns its Fault (see [What a call sends](#what-a-call-sends)); what the function throws or rejects with after that is dropped. Otherwise what a function throws reaches the calling code unchanged.
 
 ### What a call receives
 

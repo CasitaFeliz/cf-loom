@@ -313,6 +313,19 @@ describe('a header function', () => {
     expect(received[0]?.signal).toBe(controller.signal);
   });
 
+  test('receives the options the call was given, as they are', async () => {
+    const options: CallOptions = { signal: new AbortController().signal };
+    const received: CallOptions[] = [];
+    const { orders } = refreshing((call) => {
+      received.push(call);
+      return 'Bearer t';
+    });
+
+    await orders.getOrder(params, options);
+
+    expect(received[0]).toBe(options);
+  });
+
   test('of a call with no signal receives none', async () => {
     const received: CallOptions[] = [];
     const { orders } = refreshing((call) => {
@@ -322,7 +335,7 @@ describe('a header function', () => {
 
     await orders.getOrder(params);
 
-    expect(received).toEqual([{}]);
+    expect(received).toStrictEqual([{}]);
   });
 
   test('whose call is aborted while it runs gets the not-sent Fault at once, and nothing is sent', async () => {
@@ -411,9 +424,10 @@ describe('a header function', () => {
     expect(sent).toEqual([]);
   });
 
-  test('that aborts its own call and returns is answered with the not-sent Fault, whatever the next one does', async () => {
+  test('that aborts its own call and returns is answered with the not-sent Fault, and the next one is not called', async () => {
     const controller = new AbortController();
     const { sent, fetch } = recorded();
+    let called = 0;
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch,
@@ -422,13 +436,43 @@ describe('a header function', () => {
           controller.abort();
           return 'key-1';
         },
-        authorization: () => new Promise<string>(() => undefined),
+        authorization: () => {
+          called += 1;
+          return new Promise<string>(() => undefined);
+        },
       },
     });
 
     const outcome = await orders.getOrder(params, { signal: controller.signal });
 
     expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(called).toBe(0);
+    expect(sent).toEqual([]);
+  });
+
+  test('is not called once the signal was aborted in a microtask after the one before returned', async () => {
+    const controller = new AbortController();
+    const { sent, fetch } = recorded();
+    let called = 0;
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: {
+        'x-api-key': () => {
+          queueMicrotask(() => controller.abort());
+          return 'key-1';
+        },
+        authorization: () => {
+          called += 1;
+          return 'Bearer t';
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(called).toBe(0);
     expect(sent).toEqual([]);
   });
 
