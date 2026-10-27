@@ -450,6 +450,13 @@ const killHook = lines([
   'syncBuiltinESMExports();',
 ]);
 
+/**
+ * How long a kill test may run, past the project's timeout: two runs of `package`, each a fresh Node
+ * process, per call it kills at, fourteen for `writeFileSync` and `mkdirSync`, which took 62 s on a
+ * CI runner with shared cores.
+ */
+const killTestTimeout = 180_000;
+
 /** Runs `package`, killed at the `at`th call of a file-system function on the package folder. */
 function killedPackage(
   project: string,
@@ -2311,6 +2318,7 @@ describe('cf-loom package: where it writes', () => {
       expect(outcomes.at(-1)).toBeNull();
       expect(outcomes.filter((signal) => signal === 'SIGKILL').length).toBeGreaterThan(0);
     },
+    killTestTimeout,
   );
 });
 
