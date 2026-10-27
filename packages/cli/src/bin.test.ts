@@ -4998,7 +4998,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
-  test('versions the registry does not list exit 3 although a Change is refused', async ({
+  test('versions the registry does not list exit 3 although a Change is refused, and stderr still says the Change is refused', async ({
     lab,
   }) => {
     const before = aSubscribingRoot();
@@ -5008,7 +5008,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { ran, registry } = await publishedAgainst(lab, changed);
 
     expect(ran.stdout).toContain('retired-before-deprecated: Breaking, refused');
-    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('5.1.0')}\n` });
+    expect(ran).toMatchObject({
+      status: 3,
+      stderr: `${paymentsUnlisted('5.1.0')}\n${refusedLine}\n`,
+    });
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
@@ -6411,17 +6414,91 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
     expect(putRequestsOf(published.registry)).toEqual([]);
   });
 
-  test('a tooling failure is the errors document, with its line on stderr', async ({ lab }) => {
+  test('a version that would not be above the Baseline is status 3 with the Changes check --json prints', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const published = await publishedAgainst(lab, changed, '--json', '--prerelease');
+    const checked = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const line = `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand`;
+    expect(published.ran).toMatchObject({ status: 3, stderr: `${line}\n` });
+    expect(documentOf(published.ran)).toMatchObject({
+      status: 3,
+      errors: [line],
+      version: null,
+      tag: null,
+      published: false,
+    });
+    const { changes } = documentOf(published.ran);
+    const { changes: checkedChanges } = documentOf(checked.ran);
+    expect(changes).toEqual(checkedChanges);
+    expect(putRequestsOf(published.registry)).toEqual([]);
+  });
+
+  test('a version the registry does not list is status 3 with the Changes check --json prints', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aSubscribingRoot(),
+      after: aSubscribingRoot({ body: 'z.object({ ok: z.boolean(), total: z.number() })' }),
+    });
+
+    const published = await publishedAgainst(lab, changed, '--json');
+    const checked = await checkedAgainst(lab, changed, '--json');
+
+    expect(published.ran.status).toBe(3);
+    expect(documentOf(published.ran)).toMatchObject({
+      status: 3,
+      errors: [paymentsUnlisted('5.1.0')],
+      published: false,
+    });
+    const { changes } = documentOf(published.ran);
+    const { changes: checkedChanges } = documentOf(checked.ran);
+    expect(changes).toEqual(checkedChanges);
+    expect(changes).toHaveLength(1);
+    expect(putRequestsOf(published.registry)).toEqual([]);
+  });
+
+  test('a version the registry does not list and a refused Change are both errors, beside the refused Change', async ({
+    lab,
+  }) => {
+    const before = aSubscribingRoot();
+    const after = aSubscribingRoot({ lifecycle: 'retired' });
+    const changed = await aChangedProject(lab, { before, after });
+
+    const { ran } = await publishedAgainst(lab, changed, '--json');
+
+    expect(ran.status).toBe(3);
+    expect(documentOf(ran)).toMatchObject({
+      status: 3,
+      errors: [paymentsUnlisted('5.1.0'), refusedLine],
+      changes: [expect.objectContaining({ verdict: 'refused' })],
+      version: null,
+      published: false,
+    });
+  });
+
+  test('a tooling failure while it puts keeps the Changes and the version beside the error', async ({
+    lab,
+  }) => {
     const project = await aGeneratedProject(lab, aRoot());
     withTsc(project, "console.error('tsc crashed'); process.exit(1);");
 
     const { ran } = await publishedAgainst(lab, { project, served: {} }, '--json');
 
     const line = `tsc on the Contract Package of ${ordersPackage}@1.0.0 failed: tsc crashed`;
-    expect(ran).toEqual({
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(`${line}\n`);
+    expect(documentOf(ran)).toMatchObject({
       status: 3,
-      stdout: `${JSON.stringify({ format: 1, status: 3, errors: [line] })}\n`,
-      stderr: `${line}\n`,
+      errors: [line],
+      package: ordersPackage,
+      changes: [],
+      version: '1.0.0',
+      tag: 'latest',
+      published: false,
     });
   });
 

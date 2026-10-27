@@ -5,7 +5,7 @@ import { comparedLinesOf, notAboveOf, nothingToPublishOf, wouldPublishOf } from 
 import { type Checked, endingOf } from './checked.ts';
 import { checkedDocumentOf } from './checked-document.ts';
 import { derivedCheckedOf } from './derivation.ts';
-import { type Document, done, type Exit, toolingError } from './exit.ts';
+import { checkFailed, done, type Exit, toolingError } from './exit.ts';
 import { type Prepared, preparedOf } from './prepared.ts';
 import { type PublishMode, publishedPackageOf, type ToPublish } from './published-package.ts';
 
@@ -25,16 +25,20 @@ export async function publish(run: Run, options: PublishOptions): Promise<Exit> 
     return prepared.exit;
   }
   const checked = derivedCheckedOf(prepared, options);
-  run.found({ lines: comparedLinesOf(checked) });
+  const { derivation } = checked;
+  run.found({
+    lines: comparedLinesOf(checked),
+    fields: { ...checkedDocumentOf(checked), published: false },
+  });
+  if (derivation.kind === 'refused') {
+    run.found({ ending: endingOf(checked.changes) });
+  }
   if (prepared.unlisted.length > 0) {
     return { status: 3, stdout: [], stderr: prepared.unlisted };
   }
-  const { derivation } = checked;
   switch (derivation.kind) {
-    case 'refused': {
-      const { stderr } = endingOf(checked.changes);
-      return { status: 1, stdout: [], stderr, document: documentOf(checked, false) };
-    }
+    case 'refused':
+      return checkFailed([]);
     case 'against':
       throw new Error('publish compared with a version --against named: a bug.');
     case 'derived':
@@ -55,7 +59,7 @@ async function derivedExit(run: Run, publishing: Publishing, derived: Derived): 
   switch (derived.kind) {
     case 'unchanged': {
       const nothing = nothingToPublishOf(checked.packageName, derived.baseline);
-      return done([`${nothing}; --force publishes anyway`], documentOf(checked, false));
+      return done([`${nothing}; --force publishes anyway`], {});
     }
     case 'not-above':
       return toolingError(notAboveOf(checked.packageName, derived));
@@ -64,11 +68,6 @@ async function derivedExit(run: Run, publishing: Publishing, derived: Derived): 
       return await putExit(run, { prepared, checked, derived, mode });
     }
   }
-}
-
-/** The document of `check` with whether the package was put out. */
-function documentOf(checked: Checked, published: boolean): Document {
-  return { ...checkedDocumentOf(checked), published };
 }
 
 /** A publish that goes on: the comparison it was prepared from, what `check` reported of it, the version it derived and what it does with the built package. */
@@ -86,12 +85,13 @@ async function putExit(run: Run, { prepared, checked, derived, mode }: Ready): P
       return { status: 3, stdout: [], stderr: [put.message, ...left] };
     case 'published': {
       const published = `Published ${checked.packageName}@${derived.version}`;
-      return { status: 0, stdout: [published], stderr: left, document: documentOf(checked, true) };
+      run.found({ lines: [published], fields: { published: true } });
+      return { status: 0, stdout: [], stderr: left };
     }
     case 'built': {
       const would = wouldPublishOf(checked.packageName, derived);
       const stopped = `${would}: --dry-run stopped before npm publish`;
-      return { status: 0, stdout: [stopped], stderr: left, document: documentOf(checked, false) };
+      return { status: 0, stdout: [stopped], stderr: left };
     }
   }
 }
