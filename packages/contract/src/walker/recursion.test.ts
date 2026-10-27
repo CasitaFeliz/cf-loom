@@ -1,12 +1,22 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { refusalsOf } from '../../test/failures.ts';
+import { refusalsOf, summarized } from '../../test/failures.ts';
+import { seededNext } from '../../test/random-schemas.ts';
+import { aRootPackage } from '../../test/root-package.ts';
+import { publishedAt } from '../../test/snapshots.ts';
+import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
+  compatibilityReportOf,
+  exportedSnapshotOf,
+  hashedTextOf,
+  publishedSnapshotOf,
   reachedDefsOf,
   refusalsIn,
   type SchemaNode,
   siteTextOf,
+  snapshotOf,
+  validateRoot,
   walkSchemas,
 } from '../internal/index.ts';
 
@@ -1473,6 +1483,23 @@ describe('reachedDefsOf', () => {
   const ref = (name: string): SchemaNode => ({ type: 'ref', name });
   const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
 
+  test('defs reached through several refs are named in the order the nodes hold them, depth first', () => {
+    const both: SchemaNode = {
+      type: 'object',
+      fields: { a: { required: true, schema: ref('a') }, b: { required: true, schema: ref('b') } },
+    };
+    const defs = {
+      a: holding(ref('c')),
+      b: holding(ref('d')),
+      c: { type: 'string' },
+      d: { type: 'string' },
+    } as const;
+
+    const names = reachedDefsOf([both, ref('e')], { ...defs, e: { type: 'string' } });
+
+    expect(names).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
   test.each([
     {
       reach: 'a chain whose last def closes a cycle',
@@ -1490,5 +1517,311 @@ describe('reachedDefsOf', () => {
     const names = reachedDefsOf(nodes, defs);
 
     expect(names).toEqual(reached);
+  });
+});
+
+/** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */
+const depth = 5_000;
+
+/** A deep test walks thousands of schemas, which takes seconds on a CI runner with shared cores. */
+const deepTimeout = 60_000;
+
+/**
+ * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies
+ * on a cycle, and the next through `link`; the innermost holds `innermost` instead.
+ */
+function aChainOf(
+  count: number,
+  link: (next: z.ZodObject) => z.ZodType,
+  innermost: z.ZodType = z.boolean(),
+): z.ZodObject {
+  let next: z.ZodObject | undefined;
+  for (let index = count - 1; index >= 0; index--) {
+    const held = next === undefined ? innermost : link(next);
+    const level: z.ZodObject = z
+      .object({ tag: z.literal('level'), self: z.lazy(() => level).optional(), next: held })
+      .meta({ id: `level${index}` });
+    next = level;
+  }
+  if (next === undefined) {
+    throw new Error('A chain holds at least one id.');
+  }
+  return next;
+}
+
+/** `count` schemas, each wrapping the next by `wrap`, around `innermost`. */
+function aNestOf(
+  count: number,
+  wrap: (inner: z.ZodType) => z.ZodType,
+  innermost: z.ZodType = z.boolean(),
+): z.ZodType {
+  let schema = innermost;
+  for (let index = 0; index < count; index++) {
+    schema = wrap(schema);
+  }
+  return schema;
+}
+
+/** A Service whose one Endpoint answers `body`. */
+function aServiceAnswering(body: z.ZodType) {
+  const endpoint = defineEndpoint({
+    name: 'getTree',
+    method: 'GET',
+    path: '/tree',
+    visibility: 'public',
+    description: 'The tree',
+    success: { status: 200, body },
+  });
+  const group = defineGroup({ name: 'trees', description: 'Trees', endpoints: [endpoint] });
+  return defineService({ name: 'orders-service', groups: [group] });
+}
+
+function validated(body: z.ZodType) {
+  const service = aServiceAnswering(body);
+  return validateRoot(service, aRootPackage(service));
+}
+
+/** The Snapshot of a Service's Root the test knows is valid. */
+function serviceSnapshotOf(root: ReturnType<typeof validated>) {
+  if (root.kind !== 'valid') {
+    throw new Error('The Root is valid.');
+  }
+  const snapshot = snapshotOf(root);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The Root is a Service.');
+  }
+  return snapshot;
+}
+
+/** What a random graph of recursive ids is drawn with: its seed, its size and its innermost schema. */
+type GraphDraw = {
+  readonly seed: number;
+  readonly size: number;
+  readonly innermost: z.ZodType;
+  readonly shuffled: boolean;
+};
+
+/**
+ * A random graph of recursive ids, the first returned: each holds itself, the next by a path that
+ * runs through all of them, and up to three others drawn by the seed. Shuffled, each object's
+ * fields are written in an order the seed draws, the graph unchanged.
+ */
+function aGraphOf({ seed, size, innermost, shuffled }: GraphDraw): z.ZodType {
+  const next = seededNext(seed);
+  const order = seededNext(seed + 1);
+  const ids: z.ZodType[] = [];
+  const idAt = (index: number) => z.lazy(() => ids[index] ?? z.never());
+  for (let index = 0; index < size; index++) {
+    const fields: (readonly [string, z.ZodType])[] = [
+      ['self', idAt(index).optional()],
+      ['next', index === size - 1 ? innermost : idAt(index + 1)],
+    ];
+    const held = Math.floor(next() * 4);
+    for (let other = 0; other < held; other++) {
+      fields.push([`other${other}`, idAt(Math.floor(next() * size)).optional()]);
+    }
+    const written = shuffled ? shuffledOf(fields, order) : fields;
+    ids.push(z.object(Object.fromEntries(written)).meta({ id: `node${index}` }));
+  }
+  return ids[0] ?? z.never();
+}
+
+/** The values in an order `next` draws. */
+function shuffledOf<Value>(values: readonly Value[], next: () => number): readonly Value[] {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const other = Math.floor(next() * (index + 1));
+    [shuffled[index], shuffled[other]] = [shuffled[other] as Value, shuffled[index] as Value];
+  }
+  return shuffled;
+}
+
+describe('walkSchemas: depth', () => {
+  test('a chain of 5,000 recursive ids, each holding the next, walks to 5,000 defs', {
+    timeout: deepTimeout,
+  }, () => {
+    const outermost = aChainOf(depth, (next) => next);
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: outermost }], () => undefined);
+
+    expect(walked.located[0]?.walked).toEqual(walkedTo({ type: 'ref', name: 'level0' }));
+    expect(Object.keys(walked.defs)).toHaveLength(depth);
+  });
+
+  test.for([
+    ['an object', (next: z.ZodObject) => z.object({ inner: next })],
+    ['an optional field', (next: z.ZodObject) => next.optional()],
+    ['a nonoptional field', (next: z.ZodObject) => next.optional().nonoptional()],
+    ['a nonoptional field on a required schema', (next: z.ZodObject) => next.nonoptional()],
+    ['an array', (next: z.ZodObject) => z.array(next)],
+    ['a record', (next: z.ZodObject) => z.record(z.string(), next)],
+    ['a tuple item', (next: z.ZodObject) => z.tuple([next])],
+    ['a tuple rest', (next: z.ZodObject) => z.tuple([z.string()], next)],
+    ['a union option', (next: z.ZodObject) => z.union([next, z.string()])],
+    ['a tagged variant', (next: z.ZodObject) => z.discriminatedUnion('tag', [next])],
+    ['an intersection', (next: z.ZodObject) => z.intersection(next, z.object({}))],
+    ['.nullable()', (next: z.ZodObject) => next.nullable()],
+    ['z.lazy()', (next: z.ZodObject) => z.lazy(() => next)],
+  ] as const)(
+    'a chain of 5,000 recursive ids, each holding the next in %s, walks to 5,000 defs',
+    { timeout: deepTimeout },
+    ([_container, link]) => {
+      const outermost = aChainOf(depth, link);
+
+      const walked = walkSchemas([{ at: placeAt('body'), schema: outermost }], () => undefined);
+
+      expect(walked.located[0]?.walked).toEqual(walkedTo({ type: 'ref', name: 'level0' }));
+      expect(Object.keys(walked.defs)).toHaveLength(depth);
+    },
+  );
+
+  test.for([
+    ['z.lazy()', (inner: z.ZodType) => z.lazy(() => inner), { type: 'boolean' }],
+    ['.nullable()', (inner: z.ZodType) => inner.nullable(), { type: 'boolean', nullable: true }],
+  ] as const)(
+    '5,000 of %s around one schema walk to its one node',
+    { timeout: deepTimeout },
+    ([_wrapper, wrap, node]) => {
+      const schema = aNestOf(depth, wrap);
+
+      const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+
+      expect(walked.located[0]?.walked).toEqual(walkedTo(node));
+    },
+  );
+
+  test.for([
+    ['.optional()', (inner: z.ZodType) => inner.optional()],
+    ['.readonly()', (inner: z.ZodType) => inner.readonly()],
+    ['z.set()', (inner: z.ZodType) => z.set(inner)],
+    ['z.map()', (inner: z.ZodType) => z.map(z.string(), inner)],
+    ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean())],
+  ] as const)(
+    '5,000 of %s around one schema are each refused',
+    { timeout: deepTimeout },
+    ([_wrapper, wrap]) => {
+      const schema = aNestOf(depth, wrap);
+
+      const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+
+      const located = walked.located[0]?.walked;
+      const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
+      expect(refusals).toHaveLength(depth);
+    },
+  );
+
+  test('a def on a cycle holding 5,000 nested z.set() around a z.date() reports each refusal', {
+    timeout: deepTimeout,
+  }, () => {
+    const held = aNestOf(depth, (inner) => z.set(inner), z.date());
+    const def: z.ZodType = z
+      .object({ self: z.lazy(() => def).optional(), held })
+      .meta({ id: 'holder' });
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: def }], () => undefined);
+
+    const located = walked.located[0]?.walked;
+    const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
+    expect(refusals).toHaveLength(depth + 1);
+  });
+
+  test('one cycle through 5,000 ids walks to 5,000 defs, each a ref to the next', {
+    timeout: deepTimeout,
+  }, () => {
+    const ring: z.ZodType[] = [];
+    for (let index = 0; index < depth; index++) {
+      const next = z.lazy(() => ring[(index + 1) % depth] ?? z.never());
+      ring.push(z.object({ next }).meta({ id: `link${index}` }));
+    }
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: ring[0]! }], () => undefined);
+
+    expect(Object.keys(walked.defs)).toHaveLength(depth);
+    expect(walked.defs['link0']).toEqual({
+      type: 'object',
+      fields: { next: { required: true, schema: { type: 'ref', name: 'link1' } } },
+    });
+    expect(walked.defs[`link${depth - 1}`]).toEqual({
+      type: 'object',
+      fields: { next: { required: true, schema: { type: 'ref', name: 'link0' } } },
+    });
+  });
+
+  test('a chain of 5,000 alias defs on one chain of lazies walks to one def and its aliases', {
+    timeout: deepTimeout,
+  }, () => {
+    const aliases: z.ZodType[] = [];
+    const inner: z.ZodType = z
+      .lazy(() => z.object({ children: z.array(aliases[0] ?? z.never()) }))
+      .meta({ id: 'inner' });
+    for (let index = 0; index < depth; index++) {
+      const next = z.lazy(() => aliases[index + 1] ?? inner);
+      aliases.push(next.meta({ id: `alias${index}` }));
+    }
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: aliases[0]! }], () => undefined);
+
+    expect(Object.keys(walked.defs)).toHaveLength(depth + 1);
+    expect(walked.defs['alias0']).toEqual({ type: 'ref', name: 'alias1' });
+    expect(walked.defs[`alias${depth - 1}`]).toEqual({ type: 'ref', name: 'inner' });
+  });
+
+  test.for([1, 2, 3])(
+    'a random graph of 5,000 recursive ids, seed %i, goes through the Snapshot, its export and the Check',
+    { timeout: deepTimeout },
+    (seed) => {
+      const graph = aGraphOf({ seed, size: depth, innermost: z.boolean(), shuffled: false });
+
+      const snapshot = serviceSnapshotOf(validated(graph));
+      const baseline = publishedSnapshotOf(undefined, snapshot, publishedAt('1.0.0'));
+
+      expect(Object.keys(snapshot.defs)).toHaveLength(depth);
+      expect(Object.keys(exportedSnapshotOf(snapshot).defs)).toHaveLength(depth);
+      expect(compatibilityReportOf(baseline, snapshot)).toEqual({ changes: [] });
+    },
+  );
+
+  test('the order an object’s fields are written in changes neither the Snapshot nor the verdict', {
+    timeout: deepTimeout,
+  }, () => {
+    const draw = { seed: 4, size: 1_000, innermost: z.boolean() };
+    const dated = { ...draw, innermost: z.date() };
+
+    const written = serviceSnapshotOf(validated(aGraphOf({ ...draw, shuffled: false })));
+    const shuffled = serviceSnapshotOf(validated(aGraphOf({ ...draw, shuffled: true })));
+    const writtenDated = summarized(validated(aGraphOf({ ...dated, shuffled: false })));
+    const shuffledDated = summarized(validated(aGraphOf({ ...dated, shuffled: true })));
+
+    expect(hashedTextOf(shuffled)).toBe(hashedTextOf(written));
+    expect(shuffledDated).toMatchObject({
+      kind: 'invalid',
+      failures: [{ construct: 'z.date()' }],
+    });
+    expect(writtenDated).toMatchObject({
+      kind: 'invalid',
+      failures: [{ construct: 'z.date()' }],
+    });
+  });
+
+  test('a refusal inside the innermost of 5,000 nested defs is told once, at its def', {
+    timeout: deepTimeout,
+  }, () => {
+    const outermost = aChainOf(depth, (next) => next, z.date());
+
+    const root = summarized(validated(outermost));
+
+    expect(root).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          location: `endpoints.GET /tree (getTree) success.body${'.next'.repeat(depth)}`,
+          construct: 'z.date()',
+          instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
+        },
+      ],
+    });
   });
 });

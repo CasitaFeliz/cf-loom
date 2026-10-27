@@ -62,10 +62,22 @@ export type Reach = { readonly at: Reached; within: Memo | undefined };
  */
 export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
 
-/** How a part of the walk walks the schemas inside the one it walks, with the walk's shared state. */
+/** A schema the walk enters, and where: the driver walks it as a frame of its own. */
+export type Visit = { readonly schema: core.$ZodType; readonly at: Under };
+
+/**
+ * A walk in progress: it yields each schema it enters for the driver to walk, receives that
+ * schema's result back, and returns its own, so no depth of schemas grows the call stack.
+ */
+export type Walking<Value = SchemaNode> = Generator<Visit, Walked<Value>, Walked>;
+
+/**
+ * How a schema's walk enters what it holds. Every schema entered is yielded to the driver as a
+ * `Visit`; a walk never delegates into another schema's walk, which would grow the call stack.
+ */
 export type Walker = {
-  readonly schema: (schema: core.$ZodType, at: Under) => Walked;
-  readonly field: (schema: core.$ZodType, at: Under) => Walked<Field>;
+  readonly schema: (schema: core.$ZodType, at: Under) => Walking;
+  readonly field: (schema: core.$ZodType, at: Under) => Walking<Field>;
   /** The place a schema is entered at, which a refusal raised at the schema tells. */
   readonly reach: (schema: core.$ZodType, at: Under) => Reached;
 };

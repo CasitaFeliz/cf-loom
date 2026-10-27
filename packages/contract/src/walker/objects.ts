@@ -16,6 +16,7 @@ import {
   type ReachedSchema,
   type Walked,
   type Walker,
+  type Walking,
   walked,
 } from './walked.ts';
 
@@ -25,21 +26,33 @@ const protoKey = '__proto__';
 const inheritedKeys: ReadonlySet<string> = new Set(prototypeNames);
 
 /** An object: a Contract declares no strict object, and a catchall is refused. */
-export function walkObject(def: core.$ZodObjectDef, at: Reached, walker: Walker): Walked {
+export function* walkObject(def: core.$ZodObjectDef, at: Reached, walker: Walker): Walking {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
-  const fieldEntries = Object.entries(def.shape).map(([key, schema]) => {
-    const field = { at: inside(at, fieldStep(key)), schema };
-    const refusal = fieldNameRefusalOf(key);
-    return refusal === undefined
-      ? walkedEntry(key, walker.field(schema, field.at))
-      : refusedNameFailure(refusal, field, walker);
-  });
+  const fieldEntries: Walked<[string, Field]>[] = [];
+  for (const [key, schema] of Object.entries(def.shape)) {
+    fieldEntries.push(
+      yield* walkNamedField(key, { at: inside(at, fieldStep(key)), schema }, walker),
+    );
+  }
   const fields = allWalked(fieldEntries);
   if (refusals.length > 0 || fields.kind === 'not-allowed') {
     return failed(failuresOf([...refusals, fields]), { type: 'object' });
   }
   return walked({ type: 'object', fields: Object.fromEntries(fields.value) });
+}
+
+/** A field walked by its name, or refused beside what lies inside it when zod cannot read the name. */
+function* walkNamedField(
+  key: string,
+  field: ReachedSchema,
+  walker: Walker,
+): Walking<[string, Field]> {
+  const refusal = fieldNameRefusalOf(key);
+  if (refusal !== undefined) {
+    return yield* refusedNameFailure(refusal, field, walker);
+  }
+  return walkedEntry(key, yield* walker.field(field.schema, field.at));
 }
 
 /** Why zod cannot read a field of this name, or undefined when it can. */
@@ -51,21 +64,21 @@ function fieldNameRefusalOf(key: string): Refused | undefined {
 }
 
 /** A field zod cannot read by its name, refused beside what lies inside its schema. */
-function refusedNameFailure(
+function* refusedNameFailure(
   refusal: Refused,
   { at, schema }: ReachedSchema,
   walker: Walker,
-): Walked<never> {
-  return failed(failuresOf([notAllowed(at, refusal), walker.field(schema, at)]));
+): Walking<never> {
+  return failed(failuresOf([notAllowed(at, refusal), yield* walker.field(schema, at)]));
 }
 
 /**
  * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
  * object, which a Contract never declares.
  */
-export function walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker): Walked {
-  const key = walker.schema(def.keyType, inside(at, keyStep));
-  const value = walker.schema(def.valueType, inside(at, valueStep));
+export function* walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker): Walking {
+  const key = yield* walker.schema(def.keyType, inside(at, keyStep));
+  const value = yield* walker.schema(def.valueType, inside(at, valueStep));
   const record: Outline = { type: 'record' };
   if (def.mode === 'loose') {
     return failed(failuresOf([notAllowed(at, refused.looseRecord), key, value]), record);
@@ -87,21 +100,20 @@ export function walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker)
  * One open object for an intersection of open objects whose shared keys agree, which fails
  * otherwise; any other intersection is `allOf`.
  */
-export function walkIntersection(
+export function* walkIntersection(
   def: core.$ZodIntersectionDef,
   at: Reached,
   walker: Walker,
-): Walked {
-  const items = allWalked([
-    walker.schema(def.left, inside(at, indexStep(0))),
-    walker.schema(def.right, inside(at, indexStep(1))),
-  ]);
+): Walking {
+  const left = yield* walker.schema(def.left, inside(at, indexStep(0)));
+  const right = yield* walker.schema(def.right, inside(at, indexStep(1)));
+  const items = allWalked([left, right]);
   if (items.kind === 'not-allowed') {
     return failed(items.tree, { type: 'allOf' });
   }
-  const [left, right] = items.value;
-  if (left?.type === 'object' && right?.type === 'object') {
-    return mergedObjects(left, right, at);
+  const [leftNode, rightNode] = items.value;
+  if (leftNode?.type === 'object' && rightNode?.type === 'object') {
+    return mergedObjects(leftNode, rightNode, at);
   }
   return walked({ type: 'allOf', items: inCanonicalJsonOrder(items.value) });
 }
