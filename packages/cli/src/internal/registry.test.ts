@@ -34,7 +34,6 @@ import {
 } from '../../test/tarball.ts';
 import { baselineOf, type ReadBaseline } from './index.ts';
 
-const npmTimeout = 30_000;
 const mebibyte = 1024 * 1024;
 
 function base256At(offset: number): Overwrite {
@@ -172,7 +171,7 @@ function tarballsRequested(registry: Registry): readonly string[] {
   return registry.requests.map((request) => request.path).filter((p) => p.startsWith('/tarballs/'));
 }
 
-describe.concurrent('baselineOf', { timeout: npmTimeout }, () => {
+describe.concurrent('baselineOf', () => {
   test('a package’s Baseline is the snapshot.json of its highest published version', async ({
     lab,
   }) => {
@@ -1582,7 +1581,7 @@ function packDestinationIn(calls: readonly string[]): string {
   return destination;
 }
 
-describe('baselineOf and its temporary folder', { timeout: npmTimeout }, () => {
+describe('baselineOf and its temporary folder', () => {
   test.for([
     ['succeeds', ordersWith(aVersion('1.0.0')), 'baseline'],
     ['fails', ordersWith(aVersion('1.0.0', { snapshotJson: '{' })), 'failed'],
