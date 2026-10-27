@@ -285,7 +285,12 @@ describe('fakeProvider: a test’s mistakes', () => {
     [
       'a code that is no UPPER_SNAKE_CASE',
       'card-expired',
-      'card-expired is no UPPER_SNAKE_CASE, so no Contract can declare it',
+      'card-expired is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it',
+    ],
+    [
+      'a code of more than 64 characters',
+      'A'.repeat(65),
+      `${'A'.repeat(65)} is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it`,
     ],
   ])('r.unknownRejection with %s is a mistake', async (_name, code, message) => {
     const payments = fakeProvider(paymentsDependency);
