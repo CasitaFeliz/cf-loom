@@ -93,7 +93,7 @@ Reader schemas and types always come from a Snapshot, the same way for every Vis
 ## Messages
 
 - Delivery is at least once and in no guaranteed order: once concurrency or redelivery is involved, nothing orders Messages across subjects or within one (`memory()` is sequential: see [In memory](packages/messaging/README.md#in-memory) in the messaging README). A Command is handled by one Message Handler, and every Handler must be safe to run again.
-- Commands are internal to their Service: they are in the Contract only so the compatibility rules protect Releases running side by side.
+- Commands are their Service's own, always Private: they are in the Contract only so the compatibility rules protect Releases running side by side.
 - A Service handles its own Events through Subscriptions, like any Subscriber.
 - Where a Message travels is derived from the Contract (see [Over the Broker](#over-the-broker)). A Group adds nothing to a Message: its subject, Stream and Durable consumer never name it.
 - cf-loom derives the Broker's desired state, the Streams and Durable consumers each Service needs, but never applies it on its own: when and how it is applied, retention, replicas and broker permissions belong to the organization (see [The broker plan](packages/messaging/README.md#the-broker-plan) in the messaging README), and so does whether the Broker enforces Visibility.
