@@ -14,7 +14,7 @@ describe('the records a Service reads off a Handler', () => {
 });
 
 describe('the hooks a Service gives', () => {
-  test('a hook that returns a value is awaited and its value ignored', async () => {
+  test('a hook may return a value', async () => {
     const failure = await hookFailureOf((count: number) => count + 1, 1, {
       source: 'orders',
       hook: 'onServiceFault',
