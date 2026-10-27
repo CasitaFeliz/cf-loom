@@ -1720,6 +1720,30 @@ describe('cf-loom generate: how deep a schema nests as written', () => {
   });
 });
 
+describe('cf-loom generate: a value zod cannot parse within the call stack', () => {
+  test('a tree with 250 .nullable() around each kid and an example 120 levels deep fails generate on the example line', () => {
+    const body = [
+      '(() => {',
+      '  let example: unknown = { kids: [] };',
+      '  for (let level = 0; level < 120; level++) {',
+      '    example = { kids: [example] };',
+      '  }',
+      '  const tree: z.ZodType = z',
+      `    .object({ kids: z.array(${nestSource(250, 'inner.nullable()', 'z.lazy(() => tree)')}) })`,
+      "    .meta({ id: 'tree', examples: [example] });",
+      '  return tree;',
+      '})()',
+    ].join('\n');
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body';
+    const stderr = `${at} not allowed: an example the schema refuses (examples[0])\n`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
+  });
+});
+
 describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {
   test('its Guards and shared schemas carry the origin of the version installed', () => {
     const project = aProject({
