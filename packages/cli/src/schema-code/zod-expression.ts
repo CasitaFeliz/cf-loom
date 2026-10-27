@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from 'node:util';
 import type {
   EnumNode,
   Field,
@@ -44,8 +43,6 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
       return numberOf(node);
     case 'boolean':
       return 'z.boolean()';
-    case 'literal':
-      return `z.literal(${literalOf(node.value)})`;
     case 'enum':
       return enumOf(node, writing);
     case 'object':
@@ -94,46 +91,39 @@ function boundsOf(node: { readonly min?: number; readonly max?: number }): strin
   return `${min}${max}`;
 }
 
-/**
- * An enum; values that are not all strings are literals. An Open Enum's reader reads a declared
- * value as itself and any other string as its Unknown case, `{ unknown: 'refunded' }`, so
- * TypeScript tells them apart, and writes that case back as its string.
- */
 function enumOf(node: EnumNode, writing: Writing): string {
-  const values = node.values.map(literalOf).join(', ');
-  const allStrings = node.values.every((value) => typeof value === 'string');
-  if (!node.open) {
-    return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
-  }
-  writing.needs.modules.add('loom');
-  const call = writing.mode === 'reader' ? 'openEnumReader' : 'openEnum';
-  return `loom.${call}([${values}])`;
+  return node.open ? openEnumOf(node, writing) : closedEnumOf(node);
 }
 
-/** An object as zod declares it; a strict one is the record it was walked from. */
-function objectOf(node: ObjectNode, writing: Writing): string {
-  if (node.mode === 'strict') {
-    return keyedRecordOf(node, writing);
+/**
+ * A closed enum of one value, or of values that are not all strings, is a literal, as a
+ * discriminator must be.
+ */
+function closedEnumOf(node: EnumNode): string {
+  const values = node.values.map(literalOf).join(', ');
+  const allStrings = node.values.every((value) => typeof value === 'string');
+  if (node.values.length === 1) {
+    return `z.literal(${values})`;
   }
+  return allStrings ? `z.enum([${values}])` : `z.literal([${values}])`;
+}
+
+/**
+ * An Open Enum's reader reads a declared value as itself and any other string as its Unknown case,
+ * `{ unknown: 'refunded' }`, so TypeScript tells them apart, and writes that case back as its
+ * string.
+ */
+function openEnumOf(node: EnumNode, writing: Writing): string {
+  writing.needs.modules.add('loom');
+  const call = writing.mode === 'reader' ? 'openEnumReader' : 'openEnum';
+  return `loom.${call}([${node.values.map(literalOf).join(', ')}])`;
+}
+
+function objectOf(node: ObjectNode, writing: Writing): string {
   const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
   return fields.length === 0 ? 'z.object({})' : `z.object({ ${fields.join(', ')} })`;
-}
-
-/**
- * A record keyed by an enum or literal, since a Contract declares no strict object: one enum of
- * the object's keys, whose fields share one schema and requiredness.
- */
-function keyedRecordOf(node: ObjectNode, writing: Writing): string {
-  const fields = Object.values(node.fields);
-  const [first] = fields;
-  if (first === undefined || !fields.every((field) => isDeepStrictEqual(field, first))) {
-    throw new Error('A strict object is a keyed record, one field per key, all alike: a bug.');
-  }
-  const keys = Object.keys(node.fields).map(stringLiteralOf).join(', ');
-  const call = first.required ? 'z.record' : 'z.partialRecord';
-  return `${call}(z.enum([${keys}]), ${zodExpressionOf(first.schema, writing)})`;
 }
 
 /** A field's schema, optional unless it is required. */

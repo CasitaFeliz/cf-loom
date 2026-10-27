@@ -3,14 +3,26 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { type SchemaNode, type StringFormat, walkSchemas } from '../internal/index.ts';
 
+const bodyAt = {
+  site: { kind: 'export', name: 'body' },
+  declaration: undefined,
+  steps: [],
+} as const;
+
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  return refusalsOf(walkSchemas([{ at: bodyAt, schema }], () => undefined));
 }
 
 function walkedTo(node: SchemaNode) {
-  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+  return { located: [{ kind: 'walked', value: node }], defs: {} };
+}
+
+function refusedAt(at: string, construct: string) {
+  const failure = { kind: 'not-allowed', at, construct };
+  return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
 describe('walkSchemas: strings', () => {
@@ -91,9 +103,9 @@ describe('walkSchemas: strings', () => {
     ['z.currencyCode()', z.currencyCode(), 'currency_code'],
     ['z.hash()', z.hash('sha256'), 'sha256_hex'],
   ])('%s walked by the built package is its format', (_name, schema, format) => {
-    expect(built.walkSchemas([{ at: ['body'], schema }], () => undefined)).toEqual(
-      walkedTo({ type: 'string', format }),
-    );
+    const walked = built.walkSchemas([{ at: bodyAt, schema }], () => undefined);
+
+    expect(refusalsOf(walked)).toEqual(walkedTo({ type: 'string', format }));
   });
 
   test.each<[string, core.$ZodType, StringFormat]>([
@@ -105,19 +117,26 @@ describe('walkSchemas: strings', () => {
     expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
   });
 
-  test('a regex-built format is judged by its pattern alone, whatever function checks it', () => {
+  test('a regex-built format whose check is a function of the author fails, whatever its pattern', () => {
     const zodPattern = { pattern: z.regexes.hex } as object;
-    const hex = z.stringFormat('hex', (value) => z.regexes.hex.test(value), zodPattern);
+    const hex = z.stringFormat('hex', () => true, zodPattern);
 
-    expect(walkBody(hex)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
+    expect(walkBody(hex)).toEqual(refusedAt('', 'z.stringFormat("hex")'));
+  });
+
+  test.each<[string, core.$ZodType]>([
+    ['z.stringFormat() with zod’s own regex', z.stringFormat('hex', z.regexes.hex)],
+    ['a zod/mini z.stringFormat() with zod’s own regex', zm.stringFormat('hex', z.regexes.hex)],
+  ])('%s is the hex format', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
   });
 
   test('the built package walks a format like the source', () => {
     const placedAt = z.iso.datetime({ offset: true, precision: 3 });
 
-    const walked = built.walkSchemas([{ at: ['body'], schema: placedAt }], () => undefined);
+    const walked = built.walkSchemas([{ at: bodyAt, schema: placedAt }], () => undefined);
 
-    expect(walked).toEqual(walkBody(placedAt));
+    expect(refusalsOf(walked)).toEqual(walkBody(placedAt));
   });
 
   test('an option that differs from zod default is a format option', () => {
@@ -192,10 +211,33 @@ describe('walkSchemas: booleans, literals and JSON', () => {
     expect(walkBody(z.boolean())).toEqual(walkedTo({ type: 'boolean' }));
   });
 
-  test('a literal keeps its value with its JSON type', () => {
-    expect(walkBody(z.literal(true))).toEqual(walkedTo({ type: 'literal', value: true }));
-    expect(walkBody(z.literal('true'))).toEqual(walkedTo({ type: 'literal', value: 'true' }));
-    expect(walkBody(z.literal(2))).toEqual(walkedTo({ type: 'literal', value: 2 }));
+  test('a literal is a closed enum of its one value', () => {
+    expect(walkBody(z.literal('a'))).toEqual(
+      walkedTo({ type: 'enum', values: ['a'], open: false }),
+    );
+  });
+
+  test.each([
+    ['a string', 'a'],
+    ['an integer', 2],
+    ['a non-integer', 1.5],
+    ['true', true],
+    ['false', false],
+  ])(
+    'a literal of %s, alone, as a list of one or as a union of one, is one closed enum',
+    (_kind, value) => {
+      const one = walkBody(z.literal(value));
+      const listed = walkBody(z.literal([value]));
+      const union = walkBody(z.union([z.literal(value)]));
+
+      expect(one).toEqual(walkedTo({ type: 'enum', values: [value], open: false }));
+      expect(listed).toEqual(one);
+      expect(union).toEqual(one);
+    },
+  );
+
+  test('a literal and an enum of the same string walk to the same node', () => {
+    expect(walkBody(z.enum(['a']))).toEqual(walkBody(z.literal('a')));
   });
 
   test('a literal of several values is an enum of them', () => {

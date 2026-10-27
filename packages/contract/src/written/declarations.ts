@@ -1,18 +1,11 @@
-import type { Contract, Definitions, Endpoint } from '../declarations/index.ts';
-import {
-  isContract,
-  isDefinitions,
-  isDependencies,
-  isEndpoint,
-  isGroup,
-} from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
-import { identityOf } from './identity.ts';
+import type { Definitions, Root } from '../declarations/index.ts';
+import { isDefinitions, isDependency, isServiceContract } from '../declarations/index.ts';
+import { inFields, type Place, placeOf } from '../walker/index.ts';
+import { groupedOf, groupsOf, placedIn } from './grouped.ts';
 import type {
   LocatedCode,
   LocatedCommand,
-  LocatedDefinitions,
-  LocatedDependencies,
+  LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
   LocatedGroup,
@@ -20,83 +13,81 @@ import type {
   LocatedRejection,
   LocatedStandardRejection,
   LocatedSubscription,
-  Root,
+  NamedDefinitions,
 } from './located.ts';
-import { messagingOf } from './messaging.ts';
-import { codesOf, guardsOf, rejectionsOf } from './references.ts';
-import { entriesOf, isPlainObject, listOf, textOf } from './written.ts';
+import { type Members, membersOf } from './members.ts';
+import { codesOf, referencesOf } from './references.ts';
+import { entriesOf, isPlainObject, listOf } from './written.ts';
 
 /**
- * Every declaration of a root, each once, with where it sits, so each rule reads one list; what
+ * Every declaration of a Root, each once, with where it sits, so each rule reads one list; what
  * sits where a declaration belongs and is none is left out here and reported by the structure rules.
  */
 export type Declarations = {
   readonly root: Root;
-  /** Every Definitions Package in play: the ones a Contract lists, or the root itself when it is one. */
-  readonly allPackages: readonly LocatedDefinitions[];
-  /** The Definitions Packages a Contract lists; never the root. */
-  readonly listedDefinitions: readonly LocatedDefinitions[];
+  /** What a Definitions Package's Root file exports that it shares; none for another Root. */
+  readonly ownMembers: Members | undefined;
+  /** The Definitions Package a Contract names as `standardRejections`, at that field; none for another Root. */
+  readonly standardRejectionsSource: NamedDefinitions | undefined;
   readonly groups: readonly LocatedGroup[];
   readonly endpoints: readonly LocatedEndpoint[];
+  /** Every Guard the Root reaches, each once. */
   readonly guards: readonly LocatedGuard[];
-  /** Every Rejection, each once, in the root's order. */
+  /** Every Rejection the Root reaches, each once, in the Root's order. */
   readonly rejections: readonly LocatedRejection[];
-  /** Every code, each once, with every declaration of it. */
+  /** Every code the Root reaches, each once, with every declaration of it. */
   readonly codes: readonly LocatedCode[];
+  /** The Standard Rejections the Root's declaring package declares. */
   readonly standardRejections: readonly LocatedStandardRejection[];
-  readonly dependencies: readonly LocatedDependencies[];
+  readonly dependencies: readonly LocatedDependency[];
   readonly events: readonly LocatedEvent[];
   readonly commands: readonly LocatedCommand[];
   readonly subscriptions: readonly LocatedSubscription[];
 };
 
-/** Gathers what a root declares, Guards and Rejections included, each where it was first met. */
-export function declarationsOf(root: Root): Declarations {
-  const listedDefinitions = definitionsOf(root);
+/**
+ * Gathers what a Root reaches, Guards and Rejections included, each where it was first met: what
+ * its Endpoints reach, and for a Definitions Package the members its file exports, by `rootExports`.
+ */
+export function declarationsOf(
+  root: Root,
+  rootExports: Readonly<Record<string, unknown>>,
+): Declarations {
   const groups = groupsOf(root);
-  const endpoints = distinctEndpoints(groups.flatMap(locatedEndpointsOf));
-  const allPackages =
-    root.kind === 'definitions' ? [{ at: [], definitions: root }] : listedDefinitions;
-  const sources = { root, allPackages, endpoints };
-  const guards = guardsOf(sources);
-  const rejections = rejectionsOf(sources, guards);
+  const { endpoints, events, commands, subscriptions } = groupedOf(groups);
+  const ownMembers = root.kind === 'definitions' ? membersOf(rootExports) : undefined;
+  const standardRejectionsSource = namedSourceOf(root);
+  const sources = { ownMembers, endpoints };
+  const { guards, rejections } = referencesOf(sources);
+  const declarer = standardRejectionsDeclarerOf({ root, standardRejectionsSource });
   return {
     root,
-    allPackages,
-    listedDefinitions,
+    ownMembers,
+    standardRejectionsSource,
     groups,
     endpoints,
     guards,
     rejections,
-    codes: codesOf(sources, { guards, rejections }),
-    standardRejections: allPackages.flatMap(standardRejectionsOf),
+    codes: codesOf(rejections),
+    standardRejections: declarer === undefined ? [] : standardRejectionsOf(declarer),
     dependencies: dependenciesOf(root),
-    ...messagingOf(root),
+    events,
+    commands,
+    subscriptions,
   };
 }
 
-/** Every Endpoint a Contract lists through its Groups, each once, in the root's order. */
-export function endpointsOf(contract: Contract): readonly Endpoint[] {
-  const located = distinctEndpoints(groupsOf(contract).flatMap(locatedEndpointsOf));
-  return located.map(({ endpoint }) => endpoint);
-}
-
-/** Where an Endpoint sits under its Group: the one place that spells an Endpoint's location. */
-export function endpointAt(groupAt: Path, endpoint: Endpoint): Path {
-  return [...groupAt, 'endpoints', identityOf(endpoint.method, endpoint.path)];
-}
-
-/** An Endpoint listed twice is one Endpoint, where first met; the Groups rule reports the repeat. */
-function distinctEndpoints(endpoints: readonly LocatedEndpoint[]): readonly LocatedEndpoint[] {
-  const seen = new Set<Endpoint>();
-  const distinct: LocatedEndpoint[] = [];
-  for (const located of endpoints) {
-    if (!seen.has(located.endpoint)) {
-      seen.add(located.endpoint);
-      distinct.push(located);
-    }
-  }
-  return distinct;
+/**
+ * The Definitions Package whose `standardRejections` a Root's Standard Rejections come from: the
+ * one a Contract names, or a Definitions Package itself.
+ */
+export function standardRejectionsDeclarerOf({
+  root,
+  standardRejectionsSource,
+}: Pick<Declarations, 'root' | 'standardRejectionsSource'>): NamedDefinitions | undefined {
+  return root.kind === 'definitions'
+    ? { at: placeOf({ kind: 'root' }, root), definitions: root }
+    : standardRejectionsSource;
 }
 
 /** A Standard Rejection declaration as written, before the structure rule has judged it. */
@@ -104,15 +95,15 @@ type WrittenStandardRejection = Omit<LocatedStandardRejection, 'declaration'> & 
   readonly declaration: unknown;
 };
 
-function standardRejectionsOf(listedIn: LocatedDefinitions): readonly LocatedStandardRejection[] {
-  const { at, definitions } = listedIn;
+function standardRejectionsOf({
+  definitions,
+}: NamedDefinitions): readonly LocatedStandardRejection[] {
   const entries: readonly WrittenStandardRejection[] = entriesOf(
     definitions.standardRejections,
   ).map(([name, declaration]) => ({
-    at: [...at, 'standardRejections', name],
+    at: placeOf({ kind: 'standard-rejection', name }, definitions),
     name,
     declaration,
-    listedIn,
   }));
   return entries.filter(isLocatedStandardRejection);
 }
@@ -124,44 +115,44 @@ function isLocatedStandardRejection(
   return isPlainObject(entry.declaration);
 }
 
-/**
- * The Definitions Packages a Contract lists, whatever a root file exported: the CLI resolves them
- * before validating; what else sits there is the structure rules' to report.
- */
-export function listedDefinitionsOf(root: unknown): readonly Definitions[] {
-  return isContract(root) ? listOf(root.definitions).filter(isDefinitions) : [];
-}
-
-function definitionsOf(root: Root): readonly LocatedDefinitions[] {
-  return listedDefinitionsOf(root).map((definitions) => ({
-    at: ['definitions', textOf(definitions.name)],
-    definitions,
-  }));
-}
-
-function groupsOf(root: Root): readonly LocatedGroup[] {
-  if (root.kind !== 'contract') {
-    return [];
+function namedSourceOf(root: Root): NamedDefinitions | undefined {
+  const definitions = standardRejectionsSourceOf(root);
+  if (definitions === undefined) {
+    return undefined;
   }
-  return listOf(root.groups)
-    .filter(isGroup)
-    .map((group) => ({ at: ['groups', textOf(group.name)], group }));
+  return { at: inFields(placeOf({ kind: 'root' }, root), 'standardRejections'), definitions };
 }
 
-function locatedEndpointsOf({ at, group }: LocatedGroup): readonly LocatedEndpoint[] {
-  return listOf(group.endpoints)
-    .filter(isEndpoint)
-    .map((endpoint) => ({ at: endpointAt(at, endpoint), endpoint, group }));
+/**
+ * The Definitions object a Contract names as `standardRejections`, whatever a Root file exported;
+ * none for any other Root, or when what it names is no Definitions object, which the structure
+ * rule reports.
+ */
+export function standardRejectionsSourceOf(root: unknown): Definitions | undefined {
+  if (!isServiceContract(root)) {
+    return undefined;
+  }
+  const named: unknown = root.standardRejections;
+  return isDefinitions(named) ? named : undefined;
 }
 
-function dependenciesOf(root: Root): readonly LocatedDependencies[] {
+/** Each Dependency at its place in the Root's list, since a Dependency has no name of its own. */
+function dependenciesOf(root: Root): readonly LocatedDependency[] {
   if (root.kind === 'definitions') {
     return [];
   }
-  return listOf(root.dependencies)
-    .filter(isDependencies)
-    .map((dependencies) => ({
-      at: ['dependencies', textOf(dependencies.provider)],
-      dependencies,
-    }));
+  const holder = placeOf({ kind: 'root' }, root);
+  const written = listOf(root.dependencies).map((dependency: unknown, index) => {
+    const at = placedIn({ holder, field: 'dependencies', index }, dependency, undefined);
+    return { at, dependency };
+  });
+  return written.filter(isLocatedDependency);
+}
+
+/** What sits where a Dependency belongs and is none is the structure rule's. */
+function isLocatedDependency(written: {
+  readonly at: Place;
+  readonly dependency: unknown;
+}): written is LocatedDependency {
+  return isDependency(written.dependency);
 }

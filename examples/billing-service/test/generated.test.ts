@@ -27,11 +27,14 @@ describe('the Snapshot', () => {
     expect(origin).toBe('@org/definitions@0.0.0#money');
   });
 
-  test('the Subscription to orders-service’s OrderCreated@1 is recorded with the Dependency on it', () => {
-    const subscription = snapshot.subscriptions['draft-invoice-on-created'];
-    const dependencyEvents = snapshot.dependencies['orders-service'].events;
+  test('the Subscription to orders-service’s OrderCreated@1 is recorded by its Provider, and the Dependency only by its Endpoints', () => {
+    const subscription = snapshot.subscriptions.draftInvoiceOnCreated;
+    const dependency = snapshot.dependencies['orders-service'];
 
     expect(subscription.event).toBe('orders-service:OrderCreated@1');
-    expect(dependencyEvents).toEqual(['OrderCreated@1']);
+    expect(dependency).toEqual({
+      against: '0.0.0',
+      endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
+    });
   });
 });

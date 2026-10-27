@@ -2,24 +2,20 @@ import type * as core from 'zod/v4/core';
 import { isJsonPrimitive } from './canonical-json.ts';
 import { enumOf } from './choices.ts';
 import { innerOfLazy } from './lazy.ts';
-import type { JsonPrimitive, Path } from './nodes.ts';
+import type { JsonPrimitive } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
-import { allWalked, type Walked, walked } from './walked.ts';
+import { allWalked, failed, type Reached, type Walked, walked } from './walked.ts';
 
 /**
- * A `literal` of one JSON value, or an `enum` of several, since a literal of several values is a
- * union of literals; `null`, `undefined` and bigints have no JSON value of their own.
+ * A closed `enum` of the literal's JSON values; `null`, `undefined` and bigints have no JSON value
+ * of their own.
  */
-export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Path): Walked {
+export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Reached): Walked {
   const values = allWalked(def.values.map((value) => jsonValueOf(value, at)));
   if (values.kind === 'not-allowed') {
-    return values;
+    return failed(values.tree, { type: 'enum' });
   }
-  const [only, ...others] = values.value;
-  if (only !== undefined && others.length === 0) {
-    return walked({ type: 'literal', value: only });
-  }
-  return walked(enumOf(values.value));
+  return enumOf(values.value, at);
 }
 
 /**
@@ -46,7 +42,7 @@ export function isJsonUnion(union: core.$ZodUnion): boolean {
   );
 }
 
-function jsonValueOf(value: core.util.Literal, at: Path): Walked<JsonPrimitive> {
+function jsonValueOf(value: core.util.Literal, at: Reached): Walked<JsonPrimitive> {
   if (isJsonPrimitive(value)) {
     return walked(value);
   }

@@ -4,4 +4,6 @@ export type {
   ReceivedOutcome,
   ReceivedRejection,
   ReceivedSuccess,
+  ReceivedUnknownRejection,
 } from './outcomes.ts';
+export { rejectionOf } from './rejection.ts';

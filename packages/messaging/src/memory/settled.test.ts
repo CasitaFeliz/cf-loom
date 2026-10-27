@@ -1,9 +1,15 @@
-import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { type Fault, fault, handle, type MessageMeta, withReader } from '@cf-loom/handlers';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+} from '@cf-loom/contract';
+import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Messaging, type MessagingOptions, messaging } from '../index.ts';
-import { type MemoryBroker, memory } from './index.ts';
+import type { ConsumedFault, Messaging, MessagingOptions } from '../index.ts';
+import { type MemoryMessaging, memory } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
 
@@ -30,52 +36,75 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV1 });
-
-const onAudited = defineSubscription({ name: 'on-audited', event: orderAuditedV1 });
-
-const contract = defineContract({
-  name: 'orders-service',
-  events: [orderCreatedV1, orderAuditedV1],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated, onAudited],
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV1,
 });
 
-const pairings = {
-  chargeCard: withReader(chargeCardV1, orderBody),
-  notifyOnCreated: withReader(notifyOnCreated, orderBody),
-  onAudited: withReader(onAudited, z.object({ orderId: z.uuid() })),
-};
+const onAudited = defineSubscription({
+  name: 'onAudited',
+  description: 'On audited',
+  event: orderAuditedV1,
+});
+
+const contract = defineService({
+  name: 'orders-service',
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderAuditedV1],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated, onAudited],
+    }),
+  ],
+});
+
+const readers = readersOf({
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: {
+    notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody },
+    onAudited: { declaration: onAudited, reader: z.object({ orderId: z.uuid() }) },
+  },
+});
 
 type Implementation = (
   body: { readonly orderId: string },
   meta: MessageMeta,
-) => Fault | undefined | Promise<Fault | undefined>;
+) => MessageFault | undefined | Promise<MessageFault | undefined>;
 
 type Handlers = {
   readonly charge?: Implementation;
   readonly notify?: Implementation;
 };
 
-/** A memory() and the messaging connected through it. */
-type Running = Messaging<typeof contract> & { readonly broker: MemoryBroker };
+/** A memory() of the Contract, also destructured. */
+type Running = Messaging<typeof contract> & {
+  readonly inMemory: MemoryMessaging<typeof contract>;
+};
 
-/** A memory() connected to the Contract and consuming with the Handlers given, the others acknowledging. */
+/** A memory() of the Contract and consuming with the Handlers given, the others acknowledging. */
 async function running(
   handlers: (connection: Running) => Handlers = () => ({}),
   options: MessagingOptions = {},
 ): Promise<Running> {
-  const broker = memory();
-  const started = await messaging(contract, broker, options);
-  const connection = { broker, ...started };
+  const inMemory = await memory(contract, options);
+  const connection = { inMemory, ...inMemory };
   const { charge, notify } = handlers(connection);
-  await started.consume({
-    commands: { chargeCardV1: handle(pairings.chargeCard, charge ?? (() => undefined)) },
-    subscriptions: {
-      'notify-on-created': handle(pairings.notifyOnCreated, notify ?? (() => undefined)),
-      'on-audited': handle(pairings.onAudited, () => undefined),
+  await inMemory.consume(
+    {
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
+        onAudited: handle(readers.subscriptions.onAudited, () => undefined),
+      },
+      readers,
     },
-  });
+    {},
+  );
   return connection;
 }
 
@@ -102,9 +131,9 @@ const created = { orderId: 'o-1' };
 
 describe('settled()', () => {
   test('settled() with nothing in flight resolves', async () => {
-    const { broker } = await running();
+    const { inMemory } = await running();
 
-    const settling = broker.settled();
+    const settling = inMemory.settled();
 
     await expect(settling).resolves.toBeUndefined();
   });
@@ -112,10 +141,10 @@ describe('settled()', () => {
   test('settled() resolves once every Message, and every Message its Handlers publish or send meanwhile, has been handled', async () => {
     const gate = aGate();
     const charged: string[] = [];
-    const { broker, publisher } = await running((connection) => ({
+    const { inMemory, publisher } = await running((connection) => ({
       notify: async () => {
         await gate.opened;
-        await connection.sender.send('ChargeCard', { orderId: 'o-1' });
+        await connection.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-53' });
         return undefined;
       },
       charge: ({ orderId }) => {
@@ -123,9 +152,9 @@ describe('settled()', () => {
         return undefined;
       },
     }));
-    await publisher.publish('OrderCreated', { v1: created });
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-54' });
 
-    const settling = broker.settled();
+    const settling = inMemory.settled();
     gate.open();
     await settling;
 
@@ -134,59 +163,66 @@ describe('settled()', () => {
 
   test('settled() rejects when a Handler threw, with the ConsumedFault as cause', async () => {
     const error = new Error('gateway down');
-    const { broker, publisher } = await running(() => ({
+    const { inMemory, publisher } = await running(() => ({
       notify: () => {
         throw error;
       },
     }));
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
 
-    const rejection = await rejectionOf(broker.settled());
+    const rejection = await rejectionOf(inMemory.settled());
 
     expect(rejection?.cause).toEqual({
-      element: 'notify-on-created',
+      declaration: notifyOnCreated,
+      name: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
-      messageId: 'OrderCreated.v1:o-1',
+      messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
+      deliveryCount: 1,
+      lastAttempt: false,
       kind: 'thrown',
       cause: error,
     });
   });
 
-  test.each<[string, Handlers, (connection: Running) => Promise<void>]>([
+  test.each<[string, Handlers, (connection: Running) => Promise<unknown>]>([
     [
       'a non-retryable Fault',
       { charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }) },
-      ({ sender }) => sender.send('ChargeCard', created),
+      ({ sender }) => sender.send('ChargeCard', created, { factId: 'f-56' }),
     ],
     [
       'a body that fails its Reader',
       {},
-      ({ publisher }) => publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } }),
+      ({ publisher }) =>
+        publisher.publish('OrderAudited', { v1: { orderId: 'not-a-uuid' } }, { factId: 'f-57' }),
     ],
   ])('settled() rejects when a Message was ended, for %s', async (_ended, handlers, ending) => {
     const connection = await running(() => handlers);
     await ending(connection);
 
-    const rejection = await rejectionOf(connection.broker.settled());
+    const rejection = await rejectionOf(connection.inMemory.settled());
 
     expect(rejection).toBeInstanceOf(Error);
   });
 
-  test('a retryable Fault does not make settled() reject', async () => {
-    const { broker, sender } = await running(() => ({
-      charge: () => fault({ committed: 'no', retryable: true }),
+  test('a retryable Fault makes settled() reject with its line', async () => {
+    const { inMemory, sender } = await running(() => ({
+      charge: () => fault({ committed: 'no', retryable: true, message: 'card 503' }),
     }));
-    await sender.send('ChargeCard', created);
+    await sender.send('ChargeCard', created, { factId: 'o-1' });
 
-    const settling = broker.settled();
+    const rejection = await rejectionOf(inMemory.settled());
 
-    await expect(settling).resolves.toBeUndefined();
-    expect(broker.pending).toHaveLength(1);
+    expect(rejection?.message).toBe(
+      'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1 attempt 1: card 503',
+    );
+    expect(rejection?.cause).toMatchObject({ kind: 'returned', deliveryCount: 1 });
+    expect(inMemory.pending).toHaveLength(1);
   });
 
   test('the rejection’s message has one line per failure since the last settled()', async () => {
-    const { broker, publisher, sender } = await running(() => ({
+    const { inMemory, publisher, sender } = await running(() => ({
       notify: () => {
         throw new Error('gateway down');
       },
@@ -195,60 +231,60 @@ describe('settled()', () => {
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
     await sender.send('ChargeCard', created, { factId: 'o-1' });
 
-    const rejection = await rejectionOf(broker.settled());
+    const rejection = await rejectionOf(inMemory.settled());
 
     expect(rejection?.message).toBe(
       [
-        'notify-on-created orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: the Handler threw',
-        'ChargeCard@1 orders-service.command.ChargeCard.v1 ChargeCard.v1:o-1 o-1: Card refused',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: the Handler threw',
+        'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:o-1 o-1 attempt 1: Card refused',
       ].join('\n'),
     );
   });
 
   test('with several failures since the last settled(), the cause is the first failure’s', async () => {
-    const { broker, publisher, sender } = await running(() => ({
+    const { inMemory, publisher, sender } = await running(() => ({
       notify: () => {
         throw new Error('gateway down');
       },
       charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }),
     }));
-    await publisher.publish('OrderCreated', { v1: created });
-    await sender.send('ChargeCard', created);
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-61' });
+    await sender.send('ChargeCard', created, { factId: 'f-62' });
 
-    const rejection = await rejectionOf(broker.settled());
+    const rejection = await rejectionOf(inMemory.settled());
 
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notify-on-created' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
   });
 
   test('a failure is reported once: the next settled() resolves', async () => {
-    const { broker, sender } = await running(() => ({
+    const { inMemory, sender } = await running(() => ({
       charge: () => fault({ committed: 'no', retryable: false }),
     }));
-    await sender.send('ChargeCard', created);
-    await rejectionOf(broker.settled());
+    await sender.send('ChargeCard', created, { factId: 'f-63' });
+    await rejectionOf(inMemory.settled());
 
-    const settling = broker.settled();
+    const settling = inMemory.settled();
 
     await expect(settling).resolves.toBeUndefined();
   });
 
   test('a failure in a Message deliver hands in makes settled() reject too', async () => {
-    const { broker } = await running(() => ({
+    const { inMemory } = await running(() => ({
       notify: () => {
         throw new Error('gateway down');
       },
     }));
 
-    const settlement = await broker.deliver(orderCreatedV1, created);
-    const rejection = await rejectionOf(broker.settled());
+    const settlement = await inMemory.deliver(orderCreatedV1, created);
+    const rejection = await rejectionOf(inMemory.settled());
 
     expect(settlement).toBe('pending');
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', element: 'notify-on-created' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
   });
 
-  test('an onServiceFault that throws leaves the Message pending and makes settled() reject', async () => {
+  test('settled() rejects with the Fault’s line and the onServiceFault threw line when onServiceFault throws', async () => {
     const hook = new Error('the hook broke');
-    const { broker, publisher } = await running(
+    const { inMemory, publisher } = await running(
       () => ({
         notify: () => {
           throw new Error('gateway down');
@@ -262,40 +298,206 @@ describe('settled()', () => {
     );
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
 
-    const rejection = await rejectionOf(broker.settled());
+    const rejection = await rejectionOf(inMemory.settled());
 
     expect(rejection?.message).toBe(
-      'notify-on-created orders-service.event.OrderCreated.v1 OrderCreated.v1:o-1 o-1: onServiceFault threw',
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: the Handler threw',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
+      ].join('\n'),
     );
-    expect(rejection?.cause).toBe(hook);
-    expect(broker.pending).toMatchObject([{ element: notifyOnCreated, deliveryCount: 1 }]);
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
+    expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
+  });
+
+  test('an onServiceFault that rejects leaves pending a Message it would have ended, and makes settled() reject', async () => {
+    const { inMemory, publisher } = await running(
+      () => ({
+        notify: () => fault({ committed: 'no', retryable: false, message: 'Not notified' }),
+      }),
+      { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
+    );
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+
+    const rejection = await rejectionOf(inMemory.settled());
+
+    expect(rejection?.message).toBe(
+      [
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: Not notified',
+        'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
+      ].join('\n'),
+    );
+    expect(rejection?.cause).toMatchObject({ kind: 'returned', name: 'notifyOnCreated' });
+    expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
+  });
+
+  test('a Message a Handler publishes while messaging is closing is left pending, its Handler never run, and settled() resolves', async () => {
+    const gate = aGate();
+    const entered = Promise.withResolvers<void>();
+    const charged: string[] = [];
+    const { inMemory, publisher, sender, close } = await running(() => ({
+      notify: async () => {
+        entered.resolve();
+        await gate.opened;
+        await sender.send('ChargeCard', created, { factId: 'o-1:charge' });
+        return undefined;
+      },
+      charge: ({ orderId }) => {
+        charged.push(orderId);
+        return undefined;
+      },
+    }));
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    const settling = inMemory.settled();
+    await entered.promise;
+
+    const closing = close();
+    gate.open();
+    await closing;
+
+    await expect(settling).resolves.toBeUndefined();
+    expect(charged).toEqual([]);
+    expect(inMemory.pending).toMatchObject([{ name: 'ChargeCard@1', deliveryCount: 1 }]);
+  });
+
+  test('a Message close({ signal }) handed back is listed in pending', async () => {
+    const handling = Promise.withResolvers<void>();
+    const { inMemory, close } = await running(() => ({
+      notify: () => {
+        handling.resolve();
+        return new Promise(() => undefined);
+      },
+    }));
+    const delivered = inMemory.deliver(orderCreatedV1, created, { factId: 'o-1' });
+    await handling.promise;
+
+    const closing = close({ signal: AbortSignal.abort() });
+
+    await expect(closing).rejects.toThrow('close stopped waiting and handed back 1 Message');
+    await expect(delivered).resolves.toBe('handed-back');
+    expect(inMemory.pending).toMatchObject([
+      { name: 'notifyOnCreated', factId: 'o-1', deliveryCount: 1 },
+    ]);
+  });
+
+  test('memory(contract, { onServiceFault }) hands each Fault to the hook, and settled() still reports it', async () => {
+    const faults: ConsumedFault[] = [];
+    const { inMemory, sender } = await running(
+      () => ({
+        charge: () => fault({ committed: 'no', retryable: false, message: 'Card refused' }),
+      }),
+      { onServiceFault: (consumed) => void faults.push(consumed) },
+    );
+    await sender.send('ChargeCard', created, { factId: 'f-70' });
+
+    const rejection = await rejectionOf(inMemory.settled());
+
+    expect(faults).toMatchObject([{ kind: 'returned', name: 'ChargeCard@1' }]);
+    expect(rejection?.message).toBe(
+      'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-70 f-70 attempt 1: Card refused',
+    );
+  });
+
+  test('a Handler that throws makes settled() reject and never reaches the runtime as an unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    const { inMemory, publisher } = await running(() => ({
+      notify: () => {
+        throw new Error('gateway down');
+      },
+    }));
+
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    const rejection = await rejectionOf(inMemory.settled());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    process.off('unhandledRejection', listener);
+
+    expect(rejection?.message).toContain('attempt 1: the Handler threw');
+    expect(unhandled).toEqual([]);
+  });
+
+  test('an onServiceFault that rejects causes no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const listener = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', listener);
+    const { inMemory, publisher } = await running(
+      () => ({
+        notify: () => {
+          throw new Error('gateway down');
+        },
+      }),
+      { onServiceFault: async () => Promise.reject(new Error('the hook broke')) },
+    );
+
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    await rejectionOf(inMemory.settled());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    process.off('unhandledRejection', listener);
+
+    expect(unhandled).toEqual([]);
   });
 });
 
 describe('settled(): a chain of Messages that keeps producing', () => {
   test('runs that each settle before the next, adding up past 1,000 deliveries, are not cut', async () => {
-    const { broker } = await running();
+    const { inMemory } = await running();
     const settlements: string[] = [];
 
     for (let delivered = 0; delivered < 1001; delivered += 1) {
-      settlements.push(await broker.deliver(chargeCardV1, created));
+      settlements.push(await inMemory.deliver(chargeCardV1, created));
     }
 
     expect(settlements.filter((settlement) => settlement === 'acked')).toHaveLength(1001);
-    await expect(broker.settled()).resolves.toBeUndefined();
+    await expect(inMemory.settled()).resolves.toBeUndefined();
   });
 
-  /** Two Handlers that trigger each other forever: the Subscription sends, the CommandHandler publishes. */
+  test('600 delivers awaited one after the other, each Handler sending a Command, are not cut, and settled() then runs what is left', async () => {
+    const charged: string[] = [];
+    const { inMemory } = await running((connection) => ({
+      notify: async (_body, meta) => {
+        await connection.sender.send('ChargeCard', created, { factId: `charge-${meta.factId}` });
+        return undefined;
+      },
+      charge: (_body, meta) => {
+        charged.push(meta.factId);
+        return undefined;
+      },
+    }));
+    const settlements: string[] = [];
+
+    for (let delivered = 0; delivered < 600; delivered += 1) {
+      settlements.push(
+        await inMemory.deliver(orderCreatedV1, created, { factId: `o-${delivered}` }),
+      );
+    }
+
+    expect(settlements.filter((settlement) => settlement === 'acked')).toHaveLength(600);
+    await expect(inMemory.settled()).resolves.toBeUndefined();
+    expect(charged).toHaveLength(600);
+  });
+
+  /** Two Handlers that trigger each other forever: the Subscription's Message Handler sends, the Command's publishes. */
   function chaining(connection: Running, count: { deliveries: number }) {
     return {
       notify: async () => {
         count.deliveries += 1;
-        await connection.sender.send('ChargeCard', created);
+        await connection.sender.send('ChargeCard', created, {
+          factId: `charge-${count.deliveries}`,
+        });
         return undefined;
       },
       charge: async () => {
         count.deliveries += 1;
-        await connection.publisher.publish('OrderCreated', { v1: created });
+        await connection.publisher.publish(
+          'OrderCreated',
+          { v1: created },
+          { factId: `created-${count.deliveries}` },
+        );
         return undefined;
       },
     };
@@ -303,29 +505,29 @@ describe('settled(): a chain of Messages that keeps producing', () => {
 
   test('a chain of Messages that keeps producing is cut after 1,000 deliveries, and settled() rejects', async () => {
     const count = { deliveries: 0 };
-    const { broker, publisher } = await running((connection) => chaining(connection, count));
-    await publisher.publish('OrderCreated', { v1: created });
+    const { inMemory, publisher } = await running((connection) => chaining(connection, count));
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-71' });
 
-    const rejection = await rejectionOf(broker.settled());
+    const rejection = await rejectionOf(inMemory.settled());
 
     expect(rejection?.message).toBe('a chain of Messages was cut after 1,000 deliveries');
     expect(count.deliveries).toBe(1000);
-    expect(broker.messages).toHaveLength(1001);
-    expect(broker.pending).toEqual([]);
-    await expect(broker.settled()).resolves.toBeUndefined();
+    expect(inMemory.messages).toHaveLength(1001);
+    expect(inMemory.pending).toEqual([]);
+    await expect(inMemory.settled()).resolves.toBeUndefined();
   });
 
   test('a deliver still lined up when a chain is cut rejects with the cut’s error', async () => {
     const count = { deliveries: 0 };
     let lastDelivery: Promise<unknown> = Promise.resolve();
-    const { broker, publisher } = await running((connection) => {
+    const { inMemory, publisher } = await running((connection) => {
       const { notify, charge } = chaining(connection, count);
       return {
         notify,
         charge: async () => {
           await charge();
           if (count.deliveries === 1000) {
-            lastDelivery = connection.broker
+            lastDelivery = connection.inMemory
               .deliver(orderCreatedV1, created)
               .catch((e: unknown) => e);
           }
@@ -333,8 +535,8 @@ describe('settled(): a chain of Messages that keeps producing', () => {
         },
       };
     });
-    await publisher.publish('OrderCreated', { v1: created });
-    await rejectionOf(broker.settled());
+    await publisher.publish('OrderCreated', { v1: created }, { factId: 'f-72' });
+    await rejectionOf(inMemory.settled());
 
     const cut = await lastDelivery;
 

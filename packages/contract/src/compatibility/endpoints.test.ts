@@ -1,19 +1,23 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
   type CodeSnapshot,
   compatibilityReportOf,
   type Difference,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type Field,
   type GuardSnapshot,
   type ObjectNode,
-  type Path,
   type PublishedServiceSnapshot,
   type SchemaNode,
   type ServiceSnapshot,
   type ShapeDifference,
+  type Step,
+  snapshotPathOf,
 } from '../internal/index.ts';
 
 type Visibility = EndpointSnapshot['visibility'];
@@ -23,17 +27,16 @@ type Success = EndpointSnapshot['success'];
 const identity = 'PUT /orders/{}';
 const orderLocked = 'ORDER_LOCKED';
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -55,34 +58,36 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 function theParams(...fields: readonly (readonly [string, SchemaNode])[]): ObjectNode {
   const entries = fields.map(([name, schema]) => [name, required(schema)]);
-  return { type: 'object', mode: 'strict', fields: Object.fromEntries(entries) };
+  return { type: 'object', fields: Object.fromEntries(entries) };
 }
 
 function anInput(fields: Partial<Input> = {}): Input {
   return {
     params: theParams(['orderId', aString]),
-    query: null,
-    headers: null,
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
     body: null,
     ...fields,
   };
 }
 
 function aSuccess(fields: Partial<Success> = {}): Success {
-  return { status: 200, headers: null, body: null, ...fields };
+  return { status: 200, headers: { type: 'object', fields: {} }, body: null, ...fields };
 }
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'updateOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Updates an order',
     params: ['orderId'],
     guards: [],
@@ -90,6 +95,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: aSuccess(),
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -99,7 +105,7 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -107,11 +113,18 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
 }
 
 function aBaseline(
-  endpoint: EndpointSnapshot,
+  endpoint: EndpointFields,
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
   const live = { ...endpoint, lifecycle: 'active' } as const;
-  return { ...heading, version: '3.4.0', endpoints: { [identity]: live }, ...fields };
+  return {
+    ...heading,
+    version: '3.4.0',
+    generator: publishedBy,
+    formerInputs: [],
+    endpoints: { [identity]: live },
+    ...fields,
+  };
 }
 
 function aProposed(
@@ -123,9 +136,6 @@ function aProposed(
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -133,26 +143,49 @@ function changesOf(from: EndpointSnapshot, to: EndpointSnapshot): readonly Chang
   return reportOf(aBaseline(from), aProposed(to)).changes;
 }
 
-const site: ChangeSite = { kind: 'endpoint', identity, visibility: 'public' };
+const site: ChangeSite = { kind: 'endpoint', identity, name: 'updateOrder', visibility: 'public' };
 
 function breaking(difference: Difference): Change {
-  return { site, difference, class: 'breaking', approval: 'needed' };
+  return { site, difference, class: 'breaking', verdict: 'approval-needed' };
 }
 
 function additive(difference: Difference): Change {
-  return { site, difference, class: 'additive' };
+  return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
-function schemaChange(at: Path, shape: ShapeDifference, position: 'input' | 'success' = 'input') {
+function neutral(difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
+}
+
+const attachmentsChanged = neutral({ kind: 'attachments-changed' });
+
+type Part = Extract<Step, { readonly kind: 'part' }>['name'];
+
+function partsAt(...names: readonly Part[]): readonly Step[] {
+  return names.map((name) => ({ kind: 'part', name }));
+}
+
+function fieldAt(parts: readonly Part[], name: string): readonly Step[] {
+  return [...partsAt(...parts), { kind: 'field', name }];
+}
+
+function schemaChange(
+  at: readonly Step[],
+  shape: ShapeDifference,
+  position: 'input' | 'success' = 'input',
+) {
   return { kind: 'schema', position, at, shape } as const;
 }
 
-function fieldAdded(at: Path, isRequired: boolean, position: 'input' | 'success' = 'input') {
+function fieldAdded(
+  at: readonly Step[],
+  isRequired: boolean,
+  position: 'input' | 'success' = 'input',
+) {
   return schemaChange(at, { kind: 'field-added', required: isRequired }, position);
 }
 
 const typeChange = { kind: 'type-changed', from: 'string', to: 'number' } as const;
-const unprovenParam = { kind: 'unproven', node: 'param' } as const;
 
 describe('compatibilityReportOf, path params', () => {
   test.each(['public', 'internal', 'private'] as const)(
@@ -169,9 +202,10 @@ describe('compatibilityReportOf, path params', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity, visibility },
+          site: { ...site, visibility },
           difference: { kind: 'param-renamed', from: 'orderId', to: 'id' },
           class: 'additive',
+          verdict: 'allowed',
         },
       ]);
     },
@@ -183,7 +217,7 @@ describe('compatibilityReportOf, path params', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'orderId'), typeChange)),
     ]);
   });
 
@@ -197,7 +231,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'id'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'id'), typeChange)),
     ]);
   });
 
@@ -215,15 +249,15 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive({ kind: 'param-renamed', from: 'a', to: 'b' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'b'], typeChange)),
       additive({ kind: 'param-renamed', from: 'b', to: 'a' }),
       breaking(
-        schemaChange(['input', 'params', 'fields', 'a'], {
+        schemaChange(fieldAt(['input', 'params'], 'a'), {
           kind: 'type-changed',
           from: 'number',
           to: 'string',
         }),
       ),
+      breaking(schemaChange(fieldAt(['input', 'params'], 'b'), typeChange)),
     ]);
   });
 
@@ -237,7 +271,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       breaking(
-        schemaChange(['input', 'params', 'fields', 'orderId'], {
+        schemaChange(fieldAt(['input', 'params'], 'orderId'), {
           kind: 'constraint-tightened',
           constraint: 'lower-bound',
         }),
@@ -254,7 +288,7 @@ describe('compatibilityReportOf, path params', () => {
 
     expect(changes).toEqual([
       additive(
-        schemaChange(['input', 'params', 'fields', 'orderId'], {
+        schemaChange(fieldAt(['input', 'params'], 'orderId'), {
           kind: 'constraint-relaxed',
           constraint: 'lower-bound',
         }),
@@ -262,54 +296,20 @@ describe('compatibilityReportOf, path params', () => {
     ]);
   });
 
-  test('a path param with no schema in the Baseline is Breaking: nothing proves it compatible', () => {
-    const corrupted = anEndpoint({ input: anInput({ params: theParams(['id', aString]) }) });
-
-    const changes = changesOf(corrupted, anEndpoint());
-
-    expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
-    ]);
-  });
-
-  test('a path param named where the Baseline declares no params is Breaking', () => {
-    const corrupted = anEndpoint({ input: anInput({ params: null }) });
-
-    const changes = changesOf(corrupted, anEndpoint());
-
-    expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'orderId'], unprovenParam)),
-    ]);
-  });
-
-  test('a path param named constructor that one side holds no schema for is Breaking', () => {
-    const named = anEndpoint({
-      params: ['constructor'],
-      input: anInput({ params: theParams(['constructor', aString]) }),
-    });
-    const corrupted = anEndpoint({
-      params: ['constructor'],
-      input: anInput({ params: theParams(['id', aString]) }),
+  test('the params object’s own description, examples or origin changed is Neutral at input.params', () => {
+    const described = anEndpoint({
+      input: anInput({ params: { ...theParams(['orderId', aString]), description: 'The order' } }),
     });
 
-    const changes = changesOf(corrupted, named);
+    const changes = changesOf(anEndpoint(), described);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'params', 'fields', 'constructor'], unprovenParam)),
-    ]);
-  });
-
-  test('a renamed path param with no schema in the proposed Snapshot gives a rename and a Breaking Change', () => {
-    const corrupted = anEndpoint({
-      params: ['id'],
-      input: anInput({ params: theParams(['orderId', aString]) }),
-    });
-
-    const changes = changesOf(anEndpoint(), corrupted);
-
-    expect(changes).toEqual([
-      additive({ kind: 'param-renamed', from: 'orderId', to: 'id' }),
-      breaking(schemaChange(['input', 'params', 'fields', 'id'], unprovenParam)),
+      neutral(
+        schemaChange(partsAt('input', 'params'), {
+          kind: 'annotation-changed',
+          annotation: 'description',
+        }),
+      ),
     ]);
   });
 
@@ -335,7 +335,7 @@ describe('compatibilityReportOf, path params', () => {
 describe('compatibilityReportOf, query', () => {
   const queryOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ input: anInput({ query: anOpenObject(fields) }) });
-  const pageAt = ['input', 'query', 'fields', 'page'];
+  const pageAt = fieldAt(['input', 'query'], 'page');
 
   test('adding an optional query param is Additive', () => {
     const changes = changesOf(queryOf({}), queryOf({ page: optional(aNumber) }));
@@ -368,12 +368,6 @@ describe('compatibilityReportOf, query', () => {
     ]);
   });
 
-  test('a query declared with no fields where there was none gives no Change', () => {
-    const changes = changesOf(anEndpoint(), queryOf({}));
-
-    expect(changes).toEqual([]);
-  });
-
   test('a query declared with an optional field where there was none gives that field added', () => {
     const changes = changesOf(anEndpoint(), queryOf({ page: optional(aNumber) }));
 
@@ -392,7 +386,10 @@ describe('compatibilityReportOf, query', () => {
       input: anInput({ query: anOpenObject({ token: required(aString) }) }),
     });
     const demanding = aGuard({
-      demands: { headers: null, query: anOpenObject({ token: required(aString) }) },
+      demands: {
+        headers: { type: 'object', fields: {} },
+        query: anOpenObject({ token: required(aString) }),
+      },
     });
 
     const report = reportOf(
@@ -401,7 +398,8 @@ describe('compatibilityReportOf, query', () => {
     );
 
     expect(report.changes).toEqual([
-      breaking(fieldAdded(['input', 'query', 'fields', 'token'], true)),
+      breaking(fieldAdded(fieldAt(['input', 'query'], 'token'), true)),
+      attachmentsChanged,
     ]);
   });
 });
@@ -409,7 +407,7 @@ describe('compatibilityReportOf, query', () => {
 describe('compatibilityReportOf, Input headers', () => {
   const headersOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ input: anInput({ headers: anOpenObject(fields) }) });
-  const traceAt = ['input', 'headers', 'fields', 'x-trace'];
+  const traceAt = fieldAt(['input', 'headers'], 'x-trace');
   const refusesText = { kind: 'header-refuses-text', at: traceAt } as const;
 
   const accepting: readonly (readonly [string, SchemaNode])[] = [
@@ -430,17 +428,16 @@ describe('compatibilityReportOf, Input headers', () => {
     ['a min length', { type: 'string', min: 1 }],
     ['a max length', { type: 'string', max: 64 }],
     ['an enum', { type: 'enum', values: ['a', 'b'], open: false }],
-    ['a literal', { type: 'literal', value: 'a' }],
     ['a number', aNumber],
     ['a boolean', { type: 'boolean' }],
   ];
 
   test.each(refusing)(
-    'adding an optional header with %s is Additive by the field rules and Breaking by the header text rule',
+    'adding an optional header with %s is one Breaking Change, by the header text rule alone',
     (_name, schema) => {
       const changes = changesOf(headersOf({}), headersOf({ 'x-trace': optional(schema) }));
 
-      expect(changes).toEqual([additive(fieldAdded(traceAt, false)), breaking(refusesText)]);
+      expect(changes).toEqual([breaking(refusesText)]);
     },
   );
 
@@ -463,14 +460,17 @@ describe('compatibilityReportOf, Input headers', () => {
     ]);
   });
 
-  test('attaching a Guard that demands an optional header with an enum is Breaking', () => {
+  test('attaching a Guard that demands an optional header with an enum is one Breaking Change', () => {
     const closedEnum: SchemaNode = { type: 'enum', values: ['a', 'b'], open: false };
     const attached = anEndpoint({
       guards: [{ guard: 'traced', qualifier: null }],
       input: anInput({ headers: anOpenObject({ 'x-trace': optional(closedEnum) }) }),
     });
     const demanding = aGuard({
-      demands: { query: null, headers: anOpenObject({ 'x-trace': optional(closedEnum) }) },
+      demands: {
+        query: { type: 'object', fields: {} },
+        headers: anOpenObject({ 'x-trace': optional(closedEnum) }),
+      },
     });
 
     const report = reportOf(
@@ -478,7 +478,7 @@ describe('compatibilityReportOf, Input headers', () => {
       aProposed(attached, { guards: { traced: demanding } }),
     );
 
-    expect(report.changes).toEqual([additive(fieldAdded(traceAt, false)), breaking(refusesText)]);
+    expect(report.changes).toEqual([breaking(refusesText), attachmentsChanged]);
   });
 
   test('attaching a Guard that demands a required header is Breaking', () => {
@@ -490,7 +490,8 @@ describe('compatibilityReportOf, Input headers', () => {
     const report = reportOf(aBaseline(anEndpoint()), aProposed(attached));
 
     expect(report.changes).toEqual([
-      breaking(fieldAdded(['input', 'headers', 'fields', 'authorization'], true)),
+      breaking(fieldAdded(fieldAt(['input', 'headers'], 'authorization'), true)),
+      attachmentsChanged,
     ]);
   });
 
@@ -504,12 +505,13 @@ describe('compatibilityReportOf, Input headers', () => {
 
     expect(changes).toEqual([
       additive(
-        schemaChange(['input', 'headers', 'fields', 'authorization'], { kind: 'field-removed' }),
+        schemaChange(fieldAt(['input', 'headers'], 'authorization'), { kind: 'field-removed' }),
       ),
+      attachmentsChanged,
     ]);
   });
 
-  test('moving a header’s declaration from the Endpoint to a Guard gives no Change', () => {
+  test('moving a header’s declaration from the Endpoint to a Guard gives only attachments-changed', () => {
     const headers = anOpenObject({ authorization: required(aString) });
     const own = anEndpoint({ input: anInput({ headers }) });
     const throughGuard = anEndpoint({
@@ -519,7 +521,7 @@ describe('compatibilityReportOf, Input headers', () => {
 
     const report = reportOf(aBaseline(own), aProposed(throughGuard));
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report.changes).toEqual([attachmentsChanged]);
   });
 
   test('removing a header is Additive', () => {
@@ -547,7 +549,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, to);
 
     expect(changes).toEqual([
-      breaking({ kind: `body-${change}`, at: ['success', 'body'], position: 'success' }),
+      breaking({ kind: `body-${change}`, at: partsAt('success', 'body'), position: 'success' }),
     ]);
   });
 
@@ -557,7 +559,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking({ kind: 'body-added', at: ['input', 'body'], position: 'input' }),
+      breaking({ kind: 'body-added', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -568,7 +570,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(anEndpoint(), to);
 
     expect(changes).toEqual([
-      breaking({ kind: 'body-added', at: ['input', 'body'], position: 'input' }),
+      breaking({ kind: 'body-added', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -578,7 +580,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, anEndpoint());
 
     expect(changes).toEqual([
-      additive({ kind: 'body-removed', at: ['input', 'body'], position: 'input' }),
+      additive({ kind: 'body-removed', at: partsAt('input', 'body'), position: 'input' }),
     ]);
   });
 
@@ -589,7 +591,7 @@ describe('compatibilityReportOf, bodies and Success', () => {
     const changes = changesOf(from, to);
 
     expect(changes).toEqual([
-      breaking(schemaChange(['input', 'body', 'fields', 'note'], typeChange)),
+      breaking(schemaChange(fieldAt(['input', 'body'], 'note'), typeChange)),
     ]);
   });
 
@@ -601,13 +603,13 @@ describe('compatibilityReportOf, bodies and Success', () => {
 
     expect(changes).toEqual([
       breaking({ kind: 'status-changed', from: 204, to: 200 }),
-      breaking({ kind: 'body-added', at: ['success', 'body'], position: 'success' }),
+      breaking({ kind: 'body-added', at: partsAt('success', 'body'), position: 'success' }),
     ]);
   });
 
   const headersOf = (fields: Readonly<Record<string, Field>>) =>
     anEndpoint({ success: aSuccess({ headers: anOpenObject(fields) }) });
-  const locationAt = ['success', 'headers', 'fields', 'location'];
+  const locationAt = fieldAt(['success', 'headers'], 'location');
 
   test('adding a Success header is Additive, even with a format', () => {
     const withFormat: SchemaNode = { type: 'string', format: 'uuid' };
@@ -634,12 +636,6 @@ describe('compatibilityReportOf, bodies and Success', () => {
     expect(changes).toEqual([
       breaking(schemaChange(locationAt, { kind: 'field-made-optional' }, 'success')),
     ]);
-  });
-
-  test('Success headers declared with no fields where there were none give no Change', () => {
-    const changes = changesOf(anEndpoint(), headersOf({}));
-
-    expect(changes).toEqual([]);
   });
 
   test('Success headers declared with a required field where there were none give that field added', () => {
@@ -696,17 +692,20 @@ describe('compatibilityReportOf, an Endpoint’s Rejections', () => {
 
     const changes = changesOf(anEndpoint(), attached);
 
-    expect(changes).toEqual([additive({ kind: 'rejection-added', code: 'UNAUTHENTICATED' })]);
+    expect(changes).toEqual([
+      additive({ kind: 'rejection-added', code: 'UNAUTHENTICATED' }),
+      attachmentsChanged,
+    ]);
   });
 });
 
-function endpointsOf(endpoint: EndpointSnapshot, other: string) {
+function endpointsOf(endpoint: EndpointFields, other: string) {
   const live = { ...endpoint, lifecycle: 'active' } as const;
   return { [identity]: live, [other]: { ...live, name: 'auditOrder' } };
 }
 
 function auditSite(other: string): ChangeSite {
-  return { kind: 'endpoint', identity: other, visibility: 'public' };
+  return { kind: 'endpoint', identity: other, name: 'auditOrder', visibility: 'public' };
 }
 
 describe('compatibilityReportOf, Neutral', () => {
@@ -715,70 +714,96 @@ describe('compatibilityReportOf, Neutral', () => {
     { guard: 'traced', qualifier: null },
   ];
   const attached = anEndpoint({ guards });
-  const neutral: readonly (readonly [string, PublishedServiceSnapshot, ServiceSnapshot])[] = [
-    [
-      'moving an Endpoint to another Group',
-      aBaseline(anEndpoint()),
-      aProposed(anEndpoint({ group: 'archive' })),
-    ],
-    [
-      'reordering an Endpoint’s Guards',
-      aBaseline(attached),
-      aProposed(anEndpoint({ guards: [...guards].reverse() })),
-    ],
-    [
-      'changing an Attachment’s Qualifier',
-      aBaseline(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin'] }] })),
-      aProposed(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin', 'agent'] }] })),
-    ],
-    [
-      'changing a Rejection’s message',
-      aBaseline(anEndpoint({ rejections: [orderLocked] }), {
+  const codeSite: ChangeSite = { kind: 'code', code: orderLocked, visibility: 'public' };
+  const neutralRows: readonly {
+    readonly name: string;
+    readonly baseline: PublishedServiceSnapshot;
+    readonly proposed: ServiceSnapshot;
+    readonly expected: readonly Change[];
+  }[] = [
+    {
+      name: 'moving an Endpoint to another Group',
+      baseline: aBaseline(anEndpoint()),
+      proposed: aProposed(anEndpoint({ group: 'archive' })),
+      expected: [neutral({ kind: 'group-changed', from: 'orders', to: 'archive' })],
+    },
+    {
+      name: 'reordering an Endpoint’s Guards',
+      baseline: aBaseline(attached),
+      proposed: aProposed(anEndpoint({ guards: [...guards].reverse() })),
+      expected: [attachmentsChanged],
+    },
+    {
+      name: 'changing an Attachment’s Qualifier',
+      baseline: aBaseline(anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin'] }] })),
+      proposed: aProposed(
+        anEndpoint({ guards: [{ guard: 'roles', qualifier: ['admin', 'agent'] }] }),
+      ),
+      expected: [attachmentsChanged],
+    },
+    {
+      name: 'changing a Rejection’s message',
+      baseline: aBaseline(anEndpoint({ rejections: [orderLocked] }), {
         codes: { [orderLocked]: aCode('Locked') },
       }),
-      aProposed(anEndpoint({ rejections: [orderLocked] }), {
+      proposed: aProposed(anEndpoint({ rejections: [orderLocked] }), {
         codes: { [orderLocked]: aCode('Frozen') },
       }),
-    ],
+      expected: [
+        {
+          site: codeSite,
+          difference: { kind: 'message-changed' },
+          class: 'neutral',
+          verdict: 'allowed',
+        },
+      ],
+    },
   ];
 
-  test.each(neutral)('%s gives no Change, only a changed hash', (_name, baseline, proposed) => {
+  test.each(neutralRows)('$name is one Neutral Change', ({ baseline, proposed, expected }) => {
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report.changes).toEqual(expected);
   });
 });
 
 function aCode(message: string): CodeSnapshot {
-  return { origin: 'local', status: 409, message, body: null, removed: false };
+  return {
+    origin: 'local',
+    status: 409,
+    message,
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
 }
 
 describe('compatibilityReportOf, an Endpoint’s order', () => {
   test('an Endpoint’s Changes come: lifecycle, Visibility, rename, params, query, headers, Input body, Success status, headers and body, Rejections', () => {
     const from = anEndpoint({
       visibility: 'internal',
-      lifecycle: 'active',
       input: anInput({ query: anOpenObject({}), headers: anOpenObject({}) }),
       success: aSuccess({ headers: anOpenObject({}), body: anOpenObject({}) }),
     });
-    const to = anEndpoint({
-      name: 'changeOrder',
-      visibility: 'public',
-      lifecycle: 'deprecated',
-      params: ['id'],
-      input: anInput({
-        params: theParams(['id', aString]),
-        query: anOpenObject({ page: optional(aNumber) }),
-        headers: anOpenObject({ 'x-trace': optional(aNumber) }),
-        body: anOpenObject({}),
-      }),
-      success: aSuccess({
-        status: 201,
-        headers: anOpenObject({ location: required(aString) }),
-        body: anOpenObject({ id: required(aString) }),
-      }),
-      rejections: ['ORDER_LOCKED'],
-    });
+    const to = anEndpoint(
+      {
+        name: 'changeOrder',
+        visibility: 'public',
+        params: ['id'],
+        input: anInput({
+          params: theParams(['id', aString]),
+          query: anOpenObject({ page: optional(aNumber) }),
+          headers: anOpenObject({ 'x-trace': optional(aNumber) }),
+          body: anOpenObject({}),
+        }),
+        success: aSuccess({
+          status: 201,
+          headers: anOpenObject({ location: required(aString) }),
+          body: anOpenObject({ id: required(aString) }),
+        }),
+        rejections: ['ORDER_LOCKED'],
+      },
+      { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' },
+    );
 
     const changes = changesOf(from, to);
 
@@ -788,7 +813,6 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
       'renamed',
       'param-renamed',
       'input.query.fields.page',
-      'input.headers.fields.x-trace',
       'header-refuses-text',
       'body-added input.body',
       'status-changed',
@@ -814,11 +838,80 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
 function describedAs(difference: Difference): string {
   switch (difference.kind) {
     case 'schema':
-      return difference.at.join('.');
+      return snapshotPathOf(difference.at).join('.');
     case 'body-added':
     case 'body-removed':
-      return `${difference.kind} ${difference.at.join('.')}`;
+      return `${difference.kind} ${snapshotPathOf(difference.at).join('.')}`;
     default:
       return difference.kind;
   }
 }
+
+describe('compatibilityReportOf, retiring an Endpoint compares nothing it declares', () => {
+  const deprecated = anEndpoint(
+    {},
+    { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' },
+  );
+  const locked: CodeSnapshot = {
+    origin: 'local',
+    status: 409,
+    message: 'Locked',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
+
+  function retiringChangesOf(retired: Partial<EndpointFields>): readonly Change[] {
+    const baseline: PublishedServiceSnapshot = {
+      ...heading,
+      version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
+      endpoints: { [identity]: deprecated },
+      codes: { [orderLocked]: locked },
+    };
+    const proposed = aProposed(anEndpoint(retired, { lifecycle: 'retired' }), {
+      codes: baseline.codes,
+    });
+    return reportOf(baseline, proposed).changes;
+  }
+
+  const body = anOpenObject({ note: required(aString) });
+  const header = anOpenObject({ 'x-trace': required(aString) });
+  test.each<[string, Partial<EndpointFields>]>([
+    ['a Success whose status changed', { success: aSuccess({ status: 201 }) }],
+    ['a Success body added', { success: aSuccess({ body }) }],
+    ['an Input body added', { input: anInput({ body }) }],
+    ['an Input header added', { input: anInput({ headers: header }) }],
+    ['a query param added', { input: anInput({ query: header }) }],
+    [
+      'a path param whose type changed',
+      { input: anInput({ params: theParams(['orderId', aNumber]) }) },
+    ],
+    ['a code answered that was not', { rejections: [orderLocked] }],
+  ])(
+    'retiring a Deprecated Endpoint with %s compares nothing but reports retired-changed',
+    (_name, change) => {
+      const changes = retiringChangesOf(change);
+
+      expect(changes.map(({ difference }) => difference.kind)).toEqual([
+        'retired',
+        'retired-changed',
+      ]);
+    },
+  );
+
+  test('an Endpoint still declared Deprecated with a changed Success reports it', () => {
+    const baseline: PublishedServiceSnapshot = {
+      ...heading,
+      version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
+      endpoints: { [identity]: deprecated },
+    };
+    const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });
+
+    const changes = reportOf(baseline, proposed).changes;
+
+    expect(changes.map(({ difference }) => difference.kind)).toEqual(['status-changed']);
+  });
+});

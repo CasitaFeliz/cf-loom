@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "${configDir}/src",
+    "rootDir": "${configDir}",
     "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/test.tsbuildinfo",
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": ["src"],
+  "include": ["src", "test"],
   "references": [
     {
       "path": "../contract/tsconfig.build.json"
@@ -16,9 +16,6 @@
     },
     {
       "path": "../client/tsconfig.build.json"
-    },
-    {
-      "path": "../messaging/tsconfig.build.json"
     },
     {
       "path": "../server/tsconfig.build.json"

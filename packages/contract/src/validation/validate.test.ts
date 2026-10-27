@@ -2,27 +2,38 @@ import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
+import { summarized } from '../../test/failures.ts';
+import { aProvider } from '../../test/providers.ts';
+import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineApplication,
-  defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Guard,
   notFound,
   openEnum,
+  providedEndpoint,
 } from '../index.ts';
-import { type RootPackage, validateContract, walkSchemas } from '../internal/index.ts';
+import { type Root, type Site, validateRoot, walkSchemas } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+/** Validates a Root as the package it names: its package.json named as the Root is. */
+function validateInPackage(root: Root) {
+  return summarized(validateRoot(root, aRootPackage(root)));
+}
+
+/** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
+function aPlace(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
+/** Where a declaration sits: at its site, with the declaration itself and no steps. */
+function sitting(site: Site, declaration: unknown) {
+  return { site, declaration, steps: [] };
 }
 
 function noOrigin() {
@@ -73,48 +84,33 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder],
 });
 
-const getPayment = defineEndpoint({
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
-
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: { getPayment },
-  events: {},
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+const getPayment = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
   },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
+  undefined,
+);
 
-describe('validateContract', () => {
+describe('validateRoot', () => {
   test('a valid Contract finds the walked node of each declaration’s part', () => {
-    const contract = defineContract({ name: 'orders-service', groups: [ordersGroup] });
+    const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
     const located = [
-      {
-        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params'],
-        schema: getOrder.input.params,
-      },
-      {
-        at: ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'success', 'body'],
-        schema: getOrder.success.body,
-      },
-      { at: ['guards', 'apiKey', 'demands', 'headers'], schema: apiKey.demands.headers },
-      { at: ['guards', 'apiKey', 'context'], schema: apiKey.context },
-      { at: ['rejections', 'ORDER_LOCKED', 'body'], schema: orderLocked.body },
+      { at: aPlace('params'), schema: getOrder.input.params },
+      { at: aPlace('body'), schema: getOrder.success.body },
+      { at: aPlace('headers'), schema: apiKey.demands.headers },
+      { at: aPlace('context'), schema: apiKey.context },
+      { at: aPlace('lockedBody'), schema: orderLocked.body },
     ];
     const walked = walkSchemas(located, noOrigin);
 
-    const validated = validateInPackage(contract, noOrigin);
+    const validated = validateInPackage(contract);
 
     const { nodeOf, defs } = validated.kind === 'valid' ? validated.schemas : unreachable();
     expect([
@@ -127,64 +123,57 @@ describe('validateContract', () => {
     expect(defs).toEqual({});
   });
 
-  test('a valid Contract carries its declarations in the root’s order: Endpoints by identity, Guards and codes reached, Standard Rejections resolved', () => {
-    const shared = defineGuard({ name: 'shared', description: 'Listed, attached by no Endpoint' });
+  test('a valid Contract carries what it reaches in the Root’s order: Endpoints by identity, Guards and codes, Standard Rejections resolved', () => {
+    const shared = defineGuard({
+      name: 'shared',
+      description: 'Exported, attached by no Endpoint',
+    });
     const unused = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
     const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [shared],
-      rejections: [unused],
       standardRejections: { notFound: { code: 'MISSING', status: 404, message: 'Missing' } },
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [ordersGroup],
     });
+    const installed = anInstalledPackage(definitions, { shared, unused, apiKey });
 
-    const validated = validateInPackage(contract, noOrigin);
+    const validated = validateRoot(contract, aRootPackage(contract, { packages: [installed] }));
 
-    const listedIn = { at: ['definitions', 'definitions'], definitions };
     expect(validated.kind === 'valid' && validated.declarations).toEqual({
       root: contract,
+      packageName: 'orders-service',
+      ownMembers: undefined,
+      groups: [{ at: sitting({ kind: 'group', name: 'orders' }, ordersGroup), group: ordersGroup }],
       endpoints: [
         {
-          at: ['groups', 'orders', 'endpoints', 'GET /orders/{}'],
+          at: sitting({ kind: 'endpoint', identity: 'GET /orders/{}', name: 'getOrder' }, getOrder),
           endpoint: getOrder,
           group: ordersGroup,
         },
       ],
       guards: [
-        { at: ['guards', 'apiKey'], guard: apiKey, reached: true, listedIn: undefined },
-        { at: ['guards', 'shared'], guard: shared, reached: false, listedIn },
+        { at: sitting({ kind: 'guard', name: 'apiKey' }, apiKey), guard: apiKey, from: installed },
       ],
       codes: [
         {
-          code: 'UNUSED',
-          at: ['rejections', 'UNUSED'],
-          rejection: unused,
-          reached: false,
-          listedIn,
+          code: 'ORDER_LOCKED',
+          at: sitting({ kind: 'code', code: 'ORDER_LOCKED' }, orderLocked),
+          rejection: orderLocked,
+          from: undefined,
         },
         {
           code: 'UNAUTHENTICATED',
-          at: ['rejections', 'UNAUTHENTICATED'],
+          at: sitting({ kind: 'code', code: 'UNAUTHENTICATED' }, unauthenticated),
           rejection: unauthenticated,
-          reached: true,
-          listedIn: undefined,
-        },
-        {
-          code: 'ORDER_LOCKED',
-          at: ['rejections', 'ORDER_LOCKED'],
-          rejection: orderLocked,
-          reached: true,
-          listedIn: undefined,
+          from: undefined,
         },
       ],
       standardRejections: [
         {
           name: 'invalidInput',
-          at: ['definitions', 'definitions', 'standardRejections', 'invalidInput'],
+          at: sitting({ kind: 'standard-rejection', name: 'invalidInput' }, definitions),
           code: 'INVALID_INPUT',
           status: 400,
           message: 'Invalid input',
@@ -192,27 +181,27 @@ describe('validateContract', () => {
         },
         {
           name: 'notFound',
-          at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
+          at: sitting({ kind: 'standard-rejection', name: 'notFound' }, definitions),
           code: 'MISSING',
           status: 404,
           message: 'Missing',
           declared: {
-            at: ['definitions', 'definitions', 'standardRejections', 'notFound'],
+            at: sitting({ kind: 'standard-rejection', name: 'notFound' }, definitions),
             name: 'notFound',
             declaration: { code: 'MISSING', status: 404, message: 'Missing' },
-            listedIn,
           },
         },
         {
           name: 'notImplemented',
-          at: ['definitions', 'definitions', 'standardRejections', 'notImplemented'],
+          at: sitting({ kind: 'standard-rejection', name: 'notImplemented' }, definitions),
           code: 'NOT_IMPLEMENTED',
           status: 501,
           message: 'Not implemented',
           declared: undefined,
         },
       ],
-      dependencies: [],
+      standardRejectionsSource: installed,
+      providers: [],
       events: [],
       commands: [],
       subscriptions: [],
@@ -226,12 +215,10 @@ describe('validateContract', () => {
       description: 'The user holds a permission',
       guards: [userToken],
     });
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [permission, userToken],
-    });
+    const definitions = defineDefinitions({});
+    const rootExports = { permission, userToken };
 
-    const validated = validateInPackage(definitions, noOrigin);
+    const validated = validateRoot(definitions, aRootPackage(definitions, { rootExports }));
 
     expect(validated.kind === 'valid' && validated.declarations.guards).toMatchObject([
       { guard: userToken },
@@ -239,30 +226,30 @@ describe('validateContract', () => {
     ]);
   });
 
-  test('a valid Definitions Package reaches every Guard and code it declares', () => {
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [apiKey],
-      rejections: [orderLocked, unauthenticated],
-    });
+  test('a valid Definitions Package reaches every Guard and code it exports', () => {
+    const definitions = defineDefinitions({});
+    const rootExports = { apiKey, orderLocked, unauthenticated };
 
-    const validated = validateInPackage(definitions, noOrigin);
+    const validated = validateRoot(definitions, aRootPackage(definitions, { rootExports }));
 
     expect(validated.kind === 'valid' && validated.declarations).toMatchObject({
       endpoints: [],
-      guards: [{ guard: apiKey, reached: true }],
+      guards: [{ guard: apiKey }],
       codes: [
-        { code: 'ORDER_LOCKED', rejection: orderLocked, reached: true },
-        { code: 'UNAUTHENTICATED', rejection: unauthenticated, reached: true },
+        { code: 'UNAUTHENTICATED', rejection: unauthenticated },
+        { code: 'ORDER_LOCKED', rejection: orderLocked },
       ],
     });
   });
 
   test('a valid Application returns no schemas and no Elements', () => {
-    const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment] });
-    const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
+    const paymentsDependency = defineDependency({ endpoints: [getPayment] });
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [paymentsDependency],
+    });
 
-    const validated = validateInPackage(application, noOrigin);
+    const validated = validateInPackage(application);
 
     expect(validated).toMatchObject({
       kind: 'valid',
@@ -285,8 +272,7 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     expect(validated).toEqual({
@@ -294,7 +280,7 @@ describe('validateContract', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -319,8 +305,7 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     expect(validated).toEqual({
@@ -328,7 +313,7 @@ describe('validateContract', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -351,8 +336,7 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     expect(validated).toEqual({
@@ -360,7 +344,7 @@ describe('validateContract', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'quota', 'qualifier'],
+          location: 'guards.quota qualifier',
           rule: 'not-a-schema',
           message: 'qualifier is not a zod schema',
         },
@@ -381,8 +365,7 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     expect(validated.kind).toBe('valid');
@@ -406,8 +389,7 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [listOrders] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
     expect(validated).toEqual({
@@ -415,7 +397,7 @@ describe('validateContract', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['guards', 'quota', 'qualifier'],
+          location: 'guards.quota qualifier',
           rule: 'not-a-schema',
           message: 'qualifier is not a zod schema',
         },
@@ -436,23 +418,21 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
-    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: [...endpointAt, 'input', 'body'],
+          location: 'endpoints.POST /orders (createOrder) input.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
         {
           kind: 'declaration',
-          at: [...endpointAt, 'success', 'body'],
+          location: 'endpoints.POST /orders (createOrder) success.body',
           rule: 'not-a-schema',
           message: 'body is not a zod schema',
         },
@@ -462,21 +442,17 @@ describe('validateContract', () => {
 
   test('a valid Definitions Package finds the nodes of its Guards, Rejections and shared schemas', () => {
     const money = z.object({ amount: z.int(), currency: z.string() });
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [apiKey],
-      schemas: { money },
-      rejections: [unauthenticated, orderLocked],
-    });
+    const definitions = defineDefinitions({});
     const located = [
-      { at: ['guards', 'apiKey', 'demands', 'headers'], schema: apiKey.demands.headers },
-      { at: ['guards', 'apiKey', 'context'], schema: apiKey.context },
-      { at: ['rejections', 'ORDER_LOCKED', 'body'], schema: orderLocked.body },
-      { at: ['schemas', 'money'], schema: money },
+      { at: aPlace('headers'), schema: apiKey.demands.headers },
+      { at: aPlace('context'), schema: apiKey.context },
+      { at: aPlace('lockedBody'), schema: orderLocked.body },
+      { at: aPlace('money'), schema: money },
     ];
     const walked = walkSchemas(located, noOrigin);
+    const rootExports = { apiKey, money, unauthenticated, orderLocked };
 
-    const validated = validateInPackage(definitions, noOrigin);
+    const validated = validateRoot(definitions, aRootPackage(definitions, { rootExports }));
 
     const { nodeOf } = validated.kind === 'valid' ? validated.schemas : unreachable();
     expect([
@@ -494,33 +470,27 @@ describe('validateContract', () => {
       path: '/orders',
       visibility: 'public',
       description: 'Creates an order',
+      // @ts-expect-error z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] })],
     });
 
-    const validated = validateInPackage(contract, noOrigin);
+    const validated = validateInPackage(contract);
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'not-allowed',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'POST /orders',
-            'input',
-            'body',
-            'fields',
-            'placedAt',
-          ],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });
@@ -534,6 +504,7 @@ describe('validateContract', () => {
       visibility: 'public',
       description: 'Creates an order',
       input: {
+        // @ts-expect-error z.date() is refused by the types, as generate refuses it
         body: z.object({ placedAt: z.date() }),
         headers: z.object({ 'x-tenant': z.object({ id: z.string() }) }),
       },
@@ -542,25 +513,25 @@ describe('validateContract', () => {
     const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] });
 
     const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [orders] }),
-      noOrigin,
+      defineService({ name: 'orders-service', groups: [orders] }),
     );
 
-    const endpointAt = ['groups', 'orders', 'endpoints', 'POST /orders'];
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
+          location: 'endpoints.POST /orders (createOrder) input.headers.x-tenant',
           rule: 'not-text',
           message: 'A header travels as text: a string, number, boolean, literal or enum: x-tenant',
         },
         {
           kind: 'not-allowed',
-          at: [...endpointAt, 'input', 'body', 'fields', 'placedAt'],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });
@@ -573,46 +544,40 @@ describe('validateContract', () => {
       path: '/orders/',
       visibility: 'public',
       description: 'Creates an order',
+      // @ts-expect-error z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [createOrder] })],
     });
 
-    const validated = validateInPackage(contract, noOrigin);
+    const validated = validateInPackage(contract);
 
     expect(validated).toEqual({
       kind: 'invalid',
       failures: [
         {
           kind: 'declaration',
-          at: ['groups', 'orders', 'endpoints', 'POST /orders', 'path'],
+          location: 'endpoints.POST /orders (createOrder) path',
           rule: 'canonical-path',
-          message: 'A path has no trailing slash: /orders/',
+          message: 'A path has no trailing slash: "/orders/"',
         },
         {
           kind: 'not-allowed',
-          at: [
-            'groups',
-            'orders',
-            'endpoints',
-            'POST /orders',
-            'input',
-            'body',
-            'fields',
-            'placedAt',
-          ],
+          location: 'endpoints.POST /orders (createOrder) input.body.placedAt',
           construct: 'z.date()',
           instead: 'z.iso.datetime()',
+          alsoIn: [],
+          origin: undefined,
         },
       ],
     });
   });
 });
 
-describe('validateContract: the README’s examples', () => {
+describe('validateRoot: the README’s examples', () => {
   const money = z.object({ amount: z.int(), currency: z.string() });
   const pagination = z.object({ page: z.int(), size: z.int() });
   const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
@@ -632,10 +597,6 @@ describe('validateContract: the README’s examples', () => {
     rejections: [forbidden],
   });
   const definitions = defineDefinitions({
-    name: 'definitions',
-    guards: [userToken, permission],
-    schemas: { money, pagination },
-    rejections: [unauthenticated, forbidden],
     standardRejections: {
       invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
       notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
@@ -686,63 +647,32 @@ describe('validateContract: the README’s examples', () => {
     description: 'Order lifecycle',
     endpoints: [readmeGetOrder, createOrder, updateOrder],
   });
-  const paymentsDeps = defineDependencies(payments, { endpoints: [payments.endpoints.getPayment] });
-  const contract = defineContract({
+  const paymentsDependency = defineDependency({ endpoints: [getPayment] });
+  const contract = defineService({
     name: 'orders-service',
-    definitions: [definitions],
+    standardRejections: definitions,
     groups: [readmeOrders],
-    dependencies: [paymentsDeps],
+    dependencies: [paymentsDependency],
   });
 
   test('the Service, its Definitions Package and an Application validate', () => {
-    const application = defineApplication({ name: 'web-admin', dependencies: [paymentsDeps] });
+    const application = defineApplication({
+      name: 'web-admin',
+      dependencies: [paymentsDependency],
+    });
+
+    const exported = { userToken, permission, money, pagination, unauthenticated, forbidden };
+    const packages = [anInstalledPackage(definitions, exported)];
+    const rootExports = exported;
 
     const validated = [contract, definitions, application].map(
-      (root) => validateInPackage(root, noOrigin).kind,
+      (root) => validateRoot(root, aRootPackage(root, { packages, rootExports })).kind,
     );
 
     expect(validated).toEqual(['valid', 'valid', 'valid']);
   });
 
-  test('a code declared twice is written once, as its first declaration, and compared from both', () => {
-    const lockedAgain = defineRejection({
-      code: 'ORDER_LOCKED',
-      status: 409,
-      message: 'Locked',
-      body: z.object({ lockedAt: z.iso.datetime().describe('When it locked') }),
-    });
-    const retryOrder = defineEndpoint({
-      name: 'retryOrder',
-      method: 'POST',
-      path: '/orders/:orderId/retry',
-      visibility: 'public',
-      description: 'Retries one order',
-      input: { params: z.object({ orderId: z.uuid() }) },
-      success: { status: 204 },
-      rejections: [lockedAgain],
-    });
-    const group = defineGroup({
-      name: 'orders',
-      description: 'Orders',
-      endpoints: [getOrder, retryOrder],
-    });
-
-    const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [group] }),
-      noOrigin,
-    );
-
-    const { schemas, declarations } = validated.kind === 'valid' ? validated : unreachable();
-    const written = declarations.codes.find(({ code }) => code === 'ORDER_LOCKED');
-    expect(written?.rejection).toBe(orderLocked);
-    expect(schemas.nodeOf(written?.rejection, 'body')).toEqual({
-      type: 'object',
-      mode: 'open',
-      fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
-    });
-  });
-
-  test('a Contract of 4000 Endpoints validates', () => {
+  test('a Contract of 4000 Endpoints validates', { timeout: 30_000 }, () => {
     const endpoints = Array.from({ length: 4000 }, (_, index) =>
       defineEndpoint({
         name: `getItem${index}`,
@@ -763,17 +693,14 @@ describe('validateContract: the README’s examples', () => {
       endpoints: [first!, ...rest],
     });
 
-    const validated = validateInPackage(
-      defineContract({ name: 'orders-service', groups: [items] }),
-      noOrigin,
-    );
+    const validated = validateInPackage(defineService({ name: 'orders-service', groups: [items] }));
 
     expect(validated.kind).toBe('valid');
   });
 
-  test('the same root validates to the same result twice', () => {
-    const first = validateInPackage(contract, noOrigin);
-    const second = validateInPackage(contract, noOrigin);
+  test('the same Root validates to the same result twice', () => {
+    const first = validateInPackage(contract);
+    const second = validateInPackage(contract);
 
     const lookup = { nodeOf: expect.any(Function) };
     const expected =

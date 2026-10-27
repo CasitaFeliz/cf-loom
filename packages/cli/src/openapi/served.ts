@@ -8,7 +8,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Authorization, separatedAuthorizationOf } from './authorization.ts';
 
-/** A Rejection an Endpoint answers: its code, with the status, message and body that code has. */
+/** A Rejection an Endpoint answers: its code, with the status, message, headers and body that code has. */
 export type ServedRejection = CodeSnapshot & { readonly code: string };
 
 /** What `serve` reads of an Endpoint that is not Retired, and what it answers. */
@@ -78,7 +78,7 @@ export function servedNodesOf(served: Served): readonly SchemaNode[] {
         input.body,
         success.headers,
         success.body,
-        ...rejections.map(({ body }) => body),
+        ...rejections.flatMap(({ headers, body }) => [headers, body]),
       ];
       return parts.filter(isNode);
     }

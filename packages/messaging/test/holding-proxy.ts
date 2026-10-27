@@ -7,6 +7,8 @@ export type HoldingProxy = {
   readonly hold: () => void;
   /** Passes on what was held, and everything the server sends from now on. */
   readonly release: () => void;
+  /** Closes every open connection through the proxy cleanly, what was held lost, and stops holding; it keeps listening, so a client that reconnects gets through. */
+  readonly drop: () => void;
   readonly stop: () => Promise<void>;
 };
 
@@ -18,15 +20,7 @@ export async function aHoldingProxy(upstreamUrl: string): Promise<HoldingProxy> 
   const links: Link[] = [];
   let holding = false;
   const server = createServer((client) => {
-    const link: Link = { client, held: [] };
-    links.push(link);
-    const toServer = connect({ host: upstream.hostname, port: Number(upstream.port) });
-    client.on('data', (chunk) => toServer.write(chunk));
-    toServer.on('data', (chunk) => (holding ? link.held.push(chunk) : client.write(chunk)));
-    client.on('close', () => toServer.destroy());
-    toServer.on('close', () => client.destroy());
-    client.on('error', () => toServer.destroy());
-    toServer.on('error', () => client.destroy());
+    links.push(linkedToUpstream(client, upstream, () => holding));
   });
   await listening(server);
   const release = () => {
@@ -35,12 +29,19 @@ export async function aHoldingProxy(upstreamUrl: string): Promise<HoldingProxy> 
       link.client.write(Buffer.concat(link.held.splice(0)));
     }
   };
+  const drop = () => {
+    holding = false;
+    for (const link of links.splice(0)) {
+      link.client.end();
+    }
+  };
   return {
     url: `nats://127.0.0.1:${(server.address() as { port: number }).port}`,
     hold: () => {
       holding = true;
     },
     release,
+    drop,
     stop: async () => {
       for (const link of links) {
         link.client.destroy();
@@ -48,6 +49,19 @@ export async function aHoldingProxy(upstreamUrl: string): Promise<HoldingProxy> 
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
+}
+
+/** Passes what the client sends to the upstream server, and what the server sends back unless the proxy is holding it. */
+function linkedToUpstream(client: Socket, upstream: URL, isHolding: () => boolean): Link {
+  const toServer = connect({ host: upstream.hostname, port: Number(upstream.port) });
+  const link: Link = { client, held: [] };
+  client.on('data', (chunk) => toServer.write(chunk));
+  toServer.on('data', (chunk) => (isHolding() ? link.held.push(chunk) : client.write(chunk)));
+  client.on('close', () => toServer.destroy());
+  toServer.on('close', () => client.destroy());
+  client.on('error', () => toServer.destroy());
+  toServer.on('error', () => client.destroy());
+  return link;
 }
 
 function listening(server: Server): Promise<void> {

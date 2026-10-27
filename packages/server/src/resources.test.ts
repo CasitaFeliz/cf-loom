@@ -1,21 +1,13 @@
 import {
   defineCommand,
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   notFound,
 } from '@cf-loom/contract';
-import {
-  admit,
-  type GuardCall,
-  handle,
-  reject,
-  success,
-  type WithResources,
-  withReader,
-} from '@cf-loom/handlers';
+import { admit, handle, readersOf, reject, success, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { serve } from './index.ts';
@@ -74,7 +66,7 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder, health] })],
 });
@@ -88,7 +80,7 @@ const seen: unknown[] = [];
 
 const getOrderHandler = handle(
   getOrder,
-  ({ params }, context, { resources: taken }: Needs<'orders'>) => {
+  ({ params }, { context }, { resources: taken }: Needs<'orders'>) => {
     seen.push(taken);
     const name = taken.orders.find(params.orderId);
     return name === undefined
@@ -99,19 +91,20 @@ const getOrderHandler = handle(
 
 const apiKeyHandler = handle(
   apiKey,
-  (
-    { headers },
-    _context,
-    { resources: taken }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
-  ) => {
+  ({ headers }, _call, { resources: taken }: Needs<'callers'>) => {
     seen.push(taken);
     const callerId = taken.callers.byKey(headers['x-api-key']);
     return callerId === undefined ? reject(unauthenticated) : admit({ callerId });
   },
 );
 
+const readers = readersOf({
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
+  subscriptions: {},
+});
+
 const chargeCardHandler = handle(
-  withReader(chargeCardV1, chargeCardV1.body),
+  readers.commands.chargeCardV1,
   (_body, _meta, { resources: taken }: Needs<'charges'>) => {
     taken.charges.chargeOnce(ORDER_ID);
   },
@@ -124,7 +117,7 @@ const handlers = {
   guards: { apiKey: apiKeyHandler },
   commands: { chargeCardV1: chargeCardHandler },
   subscriptions: {},
-  deprecatedAt: {},
+  readers,
 };
 
 function getOrderRequest(key: string): Request {
@@ -163,7 +156,7 @@ describe('serve: Resources', () => {
   test('without the Resources its Endpoint and Guard Handlers take is a type error', () => {
     const missing = () => [
       // @ts-expect-error the Handlers take orders and callers
-      serve(contract, handlers),
+      serve(contract, handlers, {}),
       // @ts-expect-error the options must hold the Resources
       serve(contract, handlers, { maxBodyBytes: 1 }),
       // @ts-expect-error callers is missing
@@ -187,12 +180,22 @@ describe('serve: Resources', () => {
     const bare = {
       endpoints: { getOrder: handle.stub(getOrder), health: healthHandler },
       guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
-      deprecatedAt: {},
     };
 
-    const served = [serve(contract, bare), serve(contract, bare, { maxBodyBytes: 1 })];
+    const served = [serve(contract, bare, {}), serve(contract, bare, { maxBodyBytes: 1 })];
 
     expect(served).toHaveLength(2);
+  });
+
+  test('a map of stubs is served with Resources given', () => {
+    const stubs = {
+      endpoints: { getOrder: handle.stub(getOrder), health: handle.stub(health) },
+      guards: { apiKey: handle.stub(apiKey) },
+    };
+
+    const http = serve(contract, stubs, { resources: { orders } });
+
+    expect(http).toBeTypeOf('function');
   });
 
   test('a test that replaces a Handler by spreading the map needs only what the rest take', async () => {
@@ -206,5 +209,47 @@ describe('serve: Resources', () => {
     const response = await http(getOrderRequest('any'));
 
     expect(await response.json()).toEqual({ name: 'Book', callerId: 'c-9' });
+  });
+});
+
+describe('serve: the request an EndpointHandler receives', () => {
+  test('an EndpointHandler receives the request’s headers as received, x-request-id included', async () => {
+    const received: Headers[] = [];
+    const healthy = handle(health, (_input, { request }) => {
+      received.push(request.headers);
+      return success();
+    });
+    const http = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, health: healthy } },
+      {
+        resources,
+      },
+    );
+
+    await http(new Request('http://test/health', { headers: { 'x-request-id': 'r-1' } }));
+
+    expect(received[0]?.get('x-request-id')).toBe('r-1');
+  });
+
+  test('an EndpointHandler receives the request’s abort signal, which aborts when the Request’s does', async () => {
+    const controller = new AbortController();
+    const received: AbortSignal[] = [];
+    const healthy = handle(health, (_input, { request }) => {
+      received.push(request.signal);
+      controller.abort();
+      return success();
+    });
+    const http = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, health: healthy } },
+      {
+        resources,
+      },
+    );
+
+    await http(new Request('http://test/health', { signal: controller.signal }));
+
+    expect(received[0]?.aborted).toBe(true);
   });
 });

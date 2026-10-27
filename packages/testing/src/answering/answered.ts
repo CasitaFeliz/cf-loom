@@ -1,18 +1,31 @@
+import { networkFailureOf } from '@cf-loom/client/internal';
 import {
+  envelopeOf,
   faultResponseOf,
   follows,
   isJsonValue,
   isReservedCode,
+  methodNotAllowedResponseOf,
+  oneOf,
   rejectionResponseOf,
+  reservedCodes,
   reservedResponseOf,
+  ruleOf,
+  sendableRetryAfterOf,
+  travelingFaultOf,
   upperSnakeCase,
+  writtenTextOf,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
-import { type ListedEndpoint, whoOf } from '../provided/index.ts';
+import { type ListedEndpoint, type ListedMatch, whoOf } from '../provided/index.ts';
 import type { Answer } from '../scripting/index.ts';
-import { knownRejectionResponseOf, scriptedSuccessResponseOf } from './outcomes.ts';
+import {
+  declaredRejectionResponseOf,
+  knownRejectionResponseOf,
+  scriptedSuccessResponseOf,
+} from './outcomes.ts';
 
-/** The status a scripted code the Provider does not declare travels with. */
+/** The status a scripted code the listed Endpoints do not declare travels with. */
 const unknownRejectionStatus = 422;
 
 /** What a mistake says when a scripted answer throws while it is read. */
@@ -22,7 +35,7 @@ const unsendable = 'the scripted answer cannot be sent';
  * A scripted answer as the Provider would send it, a network failure thrown as `fetch` throws it;
  * whatever throws while an answer is read is the test's mistake.
  */
-export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
+export function responseOf(answer: Answer, { listed, otherMethods }: ListedMatch): Response {
   switch (answer.kind) {
     case 'success':
       return builtOf(listed, unsendable, () => scriptedSuccessResponseOf(answer.success, listed));
@@ -31,54 +44,108 @@ export function responseOf(answer: Answer, listed: ListedEndpoint): Response {
     case 'unknown-rejection':
       return builtOf(listed, unsendable, () => unknownRejectionResponseOf(answer, listed));
     case 'fault':
-      return builtOf(listed, unsendable, () => faultResponseOf(answer));
+      return builtOf(listed, unsendable, () => faultResponseOf(readableFaultOf(answer, listed)));
     case 'reserved':
-      return builtOf(listed, unsendable, () => reservedResponseOf(answer.code));
+      return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, listed, otherMethods));
     case 'no-connection':
-      throw networkFailureOf('ECONNREFUSED');
+      throw networkFailureOf('no-connection');
     case 'reset':
-      throw networkFailureOf('ECONNRESET');
+      throw networkFailureOf('connection-lost');
     case 'status':
       return builtOf(listed, unsendable, () => bareStatusResponseOf(answer, listed));
   }
 }
 
-/** What `fetch` throws when the connection is refused or reset, as Node's reports it. */
-function networkFailureOf(code: 'ECONNREFUSED' | 'ECONNRESET'): TypeError {
-  return new TypeError('fetch failed', { cause: { code } });
+type ScriptedFault = Extract<Answer, { readonly kind: 'fault' }>;
+
+/**
+ * The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a
+ * Fault or its `retryAfter` cannot travel as `Retry-After`.
+ */
+function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
+  const fault = travelingFaultOf(answer);
+  if (fault === undefined) {
+    const what =
+      "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
+  const sendable = sendableRetryAfterOf(answer);
+  if (sendable.kind === 'refused') {
+    throw mistakeOf({ ...whoOf(listed), what: `r.fault: ${sendable.message}` });
+  }
+  return { ...fault, retryAfter: sendable.retryAfter };
+}
+
+/**
+ * A Reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path
+ * takes; the test's mistake when it is none.
+ */
+function reservedAnswerOf(
+  code: unknown,
+  listed: ListedEndpoint,
+  otherMethods: readonly string[],
+): Response {
+  if (!isReservedCode(code)) {
+    const what = `r.reserved takes a Reserved code, ${oneOf(reservedCodes)}, not ${writtenTextOf(code)}`;
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
+  return code === 'METHOD_NOT_ALLOWED'
+    ? methodNotAllowedResponseOf(otherMethods)
+    : reservedResponseOf(code);
 }
 
 type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;
 
 /**
- * A code the Provider does not declare, as a later Provider might send it: never one the Endpoint
- * answers, a reserved one or one no Contract could declare, and with a JSON body.
+ * A code the Endpoint does not answer, as a later Provider might send it: one another listed
+ * Endpoint declares as it declares it, any other with 422; never a Reserved code or one no
+ * Contract could declare.
  */
 function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
-  const refused = refusedUnknownCodeOf(answer.code, listed);
+  const refused = refusedUnknownCodeOf(answer.code, listed) ?? refusedMessageOf(answer);
   if (refused !== undefined) {
     throw mistakeOf({ ...whoOf(listed), what: refused });
   }
-  const { code, message, body } = answer;
+  const rejection = listed.declaredByCode.get(answer.code);
+  if (rejection !== undefined) {
+    return declaredRejectionResponseOf({ ...answer, rejection }, listed);
+  }
+  return undeclaredRejectionResponseOf(answer, listed);
+}
+
+/** A code the listed Endpoints do not declare: 422, its message the code unless given, and a JSON body only when given. */
+function undeclaredRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
+  const { code, message = code, headers, body } = answer;
+  if (headers !== undefined) {
+    const what = 'r.unknownRejection takes headers only for a code the listed Endpoints declare';
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
   const what = `the scripted ${code} body is no JSON`;
   return builtOf(listed, what, () => {
-    if (!isJsonValue(body)) {
+    if (body !== undefined && !isJsonValue(body)) {
       throw mistakeOf({ ...whoOf(listed), what });
     }
     return rejectionResponseOf({ code, status: unknownRejectionStatus, message, body });
   });
 }
 
-/** Why a code cannot stand for one the Provider does not declare, if it cannot. */
+/** Why a scripted message cannot travel as a Rejection's, if it cannot: no Caller would read it as one. */
+function refusedMessageOf({ code, message = code }: UnknownRejection): string | undefined {
+  return envelopeOf({ rejection: { code, message } }) === undefined
+    ? 'r.unknownRejection takes message a string'
+    : undefined;
+}
+
+/** Why a code cannot stand for one the Endpoint does not answer, if it cannot. */
 function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | undefined {
   if (listed.rejectionsByCode.has(code)) {
-    return `${code} is a code the Endpoint answers, not one the Provider does not declare`;
+    return `${code} is a code the Endpoint answers: r.reject('${code}') answers it`;
   }
   if (isReservedCode(code)) {
-    return `${code} is a reserved code, which r.fault({ code }) answers`;
+    return `${code} is a Reserved code, which r.reserved answers`;
   }
   if (!follows(upperSnakeCase, code)) {
-    return `${code} is no ${upperSnakeCase.name}, so no Contract can declare it`;
+    return `${code} is no ${ruleOf(upperSnakeCase)}, so no Contract can declare it`;
   }
   return undefined;
 }

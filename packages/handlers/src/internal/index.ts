@@ -1,20 +1,32 @@
-export type { EndpointRun, GuardRun, MessageGiven, MessageRun } from '../calls/index.ts';
+export type {
+  EndpointRun,
+  GuardRun,
+  HandlerFailure,
+  HandlerFaultBase,
+  HookName,
+  MessageGiven,
+  MessageRun,
+} from '../calls/index.ts';
 export {
-  elementNameOf,
+  defaultedMetaOf,
+  failureCauseOf,
+  failureLineOf,
   faultLineOf,
   faultLogOf,
-  issueLineOf,
+  firstAttempt,
+  hookFailureOf,
   logOf,
-  notRunFaultOf,
+  nameOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
-export { checkedBody, checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
-export type { CallArgument, NoResources, ResourcesField } from '../handlers/index.ts';
+export { checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
+export type { ResourcesField } from '../handlers/index.ts';
 export {
   isStub,
   mappedHandlerOf,
-  readerOf,
+  mappedMessageHandlerOf,
   runEndpoint,
   runGuard,
   runMessage,
 } from '../handlers/index.ts';
+export { thrownFault } from '../outcomes/index.ts';

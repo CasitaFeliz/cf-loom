@@ -1,13 +1,18 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { type BrokerLimits, type BrokerPlan, jetstream } from '@cf-loom/messaging/jetstream';
+import { applyBrokerPlan, type BrokerLimits, type BrokerPlan } from '@cf-loom/messaging/jetstream';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
 /** Every setting of a test's plans, for one throwaway nats-server, which holds one replica of anything. */
 const testLimits: BrokerLimits = {
-  consumerDefaults: { ackWait: '30s', deliverPolicy: 'all', maxAckPending: 100, maxDeliver: 5 },
+  durableConsumerDefaults: {
+    ackWait: '30s',
+    deliverPolicy: 'all',
+    maxAckPending: 100,
+    maxDeliver: 5,
+  },
   streamDefaults: {
     duplicateWindow: '2m',
     maxAge: '1h',
@@ -28,13 +33,13 @@ function planOf(serviceDir: string, prefix: string): BrokerPlan {
   if (ran.status !== 0) {
     throw new Error(`cf-loom broker-plan failed in ${serviceDir}: ${ran.stderr}`);
   }
-  return JSON.parse(ran.stdout);
+  return JSON.parse(ran.stdout).plan;
 }
 
 /** Applies the plan of the Service in `serviceDir` to the nats-server at `url`, as the organization's deploy step would. */
 export async function applyPlanOf(serviceDir: string, url: string, prefix: string): Promise<void> {
-  const broker = jetstream({ connect: () => connect({ servers: url }), prefix });
-  await broker.apply(planOf(serviceDir, prefix), testLimits);
+  const connecting = { connect: () => connect({ servers: url }) };
+  await applyBrokerPlan(connecting, planOf(serviceDir, prefix), testLimits);
 }
 
 /** The stream sequence and Fact id of the last Message on a subject; undefined while the subject holds none. */
@@ -56,11 +61,11 @@ export async function lastMessageOn(
   }
 }
 
-/** What a durable consumer has settled and still holds. */
-export type DurableState = {
+/** What a Durable consumer has settled and still holds. */
+export type DurableConsumerState = {
   /** The stream sequence up to which every delivery is settled. */
   readonly ackFloor: number;
-  /** Messages the durable consumer has not delivered yet. */
+  /** Messages the Durable consumer has not delivered yet. */
   readonly pending: number;
   /** Deliveries waiting for their acknowledgement. */
   readonly ackPending: number;
@@ -68,21 +73,21 @@ export type DurableState = {
   readonly redelivered: number;
 };
 
-/** What NATS holds about a durable consumer's progress. */
-export async function durableStateOf(
+/** What NATS holds about a Durable consumer's progress. */
+export async function durableConsumerStateOf(
   url: string,
   stream: string,
   durable: string,
-): Promise<DurableState> {
+): Promise<DurableConsumerState> {
   const connection = await connect({ servers: url });
   try {
     const manager = await jetstreamManager(connection);
-    const consumer = await manager.consumers.info(stream, durable);
+    const consumerInfo = await manager.consumers.info(stream, durable);
     return {
-      ackFloor: consumer.ack_floor.stream_seq,
-      ackPending: consumer.num_ack_pending,
-      pending: consumer.num_pending,
-      redelivered: consumer.num_redelivered,
+      ackFloor: consumerInfo.ack_floor.stream_seq,
+      ackPending: consumerInfo.num_ack_pending,
+      pending: consumerInfo.num_pending,
+      redelivered: consumerInfo.num_redelivered,
     };
   } finally {
     await connection.close();

@@ -1,21 +1,20 @@
 import type { VersionBump } from '../snapshot/index.ts';
 import { type PeerMove, peerBumpOf } from './peers.ts';
-import type { Change, ChangeSite, ComparedReport } from './report.ts';
+import type { Change, ComparedReport } from './report.ts';
 
 const bumpsInOrder = ['unchanged', 'patch', 'minor', 'major'] as const;
 
 /**
- * The bump a publish takes: the highest of its Changes' classes, Private ones capped at patch, and
- * of the peer rule; `unchanged` when neither the hash nor a peer range moved.
+ * The bump a publish takes: the highest of its Changes' classes, Private and refused ones capped at
+ * patch, and of the peer rule; `unchanged` with no Change and no peer range moved.
  */
 export function versionBumpOf(report: ComparedReport, peers: PeerMove): VersionBump | 'unchanged' {
-  const snapshotBump = report.hashChanged ? snapshotBumpOf(report.changes) : 'unchanged';
-  return higherOf(snapshotBump, peerBumpOf(peers));
+  return higherOf(changesBumpOf(report.changes), peerBumpOf(peers));
 }
 
-/** A changed hash is a patch at least, whatever its Changes; the highest of them decides past that. */
-function snapshotBumpOf(changes: readonly Change[]): VersionBump {
-  let highest: VersionBump = 'patch';
+/** The highest bump of the Changes, `unchanged` when there are none. */
+function changesBumpOf(changes: readonly Change[]): VersionBump | 'unchanged' {
+  let highest: VersionBump | 'unchanged' = 'unchanged';
   for (const change of changes) {
     highest = higherOf(highest, bumpOf(change));
   }
@@ -26,9 +25,12 @@ function higherOf<Bump extends (typeof bumpsInOrder)[number]>(left: Bump, right:
   return bumpsInOrder.indexOf(left) >= bumpsInOrder.indexOf(right) ? left : right;
 }
 
-/** A Not allowed Change never bumps past patch: `publish` refuses it first. */
-function bumpOf({ site, class: changeClass }: Change): VersionBump {
-  if (!reachesConsumers(site)) {
+/**
+ * A refused Change never bumps past patch, since `publish` refuses it first; nor does one on a
+ * Private site, which no Consumer reads.
+ */
+function bumpOf({ site, class: changeClass, verdict }: Change): VersionBump {
+  if (verdict === 'refused' || site.visibility === 'private') {
     return 'patch';
   }
   switch (changeClass) {
@@ -37,27 +39,6 @@ function bumpOf({ site, class: changeClass }: Change): VersionBump {
     case 'additive':
       return 'minor';
     case 'neutral':
-    case 'not-allowed':
       return 'patch';
-  }
-}
-
-/**
- * Whether Consumers can see a site, since the version is a signal for them and for nobody else; a
- * Definitions Package's shared schema or Guard is for the Services that import it, who may use all
- * of it, and a Subscription is the Service's own.
- */
-function reachesConsumers(site: ChangeSite): boolean {
-  switch (site.kind) {
-    case 'endpoint':
-    case 'event':
-    case 'code':
-      return site.visibility !== 'private';
-    case 'shared-schema':
-    case 'guard':
-      return true;
-    case 'command':
-    case 'subscription':
-      return false;
   }
 }

@@ -1,13 +1,16 @@
-import type { Command, Contract, Event, Subscription } from '@cf-loom/contract';
+import type { Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
 import {
   codeNameOf,
+  commandsOf,
   durableNameOf,
   eventServiceOf,
-  isContract,
+  eventsOf,
   isLive,
+  isServiceContract,
   lifecycleOf,
   streamNameOf,
   subjectOf,
+  subscriptionsOf,
 } from '@cf-loom/contract/internal';
 
 /** A live version of one of the Service's own Events and the subject it is published on. */
@@ -16,9 +19,9 @@ export type PublishedVersion = { readonly message: Event; readonly subject: stri
 /** The Active version of one of the Service's own Commands and the subject it is sent on. */
 export type SentVersion = { readonly message: Command; readonly subject: string };
 
-/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its durable consumer. */
+/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its Durable consumer. */
 export type Consumed = {
-  readonly element: Subscription | Command;
+  readonly declaration: Subscription | Command;
   readonly at: { readonly map: 'commands' | 'subscriptions'; readonly key: string };
   readonly subject: string;
   readonly stream: string;
@@ -37,12 +40,12 @@ export type Subjects = {
   readonly consumed: readonly Consumed[];
 };
 
-/** The subjects of a root, which must be a Contract whose every Subscription's Event is listed. */
+/** The subjects of a Root, which must be a Service's Contract whose every Subscription's Event is listed. */
 export function subjectsOf(root: unknown): Subjects {
   const contract = contractOf(root);
   const service = contract.name;
-  const events = (contract.events ?? []).filter(isLive).toSorted(byVersion);
-  const commands = contract.commands ?? [];
+  const events = eventsOf(contract).filter(isLive).toSorted(byVersion);
+  const commands = commandsOf(contract);
   const active = commands.filter((command) => lifecycleOf(command) === 'active');
   return {
     service,
@@ -51,7 +54,7 @@ export function subjectsOf(root: unknown): Subjects {
     sent: active.map((command) => ({ message: command, subject: subjectOf(service, command) })),
     consumed: [
       ...commands.filter(isLive).map((command) => consumedCommandOf(service, command)),
-      ...(contract.subscriptions ?? []).map((subscription) =>
+      ...subscriptionsOf(contract).map((subscription) =>
         consumedSubscriptionOf(contract, subscription),
       ),
     ],
@@ -76,9 +79,9 @@ export function sentVersionOf(subjects: Subjects, name: string): SentVersion {
   return sent;
 }
 
-function contractOf(root: unknown): Contract {
-  if (!isContract(root)) {
-    throw new Error('messaging() takes a Contract declared with defineContract');
+function contractOf(root: unknown): ServiceContract {
+  if (!isServiceContract(root)) {
+    throw new Error("messaging() takes a Service's Contract declared with defineService");
   }
   return root;
 }
@@ -89,7 +92,7 @@ function byVersion(left: Event, right: Event): number {
 
 function consumedCommandOf(service: string, command: Command): Consumed {
   return {
-    element: command,
+    declaration: command,
     at: { map: 'commands', key: codeNameOf(command) },
     subject: subjectOf(service, command),
     stream: streamNameOf(service),
@@ -97,14 +100,14 @@ function consumedCommandOf(service: string, command: Command): Consumed {
   };
 }
 
-function consumedSubscriptionOf(contract: Contract, subscription: Subscription): Consumed {
+function consumedSubscriptionOf(contract: ServiceContract, subscription: Subscription): Consumed {
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
-    const message = `${subscription.name} subscribes to an Event neither the root nor a Dependency lists`;
+    const message = `${subscription.name} subscribes to an Event neither a Group lists nor another Service's Contract Package exports`;
     throw new Error(message);
   }
   return {
-    element: subscription,
+    declaration: subscription,
     at: { map: 'subscriptions', key: subscription.name },
     subject: subjectOf(provider, subscription.event),
     stream: streamNameOf(provider),

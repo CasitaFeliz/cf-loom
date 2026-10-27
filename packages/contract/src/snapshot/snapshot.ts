@@ -1,94 +1,105 @@
-import type { Contract, Definitions } from '../declarations/index.ts';
-import type { ValidContract } from '../validation/index.ts';
+import type { ServiceContract } from '../declarations/index.ts';
+import type { ValidRoot } from '../validation/index.ts';
+import type { Member } from '../written/index.ts';
 import { codeSnapshotsOf, standardRejectionsOf } from './codes.ts';
-import type { SnapshotContext, SnapshotSources } from './context.ts';
+import type { SnapshotSources } from './context.ts';
 import { dependencySnapshotsOf } from './dependencies.ts';
 import { endpointSnapshotsOf } from './endpoints.ts';
+import { groupSnapshotsOf } from './groups.ts';
 import { guardSnapshotsOf } from './guards.ts';
 import { commandSnapshotsOf, eventSnapshotsOf, subscriptionSnapshotsOf } from './messaging.ts';
-import type { DefinitionsSnapshot, ServiceSnapshot, Snapshot } from './types.ts';
+import {
+  type DefinitionsSnapshot,
+  type ExportSnapshot,
+  type ServiceSnapshot,
+  type Snapshot,
+  writtenSnapshotFormat,
+} from './types.ts';
 
 /**
- * The declared Snapshot of a valid root, as `generate` writes it: every map keyed by identity or
- * name, every array whose order means nothing sorted, and no `version`, which `publish` fills in.
+ * The declared Snapshot of a valid Root, as `generate` writes it: every map keyed by identity or
+ * name, every array whose order means nothing sorted, and no `version` or `generator`, which
+ * `package` and `publish` fill in.
  */
-export function snapshotOf(validated: ValidContract, context: SnapshotContext): Snapshot {
+export function snapshotOf(validated: ValidRoot): Snapshot {
   const { root } = validated.declarations;
   switch (root.kind) {
-    case 'contract':
-      return serviceSnapshotOf(validated, root, context);
+    case 'service':
+      return serviceSnapshotOf(validated, root);
     case 'application':
       return {
-        format: 1,
+        format: writtenSnapshotFormat,
         kind: 'application',
         name: root.name,
-        generator: context.generator,
-        dependencies: dependencySnapshotsOf(validated.declarations.dependencies),
+        dependencies: dependencySnapshotsOf(validated.declarations.providers),
       };
     case 'definitions':
-      return definitionsSnapshotOf(validated, root, context);
+      return definitionsSnapshotOf(validated);
   }
 }
 
-function serviceSnapshotOf(
-  validated: ValidContract,
-  root: Contract,
-  context: SnapshotContext,
-): ServiceSnapshot {
+function serviceSnapshotOf(validated: ValidRoot, root: ServiceContract): ServiceSnapshot {
   const { schemas, declarations } = validated;
-  const sources = sourcesOf(validated, context);
+  const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
-  const definitions = context.packages.map(({ packageName, version }) => [packageName, version]);
   return {
-    format: 1,
+    format: writtenSnapshotFormat,
     kind: 'service',
     name: root.name,
-    generator: context.generator,
-    definitions: Object.fromEntries(definitions),
     standardRejections,
+    groups: groupSnapshotsOf(declarations.groups),
     defs: schemas.defs,
-    endpoints: endpointSnapshotsOf(declarations.endpoints, sources, context),
+    endpoints: endpointSnapshotsOf(declarations.endpoints, sources),
     events: eventSnapshotsOf(declarations.events, sources),
     commands: commandSnapshotsOf(declarations.commands, sources),
     guards: guardSnapshotsOf(declarations.guards, sources),
-    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
+    codes: codeSnapshotsOf(declarations.codes, sources),
     subscriptions: subscriptionSnapshotsOf(declarations.subscriptions),
-    dependencies: dependencySnapshotsOf(declarations.dependencies),
+    dependencies: dependencySnapshotsOf(declarations.providers),
   };
 }
 
-function definitionsSnapshotOf(
-  validated: ValidContract,
-  root: Definitions,
-  context: SnapshotContext,
-): DefinitionsSnapshot {
+function definitionsSnapshotOf(validated: ValidRoot): DefinitionsSnapshot {
   const { schemas, declarations } = validated;
-  const sources = sourcesOf(validated, context);
+  const sources = sourcesOf(validated);
   const standardRejections = standardRejectionsOf(sources);
-  const shared = Object.entries(root.schemas ?? {}).map(([name, schema]) => [
-    name,
-    sources.nodeOf(schema, 'schema'),
-  ]);
+  const exports: (readonly [string, ExportSnapshot])[] = [];
+  for (const member of declarations.ownMembers ?? []) {
+    const exported = exportSnapshotOf(member, sources);
+    if (exported !== undefined) {
+      exports.push([member.name, exported]);
+    }
+  }
   return {
-    format: 1,
+    format: writtenSnapshotFormat,
     kind: 'definitions',
-    name: root.name,
-    generator: context.generator,
+    name: declarations.packageName,
     standardRejections,
     defs: schemas.defs,
-    schemas: Object.fromEntries(shared),
+    exports: Object.fromEntries(exports),
     guards: guardSnapshotsOf(declarations.guards, sources),
-    codes: codeSnapshotsOf(declarations.codes, standardRejections, sources),
+    codes: codeSnapshotsOf(declarations.codes, sources),
   };
 }
 
-function sourcesOf(
-  { schemas, declarations }: ValidContract,
-  context: SnapshotContext,
-): SnapshotSources {
+/** A member as its Snapshot records it: a Guard by name, a Rejection by code, a schema by its walked node. */
+function exportSnapshotOf(member: Member, { nodeOf }: SnapshotSources): ExportSnapshot | undefined {
+  switch (member.kind) {
+    case 'guard':
+      return { kind: 'guard', guard: member.value.name };
+    case 'rejection':
+      return { kind: 'rejection', code: member.value.code };
+    case 'schema': {
+      const schema = nodeOf(member.value, 'schema');
+      return schema === undefined ? undefined : { kind: 'schema', schema };
+    }
+  }
+}
+
+function sourcesOf({ schemas, declarations }: ValidRoot): SnapshotSources {
   return {
     nodeOf: schemas.nodeOf,
     standards: declarations.standardRejections,
-    packages: context.packages,
+    standardRejectionsSource: declarations.standardRejectionsSource,
   };
 }

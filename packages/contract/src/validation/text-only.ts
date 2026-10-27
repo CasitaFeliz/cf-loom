@@ -1,18 +1,21 @@
-import { reservedHeaderNames } from '../declarations/index.ts';
 import {
-  isKeyedRecord,
-  keyedRecordsOf,
+  isReservedRequestHeaderName,
+  isReservedResponseHeaderName,
+} from '../declarations/index.ts';
+import {
+  inFields,
   type ObjectNode,
-  type Path,
+  type Place,
+  placeNameOf,
   type SchemaNode,
   shapeKey,
 } from '../walker/index.ts';
 import {
   attachedGuardsOf,
+  isInputPart,
   isObjectPart,
-  isQueryOrHeadersPart,
   type LocatedEndpoint,
-  type Part,
+  type ObjectPart,
   partFieldOf,
   slotAt,
   type TextIn,
@@ -24,12 +27,7 @@ import type { Nodes, WalkedSlot } from './schemas.ts';
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
-/** The text part a slot's fields travel in, by the field its part names; none for the rest. */
-function textPartOf(part: Part): TextIn | undefined {
-  return isObjectPart(part) ? partFieldOf(part) : undefined;
-}
-
-const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'literal', 'enum'];
+const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
 
 const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',
@@ -42,15 +40,6 @@ const nouns: Readonly<Record<TextIn, string>> = {
  * the runtime's startup check read text parts by the same rules.
  */
 export function textPartFailures(nodes: Nodes): readonly Failure[] {
-  const queryOrHeaders = nodes.slots.filter((slot) => isQueryOrHeadersPart(slot.part));
-  return [
-    ...textFailures(nodes),
-    ...keyedRecordsOf({ queryOrHeaders, readShapes: [] }, nodes.defs),
-  ];
-}
-
-/** Every text part holds only text, judged on the walked nodes. */
-function textFailures(nodes: Nodes): readonly DeclarationFailure[] {
   return nodes.slots.flatMap(partFailures);
 }
 
@@ -71,58 +60,66 @@ export function conflictFailures(
 }
 
 function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
-  const part = textPartOf(slot.part);
-  if (part === undefined) {
+  const { at, node, part } = slot;
+  if (!isObjectPart(part)) {
     return [];
   }
-  const { at, node } = slot;
-  const name = textOf(at.at(-1));
+  const textIn = partFieldOf(part);
+  const name = placeNameOf(at);
   if (node.type !== 'object') {
     return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
   }
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
   }
-  if (isQueryOrHeadersPart(slot.part) && isKeyedRecord(node)) {
-    return [];
-  }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
-    ...headerNameFailures(at, part, field),
-    ...fieldFailures({ at, part }, field, schema),
+    ...headerNameFailures({ at, part, textIn }, field),
+    ...fieldFailures({ at, part: textIn }, field, schema),
   ]);
 }
 
 /** A lower-case RFC 9110 token: the only header names a Contract declares. */
 const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 
-function headerNameFailures(at: Path, part: TextIn, name: string): readonly DeclarationFailure[] {
-  if (part !== 'headers') {
+function headerNameFailures(
+  { at, part, textIn }: { readonly at: Place; readonly part: ObjectPart; readonly textIn: TextIn },
+  name: string,
+): readonly DeclarationFailure[] {
+  if (textIn !== 'headers') {
     return [];
   }
-  const message = headerNameMessageOf(name);
-  return message === undefined ? [] : [failure([...at, 'fields', name], 'header-names', message)];
+  const message = headerNameMessageOf(name, part);
+  return message === undefined ? [] : [failure(inFields(at, name), 'header-names', message)];
 }
 
-/** What is wrong with a header name: its case, its characters, or a name the host owns. */
-function headerNameMessageOf(name: string): string | undefined {
+/** What is wrong with a header name: its case, its characters, or a name another party owns in its direction. */
+function headerNameMessageOf(name: string, part: ObjectPart): string | undefined {
   if (name !== name.toLowerCase()) {
     return `Header names are lower-case: ${name}`;
   }
   if (!lowerCaseToken.test(name)) {
     return `A header name is an RFC 9110 token: ${name}`;
   }
-  if (reservedHeaderNames.includes(name)) {
-    return `A header the host or cf-loom owns is reserved: ${name}`;
+  return reservedHeaderMessageOf(name, part);
+}
+
+function reservedHeaderMessageOf(name: string, part: ObjectPart): string | undefined {
+  if (isInputPart(part)) {
+    return isReservedRequestHeaderName(name)
+      ? `A request header the Fetch standard keeps for the user agent, or cf-loom owns, is reserved: ${name}`
+      : undefined;
   }
-  return undefined;
+  return isReservedResponseHeaderName(name)
+    ? `A response header the host or cf-loom owns, or a browser hides, is reserved: ${name}`
+    : undefined;
 }
 
 function fieldFailures(
-  { at, part }: { readonly at: Path; readonly part: TextIn },
+  { at, part }: { readonly at: Place; readonly part: TextIn },
   name: string,
   schema: SchemaNode,
 ): readonly DeclarationFailure[] {
-  const fieldAt = [...at, 'fields', name];
+  const fieldAt = inFields(at, name);
   const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
   if (schema.nullable === true || items.nullable === true) {
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
@@ -137,7 +134,7 @@ function fieldFailures(
 
 function partConflicts(
   sources: readonly { readonly owner: string; readonly node: SchemaNode | undefined }[],
-  { at, part }: { readonly at: Path; readonly part: 'headers' | 'query' },
+  { at, part }: { readonly at: Place; readonly part: 'headers' | 'query' },
 ): readonly DeclarationFailure[] {
   const declaredByName = new Map<string, Declared>();
   const failures: DeclarationFailure[] = [];

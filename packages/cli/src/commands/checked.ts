@@ -1,47 +1,37 @@
-import { type Change, type ChangeSite, locationOf, type Path } from '@cf-loom/contract/internal';
-import type { NoBaseline } from '../registry/index.ts';
-import type { ExitStatus } from './exit.ts';
+import type { Choice, Listing, NoBaseline } from '../registry/index.ts';
+import { listedVersionsOf } from '../versioning/index.ts';
+import type { CheckedChange } from './checked-change.ts';
+import type { Derivation } from './derivation.ts';
+import type { Ending } from './run.ts';
 
-/** What `check` compared a Snapshot with: its Baseline's version, or the reason it has none. */
+/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named) and how it was chosen, or the reason it has none. */
 type Against =
-  | { readonly kind: 'baseline'; readonly version: string }
-  | { readonly kind: 'none'; readonly why: NoBaseline };
+  | {
+      readonly kind: 'baseline';
+      readonly version: string;
+      readonly chosen: Choice['kind'];
+    }
+  | { readonly kind: 'none'; readonly reason: string };
 
-/** What `check` found, ready to print: the package, what it was compared with and every Change. */
-export type Checked = {
+/** What `check` found before any version is derived: the package with the highest stable version it lists, what it was compared with and every Change. */
+export type Compared = {
   readonly kind: 'checked';
   readonly packageName: string;
+  readonly stable: string | undefined;
   readonly against: Against;
-  readonly changes: readonly Change[];
+  readonly changes: readonly CheckedChange[];
 };
 
-/** How `check` ends: done, the check failed or a Breaking Change Approval is needed, with what it says on stderr. */
-export type Ending = {
-  readonly status: Exclude<ExitStatus, 3>;
-  readonly stderr: readonly string[];
-};
+/** What `check` found, ready to print: the comparison and what `publish` would derive from it. */
+export type Checked = Compared & { readonly derivation: Derivation };
 
-/** What a Change says apart from its class: its site, its kinds, and the path and Position of a Difference that has them. */
-export type ChangeParts = {
-  readonly site: string;
-  readonly difference: string;
-  readonly shape: string | null;
-  readonly at: string | null;
-  readonly position: string | null;
-};
-
-/** What a path segment or a text may be on a Change line without quotes. */
-const plainToken = /^[\w@/{}$-]+$/;
-
-/** How `check` ends for these Changes: Not allowed fails, then a needed Approval, else done. */
-export function endingOf(changes: readonly Change[]): Ending {
-  const notAllowed = changes.filter((change) => change.class === 'not-allowed');
-  if (notAllowed.length > 0) {
-    return { status: 1, stderr: [`The check failed: ${notAllowed.length} Change(s) not allowed`] };
+/** How `check` ends for these Changes: a refused one fails, then a needed Approval, else done. */
+export function endingOf(changes: readonly CheckedChange[]): Ending {
+  const refused = changes.filter((change) => change.verdict === 'refused');
+  if (refused.length > 0) {
+    return { status: 1, stderr: [`The check failed: ${refused.length} Change(s) refused`] };
   }
-  const needing = changes.filter(
-    (change) => change.class === 'breaking' && change.approval === 'needed',
-  );
+  const needing = changes.filter((change) => change.verdict === 'approval-needed');
   if (needing.length > 0) {
     const need = `${needing.length} Breaking Change(s) need a Breaking Change Approval`;
     return { status: 2, stderr: [`${need}: your review process enforces it`] };
@@ -49,53 +39,12 @@ export function endingOf(changes: readonly Change[]): Ending {
   return { status: 0, stderr: [] };
 }
 
-/** Where a Change is, as a Snapshot keys it: `endpoints.GET /orders/{}`, `events.OrderCreated@2`. */
-export function siteOf(site: ChangeSite): string {
-  switch (site.kind) {
-    case 'endpoint':
-      return `endpoints.${site.identity}`;
-    case 'event':
-      return `events.${site.identity}`;
-    case 'command':
-      return `commands.${site.identity}`;
-    case 'code':
-      return `codes.${tokenOf(site.code)}`;
-    case 'subscription':
-      return `subscriptions.${tokenOf(site.name)}`;
-    case 'shared-schema':
-      return `schemas.${tokenOf(site.name)}`;
-    case 'guard':
-      return `guards.${tokenOf(site.name)}`;
-  }
-}
-
-/** Why a package has no Baseline, naming the registry and the npm user when npm does not know it. */
-export function reasonOf(why: NoBaseline): string {
+/** Why a package has no Baseline, naming the registry and the npm user when npm does not know it, or the highest version it lists when cf-loom published none. */
+export function reasonOf(why: NoBaseline, { versions }: Listing): string {
   switch (why.kind) {
     case 'unknown-package':
       return `it is not in ${why.registry} for the npm user ${why.username}: never published, or that login cannot read it`;
-    case 'only-prereleases':
-      return `it has only prereleases, the highest ${why.versions.at(-1)}`;
+    case 'none-published':
+      return `none of its versions was published by cf-loom, the highest ${listedVersionsOf(versions).highest}`;
   }
-}
-
-/** The one place a line and the JSON document read where and how a Change differs. */
-export function partsOf(change: Change): ChangeParts {
-  const { difference } = change;
-  return {
-    site: siteOf(change.site),
-    difference: difference.kind,
-    shape: difference.kind === 'schema' ? difference.shape.kind : null,
-    at: 'at' in difference ? locationTextOf(difference.at) : null,
-    position: 'position' in difference ? difference.position : null,
-  };
-}
-
-/** A text as it stands on a Change line: itself when plain, else as JSON, so it reads as one token. */
-export function tokenOf(text: string): string {
-  return plainToken.test(text) ? text : JSON.stringify(text);
-}
-
-function locationTextOf(at: Path): string {
-  return locationOf(at.map((segment) => tokenOf(String(segment))));
 }

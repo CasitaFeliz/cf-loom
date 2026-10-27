@@ -1,3 +1,10 @@
-export type { ConsumedHandlers } from './consumers.ts';
-export { consumersOf } from './consumers.ts';
-export { consumedFaultLinesOf, receiveFailureLineOf, reportOf } from './faults.ts';
+export type { DeliveryEnds } from './deadline.ts';
+export { DeadlineError, whenAborted } from './deadline.ts';
+export type { CoreDurableConsumer, Named, Received, Settle, Settled } from './details.ts';
+export { durableConsumerOf, leftPending } from './details.ts';
+export type { ConsumedHandlers } from './durable-consumers.ts';
+export { durableConsumersOf } from './durable-consumers.ts';
+export type { ConsumedFault, ServiceFaultHook } from './faults.ts';
+export { consumedFaultLinesOf, reportOf } from './faults.ts';
+export type { BrokerTrouble, BrokerTroubleHook, TroubleTell } from './trouble.ts';
+export { troubledOf, troubleTellOf } from './trouble.ts';

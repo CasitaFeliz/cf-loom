@@ -1,19 +1,23 @@
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
-  type ExportedSnapshot,
-  type StandardRejections,
+  type Http,
+  openEnumReader,
+  type ProvidedStandardRejections,
+  providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, success } from '@cf-loom/handlers';
+import { providedSnapshotOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { admit, handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client } from './index.ts';
 
 const searchOrders = defineEndpoint({
@@ -75,56 +79,64 @@ const priceOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Endpoints extends Readonly<Record<string, Exportable>>,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'orders-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const;
+const defaultStandards = providedStandardRejections();
 
 const orders = contractPackageOf({ searchOrders, createOrder, priceOrder }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, {
-  endpoints: [searchOrders, createOrder, priceOrder],
+const ordersDependency = defineDependency({
+  endpoints: [
+    orders.endpoints.searchOrders,
+    orders.endpoints.createOrder,
+    orders.endpoints.priceOrder,
+  ],
 });
 
-/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof orders, format: unknown): typeof orders {
-  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+/** An Endpoint as another cf-loom wrote it: carrying the cut that `change` makes of a copy of its own. */
+function carrying(
+  endpoint: typeof orders.endpoints.searchOrders,
+  change: (cut: Record<string, unknown>) => void,
+): typeof orders.endpoints.searchOrders {
+  const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(endpoint));
+  change(cut);
+  return providedEndpoint(
+    { name: 'orders-service', standardRejections: defaultStandards },
+    endpoint,
+    cut,
+  );
 }
 
 /** A client whose `fetch` records each request and answers `response`. */
 function recording(response: () => Response, baseUrl: string | URL = 'http://orders.test') {
   const sent: Request[] = [];
-  const orders = client(ordersDeps, {
+  const orders = client(ordersDependency, {
     baseUrl,
-    fetch: async (url, init) => {
-      sent.push(new Request(url, init));
+    fetch: async (request) => {
+      sent.push(request);
       return response();
     },
   });
@@ -134,6 +146,28 @@ function recording(response: () => Response, baseUrl: string | URL = 'http://ord
 const counted = () => Response.json({ count: 1 });
 
 describe('what a call sends', () => {
+  test('a fetch that refuses a this of its own, as a browser’s does, is called and answers', async () => {
+    const browserFetch = function (this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve(Response.json({ count: 1 }));
+    };
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: browserFetch });
+
+    const outcome = await orders.searchOrders({ params: { shopId: 's-1' }, query: { ids: ['1'] } });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { count: 1 } });
+  });
+
+  test('the Request fetch receives never follows a redirect', async () => {
+    const { orders, sent } = recording(counted);
+
+    await orders.searchOrders({ params: { shopId: 's-1' }, query: { ids: ['1'] } });
+
+    expect(sent[0]?.redirect).toBe('manual');
+  });
+
   test('each path param is percent-encoded as one segment', async () => {
     const { orders, sent } = recording(counted);
 
@@ -191,27 +225,88 @@ describe('what a call sends', () => {
   });
 
   test('a baseUrl with a query or a fragment is a bug, thrown when the client is created', () => {
-    const withQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?key=1' });
-    const withFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#top' });
+    const withQuery = () => client(ordersDependency, { baseUrl: 'http://orders.test/?key=1' });
+    const withFragment = () => client(ordersDependency, { baseUrl: 'http://orders.test/#top' });
 
     expect(withQuery).toThrow(/query or a fragment/);
     expect(withFragment).toThrow(/query or a fragment/);
   });
 
   test('a baseUrl with a username or a password is a bug, thrown when the client is created', () => {
-    const withUsername = () => client(ordersDeps, { baseUrl: 'http://ann@orders.test/' });
-    const withPassword = () => client(ordersDeps, { baseUrl: 'http://:secret@orders.test/' });
+    const withUsername = () => client(ordersDependency, { baseUrl: 'http://ann@orders.test/' });
+    const withPassword = () => client(ordersDependency, { baseUrl: 'http://:secret@orders.test/' });
 
     expect(withUsername).toThrow(/a username or a password/);
     expect(withPassword).toThrow(/a username or a password/);
   });
 
   test('a baseUrl ending in an empty query or fragment is refused too', () => {
-    const emptyQuery = () => client(ordersDeps, { baseUrl: 'http://orders.test/?' });
-    const emptyFragment = () => client(ordersDeps, { baseUrl: 'http://orders.test/#' });
+    const emptyQuery = () => client(ordersDependency, { baseUrl: 'http://orders.test/?' });
+    const emptyFragment = () => client(ordersDependency, { baseUrl: 'http://orders.test/#' });
 
     expect(emptyQuery).toThrow(/query or a fragment/);
     expect(emptyFragment).toThrow(/query or a fragment/);
+  });
+
+  test.each([
+    ['http://orders.test', 'http://orders.test'],
+    ['HTTP://orders.test', 'http://orders.test'],
+    ['https://orders.test', 'https://orders.test'],
+    ['HTTPS://orders.test', 'https://orders.test'],
+    [new URL('HTTP://orders.test'), 'http://orders.test'],
+  ])(
+    'a baseUrl of %s is an http or https URL, whatever the case of its scheme',
+    async (baseUrl, origin) => {
+      const { orders, sent } = recording(counted, baseUrl);
+
+      await orders.searchOrders({ params: { shopId: 's' }, query: { ids: ['1'] } });
+
+      expect(sent[0]?.url).toBe(`${origin}/shops/s/orders?ids=1`);
+    },
+  );
+
+  test.each([
+    'ftp://orders.test/',
+    'file:///var/orders',
+    'ws://orders.test/',
+    'wss://orders.test/',
+    'data:text/plain,orders',
+    'blob:http://orders.test/id',
+    'unix:/var/run/orders.sock',
+    new URL('ftp://orders.test/'),
+  ])(
+    'a baseUrl of %s is no http or https URL, a bug thrown when the client is created',
+    (baseUrl) => {
+      const create = () => client(ordersDependency, { baseUrl });
+
+      expect(create).toThrow(/is no http or https/);
+    },
+  );
+
+  test.each([
+    ['ftp://orders.test/api', 'ftp:'],
+    ['ftp://ann:secret@orders.test/api?token=t0k#top', 'ftp:'],
+    ['blob:http://ann:secret@orders.test/id', 'blob:'],
+    ['blob:/http://ann:secret@orders.test/id', 'blob:'],
+    ['unix:/var/run/orders.sock', 'unix:'],
+  ])(
+    'a baseUrl of %s that is no http or https URL is thrown by its scheme alone',
+    (baseUrl, scheme) => {
+      const create = () => client(ordersDependency, { baseUrl });
+
+      expect(create).toThrow(new Error(`The baseUrl's scheme ${scheme} is no http or https`));
+    },
+  );
+
+  test('a baseUrl with a username or a password is thrown without them, nor its query or fragment', () => {
+    const create = () =>
+      client(ordersDependency, { baseUrl: 'https://ann:secret@orders.test/api?token=t0k#top' });
+
+    expect(create).toThrow(
+      new Error(
+        'The baseUrl https://orders.test/api has a username or a password, which fetch refuses',
+      ),
+    );
   });
 
   test('an optional query param passed as undefined sends no key', async () => {
@@ -238,16 +333,15 @@ describe('what a call sends', () => {
         ),
       },
       guards: {},
-      deprecatedAt: {},
     };
-    const provider = defineContract({
+    const provider = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'prices', description: 'Prices', endpoints: [priceOrder] })],
     });
-    const http = serve(provider, handlers);
-    const orders = client(ordersDeps, {
+    const http = serve(provider, handlers, {});
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
-      fetch: (url, init) => http(new Request(url, init)),
+      fetch: http,
     });
 
     const outcome = await orders.priceOrder({
@@ -258,8 +352,8 @@ describe('what a call sends', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { amount: 1e21, ratio: 1.5e-7, scale: -2.5e-10, exact: true },
-      headers: {},
+      status: 200,
+      body: { amount: 1e21, ratio: 1.5e-7, scale: -2.5e-10, exact: true },
     });
   });
 });
@@ -268,7 +362,7 @@ describe('Input that cannot be sent', () => {
   /** A client whose `fetch` must never be called. */
   function unsent() {
     let calls = 0;
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
         calls += 1;
@@ -278,15 +372,54 @@ describe('Input that cannot be sent', () => {
     return { orders, calls: () => calls };
   }
 
-  test('a broken constraint is the Provider’s invalid-input Rejection, and nothing is sent', async () => {
+  test('a signal aborted while the Input is read gets the not-sent Fault, not the invalid-input Rejection', async () => {
+    const controller = new AbortController();
+    const { orders, calls } = unsent();
+    const input = {
+      params: {
+        get shopId() {
+          controller.abort();
+          return 1;
+        },
+      },
+      query: { ids: ['1'] },
+    } as never;
+
+    const outcome = await orders.searchOrders(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(calls()).toBe(0);
+  });
+
+  test('what the Input throws while it is read gets the not-sent Fault once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const { orders, calls } = unsent();
+    const input = {
+      params: {
+        get shopId(): string {
+          controller.abort();
+          throw new Error('the Input could not be read');
+        },
+      },
+      query: { ids: ['1'] },
+    } as never;
+
+    const outcome = await orders.searchOrders(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(calls()).toBe(0);
+  });
+
+  test('a broken constraint is the Provider’s invalid-input Rejection, marked source client, and nothing is sent', async () => {
     const { orders, calls } = unsent();
 
     const outcome = await orders.createOrder({ params: { shopId: 's' }, body: { quantity: 0 } });
 
     expect(outcome).toEqual({
       kind: 'rejection',
-      known: true,
+      source: 'client',
       code: 'INVALID_INPUT',
+      status: 400,
       message: 'Invalid input',
       body: {
         issues: [
@@ -343,6 +476,41 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
+  test('an issue code the Provider’s Reader does not declare is its Unknown case, as the Caller’s cf-loom may know more', async () => {
+    const olderReader = z.object({
+      issues: z.array(
+        z.object({
+          in: openEnumReader(['body', 'headers', 'params', 'query']),
+          path: z.array(z.union([z.string(), z.number()])),
+          code: openEnumReader(['invalid_type', 'too_small']),
+          message: z.string(),
+        }),
+      ),
+    });
+    const older = contractPackageOf(
+      { searchOrders },
+      {
+        ...defaultStandards,
+        invalidInput: { ...defaultStandards.invalidInput, body: olderReader },
+      },
+    );
+    const olderOrders = client(defineDependency({ endpoints: [older.endpoints.searchOrders] }), {
+      baseUrl: 'http://orders.test',
+      fetch: async () => counted(),
+    });
+
+    const outcome = await olderOrders.searchOrders({
+      params: { shopId: 's' },
+      query: { ids: [] },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      code: 'INVALID_INPUT',
+      body: { issues: [{ in: 'query', path: ['ids'], code: { unknown: 'required' } }] },
+    });
+  });
+
   test('a query value or header with a lone surrogate cannot travel', async () => {
     const { orders, calls } = unsent();
 
@@ -380,7 +548,9 @@ describe('Input that cannot be sent', () => {
         ],
       },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
     expect(calls()).toBe(0);
   });
 
@@ -405,6 +575,63 @@ describe('Input that cannot be sent', () => {
   });
 });
 
+describe('Input nested past the stack', () => {
+  const tree: z.ZodType = z
+    .object({
+      get next() {
+        return tree.optional();
+      },
+    })
+    .meta({ id: 'tree' });
+  const nest = defineEndpoint({
+    name: 'nest',
+    method: 'POST',
+    path: '/nest',
+    visibility: 'public',
+    description: 'A deep body',
+    input: { body: tree },
+    success: { status: 204 },
+  });
+  const nestingPackage = contractPackageOf({ nest }, defaultStandards);
+  const nesting = defineDependency({
+    endpoints: [nestingPackage.endpoints.nest],
+  });
+
+  test('is the Provider’s invalid-input Rejection, malformed at the body, and nothing is sent', async () => {
+    const sent: Request[] = [];
+    const nests = client(nesting, {
+      baseUrl: 'http://orders.test',
+      fetch: async (request) => {
+        sent.push(request);
+        return new Response(null, { status: 204 });
+      },
+    });
+    let body: object = {};
+    for (let depth = 0; depth < 5000; depth += 1) {
+      body = { next: body };
+    }
+
+    const outcome = await nests.nest({ body });
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      source: 'client',
+      code: 'INVALID_INPUT',
+      body: {
+        issues: [
+          {
+            in: 'body',
+            path: [],
+            code: 'malformed',
+            message: 'The value is nested too deeply to read',
+          },
+        ],
+      },
+    });
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('a Guard’s demands, checked before the Input, as serve checks them', () => {
   const apiKey = defineGuard({
     name: 'apiKey',
@@ -425,10 +652,12 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
     success: { status: 204 },
   });
   const making = contractPackageOf({ makeOrder }, defaultStandards);
-  const makingDeps = defineDependencies(making, { endpoints: [makeOrder] });
+  const makingDependency = defineDependency({
+    endpoints: [making.endpoints.makeOrder],
+  });
 
   test('a demand that fails gives only its Issues, though the body fails too', async () => {
-    const makers = client(makingDeps, {
+    const makers = client(makingDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => counted(),
     });
@@ -442,9 +671,166 @@ describe('a Guard’s demands, checked before the Input, as serve checks them', 
       code: 'INVALID_INPUT',
       body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'too_small' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.known && outcome.body).toMatchObject({
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
       issues: { length: 1 },
     });
+  });
+});
+
+describe('every header and query param the Provider reads reaches the request, whichever declares it', () => {
+  const headerKey = z.object({ 'x-key': z.string() });
+  const queryKey = z.object({ key: z.string() });
+  const keyedByHeader = defineGuard({
+    name: 'keyed',
+    description: 'A key',
+    demands: { headers: headerKey },
+  });
+  const keyedByQuery = defineGuard({
+    name: 'keyed',
+    description: 'A key',
+    demands: { query: queryKey },
+  });
+  const readKeyed = {
+    name: 'readKeyed',
+    method: 'GET',
+    path: '/keyed',
+    visibility: 'public',
+    description: 'Reads with a key',
+    success: { status: 204 },
+  } as const;
+  const headerOnlyGuardDemands = defineEndpoint({ ...readKeyed, guards: [keyedByHeader] });
+
+  /** The Endpoints as a hand-built package lists them: a field in its own Input, its Guard's demands, or both. */
+  const cases: readonly {
+    readonly part: 'headers' | 'query';
+    readonly name: string;
+    readonly declaredBy: string;
+    readonly endpoint: Exportable;
+  }[] = [
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'the Endpoint only',
+      endpoint: defineEndpoint({ ...readKeyed, input: { headers: headerKey } }),
+    },
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'an attached Guard only',
+      endpoint: headerOnlyGuardDemands,
+    },
+    {
+      part: 'headers',
+      name: 'x-key',
+      declaredBy: 'both',
+      endpoint: defineEndpoint({
+        ...readKeyed,
+        guards: [keyedByHeader],
+        input: { headers: headerKey },
+      }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'the Endpoint only',
+      endpoint: defineEndpoint({ ...readKeyed, input: { query: queryKey } }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'an attached Guard only',
+      endpoint: defineEndpoint({ ...readKeyed, guards: [keyedByQuery] }),
+    },
+    {
+      part: 'query',
+      name: 'key',
+      declaredBy: 'both',
+      endpoint: defineEndpoint({
+        ...readKeyed,
+        guards: [keyedByQuery],
+        input: { query: queryKey },
+      }),
+    },
+  ];
+
+  /** A client of the one Endpoint, called with an Input its types do not take. */
+  function keyedClient(endpoint: Exportable, fetch: Http) {
+    const provider = contractPackageOf({ readKeyed: endpoint }, defaultStandards);
+    const dependency = defineDependency({ endpoints: [provider.endpoints.readKeyed] });
+    return client(dependency, { baseUrl: 'http://orders.test', fetch }) as unknown as {
+      readonly readKeyed: (input: unknown) => Promise<unknown>;
+    };
+  }
+
+  /** What the Request carries under the name, as a list: its one value, or none. */
+  function carriedBy(request: Request | undefined, part: string, name: string) {
+    if (part === 'headers') {
+      const value = request?.headers.get(name);
+      return value == null ? [] : [value];
+    }
+    return new URL(request?.url ?? '').searchParams.getAll(name);
+  }
+
+  test.each(cases)(
+    'a $part field declared by $declaredBy is sent once, with its value',
+    async ({ part, name, endpoint }) => {
+      const sent: Request[] = [];
+      const keyed = keyedClient(endpoint, async (request) => {
+        sent.push(request);
+        return new Response(null, { status: 204 });
+      });
+
+      const outcome = await keyed.readKeyed({ [part]: { [name]: 'k' } });
+
+      expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
+      expect(carriedBy(sent[0], part, name)).toEqual(['k']);
+    },
+  );
+
+  test.each(cases.filter(({ declaredBy }) => declaredBy === 'an attached Guard only'))(
+    'a $part field only a Guard demands, left out, answers invalid input and sends nothing',
+    async ({ part, name, endpoint }) => {
+      let calls = 0;
+      const keyed = keyedClient(endpoint, async () => {
+        calls += 1;
+        return new Response(null, { status: 204 });
+      });
+
+      const outcome = await keyed.readKeyed({});
+
+      expect(outcome).toMatchObject({
+        kind: 'rejection',
+        code: 'INVALID_INPUT',
+        body: { issues: [{ in: part, path: [name], code: 'required' }] },
+      });
+      expect(calls).toBe(0);
+    },
+  );
+
+  test('a header only a Guard demands reaches the Provider that reads it', async () => {
+    const provider = defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'keyed',
+          description: 'Keyed',
+          endpoints: [headerOnlyGuardDemands],
+        }),
+      ],
+    });
+    const http = serve(
+      provider,
+      {
+        endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
+        guards: { keyed: handle(keyedByHeader, () => admit()) },
+      },
+      {},
+    );
+    const keyed = keyedClient(headerOnlyGuardDemands, http);
+
+    const outcome = await keyed.readKeyed({ headers: { 'x-key': 'k' } });
+
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 });
 
@@ -459,7 +845,9 @@ describe('a number literal in exponent form, end to end against serve', () => {
     success: { status: 204, headers: z.object({ 'x-small': z.literal(1.5e-7) }) },
   });
   const echoing = contractPackageOf({ echoLarge }, defaultStandards);
-  const echoingDeps = defineDependencies(echoing, { endpoints: [echoLarge] });
+  const echoingDependency = defineDependency({
+    endpoints: [echoing.endpoints.echoLarge],
+  });
 
   test('travels as plain decimal both ways and reads back as its literal', async () => {
     const handlers = {
@@ -467,21 +855,20 @@ describe('a number literal in exponent form, end to end against serve', () => {
         echoLarge: handle(echoLarge, () => success({ headers: { 'x-small': 1.5e-7 } })),
       },
       guards: {},
-      deprecatedAt: {},
     };
-    const provider = defineContract({
+    const provider = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'large', description: 'Large', endpoints: [echoLarge] })],
     });
-    const http = serve(provider, handlers);
-    const echoes = client(echoingDeps, {
+    const http = serve(provider, handlers, {});
+    const echoes = client(echoingDependency, {
       baseUrl: 'http://orders.test',
-      fetch: (url, init) => http(new Request(url, init)),
+      fetch: http,
     });
 
     const outcome = await echoes.echoLarge({ params: { size: 1e21 } });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-small': 1.5e-7 } });
+    expect(outcome).toEqual({ kind: 'success', status: 204, headers: { 'x-small': 1.5e-7 } });
   });
 });
 
@@ -517,9 +904,11 @@ describe('several Guards, checked in Attachment order', () => {
     success: { status: 204 },
   });
   const shops = contractPackageOf({ listShops }, defaultStandards);
-  const shopsDeps = defineDependencies(shops, { endpoints: [listShops] });
+  const shopsDependency = defineDependency({
+    endpoints: [shops.endpoints.listShops],
+  });
   const shopsClient = () =>
-    client(shopsDeps, {
+    client(shopsDependency, {
       baseUrl: 'http://shops.test',
       fetch: async () => new Response(null, { status: 204 }),
     });
@@ -537,7 +926,9 @@ describe('several Guards, checked in Attachment order', () => {
     expect(outcome).toMatchObject({
       body: { issues: [{ in: 'headers', path: ['x-region'], code: 'invalid_value' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
   });
 
   test('a demand in a Guard’s query failing beside the Input answers alone', async () => {
@@ -549,7 +940,9 @@ describe('several Guards, checked in Attachment order', () => {
     expect(outcome).toMatchObject({
       body: { issues: [{ in: 'query', path: ['zone'], code: 'too_small' }] },
     });
-    expect(outcome.kind === 'rejection' && outcome.body).toMatchObject({ issues: { length: 1 } });
+    expect(outcome.kind === 'rejection' && 'body' in outcome && outcome.body).toMatchObject({
+      issues: { length: 1 },
+    });
   });
 
   test('an empty list in a Guard’s query is dropped before its demands are parsed', async () => {
@@ -558,35 +951,45 @@ describe('several Guards, checked in Attachment order', () => {
       query: { ...valid.query, tags: [] },
     });
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 });
 
-describe('a Provider’s exported Snapshot, read when the client is created', () => {
-  test('a Contract Package in a newer format is refused', () => {
-    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [searchOrders] });
+describe('an Endpoint’s exported Snapshot cut, read when the client is created', () => {
+  const { searchOrders: listed } = orders.endpoints;
 
-    const create = () => client(newer, { baseUrl: 'http://orders.test' });
+  function creating(endpoint: typeof listed) {
+    const dependency = defineDependency({ endpoints: [endpoint] });
+    return () => client(dependency, { baseUrl: 'http://orders.test' });
+  }
 
-    expect(create).toThrow(
+  test('a cut in a newer format is refused, naming the Provider', () => {
+    const newer = carrying(listed, (cut) => {
+      cut['format'] = 2;
+    });
+
+    expect(creating(newer)).toThrow(
       "orders-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
     );
   });
 
-  test('a Contract Package in a newer format is refused even when no Endpoint is listed', () => {
-    const newer = defineDependencies(inFormat(orders, 2), { endpoints: [] });
+  test('a cut whose Endpoint entry lacks its name is refused as malformed', () => {
+    const damaged = carrying(listed, (cut) => {
+      const endpoints = cut['endpoints'] as Record<string, Record<string, unknown>>;
+      delete endpoints['GET /shops/{}/orders']?.['name'];
+    });
 
-    const create = () => client(newer, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow('is in format 2, newer than this cf-loom reads');
+    expect(creating(damaged)).toThrow(
+      "orders-service's exported Snapshot is malformed: endpoints.GET /shops/{}/orders.name is missing",
+    );
   });
 
-  test('a Contract Package whose format is no whole number from 1 is refused as malformed', () => {
-    const damaged = defineDependencies(inFormat(orders, '1'), { endpoints: [searchOrders] });
+  test('a cut whose format is no whole number from 1 is refused as malformed', () => {
+    const damaged = carrying(listed, (cut) => {
+      cut['format'] = '1';
+    });
 
-    const create = () => client(damaged, { baseUrl: 'http://orders.test' });
-
-    expect(create).toThrow(
+    expect(creating(damaged)).toThrow(
       "orders-service's exported Snapshot is malformed: format is not a whole number from 1",
     );
   });

@@ -7,16 +7,16 @@ import {
 } from '@cf-loom/contract/internal';
 import { type ParsedInput, textOf } from './input.ts';
 
-/** What `fetch` is called with: the URL and the init, the signal left to the caller. */
-export type Sending = { readonly url: string; readonly init: RequestInit };
-
 /**
- * The URL a Provider is reached at, checked once: its path is kept as a prefix, such as a
- * gateway's mount; a username or a password, which `fetch` refuses in a URL, or a query or
- * fragment, which no Endpoint's URL can carry, is a bug.
+ * The URL a Provider is reached at, checked once: an http or https URL, its path kept as a prefix,
+ * such as a gateway's mount; another scheme, a username or a password, which `fetch` refuses in a
+ * URL, or a query or fragment, which no Endpoint's URL can carry, is a bug.
  */
 export function baseUrlOf(baseUrl: string | URL): URL {
   const base = new URL(baseUrl);
+  if (base.protocol !== 'http:' && base.protocol !== 'https:') {
+    throw new Error(`The baseUrl's scheme ${base.protocol} is no http or https`);
+  }
   if (base.username !== '' || base.password !== '') {
     const shown = `${base.protocol}//${base.host}${base.pathname}`;
     throw new Error(`The baseUrl ${shown} has a username or a password, which fetch refuses`);
@@ -32,8 +32,8 @@ export function basePathOf(base: URL): string {
   return base.pathname.replace(/\/$/, '');
 }
 
-/** A parsed Input as it travels to its Endpoint under the base URL. */
-export function sendingOf(endpoint: Endpoint, base: URL, input: ParsedInput): Sending {
+/** A parsed Input as the Request it travels in under the base URL; a redirect is never followed. */
+export function requestOf(endpoint: Endpoint, base: URL, input: ParsedInput): Request {
   const url = new URL(base);
   url.pathname = `${basePathOf(base)}${pathOf(endpoint.path, input.params)}`;
   url.search = queryOf(input.query).toString();
@@ -41,12 +41,13 @@ export function sendingOf(endpoint: Endpoint, base: URL, input: ParsedInput): Se
   for (const [name, text] of input.headers) {
     headers.set(name, text);
   }
+  const { method } = endpoint;
   if (!('body' in input)) {
-    return { url: url.href, init: { method: endpoint.method, headers } };
+    return new Request(url, { method, headers, redirect: 'manual' });
   }
   headers.set('content-type', jsonContentType);
   const body = JSON.stringify(input.body);
-  return { url: url.href, init: { method: endpoint.method, headers, body } };
+  return new Request(url, { method, headers, body, redirect: 'manual' });
 }
 
 /** The declared path with each param's text percent-encoded as one segment. */

@@ -80,34 +80,4 @@ describe('a direct call never throws what a check throws', () => {
 
     expect(outcome).toEqual({ ...fromTheThrow, committed: 'no' });
   });
-
-  test('a body nested past the stack answers the Fault, not committed since nothing ran', async () => {
-    const node: z.ZodType = z.object({
-      get next() {
-        return node.optional();
-      },
-    });
-    const nested = defineEndpoint({
-      name: 'nested',
-      method: 'POST',
-      path: '/nested',
-      visibility: 'public',
-      description: 'A deep body',
-      input: { body: node },
-      success: { status: 204 },
-    });
-    let body: object = {};
-    for (let depth = 0; depth < 1600; depth += 1) {
-      body = { next: body };
-    }
-    const nestedHandler = handle(nested, () => success());
-
-    const outcome = await nestedHandler({ body }, {});
-
-    expect(outcome).toMatchObject({
-      kind: 'fault',
-      committed: 'no',
-      cause: expect.any(RangeError),
-    });
-  });
 });

@@ -16,6 +16,32 @@ describe('defineRejection', () => {
     expect(orderLocked.body).toBe(body);
   });
 
+  test('a Rejection keeps its headers schema by identity', () => {
+    const headers = z.object({ 'www-authenticate': z.string() });
+
+    const unauthenticated = defineRejection({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      message: 'Unauthenticated',
+      headers,
+    });
+
+    expect(unauthenticated.headers).toBe(headers);
+  });
+
+  test('an upper-case Rejection header name is a type error', () => {
+    const declare = () =>
+      defineRejection({
+        code: 'UNAUTHENTICATED',
+        status: 401,
+        message: 'Unauthenticated',
+        // @ts-expect-error header names are lower-case
+        headers: z.object({ 'WWW-Authenticate': z.string() }),
+      });
+
+    expect(declare).not.toThrow();
+  });
+
   test('a Rejection status of 400 and of 499 type-check', () => {
     const rejections = [
       defineRejection({ code: 'FIRST', status: 400, message: 'First' }),

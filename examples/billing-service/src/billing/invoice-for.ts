@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { ReceivedOutcome } from '@cf-loom/client';
-import type { ordersDeps } from '../contract/dependencies/orders-service.dependencies.ts';
+import type { ReceivedOutcome, ReceivedRejection, ReceivedSuccess } from '@cf-loom/client';
+import type { ordersDependency } from '../contract/dependencies/orders-service.dependency.ts';
 import type { OrdersClient } from '../orders-client/orders-client.ts';
 
-type OrderOutcome = ReceivedOutcome<typeof ordersDeps, 'getOrder'>;
-type Order = Extract<OrderOutcome, { kind: 'success' }>['value'];
-type OrderRejection = Extract<OrderOutcome, { kind: 'rejection' }>;
+type OrderOutcome = ReceivedOutcome<typeof ordersDependency, 'getOrder'>;
+type Order = ReceivedSuccess<typeof ordersDependency, 'getOrder'>['body'];
+type OrderRejection = ReceivedRejection<typeof ordersDependency, 'getOrder'>;
 
 /** An invoice for one paid order, for its total. */
 export type Invoice = {
@@ -27,9 +27,11 @@ export async function invoiceFor(orders: OrdersClient, orderId: string): Promise
   const outcome = await orderOf(orders, orderId);
   switch (outcome.kind) {
     case 'success':
-      return invoicingOf(outcome.value);
+      return invoicingOf(outcome.body);
     case 'rejection':
       return invoicingOfRejection(outcome);
+    case 'unknown-rejection':
+      return { kind: 'unavailable', retryable: false };
     case 'fault':
       return { kind: 'unavailable', retryable: outcome.retryable };
   }
@@ -64,7 +66,6 @@ function invoiceOf(order: Order): Invoice {
 }
 
 function invoicingOfRejection(rejection: OrderRejection): Invoicing {
-  if (!rejection.known) return { kind: 'unavailable', retryable: false };
   switch (rejection.code) {
     case 'RESOURCE_NOT_FOUND':
       return { kind: 'not-found' };

@@ -1,16 +1,18 @@
 import type { DeprecationNotice } from '@cf-loom/client';
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
   notFound,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider, type StepBuilder } from './index.ts';
 
 const getPayment = defineEndpoint({
@@ -20,6 +22,7 @@ const getPayment = defineEndpoint({
   visibility: 'internal',
   description: 'One payment',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   input: { params: z.object({ paymentId: z.string().min(3) }) },
   success: { status: 200, body: z.object({ id: z.string() }) },
   rejections: [notFound],
@@ -34,43 +37,42 @@ const listPayments = defineEndpoint({
   success: { status: 200, body: z.array(z.string()) },
 });
 
-/** The Provider's Contract Package, its Deprecated Endpoint stamped when the clock read `now`. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+/** The Provider's Contract Package, its Deprecated Endpoints dated as they declare. */
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
 ) {
   const listed = Object.values(endpoints) as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const now = Date.parse('2026-10-17T09:30:00Z');
-  const context = { generator: 'test', packages: [], committed: undefined, now };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment, listPayments }), {
-  endpoints: [getPayment, listPayments],
+const paymentsDependencyPackage = contractPackageOf({ getPayment, listPayments });
+const paymentsDependency = defineDependency({
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.listPayments,
+  ],
 });
 
-type Builder = StepBuilder<typeof getPayment, (typeof paymentsDeps)['standardRejections']>;
+type Builder = StepBuilder<typeof paymentsDependency, 'getPayment'>;
 
 const deprecation = `@${Date.parse('2026-10-17T09:30:00Z') / 1000}`;
 
@@ -78,32 +80,54 @@ describe('fakeProvider: Deprecation', () => {
   test.each([
     ['a Success', (r: Builder) => r.success({ id: 'pay-1' })],
     ['a Rejection', (r: Builder) => r.reject('NOT_FOUND')],
-    [
-      'a code the Provider does not declare',
-      (r: Builder) => r.reject({ unknown: 'CARD_EXPIRED' }, {}),
-    ],
+    ['a code the Provider does not declare', (r: Builder) => r.unknownRejection('CARD_EXPIRED')],
     ['a Fault', (r: Builder) => r.fault({ committed: 'no', retryable: true })],
-    ['a reserved code', (r: Builder) => r.fault({ code: 'INVALID_OUTCOME' })],
+    ['a Reserved code', (r: Builder) => r.reserved('INVALID_OUTCOME')],
     ['a bare status', (r: Builder) => r.status(502)],
   ])('%s of a Deprecated Endpoint carries Deprecation', async (_name, step) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
 
-    const response = await payments.fetch('https://payments-service.test/payments/pay-1', {});
+    const response = await payments.fetch(
+      new Request('https://payments-service.test/payments/pay-1'),
+    );
 
     expect(response.headers.get('deprecation')).toBe(deprecation);
   });
 
   test('the invalid-input Rejection of a Deprecated Endpoint carries Deprecation', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
-    const response = await payments.fetch('https://payments-service.test/payments/ab', {});
+    const response = await payments.fetch(new Request('https://payments-service.test/payments/ab'));
 
     expect([response.status, response.headers.get('deprecation')]).toEqual([400, deprecation]);
   });
 
+  test('a Deprecated Endpoint whose deprecatedAt lies in the future carries Deprecation too', async () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'internal',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const provided = contractPackageOf({ scheduled });
+    const dependency = defineDependency({
+      endpoints: [provided.endpoints.scheduled],
+    });
+    const payments = fakeProvider(dependency);
+    payments.on('scheduled').otherwise((r) => r.success());
+
+    const response = await payments.fetch(new Request('https://payments-service.test/scheduled'));
+
+    expect(response.headers.get('deprecation')).toBe('@32472144000');
+  });
+
   test('onDeprecation is told once per method, and never for an Active Endpoint', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.success({ id: 'pay-1' }));
     payments.on('listPayments').otherwise((r) => r.success([]));
     const notices: DeprecationNotice[] = [];
@@ -111,7 +135,7 @@ describe('fakeProvider: Deprecation', () => {
 
     await client.getPayment({ params: { paymentId: 'pay-1' } });
     await client.getPayment({ params: { paymentId: 'pay-2' } });
-    const listed = await payments.fetch('https://payments-service.test/payments', {});
+    const listed = await payments.fetch(new Request('https://payments-service.test/payments'));
     await client.listPayments();
 
     expect(listed.headers.has('deprecation')).toBe(false);

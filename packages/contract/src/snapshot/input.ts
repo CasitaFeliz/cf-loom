@@ -17,16 +17,30 @@ export function inputOf(
     guards.map((guard) => nodeOf(guard, part));
   const headers = mergedOf([own('input.headers'), ...demanded('demands.headers')]);
   return {
-    params: strictParamsOf(nodeOf(endpoint, 'input.params')),
-    query: mergedOf([own('input.query'), ...demanded('demands.query')]) ?? null,
-    headers: headers ?? null,
+    params: nodeOf(endpoint, 'input.params') ?? null,
+    query: textPartOf(mergedOf([own('input.query'), ...demanded('demands.query')])),
+    headers: textPartOf(headers),
     body: nodeOf(endpoint, 'input.body') ?? null,
   };
 }
 
-/** The params as the Snapshot stores them: `strict`, exactly the path's params. */
-function strictParamsOf(params: ObjectNode | undefined): ObjectNode | null {
-  return params === undefined ? null : { ...params, mode: 'strict' };
+/**
+ * A text part as the Snapshot writes it: an open object, with no field when none is declared, so
+ * a part declared empty and one not declared are the same Snapshot.
+ */
+export function textPartOf(part: ObjectNode | undefined): ObjectNode {
+  return part ?? emptyTextPart();
+}
+
+/** Whether a text part is the one the Snapshot writes where none is declared, with no field and no annotation. */
+export function isEmptyTextPart(part: ObjectNode): boolean {
+  const empty = emptyTextPart();
+  const isBare = Object.keys(part).every((key) => Object.hasOwn(empty, key));
+  return isBare && Object.keys(part.fields).length === 0;
+}
+
+function emptyTextPart(): ObjectNode {
+  return { type: 'object', fields: {} };
 }
 
 /**

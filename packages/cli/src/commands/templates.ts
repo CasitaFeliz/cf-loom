@@ -1,25 +1,19 @@
-import { type RootKind, rootPlaces } from '../loading/index.ts';
+import type { RootKind } from '@cf-loom/contract/internal';
+import { rootPlaces } from '../loading/index.ts';
 
-/** A root that declares nothing yet, under the export the CLI loads it from. */
+/** A Root that declares nothing yet, exported under the conventional name, named when it has a name. */
 export function rootTemplateOf(kind: RootKind, name: string): string {
   const { define, exported } = rootPlaces[kind];
-  const fields =
-    kind === 'application' ? [`  name: '${name}',`, '  dependencies: [],'] : [`  name: '${name}',`];
+  const imported = `import { ${define} } from '@cf-loom/contract';`;
+  if (kind === 'definitions') {
+    return lines([imported, '', `export const ${exported} = ${define}({});`]);
+  }
   return lines([
-    `import { ${define} } from '@cf-loom/contract';`,
+    imported,
     '',
     `export const ${exported} = ${define}({`,
-    ...fields,
+    `  name: '${name}',`,
     '});',
-  ]);
-}
-
-/** The configuration `init` writes, with the scope of the project's package.json. */
-export function configTemplateOf(scope: string): string {
-  return lines([
-    "import { defineConfig } from '@cf-loom/cli';",
-    '',
-    `export const config = defineConfig({ scope: '${scope}' });`,
   ]);
 }
 

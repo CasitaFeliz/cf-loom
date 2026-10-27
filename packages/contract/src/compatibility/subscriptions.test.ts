@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
   type CodeSnapshot,
   compatibilityReportOf,
+  type Difference,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
   type SubscriptionSnapshot,
@@ -11,17 +13,16 @@ import {
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -32,6 +33,8 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
+    formerInputs: [],
     endpoints: {},
     events: {},
     commands: {},
@@ -46,8 +49,11 @@ function aProposed(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
 
 const orderLocked = 'ORDER_LOCKED';
 
-function aSubscription(event = 'orders-service:OrderPlaced@1'): SubscriptionSnapshot {
-  return { event };
+function aSubscription(
+  event = 'orders-service:OrderPlaced@1',
+  description = 'Receives it',
+): SubscriptionSnapshot {
+  return { group: 'orders', description, event };
 }
 
 function aRemovedSubscription(event = 'orders-service:OrderPlaced@1'): SubscriptionTombstone {
@@ -55,11 +61,21 @@ function aRemovedSubscription(event = 'orders-service:OrderPlaced@1'): Subscript
 }
 
 function aCode(status: number): CodeSnapshot {
-  return { origin: 'local', status, message: 'The order is locked', body: null, removed: false };
+  return {
+    origin: 'local',
+    status,
+    message: 'The order is locked',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
 }
 
 function subscriptionSite(name: string): ChangeSite {
-  return { kind: 'subscription', name };
+  return { kind: 'subscription', name, visibility: 'private' };
+}
+
+function neutral(site: ChangeSite, difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
 }
 
 function reportOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot) {
@@ -71,9 +87,6 @@ function changesOf(
   proposed: ServiceSnapshot,
 ): readonly Change[] {
   const report = reportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report.changes;
 }
 
@@ -82,41 +95,47 @@ describe('compatibilityReportOf, Subscriptions', () => {
     {
       name: 'adding',
       baseline: aBaseline(),
-      proposed: aProposed({ subscriptions: { 'notify-on-placed': aSubscription() } }),
+      proposed: aProposed({ subscriptions: { notifyOnPlaced: aSubscription() } }),
+      difference: { kind: 'added' },
     },
     {
       name: 'removing',
-      baseline: aBaseline({ subscriptions: { 'notify-on-placed': aSubscription() } }),
+      baseline: aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } }),
       proposed: aProposed(),
+      difference: { kind: 'removed' },
     },
-  ])('$name a Subscription gives no Change, only a changed hash', ({ baseline, proposed }) => {
-    const report = reportOf(baseline, proposed);
+  ] as const)(
+    '$name a Subscription is one Neutral Change',
+    ({ baseline, proposed, difference }) => {
+      const changes = changesOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-  });
+      expect(changes).toEqual([neutral(subscriptionSite('notifyOnPlaced'), difference)]);
+    },
+  );
 
   test('a Subscription tombstone the proposed Snapshot leaves out is no Change', () => {
-    const baseline = aBaseline({ subscriptions: { 'legacy-sync': aRemovedSubscription() } });
+    const baseline = aBaseline({ subscriptions: { legacySync: aRemovedSubscription() } });
 
     const report = reportOf(baseline, aProposed());
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each([
     { name: 'its old Event', event: 'orders-service:OrderPlaced@1' },
     { name: 'another Event', event: 'payments-service:PaymentSettled@1' },
-  ])('declaring a removed Subscription’s name again with $name is not allowed', ({ event }) => {
-    const baseline = aBaseline({ subscriptions: { 'legacy-sync': aRemovedSubscription() } });
-    const proposed = aProposed({ subscriptions: { 'legacy-sync': aSubscription(event) } });
+  ])('declaring a removed Subscription’s name again with $name is refused', ({ event }) => {
+    const baseline = aBaseline({ subscriptions: { legacySync: aRemovedSubscription() } });
+    const proposed = aProposed({ subscriptions: { legacySync: aSubscription(event) } });
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
       {
-        site: subscriptionSite('legacy-sync'),
+        site: subscriptionSite('legacySync'),
         difference: { kind: 'identity-reused' },
-        class: 'not-allowed',
+        class: 'breaking',
+        verdict: 'refused',
       },
     ]);
   });
@@ -124,59 +143,88 @@ describe('compatibilityReportOf, Subscriptions', () => {
   test.each([
     { name: 'another version', to: 'orders-service:OrderPlaced@2' },
     { name: 'another Service’s Event', to: 'payments-service:PaymentSettled@1' },
-  ])('changing a Subscription’s Event to $name is not allowed, naming both', ({ to }) => {
-    const baseline = aBaseline({ subscriptions: { 'notify-on-placed': aSubscription() } });
-    const proposed = aProposed({ subscriptions: { 'notify-on-placed': aSubscription(to) } });
+  ])('changing a Subscription’s Event to $name is refused, naming both', ({ to }) => {
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
+    const proposed = aProposed({ subscriptions: { notifyOnPlaced: aSubscription(to) } });
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
       {
-        site: subscriptionSite('notify-on-placed'),
+        site: subscriptionSite('notifyOnPlaced'),
         difference: { kind: 'event-changed', from: 'orders-service:OrderPlaced@1', to },
-        class: 'not-allowed',
+        class: 'breaking',
+        verdict: 'refused',
       },
     ]);
   });
 
+  test('changing only a Subscription’s description is one Neutral description-changed', () => {
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
+    const reworded = aSubscription('orders-service:OrderPlaced@1', 'Tells the customer');
+    const proposed = aProposed({ subscriptions: { notifyOnPlaced: reworded } });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([
+      neutral(subscriptionSite('notifyOnPlaced'), { kind: 'description-changed' }),
+    ]);
+  });
+
+  test('moving a Subscription to another Group is one Neutral group-changed', () => {
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
+    const moved = { ...aSubscription(), group: 'billing' };
+    const proposed = aProposed({ subscriptions: { notifyOnPlaced: moved } });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([
+      neutral(subscriptionSite('notifyOnPlaced'), {
+        kind: 'group-changed',
+        from: 'orders',
+        to: 'billing',
+      }),
+    ]);
+  });
+
   test('a Subscription whose Event is unchanged gives no Change', () => {
-    const baseline = aBaseline({ subscriptions: { 'notify-on-placed': aSubscription() } });
-    const proposed = aProposed({ subscriptions: { 'notify-on-placed': aSubscription() } });
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
+    const proposed = aProposed({ subscriptions: { notifyOnPlaced: aSubscription() } });
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
-  test('following a new Message Version with a new Subscription beside the old one gives no Change', () => {
-    const baseline = aBaseline({ subscriptions: { 'notify-on-placed': aSubscription() } });
+  test('following a new Message Version with a new Subscription beside the old one adds only that Subscription', () => {
+    const baseline = aBaseline({ subscriptions: { notifyOnPlaced: aSubscription() } });
     const proposed = aProposed({
       subscriptions: {
-        'notify-on-placed': aSubscription(),
-        'notify-on-placed-v2': aSubscription('orders-service:OrderPlaced@2'),
+        notifyOnPlaced: aSubscription(),
+        notifyOnPlacedV2: aSubscription('orders-service:OrderPlaced@2'),
       },
     });
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([]);
+    expect(changes).toEqual([neutral(subscriptionSite('notifyOnPlacedV2'), { kind: 'added' })]);
   });
 
   test('Subscription Changes come after codes, by name in code point order', () => {
     const baseline = aBaseline({
       codes: { [orderLocked]: aCode(409) },
       subscriptions: {
-        'b-sync': aSubscription(),
-        'a-sync': aSubscription(),
-        'c-sync': aRemovedSubscription(),
+        bSync: aSubscription(),
+        aSync: aSubscription(),
+        cSync: aRemovedSubscription(),
       },
     });
     const proposed = aProposed({
       codes: { [orderLocked]: aCode(422) },
       subscriptions: {
-        'b-sync': aSubscription('orders-service:OrderPlaced@2'),
-        'a-sync': aSubscription('orders-service:OrderPlaced@3'),
-        'c-sync': aSubscription(),
+        bSync: aSubscription('orders-service:OrderPlaced@2'),
+        aSync: aSubscription('orders-service:OrderPlaced@3'),
+        cSync: aSubscription(),
       },
     });
 
@@ -189,9 +237,9 @@ describe('compatibilityReportOf, Subscriptions', () => {
       ['subscription', 'identity-reused'],
     ]);
     expect(changes.slice(1).map(({ site }) => site)).toEqual([
-      subscriptionSite('a-sync'),
-      subscriptionSite('b-sync'),
-      subscriptionSite('c-sync'),
+      subscriptionSite('aSync'),
+      subscriptionSite('bSync'),
+      subscriptionSite('cSync'),
     ]);
   });
 });

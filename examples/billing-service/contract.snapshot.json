@@ -1,4 +1,7 @@
 {
+  "format": 1,
+  "kind": "service",
+  "name": "billing-service",
   "codes": {
     "BAD_REQUEST": {
       "body": {
@@ -11,7 +14,7 @@
                   "code": {
                     "required": true,
                     "schema": {
-                      "open": false,
+                      "open": true,
                       "type": "enum",
                       "values": [
                         "invalid_format",
@@ -29,7 +32,7 @@
                   "in": {
                     "required": true,
                     "schema": {
-                      "open": false,
+                      "open": true,
                       "type": "enum",
                       "values": [
                         "body",
@@ -51,10 +54,10 @@
                       "items": {
                         "options": [
                           {
-                            "type": "number"
+                            "type": "string"
                           },
                           {
-                            "type": "string"
+                            "type": "number"
                           }
                         ],
                         "type": "union"
@@ -63,26 +66,30 @@
                     }
                   }
                 },
-                "mode": "open",
                 "type": "object"
               },
               "type": "array"
             }
           }
         },
-        "mode": "open",
+        "type": "object"
+      },
+      "headers": {
+        "fields": {},
         "type": "object"
       },
       "message": "The request is invalid",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 400
     },
     "NOT_YET_IMPLEMENTED": {
       "body": null,
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "Not implemented yet",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 501
     },
     "ORDER_LOCKED": {
@@ -96,12 +103,14 @@
             }
           }
         },
-        "mode": "open",
+        "type": "object"
+      },
+      "headers": {
+        "fields": {},
         "type": "object"
       },
       "message": "The order is locked and cannot be billed",
       "origin": "local",
-      "removed": false,
       "status": 409
     },
     "ORDER_NOT_BILLABLE": {
@@ -114,26 +123,28 @@
             }
           }
         },
-        "mode": "open",
+        "type": "object"
+      },
+      "headers": {
+        "fields": {},
         "type": "object"
       },
       "message": "Only a paid order can be billed",
       "origin": "local",
-      "removed": false,
       "status": 409
     },
     "RESOURCE_NOT_FOUND": {
       "body": null,
+      "headers": {
+        "fields": {},
+        "type": "object"
+      },
       "message": "The resource does not exist",
       "origin": "@org/definitions@0.0.0",
-      "removed": false,
       "status": 404
     }
   },
   "commands": {},
-  "definitions": {
-    "@org/definitions": "0.0.0"
-  },
   "defs": {},
   "dependencies": {
     "orders-service": {
@@ -143,16 +154,13 @@
           "id": "GET /orders/{}",
           "name": "getOrder"
         }
-      ],
-      "events": [
-        "OrderCreated@1"
       ]
     }
   },
   "endpoints": {
     "POST /invoices": {
       "description": "Bills a paid order for its total",
-      "group": "invoices",
+      "group": "billing",
       "guards": [],
       "input": {
         "body": {
@@ -165,12 +173,17 @@
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "params": null,
-        "query": null
+        "query": {
+          "fields": {},
+          "type": "object"
+        }
       },
       "lifecycle": "active",
       "name": "createInvoice",
@@ -222,122 +235,39 @@
                     }
                   }
                 },
-                "mode": "open",
                 "origin": "@org/definitions@0.0.0#money",
                 "type": "object"
               }
             }
           },
-          "mode": "open",
           "type": "object"
         },
-        "headers": null,
+        "headers": {
+          "fields": {},
+          "type": "object"
+        },
         "status": 201
       },
       "visibility": "internal"
     }
   },
   "events": {},
-  "format": 1,
-  "generator": "@cf-loom/cli@0.0.0",
-  "guards": {},
-  "kind": "service",
-  "name": "billing-service",
-  "standardRejections": {
-    "invalidInput": {
-      "body": {
-        "fields": {
-          "issues": {
-            "required": true,
-            "schema": {
-              "items": {
-                "fields": {
-                  "code": {
-                    "required": true,
-                    "schema": {
-                      "open": false,
-                      "type": "enum",
-                      "values": [
-                        "invalid_format",
-                        "invalid_type",
-                        "invalid_value",
-                        "malformed",
-                        "not_multiple",
-                        "required",
-                        "too_big",
-                        "too_small",
-                        "unrecognized_key"
-                      ]
-                    }
-                  },
-                  "in": {
-                    "required": true,
-                    "schema": {
-                      "open": false,
-                      "type": "enum",
-                      "values": [
-                        "body",
-                        "headers",
-                        "params",
-                        "query"
-                      ]
-                    }
-                  },
-                  "message": {
-                    "required": true,
-                    "schema": {
-                      "type": "string"
-                    }
-                  },
-                  "path": {
-                    "required": true,
-                    "schema": {
-                      "items": {
-                        "options": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "type": "union"
-                      },
-                      "type": "array"
-                    }
-                  }
-                },
-                "mode": "open",
-                "type": "object"
-              },
-              "type": "array"
-            }
-          }
-        },
-        "mode": "open",
-        "type": "object"
-      },
-      "code": "BAD_REQUEST",
-      "message": "The request is invalid",
-      "origin": "@org/definitions@0.0.0",
-      "status": 400
-    },
-    "notFound": {
-      "code": "RESOURCE_NOT_FOUND",
-      "message": "The resource does not exist",
-      "origin": "@org/definitions@0.0.0",
-      "status": 404
-    },
-    "notImplemented": {
-      "code": "NOT_YET_IMPLEMENTED",
-      "message": "Not implemented yet",
-      "origin": "@org/definitions@0.0.0",
-      "status": 501
+  "groups": {
+    "billing": {
+      "description": "Invoices for paid orders"
     }
   },
+  "guards": {},
+  "standardRejections": {
+    "invalidInput": "BAD_REQUEST",
+    "notFound": "RESOURCE_NOT_FOUND",
+    "notImplemented": "NOT_YET_IMPLEMENTED"
+  },
   "subscriptions": {
-    "draft-invoice-on-created": {
-      "event": "orders-service:OrderCreated@1"
+    "draftInvoiceOnCreated": {
+      "description": "Drafts an invoice for each order created",
+      "event": "orders-service:OrderCreated@1",
+      "group": "billing"
     }
   }
 }

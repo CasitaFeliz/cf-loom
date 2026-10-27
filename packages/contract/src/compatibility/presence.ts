@@ -14,6 +14,7 @@ export function presenceDifferenceOf(
     case 'reused':
       return { kind: 'identity-reused' };
     case 'kept':
+    case 'retired':
       return undefined;
   }
 }

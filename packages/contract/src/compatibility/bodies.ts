@@ -1,6 +1,8 @@
+import type { Lifecycle } from '../declarations/index.ts';
 import type { SchemaNode } from '../walker/index.ts';
+import { partsOf } from '../walker/index.ts';
 import type { BothDefs } from './findings.ts';
-import type { Pair } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 import { type EndpointPlace, schemaDifferencesOf } from './schemas.ts';
 
@@ -31,14 +33,15 @@ export function bodyDifferencesOf(
   return schemaDifferencesOf({ baseline, proposed }, defs, place);
 }
 
-/** A Message Version's body Differences, read as Message. */
+/** A Message Version's body Differences, read as Message, unless it is Retired now. */
 export function messageBodyDifferencesOf(
-  pair: Pair<{ readonly body: SchemaNode }>,
+  pair: Pair<{ readonly body: SchemaNode; readonly lifecycle: Lifecycle }>,
   defs: BothDefs,
 ): readonly Difference[] {
-  if (pair.kind !== 'kept') {
+  const compared = comparedShapesOf(pair);
+  if (compared === undefined) {
     return [];
   }
-  const bodies = { baseline: pair.baseline.body, proposed: pair.proposed.body };
-  return schemaDifferencesOf(bodies, defs, { position: 'message', at: ['body'] });
+  const bodies = { baseline: compared.baseline.body, proposed: compared.proposed.body };
+  return schemaDifferencesOf(bodies, defs, { position: 'message', at: partsOf('body') });
 }

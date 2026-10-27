@@ -1,28 +1,35 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
+import { publishedServiceAt } from '../../test/snapshots.ts';
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
 } from '../index.ts';
 import {
   type CodeSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
+  type EndpointPath,
   type EndpointSnapshot,
   type EventSnapshot,
+  endpointPathOf,
+  exportedCutOf,
   exportedSnapshotOf,
   type GuardSnapshot,
+  matchOf,
   type ObjectNode,
   type PublishedServiceSnapshot,
   type ResolvedDefinitions,
   type SchemaNode,
   type ServiceSnapshot,
-  schemaOriginsOf,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapshot {
@@ -30,13 +37,12 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
     format: 1,
     kind: 'service',
     name: 'orders-service',
-    generator: 'test',
-    definitions: {},
     standardRejections: {
-      invalidInput: { origin: 'cf-loom', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-      notFound: { origin: 'cf-loom', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { origin: 'cf-loom', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+      invalidInput: 'INVALID_INPUT',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
     },
+    groups: {},
     defs: {},
     endpoints: {},
     events: {},
@@ -49,19 +55,36 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
   };
 }
 
-function anEndpointEntry(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+/** An Endpoint's lifecycle as the Snapshot writes it, a Deprecated one with its instant. */
+function endpointLifecycleOf(lifecycle: EndpointSnapshot['lifecycle']): EndpointLifecycle {
+  return lifecycle === 'deprecated'
+    ? { lifecycle, deprecatedAt: '2026-10-17T09:30:00Z' }
+    : { lifecycle };
+}
+
+function anEndpointEntry<
+  const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' },
+>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -71,7 +94,7 @@ function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'A Guard',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
@@ -83,18 +106,19 @@ function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
     origin: 'orders-service',
     status: 409,
     message: 'Conflict',
+    headers: { type: 'object', fields: {} },
     body: null,
-    removed: false,
     ...fields,
   };
 }
 
 function anEventEntry(fields: Partial<EventSnapshot> = {}): EventSnapshot {
   return {
+    group: 'orders',
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    body: { type: 'object', fields: {} },
     ...fields,
   };
 }
@@ -104,20 +128,26 @@ function aRef(name: string): SchemaNode {
 }
 
 function anObjectWith(node: SchemaNode): ObjectNode {
-  return { type: 'object', mode: 'strict', fields: { item: { required: true, schema: node } } };
+  return { type: 'object', fields: { item: { required: true, schema: node } } };
 }
 
 const aString: SchemaNode = { type: 'string' };
 
 /** An Endpoint's entry that attaches the Guards named, each without a Qualifier. */
-function attaching(...guards: readonly string[]): EndpointSnapshot {
+function attaching(...guards: readonly string[]) {
   return anEndpointEntry({ guards: guards.map((guard) => ({ guard, qualifier: null })) });
 }
 
 /** A code a Rejection of the Service's own answers with. */
 const orderLocked = 'ORDER_LOCKED';
 
+const codeA = 'CODE_A';
+const codeB = 'CODE_B';
+const codeC = 'CODE_C';
+
 const privateEntry = anEndpointEntry({ name: 'purgeOrders', visibility: 'private' });
+
+const noFields = { type: 'object', fields: {} } as const;
 
 describe('exportedSnapshotOf', () => {
   test.each([
@@ -133,7 +163,9 @@ describe('exportedSnapshotOf', () => {
   ] as const)(
     'an Endpoint %s and %s is exported: %s, only when Public or Internal and not Retired',
     (visibility, lifecycle, exported) => {
-      const endpoints = { 'GET /orders': anEndpointEntry({ visibility, lifecycle }) };
+      const endpoints = {
+        'GET /orders': anEndpointEntry({ visibility }, endpointLifecycleOf(lifecycle)),
+      };
 
       const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
 
@@ -141,12 +173,19 @@ describe('exportedSnapshotOf', () => {
     },
   );
 
-  test('the exported Snapshot holds format, defs, endpoints, events, guards and codes, nothing of the heading but format', () => {
+  test('the exported Snapshot holds format, defs, endpoints, events, guards and codes, nothing of the heading but format, and no shadowing', () => {
     const snapshot = aServiceSnapshot();
 
     const cut = exportedSnapshotOf(snapshot);
 
-    expect(cut).toEqual({ format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} });
+    expect(cut).toStrictEqual({
+      format: 1,
+      defs: {},
+      endpoints: {},
+      events: {},
+      guards: {},
+      codes: {},
+    });
   });
 
   test('an Internal Event that is not Retired is kept by identity; a Private or a Retired one is cut', () => {
@@ -159,6 +198,14 @@ describe('exportedSnapshotOf', () => {
     const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
 
     expect(cut.events).toEqual({ 'OrderPlaced@1': events['OrderPlaced@1'] });
+  });
+
+  test('an exported Event keeps its Group', () => {
+    const events = { 'OrderPlaced@1': anEventEntry({ group: 'billing' }) };
+
+    const cut = exportedSnapshotOf(aServiceSnapshot({ events }));
+
+    expect(cut.events['OrderPlaced@1']?.group).toBe('billing');
   });
 
   test('a Deprecated Internal Event is kept', () => {
@@ -275,7 +322,8 @@ describe('exportedSnapshotOf', () => {
     { reach: 'only a Public Endpoint lists', code: orderLocked, kept: true },
     { reach: 'only a Private Endpoint lists', code: 'PURGED', kept: false },
     {
-      reach: 'only a listed Definitions Package declares, which the declared Snapshot never writes',
+      reach:
+        'only an imported Definitions Package declares, which the declared Snapshot never writes',
       code: 'UNUSED',
       kept: false,
     },
@@ -302,7 +350,12 @@ describe('exportedSnapshotOf', () => {
       'input.params',
       {
         endpoint: {
-          input: { params: anObjectWith(aRef('tree')), query: null, headers: null, body: null },
+          input: {
+            params: anObjectWith(aRef('tree')),
+            query: { type: 'object', fields: {} },
+            headers: { type: 'object', fields: {} },
+            body: null,
+          },
         },
       },
     ],
@@ -310,19 +363,38 @@ describe('exportedSnapshotOf', () => {
       'input.headers',
       {
         endpoint: {
-          input: { params: null, query: null, headers: anObjectWith(aRef('tree')), body: null },
+          input: {
+            params: null,
+            query: { type: 'object', fields: {} },
+            headers: anObjectWith(aRef('tree')),
+            body: null,
+          },
         },
       },
     ],
     [
       'input.body',
-      { endpoint: { input: { params: null, query: null, headers: null, body: aRef('tree') } } },
+      {
+        endpoint: {
+          input: {
+            params: null,
+            query: { type: 'object', fields: {} },
+            headers: { type: 'object', fields: {} },
+            body: aRef('tree'),
+          },
+        },
+      },
     ],
     [
       'input.query',
       {
         endpoint: {
-          input: { params: null, query: anObjectWith(aRef('tree')), headers: null, body: null },
+          input: {
+            params: null,
+            query: anObjectWith(aRef('tree')),
+            headers: { type: 'object', fields: {} },
+            body: null,
+          },
         },
       },
     ],
@@ -330,17 +402,33 @@ describe('exportedSnapshotOf', () => {
       'success.headers',
       { endpoint: { success: { status: 200, headers: anObjectWith(aRef('tree')), body: null } } },
     ],
-    ['success.body', { endpoint: { success: { status: 200, headers: null, body: aRef('tree') } } }],
+    [
+      'success.body',
+      {
+        endpoint: {
+          success: { status: 200, headers: noFields, body: aRef('tree') },
+        },
+      },
+    ],
     ['a Guard’s context', { guard: { context: aRef('tree') } }],
     ['a Guard’s qualifier', { guard: { qualifier: aRef('tree') } }],
     [
       'a Guard’s demands headers',
-      { guard: { demands: { headers: anObjectWith(aRef('tree')), query: null } } },
+      {
+        guard: {
+          demands: { headers: anObjectWith(aRef('tree')), query: { type: 'object', fields: {} } },
+        },
+      },
     ],
     [
       'a Guard’s demands query',
-      { guard: { demands: { headers: null, query: anObjectWith(aRef('tree')) } } },
+      {
+        guard: {
+          demands: { headers: { type: 'object', fields: {} }, query: anObjectWith(aRef('tree')) },
+        },
+      },
     ],
+    ['a code’s headers', { code: { headers: anObjectWith(aRef('tree')) } }],
     ['a code’s body', { code: { body: aRef('tree') } }],
   ] as const)('a def a node at %s of what is exported reaches is kept', (_, at) => {
     const endpoint = {
@@ -370,7 +458,9 @@ describe('exportedSnapshotOf', () => {
       c: anObjectWith(aRef('a')),
       d: aString,
     };
-    const endpoint = anEndpointEntry({ success: { status: 200, headers: null, body: aRef('a') } });
+    const endpoint = anEndpointEntry({
+      success: { status: 200, headers: { type: 'object', fields: {} }, body: aRef('a') },
+    });
 
     const cut = exportedSnapshotOf(
       aServiceSnapshot({ endpoints: { 'GET /orders': endpoint }, defs }),
@@ -382,7 +472,10 @@ describe('exportedSnapshotOf', () => {
   test.each([
     {
       through: 'its own success body',
-      purging: { ...privateEntry, success: { status: 200, headers: null, body: aRef('tree') } },
+      purging: {
+        ...privateEntry,
+        success: { status: 200, headers: noFields, body: aRef('tree') },
+      },
       guards: {},
       codes: {},
     },
@@ -416,7 +509,7 @@ describe('exportedSnapshotOf', () => {
       rejections: ['Z_CODE', 'A_CODE'],
       success: {
         status: 200,
-        headers: null,
+        headers: noFields,
         body: anObjectWith({ type: 'union', options: [aRef('z'), aRef('a')] }),
       },
     };
@@ -443,12 +536,16 @@ describe('exportedSnapshotOf', () => {
   test('a published Snapshot’s tombstones and still-declared Retired Elements are left out of the exported Snapshot', () => {
     const published: PublishedServiceSnapshot = {
       ...aServiceSnapshot(),
-      version: '3.4.0',
+      ...publishedServiceAt('3.4.0'),
       commands: {},
       subscriptions: {},
       endpoints: {
-        'GET /orders': { ...anEndpointEntry(), lifecycle: 'active' },
-        'GET /legacy': { ...anEndpointEntry(), lifecycle: 'retired', retiredIn: '3.0.0' },
+        'GET /orders': anEndpointEntry(),
+        'GET /legacy': {
+          ...anEndpointEntry(),
+          lifecycle: 'retired',
+          retiredIn: '3.0.0',
+        },
         'DELETE /orders': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'purgeOrders' },
       },
       events: {
@@ -502,6 +599,286 @@ describe('exportedSnapshotOf', () => {
   });
 });
 
+describe('exportedCutOf', () => {
+  test('the cut of an exported Endpoint holds its entry, the Guards, codes and defs it reaches and its shadowing, with no events key', () => {
+    const snapshot = reachingSnapshot();
+
+    const cut = exportedCutOf(snapshot, 'GET /a');
+
+    expect(cut).toStrictEqual({
+      format: 1,
+      defs: { dA: aString },
+      endpoints: { 'GET /a': snapshot.endpoints['GET /a'] },
+      guards: { gA: snapshot.guards['gA'] },
+      codes: { [codeA]: snapshot.codes[codeA] },
+      shadowing: {},
+    });
+  });
+
+  test.each([
+    ['a Private Endpoint', 'GET /private'],
+    ['a Retired Endpoint', 'GET /retired'],
+    ['an Endpoint the Snapshot does not hold', 'GET /missing'],
+  ])('%s has no cut', (_, identity) => {
+    const endpoints = {
+      'GET /private': anEndpointEntry({ visibility: 'private' }),
+      'GET /retired': anEndpointEntry({}, { lifecycle: 'retired' }),
+    };
+
+    const cutting = () => exportedCutOf(aServiceSnapshot({ endpoints }), identity);
+
+    expect(cutting).toThrow(`${identity} is no Endpoint a Contract Package exports`);
+  });
+
+  test.each([
+    ['declared', declaredSnapshot],
+    ['shared Guards', sharedGuardsSnapshot],
+    ['reached codes', codeReachSnapshot],
+    ['Events', eventsSnapshot],
+    ['reaching', reachingSnapshot],
+  ])(
+    'the cuts of every Endpoint of a Contract with %s hold together the exported Snapshot’s Guards and codes, and with its Events’ defs, its defs',
+    (_, snapshotOf) => {
+      const snapshot = snapshotOf();
+      const whole = exportedSnapshotOf(snapshot);
+      const cuts = Object.keys(whole.endpoints).map((identity) =>
+        exportedCutOf(snapshot, identity),
+      );
+      const eventsOnly = exportedSnapshotOf({ ...snapshot, endpoints: {} });
+
+      const together = {
+        guards: Object.fromEntries(cuts.flatMap((cut) => Object.entries(cut.guards))),
+        codes: Object.fromEntries(cuts.flatMap((cut) => Object.entries(cut.codes))),
+        defs: Object.fromEntries([...cuts, eventsOnly].flatMap((cut) => Object.entries(cut.defs))),
+      };
+
+      expect(together).toEqual({ guards: whole.guards, codes: whole.codes, defs: whole.defs });
+    },
+  );
+});
+
+describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matches', () => {
+  const exportedParam = anEndpointEntry({ params: ['paymentId'] });
+
+  test.each([
+    { visibility: 'public', lifecycle: 'active' },
+    { visibility: 'public', lifecycle: 'deprecated' },
+    { visibility: 'internal', lifecycle: 'active' },
+    { visibility: 'private', lifecycle: 'active' },
+    { visibility: 'private', lifecycle: 'deprecated' },
+    { visibility: 'private', lifecycle: 'retired' },
+    { visibility: 'internal', lifecycle: 'retired' },
+    { visibility: 'public', lifecycle: 'retired' },
+  ] as const)(
+    'an Endpoint, $visibility and $lifecycle, whose literal beats an exported param is carried, by identity and lifecycle alone',
+    ({ visibility, lifecycle }) => {
+      const endpoints = {
+        'GET /payments/{}': exportedParam,
+        'GET /payments/latest': anEndpointEntry({ visibility }, endpointLifecycleOf(lifecycle)),
+      };
+
+      const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
+
+      expect(cut.shadowing).toStrictEqual({ 'GET /payments/latest': { lifecycle } });
+    },
+  );
+
+  test('an exported literal that beats the exported param is carried by the param’s cut and not the reverse', () => {
+    const endpoints = {
+      'GET /payments/{}': exportedParam,
+      'GET /payments/latest': anEndpointEntry(),
+    };
+    const snapshot = aServiceSnapshot({ endpoints });
+
+    const carried = {
+      byParam: exportedCutOf(snapshot, 'GET /payments/{}').shadowing,
+      byLiteral: exportedCutOf(snapshot, 'GET /payments/latest').shadowing,
+    };
+
+    expect(carried).toStrictEqual({
+      byParam: { 'GET /payments/latest': { lifecycle: 'active' } },
+      byLiteral: {},
+    });
+  });
+
+  test.each([
+    ['another path', 'GET /admin/stats'],
+    ['another method', 'DELETE /payments/latest'],
+    ['a longer path', 'GET /payments/{}/receipt'],
+    ['a shorter path', 'GET /payments'],
+  ])(
+    'a Private Endpoint with %s shares no URL with an exported one and is not carried',
+    (_, identity) => {
+      const endpoints = {
+        'GET /payments/{}': exportedParam,
+        [identity]: anEndpointEntry({ visibility: 'private' }),
+      };
+
+      const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
+
+      expect(cut.shadowing).toStrictEqual({});
+    },
+  );
+
+  test('a Private param Endpoint that an exported literal beats on every URL they share is not carried', () => {
+    const endpoints = {
+      'GET /payments/latest': anEndpointEntry(),
+      'GET /payments/{}': anEndpointEntry({ visibility: 'private', params: ['paymentId'] }),
+    };
+
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/latest');
+
+    expect(cut.shadowing).toStrictEqual({});
+  });
+
+  test('a Private Endpoint that another Private one beats on the one URL it shares with an exported one is not carried', () => {
+    const endpoints = {
+      'GET /p/{}/b': anEndpointEntry({ params: ['paymentId'] }),
+      'GET /p/a/{}': anEndpointEntry({ visibility: 'private', params: ['rest'] }),
+      'GET /p/a/b': anEndpointEntry({ visibility: 'private' }),
+    };
+
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /p/{}/b');
+
+    expect(Object.keys(cut.shadowing)).toEqual(['GET /p/a/b']);
+  });
+
+  test('a Private Endpoint that wins some URLs an exported one matches is carried although another beats it elsewhere', () => {
+    const endpoints = {
+      'GET /p/{}/{}': anEndpointEntry({ params: ['first', 'second'] }),
+      'GET /p/a/{}': anEndpointEntry({ visibility: 'private', params: ['rest'] }),
+      'GET /p/a/b': anEndpointEntry({ visibility: 'private' }),
+    };
+
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /p/{}/{}');
+
+    expect(Object.keys(cut.shadowing)).toEqual(['GET /p/a/{}', 'GET /p/a/b']);
+  });
+
+  test('an Endpoint a published Snapshot holds only as a tombstone is never carried', () => {
+    const published: PublishedServiceSnapshot = {
+      ...aServiceSnapshot(),
+      ...publishedServiceAt('3.4.0'),
+      commands: {},
+      subscriptions: {},
+      events: {},
+      endpoints: {
+        'GET /payments/{}': exportedParam,
+        'GET /payments/latest': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getLatest' },
+        'GET /payments/first': {
+          ...anEndpointEntry(),
+          lifecycle: 'retired',
+          retiredIn: '3.1.0',
+        },
+      },
+    };
+
+    const cut = exportedCutOf(published, 'GET /payments/{}');
+
+    expect(cut.shadowing).toStrictEqual({ 'GET /payments/first': { lifecycle: 'retired' } });
+  });
+
+  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', {
+    timeout: 30_000,
+  }, () => {
+    const mismatches: string[] = [];
+
+    for (const declared of declaredSetsOf(smallPaths, 4)) {
+      const endpoints = Object.fromEntries(
+        declared.map(([identity, visibility]) => [identity, anEndpointEntry({ visibility })]),
+      );
+      const snapshot = aServiceSnapshot({ endpoints });
+      for (const [identity] of declared.filter(([, visibility]) => visibility === 'public')) {
+        mismatches.push(...misroutedUrlsOf(snapshot, identity));
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+  });
+
+  test('the Endpoints carried keep the Snapshot’s order', () => {
+    const endpoints = {
+      'GET /payments/{}': exportedParam,
+      'GET /payments/zeta': anEndpointEntry({ visibility: 'private' }),
+      'GET /payments/alpha': anEndpointEntry({ visibility: 'private' }),
+    };
+
+    const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
+
+    expect(Object.keys(cut.shadowing)).toEqual(['GET /payments/zeta', 'GET /payments/alpha']);
+  });
+});
+
+/** Every path of one or two segments over two literals and a param, as an Endpoint's identity spells it. */
+const smallPaths = ['a', 'b', '{}'].flatMap((first) => [
+  `GET /${first}`,
+  ...['a', 'b', '{}'].map((second) => `GET /${first}/${second}`),
+]);
+
+/** Every concrete URL of one or two segments over the two literals and a third text. */
+const smallUrls = ['a', 'b', 'c'].flatMap((first) => [
+  `/${first}`,
+  ...['a', 'b', 'c'].map((second) => `/${first}/${second}`),
+]);
+
+/** Each subset of `identities` up to `size`, every member either exported or Private. */
+function declaredSetsOf(
+  identities: readonly string[],
+  size: number,
+): readonly (readonly (readonly [string, 'public' | 'private'])[])[] {
+  const [first, ...rest] = identities;
+  if (first === undefined || size === 0) {
+    return [[]];
+  }
+  const without = declaredSetsOf(rest, size);
+  const withFirst = declaredSetsOf(rest, size - 1);
+  const exportedFirst = withFirst.map((others) => [[first, 'public'] as const, ...others]);
+  const privateFirst = withFirst.map((others) => [[first, 'private'] as const, ...others]);
+  return [...without, ...exportedFirst, ...privateFirst];
+}
+
+/** The URLs an exported Endpoint matches that its cut routes to another winner than all the declared Endpoints do. */
+function misroutedUrlsOf(snapshot: ServiceSnapshot, identity: string): readonly string[] {
+  const all = Object.keys(snapshot.endpoints).map(endpointPathOf);
+  const own = endpointPathOf(identity);
+  const { shadowing } = exportedCutOf(snapshot, identity);
+  const routed = [own, ...all.filter((path) => path.identity in shadowing)];
+  const matched = smallUrls.filter((url) => winnerAmong([own], url) !== undefined);
+  const misrouted = matched.filter((url) => winnerAmong(routed, url) !== winnerAmong(all, url));
+  return misrouted.map(
+    (url) => `${url} through ${identity} among ${Object.keys(snapshot.endpoints)}`,
+  );
+}
+
+/** The identity of the Endpoint that wins a GET of `url` among `endpoints`, or none. */
+function winnerAmong(endpoints: readonly EndpointPath[], url: string): string | undefined {
+  const match = matchOf(endpoints, new Request(`http://payments.test${url}`));
+  return match.kind === 'matched' ? match.matched.identity : undefined;
+}
+
+/**
+ * A Service whose two Public Endpoints each reach a Guard, a code and a def of their own, whose
+ * Event reaches a def of its own, and whose Private Endpoint reaches one more of each.
+ */
+function reachingSnapshot(): ServiceSnapshot {
+  const reaching = (guard: string, code: string, def: string): EndpointSnapshot => ({
+    ...attaching(guard),
+    rejections: [code],
+    success: { status: 200, headers: noFields, body: aRef(def) },
+  });
+  return aServiceSnapshot({
+    endpoints: {
+      'GET /a': reaching('gA', codeA, 'dA'),
+      'GET /b': reaching('gB', codeB, 'dB'),
+      'DELETE /c': { ...reaching('gC', codeC, 'dC'), visibility: 'private' },
+    },
+    guards: { gA: aGuardEntry(), gB: aGuardEntry(), gC: aGuardEntry() },
+    codes: { [codeA]: aCode(), [codeB]: aCode(), [codeC]: aCode() },
+    events: { 'E@1': anEventEntry({ body: aRef('dE') }) },
+    defs: { dA: aString, dB: aString, dC: aString, dE: aString },
+  });
+}
+
 /** A Service with a Public Endpoint behind a Guard and a Private one with a code of its own. */
 function declaredSnapshot(): ServiceSnapshot {
   const locked = defineRejection({ code: orderLocked, status: 409, message: 'Locked' });
@@ -536,7 +913,7 @@ function declaredSnapshot(): ServiceSnapshot {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
+  const root = defineService({ name: 'orders-service', groups: [group] });
   return serviceSnapshotOf(root);
 }
 
@@ -558,31 +935,26 @@ function eventsSnapshot(): ServiceSnapshot {
       description: 'Stock was reserved',
       body: z.object({ sku: z.string() }),
     }),
-  ];
-  const root = defineContract({ name: 'orders-service', events });
+  ] as const;
+  const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', events });
+  const root = defineService({ name: 'orders-service', groups: [ordersGroup] });
   return serviceSnapshotOf(root);
 }
 
-/** The Snapshot of a Service root, the Definitions Packages it lists given resolved. */
+/** The Snapshot of a Service's Root, the Definitions Packages it lists given resolved. */
 function serviceSnapshotOf(
-  root: ReturnType<typeof defineContract>,
+  root: ReturnType<typeof defineService>,
   packages: readonly ResolvedDefinitions[] = [],
 ): ServiceSnapshot {
-  const rootPackage = {
+  const rootPackage = aRootPackage(root, {
     packageName: 'orders-service',
-    originOf: schemaOriginsOf(packages),
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+    packages,
+  });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const snapshot = snapshotOf(validated, {
-    generator: 'test',
-    packages,
-    committed: undefined,
-    now: 0,
-  });
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -590,7 +962,7 @@ function serviceSnapshotOf(
 }
 
 /**
- * A Service whose one Public Endpoint attaches a listed Definitions Package's Guard and the Guard it
+ * A Service whose one Public Endpoint attaches an imported Definitions Package's Guard and the Guard it
  * builds on, the package's other Guard attached by none.
  */
 function sharedGuardsSnapshot(): ServiceSnapshot {
@@ -601,10 +973,7 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     guards: [userToken],
   });
   const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
-  const definitions = defineDefinitions({
-    name: 'definitions',
-    guards: [userToken, permission, unusedGuard],
-  });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -615,13 +984,19 @@ function sharedGuardsSnapshot(): ServiceSnapshot {
     success: { status: 200, body: z.object({ id: z.string() }) },
   });
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   const packages: readonly ResolvedDefinitions[] = [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    {
+      kind: 'identified',
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      reaches: [],
+      exports: { definitions, userToken, permission, unusedGuard },
+    },
   ];
   return serviceSnapshotOf(root, packages);
 }
@@ -638,7 +1013,7 @@ function codeReachSnapshot(): ServiceSnapshot {
   const inner = defineGuard({ name: 'inner', description: 'Answers DEEP', rejections: [deep] });
   const middle = defineGuard({ name: 'middle', description: 'Builds on inner', guards: [inner] });
   const outer = defineGuard({ name: 'outer', description: 'Builds on middle', guards: [middle] });
-  const definitions = defineDefinitions({ name: 'definitions', rejections: [unused] });
+  const definitions = defineDefinitions({});
   const getOrder = defineEndpoint({
     name: 'getOrder',
     method: 'GET',
@@ -663,12 +1038,43 @@ function codeReachSnapshot(): ServiceSnapshot {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
-    definitions: [definitions],
     groups: [group],
   });
   return serviceSnapshotOf(root, [
-    { definitions, packageName: '@org/definitions', version: '1.0.0' },
+    {
+      kind: 'identified',
+      definitions,
+      packageName: '@org/definitions',
+      version: '1.0.0',
+      reaches: [],
+      exports: { definitions, unused },
+    },
   ]);
 }
+
+describe('exportedSnapshotOf, depth', () => {
+  test('an exported Endpoint reaching 5,000 nested defs carries all 5,000 in its cut', {
+    timeout: 60_000,
+  }, () => {
+    const count = 5_000;
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count; index++) {
+      const held = index === count - 1 ? aString : aRef(`def${index + 1}`);
+      entries.push([`def${index}`, anObjectWith(held)]);
+    }
+    const endpoint = anEndpointEntry({
+      success: { status: 200, headers: noFields, body: aRef('def0') },
+    });
+
+    const cut = exportedSnapshotOf(
+      aServiceSnapshot({
+        endpoints: { 'GET /orders': endpoint },
+        defs: Object.fromEntries(entries),
+      }),
+    );
+
+    expect(Object.keys(cut.defs)).toHaveLength(count);
+  });
+});

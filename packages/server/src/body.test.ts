@@ -1,8 +1,8 @@
-import { defineContract, defineEndpoint, defineGroup } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineService } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type ServedFault, serve } from './index.ts';
+import { type ServedFault, type ServeOptions, serve } from './index.ts';
 
 const node: z.ZodType = z.object({
   get next() {
@@ -42,7 +42,7 @@ const nest = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -60,10 +60,9 @@ const handlers = {
     nest: handle(nest, () => success()),
   },
   guards: {},
-  deprecatedAt: {},
 };
 
-const http = serve(contract, handlers);
+const http = serve(contract, handlers, {});
 
 const order = { email: 'a@example.com', quantity: 2 };
 const json = { 'content-type': 'application/json', 'x-request-id': 'r-1' };
@@ -241,27 +240,94 @@ describe('serve: maxBodyBytes', () => {
     expect(response.status).toBe(201);
   });
 
+  test.each([
+    [Number.NaN, 'NaN'],
+    [-1, '-1'],
+    [1.5, '1.5'],
+    [Number.POSITIVE_INFINITY, 'Infinity'],
+    ['10', '"10"'],
+    [null, 'null'],
+  ])('serve refuses a maxBodyBytes of %s at startup, naming it', (maxBodyBytes, named) => {
+    const starting = () => serve(contract, handlers, { maxBodyBytes: maxBodyBytes as number });
+
+    expect(starting).toThrow(
+      `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+    );
+  });
+
+  test.each([
+    { label: '{}', given: {}, named: 'an object' },
+    { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
+    { label: '[1]', given: [1], named: 'a list' },
+    { label: '1n', given: 1n, named: '1' },
+  ])(
+    'serve refuses a maxBodyBytes of $label at startup, naming it as a written value',
+    ({ given, named }) => {
+      const starting = () => serve(contract, handlers, { maxBodyBytes: given as number });
+
+      expect(starting).toThrow(
+        `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+      );
+    },
+  );
+
+  test('a maxBodyBytes of unlimited reads a body of 2 MB', async () => {
+    const unlimited = serve(contract, handlers, { maxBodyBytes: 'unlimited' });
+
+    const response = await unlimited(
+      post(JSON.stringify({ ...order, note: 'x'.repeat(2_000_000) })),
+    );
+
+    expect(response.status).toBe(201);
+  });
+
+  test('a maxBodyBytes of 0 answers BODY_TOO_LARGE to any body that is not empty', async () => {
+    const none = serve(contract, handlers, { maxBodyBytes: 0 });
+
+    const response = await none(post(JSON.stringify(order)));
+
+    expect(response.status).toBe(413);
+  });
+
+  test('maxBodyBytes takes a number or unlimited, and no other text', () => {
+    const unlimited: ServeOptions = { maxBodyBytes: 'unlimited' };
+    // @ts-expect-error a number of bytes as text is not a limit
+    const text: ServeOptions = { maxBodyBytes: '10' };
+
+    expect([unlimited.maxBodyBytes, text.maxBodyBytes]).toEqual(['unlimited', '10']);
+  });
+
   test('without maxBodyBytes a large body is read', async () => {
     const response = await http(post(JSON.stringify({ ...order, note: 'x'.repeat(1_000_000) })));
 
     expect(response.status).toBe(201);
   });
 
-  test('a body nested past the stack answers the Fault 500, which onServiceFault receives as thrown', async () => {
+  test('a body nested past the stack answers the invalid-input Rejection, malformed at input.body, and no Handler runs', async () => {
     const faults: ServedFault[] = [];
-    const watched = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const ran: string[] = [];
+    const nestHandler = handle(nest, () => {
+      ran.push('nest');
+      return success();
+    });
+    const watched = serve(
+      contract,
+      { ...handlers, endpoints: { ...handlers.endpoints, nest: nestHandler } },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
+    );
     const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
 
     const response = await watched(
       new Request('http://test/nest', { method: 'POST', headers: json, body: deep }),
     );
 
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
-      fault: { committed: 'no', retryable: false, message: 'Internal error' },
-    });
-    expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'nest', fault: { cause: expect.any(RangeError) } },
-    ]);
+    expect(response.status).toBe(400);
+    expect(await issuesOf(response)).toEqual(malformed('The value is nested too deeply to read'));
+    expect(faults).toEqual([]);
+    expect(ran).toEqual([]);
   });
 });

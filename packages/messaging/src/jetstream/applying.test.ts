@@ -1,16 +1,31 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
-import { JetStreamApiError, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+} from '@cf-loom/contract';
+import { handle, readersOf } from '@cf-loom/handlers';
+import {
+  type ConsumerConfig,
+  JetStreamApiError,
+  jetstream as jetStreamClientOf,
+} from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
-import { withMethods } from '../../test/connections.ts';
-import { arrangeDurable, durableConfigOf, durableInfoOf } from '../../test/durables.ts';
+import { stopServerUnder, withMethods } from '../../test/connections.ts';
+import {
+  arrangeDurableConsumer,
+  durableConsumerConfigOf,
+  durableConsumerInfoOf,
+} from '../../test/durable-consumers.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, planOf, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
-import { type BrokerLimits, type BrokerPlan, jetstream } from './index.ts';
+import { applyBrokerPlan, type BrokerLimits, type BrokerPlan, jetstream } from './index.ts';
 
 const nanosPerSecond = 1_000_000_000;
 
@@ -31,10 +46,16 @@ const chargeCardV1 = defineCommand({
   body: orderBody,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  events: [orderCreatedV1],
-  commands: [chargeCardV1],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1],
+      commands: [chargeCardV1],
+    }),
+  ],
 });
 
 let server: NatsServer;
@@ -66,7 +87,7 @@ function aConnect() {
   return { connect: connectService, opened };
 }
 
-/** Every setting a stream and a durable consumer needs, as the files the arranged ones are made with. */
+/** Every setting a stream and a Durable consumer needs, as the files the arranged ones are made with. */
 const testLimits: BrokerLimits = {
   streamDefaults: {
     retention: 'limits',
@@ -75,7 +96,12 @@ const testLimits: BrokerLimits = {
     replicas: 1,
     storage: 'file',
   },
-  consumerDefaults: { deliverPolicy: 'all', ackWait: '30s', maxDeliver: 5, maxAckPending: 100 },
+  durableConsumerDefaults: {
+    deliverPolicy: 'all',
+    ackWait: '30s',
+    maxDeliver: 5,
+    maxAckPending: 100,
+  },
 };
 
 /** The names and subjects of Orders’ plan under a prefix, and the plan itself. */
@@ -87,21 +113,23 @@ function anOrders(prefix: string) {
   const plan: BrokerPlan = {
     prefix,
     streams: { [stream]: { service: 'orders-service', subjects: [charge, created] } },
-    consumers: {
+    durableConsumers: {
       [chargeDurable]: { service: 'orders-service', stream, subject: charge },
     },
   };
   return { stream, created, charge, chargeDurable, plan };
 }
 
-/** Billing’s plan under a prefix: no stream, and one durable consumer on Orders’ stream. */
+type Orders = ReturnType<typeof anOrders>;
+
+/** Billing’s plan under a prefix: no stream, and one Durable consumer on Orders’ stream. */
 function aBilling(prefix: string) {
   const orders = anOrders(prefix);
   const durable = `${prefix}_billing-service_draft-invoice-on-created`;
   const plan: BrokerPlan = {
     prefix,
     streams: {},
-    consumers: {
+    durableConsumers: {
       [durable]: { service: 'billing-service', stream: orders.stream, subject: orders.created },
     },
   };
@@ -113,6 +141,71 @@ function readFromJson(limits: unknown): BrokerLimits {
   return JSON.parse(JSON.stringify(limits));
 }
 
+/** Orders’ stream, holding its subjects, as the organization’s tooling would arrange it. */
+function arrangeOrdersStream(orders: Orders): Promise<void> {
+  return arrangeStream(server.url, {
+    name: orders.stream,
+    subjects: [orders.charge, orders.created],
+  });
+}
+
+/** The settings of a Durable consumer that pulls Orders’ Command, with `extra` over them. */
+function pullingCharge(
+  orders: Orders,
+  extra: Partial<ConsumerConfig> = {},
+): Partial<ConsumerConfig> {
+  return { ack_policy: 'explicit', filter_subject: orders.charge, ...extra };
+}
+
+/** The Handlers `consume` needs for Orders’ plan: one for its Command, which does nothing. */
+function chargeHandlers() {
+  const readers = readersOf({
+    commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+    subscriptions: {},
+  });
+  return {
+    commands: { chargeCardV1: handle(readers.commands.chargeCardV1, async () => undefined) },
+    subscriptions: {},
+    readers,
+  };
+}
+
+/** A Service whose names have 64 characters, a Subscription's with the most capitals, its Command at the largest Message Version. */
+function aServiceOfLongestNames() {
+  const kebab = 'a'.repeat(64);
+  const subscribed = `aa${'Bb'.repeat(31)}`;
+  const pascal = (initial: string) => `${initial}${'a'.repeat(63)}`;
+  const created = defineEvent({
+    name: pascal('A'),
+    version: 1,
+    visibility: 'internal',
+    description: 'An order was created',
+    body: orderBody,
+  });
+  const charge = defineCommand({
+    name: pascal('B'),
+    version: Number.MAX_SAFE_INTEGER,
+    description: 'Charges the order’s card',
+    body: orderBody,
+  });
+  const onCreated = defineSubscription({
+    name: subscribed,
+    description: 'Receives the order created',
+    event: created,
+  });
+  const group = defineGroup({
+    name: kebab,
+    description: 'Messages',
+    events: [created],
+    commands: [charge],
+    subscriptions: [onCreated],
+  });
+  return {
+    contract: defineService({ name: kebab, groups: [group] }),
+    prefix: 'p'.repeat(64),
+  };
+}
+
 async function rejectionOf(applying: Promise<void>): Promise<Error> {
   try {
     await applying;
@@ -122,14 +215,33 @@ async function rejectionOf(applying: Promise<void>): Promise<Error> {
     }
     throw error;
   }
-  throw new Error('apply did not reject');
+  throw new Error('applyBrokerPlan did not reject');
 }
 
-describe('applying a broker plan with jetstream()', () => {
-  test('apply creates each stream of the plan with its subjects, retention, max age, duplicate window, replicas and storage', async () => {
+describe('applyBrokerPlan', () => {
+  test('applyBrokerPlan applies the plan of the longest names the grammars accept, under the longest prefix', async () => {
+    const { contract: longest, prefix } = aServiceOfLongestNames();
+    const plan = planOf(longest, prefix);
+    const connecting = { connect: aConnect().connect };
+    const [stream = ''] = Object.keys(plan.streams);
+    const durableConsumers = Object.entries(plan.durableConsumers);
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    const streamApplied = await streamConfigOf(server.url, stream);
+    const configsApplied = await Promise.all(
+      durableConsumers.map(([name]) => durableConsumerConfigOf(server.url, stream, name)),
+    );
+    const names = [stream, ...durableConsumers.map(([name]) => name)];
+    expect(streamApplied.name).toBe(stream);
+    expect(configsApplied.map((config) => config.durable_name)).toEqual(names.slice(1));
+    expect(names.map((name) => name.length).sort((a, b) => a - b)).toEqual([129, 220, 225]);
+  });
+
+  test('applyBrokerPlan creates each stream of the plan with its subjects, retention, max age, duplicate window, replicas and storage', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       streamDefaults: {
         retention: 'interest',
@@ -138,10 +250,10 @@ describe('applying a broker plan with jetstream()', () => {
         replicas: 1,
         storage: 'memory',
       },
-      consumerDefaults: testLimits.consumerDefaults,
+      durableConsumerDefaults: testLimits.durableConsumerDefaults,
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const config = await streamConfigOf(server.url, orders.stream);
     expect(config).toMatchObject({
@@ -155,18 +267,23 @@ describe('applying a broker plan with jetstream()', () => {
     expect([...config.subjects].sort()).toEqual([orders.charge, orders.created].sort());
   });
 
-  test('apply creates each durable consumer as a pull consumer with explicit acknowledgements, filtered on the plan’s subject', async () => {
+  test('applyBrokerPlan creates each Durable consumer as a pull consumer with explicit acknowledgements, filtered on the plan’s subject', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
-      consumerDefaults: { deliverPolicy: 'new', ackWait: '45s', maxDeliver: 7, maxAckPending: 20 },
+      durableConsumerDefaults: {
+        deliverPolicy: 'new',
+        ackWait: '45s',
+        maxDeliver: 7,
+        maxAckPending: 20,
+      },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
-    const config = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(config).toMatchObject({
       durable_name: orders.chargeDurable,
       ack_policy: 'explicit',
@@ -179,58 +296,58 @@ describe('applying a broker plan with jetstream()', () => {
     expect(config.deliver_subject).toBeUndefined();
   });
 
-  test('a stream’s or durable consumer’s own limits override the defaults setting by setting', async () => {
+  test('a stream’s or Durable consumer’s own limits override the defaults setting by setting', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { maxAge: '2h' } },
-      consumers: { [orders.chargeDurable]: { ackWait: '2m', maxDeliver: 9 } },
+      durableConsumers: { [orders.chargeDurable]: { ackWait: '2m', maxDeliver: 9 } },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({
       max_age: 7200 * nanosPerSecond,
       duplicate_window: 120 * nanosPerSecond,
     });
-    expect(durable).toMatchObject({
+    expect(config).toMatchObject({
       ack_wait: 120 * nanosPerSecond,
       max_deliver: 9,
       max_ack_pending: 100,
     });
   });
 
-  test('apply adds the plan’s subjects to an existing stream and keeps the subjects it already held', async () => {
+  test('applyBrokerPlan adds the plan’s subjects to an existing stream and keeps the subjects it already held', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const other = `${prefix}.orders-service.other`;
     await arrangeStream(server.url, { name: orders.stream, subjects: [other, orders.created] });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(orders.plan, testLimits);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
 
     const { subjects } = await streamConfigOf(server.url, orders.stream);
     expect([...subjects].sort()).toEqual([other, orders.charge, orders.created].sort());
   });
 
-  test('apply adds no subject to a stream that already holds it through a wildcard', async () => {
+  test('applyBrokerPlan adds no subject to a stream that already holds it through a wildcard', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const wildcard = `${prefix}.orders-service.>`;
     await arrangeStream(server.url, { name: orders.stream, subjects: [wildcard] });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(orders.plan, testLimits);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
 
     const { subjects } = await streamConfigOf(server.url, orders.stream);
     expect(subjects).toEqual([wildcard]);
   });
 
-  test('apply updates the limits of an existing stream and durable consumer that NATS lets change and keeps the settings limits does not name', async () => {
+  test('applyBrokerPlan updates the limits of an existing stream and Durable consumer that NATS lets change and keeps the settings limits does not name', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(
@@ -243,7 +360,7 @@ describe('applying a broker plan with jetstream()', () => {
         retention: 'limits',
       },
     );
-    await arrangeDurable(server.url, orders.stream, {
+    await arrangeDurableConsumer(server.url, orders.stream, {
       durable_name: orders.chargeDurable,
       filter_subject: orders.charge,
       ack_policy: 'explicit',
@@ -252,16 +369,16 @@ describe('applying a broker plan with jetstream()', () => {
       max_ack_pending: 7,
       description: 'arranged by hand',
     });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { retention: 'interest' } },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({
       retention: 'interest',
       max_age: 604_800 * nanosPerSecond,
@@ -270,7 +387,7 @@ describe('applying a broker plan with jetstream()', () => {
       storage: 'file',
       max_bytes: 1_000_000,
     });
-    expect(durable).toMatchObject({
+    expect(config).toMatchObject({
       deliver_policy: 'all',
       ack_wait: 30 * nanosPerSecond,
       max_deliver: 5,
@@ -279,51 +396,59 @@ describe('applying a broker plan with jetstream()', () => {
     });
   });
 
-  test('applying the same plan twice leaves the streams, durable consumers and stored Messages as the first apply left them', async () => {
+  test('applying the same plan twice leaves the streams, Durable consumers and stored Messages as the first applyBrokerPlan left them', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
-    await broker.apply(orders.plan, testLimits);
+    const connecting = { connect: service.connect };
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
     const connection = await service.connect();
     await jetStreamClientOf(connection).publish(orders.created, '{}');
     const first = await streamInfoOf(server.url, orders.stream);
-    const firstDurable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const firstConfig = await durableConsumerConfigOf(
+      server.url,
+      orders.stream,
+      orders.chargeDurable,
+    );
 
-    await broker.apply(orders.plan, testLimits);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
 
     const again = await streamInfoOf(server.url, orders.stream);
-    const againDurable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const againConfig = await durableConsumerConfigOf(
+      server.url,
+      orders.stream,
+      orders.chargeDurable,
+    );
     expect(again.config).toEqual(first.config);
     expect(again.state.messages).toBe(first.state.messages);
     expect(first.state.messages).toBe(1);
-    expect(againDurable).toEqual(firstDurable);
+    expect(againConfig).toEqual(firstConfig);
   });
 
-  test('apply creates a durable consumer on a stream the same plan creates', async () => {
+  test('applyBrokerPlan creates a Durable consumer on a stream the same plan creates', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(orders.plan, testLimits);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
 
-    const info = await durableInfoOf(server.url, orders.stream, orders.chargeDurable);
+    const info = await durableConsumerInfoOf(server.url, orders.stream, orders.chargeDurable);
     expect(info?.stream_name).toBe(orders.stream);
   });
 
-  test('a plan with no stream creates only its durable consumers, on its Provider’s existing stream', async () => {
+  test('a plan with no stream creates only its Durable consumers, on its Provider’s existing stream', async () => {
     const prefix = aPrefix();
     const billing = aBilling(prefix);
-    await jetstream({ connect: aConnect().connect, prefix }).apply(billing.orders.plan, testLimits);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    await applyBrokerPlan({ connect: aConnect().connect }, billing.orders.plan, testLimits);
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(billing.plan, testLimits);
+    await applyBrokerPlan(connecting, billing.plan, testLimits);
 
-    const info = await durableInfoOf(server.url, billing.orders.stream, billing.durable);
+    const info = await durableConsumerInfoOf(server.url, billing.orders.stream, billing.durable);
     expect(info?.config.filter_subject).toBe(billing.orders.created);
   });
 
-  test('apply never removes a subject, stream or durable consumer that the plan it applies does not list', async () => {
+  test('applyBrokerPlan never removes a subject, stream or Durable consumer that the plan it applies does not list', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const leftover = `${prefix}.orders-service.event.OrderCancelled.v1`;
@@ -333,24 +458,24 @@ describe('applying a broker plan with jetstream()', () => {
       name: `${prefix}_retired-service`,
       subjects: [`${prefix}.r`],
     });
-    await arrangeDurable(server.url, orders.stream, {
+    await arrangeDurableConsumer(server.url, orders.stream, {
       durable_name: leftoverDurable,
       filter_subject: leftover,
       ack_policy: 'explicit',
     });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(orders.plan, testLimits);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
 
     const { subjects } = await streamConfigOf(server.url, orders.stream);
     expect(subjects).toContain(leftover);
     await expect(streamConfigOf(server.url, `${prefix}_retired-service`)).resolves.toBeDefined();
     await expect(
-      durableConfigOf(server.url, orders.stream, leftoverDurable),
+      durableConsumerConfigOf(server.url, orders.stream, leftoverDurable),
     ).resolves.toBeDefined();
   });
 
-  test('without a prefix, apply creates the names and subjects the plan prints, unprefixed', async () => {
+  test('without a prefix, applyBrokerPlan creates the names and subjects the plan prints, unprefixed', async () => {
     const plan: BrokerPlan = {
       prefix: null,
       streams: {
@@ -359,7 +484,7 @@ describe('applying a broker plan with jetstream()', () => {
           subjects: ['unprefixed-orders.event.A.v1'],
         },
       },
-      consumers: {
+      durableConsumers: {
         'unprefixed-orders_command_B_v1': {
           service: 'unprefixed-orders',
           stream: 'unprefixed-orders',
@@ -367,51 +492,51 @@ describe('applying a broker plan with jetstream()', () => {
         },
       },
     };
-    const broker = jetstream({ connect: aConnect().connect });
+    const connecting = { connect: aConnect().connect };
 
-    await broker.apply(plan, testLimits);
+    await applyBrokerPlan(connecting, plan, testLimits);
 
     const stream = await streamConfigOf(server.url, 'unprefixed-orders');
-    const durable = await durableConfigOf(
+    const config = await durableConsumerConfigOf(
       server.url,
       'unprefixed-orders',
       'unprefixed-orders_command_B_v1',
     );
     expect(stream.subjects).toEqual(['unprefixed-orders.event.A.v1']);
-    expect(durable.filter_subject).toBe('unprefixed-orders.event.A.v1');
+    expect(config.filter_subject).toBe('unprefixed-orders.event.A.v1');
   });
 
   test('"unlimited" reaches NATS as no limit: max age 0, max deliver -1 and max ack pending -1', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       streamDefaults: { ...testLimits.streamDefaults, maxAge: 'unlimited' },
-      consumerDefaults: {
-        ...testLimits.consumerDefaults,
+      durableConsumerDefaults: {
+        ...testLimits.durableConsumerDefaults,
         maxDeliver: 'unlimited',
         maxAckPending: 'unlimited',
       },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream.max_age).toBe(0);
-    expect(durable).toMatchObject({ max_deliver: -1, max_ack_pending: -1 });
+    expect(config).toMatchObject({ max_deliver: -1, max_ack_pending: -1 });
   });
 
   test('a duration of a year reaches NATS exactly, in nanoseconds', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxAge: '365d' },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
     expect(stream.max_age).toBe(31_536_000_000_000_000);
@@ -420,47 +545,50 @@ describe('applying a broker plan with jetstream()', () => {
   test('the longest duration NATS holds in 64 bits reaches it exactly, in nanoseconds', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxAge: '106751d' },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
     expect(stream.max_age).toBe(9_223_286_400_000_000_000);
   });
 
-  test('an undefined setting in a stream’s or durable consumer’s own limits leaves the default in place', async () => {
+  test('an undefined setting in a stream’s or Durable consumer’s own limits leaves the default in place', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { maxAge: undefined, replicas: undefined } },
-      consumers: { [orders.chargeDurable]: { ackWait: undefined } },
+      durableConsumers: { [orders.chargeDurable]: { ackWait: undefined } },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
     expect(stream).toMatchObject({ max_age: 604_800 * nanosPerSecond, num_replicas: 1 });
-    expect(durable.ack_wait).toBe(30 * nanosPerSecond);
+    expect(config.ack_wait).toBe(30 * nanosPerSecond);
   });
 
-  test('an undefined entry for a stream, a durable consumer or a name the plan does not list leaves the defaults in place', async () => {
+  test('an undefined entry for a stream, a Durable consumer or a name the plan does not list leaves the defaults in place', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: undefined, [`${prefix}_unlisted`]: undefined },
-      consumers: { [orders.chargeDurable]: undefined, [`${prefix}_unlisted_durable`]: undefined },
+      durableConsumers: {
+        [orders.chargeDurable]: undefined,
+        [`${prefix}_unlisted_durable`]: undefined,
+      },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
     const stream = await streamConfigOf(server.url, orders.stream);
     expect(stream.max_age).toBe(604_800 * nanosPerSecond);
@@ -469,46 +597,190 @@ describe('applying a broker plan with jetstream()', () => {
   test('a list of ack waits reaches NATS as its backoff, the first as the ack wait', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
-      consumerDefaults: { ...testLimits.consumerDefaults, ackWait: ['30s', '1m', '5m'] },
+      durableConsumerDefaults: {
+        ...testLimits.durableConsumerDefaults,
+        ackWait: ['30s', '1m', '5m'],
+      },
     };
 
-    await broker.apply(orders.plan, limits);
+    await applyBrokerPlan(connecting, orders.plan, limits);
 
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.ack_wait).toBe(30 * nanosPerSecond);
-    expect(durable.backoff).toEqual([
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.ack_wait).toBe(30 * nanosPerSecond);
+    expect(config.backoff).toEqual([
       30 * nanosPerSecond,
       60 * nanosPerSecond,
       300 * nanosPerSecond,
     ]);
   });
 
-  test('an update that sets one ack wait clears the backoff the durable consumer had', async () => {
+  test('an update that sets one ack wait clears the backoff the Durable consumer had', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const withBackoff: BrokerLimits = {
       ...testLimits,
-      consumerDefaults: { ...testLimits.consumerDefaults, ackWait: ['30s', '1m'] },
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: ['30s', '1m'] },
     };
-    await broker.apply(orders.plan, withBackoff);
+    await applyBrokerPlan(connecting, orders.plan, withBackoff);
 
-    await broker.apply(orders.plan, {
+    await applyBrokerPlan(connecting, orders.plan, {
       ...testLimits,
-      consumers: { [orders.chargeDurable]: { ackWait: '2m' } },
+      durableConsumers: { [orders.chargeDurable]: { ackWait: '2m' } },
     });
 
-    const durable = await durableConfigOf(server.url, orders.stream, orders.chargeDurable);
-    expect(durable.ack_wait).toBe(120 * nanosPerSecond);
-    expect(durable.backoff ?? []).toEqual([]);
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.ack_wait).toBe(120 * nanosPerSecond);
+    expect(config.backoff ?? []).toEqual([]);
   });
 });
 
-describe('what applying a broker plan refuses', () => {
-  test('apply refuses a durable consumer whose stream does not exist yet, naming the stream, and keeps the streams it created', async () => {
+describe('applyBrokerPlan on a Durable consumer cf-loom cannot pull from', () => {
+  test('applyBrokerPlan turns off headers only on an existing Durable consumer', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurableConsumer(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      filter_subject: orders.charge,
+      ack_policy: 'explicit',
+      headers_only: true,
+    });
+    const connecting = { connect: aConnect().connect };
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.headers_only ?? false).toBe(false);
+  });
+
+  test('applyBrokerPlan clears the priority groups, policy and timeout of an existing Durable consumer', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurableConsumer(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      filter_subject: orders.charge,
+      ack_policy: 'explicit',
+      priority_groups: ['g'],
+      priority_policy: 'pinned_client',
+      priority_timeout: 120 * nanosPerSecond,
+    });
+    const connecting = { connect: aConnect().connect };
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.priority_groups ?? []).toEqual([]);
+    expect(config.priority_policy ?? 'none').toBe('none');
+    expect(config.priority_timeout ?? 0).toBe(0);
+  });
+
+  test('applyBrokerPlan sets filter_subject on a Durable consumer filtered on its subject through filter_subjects, and leaves filter_subjects unset', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    await arrangeOrdersStream(orders);
+    await arrangeDurableConsumer(server.url, orders.stream, {
+      durable_name: orders.chargeDurable,
+      ack_policy: 'explicit',
+      filter_subjects: [orders.charge],
+    });
+    const connecting = { connect: aConnect().connect };
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const config = await durableConsumerConfigOf(server.url, orders.stream, orders.chargeDurable);
+    expect(config.filter_subject).toBe(orders.charge);
+    expect(config.filter_subjects ?? []).toEqual([]);
+  });
+
+  test.each<[string, (orders: Orders) => Partial<ConsumerConfig>]>([
+    ['delivers headers only', (orders) => pullingCharge(orders, { headers_only: true })],
+    [
+      'has priority groups pinned to a client',
+      (orders) =>
+        pullingCharge(orders, { priority_groups: ['g'], priority_policy: 'pinned_client' }),
+    ],
+    [
+      'has priority groups with the overflow policy',
+      (orders) =>
+        pullingCharge(orders, { priority_groups: ['g', 'h'], priority_policy: 'overflow' }),
+    ],
+    [
+      'is filtered on another subject',
+      (orders) => pullingCharge(orders, { filter_subject: orders.created }),
+    ],
+    [
+      'is filtered on another subject through filter_subjects',
+      (orders) => ({ ack_policy: 'explicit', filter_subjects: [orders.created] }),
+    ],
+    [
+      'is filtered on two subjects through filter_subjects',
+      (orders) => ({
+        ack_policy: 'explicit',
+        filter_subjects: [orders.charge, orders.created],
+      }),
+    ],
+  ])(
+    'a Durable consumer that %s is refused by consume until applyBrokerPlan ran, and accepted after',
+    async (_name, settings) => {
+      const prefix = aPrefix();
+      const orders = anOrders(prefix);
+      await arrangeOrdersStream(orders);
+      await arrangeDurableConsumer(server.url, orders.stream, {
+        durable_name: orders.chargeDurable,
+        ...settings(orders),
+      });
+      const opened = await messaging(contract, jetstream({ connect: aConnect().connect, prefix }));
+      onTestFinished(() => opened.close());
+      const handlers = chargeHandlers();
+      await expect(opened.consume(handlers, {})).rejects.toThrow(
+        `The Durable consumer ${orders.chargeDurable} `,
+      );
+
+      await applyBrokerPlan({ connect: aConnect().connect }, orders.plan, testLimits);
+
+      await expect(opened.consume(handlers, {})).resolves.toBeUndefined();
+    },
+  );
+
+  test.each([
+    ['does not acknowledge explicitly', { ack_policy: 'none' as const }, 'has the ack policy none'],
+    ['is a push consumer', { deliver_subject: 'somewhere.else' }, 'is a push consumer'],
+  ])(
+    'a Durable consumer that %s, which NATS does not change, rejects applyBrokerPlan and is still refused by consume',
+    async (_name, settings, difference) => {
+      const prefix = aPrefix();
+      const orders = anOrders(prefix);
+      await arrangeOrdersStream(orders);
+      await arrangeDurableConsumer(server.url, orders.stream, {
+        durable_name: orders.chargeDurable,
+        filter_subject: orders.charge,
+        ack_policy: 'explicit',
+        ...settings,
+      });
+      const opened = await messaging(contract, jetstream({ connect: aConnect().connect, prefix }));
+      onTestFinished(() => opened.close());
+
+      const applying = applyBrokerPlan({ connect: aConnect().connect }, orders.plan, testLimits);
+
+      const error = await rejectionOf(applying);
+
+      expect(error.message).toContain(
+        `The Durable consumer ${orders.chargeDurable} could not be applied: `,
+      );
+      await expect(opened.consume(chargeHandlers(), {})).rejects.toThrow(
+        `The Durable consumer ${orders.chargeDurable} ${difference}`,
+      );
+    },
+  );
+});
+
+describe('what applyBrokerPlan refuses', () => {
+  test('applyBrokerPlan refuses a Durable consumer whose stream does not exist yet, naming the stream, and keeps the streams it created', async () => {
     const prefix = aPrefix();
     const billing = aBilling(prefix);
     const own = `${prefix}_billing-service`;
@@ -518,40 +790,40 @@ describe('what applying a broker plan refuses', () => {
         [own]: { service: 'billing-service', subjects: [`${prefix}.billing-service.event.X.v1`] },
       },
     };
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    const error = await rejectionOf(broker.apply(plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, plan, testLimits));
 
     expect(error.message).toBe(
-      `The durable consumer ${billing.durable} reads the stream ${billing.orders.stream}, which does not exist yet: apply its Service's plan first`,
+      `The Durable consumer ${billing.durable} reads the stream ${billing.orders.stream}, which does not exist yet: apply its Service's plan first`,
     );
     await expect(streamConfigOf(server.url, own)).resolves.toBeDefined();
-    await expect(durableInfoOf(server.url, own, billing.durable)).resolves.toBeUndefined();
+    await expect(durableConsumerInfoOf(server.url, own, billing.durable)).resolves.toBeUndefined();
   });
 
   test('applying again once the missing stream exists completes the plan', async () => {
     const prefix = aPrefix();
     const billing = aBilling(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
-    await rejectionOf(broker.apply(billing.plan, testLimits));
-    await broker.apply(billing.orders.plan, testLimits);
+    const connecting = { connect: aConnect().connect };
+    await rejectionOf(applyBrokerPlan(connecting, billing.plan, testLimits));
+    await applyBrokerPlan(connecting, billing.orders.plan, testLimits);
 
-    await broker.apply(billing.plan, testLimits);
+    await applyBrokerPlan(connecting, billing.plan, testLimits);
 
-    const info = await durableInfoOf(server.url, billing.orders.stream, billing.durable);
+    const info = await durableConsumerInfoOf(server.url, billing.orders.stream, billing.durable);
     expect(info?.config.filter_subject).toBe(billing.orders.created);
   });
 
-  test('apply stops at the first durable consumer it cannot apply and creates none after it', async () => {
+  test('applyBrokerPlan stops at the first Durable consumer it cannot apply and creates none after it', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    await jetstream({ connect: aConnect().connect, prefix }).apply(orders.plan, testLimits);
+    await applyBrokerPlan({ connect: aConnect().connect }, orders.plan, testLimits);
     const first = `${prefix}_billing-service_first`;
     const second = `${prefix}_billing-service_second`;
     const plan: BrokerPlan = {
       prefix,
       streams: {},
-      consumers: {
+      durableConsumers: {
         [first]: {
           service: 'billing-service',
           stream: `${prefix}_absent`,
@@ -560,17 +832,17 @@ describe('what applying a broker plan refuses', () => {
         [second]: { service: 'billing-service', stream: orders.stream, subject: orders.created },
       },
     };
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    const error = await rejectionOf(broker.apply(plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, plan, testLimits));
 
     expect(error.message).toContain(
-      `The durable consumer ${first} reads the stream ${prefix}_absent`,
+      `The Durable consumer ${first} reads the stream ${prefix}_absent`,
     );
-    await expect(durableInfoOf(server.url, orders.stream, second)).resolves.toBeUndefined();
+    await expect(durableConsumerInfoOf(server.url, orders.stream, second)).resolves.toBeUndefined();
   });
 
-  test('a stream’s storage, which NATS does not change, rejects apply naming the stream, with NATS’s error as its cause', async () => {
+  test('a stream’s storage, which NATS does not change, rejects applyBrokerPlan naming the stream, with NATS’s error as its cause', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(
@@ -578,130 +850,112 @@ describe('what applying a broker plan refuses', () => {
       { name: orders.stream, subjects: [orders.charge, orders.created] },
       { storage: 'memory' },
     );
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
     expect(error.message).toContain('storage');
     expect(error.cause).toBeInstanceOf(JetStreamApiError);
   });
 
-  test('more replicas than a single NATS server holds reject apply naming the stream, with NATS’s error as its cause', async () => {
+  test('more replicas than a single NATS server holds reject applyBrokerPlan naming the stream, with NATS’s error as its cause', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, replicas: 3 },
     };
 
-    const error = await rejectionOf(broker.apply(orders.plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
 
     expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
     expect(error.message).toContain('replicas');
     expect(error.cause).toBeInstanceOf(JetStreamApiError);
   });
 
-  test('a durable consumer’s deliver policy, which NATS does not change, rejects apply naming the durable consumer, with NATS’s error as its cause', async () => {
+  test('a Durable consumer’s deliver policy, which NATS does not change, rejects applyBrokerPlan naming the Durable consumer, with NATS’s error as its cause', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(server.url, {
       name: orders.stream,
       subjects: [orders.charge, orders.created],
     });
-    await arrangeDurable(server.url, orders.stream, {
+    await arrangeDurableConsumer(server.url, orders.stream, {
       durable_name: orders.chargeDurable,
       filter_subject: orders.charge,
       ack_policy: 'explicit',
       deliver_policy: 'new',
     });
-    const broker = jetstream({ connect: aConnect().connect, prefix });
+    const connecting = { connect: aConnect().connect };
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toContain(
-      `The durable consumer ${orders.chargeDurable} could not be applied: `,
+      `The Durable consumer ${orders.chargeDurable} could not be applied: `,
     );
     expect(error.cause).toBeInstanceOf(JetStreamApiError);
   });
 
-  test('apply refuses a plan whose shape is not the documented one, such as broker-plan’s errors document, without calling connect', async () => {
+  test('applyBrokerPlan refuses a plan whose shape is not the documented one, such as broker-plan’s errors document, without calling connect', async () => {
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix: aPrefix() });
+    const connecting = { connect: service.connect };
     const errorsDocument = JSON.parse('{"errors":["no snapshot"]}');
 
-    const error = await rejectionOf(broker.apply(errorsDocument, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, errorsDocument, testLimits));
 
     expect(error.message).toBe(
-      'The broker plan is not the shape cf-loom broker-plan --json prints: prefix is missing',
+      'The broker plan is not the plan of the document cf-loom broker-plan --json prints: prefix is missing',
     );
     expect(service.opened).toHaveLength(0);
   });
 
-  test.each([
-    ['staging', 't-prefix', "The broker plan's prefix is staging, but this broker's is t-prefix"],
-    [null, 't-prefix', "The broker plan's prefix is none, but this broker's is t-prefix"],
-    ['staging', undefined, "The broker plan's prefix is staging, but this broker's is none"],
-  ])(
-    'apply refuses a plan whose prefix is %s on a broker whose prefix is %s, naming both, without calling connect',
-    async (planPrefix, brokerPrefix, message) => {
-      const service = aConnect();
-      const broker = jetstream({ connect: service.connect, prefix: brokerPrefix });
-      const plan: BrokerPlan = { prefix: planPrefix, streams: {}, consumers: {} };
-
-      const error = await rejectionOf(broker.apply(plan, testLimits));
-
-      expect(error.message).toBe(message);
-      expect(service.opened).toHaveLength(0);
-    },
-  );
-
-  test('apply refuses every setting left unset, naming each stream or durable consumer and the setting, without calling connect', async () => {
+  test('applyBrokerPlan refuses every setting left unset, naming each stream or Durable consumer and the setting, without calling connect', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const billing = aBilling(prefix);
     const plan: BrokerPlan = {
       prefix,
       streams: orders.plan.streams,
-      consumers: { ...orders.plan.consumers, ...billing.plan.consumers },
+      durableConsumers: { ...orders.plan.durableConsumers, ...billing.plan.durableConsumers },
     };
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const limits: BrokerLimits = {
       streamDefaults: { retention: 'limits', replicas: 1, storage: 'file' },
-      consumers: { [billing.durable]: { deliverPolicy: 'all', ackWait: '30s' } },
+      durableConsumers: { [billing.durable]: { deliverPolicy: 'all', ackWait: '30s' } },
     };
 
-    const error = await rejectionOf(broker.apply(plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, plan, limits));
 
     expect(error.message).toBe(
       [
         `The stream ${orders.stream} has no maxAge, duplicateWindow in limits.streams or limits.streamDefaults`,
-        `The durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.consumers or limits.consumerDefaults`,
-        `The durable consumer ${billing.durable} has no maxDeliver, maxAckPending in limits.consumers or limits.consumerDefaults`,
+        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${billing.durable} has no maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);
   });
 
-  test('apply refuses an undefined setting and an undefined entry that no default fills, as unset', async () => {
+  test('applyBrokerPlan refuses an undefined setting and an undefined entry that no default fills, as unset', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const limits: BrokerLimits = {
       streamDefaults: { ...testLimits.streamDefaults, maxAge: undefined },
-      consumerDefaults: undefined,
-      consumers: { [orders.chargeDurable]: undefined },
+      durableConsumerDefaults: undefined,
+      durableConsumers: { [orders.chargeDurable]: undefined },
     };
 
-    const error = await rejectionOf(broker.apply(orders.plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
 
     expect(error.message).toBe(
       [
         `The stream ${orders.stream} has no maxAge in limits.streams or limits.streamDefaults`,
-        `The durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.consumers or limits.consumerDefaults`,
+        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);
@@ -720,8 +974,8 @@ describe('what applying a broker plan refuses', () => {
     ],
     [
       'a duration of zero',
-      { consumerDefaults: { ackWait: '0s' } },
-      "limits.consumerDefaults.ackWait '0s' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+      { durableConsumerDefaults: { ackWait: '0s' } },
+      "limits.durableConsumerDefaults.ackWait '0s' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
     [
       'a duration of millions of years',
@@ -750,62 +1004,79 @@ describe('what applying a broker plan refuses', () => {
     ],
     [
       'a max deliver that is neither a count nor unlimited',
-      { consumerDefaults: { maxDeliver: 'many' } },
-      "limits.consumerDefaults.maxDeliver 'many' is not a whole number from 1, or 'unlimited'",
+      { durableConsumerDefaults: { maxDeliver: 'many' } },
+      "limits.durableConsumerDefaults.maxDeliver 'many' is not a whole number from 1, or 'unlimited'",
     ],
     [
       'an empty list of ack waits',
-      { consumerDefaults: { ackWait: [] } },
-      'limits.consumerDefaults.ackWait [] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them',
+      { durableConsumerDefaults: { ackWait: [] } },
+      'limits.durableConsumerDefaults.ackWait [] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them',
     ],
     ['limits that are no object', 'unlimited', 'limits is not an object'],
-  ])('apply refuses %s, naming where it is, without calling connect', async (_, limits, line) => {
+  ])(
+    'applyBrokerPlan refuses %s, naming where it is, without calling connect',
+    async (_, limits, line) => {
+      const service = aConnect();
+      const prefix = aPrefix();
+      const connecting = { connect: service.connect };
+
+      const error = await rejectionOf(
+        applyBrokerPlan(connecting, anOrders(prefix).plan, readFromJson(limits)),
+      );
+
+      expect(error.message).toBe(line);
+      expect(service.opened).toHaveLength(0);
+    },
+  );
+
+  test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();
     const prefix = aPrefix();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
+    const noLimits = undefined as unknown as BrokerLimits;
 
-    const error = await rejectionOf(broker.apply(anOrders(prefix).plan, readFromJson(limits)));
+    const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, noLimits));
 
-    expect(error.message).toBe(line);
+    expect(error.message).toBe('limits is missing');
     expect(service.opened).toHaveLength(0);
   });
 
-  test('apply refuses a setting name limits does not know, in the defaults or in one stream’s own limits, naming each', async () => {
+  test('applyBrokerPlan refuses a setting name limits does not know, in the defaults or in one stream’s own limits, naming each', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const limits = readFromJson({
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxage: '1h' },
-      consumerDefaults: { ...testLimits.consumerDefaults, backoff: ['1s'] },
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, backoff: ['1s'] },
       streams: { [orders.stream]: { replica: 1 } },
       other: {},
     });
 
-    const error = await rejectionOf(broker.apply(orders.plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
 
     expect(error.message.split('\n').sort()).toEqual(
       [
         'limits.other is a key BrokerLimits does not define',
         'limits.streamDefaults.maxage is a key BrokerLimits does not define',
-        'limits.consumerDefaults.backoff is a key BrokerLimits does not define',
+        'limits.durableConsumerDefaults.backoff is a key BrokerLimits does not define',
         `limits.streams.${orders.stream}.replica is a key BrokerLimits does not define`,
       ].sort(),
     );
     expect(service.opened).toHaveLength(0);
   });
 
-  test('apply refuses a setting name limits does not know even when its value is undefined', async () => {
+  test('applyBrokerPlan refuses a setting name limits does not know even when its value is undefined', async () => {
     const prefix = aPrefix();
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const limits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxBytes: undefined },
     };
 
-    const error = await rejectionOf(broker.apply(anOrders(prefix).plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
 
     expect(error.message).toBe(
       'limits.streamDefaults.maxBytes is a key BrokerLimits does not define',
@@ -813,43 +1084,43 @@ describe('what applying a broker plan refuses', () => {
     expect(service.opened).toHaveLength(0);
   });
 
-  test('apply refuses a limit keyed by a name the plan does not list, naming each', async () => {
+  test('applyBrokerPlan refuses a limit keyed by a name the plan does not list, naming each', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const limits: BrokerLimits = {
       ...testLimits,
       streams: { [`${prefix}_ordres-service`]: { replicas: 1 } },
-      consumers: { [`${prefix}_orders-service_command_ChargeCard_v2`]: { ackWait: '2m' } },
+      durableConsumers: { [`${prefix}_orders-service_command_ChargeCard_v2`]: { ackWait: '2m' } },
     };
 
-    const error = await rejectionOf(broker.apply(orders.plan, limits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
 
     expect(error.message).toBe(
       [
         `limits.streams names ${prefix}_ordres-service, which the plan does not list`,
-        `limits.consumers names ${prefix}_orders-service_command_ChargeCard_v2, which the plan does not list`,
+        `limits.durableConsumers names ${prefix}_orders-service_command_ChargeCard_v2, which the plan does not list`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);
   });
 });
 
-describe('the connection applying a broker plan uses', () => {
-  test('apply calls the Service’s connect once and drains that connection when it succeeds', async () => {
+describe('the connection applyBrokerPlan uses', () => {
+  test('applyBrokerPlan calls the Service’s connect once and drains that connection when it succeeds', async () => {
     const prefix = aPrefix();
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
     const connectedBefore = service.opened.length;
 
-    await broker.apply(anOrders(prefix).plan, testLimits);
+    await applyBrokerPlan(connecting, anOrders(prefix).plan, testLimits);
 
     expect(connectedBefore).toBe(0);
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 
-  test('apply drains the connection when NATS refuses', async () => {
+  test('applyBrokerPlan drains the connection when NATS refuses', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeStream(
@@ -858,35 +1129,116 @@ describe('the connection applying a broker plan uses', () => {
       { storage: 'memory' },
     );
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.cause).toBeInstanceOf(JetStreamApiError);
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 
-  test('apply drains the connection when it refuses a durable consumer whose stream does not exist', async () => {
+  test('applyBrokerPlan drains the connection when it refuses a Durable consumer whose stream does not exist', async () => {
     const prefix = aPrefix();
     const service = aConnect();
-    const broker = jetstream({ connect: service.connect, prefix });
+    const connecting = { connect: service.connect };
 
-    await rejectionOf(broker.apply(aBilling(prefix).plan, testLimits));
+    await rejectionOf(applyBrokerPlan(connecting, aBilling(prefix).plan, testLimits));
 
     expect(service.opened.map((connection) => connection.isClosed())).toEqual([true]);
   });
 
-  test('apply rejects with the error the Service’s connect rejected with', async () => {
+  test.each([
+    ['keeps reconnecting', -1],
+    ['gives up reconnecting after one attempt', 1],
+  ])(
+    'applyBrokerPlan, when the server goes away before its drain after applying everything and the Service’s connect %s, closes its connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause',
+    async (_reconnecting, maxReconnectAttempts) => {
+      const prefix = aPrefix();
+      const own = await aNatsServer();
+      onTestFinished(() => own.stop());
+      const opened: NatsConnection[] = [];
+      const connectLosingServerAtDrain = async (): Promise<NatsConnection> => {
+        const connection = await connect({
+          servers: own.url,
+          maxReconnectAttempts,
+          reconnectTimeWait: 200,
+        });
+        onTestFinished(() => connection.close());
+        opened.push(connection);
+        const drain = async () => {
+          await stopServerUnder(connection, own);
+          return await connection.drain();
+        };
+        return withMethods(connection, { drain });
+      };
+      const connecting = { connect: connectLosingServerAtDrain };
+
+      const error = await rejectionOf(
+        applyBrokerPlan(connecting, anOrders(prefix).plan, testLimits),
+      );
+
+      expect(error.message).toBe(
+        'NATS did not answer the drain, so the connection was closed without it',
+      );
+      expect(error.cause).toBeInstanceOf(Error);
+      expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+    },
+  );
+
+  test('applyBrokerPlan, when its JetStream manager cannot be made and the drain is not answered either, rejects with that error unchanged and closes its connection', async () => {
+    const prefix = aPrefix();
+    const opened: NatsConnection[] = [];
+    const connectUndrainable = async (): Promise<NatsConnection> => {
+      const connection = await connect({ servers: server.url });
+      onTestFinished(() => connection.close());
+      opened.push(connection);
+      return withMethods(connection, { drain: () => Promise.reject(new Error('no answer')) });
+    };
+    const connecting = { connect: connectUndrainable, jetstream: { apiPrefix: '' } };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, testLimits));
+
+    expect(error.message).toBe("'prefix' cannot be empty");
+    expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test('applyBrokerPlan, when applying fails and the drain is not answered either, rejects naming the stream it could not apply, with the client’s error as its cause, and closes its connection', async () => {
+    const prefix = aPrefix();
+    const orders = anOrders(prefix);
+    const own = await aNatsServer();
+    onTestFinished(() => own.stop());
+    const opened: NatsConnection[] = [];
+    const connectToGoneServer = async (): Promise<NatsConnection> => {
+      const connection = await connect({
+        servers: own.url,
+        maxReconnectAttempts: -1,
+        reconnectTimeWait: 200,
+      });
+      onTestFinished(() => connection.close());
+      opened.push(connection);
+      await stopServerUnder(connection, own);
+      return connection;
+    };
+    const connecting = { connect: connectToGoneServer, jetstream: { timeout: 500 } };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(opened.map((connection) => connection.isClosed())).toEqual([true]);
+  });
+
+  test('applyBrokerPlan rejects with the error the Service’s connect rejected with', async () => {
     const prefix = aPrefix();
     const error = new Error('no route to NATS');
-    const broker = jetstream({ connect: () => Promise.reject(error), prefix });
+    const connecting = { connect: () => Promise.reject(error) };
 
-    const applying = broker.apply(anOrders(prefix).plan, testLimits);
+    const applying = applyBrokerPlan(connecting, anOrders(prefix).plan, testLimits);
 
     await expect(applying).rejects.toBe(error);
   });
 
-  test('a failure of the NATS client while applying a stream rejects apply naming the stream, with the client’s error as its cause', async () => {
+  test('a failure of the NATS client while applying a stream rejects applyBrokerPlan naming the stream, with the client’s error as its cause', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const clientError = new Error('the Broker did not answer');
@@ -895,9 +1247,9 @@ describe('the connection applying a broker plan uses', () => {
       onTestFinished(() => connection.close());
       return withMethods(connection, { request: () => Promise.reject(clientError) });
     };
-    const broker = jetstream({ connect: connectFailing, prefix });
+    const connecting = { connect: connectFailing };
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toBe(
       `The stream ${orders.stream} could not be applied: the Broker did not answer`,
@@ -905,30 +1257,25 @@ describe('the connection applying a broker plan uses', () => {
     expect(error.cause).toBe(clientError);
   });
 
-  test('the jetstream options reach apply: an unknown domain rejects apply naming the first stream, with the client’s error as its cause', async () => {
+  test('the jetstream options reach applyBrokerPlan: an unknown domain rejects applyBrokerPlan naming the first stream, with the client’s error as its cause', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const service = aConnect();
-    const broker = jetstream({
-      connect: service.connect,
-      prefix,
-      jetstream: { domain: 'nowhere' },
-    });
+    const connecting = { connect: service.connect, jetstream: { domain: 'nowhere' } };
 
-    const error = await rejectionOf(broker.apply(orders.plan, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toContain(`The stream ${orders.stream} could not be applied: `);
     expect(error.message).toContain('jetstream is not enabled');
     expect(error.cause).toBeInstanceOf(Error);
   });
 
-  test('the plan cf-loom derives for a Service, applied, lets messaging() through the same jetstream() connect', async () => {
+  test('a Service started with jetstream({ prefix }) finds the Stream applyBrokerPlan created from the plan with that prefix', async () => {
     const prefix = aPrefix();
     const plan = JSON.parse(JSON.stringify(planOf(contract, prefix)));
-    const broker = jetstream({ connect: aConnect().connect, prefix });
-    await broker.apply(plan, testLimits);
+    await applyBrokerPlan({ connect: aConnect().connect }, plan, testLimits);
 
-    const opening = messaging(contract, broker);
+    const opening = messaging(contract, jetstream({ connect: aConnect().connect, prefix }));
 
     await expect(opening).resolves.toBeDefined();
   });

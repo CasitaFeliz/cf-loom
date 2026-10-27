@@ -7,11 +7,11 @@ import {
   pathSegmentsOf,
   standardRejectionsOf,
   type TextPartNodes,
+  writtenTextOf,
 } from '@cf-loom/contract/internal';
 import {
   checkedTextPartsOf,
   contractOf,
-  deprecatedAtOf,
   endpointHandlerOf,
   guardHandlerOf,
   type ServedHandlers,
@@ -21,7 +21,7 @@ import {
 export type ServedAttachment = {
   readonly guard: Guard;
   readonly qualifier: unknown;
-  readonly handler: { readonly element: Guard };
+  readonly handler: { readonly declaration: Guard };
 };
 
 /** What every declared Endpoint is matched by: its method and its path's segments. */
@@ -31,10 +31,10 @@ type Declared = {
   readonly segments: readonly PathSegment[];
 };
 
-/** A live Endpoint, ready to answer: its Handler, its Attachments and its stamp. */
+/** A live Endpoint, ready to answer: its Handler, its Attachments and its `deprecatedAt`. */
 export type LiveEndpoint = Declared & {
   readonly kind: 'live';
-  readonly handler: { readonly element: Endpoint };
+  readonly handler: { readonly declaration: Endpoint };
   readonly attachments: readonly ServedAttachment[];
   readonly deprecatedAt: string | undefined;
 };
@@ -50,13 +50,13 @@ export type ServedContract = {
   readonly endpoints: readonly ServedEndpoint[];
   readonly nodes: ReadonlyMap<Endpoint | Guard, TextPartNodes>;
   readonly standards: StandardRejections;
-  readonly maxBodyBytes: number | undefined;
+  readonly maxBodyBytes: number;
   readonly resources: unknown;
 };
 
-/** What `serve()` hands a ServedContract besides the Contract and the Handler map. */
+/** What `serve()` hands a ServedContract besides the Contract and the Handler map, as given, typed or not. */
 export type ServedOptions = {
-  readonly maxBodyBytes?: number;
+  readonly maxBodyBytes?: unknown;
   readonly resources?: unknown;
 };
 
@@ -72,9 +72,22 @@ export function servedContractOf(
     endpoints: endpointsOf(contract).map((endpoint) => servedEndpointOf(endpoint, handlers)),
     nodes,
     standards: standardRejectionsOf(contract),
-    maxBodyBytes: options.maxBodyBytes,
+    maxBodyBytes: bodyLimitOf(options.maxBodyBytes),
     resources: options.resources,
   };
+}
+
+/** The most bytes of a body `serve` reads: none or `'unlimited'` is no limit, and anything but a whole number from 0 throws. */
+function bodyLimitOf(given: unknown): number {
+  if (given === undefined || given === 'unlimited') {
+    return Number.POSITIVE_INFINITY;
+  }
+  if (typeof given === 'number' && Number.isSafeInteger(given) && given >= 0) {
+    return given;
+  }
+  throw new Error(
+    `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${writtenTextOf(given)}`,
+  );
 }
 
 function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedEndpoint {
@@ -94,6 +107,6 @@ function servedEndpointOf(endpoint: Endpoint, handlers: ServedHandlers): ServedE
       ...attached,
       handler: guardHandlerOf(handlers, attached.guard),
     })),
-    deprecatedAt: deprecatedAtOf(handlers, endpoint),
+    deprecatedAt: endpoint.deprecatedAt,
   };
 }

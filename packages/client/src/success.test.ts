@@ -1,18 +1,21 @@
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
   openEnum,
   openEnumReader,
-  type StandardRejections,
+  type ProvidedStandardRejections,
+  providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { client } from './index.ts';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
+import { client, type Happened } from './index.ts';
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -38,14 +41,14 @@ const cancelOrder = defineEndpoint({
   success: { status: 204 },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
+const orderTotal = defineEndpoint({
+  name: 'orderTotal',
+  method: 'GET',
+  path: '/orders/:orderId/total',
   visibility: 'public',
-  description: 'Whether an order exists',
+  description: 'The total of an order, in a header',
   input: { params: z.object({ orderId: z.string() }) },
-  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+  success: { status: 204, headers: z.object({ 'x-total': z.int() }) },
 });
 
 /**
@@ -53,51 +56,47 @@ const headOrder = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Endpoints extends Readonly<Record<string, Exportable>>,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'orders-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const;
+const defaultStandards = providedStandardRejections();
 
-const orders = contractPackageOf({ getOrder, cancelOrder, headOrder }, defaultStandards);
+const orders = contractPackageOf({ getOrder, cancelOrder, orderTotal }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, {
-  endpoints: [getOrder, cancelOrder, headOrder],
+const ordersDependency = defineDependency({
+  endpoints: [orders.endpoints.getOrder, orders.endpoints.cancelOrder, orders.endpoints.orderTotal],
 });
 
 const params = { params: { orderId: 'o-1' } };
 
 function ordersAnswering(response: () => Response) {
-  return client(ordersDeps, { baseUrl: 'http://orders.test', fetch: async () => response() });
+  return client(ordersDependency, { baseUrl: 'http://orders.test', fetch: async () => response() });
 }
 
 describe('a Success', () => {
-  test('carries its body as value and its declared headers, read as their types', async () => {
+  test('carries its status, its body and its declared headers, read as their types', async () => {
     const headers = { 'x-total': '3', 'x-cached': 'true', 'x-other': 'passes through' };
     const orders = ordersAnswering(() => Response.json({ id: 'o-1', total: 3 }, { headers }));
 
@@ -105,11 +104,13 @@ describe('a Success', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', total: 3 },
+      status: 200,
       headers: { 'x-total': 3, 'x-cached': true },
+      body: { id: 'o-1', total: 3 },
     });
     if (outcome.kind === 'success') {
-      expectTypeOf(outcome.value).toEqualTypeOf<{ id: string; total: number }>();
+      expectTypeOf(outcome.status).toEqualTypeOf<200>();
+      expectTypeOf(outcome.body).toEqualTypeOf<{ id: string; total: number }>();
       expectTypeOf(outcome.headers['x-total']).toEqualTypeOf<number>();
       // @ts-expect-error: a header the Endpoint does not declare is not read, so it is not typed
       expectTypeOf(outcome.headers['x-undeclared']).toBeUnknown();
@@ -124,37 +125,27 @@ describe('a Success', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { id: 'o-1', total: 3 },
+      status: 200,
       headers: { 'x-total': 3 },
+      body: { id: 'o-1', total: 3 },
     });
   });
 
-  test('a 204 carries no value and no headers', async () => {
+  test('an Endpoint that declares no body and no headers has neither key', async () => {
     const orders = ordersAnswering(() => new Response(null, { status: 204 }));
 
     const outcome = await orders.cancelOrder(params);
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
   });
 
-  test('a Success declaring no body, whose stream already failed, is still the Success', async () => {
-    const failed = new ReadableStream<Uint8Array>({
-      start: (controller) => controller.error(new Error('reset')),
-    });
+  test('an Endpoint that declares headers only has no body key', async () => {
     const headers = { 'x-total': '7' };
-    const orders = ordersAnswering(() => new Response(failed, { status: 200, headers }));
+    const orders = ordersAnswering(() => new Response(null, { status: 204, headers }));
 
-    const outcome = await orders.headOrder(params);
+    const outcome = await orders.orderTotal(params);
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
-  });
-
-  test('a HEAD Success carries its headers only', async () => {
-    const orders = ordersAnswering(() => new Response(null, { headers: { 'x-total': '7' } }));
-
-    const outcome = await orders.headOrder(params);
-
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: { 'x-total': 7 } });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204, headers: { 'x-total': 7 } });
   });
 });
 
@@ -167,6 +158,8 @@ describe('a Success that breaks its Reader schemas', () => {
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'invalid-outcome',
+      status: 200,
       code: 'INVALID_OUTCOME',
       committed: 'yes',
       retryable: false,
@@ -187,43 +180,117 @@ describe('a Success that breaks its Reader schemas', () => {
 
     expect(outcomes).toMatchObject([
       {
+        source: 'invalid-outcome',
         code: 'INVALID_OUTCOME',
         committed: 'yes',
         issues: [{ part: 'success.headers', path: ['x-total'], code: 'invalid_type' }],
       },
       {
+        source: 'invalid-outcome',
         code: 'INVALID_OUTCOME',
         committed: 'yes',
         issues: [{ part: 'success.headers', path: ['x-total'], code: 'required' }],
       },
     ]);
   });
+});
 
-  test('a body that is no JSON, as a proxy’s page on the Success status, is INVALID_OUTCOME', async () => {
+describe('a Success body nested past the stack', () => {
+  const tree: z.ZodType = z
+    .object({
+      get next() {
+        return tree.optional();
+      },
+    })
+    .meta({ id: 'tree' });
+  const nest = defineEndpoint({
+    name: 'nest',
+    method: 'GET',
+    path: '/nest',
+    visibility: 'public',
+    description: 'A deep body',
+    success: { status: 200, body: tree },
+  });
+  const nestingPackage = contractPackageOf({ nest }, defaultStandards);
+  const nesting = defineDependency({
+    endpoints: [nestingPackage.endpoints.nest],
+  });
+
+  test('is INVALID_OUTCOME with one malformed Issue at success.body, never a rejected call', async () => {
+    const deep = `${'{"next":'.repeat(5000)}{}${'}'.repeat(5000)}`;
+    const nests = client(nesting, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        new Response(deep, { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const outcome = await nests.nest();
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'invalid-outcome',
+      code: 'INVALID_OUTCOME',
+      committed: 'yes',
+      issues: [
+        {
+          part: 'success.body',
+          path: [],
+          code: 'malformed',
+          message: 'The value is nested too deeply to read',
+        },
+      ],
+    });
+  });
+});
+
+describe('a Success status that carries no JSON', () => {
+  const statusFault = {
+    kind: 'fault',
+    source: 'status',
+    status: 200,
+    committed: 'unknown',
+    retryable: false,
+    message: 'The Provider answered 200',
+  };
+
+  test('an HTML body, as a proxy’s page, is the status Fault, offered to inferFault', async () => {
     const page = new Response('<html>OK</html>', {
       headers: { 'content-type': 'text/html', 'x-total': '1' },
     });
+    const received: Happened[] = [];
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => page,
+      inferFault: (happened) => {
+        received.push(happened);
+        return undefined;
+      },
+    });
+
+    const outcome = await orders.getOrder(params);
+
+    expect(outcome).toEqual(statusFault);
+    expect(received).toEqual([{ kind: 'status', status: 200, headers: page.headers }]);
+  });
+
+  test('bytes that are no JSON under a JSON content type are the same status Fault', async () => {
     const garbled = new Response('{"id":', {
       headers: { 'content-type': 'application/json', 'x-total': '1' },
     });
 
-    const outcomes = [
-      await ordersAnswering(() => page).getOrder(params),
-      await ordersAnswering(() => garbled).getOrder(params),
-    ];
+    const outcome = await ordersAnswering(() => garbled).getOrder(params);
 
-    expect(outcomes).toMatchObject([
-      {
-        code: 'INVALID_OUTCOME',
-        committed: 'yes',
-        issues: [{ part: 'success.body', code: 'malformed' }],
-      },
-      {
-        code: 'INVALID_OUTCOME',
-        committed: 'yes',
-        issues: [{ part: 'success.body', code: 'malformed' }],
-      },
-    ]);
+    expect(outcome).toEqual(statusFault);
+  });
+
+  test('an HTML body beside a Success header that fails its schema is still the status Fault', async () => {
+    const page = new Response('<html>OK</html>', {
+      headers: { 'content-type': 'text/html', 'x-total': 'many' },
+    });
+
+    const outcome = await ordersAnswering(() => page).getOrder(params);
+
+    expect(outcome).toEqual(statusFault);
   });
 });
 
@@ -238,28 +305,37 @@ describe('an Open Enum Success header', () => {
     success: { status: 204, headers: z.object({ 'x-stage': openEnum(['packed', 'shipped']) }) },
   });
   /** The Endpoint as its Contract Package rebuilds it, its Success headers as Reader schemas. */
-  const trackOrderReader = defineEndpoint({
-    name: 'trackOrder',
-    method: 'GET',
-    path: '/orders/:orderId/track',
-    visibility: 'public',
-    description: 'Where an order stands',
-    input: { params: z.object({ orderId: z.string() }) },
-    success: {
-      status: 204,
-      headers: z.object({
-        'x-stage': openEnumReader(['packed', 'shipped']),
-      }),
+  const trackOrderReader = providedEndpoint(
+    { name: 'orders-service', standardRejections: defaultStandards },
+    {
+      name: 'trackOrder',
+      method: 'GET',
+      path: '/orders/:orderId/track',
+      visibility: 'public',
+      description: 'Where an order stands',
+      input: { params: z.object({ orderId: z.string() }) },
+      success: {
+        status: 204,
+        headers: z.object({
+          'x-stage': openEnumReader(['packed', 'shipped']),
+        }),
+      },
     },
-  });
+    undefined,
+  );
   const tracking = contractPackageOf({ trackOrder: trackOrderReader }, defaultStandards, [
     trackOrder,
   ]);
-  const trackingDeps = defineDependencies(tracking, { endpoints: [trackOrderReader] });
+  const trackingDependency = defineDependency({
+    endpoints: [tracking.endpoints.trackOrder],
+  });
 
   function trackingAnswering(stage: string) {
     const response = () => new Response(null, { status: 204, headers: { 'x-stage': stage } });
-    return client(trackingDeps, { baseUrl: 'http://orders.test', fetch: async () => response() });
+    return client(trackingDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () => response(),
+    });
   }
 
   test('a declared value is read as itself, and one it does not know as its Unknown case', async () => {
@@ -269,8 +345,8 @@ describe('an Open Enum Success header', () => {
     ];
 
     expect(outcomes).toEqual([
-      { kind: 'success', value: undefined, headers: { 'x-stage': 'shipped' } },
-      { kind: 'success', value: undefined, headers: { 'x-stage': { unknown: 'lost' } } },
+      { kind: 'success', status: 204, headers: { 'x-stage': 'shipped' } },
+      { kind: 'success', status: 204, headers: { 'x-stage': { unknown: 'lost' } } },
     ]);
   });
 
@@ -284,25 +360,31 @@ describe('an Open Enum Success header', () => {
       input: { params: z.object({ orderId: z.string() }) },
       success: { status: 200, body: z.object({ stage: openEnum(['packed', 'shipped']) }) },
     });
-    const stageOrderReader = defineEndpoint({
-      name: 'stageOrder',
-      method: 'GET',
-      path: '/orders/:orderId/stage',
-      visibility: 'public',
-      description: 'The stage of an order',
-      input: { params: z.object({ orderId: z.string() }) },
-      success: {
-        status: 200,
-        body: z.object({
-          stage: openEnumReader(['packed', 'shipped']),
-        }),
+    const stageOrderReader = providedEndpoint(
+      { name: 'orders-service', standardRejections: defaultStandards },
+      {
+        name: 'stageOrder',
+        method: 'GET',
+        path: '/orders/:orderId/stage',
+        visibility: 'public',
+        description: 'The stage of an order',
+        input: { params: z.object({ orderId: z.string() }) },
+        success: {
+          status: 200,
+          body: z.object({
+            stage: openEnumReader(['packed', 'shipped']),
+          }),
+        },
       },
-    });
+      undefined,
+    );
     const staging = contractPackageOf({ stageOrder: stageOrderReader }, defaultStandards, [
       stageOrder,
     ]);
-    const stagingDeps = defineDependencies(staging, { endpoints: [stageOrderReader] });
-    const stages = client(stagingDeps, {
+    const stagingDependency = defineDependency({
+      endpoints: [staging.endpoints.stageOrder],
+    });
+    const stages = client(stagingDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => Response.json({ stage: 'lost' }),
     });
@@ -311,8 +393,8 @@ describe('an Open Enum Success header', () => {
 
     expect(outcome).toEqual({
       kind: 'success',
-      value: { stage: { unknown: 'lost' } },
-      headers: {},
+      status: 200,
+      body: { stage: { unknown: 'lost' } },
     });
   });
 });

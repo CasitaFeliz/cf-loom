@@ -1,5 +1,16 @@
-export type { NoBaseline, ReadBaseline } from './baseline.ts';
+export type { Choice } from './against.ts';
+export type {
+  Baseline,
+  BaselineQuery,
+  NoBaseline,
+  NonePublished,
+  ReadBaseline,
+} from './baseline.ts';
 export { baselineOf } from './baseline.ts';
 export type { NpmPlace } from './npm.ts';
-export type { DistTag, Publishing } from './publish.ts';
+export { unchangedSince } from './package-versions.ts';
+export type { Publishing } from './publish.ts';
 export { packedPathsOf, publishFolder } from './publish.ts';
+export type { UsedVersions } from './unlisted-versions.ts';
+export { unlistedVersionLinesOf } from './unlisted-versions.ts';
+export type { Listing } from './versions.ts';

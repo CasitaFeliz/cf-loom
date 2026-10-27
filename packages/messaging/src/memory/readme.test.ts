@@ -1,15 +1,15 @@
 import {
-  type ContractPackage,
   defineCommand,
-  defineContract,
-  defineDependencies,
   defineEvent,
+  defineGroup,
+  defineService,
   defineSubscription,
+  providedEvent,
 } from '@cf-loom/contract';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
+import type { CommandSender, EventPublisher } from '../index.ts';
 import { memory } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -42,7 +42,7 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
@@ -50,31 +50,29 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: {},
-  events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
+const chargeOnCreated = defineSubscription({
+  name: 'chargeOnCreated',
+  description: 'Charge on created',
+  event: orderCreatedV2,
+});
 
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
-const chargeOnCreated = defineSubscription({ name: 'charge-on-created', event: orderCreatedV2 });
-
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
-
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
-  subscriptions: [chargeOnCreated, notifyOnSettled],
-  dependencies: [paymentsDeps],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+      subscriptions: [chargeOnCreated, notifyOnSettled],
+    }),
+  ],
 });
 
 type Resources = {
@@ -87,26 +85,32 @@ const charged: string[] = [];
 
 const notified: string[] = [];
 
+const readers = readersOf({
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
+  subscriptions: {
+    chargeOnCreated: { declaration: chargeOnCreated, reader: orderCreatedV2.body },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
+  },
+});
+
 const handlers = {
   commands: {
-    chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), ({ orderId }) => {
+    chargeCardV1: handle(readers.commands.chargeCardV1, ({ orderId }) => {
       charged.push(orderId);
     }),
   },
   subscriptions: {
-    'charge-on-created': handle(
-      withReader(chargeOnCreated, orderCreatedV2.body),
-      async ({ orderId }, _meta, { resources: { sender } }: Needs<'sender'>) => {
-        await sender.send('ChargeCard', { orderId });
+    chargeOnCreated: handle(
+      readers.subscriptions.chargeOnCreated,
+      async ({ orderId }, meta, { resources: { sender } }: Needs<'sender'>) => {
+        await sender.send('ChargeCard', { orderId }, { factId: `${meta.factId}:charge` });
       },
     ),
-    'notify-on-settled': handle(
-      withReader(notifyOnSettled, paymentSettledV1.body),
-      ({ paymentId }) => {
-        notified.push(paymentId);
-      },
-    ),
+    notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, ({ paymentId }) => {
+      notified.push(paymentId);
+    }),
   },
+  readers,
 };
 
 /** An Endpoint Handler of the Service, which publishes the Event of the order it created. */
@@ -115,34 +119,39 @@ async function createOrderHandler(
   { resources: { publisher } }: Needs<'publisher'>,
 ) {
   const total = { amount: request.body.total, currency: 'EUR' };
-  await publisher.publish('OrderCreated', {
-    v1: { orderId: ORDER_ID, total: total.amount },
-    v2: { orderId: ORDER_ID, total },
-  });
+  await publisher.publish(
+    'OrderCreated',
+    {
+      v1: { orderId: ORDER_ID, total: total.amount },
+      v2: { orderId: ORDER_ID, total },
+    },
+    { factId: `${ORDER_ID}:created` },
+  );
 }
 
 describe('the In memory section of the messaging README', () => {
-  test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages lists them, and deliver resolves acked', async () => {
-    const broker = memory();
-    const running = await messaging(contract, broker);
+  test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages and messagesOf list them, and deliver resolves acked', async () => {
+    const running = await memory(contract);
     const resources = { publisher: running.publisher, sender: running.sender };
     await running.consume(handlers, { resources });
 
     await createOrderHandler({ body: { total: 12 } }, { resources });
-    await broker.settled();
-    const messages = broker.messages.map(({ subject }) => subject);
-    const settlement = await broker.deliver(
-      paymentsDeps.events.paymentSettledV1,
+    await running.settled();
+    const messages = running.messages.map(({ subject }) => subject);
+    const created = running.messagesOf(orderCreatedV1).map(({ subject }) => subject);
+    const settlement = await running.deliver(
+      paymentSettledV1,
       { paymentId: PAYMENT_ID },
       { factId: 'pay-1' },
     );
     await running.close();
 
     expect(messages).toEqual([
-      'orders-service.event.OrderCreated.v1',
       'orders-service.event.OrderCreated.v2',
+      'orders-service.event.OrderCreated.v1',
       'orders-service.command.ChargeCard.v1',
     ]);
+    expect(created).toEqual(['orders-service.event.OrderCreated.v1']);
     expect(charged).toEqual([ORDER_ID]);
     expect(settlement).toBe('acked');
     expect(notified).toEqual([PAYMENT_ID]);

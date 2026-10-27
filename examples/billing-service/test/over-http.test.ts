@@ -3,7 +3,7 @@ import { client } from '@cf-loom/client';
 import { type Http, serve } from '@cf-loom/server';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
-import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
+import { ordersDependency } from '../src/contract/dependencies/orders-service.dependency.ts';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/generated/handlers.generated.ts';
 import { ordersClientOf } from '../src/orders-client/orders-client.ts';
@@ -83,7 +83,7 @@ describe('billing-service calling orders-service over HTTP', () => {
 
 describe('a client of orders-service over HTTP', () => {
   test('it receives ORDER_LOCKED with the instant the order was locked', async () => {
-    const ordersClient = client(ordersDeps, {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
     });
@@ -92,14 +92,15 @@ describe('a client of orders-service over HTTP', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'ORDER_LOCKED',
+      status: 409,
       body: { lockedAt: '2026-01-15T09:30:00Z' },
     });
   });
 
-  test('it receives RESOURCE_NOT_FOUND for an order nobody placed, known, with orders-service’s message', async () => {
-    const ordersClient = client(ordersDeps, {
+  test('it receives RESOURCE_NOT_FOUND for an order nobody placed, with orders-service’s message', async () => {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'billing-key' },
     });
@@ -108,20 +109,25 @@ describe('a client of orders-service over HTTP', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'provider',
       code: 'RESOURCE_NOT_FOUND',
+      status: 404,
       message: 'The resource does not exist',
     });
   });
 
   test('with an unknown key it receives UNAUTHENTICATED', async () => {
-    const ordersClient = client(ordersDeps, {
+    const ordersClient = client(ordersDependency, {
       baseUrl: ordersUrl,
       headers: { 'x-api-key': 'stolen-key' },
     });
 
     const outcome = await ordersClient.getOrder({ params: { orderId: PAID_ORDER_ID } });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', known: true, code: 'UNAUTHENTICATED' });
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      code: 'UNAUTHENTICATED',
+      headers: { 'www-authenticate': 'ApiKey realm="orders-service"' },
+    });
   });
 });

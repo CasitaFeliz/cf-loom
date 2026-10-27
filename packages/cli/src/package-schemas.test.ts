@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { encodedValueOf, walkSchemas } from '@cf-loom/contract/internal';
+import { encodedValueOf, providedSnapshotOf, walkSchemas } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
@@ -82,15 +82,33 @@ const richEndpoint = [
   '});',
 ];
 
+/** An Endpoint answering a union whose first option keeps a key the second one would drop. */
+const overlappingUnionEndpoint = [
+  'export const overlap = defineEndpoint({',
+  "  name: 'overlap',",
+  "  method: 'GET',",
+  "  path: '/overlap',",
+  "  visibility: 'public',",
+  "  description: 'Overlap',",
+  '  success: {',
+  '    status: 200,',
+  '    body: z.union([',
+  '      z.object({ b: z.string(), c: z.number() }),',
+  '      z.object({ b: z.string(), a: z.string().optional() }),',
+  '    ]),',
+  '  },',
+  '});',
+];
+
 const service: Readonly<Record<string, string>> = {
   'package.json': JSON.stringify({ name: '@org/shapes-service', type: 'module' }),
   'cf-loom.config.ts': lines([
     "import { defineConfig } from '@cf-loom/cli';",
-    "export const config = defineConfig({ scope: '@org' });",
+    'export const config = defineConfig({});',
   ]),
   'src/contract/index.ts': lines([
     'import {',
-    '  defineContract,',
+    '  defineService,',
     '  defineEndpoint,',
     '  defineEvent,',
     '  defineGroup,',
@@ -107,22 +125,23 @@ const service: Readonly<Record<string, string>> = {
     "  path: '/echo',",
     "  visibility: 'public',",
     "  description: 'Answers what it is sent',",
-    '  input: { body: everythingIn },',
+    '  input: { body: everything },',
     '  success: { status: 200, body: everything },',
     '});',
     ...richEndpoint,
+    ...overlappingUnionEndpoint,
     'export const proto = defineEndpoint({',
     "  name: 'proto',",
     "  method: 'POST',",
     "  path: '/proto',",
     "  visibility: 'public',",
     "  description: 'Proto',",
-    '  input: { body: z.object({ b: z.string().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
+    '  input: { body: z.object({ b: z.json().meta({ examples: [JSON.parse(\'{"__proto__":{"a":[1]}}\')] }) }) },',
     '  success: { status: 204 },',
     '});',
-    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, proto] });",
     "const shaped = defineEvent({ name: 'Shaped', version: 1, visibility: 'internal', description: 'Shaped', body: everything });",
-    "export const contract = defineContract({ name: 'shapes-service', groups: [shapes], events: [shaped] });",
+    "const shapes = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [echo, rich, overlap, proto], events: [shaped] });",
+    "export const contract = defineService({ name: 'shapes-service', groups: [shapes] });",
   ]),
 };
 
@@ -136,6 +155,8 @@ const sample = {
   digest: 'a'.repeat(64),
   digest2: `${'a'.repeat(22)}==`,
   scores: { ab: 1 },
+  partialScores: { any: 1 },
+  optionals: {},
   rooted: { tree: { label: 'root', children: [] } },
   forest: {
     inner: { a: 'x' },
@@ -210,9 +231,10 @@ type Shaped = {
 
 let folder = '';
 let echo: Endpoint;
-let entrySnapshot: unknown;
+let protoCut: { readonly endpoints: Readonly<Record<string, unknown>> };
 let rich: Rich;
 let proto: { readonly input: { readonly body: core.$ZodType } };
+let overlap: { readonly success: { readonly body: Reader } };
 let shaped: Shaped;
 let snapshot: {
   readonly defs: Readonly<Record<string, unknown>>;
@@ -241,11 +263,12 @@ beforeAll(async () => {
   const built = spawnSync(tsc, ['-p', out], { encoding: 'utf8' });
   expect(built.stdout).toBe('');
   const entry = await import(pathToFileURL(join(out, 'dist/index.js')).href);
-  echo = entry.contract.endpoints.echo;
-  entrySnapshot = entry.snapshot;
-  rich = entry.contract.endpoints.rich;
-  proto = entry.contract.endpoints.proto;
-  shaped = entry.contract.events.shapedV1;
+  echo = entry.echoEndpoint;
+  protoCut = providedSnapshotOf(entry.protoEndpoint);
+  rich = entry.richEndpoint;
+  proto = entry.protoEndpoint;
+  overlap = entry.overlapEndpoint;
+  shaped = entry.shapedEventV1;
   snapshot = JSON.parse(readFileSync(join(out, 'snapshot.json'), 'utf8'));
 });
 
@@ -257,14 +280,17 @@ function read(value: unknown): Parsed {
   return echo.success.body.safeParse(value);
 }
 
+/** Where the walk is told a schema sits: a body of no declaration. */
+const bodyPlace = { site: { kind: 'root' }, declaration: undefined, steps: [] } as const;
+
 /** The node a schema walks back to, so a test compares it with the Snapshot's. */
 function walkedOf(schema: core.$ZodType): unknown {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined).located[0]?.walked;
+  return walkSchemas([{ at: bodyPlace, schema }], () => undefined).located[0]?.walked;
 }
 
 describe('cf-loom package: the schemas it writes', () => {
   test('the Input schema walks back to the Snapshot’s node and defs', () => {
-    const walked = walkSchemas([{ at: ['body'], schema: echo.input.body }], () => undefined);
+    const walked = walkSchemas([{ at: bodyPlace, schema: echo.input.body }], () => undefined);
 
     expect(walked.located[0]?.walked).toEqual({
       kind: 'walked',
@@ -280,11 +306,17 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['tree']).toEqual(sample.tree);
   });
 
+  test('the Reader of a union reads with the first option that parses, as the Provider’s schema does', () => {
+    const parsed = overlap.success.body.safeParse({ b: 'x', c: 1 });
+
+    expect(parsed.data).toEqual({ b: 'x', c: 1 });
+  });
+
   test('the Success reader strips keys it does not know, a nested object’s included', () => {
     const parsed = read({ ...sample, inner: { a: 'x', b: 1 } });
 
-    expect(parsed.data).not.toHaveProperty('extra');
-    expect(parsed.data?.['inner']).toEqual({ a: 'x' });
+    const { extra: _dropped, ...known } = sample;
+    expect(parsed.data).toStrictEqual(known);
   });
 
   test('the Success reader reads an unknown Open Enum value as its Unknown case', () => {
@@ -328,6 +360,13 @@ describe('cf-loom package: the schemas it writes', () => {
 
     expect(written.filter((text) => text.includes('.transform('))).toEqual([]);
     expect(written.filter((text) => text.includes('loom.openEnumReader(['))).not.toEqual([]);
+  });
+
+  test('a one-value Open Enum is written as an Open Enum reader, not as a literal', () => {
+    const written = filesUnder(join(folder, 'contract-shapes-service', 'src')).join('\n');
+
+    expect(written).toContain("loom.openEnumReader(['ok'])");
+    expect(written).not.toContain("z.literal('ok')");
   });
 
   test('the Success reader reads a variant typed by an Open Enum it does not know as its Unknown case', () => {
@@ -388,16 +427,6 @@ describe('cf-loom package: the schemas it writes', () => {
     });
   });
 
-  test('the Input schema refuses a key outside an enum-keyed record’s keys, as the Service does', () => {
-    const records = { keyed: { a: 1, b: 2, c: 3 }, partial: { a: 1 }, single: { a: 1 } };
-
-    const parsed = echo.input.body['~standard'].validate({ ...sample, ...records });
-
-    expect(parsed).toMatchObject({
-      issues: [{ code: 'unrecognized_keys', keys: ['c'], path: ['keyed'] }],
-    });
-  });
-
   test('no file of the package declares a strict object', () => {
     const written = filesUnder(join(folder, 'contract-shapes-service', 'src'));
 
@@ -443,9 +472,11 @@ describe('cf-loom package: the schemas it writes', () => {
     expect(parsed.data?.['stem']).toEqual(sample.stem);
   });
 
-  test('the entry’s snapshot is snapshot.json, a __proto__ key in an example included', () => {
-    expect(isDeepStrictEqual(entrySnapshot, snapshot)).toBe(true);
-    expect(JSON.stringify(entrySnapshot)).toContain('"__proto__"');
+  test('an Endpoint’s cut holds its entry of snapshot.json, a __proto__ key in an example included', () => {
+    const entry = protoCut.endpoints['POST /proto'];
+
+    expect(isDeepStrictEqual(entry, snapshot.endpoints['POST /proto'])).toBe(true);
+    expect(JSON.stringify(entry)).toContain('"__proto__"');
   });
 
   test('an example holding a __proto__ key walks back to the Snapshot’s node', () => {
@@ -506,8 +537,8 @@ describe('cf-loom package: an exported Event’s body', () => {
   test('it reads a value the Contract declares, unknown keys stripped', () => {
     const parsed = shaped.body.safeParse(sample);
 
-    expect(parsed.data?.['tree']).toEqual(sample.tree);
-    expect(parsed.data).not.toHaveProperty('extra');
+    const { extra: _dropped, ...known } = sample;
+    expect(parsed.data).toStrictEqual(known);
   });
 
   test('it reads an unknown Open Enum value as its Unknown case', () => {
@@ -516,7 +547,7 @@ describe('cf-loom package: an exported Event’s body', () => {
     expect(parsed.data?.['status']).toEqual({ unknown: 'refunded' });
   });
 
-  test('it writes an Unknown case back as its text and refuses one holding a declared value, as fakeEvent writes a body', () => {
+  test('it writes an Unknown case back as its text and refuses one holding a declared value, as a direct call writes a body', () => {
     const read = { ...sample, extra: undefined, status: { unknown: 'refunded' } };
 
     const written = [

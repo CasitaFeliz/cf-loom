@@ -1,7 +1,8 @@
-import type { Path, SchemaNode } from '../walker/index.ts';
+import type { SchemaNode, Step } from '../walker/index.ts';
+import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
-import { enumFindingsOf, isEnumLike } from './enums.ts';
+import { enumFindingsOf } from './enums.ts';
 import { objectFindingsOf } from './fields.ts';
 import {
   type BothDefs,
@@ -11,77 +12,119 @@ import {
   type NodePairOf,
   typeChanged,
 } from './findings.ts';
-import { type EnteredKey, followedOf } from './refs.ts';
-import type { Difference, EndpointPosition, PositionOrEvery } from './report.ts';
+import { type Entered, hasEntered, hopOf } from './refs.ts';
+import type { Difference, EndpointPosition, Position } from './report.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
-/** Where a schema sits: the Position it is read in, and its path from the site. */
-export type SchemaPlace = { readonly position: PositionOrEvery; readonly at: Path };
+/** Where a schema sits: the Position it is read in, and its steps from the site. */
+export type SchemaPlace = { readonly position: Position; readonly at: readonly Step[] };
 
 /**
  * Where a schema read as Input or Success sits: an Endpoint's part, a Guard's demand or a
  * Rejection's body; never a Message's or a shared schema's.
  */
-export type EndpointPlace = { readonly position: EndpointPosition; readonly at: Path };
+export type EndpointPlace = { readonly position: EndpointPosition; readonly at: readonly Step[] };
 
 /**
- * A place with the keys of the pairs already entered within its root schema, one list shared by
- * every place in it, so a pair is compared once however many paths reach it.
+ * A place with the pairs a `ref` already led to within its root schema, one map shared by every
+ * place in it: a `ref` is compared where it sits, and the pair it leads to the first time that
+ * pair is met, however many paths reach it.
  */
-type EnteredPlace = SchemaPlace & { readonly entered: EnteredKey[] };
+type EnteredPlace = SchemaPlace & { readonly entered: Entered };
+
+/**
+ * A pair and how it is met: where a schema is used, or one hop on from a pair holding a `ref`, at
+ * the same path, each `ref` side the def it names and an inline side as it was.
+ */
+type Met = { readonly kind: 'use' | 'hop'; readonly pair: NodePair };
+
+/** A pair one hop on from a pair holding a `ref`. */
+type Hop = Met & { readonly kind: 'hop' };
 
 /**
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
- * its path, following `ref`s into both Snapshots' defs. A pair of schemas met again within this
- * schema compares no further, so a def used at several paths reports its differences at the first.
+ * its path, following each `ref` one hop at a time into its Snapshot's defs. A `ref` is compared
+ * where it sits, and the pair it leads to the first time that pair is met, so a def used at
+ * several paths reports its differences at the first.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
   defs: BothDefs,
   place: SchemaPlace,
 ): readonly Difference[] {
-  return differencesWithin(pair, defs, { ...place, entered: [] });
-}
-
-function differencesWithin(
-  pair: NodePair,
-  defs: BothDefs,
-  place: EnteredPlace,
-): readonly Difference[] {
-  const followed = followedOf(pair, defs, place.entered);
-  switch (followed.kind) {
-    case 'settled':
-      return differencesOf(nullabilityFindingsOf(followed.pair), defs, place);
-    case 'inline':
-      return differencesOf(findingsOf(followed.pair, defs), defs, place);
-    case 'entered':
-      place.entered.push(followed.entered);
-      return differencesOf(findingsOf(followed.pair, defs), defs, place);
-  }
-}
-
-function differencesOf(
-  findings: readonly Finding[],
-  defs: BothDefs,
-  place: EnteredPlace,
-): readonly Difference[] {
   const differences: Difference[] = [];
-  for (const finding of findings) {
-    const at = [...place.at, ...finding.steps];
+  const levels = [levelOf({ kind: 'use', pair }, defs, { ...place, entered: new Map() })];
+  for (let level = levels.at(-1); level !== undefined; level = levels.at(-1)) {
+    const next = level.findings.next();
+    if (next.done === true) {
+      levels.pop();
+      continue;
+    }
+    const finding = next.value;
     switch (finding.kind) {
       case 'found':
-        differences.push({ kind: 'schema', position: place.position, at, shape: finding.shape });
+        differences.push({
+          kind: 'schema',
+          position: level.place.position,
+          at: [...level.place.at, ...finding.steps],
+          shape: finding.shape,
+        });
         break;
-      case 'inside':
-        differences.push(...differencesWithin(finding.pair, defs, { ...place, at }));
+      case 'inside': {
+        const at = [...level.place.at, ...finding.steps];
+        levels.push(levelOf({ kind: 'use', pair: finding.pair }, defs, { ...level.place, at }));
+        break;
+      }
+      case 'hop':
+        levels.push(levelOf(finding, defs, level.place));
         break;
     }
   }
   return differences;
 }
 
-/** The nullability of a node, then what its type compares: nullability is apart from the shape. */
-function findingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
+/**
+ * A pair being compared: its findings, read one at a time, so the pair of a finding inside it is
+ * followed only once the findings before it are compared, as the walk meets it.
+ */
+type Level = { readonly findings: Iterator<Finding | Hop>; readonly place: EnteredPlace };
+
+function levelOf(met: Met, defs: BothDefs, place: EnteredPlace): Level {
+  return { findings: findingsWithin(met, defs, place).values(), place };
+}
+
+/**
+ * What comparing a pair finds: its own annotations and def name, its nullability where it is a
+ * use (a def is never nullable, each `ref` carries its use's), then its type, or, when a side is a
+ * `ref`, the pair one hop on, unless that pair was already entered within the root schema.
+ */
+function findingsWithin(
+  { kind, pair }: Met,
+  defs: BothDefs,
+  place: EnteredPlace,
+): readonly (Finding | Hop)[] {
+  const own = [
+    ...annotationFindingsOf(pair),
+    ...renamedFindingsOf(pair),
+    ...(kind === 'use' ? nullabilityFindingsOf(pair) : []),
+  ];
+  if (pair.baseline.type !== 'ref' && pair.proposed.type !== 'ref') {
+    return [...own, ...typeFindingsOf(pair, defs)];
+  }
+  const hop = hopOf(pair, defs);
+  if (hasEntered(place.entered, hop)) {
+    return own;
+  }
+  const proposedEntered = place.entered.get(hop.baseline) ?? new Set<SchemaNode>();
+  place.entered.set(hop.baseline, proposedEntered.add(hop.proposed));
+  return [...own, { kind: 'hop', pair: hop }];
+}
+
+/**
+ * The nullability of a node, then what its type compares: nullability is apart from the shape. A
+ * former Input is grafted by the same findings, so it pairs nodes as the compare does.
+ */
+export function findingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
   return [...nullabilityFindingsOf(pair), ...typeFindingsOf(pair, defs)];
 }
 
@@ -97,7 +140,7 @@ function nullabilityFindingsOf({ baseline, proposed }: NodePair): readonly Findi
 }
 
 function typeFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
-  if (isEnumLike(pair.baseline) || isEnumLike(pair.proposed)) {
+  if (pair.baseline.type === 'enum' || pair.proposed.type === 'enum') {
     return enumFindingsOf(pair);
   }
   return pair.baseline.type === pair.proposed.type

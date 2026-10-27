@@ -1,8 +1,9 @@
-import { failureLineOf } from '@cf-loom/contract/internal';
+import { type Failure, failureLineOf } from '@cf-loom/contract/internal';
 import {
   type BuiltProject,
   type Committed,
-  isCommittedCurrent,
+  committedComparisonOf,
+  type FileOf,
   type ProjectFailure,
   snapshotFile,
 } from '../project/index.ts';
@@ -13,22 +14,29 @@ import {
  */
 export type ExitStatus = 0 | 1 | 2 | 3;
 
-/** What a command ends with: its exit status and the lines it prints on each stream. */
+/** The fields of a `--json` document beside its `format` and `status`. */
+export type Document = Readonly<Record<string, unknown>>;
+
+/**
+ * What a command ends with: its exit status, the lines it prints on each stream and the fields its
+ * last step adds to the document `--json` prints instead of its stdout lines.
+ */
 export type Exit = {
   readonly status: ExitStatus;
   readonly stdout: readonly string[];
   readonly stderr: readonly string[];
+  readonly document?: Document;
 };
 
 /** A command that ended before it did its work, with the exit it ends with. */
 export type Stopped = { readonly kind: 'stopped'; readonly exit: Exit };
 
-/** A command that did what was asked, with the lines that say what it did. */
-export function done(lines: readonly string[]): Exit {
-  return { status: 0, stdout: lines, stderr: [] };
+/** A command that did what was asked, with the lines that say what it did and the document that says it. */
+export function done(lines: readonly string[], document: Document): Exit {
+  return { status: 0, stdout: lines, stderr: [], document };
 }
 
-/** A command whose check failed: something not allowed, or a generated file that differs. */
+/** A command whose check failed: a Change refused, a broken rule, or a generated file that differs. */
 export function checkFailed(lines: readonly string[]): Exit {
   return { status: 1, stdout: [], stderr: lines };
 }
@@ -42,24 +50,26 @@ export function toolingError(message: string): Exit {
 export function failureExitOf(failure: ProjectFailure): Exit {
   switch (failure.kind) {
     case 'invalid':
-      return checkFailed(failure.failures.map(failureLineOf));
+      return checkFailed(failure.failures.map((broken) => lineOf(broken, failure.fileOf)));
     case 'tooling':
       return toolingError(failure.message);
   }
 }
 
-/**
- * The stop of a command that writes from the Snapshot when the committed file is no JSON: its
- * author restores or deletes it, since its `deprecatedAt` stamps would be lost.
- */
-export function noJsonExitOf(committed: Committed): Exit | undefined {
+/** A failure on one line, the file that exports its declaration first when the project's files say. */
+function lineOf(broken: Failure, fileOf: FileOf): string {
+  const file = fileOf(broken.declaration);
+  const line = failureLineOf(broken);
+  return file === undefined ? line : `${file}: ${line}`;
+}
+
+/** The stop of a command that works from the committed Snapshot when it is no JSON, as a merge conflict leaves it. */
+function noJsonExitOf(committed: Committed): Exit | undefined {
   if (committed.kind !== 'no-json') {
     return undefined;
   }
   const { reason } = committed;
-  return toolingError(
-    `${snapshotFile} is no JSON (${reason}): restore it or delete it, then run cf-loom generate`,
-  );
+  return toolingError(`${snapshotFile} is no JSON (${reason}): run cf-loom generate`);
 }
 
 /**
@@ -71,8 +81,17 @@ export function committedStopOf(built: BuiltProject): Exit | undefined {
   if (noJson !== undefined) {
     return noJson;
   }
-  if (isCommittedCurrent(built)) {
-    return undefined;
+  switch (committedComparisonOf(built)) {
+    case 'same':
+      return undefined;
+    case 'crlf':
+      return checkFailed([crlfLineOf(snapshotFile)]);
+    case 'different':
+      return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
   }
-  return checkFailed([`${snapshotFile} is missing or out of date: run cf-loom generate`]);
+}
+
+/** The line for a generated file that differs from what `generate` writes only by CRLF line endings, which Git adds on a checkout. */
+export function crlfLineOf(path: string): string {
+  return `${path} has CRLF line endings: set eol=lf in .gitattributes`;
 }

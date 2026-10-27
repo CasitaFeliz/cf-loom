@@ -1,11 +1,12 @@
 import {
-  defineContract,
+  defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
 } from '@cf-loom/contract';
-import { admit, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, type HandledRequest, handle, reject, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { type ServedFault, serve } from './index.ts';
@@ -16,6 +17,15 @@ const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
   message: 'Unauthenticated',
+  headers: z.object({ 'www-authenticate': z.string() }),
+});
+
+const rateLimited = defineRejection({
+  code: 'RATE_LIMITED',
+  status: 429,
+  message: 'Slow down',
+  headers: z.object({ 'retry-after': z.int().min(0) }),
+  body: z.object({ limit: z.int() }),
 });
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
@@ -83,9 +93,10 @@ const listOrders = defineEndpoint({
   description: 'A tenant’s orders',
   guards: [userToken, tenant],
   success: { status: 204 },
+  rejections: [rateLimited],
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -97,21 +108,25 @@ const contract = defineContract({
 });
 
 const calls: string[] = [];
+const challenge = 'Bearer realm="orders"';
 
 const userTokenHandler = handle(userToken, ({ headers }) => {
   calls.push('userToken');
   if (headers.authorization !== 'Bearer u-1') {
-    return reject(unauthenticated);
+    return reject(unauthenticated, { headers: { 'www-authenticate': challenge } });
   }
   return admit({ userId: 'u-1' });
 });
 
-const permissionHandler = handle(permission, (_demands, { userToken: user }, { qualifier }) => {
-  calls.push('permission');
-  return admit({ granted: [user.userId, ...qualifier] });
-});
+const permissionHandler = handle(
+  permission,
+  (_demands, { context: { userToken: user }, qualifier }) => {
+    calls.push('permission');
+    return admit({ granted: [user.userId, ...qualifier] });
+  },
+);
 
-const updateOrderHandler = handle(updateOrder, (_input, context) => {
+const updateOrderHandler = handle(updateOrder, (_input, { context }) => {
   calls.push('updateOrder');
   return success({ by: context.userToken.userId, granted: context.permission.granted });
 });
@@ -128,7 +143,6 @@ const handlers = {
     permission: permissionHandler,
     tenant: handle(tenant, () => admit()),
   },
-  deprecatedAt: {},
 };
 
 function put(
@@ -142,14 +156,14 @@ describe('serve: Guards', () => {
   test('a Guard’s Context reaches the EndpointHandler and the Guards that list it, with the Qualifier', async () => {
     calls.length = 0;
 
-    const response = await serve(contract, handlers)(put(ORDER_ID));
+    const response = await serve(contract, handlers, {})(put(ORDER_ID));
 
     expect(await response.json()).toEqual({ by: 'u-1', granted: ['u-1', 'orders:edit'] });
     expect(calls).toEqual(['userToken', 'permission', 'updateOrder']);
   });
 
   test('Guards run before the Endpoint’s Input: a missing demanded header is answered, a bad param is not', async () => {
-    const response = await serve(contract, handlers)(put('nope', {}));
+    const response = await serve(contract, handlers, {})(put('nope', {}));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
@@ -192,10 +206,30 @@ describe('serve: Guards', () => {
     ]);
   });
 
+  test('a GuardHandler’s retryable Fault with retryAfter is sent with retry-after', async () => {
+    const busy = handle(userToken, () =>
+      fault({ committed: 'no', retryable: true, retryAfter: 30 }),
+    );
+    const http = serve(
+      contract,
+      { ...handlers, guards: { ...handlers.guards, userToken: busy } },
+      {},
+    );
+
+    const response = await http(put(ORDER_ID));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('retry-after')).toBe('30');
+  });
+
   test('a GuardHandler’s Rejection stops the request with its declared status', async () => {
     calls.length = 0;
 
-    const response = await serve(contract, handlers)(put(ORDER_ID, { authorization: 'Bearer x' }));
+    const response = await serve(
+      contract,
+      handlers,
+      {},
+    )(put(ORDER_ID, { authorization: 'Bearer x' }));
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
@@ -204,10 +238,89 @@ describe('serve: Guards', () => {
     expect(calls).toEqual(['userToken']);
   });
 
+  test('a Guard’s 401 carries the www-authenticate header its Rejection declares', async () => {
+    const response = await serve(
+      contract,
+      handlers,
+      {},
+    )(put(ORDER_ID, { authorization: 'Bearer x' }));
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get('www-authenticate')).toBe(challenge);
+  });
+
+  test('an EndpointHandler’s Rejection is sent with its declared headers and its body', async () => {
+    const limited = handle(listOrders, () =>
+      reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } }),
+    );
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        endpoints: { ...handlers.endpoints, listOrders: limited },
+      },
+      {},
+    );
+    const request = new Request('http://test/orders', {
+      headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
+    });
+
+    const response = await http(request);
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(await response.json()).toEqual({
+      rejection: { code: 'RATE_LIMITED', message: 'Slow down', body: { limit: 100 } },
+    });
+  });
+
+  test('a Rejection built with a header its schema does not declare is sent without it', async () => {
+    const wider = { 'retry-after': 30, 'x-extra': 'not declared' };
+    const limited = handle(listOrders, () =>
+      reject(rateLimited, { headers: wider, body: { limit: 100 } }),
+    );
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        endpoints: { ...handlers.endpoints, listOrders: limited },
+      },
+      {},
+    );
+    const request = new Request('http://test/orders', {
+      headers: { authorization: 'Bearer u-1', 'x-tenant': 't-1' },
+    });
+
+    const response = await http(request);
+
+    expect(response.headers.get('retry-after')).toBe('30');
+    expect(response.headers.has('x-extra')).toBe(false);
+  });
+
+  test('a Rejection header that cannot travel as field text answers INVALID_OUTCOME', async () => {
+    const broken = handle(userToken, () =>
+      reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer\nrealm' } }),
+    );
+    const http = serve(
+      contract,
+      {
+        ...handlers,
+        guards: { ...handlers.guards, userToken: broken },
+      },
+      {},
+    );
+
+    const response = await http(put(ORDER_ID));
+
+    expect(response.status).toBe(500);
+    expect(response.headers.has('www-authenticate')).toBe(false);
+    expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+  });
+
   test('a GuardHandler’s Rejection is answered though a later Guard’s demands fail', async () => {
     const request = new Request('http://test/orders', { headers: { authorization: 'Bearer x' } });
 
-    const response = await serve(contract, handlers)(request);
+    const response = await serve(contract, handlers, {})(request);
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({
@@ -230,7 +343,7 @@ describe('serve: Guards', () => {
     const headers = { authorization: 'Bearer x', 'content-type': 'application/json' };
     const init = { method: 'POST', headers, body, duplex: 'half' } as RequestInit;
 
-    await serve(contract, handlers)(new Request('http://test/notes', init));
+    await serve(contract, handlers, {})(new Request('http://test/notes', init));
 
     expect(pulls).toBe(0);
   });
@@ -240,7 +353,7 @@ describe('serve: Guards', () => {
       ...handlers,
       guards: { ...handlers.guards, userToken: handle.stub(userToken) },
     };
-    const http = serve(contract, stubbed);
+    const http = serve(contract, stubbed, {});
 
     const valid = await http(put(ORDER_ID));
     const invalid = await http(put(ORDER_ID, {}));
@@ -252,13 +365,71 @@ describe('serve: Guards', () => {
     expect(invalid.status).toBe(400);
   });
 
+  test('a GuardHandler under serve receives the request’s headers and its signal', async () => {
+    const controller = new AbortController();
+    const received: HandledRequest[] = [];
+    const reading = handle(userToken, (_demands, { request }) => {
+      received.push(request);
+      return admit({ userId: 'u-1' });
+    });
+    const served = { ...handlers, guards: { ...handlers.guards, userToken: reading } };
+    const headers = { authorization: 'Bearer u-1', 'x-request-id': 'r-7' };
+
+    await serve(
+      contract,
+      served,
+      {},
+    )(
+      new Request('http://test/notes', {
+        method: 'POST',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify({ text: 'hi' }),
+        signal: controller.signal,
+      }),
+    );
+    controller.abort();
+
+    expect(received[0]?.headers.get('x-request-id')).toBe('r-7');
+    expect(received[0]?.signal.aborted).toBe(true);
+  });
+
+  test('a GuardHandler stub answers the not-implemented code its Root resolves', async () => {
+    const definitions = defineDefinitions({
+      standardRejections: {
+        notImplemented: { code: 'NOT_YET_IMPLEMENTED', status: 501, message: 'Coming soon' },
+      },
+    });
+    const rooted = defineService({
+      name: 'orders-service',
+      standardRejections: definitions,
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [addNote] })],
+    });
+    const stubbed = {
+      endpoints: { addNote: handlers.endpoints.addNote },
+      guards: { userToken: handle.stub(userToken) },
+    };
+    const headers = { authorization: 'Bearer u-1', 'content-type': 'application/json' };
+    const body = JSON.stringify({ text: 'hi' });
+
+    const response = await serve(
+      rooted,
+      stubbed,
+      {},
+    )(new Request('http://test/notes', { method: 'POST', headers, body }));
+
+    expect(response.status).toBe(501);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NOT_YET_IMPLEMENTED', message: 'Coming soon' },
+    });
+  });
+
   test('an EndpointHandler stub answers not implemented', async () => {
     const stubbed = {
       ...handlers,
       endpoints: { ...handlers.endpoints, updateOrder: handle.stub(updateOrder) },
     };
 
-    const response = await serve(contract, stubbed)(put(ORDER_ID));
+    const response = await serve(contract, stubbed, {})(put(ORDER_ID));
 
     expect(response.status).toBe(501);
     expect(await response.json()).toEqual({
@@ -272,7 +443,11 @@ describe('serve: Guards', () => {
     const http = serve(
       contract,
       { ...handlers, guards: { ...handlers.guards, userToken: broken } },
-      { onServiceFault: (fault) => faults.push(fault) },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
     );
 
     const response = await http(put(ORDER_ID));
@@ -289,8 +464,9 @@ describe('serve: Guards', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'updateOrder',
-        guard: 'userToken',
+        declaration: updateOrder,
+        name: 'updateOrder',
+        guard: userToken,
         issues: [
           { part: 'context', path: ['userId'], code: 'invalid_type', message: expect.any(String) },
         ],
@@ -300,7 +476,11 @@ describe('serve: Guards', () => {
 
   test('a Qualifier serve hands a Guard that breaks its schema is the runtime’s own bug', async () => {
     const faults: ServedFault[] = [];
-    const http = serve(contract, handlers, { onServiceFault: (fault) => faults.push(fault) });
+    const http = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
 
     const response = await http(
       new Request('http://test/misattached', { headers: { authorization: 'Bearer u-1' } }),
@@ -313,8 +493,9 @@ describe('serve: Guards', () => {
     expect(faults).toMatchObject([
       {
         kind: 'runtime-bug',
-        endpoint: 'misattached',
-        guard: 'permission',
+        declaration: misattached,
+        name: 'misattached',
+        guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },
     ]);

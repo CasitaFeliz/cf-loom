@@ -2,22 +2,19 @@ import {
   addedStandardRejectionNames,
   isRejectionStatus,
   isStandardRejection,
+  notImplementedStatus,
 } from '../declarations/index.ts';
+import { fieldStep, indexStep, inFields, inside } from '../walker/index.ts';
 import {
-  type Declarations,
   isWithoutValue,
   type LocatedEndpoint,
   type LocatedGuard,
-  type LocatedRejection,
   type LocatedStandardRejection,
   listOf,
-  type ResolvedStandard,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-
-const redefinedStandard =
-  'Neither a Contract nor a Definitions Package declares a Rejection with the code a Standard Rejection resolves to';
 
 /** A declared Standard Rejection is 4xx too, except not-implemented, which is always 501. */
 export function standardStatusFailures({
@@ -30,11 +27,15 @@ export function standardStatusFailures({
     return [];
   }
   if (name === 'notImplemented') {
-    const message = `The not-implemented Rejection's status is 501: ${textOf(status)}`;
-    return status === 501 ? [] : [failure([...at, 'status'], 'rejection-status', message)];
+    const message = `The not-implemented Rejection's status is ${notImplementedStatus}: ${writtenTextOf(status)}`;
+    return status === notImplementedStatus
+      ? []
+      : [failure(inFields(at, 'status'), 'rejection-status', message)];
   }
-  const message = `A Rejection's status is 4xx: ${textOf(status)}`;
-  return isRejectionStatus(status) ? [] : [failure([...at, 'status'], 'rejection-status', message)];
+  const message = `A Rejection's status is 4xx: ${writtenTextOf(status)}`;
+  return isRejectionStatus(status)
+    ? []
+    : [failure(inFields(at, 'status'), 'rejection-status', message)];
 }
 
 /** The invalid-input and not-implemented Rejections are added to every Endpoint, so none lists them. */
@@ -50,7 +51,7 @@ export function listedStandardFailures({
   const added = listed.filter(({ name }) => addedNames.includes(name));
   return added.map(({ name, index }) =>
     failure(
-      [...at, 'rejections', index],
+      inside(at, fieldStep('rejections'), indexStep(index)),
       'standard-rejection-listed',
       `${textOf(name)} is added to every Endpoint without listing it`,
     ),
@@ -66,65 +67,9 @@ export function guardStandardFailures({ at, guard }: LocatedGuard): readonly Dec
   const standard = listed.filter(({ name }) => name !== undefined);
   return standard.map(({ name, index }) =>
     failure(
-      [...at, 'rejections', index],
+      inside(at, fieldStep('rejections'), indexStep(index)),
       'standard-rejection-on-guard',
       `A Guard lists declared Rejections only: ${textOf(name)}`,
-    ),
-  );
-}
-
-/** Each Standard Rejection resolves to a code of its own; the ones after the first sharing a code fail. */
-export function distinctCodeFailures(
-  resolved: readonly ResolvedStandard[],
-): readonly DeclarationFailure[] {
-  return resolved
-    .filter(
-      (standard, index) => resolved.findIndex((other) => other.code === standard.code) < index,
-    )
-    .map((standard) => {
-      const names = resolved
-        .filter((other) => other.code === standard.code)
-        .map((other) => other.name)
-        .join(' and ');
-      const message = `Each Standard Rejection resolves to a code of its own: ${standard.code} is ${names}`;
-      return failure([...standard.at, 'code'], 'standard-codes-distinct', message);
-    });
-}
-
-/** No declared Rejection takes the code a Standard Rejection resolves to. */
-export function redefinitionFailures(
-  rejections: readonly LocatedRejection[],
-  resolved: readonly ResolvedStandard[],
-): readonly DeclarationFailure[] {
-  const standardCodes = resolved.map(({ code }) => code);
-  return rejections
-    .filter(({ rejection }) => standardCodes.includes(textOf(rejection.code)))
-    .map(({ at, rejection }) =>
-      failure(
-        [...at, 'code'],
-        'standard-code-redefined',
-        `${redefinedStandard}: ${textOf(rejection.code)}`,
-      ),
-    );
-}
-
-/** At most one listed Definitions Package declares Standard Rejections; one listed twice is one. */
-export function onceFailures({ listedDefinitions }: Declarations): readonly DeclarationFailure[] {
-  const once = [
-    ...new Map(listedDefinitions.map((located) => [located.definitions, located])).values(),
-  ];
-  const declaring = once.filter(({ definitions: listed }) =>
-    Object.values(listed.standardRejections ?? {}).some((declaration) => declaration !== undefined),
-  );
-  const [first, ...others] = declaring;
-  if (first === undefined) {
-    return [];
-  }
-  return others.map(({ at }) =>
-    failure(
-      [...at, 'standardRejections'],
-      'standard-rejections-once',
-      `At most one listed Definitions Package declares Standard Rejections: ${textOf(first.definitions.name)} already does`,
     ),
   );
 }

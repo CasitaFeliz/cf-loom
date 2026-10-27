@@ -1,6 +1,5 @@
-import type { PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
-import { publishedNameOf } from '../loading/index.ts';
-import { cfLoomOf, manifestFileOf, type Packaging, peerRangesOf } from './manifest.ts';
+import type { PeerRanges, PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
+import { cfLoomOf, manifestFileOf, type Packaging } from './manifest.ts';
 import type { PackageFile } from './modules.ts';
 import { packagePaths } from './paths.ts';
 
@@ -10,7 +9,7 @@ export type DefinitionsManifest =
   | { readonly kind: 'unpublishable'; readonly line: string };
 
 /** The fields of a package.json whose dependencies npm installs with the package. */
-const installedFields = ['dependencies', 'optionalDependencies'] as const;
+const installedFields = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const;
 
 /** The ranges npm publishes unchanged and no registry can install. */
 const uninstallableRange = /^(workspace|catalog|file|link):/;
@@ -19,40 +18,62 @@ const uninstallableRange = /^(workspace|catalog|file|link):/;
 type Listed = { readonly field: string; readonly name: string; readonly range: string };
 
 /**
- * A Definitions Package's own package.json as published: its version, peers as carets on the
- * versions it is built with and `cfLoom`, and `snapshot.json` in its `files`; refused when it is
- * not named as the package it publishes as, or depends on a range no registry can install.
+ * A Definitions Package's own package.json as published: its version, its peers with `zod` and
+ * `@cf-loom/contract` set to the ranges the CLI declares, and `cfLoom`, `snapshot.json`
+ * in its `files` and no `publishConfig.tag`; refused when it depends on a range no registry can
+ * install, a peer read after those two are set.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
   published: PublishedDefinitionsSnapshot,
-  { scope, peers }: Pick<Packaging, 'scope' | 'peers'>,
+  { peerRanges }: Pick<Packaging, 'peerRanges'>,
 ): DefinitionsManifest {
-  const name = publishedNameOf(scope, published);
-  if (source['name'] !== name) {
-    const named = `package.json names ${String(source['name'])}`;
-    return unpublishable(
-      `${named}, but a Definitions Package of scope ${scope} publishes as ${name}`,
-    );
-  }
-  const uninstallable = uninstallableDependencyOf(source);
+  const manifest = {
+    ...source,
+    version: published.version,
+    ...publishConfigWithoutTagOf(source['publishConfig']),
+    ...filesWithSnapshotOf(source['files']),
+    peerDependencies: peerRanges,
+    cfLoom: cfLoomOf(published),
+  };
+  const uninstallable = uninstallableDependencyOf(manifest);
   if (uninstallable !== undefined) {
     const { field, name: dependency, range } = uninstallable;
     const lists = `package.json lists ${dependency} in ${field} as ${range}`;
     return unpublishable(`${lists}, which npm cannot install from the registry`);
   }
-  const manifest = {
-    ...source,
-    version: published.version,
-    ...filesWithSnapshotOf(source['files']),
-    peerDependencies: peerRangesOf(peers),
-    cfLoom: cfLoomOf(published),
-  };
   return { kind: 'manifest', file: manifestFileOf(manifest) };
+}
+
+/**
+ * The peers a Definitions Package is published with: those its package.json lists, `zod` and
+ * `@cf-loom/contract` set to the ranges the CLI declares. The manifest writes them and the version
+ * derivation compares them with the Baseline's, so the two never differ.
+ */
+export function publishedPeersOf(
+  source: Readonly<Record<string, unknown>>,
+  ranges: PeerRanges,
+): PeerRanges {
+  const listed = source['peerDependencies'];
+  const isMap = typeof listed === 'object' && listed !== null && !Array.isArray(listed);
+  const entries = isMap ? Object.entries(listed) : [];
+  const listedRanges = entries.filter(
+    (entry): entry is [string, string] => typeof entry[1] === 'string',
+  );
+  return { ...Object.fromEntries(listedRanges), ...ranges };
 }
 
 function unpublishable(line: string): DefinitionsManifest {
   return { kind: 'unpublishable', line };
+}
+
+/** The `publishConfig` field without its `tag`, which npm reads over the dist-tag `publish` chooses; a field that is no map stays as it is. */
+function publishConfigWithoutTagOf(publishConfig: unknown): { readonly publishConfig?: unknown } {
+  if (typeof publishConfig !== 'object' || publishConfig === null || Array.isArray(publishConfig)) {
+    return {};
+  }
+  const kept = Object.entries(publishConfig).filter(([name]) => name !== 'tag');
+  return { publishConfig: Object.fromEntries(kept) };
 }
 
 /** The `files` field with `snapshot.json` listed, if the package lists its files; one that lists none packs everything. */

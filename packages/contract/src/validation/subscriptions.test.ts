@@ -1,15 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { summarized } from '../../test/failures.ts';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineCommand,
   defineEvent,
+  defineGroup,
+  defineService,
   defineSubscription,
   type Event,
+  providedEvent,
   type Subscription,
 } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { validateRoot } from '../internal/index.ts';
 
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
@@ -19,7 +22,7 @@ const orderCreatedV1 = defineEvent({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
@@ -27,7 +30,7 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const paymentFailedV1 = defineEvent({
+const paymentFailedV1 = providedEvent('payments-service', {
   name: 'PaymentFailed',
   version: 1,
   visibility: 'internal',
@@ -35,142 +38,267 @@ const paymentFailedV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: {},
-  events: { paymentSettledV1, paymentFailedV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
-
-const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });
-
 /** A Subscription the types refuse, as a cast lets an author write it. */
 function aSubscription(name: string, event: unknown): Subscription {
-  return defineSubscription({ name, event } as unknown as Parameters<typeof defineSubscription>[0]);
+  const declaration = { name, description: 'Receives it', event };
+  return defineSubscription(declaration as unknown as Parameters<typeof defineSubscription>[0]);
 }
 
 function validateSubscriptions(
   subscriptions: readonly Subscription[],
   events: readonly Event[] = [orderCreatedV1],
 ) {
-  const contract = defineContract({
-    name: 'orders-service',
+  const ordersGroup = defineGroup({
+    name: 'orders',
+    description: 'Orders',
     events,
     subscriptions,
-    dependencies: [paymentsDeps],
-  });
-  return validateContract(contract, {
-    originOf: () => undefined,
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  } as unknown as Parameters<typeof defineGroup>[0]);
+  const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
+  return summarized(
+    validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' })),
+  );
 }
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Receives it',
+  event: paymentSettledV1,
+});
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-describe('validateContract: Subscriptions', () => {
+describe('validateRoot: Subscriptions', () => {
   test('a Subscription to the Service’s own Event validates', () => {
-    const audit = defineSubscription({ name: 'audit-orders', event: orderCreatedV1 });
+    const audit = defineSubscription({
+      name: 'auditOrders',
+      description: 'Receives it',
+      event: orderCreatedV1,
+    });
 
     const result = validateSubscriptions([notifyOnSettled, audit]);
 
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event listed in a Dependency validates', () => {
-    const result = validateSubscriptions([notifyOnSettled]);
+  test('a Subscription to an Event another Service’s Contract Package exports validates, with no Dependency', () => {
+    const onFailed = defineSubscription({
+      name: 'onFailed',
+      description: 'Receives it',
+      event: paymentFailedV1,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onFailed]);
 
     expect(result.kind).toBe('valid');
   });
 
-  test('a Subscription to an Event the root does not list fails', () => {
-    const audit = defineSubscription({ name: 'audit-orders', event: orderCreatedV1 });
+  test('a Subscription to an Event the Root does not list fails', () => {
+    const audit = defineSubscription({
+      name: 'auditOrders',
+      description: 'Receives it',
+      event: orderCreatedV1,
+    });
 
     const result = validateSubscriptions([notifyOnSettled, audit], []);
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'audit-orders', 'event'],
+        'subscriptions.auditOrders event',
         'subscription-event',
-        "A Subscription's Event is the Service's own or one listed in a Dependency: OrderCreated@1",
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: OrderCreated@1",
       ),
     );
   });
 
-  test('a Subscription to a Provider’s Event its Dependency does not list fails', () => {
-    const onFailed = defineSubscription({ name: 'on-failed', event: paymentFailedV1 });
+  test('a Subscription to an Event no Group lists and no Provider marks fails', () => {
+    const shippedV1 = defineEvent({
+      name: 'Shipped',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was shipped',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const onShipped = defineSubscription({
+      name: 'onShipped',
+      description: 'Receives it',
+      event: shippedV1,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onShipped]);
+
+    expect(result).toEqual(
+      failed(
+        'subscriptions.onShipped event',
+        'subscription-event',
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: Shipped@1",
+      ),
+    );
+  });
+
+  test('an Event declared apart with a Provider’s name and version is not the one it exports', () => {
+    const lookalike = defineEvent({
+      name: 'PaymentFailed',
+      version: 1,
+      visibility: 'internal',
+      description: 'A payment failed',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const onFailed = defineSubscription({
+      name: 'onFailed',
+      description: 'Receives it',
+      event: lookalike,
+    });
 
     const result = validateSubscriptions([notifyOnSettled, onFailed]);
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'on-failed', 'event'],
+        'subscriptions.onFailed event',
         'subscription-event',
-        "A Subscription's Event is the Service's own or one listed in a Dependency: PaymentFailed@1",
+        "A Subscription's Event is the Service's own or one another Service's Contract Package exports: PaymentFailed@1",
+      ),
+    );
+  });
+
+  test('a Subscription to a Provider’s Private Event fails', () => {
+    const privateEvent = providedEvent('payments-service', {
+      name: 'PaymentRefunded',
+      version: 1,
+      visibility: 'private',
+      description: 'A payment was refunded',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const onRefunded = defineSubscription({
+      name: 'onRefunded',
+      description: 'Receives it',
+      event: privateEvent,
+    });
+
+    const result = validateSubscriptions([notifyOnSettled, onRefunded]);
+
+    expect(result).toEqual(
+      failed(
+        'subscriptions.onRefunded event',
+        'subscription-event',
+        "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
+      ),
+    );
+  });
+
+  test('a Subscription to a Provider’s Private Event fails even when the Provider bears the Service’s own name', () => {
+    const privateEvent = providedEvent('orders-service', {
+      name: 'PaymentRefunded',
+      version: 1,
+      visibility: 'private',
+      description: 'A payment was refunded',
+      body: z.object({ paymentId: z.uuid() }),
+    });
+    const onRefunded = defineSubscription({
+      name: 'onRefunded',
+      description: 'Receives it',
+      event: privateEvent,
+    });
+
+    const result = validateSubscriptions([onRefunded]);
+
+    expect(result).toEqual(
+      failed(
+        'subscriptions.onRefunded event',
+        'subscription-event',
+        "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
       ),
     );
   });
 
   test('a Subscription whose event is not an Event fails', () => {
-    const notAnEvent = aSubscription('on-something', { name: 'OrderCreated', version: 1 });
+    const notAnEvent = aSubscription('onSomething', { name: 'OrderCreated', version: 1 });
 
     const result = validateSubscriptions([notifyOnSettled, notAnEvent]);
 
     expect(result).toEqual(
+      failed('subscriptions.onSomething event', 'not-a-declaration', 'event is not an Event'),
+    );
+  });
+
+  test("a Subscription whose event is a Command fails, saying a Command's Message Version has its own Message Handler", () => {
+    const chargeCardV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const subscribedToCommand = aSubscription('onCharge', chargeCardV1);
+
+    const result = validateSubscriptions([notifyOnSettled, subscribedToCommand]);
+
+    expect(result).toEqual(
       failed(
-        ['subscriptions', 'on-something', 'event'],
+        'subscriptions.onCharge event',
         'not-a-declaration',
-        'event is not an Event',
+        "A Subscription receives an Event; a Command's Message Version has its own Message Handler",
       ),
     );
   });
 
-  test('a Subscription name that is not kebab-case fails', () => {
-    const named = defineSubscription({ name: 'NotifyOnSettled', event: paymentSettledV1 });
+  test('a kebab-case Subscription name fails the camelCase grammar', () => {
+    const named = defineSubscription({
+      name: 'charge-on-created',
+      description: 'Charges the card for each order created',
+      event: paymentSettledV1,
+    });
 
     const result = validateSubscriptions([named]);
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'NotifyOnSettled', 'name'],
+        'subscriptions.charge-on-created name',
         'name-grammar',
-        'A Subscription name is kebab-case from a letter: NotifyOnSettled',
+        'A Subscription name is camelCase words: "charge-on-created"',
       ),
     );
   });
 
   test.each([
-    ['1st-audit', 'A Subscription name is kebab-case from a letter: 1st-audit'],
-    ['delete', 'A Subscription name is kebab-case from a letter and no reserved word: delete'],
-    ['handle', 'A Subscription name is kebab-case from a letter and no reserved word: handle'],
+    ['NotifyOnSettled', 'A Subscription name is camelCase words: "NotifyOnSettled"'],
+    ['1stAudit', 'A Subscription name is camelCase words: "1stAudit"'],
+    ['delete', 'A Subscription name is camelCase words and no reserved word: "delete"'],
+    ['handle', 'A Subscription name is camelCase words and no reserved word: "handle"'],
+    ['then', 'A Subscription name is camelCase words and no reserved word: "then"'],
+    [
+      'toJSON',
+      'A Subscription name is camelCase words and no reserved word: "toJSON" (write toJson)',
+    ],
+    ['notifyOnURL', 'A Subscription name is camelCase words: "notifyOnURL" (write notifyOnUrl)'],
+    ['notifyOnX', 'A Subscription name is camelCase words: "notifyOnX"'],
   ])('a Subscription name %s, which code cannot name, fails the name grammar', (name, message) => {
-    const named = defineSubscription({ name, event: paymentSettledV1 });
+    const named = defineSubscription({
+      name,
+      description: 'Receives it',
+      event: paymentSettledV1,
+    });
 
     const result = validateSubscriptions([named]);
 
-    expect(result).toEqual(failed(['subscriptions', name, 'name'], 'name-grammar', message));
+    expect(result).toEqual(failed(`subscriptions.${name} name`, 'name-grammar', message));
   });
 
   test('two Subscriptions with one name fail', () => {
-    const again = defineSubscription({ name: 'notify-on-settled', event: orderCreatedV1 });
+    const again = defineSubscription({
+      name: 'notifyOnSettled',
+      description: 'Receives it',
+      event: orderCreatedV1,
+    });
 
     const result = validateSubscriptions([notifyOnSettled, again]);
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'notify-on-settled', 'name'],
+        'subscriptions.notifyOnSettled name',
         'duplicate-subscription-name',
-        'A Subscription name is unique in the Service: notify-on-settled',
+        'A Subscription name is unique in the Service: "notifyOnSettled"',
       ),
     );
   });
@@ -184,13 +312,13 @@ describe('validateContract: Subscriptions', () => {
       lifecycle: 'retired',
       body: z.object({ orderId: z.uuid() }),
     });
-    const audit = aSubscription('audit-orders', retiredV1);
+    const audit = aSubscription('auditOrders', retiredV1);
 
     const result = validateSubscriptions([notifyOnSettled, audit], [retiredV1]);
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'audit-orders', 'event'],
+        'subscriptions.auditOrders event',
         'retired-event-subscribed',
         "A Subscription's Event is not Retired: OrderCreated@1",
       ),
@@ -207,7 +335,11 @@ describe('validateContract: Subscriptions', () => {
       body: z.object({ orderId: z.uuid() }),
     } as const;
     Object.defineProperty(copied, Symbol.for('@cf-loom/contract.declaration'), { value: true });
-    const onShipped = defineSubscription({ name: 'on-shipped', event: copied });
+    const onShipped = defineSubscription({
+      name: 'onShipped',
+      description: 'Receives it',
+      event: copied,
+    });
 
     const result = validateSubscriptions([notifyOnSettled, onShipped], [copied]);
 
@@ -215,21 +347,39 @@ describe('validateContract: Subscriptions', () => {
   });
 
   test('a Subscription without an event fails as a required field', () => {
-    const withoutEvent = aSubscription('on-nothing', undefined);
+    const withoutEvent = aSubscription('onNothing', undefined);
 
     const result = validateSubscriptions([notifyOnSettled, withoutEvent]);
 
     expect(result).toEqual(
+      failed('subscriptions.onNothing event', 'required-field', 'event is a required field'),
+    );
+  });
+
+  test('a Subscription without a description fails as a required string', () => {
+    const declaration = { name: 'onNothing', event: orderCreatedV1 };
+    const withoutDescription = defineSubscription(
+      declaration as unknown as Parameters<typeof defineSubscription>[0],
+    );
+
+    const result = validateSubscriptions([notifyOnSettled, withoutDescription]);
+
+    expect(result).toEqual(
       failed(
-        ['subscriptions', 'on-nothing', 'event'],
+        'subscriptions.onNothing description',
         'required-field',
-        'event is a required field',
+        'description is a required string',
       ),
     );
   });
 
   test('an undeclared field on a Subscription fails', () => {
-    const declaration = { name: 'on-created', event: orderCreatedV1, filter: 'eu' };
+    const declaration = {
+      name: 'onCreated',
+      description: 'Receives it',
+      event: orderCreatedV1,
+      filter: 'eu',
+    };
     const filtered = defineSubscription(
       declaration as unknown as Parameters<typeof defineSubscription>[0],
     );
@@ -238,7 +388,7 @@ describe('validateContract: Subscriptions', () => {
 
     expect(result).toEqual(
       failed(
-        ['subscriptions', 'on-created', 'filter'],
+        'subscriptions.onCreated filter',
         'undeclared-field',
         'filter is not a declared field',
       ),

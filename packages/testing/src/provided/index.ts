@@ -1,4 +1,4 @@
-export type { Matched } from './matched.ts';
+export type { ListedMatch, Matched } from './matched.ts';
 export { matchedOf } from './matched.ts';
-export type { ListedEndpoint, Provided } from './provided.ts';
-export { providedOf, whoOf } from './provided.ts';
+export type { FakedProvider, ListedEndpoint } from './provided.ts';
+export { fakedProviderOf, whoOf } from './provided.ts';

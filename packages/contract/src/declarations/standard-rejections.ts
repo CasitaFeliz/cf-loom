@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import type * as core from 'zod/v4/core';
+import { openEnum } from '../open/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { RejectionStatus } from './http.ts';
+import { notImplementedStatus, type RejectionStatus } from './http.ts';
 
 /** The three Standard Rejections by name, as values, so the runtime resolves each. */
 export const standardRejectionNames = ['invalidInput', 'notFound', 'notImplemented'] as const;
@@ -14,7 +16,7 @@ export const addedStandardRejectionNames = ['invalidInput', 'notImplemented'] as
 /** The Standard Rejections cf-loom's runtime adds to every Endpoint, so none lists them. */
 export type AddedStandardRejectionName = (typeof addedStandardRejectionNames)[number];
 
-/** A Rejection whose code, status and message the root resolves; no Contract declares one. */
+/** A Rejection whose code, status and message the Root resolves; no Contract declares one. */
 export type StandardRejection<Name extends StandardRejectionName = StandardRejectionName> =
   Name extends StandardRejectionName
     ? { readonly kind: 'standard-rejection'; readonly name: Name }
@@ -33,7 +35,7 @@ export const notFound: StandardRejection<'notFound'> = freezeDeclaration('standa
   name: 'notFound',
 });
 
-/** The Rejection cf-loom's runtime answers for a Handler that is still a stub. */
+/** The Rejection cf-loom's runtime answers for a Handler that is still a Stub. */
 export const notImplemented: StandardRejection<'notImplemented'> = freezeDeclaration(
   'standard-rejection',
   {
@@ -52,20 +54,32 @@ export type StandardRejectionDeclaration<Status extends number = RejectionStatus
 export type StandardRejectionDeclarations = {
   readonly invalidInput?: StandardRejectionDeclaration<RejectionStatus>;
   readonly notFound?: StandardRejectionDeclaration<RejectionStatus>;
-  readonly notImplemented?: StandardRejectionDeclaration<501>;
+  readonly notImplemented?: StandardRejectionDeclaration<typeof notImplementedStatus>;
 };
 
-/** Every Standard Rejection resolved, as a Contract Package carries them for its Callers. */
+/** Every Standard Rejection resolved: its code, status and message. */
 export type StandardRejections = Required<StandardRejectionDeclarations>;
+
+/**
+ * Every Standard Rejection as a Contract Package carries it for its Callers: resolved, and the
+ * invalid-input one with the Reader schema of its body, generated from the Provider's Snapshot.
+ */
+export type ProvidedStandardRejections = StandardRejections & {
+  readonly invalidInput: StandardRejectionDeclaration & { readonly body: core.$ZodType };
+};
 
 /** cf-loom's own code, status and message of each Standard Rejection, where no Definitions Package declares one. */
 export const standardRejectionDefaults: StandardRejections = {
   invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
   notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
+  notImplemented: {
+    code: 'NOT_IMPLEMENTED',
+    status: notImplementedStatus,
+    message: 'Not implemented',
+  },
 };
 
-/** What an issue of invalid Input says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue of invalid Input says went wrong: a set cf-loom owns, never zod's codes. */
 export const issueCodes = [
   'required',
   'invalid_type',
@@ -78,7 +92,7 @@ export const issueCodes = [
   'malformed',
 ] as const;
 
-/** What an issue says went wrong: a closed set cf-loom owns, never zod's codes. */
+/** What an issue says went wrong: a code of the set cf-loom owns, never zod's. */
 export type IssueCode = (typeof issueCodes)[number];
 
 /** The parts of a request an issue of invalid Input may sit in, as values. */
@@ -91,9 +105,9 @@ export const inputIns = ['params', 'query', 'headers', 'body'] as const;
 export const invalidInputBody = z.object({
   issues: z.array(
     z.object({
-      in: z.enum(inputIns),
+      in: openEnum(inputIns),
       path: z.array(z.union([z.string(), z.number()])),
-      code: z.enum(issueCodes),
+      code: openEnum(issueCodes),
       message: z.string(),
     }),
   ),

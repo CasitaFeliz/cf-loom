@@ -4,6 +4,7 @@ import {
   defineEndpoint,
   defineGuard,
   defineRejection,
+  defineService,
   invalidInput,
   notFound,
   notImplemented,
@@ -12,9 +13,10 @@ import {
   answerableByCodeOf,
   answerableRejectionsOf,
   contextProvidersOf,
+  declaredByCodeOf,
   resolutionOf,
   schemaOf,
-  standardRejectionDefaults,
+  standardRejectionsOf,
 } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
@@ -22,6 +24,10 @@ const unauthenticated = defineRejection({
   status: 401,
   message: 'Unauthenticated',
 });
+const standardRejectionDefaults = standardRejectionsOf(
+  defineService({ name: 'orders-service', groups: [] }),
+);
+
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 
 const apiKey = defineGuard({
@@ -104,6 +110,49 @@ describe('answerableByCodeOf', () => {
   });
 });
 
+describe('declaredByCodeOf', () => {
+  test('every Standard Rejection and every Rejection the Endpoints answer are found by resolved code', () => {
+    const standards = {
+      ...standardRejectionDefaults,
+      notFound: { code: 'NO_ORDER', status: 404, message: 'No order' } as const,
+    };
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders/all',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+
+    const byCode = declaredByCodeOf([listOrders, getOrder], standards);
+
+    expect([...byCode.keys()].sort()).toEqual([
+      'FORBIDDEN',
+      'INVALID_INPUT',
+      'NOT_IMPLEMENTED',
+      'NO_ORDER',
+      'UNAUTH',
+    ]);
+    expect(byCode.get('NO_ORDER')).toBe(notFound);
+  });
+
+  test('the Standard not-found code is found though no Endpoint lists it', () => {
+    const listOrders = defineEndpoint({
+      name: 'listOrders',
+      method: 'GET',
+      path: '/orders/all',
+      visibility: 'public',
+      description: 'Every order',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+
+    const byCode = declaredByCodeOf([listOrders], standardRejectionDefaults);
+
+    expect(byCode.get('NOT_FOUND')).toBe(notFound);
+  });
+});
+
 describe('resolutionOf', () => {
   test('a declared Rejection resolves to its own code, status and message', () => {
     const resolution = resolutionOf(forbidden, standardRejectionDefaults);
@@ -111,7 +160,7 @@ describe('resolutionOf', () => {
     expect(resolution).toEqual({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
   });
 
-  test('a Standard Rejection resolves to the code, status and message the root resolved', () => {
+  test('a Standard Rejection resolves to the code, status and message the Root resolved', () => {
     const standards = {
       ...standardRejectionDefaults,
       notFound: { code: 'MISSING', status: 404, message: 'Missing' },

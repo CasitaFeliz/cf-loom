@@ -1,3 +1,5 @@
+export type { Http } from '@cf-loom/contract';
+export { abortableOf } from './abortable.ts';
 export { client } from './client.ts';
 export type {
   CallInput,
@@ -6,6 +8,5 @@ export type {
   ClientOptions,
   ConfiguredName,
   DeprecationNotice,
-  Fetch,
   OnDeprecation,
 } from './client-types.ts';

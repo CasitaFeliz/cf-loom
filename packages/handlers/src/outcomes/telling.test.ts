@@ -58,34 +58,29 @@ describe('isRejectionOf', () => {
   });
 });
 
-describe('a resolved Rejection’s code', () => {
-  test('a declared Rejection’s code, status and message are typed as written', async () => {
+describe('a declared Rejection’s code', () => {
+  test('isRejectionOf narrows to the declaration, its code, status and message typed as written', async () => {
     const updateOrderHandler = handle(updateOrder, () => reject(outOfStock, { sku: 'a-1' }));
 
     const outcome = await updateOrderHandler(input, {});
 
-    expect(isRejectionOf(outcome, outOfStock) && outcome.code).toBe('OUT_OF_STOCK');
+    expect(isRejectionOf(outcome, outOfStock) && outcome.rejection.code).toBe('OUT_OF_STOCK');
     if (isRejectionOf(outcome, outOfStock)) {
-      expectTypeOf(outcome.code).toEqualTypeOf<'OUT_OF_STOCK'>();
-      expectTypeOf(outcome.status).toEqualTypeOf<422>();
-      expectTypeOf(outcome.message).toEqualTypeOf<'Not enough stock'>();
-    }
-    if (isRejectionOf(outcome, notFound)) {
-      expectTypeOf(outcome.code).toEqualTypeOf<string>();
+      expectTypeOf(outcome.rejection.code).toEqualTypeOf<'OUT_OF_STOCK'>();
+      expectTypeOf(outcome.rejection.status).toEqualTypeOf<422>();
+      expectTypeOf(outcome.rejection.message).toEqualTypeOf<'Not enough stock'>();
     }
   });
 
-  test('comparing the code leaves out the other declared Rejections', async () => {
+  test('isRejectionOf leaves out the other declared Rejections', async () => {
     const updateOrderHandler = handle(updateOrder, () => reject(orderLocked, { lockedAt }));
 
     const outcome = await updateOrderHandler(input, {});
 
-    expect(outcome.kind === 'rejection' && outcome.code).toBe('ORDER_LOCKED');
-    if (outcome.kind === 'rejection' && outcome.code === 'ORDER_LOCKED') {
+    expect(isRejectionOf(outcome, orderLocked) && outcome.rejection.code).toBe('ORDER_LOCKED');
+    if (isRejectionOf(outcome, orderLocked)) {
       expectTypeOf(outcome.rejection).not.toEqualTypeOf<typeof outOfStock>();
-      expectTypeOf<Extract<typeof outcome, { readonly body: unknown }>['body']>().toEqualTypeOf<{
-        lockedAt: string;
-      }>();
+      expectTypeOf(outcome.body).toEqualTypeOf<{ lockedAt: string }>();
     }
   });
 });

@@ -1,0 +1,21 @@
+import { z } from 'zod';
+import { lifecycles } from '../declarations/index.ts';
+import type { ExportedCut, ShadowingSnapshot } from '../snapshot/index.ts';
+import { exportedEndpoint } from './elements.ts';
+import { byEndpointIdentity, byKey } from './maps.ts';
+import { code, def, guard } from './structure.ts';
+
+/** Format 1's entry of a declared Endpoint the package does not export: its lifecycle alone. */
+const shadowingEntry: z.ZodType<ShadowingSnapshot> = z.strictObject({
+  lifecycle: z.enum(lifecycles),
+});
+
+/** Format 1's structure of the exported Snapshot cut an Endpoint carries, every key and value closed. */
+export const exportedCut: z.ZodType<ExportedCut> = z.strictObject({
+  format: z.literal(1),
+  defs: byKey(def),
+  endpoints: byEndpointIdentity(exportedEndpoint),
+  guards: byKey(guard),
+  codes: byKey(code),
+  shadowing: byEndpointIdentity(shadowingEntry),
+});

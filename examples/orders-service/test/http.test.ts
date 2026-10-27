@@ -1,9 +1,9 @@
 import { admit, handle } from '@cf-loom/handlers';
-import { type Messaging, messaging } from '@cf-loom/messaging';
+import type { ConsumedFault, Messaging, MessagingOptions } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
-import { type Http, serve } from '@cf-loom/server';
+import { type Http, type ServedFault, serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, expectTypeOf, test } from 'vitest';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
 import type { Resources } from '../src/resources.ts';
@@ -16,7 +16,7 @@ let resources: Resources;
 let http: Http;
 
 beforeAll(async () => {
-  running = await messaging(contract, memory());
+  running = await memory(contract);
   resources = { publisher: running.publisher, sender: running.sender };
   http = serve(contract, handlers, { resources, onServiceFault: () => undefined });
 });
@@ -65,6 +65,14 @@ describe('serve', () => {
     expect(await response.json()).toEqual({
       rejection: { code: 'UNAUTHENTICATED', message: 'The API key is missing or unknown' },
     });
+  });
+
+  test('the 401 carries the www-authenticate header @org/definitions’ UNAUTHENTICATED declares', async () => {
+    const request = aRequest(`/orders/${PAID_ORDER_ID}`);
+
+    const response = await http(request);
+
+    expect(response.headers.get('www-authenticate')).toBe('ApiKey realm="orders-service"');
   });
 
   test('an unknown key is answered UNAUTHENTICATED', async () => {
@@ -135,5 +143,18 @@ describe('serve', () => {
 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ fault: { code: 'NO_SUCH_ENDPOINT' } });
+  });
+});
+
+describe('onServiceFault', () => {
+  test('one async hook for ServedFault and ConsumedFault is accepted by both serve and messaging', () => {
+    const onServiceFault = async (fault: ServedFault | ConsumedFault): Promise<void> => {
+      expectTypeOf(fault.name).toEqualTypeOf<string>();
+    };
+
+    const served = serve(contract, handlers, { resources, onServiceFault });
+
+    expectTypeOf(onServiceFault).toExtend<NonNullable<MessagingOptions['onServiceFault']>>();
+    expect(typeof served).toBe('function');
   });
 });

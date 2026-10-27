@@ -1,17 +1,18 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
 import { isEndpoint, isGuard } from '@cf-loom/contract/internal';
 import {
-  type HandledElement,
-  isMessageElement,
+  type Handled,
+  isMessageHandled,
   type MessageWritten,
+  type Pairing,
   type Written,
 } from '../calls/index.ts';
 
 /** What any Handler was written with: an Endpoint's, a Guard's, or a Message Handler's with its Reader. */
 export type AnyWritten = Written<Endpoint> | Written<Guard> | MessageWritten;
 
-/** A Handler as the runtime takes it: by the Element it was written for, whatever its signature. */
-export type AnyHandler = { readonly element: HandledElement };
+/** A Handler as the runtime takes it: by the declaration it was written for, whatever its signature. */
+export type AnyHandler = { readonly declaration: Handled };
 
 const writtenByHandler = new WeakMap<object, AnyWritten>();
 
@@ -27,38 +28,44 @@ export function writtenOf<Kind extends AnyWritten>(
 ): Kind {
   const written = writtenByHandler.get(handler);
   if (written === undefined || !isKind(written)) {
-    throw new Error(`Not a Handler returned by handle(): ${String(handler.element?.name)}`);
+    throw new Error(`Not a Handler returned by handle(): ${String(handler.declaration?.name)}`);
   }
   return written;
 }
 
-/** Whether a value is a Handler `handle()` returned for this very Endpoint, Guard, Command or Subscription. */
-export function isWrittenFor<Element extends HandledElement>(
-  handler: unknown,
-  element: Element,
-): handler is { readonly element: Element } {
+/** What a value was written for, when `handle()` returned it; none for any other value. */
+export function writtenDeclarationOf(handler: unknown): Handled | undefined {
+  if (typeof handler !== 'function') {
+    return undefined;
+  }
+  return writtenByHandler.get(handler)?.declaration;
+}
+
+/** Whether a value is a Message Handler `handle()` returned for this very pairing, the one object the readers file exports. */
+export function isWrittenForPairing(handler: unknown, pairing: Pairing): boolean {
   if (typeof handler !== 'function') {
     return false;
   }
-  return writtenByHandler.get(handler)?.element === element;
+  const written = writtenByHandler.get(handler);
+  return written !== undefined && isMessageWritten(written) && written.pairing === pairing;
 }
 
 /** Whether a Handler was written for an Endpoint. */
 export function isEndpointWritten(written: AnyWritten): written is Written<Endpoint> {
-  return isEndpoint(written.element);
+  return isEndpoint(written.declaration);
 }
 
 /** Whether a Handler was written for a Guard. */
 export function isGuardWritten(written: AnyWritten): written is Written<Guard> {
-  return isGuard(written.element);
+  return isGuard(written.declaration);
 }
 
 /** Whether a Handler was written for a Command or a Subscription: a Message Handler. */
 export function isMessageWritten(written: AnyWritten): written is MessageWritten {
-  return isMessageElement(written.element);
+  return isMessageHandled(written.declaration);
 }
 
-/** Whether a Handler was written for any Element. */
+/** Whether a Handler was written for any declaration. */
 export function isAnyWritten(written: AnyWritten): written is AnyWritten {
   return isEndpointWritten(written) || isGuardWritten(written) || isMessageWritten(written);
 }

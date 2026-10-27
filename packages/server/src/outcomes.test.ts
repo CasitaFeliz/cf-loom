@@ -1,9 +1,9 @@
 import {
-  defineContract,
   defineDefinitions,
   defineEndpoint,
   defineGroup,
   defineRejection,
+  defineService,
   notFound,
 } from '@cf-loom/contract';
 import {
@@ -51,32 +51,31 @@ const updateOrder = defineEndpoint({
   success: { status: 204 },
 });
 
-const headOrder = defineEndpoint({
-  name: 'headOrder',
-  method: 'HEAD',
-  path: '/orders/:orderId',
+const orderTotal = defineEndpoint({
+  name: 'orderTotal',
+  method: 'GET',
+  path: '/orders/:orderId/total',
   visibility: 'public',
-  description: 'Whether an order exists',
+  description: 'The total of an order, in a header',
   input: { params: z.object({ orderId: z.string() }) },
-  success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
+  success: { status: 204, headers: z.object({ 'x-total': z.int() }) },
 });
 
 const definitions = defineDefinitions({
-  name: 'definitions',
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
     notFound: { code: 'MISSING', status: 404, message: 'Nothing here' },
   },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  definitions: [definitions],
+  standardRejections: definitions,
   groups: [
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [getOrder, updateOrder, headOrder],
+      endpoints: [getOrder, updateOrder, orderTotal],
     }),
   ],
 });
@@ -92,12 +91,15 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
       endpoints: {
         getOrder: handle(getOrder, implementation),
         updateOrder: handle(updateOrder, () => success()),
-        headOrder: handle(headOrder, () => success({ headers: { 'x-total': 3 } })),
+        orderTotal: handle(orderTotal, () => success({ headers: { 'x-total': 3 } })),
       },
       guards: {},
-      deprecatedAt: {},
     },
-    { onServiceFault: (serviceFault) => faults.push(serviceFault) },
+    {
+      onServiceFault: (serviceFault) => {
+        faults.push(serviceFault);
+      },
+    },
   );
   return { http, faults };
 }
@@ -169,7 +171,8 @@ describe('serve: a Success', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         issues: [
           {
             part: 'success.headers',
@@ -192,12 +195,12 @@ describe('serve: a Success', () => {
     expect(await response.text()).toBe('');
   });
 
-  test('a HEAD Endpoint’s Success sends its status and headers only', async () => {
+  test('a headers-only Success sends its status and headers only', async () => {
     const { http } = serveWith(() => reject(notFound));
 
-    const response = await http(new Request('http://test/orders/o-1', { method: 'HEAD' }));
+    const response = await http(new Request('http://test/orders/o-1/total'));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(204);
     expect(response.headers.get('x-total')).toBe('3');
     expect(response.headers.get('content-type')).toBeNull();
     expect(await response.text()).toBe('');
@@ -234,7 +237,9 @@ describe('a direct call and serve agree', () => {
       const response = await http(getRequest.clone());
 
       expect(response.status).toBe(500);
-      expect(faults).toEqual([{ kind: 'invalid-outcome', endpoint: 'getOrder', issues: thrown }]);
+      expect(faults).toEqual([
+        { kind: 'invalid-outcome', declaration: getOrder, name: 'getOrder', issues: thrown },
+      ]);
     },
   );
 
@@ -268,15 +273,18 @@ describe('serve: a Success body that is JSON null', () => {
       description: 'The note, if any',
       success: { status: 200, body: z.object({ text: z.string() }).nullable() },
     });
-    const withNote = defineContract({
+    const withNote = defineService({
       name: 'notes-service',
       groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [findNote] })],
     });
-    const http = serve(withNote, {
-      endpoints: { findNote: handle(findNote, () => success(null)) },
-      guards: {},
-      deprecatedAt: {},
-    });
+    const http = serve(
+      withNote,
+      {
+        endpoints: { findNote: handle(findNote, () => success(null)) },
+        guards: {},
+      },
+      {},
+    );
 
     const response = await http(new Request('http://test/note'));
 
@@ -302,7 +310,7 @@ describe('serve: a Rejection', () => {
     });
   });
 
-  test('a Standard Rejection resolves to the listed Definitions Package’s code, status and message, with no body key', async () => {
+  test('a Standard Rejection resolves to the code, status and message of the Definitions Package named as standardRejections, with no body key', async () => {
     const { http } = serveWith(() => reject(notFound));
 
     const response = await http(getRequest.clone());
@@ -313,7 +321,7 @@ describe('serve: a Rejection', () => {
     });
   });
 
-  test('the invalid-input Rejection is the root’s, its issues with no received value', async () => {
+  test('the invalid-input Rejection is the Root’s, its issues with no received value', async () => {
     const { http } = serveWith(() =>
       success({ headers: { 'x-total': 3, etag: 'v1' }, body: order }),
     );
@@ -336,6 +344,38 @@ describe('serve: a Rejection', () => {
 });
 
 describe('serve: a Fault', () => {
+  test('a retryable Fault with retryAfter is sent with retry-after, and one without it with none', async () => {
+    const later = serveWith(() => fault({ committed: 'no', retryable: true, retryAfter: 5 }));
+    const now = serveWith(() => fault({ committed: 'no', retryable: true }));
+
+    const responses = [await later.http(getRequest.clone()), await now.http(getRequest.clone())];
+
+    expect(responses.map(({ status }) => status)).toEqual([503, 503]);
+    expect(responses.map(({ headers }) => headers.get('retry-after'))).toEqual(['5', null]);
+  });
+
+  test.each([
+    ['a negative one', { retryable: true, retryAfter: -1 }],
+    ['one that is no number', { retryable: true, retryAfter: 'a\nb' as never }],
+    ['one on a Fault that is not retryable', { retryable: false, retryAfter: 5 }],
+  ])(
+    'a Fault built by hand with %s as retryAfter is INVALID_OUTCOME, with no retry-after',
+    async (_, built) => {
+      const { http, faults } = serveWith(
+        () => ({ kind: 'fault', committed: 'no', message: 'Down', ...built }) as never,
+      );
+
+      const response = await http(getRequest.clone());
+
+      expect(response.status).toBe(500);
+      expect(response.headers.get('retry-after')).toBeNull();
+      expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+      expect(faults).toMatchObject([
+        { kind: 'invalid-outcome', issues: [{ part: 'fault', path: ['retryAfter'] }] },
+      ]);
+    },
+  );
+
   test('a Fault the Handler returns travels with 503 when retryable, its cause kept from the Caller', async () => {
     const cause = new Error('the database is down');
     const { http, faults } = serveWith(() =>
@@ -351,7 +391,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'returned',
-        endpoint: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Try again', cause },
       },
     ]);
@@ -399,7 +440,7 @@ describe('serve: a Fault', () => {
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', endpoint: 'getOrder', fault: { cause: broken } },
+      { kind: 'thrown', declaration: getOrder, name: 'getOrder', cause: broken },
     ]);
   });
 
@@ -409,7 +450,7 @@ describe('serve: a Fault', () => {
     const response = await http(getRequest.clone());
 
     expect(response.status).toBe(500);
-    expect(faults).toMatchObject([{ kind: 'thrown', fault: { cause: expect.any(TypeError) } }]);
+    expect(faults).toMatchObject([{ kind: 'thrown', cause: expect.any(TypeError) }]);
   });
 
   test('an Outcome that breaks a constraint is INVALID_OUTCOME, its issues to the Service only', async () => {
@@ -431,7 +472,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         issues: [
           { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
         ],

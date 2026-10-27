@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -8,6 +9,8 @@ import {
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Defs,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
@@ -18,11 +21,13 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  type RefNode,
   type SchemaNode,
   type ServiceSnapshot,
   type ShapeDifference,
   type Snapshot,
   type StringNode,
+  snapshotPathOf,
   type TaggedNode,
   walkSchemas,
 } from '../internal/index.ts';
@@ -35,39 +40,46 @@ const additive = 'additive';
 const neutral = 'neutral';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
+  groups: {},
   guards: {},
   codes: {},
   dependencies: {},
 } as const;
 const noDefs: Defs = {};
 const noBodies = {
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: {
+    params: null,
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
 } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'createOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Places an order',
     params: [],
     guards: [],
     rejections: [],
     ...noBodies,
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -79,11 +91,17 @@ function anEndpointReading(input: SchemaNode | null, success: SchemaNode | null)
 }
 
 function anEvent(body: SchemaNode): EventSnapshot {
-  return { visibility: 'internal', lifecycle: 'active', description: 'Placed', body };
+  return {
+    group: 'orders',
+    visibility: 'internal',
+    lifecycle: 'active',
+    description: 'Placed',
+    body,
+  };
 }
 
 function aCommand(body: SchemaNode): CommandSnapshot {
-  return { lifecycle: 'active', description: 'Charge a card', body };
+  return { group: 'orders', lifecycle: 'active', description: 'Charge a card', body };
 }
 
 function aLive<Element extends { readonly lifecycle: string }>(
@@ -96,6 +114,8 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
+    formerInputs: [],
     defs: noDefs,
     endpoints: {},
     events: {},
@@ -122,10 +142,9 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: noDefs,
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -135,16 +154,12 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
-const aString: SchemaNode = { type: 'string' };
+const aString: StringNode = { type: 'string' };
 const aNumber: SchemaNode = { type: 'number' };
 const aBoolean: SchemaNode = { type: 'boolean' };
-
-function aLiteral(value: Value): SchemaNode {
-  return { type: 'literal', value };
-}
 
 function aClosedEnum(...values: readonly Value[]): SchemaNode {
   return { type: 'enum', values, open: false };
@@ -163,11 +178,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
-}
-
-function aKeyedRecord(fields: Readonly<Record<string, Field>>): ObjectNode {
-  return { type: 'object', mode: 'strict', fields };
+  return { type: 'object', fields };
 }
 
 function aTagged(
@@ -176,7 +187,7 @@ function aTagged(
 ): TaggedNode {
   const entries = Object.entries(variants).map(([value, fields]) => [
     JSON.stringify(value),
-    anObject({ [discriminator]: required(aLiteral(value)), ...fields }),
+    anObject({ [discriminator]: required(aClosedEnum(value)), ...fields }),
   ]);
   return { type: 'tagged', discriminator, variants: Object.fromEntries(entries) };
 }
@@ -185,14 +196,15 @@ function aRef(name: string): SchemaNode {
   return { type: 'ref', name };
 }
 
-/** What a Breaking difference in a place is classed: an Approval, or not allowed for a Message Version. */
-type Breaking =
-  | { readonly class: 'breaking'; readonly approval: 'needed' }
-  | { readonly class: 'not-allowed' };
+/** What a Breaking difference in a place is judged: an Approval, or refused for a Message Version. */
+type Breaking = {
+  readonly class: 'breaking';
+  readonly verdict: 'approval-needed' | 'refused';
+};
 
 type Place = {
   readonly name: string;
-  readonly position: Position | 'every';
+  readonly position: Position;
   readonly site: ChangeSite;
   readonly root: Path;
   readonly breaking: Breaking;
@@ -204,9 +216,14 @@ type Place = {
 const input: Place = {
   name: 'Input',
   position: 'input',
-  site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
+  site: {
+    kind: 'endpoint',
+    identity: 'POST /orders',
+    name: 'createOrder',
+    visibility: 'public',
+  },
   root: ['input', 'body'],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 0,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(node, null)) } }),
@@ -216,9 +233,14 @@ const input: Place = {
 const success: Place = {
   name: 'Success',
   position: 'success',
-  site: { kind: 'endpoint', identity: 'POST /orders', visibility: 'public' },
+  site: {
+    kind: 'endpoint',
+    identity: 'POST /orders',
+    name: 'createOrder',
+    visibility: 'public',
+  },
   root: ['success', 'body'],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 1,
   baseline: (node, defs) =>
     aBaseline({ defs, endpoints: { 'POST /orders': aLive(anEndpointReading(null, node)) } }),
@@ -230,23 +252,22 @@ const message: Place = {
   position: 'message',
   site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
   root: ['body'],
-  breaking: { class: 'not-allowed' },
+  breaking: { class: 'breaking', verdict: 'refused' },
   column: 2,
   baseline: (node, defs) => aBaseline({ defs, events: { 'OrderPlaced@1': aLive(anEvent(node)) } }),
   proposed: (node, defs) => aProposed({ defs, events: { 'OrderPlaced@1': anEvent(node) } }),
 };
 const shared: Place = {
   name: 'a shared schema',
-  position: 'every',
-  site: { kind: 'shared-schema', name: 'money' },
+  position: 'message',
+  site: { kind: 'export', name: 'money', visibility: 'public' },
   root: [],
-  breaking: { class: 'breaking', approval: 'needed' },
+  breaking: { class: 'breaking', verdict: 'approval-needed' },
   column: 3,
-  baseline: (node, defs) => aBaselineDefinitions({ defs, schemas: { money: node } }),
-  proposed: (node, defs) => aDefinitions({ defs, schemas: { money: node } }),
+  baseline: (node, defs) => aBaselineDefinitions({ defs, exports: schemaExports({ money: node }) }),
+  proposed: (node, defs) => aDefinitions({ defs, exports: schemaExports({ money: node }) }),
 };
 const places = [input, success, message, shared];
-const readersOfInput = [input, shared];
 
 /** The classes of one difference in Input, Success, Message and a shared schema, in that order. */
 type Classes = readonly [Class, Class, Class, Class];
@@ -274,7 +295,20 @@ type Row = {
   readonly places?: readonly Place[];
 };
 
-function changeAt(place: Place, difference: Found): Change {
+/** A Change with the Snapshot's own path in place of its steps, as the rows below spell their paths. */
+type PathChange = Omit<Change, 'difference'> & { readonly difference: unknown };
+
+function snapshotPathsOf(changes: readonly Change[]): readonly PathChange[] {
+  return changes.map((change) => {
+    const { difference } = change;
+    if (!('at' in difference)) {
+      return change;
+    }
+    return { ...change, difference: { ...difference, at: snapshotPathOf(difference.at) } };
+  });
+}
+
+function changeAt(place: Place, difference: Found): PathChange {
   const shapeChange = {
     kind: 'schema',
     position: place.position,
@@ -284,14 +318,11 @@ function changeAt(place: Place, difference: Found): Change {
   const changeClass = difference.classes[place.column];
   return changeClass === 'breaking'
     ? { site: place.site, difference: shapeChange, ...place.breaking }
-    : { site: place.site, difference: shapeChange, class: changeClass };
+    : { site: place.site, difference: shapeChange, class: changeClass, verdict: 'allowed' };
 }
 
 function comparedOf(baseline: PublishedSnapshot, proposed: Snapshot): ComparedReport {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -303,8 +334,8 @@ function reportOf(place: Place, row: Pick<Row, 'from' | 'to' | 'fromDefs' | 'toD
 
 function outcomeOf(place: Place, difference: Found): string {
   const changeClass = difference.classes[place.column];
-  return changeClass === 'breaking' && place.breaking.class === 'not-allowed'
-    ? 'not allowed'
+  return changeClass === 'breaking' && place.breaking.verdict === 'refused'
+    ? 'refused'
     : changeClass;
 }
 
@@ -323,7 +354,9 @@ function casesOf(rows: readonly Row[]) {
 function expectRow({ row, where }: ReturnType<typeof casesOf>[number]): void {
   const report = reportOf(where, row);
 
-  expect(report.changes).toEqual(row.found.map((difference) => changeAt(where, difference)));
+  expect(snapshotPathsOf(report.changes)).toEqual(
+    row.found.map((difference) => changeAt(where, difference)),
+  );
 }
 
 const noteField = ['fields', 'note'];
@@ -360,13 +393,6 @@ const fieldRows: readonly Row[] = [
     found: [found({ kind: 'field-removed' }, guaranteesLess, noteField)],
   },
   {
-    change: 'removing a key from a record keyed by an enum',
-    from: aKeyedRecord({ note: required(aString), id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'key-removed' }, breaksEverywhere, noteField)],
-    places: readersOfInput,
-  },
-  {
     change: 'changing a field’s type',
     from: anObject({ note: required(aString) }),
     to: anObject({ note: required(aNumber) }),
@@ -379,13 +405,6 @@ const fieldRows: readonly Row[] = [
     from: anObject({ id: required(aString) }),
     to: { type: 'record', key: aString, value: aString },
     found: [found({ kind: 'type-changed', from: 'object', to: 'record' }, breaksEverywhere)],
-  },
-  {
-    change: 'turning an object into a record keyed by an enum',
-    from: anObject({ id: required(aString) }),
-    to: aKeyedRecord({ id: required(aString) }),
-    found: [found({ kind: 'mode-changed', from: 'open', to: 'strict' }, breaksEverywhere)],
-    places: readersOfInput,
   },
   {
     change: 'turning an array into a tuple',
@@ -460,22 +479,94 @@ const fieldRows: readonly Row[] = [
 
 describe('compatibilityReportOf, fields', () => {
   test.each(casesOf(fieldRows))('$change is $outcome in $place', expectRow);
+});
 
-  test.each(places)(
-    'a change of description, examples or origin alone is no Change in $name',
-    (place) => {
-      const from: SchemaNode = anObject({
-        note: required({ type: 'string', description: 'A note', origin: 'local', examples: ['a'] }),
-      });
-      const to: SchemaNode = anObject({
-        note: required({ type: 'string', description: 'The note', origin: '@org/x@1#note' }),
-      });
+const neutralEverywhere: Classes = [neutral, neutral, neutral, neutral];
 
-      const report = reportOf(place, { from, to });
+function annotationChanged(annotation: 'description' | 'examples' | 'origin' | 'id') {
+  return { kind: 'annotation-changed', annotation } as const;
+}
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-    },
-  );
+const annotationRows: readonly Row[] = [
+  {
+    change: 'changing a field’s description',
+    from: anObject({ note: required({ type: 'string', description: 'A note' }) }),
+    to: anObject({ note: required({ type: 'string', description: 'The note' }) }),
+    found: [found(annotationChanged('description'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'adding a field’s description',
+    from: anObject({ note: required(aString) }),
+    to: anObject({ note: required({ type: 'string', description: 'The note' }) }),
+    found: [found(annotationChanged('description'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing a field’s examples',
+    from: anObject({ note: required({ type: 'string', examples: ['a'] }) }),
+    to: anObject({ note: required({ type: 'string', examples: ['a', 'b'] }) }),
+    found: [found(annotationChanged('examples'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing a field’s origin',
+    from: anObject({ note: required({ type: 'string', origin: 'local' }) }),
+    to: anObject({ note: required({ type: 'string', origin: '@org/x@1#note' }) }),
+    found: [found(annotationChanged('origin'), neutralEverywhere, noteField)],
+  },
+  {
+    change: 'changing the schema’s own description',
+    from: { type: 'number', description: 'A total' },
+    to: { type: 'number', description: 'The total' },
+    found: [found(annotationChanged('description'), neutralEverywhere)],
+  },
+  {
+    change: 'changing a description, examples and origin at once',
+    from: anObject({
+      note: required({ type: 'string', description: 'A note', origin: 'local', examples: ['a'] }),
+    }),
+    to: anObject({
+      note: required({ type: 'string', description: 'The note', origin: '@org/x@1#note' }),
+    }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, noteField),
+      found(annotationChanged('examples'), neutralEverywhere, noteField),
+      found(annotationChanged('origin'), neutralEverywhere, noteField),
+    ],
+  },
+  {
+    change: 'changing a description beside a removed field',
+    from: anObject({
+      id: required({ type: 'string', description: 'An id' }),
+      note: required(aString),
+    }),
+    to: anObject({ id: required({ type: 'string', description: 'The id' }) }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, ['fields', 'id']),
+      found({ kind: 'field-removed' }, guaranteesLess, noteField),
+    ],
+  },
+  {
+    change: 'changing the description of an array’s items',
+    from: { type: 'array', items: { type: 'string', description: 'A tag' } },
+    to: { type: 'array', items: { type: 'string', description: 'The tag' } },
+    found: [found(annotationChanged('description'), neutralEverywhere, ['items'])],
+  },
+  {
+    change: 'changing the description of a discriminated union’s variant field',
+    from: aTagged('kind', { card: { last4: required({ type: 'string', description: 'a' }) } }),
+    to: aTagged('kind', { card: { last4: required({ type: 'string', description: 'b' }) } }),
+    found: [
+      found(annotationChanged('description'), neutralEverywhere, [
+        'variants',
+        '"card"',
+        'fields',
+        'last4',
+      ]),
+    ],
+  },
+];
+
+describe('compatibilityReportOf, a node’s annotations', () => {
+  test.each(casesOf(annotationRows))('$change is $outcome in $place', expectRow);
 });
 
 const sizes = ['a', 'b'];
@@ -519,7 +610,7 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'widening a literal to an enum containing it',
-    from: aLiteral('a'),
+    from: aClosedEnum('a'),
     to: aClosedEnum(...sizes),
     found: [found({ kind: 'value-added', value: 'b', enum: 'closed' }, guaranteesLess)],
   },
@@ -540,7 +631,7 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'widening a literal to its base type',
-    from: aLiteral(7),
+    from: aClosedEnum(7),
     to: aNumber,
     found: [found({ kind: 'enum-widened', to: 'number' }, guaranteesLess)],
   },
@@ -553,13 +644,13 @@ const enumRows: readonly Row[] = [
   {
     change: 'narrowing an enum to one of its literals',
     from: aClosedEnum(...sizes),
-    to: aLiteral('a'),
+    to: aClosedEnum('a'),
     found: [found({ kind: 'value-removed', value: 'b' }, acceptsLess)],
   },
   {
     change: 'changing a literal, which adds a value and removes one',
-    from: aLiteral('a'),
-    to: aLiteral('b'),
+    from: aClosedEnum('a'),
+    to: aClosedEnum('b'),
     found: [
       found({ kind: 'value-removed', value: 'a' }, acceptsLess),
       found({ kind: 'value-added', value: 'b', enum: 'closed' }, guaranteesLess),
@@ -609,8 +700,8 @@ const enumRows: readonly Row[] = [
   },
   {
     change: 'turning true into "true", which are different values',
-    from: aLiteral(true),
-    to: aLiteral('true'),
+    from: aClosedEnum(true),
+    to: aClosedEnum('true'),
     found: [
       found({ kind: 'value-added', value: 'true', enum: 'closed' }, guaranteesLess),
       found({ kind: 'value-removed', value: true }, acceptsLess),
@@ -627,14 +718,16 @@ const enumRows: readonly Row[] = [
 describe('compatibilityReportOf, enums and literals', () => {
   test.each(casesOf(enumRows))('$change is $outcome in $place', expectRow);
 
-  test.each(places)('changing only an enum’s description is no Change in $name', (place) => {
-    const from: SchemaNode = { type: 'enum', values: sizes, open: false, description: 'Sizes' };
-    const to: SchemaNode = { type: 'enum', values: sizes, open: false, description: 'The sizes' };
-
-    const report = reportOf(place, { from, to });
-
-    expect(report.changes).toEqual([]);
-  });
+  test.each(
+    casesOf([
+      {
+        change: 'changing only an enum’s description',
+        from: { type: 'enum', values: sizes, open: false, description: 'Sizes' },
+        to: { type: 'enum', values: sizes, open: false, description: 'The sizes' },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 });
 
 const plainUnion = (...options: readonly SchemaNode[]): SchemaNode => ({ type: 'union', options });
@@ -700,6 +793,12 @@ const unionRows: readonly Row[] = [
     found: [found({ kind: 'union-changed' }, breaksEverywhere)],
   },
   {
+    change: 'reordering a plain union’s options, since the first option that parses wins',
+    from: plainUnion(aString, aNumber),
+    to: plainUnion(aNumber, aString),
+    found: [found({ kind: 'union-changed' }, breaksEverywhere)],
+  },
+  {
     change: 'adding nullability to a plain union, which is no change of its options',
     from: plainUnion(aString, aNumber),
     to: { type: 'union', options: [aString, aNumber], nullable: true },
@@ -710,23 +809,55 @@ const unionRows: readonly Row[] = [
 describe('compatibilityReportOf, unions', () => {
   test.each(casesOf(unionRows))('$change is $outcome in $place', expectRow);
 
-  test.each(places)(
-    'a plain union whose options differ only in descriptions is no Change in $name, whatever order they sort in',
-    (place) => {
-      const withNumberFirst = plainUnion(
-        { type: 'number', description: 'a' },
-        { type: 'string', description: 'z' },
-      );
-      const withStringFirst = plainUnion(
-        { type: 'string', description: 'a' },
-        { type: 'number', description: 'z' },
-      );
+  test.each(
+    casesOf([
+      {
+        change: 'a plain union whose options differ only in descriptions',
+        from: plainUnion(
+          { type: 'string', description: 'a' },
+          { type: 'number', description: 'z' },
+        ),
+        to: plainUnion({ type: 'string', description: 'z' }, { type: 'number', description: 'a' }),
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+      {
+        change: 'a plain union whose options differ only in examples and origin',
+        from: plainUnion({ type: 'string', examples: ['a'], origin: 'local' }, { type: 'number' }),
+        to: plainUnion(
+          { type: 'string', examples: ['b'], origin: '@org/x@1#id' },
+          { type: 'number' },
+        ),
+        found: [
+          found(annotationChanged('examples'), neutralEverywhere),
+          found(annotationChanged('origin'), neutralEverywhere),
+        ],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
-      const report = reportOf(place, { from: withNumberFirst, to: withStringFirst });
-
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-    },
-  );
+  test.each(
+    casesOf([
+      {
+        change:
+          'an intersection whose items differ only in descriptions, whatever order they sort in',
+        from: {
+          type: 'allOf',
+          items: [
+            { type: 'number', description: 'a' },
+            { type: 'string', description: 'z' },
+          ],
+        },
+        to: {
+          type: 'allOf',
+          items: [
+            { type: 'string', description: 'a' },
+            { type: 'number', description: 'z' },
+          ],
+        },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 });
 
 type Constraint = Extract<ShapeDifference, { kind: 'constraint-tightened' }>['constraint'];
@@ -1000,7 +1131,7 @@ describe('compatibilityReportOf, constraints', () => {
   )('an unchanged $constraint is no Change in $place', ({ node, where }) => {
     const report = reportOf(where, { from: node, to: node });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(places)(
@@ -1059,7 +1190,7 @@ describe('compatibilityReportOf, constraints', () => {
 
       const report = reportOf(place, { from, to });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found(tightened('lower-bound'), acceptsLess, ['fields', 'name'])),
       ]);
     },
@@ -1072,7 +1203,7 @@ function anArray(items: SchemaNode, counts: Counts = {}): SchemaNode {
   return { type: 'array', items, ...counts };
 }
 
-function aRecord(key: SchemaNode, value: SchemaNode): SchemaNode {
+function aRecord(key: StringNode, value: SchemaNode): SchemaNode {
   return { type: 'record', key, value };
 }
 
@@ -1200,7 +1331,10 @@ describe('compatibilityReportOf, arrays, records and tuples', () => {
 });
 
 function walkedOf(schema: z.ZodType): SchemaNode {
-  const { located } = walkSchemas([{ at: [], schema }], () => undefined);
+  const { located } = walkSchemas(
+    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    () => undefined,
+  );
   const [first] = located;
   if (first?.walked.kind !== 'walked') {
     throw new Error('the schema must be allowed in a Contract');
@@ -1264,14 +1398,14 @@ describe('compatibilityReportOf, intersections and opaque JSON', () => {
         to: walkedOf(merged),
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
   test.each(places)('an opaque JSON value left as it is is no Change in $name', (place) => {
     const report = reportOf(place, { from: { type: 'json' }, to: { type: 'json' } });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 });
 
@@ -1287,26 +1421,31 @@ const treeContainers: readonly {
   readonly container: string;
   readonly node: SchemaNode;
   readonly changed: Found;
+  readonly described: Found;
 }[] = [
   {
     container: 'a plain union',
     node: { type: 'union', options: [aRef('tree'), aString] },
     changed: found({ kind: 'union-changed' }, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
   {
     container: 'a record',
     node: aRecord(aString, aRef('tree')),
     changed: found(nameAdded, acceptsLess, ['value', 'fields', 'name']),
+    described: found(annotationChanged('description'), neutralEverywhere, ['value']),
   },
   {
     container: 'a tuple',
     node: aTuple([aRef('tree')]),
     changed: found(tupleChanged, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
   {
     container: 'an intersection',
     node: { type: 'allOf', items: [aRef('tree'), aString] },
     changed: found({ kind: 'unproven', node: 'allOf' }, breaksEverywhere),
+    described: found(annotationChanged('description'), neutralEverywhere),
   },
 ];
 
@@ -1344,25 +1483,6 @@ const refRows: readonly Row[] = [
   },
   ...containedRows,
   {
-    change: 'making a def a ref names nullable',
-    from: aRef('leaf'),
-    to: aRef('leaf'),
-    fromDefs: { leaf },
-    toDefs: { leaf: aNullable(leaf) },
-    found: [found({ kind: 'nullability-added' }, guaranteesLess)],
-  },
-  {
-    change: 'making a recursive def nullable, which makes every ref to it nullable',
-    from: aRef('tree'),
-    to: aRef('tree'),
-    fromDefs: { tree },
-    toDefs: { tree: aNullable(tree) },
-    found: [
-      found({ kind: 'nullability-added' }, guaranteesLess),
-      found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items']),
-    ],
-  },
-  {
     change: 'making a ref nullable where its def is not',
     from: aRef('tree'),
     to: aNullable(aRef('tree')),
@@ -1384,6 +1504,8 @@ const refRows: readonly Row[] = [
     to: anObject({ child: required(aRef('tree')) }),
     toDefs: { tree },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'child']),
+      found(annotationChanged('id'), neutralEverywhere, childItems),
       found({ kind: 'type-changed', from: 'string', to: 'object' }, breaksEverywhere, childItems),
     ],
   },
@@ -1393,6 +1515,8 @@ const refRows: readonly Row[] = [
     to: inlineChild,
     fromDefs: { tree },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'child']),
+      found(annotationChanged('id'), neutralEverywhere, childItems),
       found({ kind: 'type-changed', from: 'object', to: 'string' }, breaksEverywhere, childItems),
     ],
   },
@@ -1410,7 +1534,9 @@ const refRows: readonly Row[] = [
     to: anObject({ a: required(aLeafWithName()), b: required(aLeafWithName()) }),
     fromDefs: { leaf },
     found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'a']),
       found(nameAdded, acceptsLess, ['fields', 'a', 'fields', 'name']),
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'b']),
       found(nameAdded, acceptsLess, ['fields', 'b', 'fields', 'name']),
     ],
   },
@@ -1418,8 +1544,11 @@ const refRows: readonly Row[] = [
     change: 'changing a def that is a discriminated union’s variant',
     from: aTagged('kind', { card: {} }),
     to: { ...aTagged('kind', {}), variants: { '"card"': aRefVariant('card') } },
-    toDefs: { card: anObject({ kind: required(aLiteral('card')), last4: required(aString) }) },
-    found: [found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])],
+    toDefs: { card: anObject({ kind: required(aClosedEnum('card')), last4: required(aString) }) },
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, ['variants', '"card"']),
+      found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4']),
+    ],
   },
   {
     change: 'changing a def a discriminated union reaches again through its own variant',
@@ -1444,7 +1573,7 @@ function aNodeTagged(): SchemaNode {
 }
 
 function aNodeDef(extra: Readonly<Record<string, Field>>): ObjectNode {
-  const fields = { kind: required(aLiteral('node')), child: optional(aNodeTagged()), ...extra };
+  const fields = { kind: required(aClosedEnum('node')), child: optional(aNodeTagged()), ...extra };
   return anObject(fields);
 }
 
@@ -1464,7 +1593,238 @@ const sprawl = anObject(
   ),
 );
 
+const selfReferring = anObject({ f: optional(aString), c: optional(aRef('node')) });
+const kField = ['fields', 'k'];
+const idChanged = found(annotationChanged('id'), neutralEverywhere, kField);
+
+function aBodyWith(fields: Readonly<Record<string, SchemaNode>>): ObjectNode {
+  const entries = Object.entries(fields).map(([name, schema]) => [name, required(schema)]);
+  return anObject(Object.fromEntries(entries));
+}
+
+type RefAnnotations = Pick<RefNode, 'description' | 'examples' | 'origin'>;
+
+function anAliasOf(name: string, annotations: RefAnnotations): RefNode {
+  return { type: 'ref', name, ...annotations };
+}
+
+function anAliasAnnotationRow(
+  change: string,
+  annotation: 'description' | 'examples' | 'origin',
+  annotations: { readonly from: RefAnnotations; readonly to: RefAnnotations },
+): Row {
+  return {
+    change,
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { node: selfReferring, alias: anAliasOf('node', annotations.from) },
+    toDefs: { node: selfReferring, alias: anAliasOf('node', annotations.to) },
+    found: [found(annotationChanged(annotation), neutralEverywhere, kField)],
+  };
+}
+
+const variantCard = anObject({ kind: required(aClosedEnum('a')) });
+const plainCard = anObject({ f: optional(aString) });
+const aliasVariant: SchemaNode = {
+  type: 'tagged',
+  discriminator: 'kind',
+  variants: { '"a"': aRefVariant('alias') },
+};
+
+const aliasRows: readonly Row[] = [
+  {
+    change: 'pointing a ref at the def its alias names, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: aRef('alias') }),
+    to: aBodyWith({ g: aRef('node'), k: aRef('node') }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: { node: selfReferring },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'pointing a ref at an alias of the def it named, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: aRef('node') }),
+    to: aBodyWith({ g: aRef('node'), k: aRef('alias') }),
+    fromDefs: { node: selfReferring },
+    toDefs: { node: selfReferring, alias: aRef('node') },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'pointing an array’s items at the def their alias names, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: anArray(aRef('alias')) }),
+    to: aBodyWith({ g: aRef('node'), k: anArray(aRef('node')) }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: { node: selfReferring },
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
+    ],
+  },
+  anAliasAnnotationRow('changing an alias def’s description', 'description', {
+    from: { description: 'x' },
+    to: { description: 'y' },
+  }),
+  anAliasAnnotationRow('describing an alias def', 'description', {
+    from: {},
+    to: { description: 'y' },
+  }),
+  anAliasAnnotationRow('giving an alias def examples', 'examples', {
+    from: {},
+    to: { examples: [1] },
+  }),
+  anAliasAnnotationRow('giving an alias def an origin', 'origin', {
+    from: {},
+    to: { origin: 'local' },
+  }),
+  {
+    change: 'pointing an alias def at a renamed def of the same shape',
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: {
+      renamed: anObject({ f: optional(aString), c: optional(aRef('renamed')) }),
+      alias: aRef('renamed'),
+    },
+    found: [
+      idChanged,
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'fields', 'c']),
+    ],
+  },
+  {
+    change: 'shortening a chain of alias defs',
+    from: aBodyWith({ k: aRef('outer') }),
+    to: aBodyWith({ k: aRef('outer') }),
+    fromDefs: { node: selfReferring, outer: aRef('middle'), middle: aRef('node') },
+    toDefs: { node: selfReferring, outer: aRef('node') },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'turning a def into an alias of a def of the same shape',
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { alias: anObject({ f: optional(aString) }) },
+    toDefs: { alias: aRef('node'), node: anObject({ f: optional(aString) }) },
+    found: [idChanged],
+  },
+  {
+    change: 'describing an alias def a variant names',
+    from: aliasVariant,
+    to: aliasVariant,
+    fromDefs: { card: variantCard, alias: aRef('card') },
+    toDefs: { card: variantCard, alias: anAliasOf('card', { description: 'A card' }) },
+    found: [found(annotationChanged('description'), neutralEverywhere, ['variants', '"a"'])],
+  },
+  {
+    change: 'writing a nullable ref’s def inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('card')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { card: plainCard },
+    toDefs: {},
+    found: [idChanged],
+  },
+  {
+    change: 'naming a nullable schema written inline as a def',
+    from: aBodyWith({ k: aNullable(plainCard) }),
+    to: aBodyWith({ k: aNullable(aRef('card')) }),
+    fromDefs: {},
+    toDefs: { card: plainCard },
+    found: [idChanged],
+  },
+  {
+    change: 'writing a nullable ref’s alias chain inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('alias')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { alias: aRef('card'), card: plainCard },
+    toDefs: {},
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'making a ref nullable while its def gains a description',
+    from: aBodyWith({ k: aRef('node') }),
+    to: aBodyWith({ k: aNullable(aRef('node')) }),
+    fromDefs: { node: selfReferring },
+    toDefs: { node: { ...selfReferring, description: 'x' } },
+    found: [
+      found({ kind: 'nullability-added' }, guaranteesLess, kField),
+      found(annotationChanged('description'), neutralEverywhere, kField),
+    ],
+  },
+];
+
+/** A schema as `generate` writes it, with the defs its `ref`s name. */
+function walkedWithDefsOf(schema: z.ZodType): { readonly node: SchemaNode; readonly defs: Defs } {
+  const walked = walkSchemas(
+    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    () => undefined,
+  );
+  const [first] = walked.located;
+  if (first?.walked.kind !== 'walked') {
+    throw new Error('the schema must be allowed in a Contract');
+  }
+  return { node: first.walked.value, defs: walked.defs };
+}
+
+function anOuterAlias(annotations: { readonly description?: string }): z.ZodType {
+  const inner: z.ZodType = z
+    .lazy(() => z.object({ children: z.array(outer) }))
+    .meta({ id: 'inner' });
+  const outer: z.ZodType = z.lazy(() => inner).meta({ id: 'outer', ...annotations });
+  return outer;
+}
+
 describe('compatibilityReportOf, refs', () => {
+  test.each(casesOf(aliasRows))('$change is $outcome in $place', expectRow);
+
+  test.each(places)(
+    'describing an alias def zod declares is one description, in $name',
+    (place) => {
+      const from = walkedWithDefsOf(anOuterAlias({}));
+      const to = walkedWithDefsOf(anOuterAlias({ description: 'x' }));
+
+      const report = reportOf(place, {
+        from: from.node,
+        to: to.node,
+        fromDefs: from.defs,
+        toDefs: to.defs,
+      });
+
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(place, found(annotationChanged('description'), neutralEverywhere)),
+      ]);
+    },
+  );
+
+  test('a ref made nullable through an alias def is nullability added', () => {
+    const defs: Defs = { alias: aRef('target'), target: anObject({ v: required(aString) }) };
+
+    const report = reportOf(input, {
+      from: anObject({ x: required(aRef('alias')) }),
+      to: anObject({ x: required({ ...aRef('alias'), nullable: true }) }),
+      fromDefs: defs,
+      toDefs: defs,
+    });
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'x'])),
+    ]);
+  });
+
+  test('a def reached through two alias defs at two paths is one Change, at the first path', () => {
+    const aliases: Defs = { first: aRef('target'), second: aRef('target') };
+    const body = anObject({ x: required(aRef('first')), y: required(aRef('second')) });
+
+    const report = reportOf(input, {
+      from: body,
+      to: body,
+      fromDefs: { ...aliases, target: anObject({ v: required(aBoolean) }) },
+      toDefs: { ...aliases, target: anObject({ v: required(aString) }) },
+    });
+
+    const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(changed, breaksEverywhere, ['fields', 'x', 'fields', 'v'])),
+    ]);
+  });
+
   test.each(casesOf(refRows))('$change is $outcome in $place', expectRow);
 
   test.each(places)(
@@ -1477,11 +1837,11 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { tree: treeWithName },
       });
 
-      expect(report.changes).toEqual([changeAt(place, treeNameAdded)]);
+      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, treeNameAdded)]);
     },
   );
 
-  test('a cycle whose refs fall at different depths on each side ends and finds no Change', () => {
+  test('a cycle whose refs fall at different depths on each side ends and finds only the defs’ ids', () => {
     const shallow: Defs = { shallow: anObject({ x: required(aRef('shallow')) }) };
     const deep: Defs = {
       deep: anObject({ x: required(anObject({ x: required(aRef('deep')) })) }),
@@ -1494,7 +1854,25 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: deep,
     });
 
-    expect(report.changes).toEqual([]);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(annotationChanged('id'), neutralEverywhere)),
+      changeAt(input, found(annotationChanged('id'), neutralEverywhere, ['fields', 'x'])),
+      changeAt(
+        input,
+        found(annotationChanged('id'), neutralEverywhere, ['fields', 'x', 'fields', 'x']),
+      ),
+      changeAt(
+        input,
+        found(annotationChanged('id'), neutralEverywhere, [
+          'fields',
+          'x',
+          'fields',
+          'x',
+          'fields',
+          'x',
+        ]),
+      ),
+    ]);
   });
 
   test('a def with twenty refs to itself is compared in one visit of each', () => {
@@ -1505,7 +1883,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { sprawl: anObject({ ...sprawl.fields, name: required(aString) }) },
     });
 
-    expect(report.changes).toEqual([changeAt(input, treeNameAdded)]);
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(input, treeNameAdded)]);
   });
 
   test('a dense set of mutually recursive defs, unchanged, is compared fast', () => {
@@ -1518,7 +1896,7 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: defs,
     });
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test('a dense set of mutually recursive defs with one change gives that one Change', () => {
@@ -1530,71 +1908,81 @@ describe('compatibilityReportOf, refs', () => {
     });
 
     const path = ['fields', 'def1', 'fields', 'def10', 'fields', 'def11', 'fields', 'name'];
-    expect(report.changes).toEqual([changeAt(input, found(nameAdded, acceptsLess, path))]);
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(nameAdded, acceptsLess, path)),
+    ]);
   });
 
-  test.each(places)(
-    'pointing a ref at another def of the same shape is no Change in $name',
-    (place) => {
-      const defs: Defs = { tree, branch };
-
-      const report = reportOf(place, {
+  test.each(
+    casesOf([
+      {
+        change: 'pointing a ref at another def of the same shape',
         from: aRef('tree'),
         to: aRef('branch'),
-        fromDefs: defs,
-        toDefs: defs,
-      });
-
-      expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)('renaming a recursive def’s id is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('branch'),
-      fromDefs: { tree },
-      toDefs: { branch },
-    });
-
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-  });
-
-  test.each(places)(
-    'pointing a ref at the other def of a mutual recursion of the same shape is no Change in $name',
-    (place) => {
-      const report = reportOf(place, {
+        fromDefs: { tree, branch },
+        toDefs: { tree, branch },
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+        ],
+      },
+      {
+        change: 'renaming a recursive def’s id',
+        from: aRef('tree'),
+        to: aRef('branch'),
+        fromDefs: { tree },
+        toDefs: { branch },
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+        ],
+      },
+      {
+        change: 'pointing a ref at the other def of a mutual recursion of the same shape',
         from: aRef('first'),
         to: aRef('second'),
         fromDefs: mutualDefs,
         toDefs: mutualDefs,
-      });
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next']),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next', 'fields', 'next']),
+        ],
+      },
+      {
+        change: 'an alias def on one side only',
+        from: aRef('tree'),
+        to: aRef('alias'),
+        fromDefs: { tree },
+        toDefs: { alias: aRef('tree'), tree },
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere),
+        ],
+      },
+      {
+        change: 'describing a recursive def a ref names',
+        from: aRef('tree'),
+        to: aRef('tree'),
+        fromDefs: { tree },
+        toDefs: { tree: { ...tree, description: 'A tree' } },
+        found: [found(annotationChanged('description'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
-      expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)('nullability moved from a ref to its def is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aNullable(aRef('leaf')),
-      to: aRef('leaf'),
-      fromDefs: { leaf },
-      toDefs: { leaf: aNullable(leaf) },
-    });
-
-    expect(report.changes).toEqual([]);
-  });
-
-  test.each(places)('an alias def on one side only is no Change in $name', (place) => {
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('alias'),
-      fromDefs: { tree },
-      toDefs: { alias: aRef('tree'), tree },
-    });
-
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-  });
+  test.each(
+    casesOf(
+      treeContainers.map(({ container, node, described }) => ({
+        change: `describing a def a ref reaches inside ${container}`,
+        from: node,
+        to: node,
+        fromDefs: { tree },
+        toDefs: { tree: { ...tree, description: 'A tree' } },
+        found: [described],
+      })),
+    ),
+  )('$change is $outcome in $place', expectRow);
 
   test.each(places)(
     'renaming a def under a plain union is Breaking in every Position, as in $name',
@@ -1611,7 +1999,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { person: leaf },
       });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found({ kind: 'union-changed' }, breaksEverywhere)),
       ]);
     },
@@ -1620,7 +2008,7 @@ describe('compatibilityReportOf, refs', () => {
   test.each(places)(
     'a variant that is a ref follows the field rules inside its def in $name',
     (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
+      const card = anObject({ kind: required(aClosedEnum('card')) });
       const variants = { '"card"': aRefVariant('card') };
       const tagged: SchemaNode = { type: 'tagged', discriminator: 'kind', variants };
 
@@ -1631,65 +2019,44 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { card: anObject({ ...card.fields, last4: required(aString) }) },
       });
 
-      expect(report.changes).toEqual([
+      expect(snapshotPathsOf(report.changes)).toEqual([
         changeAt(place, found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])),
       ]);
     },
   );
 
-  test.each(places)(
-    'a variant that turns from inline to a ref of the same shape is no Change in $name',
-    (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
-      const refVariants = { '"card"': aRefVariant('card') };
-
-      const report = reportOf(place, {
-        from: { type: 'tagged', discriminator: 'kind', variants: { '"card"': card } },
-        to: { type: 'tagged', discriminator: 'kind', variants: refVariants },
-        toDefs: { card },
-      });
-
-      expect(report.changes).toEqual([]);
-    },
-  );
-
-  test.each(places)('a ref whose def is unchanged is no Change in $name', (place) => {
-    const describedTree = { ...tree, description: 'A tree' };
-
-    const report = reportOf(place, {
-      from: aRef('tree'),
-      to: aRef('tree'),
-      fromDefs: { tree: tree },
-      toDefs: { tree: describedTree },
-    });
-
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-  });
-
   test.each(
-    treeContainers.flatMap(({ container, node }) =>
-      places.map((place) => ({ container, node, place: place.name, where: place })),
-    ),
-  )(
-    'a def changed only in its description under $container is no Change in $place',
-    ({ node, where }) => {
-      const describedTree = { ...tree, description: 'A tree' };
-
-      const report = reportOf(where, {
-        from: node,
-        to: node,
+    casesOf([
+      {
+        change: 'a variant that turns from inline to a ref of the same shape',
+        from: {
+          type: 'tagged',
+          discriminator: 'kind',
+          variants: { '"card"': anObject({ kind: required(aClosedEnum('card')) }) },
+        },
+        to: {
+          type: 'tagged',
+          discriminator: 'kind',
+          variants: { '"card"': aRefVariant('card') },
+        },
+        toDefs: { card: anObject({ kind: required(aClosedEnum('card')) }) },
+        found: [found(annotationChanged('id'), neutralEverywhere, ['variants', '"card"'])],
+      },
+      {
+        change: 'a ref written inline as the shape of its def',
+        from: aRef('tree'),
+        to: anObject({ children: required(anArray(aRef('tree'))) }),
         fromDefs: { tree },
-        toDefs: { tree: describedTree },
-      });
-
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-    },
-  );
+        toDefs: { tree },
+        found: [found(annotationChanged('id'), neutralEverywhere)],
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
 
   test.each(places)(
     'a variant that is a ref to an unchanged def is no Change in $name',
     (place) => {
-      const card = anObject({ kind: required(aLiteral('card')) });
+      const card = anObject({ kind: required(aClosedEnum('card')) });
       const variants = { '"card"': aRefVariant('card') };
       const tagged: SchemaNode = { type: 'tagged', discriminator: 'kind', variants };
 
@@ -1700,30 +2067,45 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { card: card },
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
-  test.each(places)(
-    'a change to a def no compared schema reaches is no Change in $name',
-    (place) => {
-      const report = reportOf(place, {
+  test.each(places)('a change to a def no schema reaches is a bug in $name', (place) => {
+    const check = () =>
+      reportOf(place, {
         from: aString,
         to: aString,
         fromDefs: { tree: tree },
         toDefs: { tree: treeWithName },
       });
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
-    },
-  );
+    expect(check).toThrow('The Snapshot changed but no Change was found: a bug.');
+  });
 });
 
-function schemaChange(position: Position | 'every', at: Path, shape: ShapeDifference) {
+function schemaChange(position: Position, at: Path, shape: ShapeDifference) {
   return { kind: 'schema', position, at, shape } as const;
 }
 
 describe('compatibilityReportOf, Elements’ bodies', () => {
+  test('a difference inside a variant is at a step that names the discriminator and the variant', () => {
+    const from = aTagged('kind', { card: { last4: required(aString) } });
+    const to = aTagged('kind', { card: {} });
+
+    const report = reportOf(input, { from, to });
+
+    const [change] = report.changes;
+    expect(change?.difference).toMatchObject({
+      at: [
+        { kind: 'part', name: 'input' },
+        { kind: 'part', name: 'body' },
+        { kind: 'variant', discriminator: 'kind', value: '"card"' },
+        { kind: 'field', name: 'last4' },
+      ],
+    });
+  });
+
   test('a Command’s body is read as Message', () => {
     const baseline = aBaseline({ commands: { 'ChargeCard@1': aLive(aCommand(anObject())) } });
     const proposed = aProposed({
@@ -1732,21 +2114,18 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
 
     const report = comparedOf(baseline, proposed);
 
-    const site: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
-    expect(report).toEqual({
-      kind: 'compared',
-      hashChanged: true,
-      changes: [
-        {
-          site,
-          difference: schemaChange('message', ['body', 'fields', 'amount'], {
-            kind: 'field-added',
-            required: true,
-          }),
-          class: 'not-allowed',
-        },
-      ],
-    });
+    const site: ChangeSite = { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' };
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      {
+        site,
+        difference: schemaChange('message', ['body', 'fields', 'amount'], {
+          kind: 'field-added',
+          required: true,
+        }),
+        class: 'breaking',
+        verdict: 'refused',
+      },
+    ]);
   });
 
   test('a Breaking Change to an Endpoint’s body needs an Approval', () => {
@@ -1755,8 +2134,8 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
       to: anObject({ amount: required(aNumber) }),
     }).changes;
 
-    expect(changes.map((change) => change.class === 'breaking' && change.approval)).toEqual([
-      'needed',
+    expect(changes.map(({ class: changeClass, verdict }) => [changeClass, verdict])).toEqual([
+      ['breaking', 'approval-needed'],
     ]);
   });
 
@@ -1814,78 +2193,104 @@ describe('compatibilityReportOf, Elements’ bodies', () => {
 });
 
 type SharedClass =
-  | { readonly class: 'additive' }
-  | { readonly class: 'breaking'; readonly approval: 'needed' };
+  | { readonly class: 'additive'; verdict: 'allowed' }
+  | { readonly class: 'breaking'; readonly verdict: 'approval-needed' };
 
-function sharedChange(name: string, difference: Change['difference'], rest: SharedClass): Change {
-  return { site: { kind: 'shared-schema', name }, difference, ...rest };
+function sharedChange(name: string, difference: unknown, rest: SharedClass): PathChange {
+  return { site: { kind: 'export', name, visibility: 'public' }, difference, ...rest };
 }
 
 describe('compatibilityReportOf, shared schemas', () => {
-  test('a Breaking Change to a shared schema needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject({ cents: required(aNumber) }) } });
+  test('a shared schema is judged as a Message: a value added to its closed enum is Breaking', () => {
+    const baseline = aBaselineDefinitions({
+      exports: schemaExports({ currency: aClosedEnum('CLP') }),
+    });
+    const proposed = aDefinitions({
+      exports: schemaExports({ currency: aClosedEnum('CLP', 'USD') }),
+    });
 
     const report = comparedOf(baseline, proposed);
 
-    expect(report).toEqual({
-      kind: 'compared',
-      hashChanged: true,
-      changes: [
-        sharedChange(
-          'money',
-          schemaChange('every', ['fields', 'cents'], { kind: 'field-added', required: true }),
-          { class: 'breaking', approval: 'needed' },
-        ),
-      ],
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      sharedChange(
+        'currency',
+        schemaChange('message', [], { kind: 'value-added', value: 'USD', enum: 'closed' }),
+        { class: 'breaking', verdict: 'approval-needed' },
+      ),
+    ]);
+  });
+
+  test('a Breaking Change to a shared schema needs an Approval', () => {
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({
+      exports: schemaExports({ money: anObject({ cents: required(aNumber) }) }),
     });
+
+    const report = comparedOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      sharedChange(
+        'money',
+        schemaChange('message', ['fields', 'cents'], { kind: 'field-added', required: true }),
+        { class: 'breaking', verdict: 'approval-needed' },
+      ),
+    ]);
   });
 
   test('adding a shared schema is Additive', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject(), page: anObject() } });
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({
+      exports: schemaExports({ money: anObject(), page: anObject() }),
+    });
 
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('page', { kind: 'added' }, { class: 'additive' }),
+      sharedChange('page', { kind: 'added' }, { class: 'additive', verdict: 'allowed' }),
     ]);
   });
 
   test('removing a shared schema is Breaking and needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject(), page: anObject() } });
-    const proposed = aDefinitions({ schemas: { money: anObject() } });
+    const baseline = aBaselineDefinitions({
+      exports: schemaExports({ money: anObject(), page: anObject() }),
+    });
+    const proposed = aDefinitions({ exports: schemaExports({ money: anObject() }) });
 
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('page', { kind: 'removed' }, { class: 'breaking', approval: 'needed' }),
+      sharedChange('page', { kind: 'removed' }, { class: 'breaking', verdict: 'approval-needed' }),
     ]);
   });
 
   test('renaming a shared schema is a removal plus an addition', () => {
-    const baseline = aBaselineDefinitions({ schemas: { money: anObject() } });
-    const proposed = aDefinitions({ schemas: { amount: anObject() } });
+    const baseline = aBaselineDefinitions({ exports: schemaExports({ money: anObject() }) });
+    const proposed = aDefinitions({ exports: schemaExports({ amount: anObject() }) });
 
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes).toEqual([
-      sharedChange('amount', { kind: 'added' }, { class: 'additive' }),
-      sharedChange('money', { kind: 'removed' }, { class: 'breaking', approval: 'needed' }),
+      sharedChange('amount', { kind: 'added' }, { class: 'additive', verdict: 'allowed' }),
+      sharedChange('money', { kind: 'removed' }, { class: 'breaking', verdict: 'approval-needed' }),
     ]);
   });
 
   test('shared schemas’ Changes come by name in code point order', () => {
     const baseline = aBaselineDefinitions({
-      schemas: { page: anObject(), money: anObject(), zone: anObject(), amount: anObject() },
+      exports: schemaExports({
+        page: anObject(),
+        money: anObject(),
+        zone: anObject(),
+        amount: anObject(),
+      }),
     });
     const proposed = aDefinitions({
-      schemas: { page: aString, money: aString, zone: aString, amount: aString },
+      exports: schemaExports({ page: aString, money: aString, zone: aString, amount: aString }),
     });
 
     const report = comparedOf(baseline, proposed);
 
-    expect(report.changes.map(({ site }) => site.kind === 'shared-schema' && site.name)).toEqual([
+    expect(report.changes.map(({ site }) => site.kind === 'export' && site.name)).toEqual([
       'amount',
       'money',
       'page',
@@ -1895,16 +2300,96 @@ describe('compatibilityReportOf, shared schemas', () => {
 
   test('a shared schema is compared with the defs of its own Definitions Package', () => {
     const baseline = aBaselineDefinitions({
-      schemas: { forest: aRef('tree') },
+      exports: schemaExports({ forest: aRef('tree') }),
       defs: { tree: tree },
     });
     const proposed = aDefinitions({
-      schemas: { forest: aRef('tree') },
+      exports: schemaExports({ forest: aRef('tree') }),
       defs: { tree: treeWithName },
     });
 
     const report = comparedOf(baseline, proposed);
 
     expect(report.changes.map(({ class: changeClass }) => changeClass)).toEqual(['breaking']);
+  });
+});
+
+describe('compatibilityReportOf, depth', () => {
+  /** A deep test compares thousands of defs, which takes seconds on a CI runner with shared cores. */
+  const deepTimeout = 60_000;
+
+  /** `count` defs, each an object holding the next by `next`, the innermost holding `innermost` by `v`. */
+  function aDefChainOf(count: number, innermost: SchemaNode): Defs {
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count - 1; index++) {
+      entries.push([`def${index}`, anObject({ next: required(aRef(`def${index + 1}`)) })]);
+    }
+    entries.push([`def${count - 1}`, anObject({ v: required(innermost) })]);
+    return Object.fromEntries(entries);
+  }
+
+  /** The steps to the innermost def's `v` from the outermost of `count`. */
+  function innermostPathOf(count: number): Path {
+    const steps: string[] = [];
+    for (let index = 0; index < count - 1; index++) {
+      steps.push('fields', 'next');
+    }
+    return [...steps, 'fields', 'v'];
+  }
+
+  test('an unchanged Snapshot of 5,000 nested defs has no Change', { timeout: deepTimeout }, () => {
+    const defs = aDefChainOf(5_000, aBoolean);
+
+    const report = reportOf(input, {
+      from: aRef('def0'),
+      to: aRef('def0'),
+      fromDefs: defs,
+      toDefs: defs,
+    });
+
+    expect(report).toEqual({ changes: [] });
+  });
+
+  test.for([1, 600, 5_000])(
+    'a field changed in the innermost of %i nested defs is one Change, at its path',
+    { timeout: deepTimeout },
+    (count) => {
+      const report = reportOf(input, {
+        from: aRef('def0'),
+        to: aRef('def0'),
+        fromDefs: aDefChainOf(count, aBoolean),
+        toDefs: aDefChainOf(count, aString),
+      });
+
+      const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(input, found(changed, breaksEverywhere, innermostPathOf(count))),
+      ]);
+    },
+  );
+
+  test('a ref through 20,000 alias defs is compared as the def it reaches', {
+    timeout: deepTimeout,
+  }, () => {
+    const count = 20_000;
+    const aliasesOf = (target: SchemaNode): Defs => {
+      const entries: [string, SchemaNode][] = [['target', target]];
+      for (let index = 0; index < count; index++) {
+        entries.push([`alias${index}`, aRef(index === count - 1 ? 'target' : `alias${index + 1}`)]);
+      }
+      return Object.fromEntries(entries);
+    };
+
+    const report = reportOf(input, {
+      from: aRef('alias0'),
+      to: aRef('alias0'),
+      fromDefs: aliasesOf(anObject({ v: required(aBoolean) })),
+      toDefs: aliasesOf(anObject({ v: required(aString) })),
+    });
+
+    const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
+    ]);
   });
 });

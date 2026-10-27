@@ -1,9 +1,7 @@
 import type {
-  Application,
   Command,
-  Contract,
   Definitions,
-  Dependencies,
+  Dependency,
   Endpoint,
   Event,
   Group,
@@ -12,66 +10,74 @@ import type {
   StandardRejectionDeclaration,
   Subscription,
 } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import type { Place } from '../walker/index.ts';
 
-/** What `generate` runs for: a Service's Contract, an Application's, or a Definitions Package. */
-export type Root = Contract | Application | Definitions;
-
-/** A Group and where it sits in its root: `['groups', <name>]`. */
-export type LocatedGroup = { readonly at: Path; readonly group: Group };
+/** A Group and where it sits in its Root: at its name, else at the Root's list of Groups. */
+export type LocatedGroup = { readonly at: Place; readonly group: Group };
 
 /**
- * An Endpoint, its Group, and where it sits in its root, under its Group and by its identity,
- * since a Retired Endpoint may share its name with an Active one: `['groups', <group>,
- * 'endpoints', 'GET /orders/{}']`. A Snapshot's reader finds an Endpoint's schemas under that location.
+ * An Endpoint, its Group, and where it sits: at its identity with its name, else at its Group's
+ * list of Endpoints, by its position there.
  */
 export type LocatedEndpoint = {
-  readonly at: Path;
+  readonly at: Place;
   readonly endpoint: Endpoint;
   readonly group: Group;
 };
 
 /**
- * A Guard, where it sits by name, since Endpoints and other Guards only reference it, and whether
- * the root reaches it: an Endpoint attaches it, directly or through a Guard's `guards`, or the
- * root is a Definitions Package, which reaches all of its own.
+ * A Guard the Root reaches, where it sits by name, since Endpoints and other Guards only
+ * reference it: an Endpoint attaches it, directly or through a Guard's `guards`, or a Definitions
+ * Package exports it.
  */
-export type LocatedGuard = { readonly at: Path; readonly guard: Guard; readonly reached: boolean };
+export type LocatedGuard = { readonly at: Place; readonly guard: Guard };
 
 /** A Rejection and where it sits, by code, since Endpoints and Guards only reference it. */
-export type LocatedRejection = { readonly at: Path; readonly rejection: Rejection };
+export type LocatedRejection = { readonly at: Place; readonly rejection: Rejection };
 
 /**
- * A code and every declaration of it, the first met first, in the root's order: a listed
- * Definitions Package's, then the Guards', then the Endpoints'; reached when an Endpoint or a
- * reached Guard answers it, or the root is a Definitions Package.
+ * A code the Root reaches and every declaration of it, which a valid Root has one of, in the
+ * Root's order: the Endpoints' and Guards' lists as they are read, then a Definitions Package's
+ * exports.
  */
 export type LocatedCode = {
   readonly code: string;
-  readonly at: Path;
+  readonly at: Place;
   readonly rejections: readonly [LocatedRejection, ...LocatedRejection[]];
-  readonly reached: boolean;
 };
 
-/** A Definitions Package and where it sits: listed on a Contract, or the root itself at `[]`. */
-export type LocatedDefinitions = { readonly at: Path; readonly definitions: Definitions };
+/** The Definitions Package that declares a Root's Standard Rejections, and where it sits: named by a Contract in its `standardRejections` field, or the Definitions Package itself. */
+export type NamedDefinitions = { readonly at: Place; readonly definitions: Definitions };
 
-/** A Dependency and where it sits in its root, by Provider. */
-export type LocatedDependencies = { readonly at: Path; readonly dependencies: Dependencies };
+/**
+ * A Dependency and where it sits in its Root, by its Provider's name, or by its position in the
+ * Root's list of Dependencies when its Provider has none.
+ */
+export type LocatedDependency = { readonly at: Place; readonly dependency: Dependency };
 
-/** A Standard Rejection as a Definitions Package declares it, by name, where it sits and the package. */
+/** A Standard Rejection as a Definitions Package declares it, by name, and where it sits. */
 export type LocatedStandardRejection = {
-  readonly at: Path;
+  readonly at: Place;
   readonly name: string;
   readonly declaration: StandardRejectionDeclaration<number>;
-  readonly listedIn: LocatedDefinitions;
 };
 
-/** An Event's Message Version and where it sits in its root, by identity: `['events', 'OrderCreated@2']`. */
-export type LocatedEvent = { readonly at: Path; readonly event: Event };
+/** An Event's Message Version, its Group, and where it sits, by identity. */
+export type LocatedEvent = { readonly at: Place; readonly event: Event; readonly group: Group };
 
-/** A Command's Message Version and where it sits in its root, by identity: `['commands', 'ChargeCard@1']`. */
-export type LocatedCommand = { readonly at: Path; readonly command: Command };
+/** A Command's Message Version, its Group, and where it sits, by identity. */
+export type LocatedCommand = {
+  readonly at: Place;
+  readonly command: Command;
+  readonly group: Group;
+};
 
-/** A Subscription and where it sits in its root, by name: `['subscriptions', 'notify-on-settled']`. */
-export type LocatedSubscription = { readonly at: Path; readonly subscription: Subscription };
+/**
+ * A Subscription, its Group, and where it sits, by name, else at its Group's list of
+ * Subscriptions, by its position there.
+ */
+export type LocatedSubscription = {
+  readonly at: Place;
+  readonly subscription: Subscription;
+  readonly group: Group;
+};

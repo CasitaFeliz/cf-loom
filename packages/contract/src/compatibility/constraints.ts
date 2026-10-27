@@ -1,7 +1,7 @@
 import { canonicalJson, type NumberNode, type StringNode } from '../walker/index.ts';
 import { isMultipleOf } from './decimals.ts';
 import { type Finding, found, type NodePairOf } from './findings.ts';
-import type { Constraint, ShapeDifference } from './report.ts';
+import type { Constraint, ShapeDifference } from './shape-differences.ts';
 
 /** The bounds of a number's value, a string's length or an array's item count. */
 type Bounds = Pick<NumberNode, 'min' | 'max' | 'exclusiveMin' | 'exclusiveMax'>;

@@ -99,18 +99,32 @@ describe('the Contract Package', () => {
       'total: z.object({ amount: z.int().min(0)',
     );
     expect(importing).toEqual([]);
-    expect(manifest.peerDependencies).not.toHaveProperty(['@org/definitions']);
-    expect(manifest).not.toHaveProperty('dependencies');
+    expect(Object.keys(manifest.peerDependencies).sort()).toEqual(['@cf-loom/contract', 'zod']);
+    expect(Object.keys(manifest).sort()).toEqual([
+      'cfLoom',
+      'exports',
+      'files',
+      'name',
+      'peerDependencies',
+      'sideEffects',
+      'type',
+      'version',
+    ]);
   });
 
-  test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or charge-on-created', () => {
+  test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or chargeOnCreated', () => {
     const files = filesOf(outDir);
 
     const events = Object.keys(files).filter((path) => path.startsWith('src/events/'));
-    const exported = [files['src/index.ts'], files['src/exported-snapshot.ts']].join('\n');
+    const sources = Object.keys(files)
+      .filter((path) => path.endsWith('.ts'))
+      .map((path) => files[path])
+      .join('\n');
 
     expect(events).toEqual(['src/events/order-created.v1.ts']);
-    expect(exported).toContain('OrderCreated@1');
-    expect(exported).not.toMatch(/ChargeCard|charge-on-created/i);
+    expect(files['src/index.ts']).toContain(
+      "export { orderCreatedEventV1 } from './events/order-created.v1.ts';",
+    );
+    expect(sources).not.toMatch(/ChargeCard|chargeOnCreated/i);
   });
 });

@@ -1,22 +1,21 @@
-import type { NotAllowed, Path } from '../walker/index.ts';
+import { type Place, type Site, type Step, siteLocationOf, siteTextOf } from '../walker/index.ts';
 
 /** The rules `generate` enforces on declarations, one id per documented rule, so a caller decides by rule. */
 export type Rule =
-  | 'not-a-root'
   | 'not-a-list'
   | 'not-a-declaration'
   | 'not-a-schema'
   | 'undeclared-field'
   | 'required-field'
   | 'not-a-string'
+  | 'blank-text'
   | 'name-grammar'
   | 'duplicate-group-name'
-  | 'duplicate-definitions-name'
   | 'duplicate-endpoint-name'
   | 'duplicate-endpoint-identity'
   | 'duplicate-guard-name'
-  | 'duplicate-dependency'
   | 'group-membership'
+  | 'provided-element'
   | 'empty-group'
   | 'canonical-path'
   | 'duplicate-path-param'
@@ -25,6 +24,7 @@ export type Rule =
   | 'method'
   | 'visibility'
   | 'lifecycle'
+  | 'deprecated-at'
   | 'success-status'
   | 'success-body'
   | 'input-body'
@@ -43,17 +43,13 @@ export type Rule =
   | 'qualifier-value'
   | 'qualifier-keys'
   | 'rejection-status'
-  | 'code-status-conflict'
-  | 'code-body-conflict'
+  | 'rejection-once'
   | 'reserved-code'
   | 'standard-rejection-listed'
   | 'standard-rejection-on-guard'
-  | 'standard-code-redefined'
-  | 'standard-codes-distinct'
-  | 'standard-rejections-once'
   | 'dependency-selection'
   | 'application-dependency'
-  | 'unused-dependency-event'
+  | 'dependency-package'
   | 'message-version'
   | 'duplicate-message-identity'
   | 'message-kind'
@@ -61,39 +57,63 @@ export type Rule =
   | 'subscription-event'
   | 'retired-event-subscribed'
   | 'duplicate-subscription-name'
-  | 'definitions-unlisted'
+  | 'definitions-export'
+  | 'definitions-unexported'
+  | 'definitions-ambiguous'
+  | 'definitions-unidentified'
+  | 'code-once'
   | 'package-name';
 
 /** A declaration that breaks a rule: where it sits, which rule, and the sentence a developer reads. */
 export type DeclarationFailure = {
   readonly kind: 'declaration';
-  readonly at: Path;
+  readonly site: Site;
+  readonly steps: readonly Step[];
   readonly rule: Rule;
   readonly message: string;
+  /** The declaration the failure sits in, so a tool that knows its file can name it. */
+  readonly declaration: unknown;
 };
 
-/** What makes a root invalid: a declaration that breaks a rule, or a construct that is not allowed. */
-export type Failure = DeclarationFailure | NotAllowed;
+/** A construct the walker refuses, once for the one schema it sits in, however many sites reach it. */
+export type NotAllowedFailure = {
+  readonly kind: 'not-allowed';
+  readonly site: Site;
+  readonly steps: readonly Step[];
+  readonly construct: string;
+  readonly instead?: string;
+  /** The declaration the failure sits in, none when the Snapshot, not a declaration, is judged. */
+  readonly declaration: unknown;
+  /** The other sites that reach the same schema, in code point order. */
+  readonly alsoIn: readonly Site[];
+  /** The origin as the Snapshot writes it, `<package>@<version>#<name>`, when a Definitions Package declares the schema. */
+  readonly origin: string | undefined;
+};
+
+/** What makes a Root invalid: a declaration that breaks a rule, or a construct that is not allowed. */
+export type Failure = DeclarationFailure | NotAllowedFailure;
 
 /** One declaration failure, as every rule returns it. */
-export function failure(at: Path, rule: Rule, message: string): DeclarationFailure {
-  return { kind: 'declaration', at, rule, message };
+export function failure(at: Place, rule: Rule, message: string): DeclarationFailure {
+  const { site, steps, declaration } = at;
+  return { kind: 'declaration', site, steps, rule, message, declaration };
 }
 
-/** Where something sits in a Snapshot on one line, its segments joined by dots, `(root)` for none. */
-export function locationOf(at: Path): string {
-  return at.length === 0 ? '(root)' : at.join('.');
-}
-
-/** One failure on one line, where it sits first, as every tool that reports a root's rules words it. */
+/** One failure on one line, where it sits first, as every tool that reports a Root's rules words it. */
 export function failureLineOf(broken: Failure): string {
-  const location = locationOf(broken.at);
+  const location = siteLocationOf(broken.site, broken.steps);
   switch (broken.kind) {
     case 'declaration':
       return `${location} ${broken.rule}: ${broken.message}`;
     case 'not-allowed':
-      return broken.instead === undefined
-        ? `${location} not allowed: ${broken.construct}`
-        : `${location} not allowed: ${broken.construct} (use ${broken.instead})`;
+      return `${location} not allowed: ${notAllowedWordsOf(broken)}`;
   }
+}
+
+/** The construct, what to use instead, the other sites that reach it and the package that declares it. */
+function notAllowedWordsOf({ construct, instead, alsoIn, origin }: NotAllowedFailure): string {
+  const use = instead === undefined ? [] : [`(use ${instead})`];
+  const also = alsoIn.length === 0 ? [] : [`(also in ${alsoIn.map(siteTextOf).join(', ')})`];
+  const declared = origin === undefined ? [] : [`(declared in ${origin})`];
+  return [construct, ...use, ...also, ...declared].join(' ');
 }

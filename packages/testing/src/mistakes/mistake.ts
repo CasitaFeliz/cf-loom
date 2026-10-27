@@ -1,15 +1,16 @@
-import type { Issue } from '@cf-loom/contract/internal';
+import type { Issue } from '@cf-loom/contract';
+import { issueLineOf } from '@cf-loom/contract/internal';
 
 /**
  * A mistake in a test, never an Outcome: thrown out of a fake's `fetch` under its own name, which
- * the client passes through unchanged, so the code under test cannot take it for a Fault, or out
- * of `fakeEvent`.
+ * the client passes through unchanged. The fake records it too, since the code under test may catch
+ * it; `verify()` throws it again.
  */
 export class FakeProviderError extends Error {
   override readonly name = 'FakeProviderError';
 }
 
-/** What a fake says went wrong with one Provider's Endpoint, or with a faked Event, `provider` then being its Message Version. */
+/** What a fake says went wrong with one Provider, or one of its Endpoints. */
 export type Mistake = {
   readonly provider: string;
   readonly endpoint?: string;
@@ -18,7 +19,7 @@ export type Mistake = {
   readonly cause?: unknown;
 };
 
-/** A mistake as thrown: who, what, then each Issue on its own line, never the value. */
+/** A mistake as thrown: who, what, then each Issue on its own line after who, never the value. */
 export function mistakeOf({
   provider,
   endpoint,
@@ -27,14 +28,9 @@ export function mistakeOf({
   cause,
 }: Mistake): FakeProviderError {
   const who = endpoint === undefined ? provider : `${provider}: ${endpoint}`;
-  const lines = [`${who}: ${what}`, ...issues.map(issueLineOf)];
+  const lines = [`${who}: ${what}`, ...issues.map((issue) => issueLineOf(who, issue))];
   const message = lines.join('\n');
   return cause === undefined
     ? new FakeProviderError(message)
     : new FakeProviderError(message, { cause });
-}
-
-function issueLineOf({ part, path, code, message }: Issue): string {
-  const at = path.length === 0 ? part : `${part} at ${path.join('.')}`;
-  return `  ${at}: ${code}: ${message}`;
 }

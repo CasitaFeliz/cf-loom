@@ -1,17 +1,19 @@
 import {
-  compareSemanticVersions,
-  isPrerelease,
   isSemanticVersion,
   ownOf,
   type PeerRanges,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
+import { compareSemanticVersions } from '../versioning/index.ts';
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
-/** The versions a package lists, lowest first. */
-export type Versions = { readonly kind: 'versions'; readonly versions: readonly string[] };
+/** What the registry lists for a package: its name and its versions, lowest first, none when npm does not know it. */
+export type Listing = { readonly packageName: string; readonly versions: readonly string[] };
+
+/** The listing of a package that lists at least one version. */
+export type Versions = { readonly kind: 'versions'; readonly listing: Listing };
 
 /** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
 export type VersionMetadata = {
@@ -19,6 +21,9 @@ export type VersionMetadata = {
   readonly peers: PeerRanges;
   readonly digests: readonly string[];
 };
+
+/** A version whose package.json carries no `cfLoom`: it was not published by cf-loom, so it is no Baseline. */
+export type NotPublishedByCfLoom = { readonly kind: 'not-cf-loom' };
 
 /** The version of a package a Baseline is read from, and the declared Snapshot it must be the Baseline of. */
 export type BaselineSource = {
@@ -29,44 +34,47 @@ export type BaselineSource = {
 
 /**
  * The versions `npm view <package> versions` printed, lowest first; a package that lists none, or
- * a key that is no semantic version, is a failure, since the highest version cannot be proven.
+ * a key that is no semantic version, is a failure, since the Baseline cannot be chosen.
  */
 export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
-  const items: readonly unknown[] = Array.isArray(printed) ? printed : [printed];
-  if (items.length === 0 || printed === undefined) {
-    return failed(
-      `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`,
-    );
-  }
+  const items = keysPrintedIn(printed);
   const unreadable = items.find((item) => !isSemanticVersion(item));
   if (unreadable !== undefined) {
     const key = typeof unreadable === 'string' ? unreadable : JSON.stringify(unreadable);
     return failed(`${packageName} lists ${key}, which is no semantic version`);
   }
-  return {
-    kind: 'versions',
-    versions: items.filter(isSemanticVersion).sort(compareSemanticVersions),
-  };
+  const versions = items.filter(isSemanticVersion).sort(compareSemanticVersions);
+  if (versions.length === 0) {
+    const none = `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`;
+    return failed(none);
+  }
+  return { kind: 'versions', listing: { packageName, versions } };
 }
 
-/** The version of the Baseline: the highest of versions listed lowest first that is not a prerelease. */
-export function baselineVersionOf(versions: readonly string[]): string | undefined {
-  return versions.filter((version) => !isPrerelease(version)).at(-1);
+/** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */
+function keysPrintedIn(printed: unknown): readonly unknown[] {
+  if (printed === undefined) {
+    return [];
+  }
+  return Array.isArray(printed) ? printed : [printed];
 }
 
-/**
- * The metadata `npm view <package>@<version>` printed for the version a Baseline is read from:
- * published by cf-loom as the declared kind, with peer ranges that are a map of texts and a
- * tarball with a sha512 digest to check it against.
- */
-export function metadataFrom(source: BaselineSource, printed: unknown): VersionMetadata | Failed {
+/** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
+export function metadataFrom(
+  source: BaselineSource,
+  printed: unknown,
+): VersionMetadata | NotPublishedByCfLoom | Failed {
   const { spec, version, declared } = source;
   if (ownOf(printed, 'version') !== version) {
     return failed(`npm view ${spec} printed no metadata`);
   }
-  const kind = ownOf(ownOf(printed, 'cfLoom'), 'kind');
+  const cfLoom = ownOf(printed, 'cfLoom');
+  if (cfLoom === undefined) {
+    return { kind: 'not-cf-loom' };
+  }
+  const kind = ownOf(cfLoom, 'kind');
   if (typeof kind !== 'string') {
-    return failed(`${spec} has no cfLoom: it was not published by cf-loom publish`);
+    return failed(`${spec} has a malformed cfLoom: its kind is no text`);
   }
   if (kind !== declared.kind) {
     return failed(`${spec} is the package of kind ${kind}, not ${declared.kind}`);

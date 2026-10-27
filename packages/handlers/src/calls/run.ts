@@ -1,4 +1,4 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   type Checked,
   checkedAdmission,
@@ -10,23 +10,23 @@ import {
   type Issue,
 } from '../checks/index.ts';
 import {
+  type CheckedAdmission,
+  type CheckedOutcome,
   type Fault,
   fault,
   isAdmission,
   isOutcome,
-  type ResolvedAdmission,
-  type ResolvedOutcome,
   thrownFault,
 } from '../outcomes/index.ts';
-import type { HandledElement } from './elements.ts';
+import type { Handled } from './handled.ts';
 import { returnedOf } from './implementation.ts';
 
-/** An implementation as the runtime calls it, whatever Element it was written for. */
+/** An implementation as the runtime calls it, whatever declaration it was written for. */
 export type Implementation = (...given: readonly unknown[]) => unknown;
 
-/** What a Handler was written with: its Element, its implementation, and whether it is a stub. */
-export type Written<Answering extends HandledElement> = {
-  readonly element: Answering;
+/** What a Handler was written with: its declaration, its implementation, and whether it is a Stub. */
+export type Written<Answering extends Handled> = {
+  readonly declaration: Answering;
   readonly implementation: Implementation;
   readonly stub: boolean;
 };
@@ -36,7 +36,7 @@ export type Written<Answering extends HandledElement> = {
  * Outcome, or answered.
  */
 export type Run<Answer> =
-  | { readonly kind: 'invalid-input'; readonly issues: readonly Issue[] }
+  | { readonly kind: 'invalid-call'; readonly issues: readonly Issue[] }
   | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
   | { readonly kind: 'thrown'; readonly fault: Fault }
   | { readonly kind: 'answered'; readonly answer: Answer };
@@ -45,37 +45,32 @@ export type Run<Answer> =
  * How one call of an EndpointHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` is the runtime's own bug, which `serve` answers as a Fault and reports to `onServiceFault`.
  */
-export type EndpointRun = Run<ResolvedOutcome<Endpoint>>;
+export type EndpointRun = Run<CheckedOutcome<Endpoint>>;
 
 /**
  * How one call of a GuardHandler went, as `serve` answers it. Inside `serve`, an Issue at
  * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
  * to `onServiceFault`.
  */
-export type GuardRun = Run<ResolvedAdmission<Guard>>;
+export type GuardRun = Run<CheckedAdmission<Guard>>;
 
 /**
- * Runs one call of an EndpointHandler: checks what it is given and what it builds, then resolves.
+ * Runs one call of an EndpointHandler: checks what it is given and what it builds.
  * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
  */
 export function endpointRunOf(
   written: Written<Endpoint>,
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
-  return caught(() => endpointCallOf(written, given, standards));
+  return caught(() => endpointCallOf(written, given));
 }
 
 /**
- * Runs one call of a GuardHandler: checks what it is given and what it admits, then resolves.
+ * Runs one call of a GuardHandler: checks what it is given and what it admits.
  * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
  */
-export function guardRunOf(
-  written: Written<Guard>,
-  given: GuardGiven,
-  standards: StandardRejections,
-): Promise<GuardRun> {
-  return caught(() => guardCallOf(written, given, standards));
+export function guardRunOf(written: Written<Guard>, given: GuardGiven): Promise<GuardRun> {
+  return caught(() => guardCallOf(written, given));
 }
 
 async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answer>> {
@@ -87,44 +82,44 @@ async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answ
 }
 
 async function endpointCallOf(
-  { element: endpoint, implementation }: Written<Endpoint>,
+  { declaration: endpoint, implementation }: Written<Endpoint>,
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
   const checked = checkedGiven(() => checkedEndpointCall(endpoint, given));
   if (checked.kind !== 'value') {
     return checked;
   }
   const { input, context } = checked.value;
-  const run = () => implementation(input, context, { resources: given.resources });
+  const { request, resources } = given;
+  const run = () => implementation(input, { context, request }, { resources });
   const returned = await returnedOf(endpoint, run, isOutcome);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
-  return answeredRunOf(checkedOutcome(endpoint, returned.built, standards));
+  return answeredRunOf(checkedOutcome(endpoint, returned.built));
 }
 
 async function guardCallOf(
-  { element: guard, implementation }: Written<Guard>,
+  { declaration: guard, implementation }: Written<Guard>,
   given: GuardGiven,
-  standards: StandardRejections,
 ): Promise<GuardRun> {
   const checked = checkedGiven(() => checkedGuardCall(guard, given));
   if (checked.kind !== 'value') {
     return checked;
   }
   const { demands, context, qualifier } = checked.value;
-  const run = () => implementation(demands, context, { qualifier, resources: given.resources });
+  const { request, resources } = given;
+  const run = () => implementation(demands, { context, qualifier, request }, { resources });
   const returned = await returnedOf(guard, run, isAdmission);
   if (returned.kind === 'not-built') {
     return { kind: 'thrown', fault: thrownFault(returned.cause) };
   }
-  return answeredRunOf(checkedAdmission(guard, returned.built, standards));
+  return answeredRunOf(checkedAdmission(guard, returned.built));
 }
 
 /**
- * What a call is given, checked; a throw while checking, such as a stack overflow on deep input, is
- * the Fault not committed, since the implementation never ran.
+ * What a call is given, checked; a throw while checking, such as a getter in the Input that throws,
+ * is the Fault not committed, since the implementation never ran.
  */
 function checkedGiven<Value>(
   check: () => Checked<Value>,
@@ -132,7 +127,7 @@ function checkedGiven<Value>(
   try {
     const checked = check();
     if (checked.kind === 'issues') {
-      return { kind: 'invalid-input', issues: checked.issues };
+      return { kind: 'invalid-call', issues: checked.issues };
     }
     return checked;
   } catch (e) {
@@ -141,11 +136,10 @@ function checkedGiven<Value>(
 }
 
 /**
- * The Fault of a throw before an implementation ran, such as a stack overflow while its input is
- * parsed: not committed, since nothing was done, and not retryable, since the same request throws
- * again.
+ * The Fault of a throw before an implementation ran, such as a getter in its Input that throws: not
+ * committed, since nothing was done, and not retryable, since the same request throws again.
  */
-export function notRunFaultOf(cause: unknown): Fault {
+function notRunFaultOf(cause: unknown): Fault {
   return fault({ committed: 'no', retryable: false, cause });
 }
 

@@ -1,4 +1,4 @@
-import { isMessageVersion, methods } from '../declarations/index.ts';
+import { isMessageVersion, isMethod } from '../declarations/index.ts';
 import { textOf } from './written.ts';
 
 /** The segments between the slashes of a path, a leading or trailing slash dropped. */
@@ -119,7 +119,7 @@ export function readEndpointIdentity(
   const separator = identity.indexOf(' ');
   const method = identity.slice(0, separator);
   const path = identity.slice(separator + 1);
-  const isReadable = methods.some((known) => known === method) && identityPathForm.test(path);
+  const isReadable = isMethod(method) && identityPathForm.test(path);
   return isReadable ? { method, identityPath: path } : undefined;
 }
 

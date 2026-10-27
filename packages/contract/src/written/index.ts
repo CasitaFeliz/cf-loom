@@ -2,11 +2,28 @@ export type { AnswerableRejection } from './answerable.ts';
 export {
   answerableByCodeOf,
   answerableRejectionsOf,
+  declaredByCodeOf,
   isSameRejection,
   resolutionOf,
 } from './answerable.ts';
 export type { Declarations } from './declarations.ts';
-export { declarationsOf, endpointAt, endpointsOf, listedDefinitionsOf } from './declarations.ts';
+export {
+  declarationsOf,
+  standardRejectionsDeclarerOf,
+  standardRejectionsSourceOf,
+} from './declarations.ts';
+export type { Listed } from './field-listings.ts';
+export { fieldListings, groupedFields } from './field-listings.ts';
+export {
+  commandsOf,
+  declarationsListedBy,
+  endpointsOf,
+  eventsOf,
+  isListable,
+  listingsOf,
+  providedListingsOf,
+  subscriptionsOf,
+} from './grouped.ts';
 export type { PathSegment } from './identity.ts';
 export {
   endpointSegmentsOf,
@@ -23,11 +40,11 @@ export {
   segmentsOf,
   subjectVersionOf,
 } from './identity.ts';
+export { issueLineOf } from './issue-line.ts';
 export type {
   LocatedCode,
   LocatedCommand,
-  LocatedDefinitions,
-  LocatedDependencies,
+  LocatedDependency,
   LocatedEndpoint,
   LocatedEvent,
   LocatedGroup,
@@ -35,9 +52,14 @@ export type {
   LocatedRejection,
   LocatedStandardRejection,
   LocatedSubscription,
-  Root,
+  NamedDefinitions,
 } from './located.ts';
-export { eventServiceOf } from './messaging.ts';
+export type { Member, Members } from './members.ts';
+export { memberGuardsOf, membersOf } from './members.ts';
+export type { EventSource } from './messaging.ts';
+export { eventServiceOf, eventSourceOf } from './messaging.ts';
+export type { PackageNameParts } from './package-names.ts';
+export { packageNamePartsOf } from './package-names.ts';
 export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
 export {
   demandParts,
@@ -47,8 +69,6 @@ export {
   inputParts,
   isInputPart,
   isObjectPart,
-  isQueryOrHeadersPart,
-  isReadShapePart,
   isSchema,
   partFieldOf,
   schemaOf,
@@ -57,6 +77,8 @@ export {
   writtenAt,
 } from './parts.ts';
 export { reachedCodesOf, reachedGuardsOf, reachOf } from './reach.ts';
+export type { ReadShape, ShapeFields, ShapeSide } from './read-shape.ts';
+export { rejectionShapeOf, shapeFieldsOf, shapeSides, successShapeOf } from './read-shape.ts';
 export {
   attachedGuardOf,
   attachedGuardsOf,
@@ -68,6 +90,8 @@ export { resolvedStandards, standardRejectionsOf } from './standard-rejections.t
 export type { WrittenObject } from './written.ts';
 export {
   entriesOf,
+  isAbsentAt,
+  isEmptyField,
   isMissing,
   isPlainObject,
   isWithoutValue,
@@ -75,4 +99,5 @@ export {
   ownOf,
   partOf,
   textOf,
+  writtenTextOf,
 } from './written.ts';

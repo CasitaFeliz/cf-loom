@@ -1,5 +1,6 @@
-import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
-import { type Messaging, messaging } from '@cf-loom/messaging';
+import { notFound } from '@cf-loom/contract';
+import { InvalidCallError, isRejectionOf } from '@cf-loom/handlers';
+import type { Messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { unauthenticated } from '@org/definitions';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -20,7 +21,7 @@ let running: Messaging<typeof contract>;
 let resources: Resources;
 
 beforeAll(async () => {
-  running = await messaging(contract, memory());
+  running = await memory(contract);
   resources = { publisher: running.publisher, sender: running.sender };
 });
 
@@ -32,7 +33,7 @@ describe('getOrder', () => {
   test('a seeded order is answered with its status and total', async () => {
     const input = { params: { orderId: PAID_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context);
+    const outcome = await getOrderHandler(input, { context });
 
     expect(outcome).toMatchObject({
       kind: 'success',
@@ -46,30 +47,30 @@ describe('getOrder', () => {
     });
   });
 
-  test('an order nobody placed is answered RESOURCE_NOT_FOUND', async () => {
+  test('an order nobody placed is answered the not-found Rejection', async () => {
     const input = { params: { orderId: UNKNOWN_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context, { contract });
+    const outcome = await getOrderHandler(input, { context });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', code: 'RESOURCE_NOT_FOUND', status: 404 });
+    expect(isRejectionOf(outcome, notFound)).toBe(true);
   });
 
   test('a locked order is answered ORDER_LOCKED with the instant it was locked', async () => {
     const input = { params: { orderId: LOCKED_ORDER_ID } };
 
-    const outcome = await getOrderHandler(input, context);
+    const outcome = await getOrderHandler(input, { context });
 
     expect(isRejectionOf(outcome, orderLocked) && outcome.body).toEqual({
       lockedAt: '2026-01-15T09:30:00Z',
     });
   });
 
-  test('an order id that is no UUID throws InvalidInputError', async () => {
+  test('an order id that is no UUID throws InvalidCallError', async () => {
     const input = { params: { orderId: 'o-1' } };
 
-    const called = getOrderHandler(input, context);
+    const called = getOrderHandler(input, { context });
 
-    await expect(called).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(called).rejects.toBeInstanceOf(InvalidCallError);
   });
 });
 
@@ -79,7 +80,7 @@ describe('createOrder', () => {
 
     const input = { body: { customerId: CUSTOMER_ID, total } };
 
-    const outcome = await createOrderHandler(input, context, { resources });
+    const outcome = await createOrderHandler(input, { context }, { resources });
 
     expect(outcome).toMatchObject({
       kind: 'success',
@@ -104,7 +105,10 @@ describe('apiKey', () => {
 
     const admission = await apiKeyHandler(demands, {});
 
-    expect(isRejectionOf(admission, unauthenticated) && admission.status).toBe(401);
+    expect(isRejectionOf(admission, unauthenticated)).toBe(true);
+    expect(isRejectionOf(admission, unauthenticated) && admission.headers).toEqual({
+      'www-authenticate': 'ApiKey realm="orders-service"',
+    });
   });
 
   test('a missing key is answered UNAUTHENTICATED', async () => {
@@ -112,7 +116,7 @@ describe('apiKey', () => {
 
     const admission = await apiKeyHandler(demands, {});
 
-    expect(isRejectionOf(admission, unauthenticated) && admission.status).toBe(401);
+    expect(isRejectionOf(admission, unauthenticated)).toBe(true);
   });
 });
 

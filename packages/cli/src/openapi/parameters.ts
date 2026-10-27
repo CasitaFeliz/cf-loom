@@ -28,10 +28,8 @@ export function demandedParametersOf(input: Input): readonly OpenApiObject[] {
   return [...parametersOf('query', input.query), ...parametersOf('header', input.headers)];
 }
 
-function parametersOf(location: ParameterIn, object: ObjectNode | null): readonly OpenApiObject[] {
-  return Object.entries(object?.fields ?? {}).map(([name, field]) =>
-    parameterOf(location, name, field),
-  );
+function parametersOf(location: ParameterIn, object: ObjectNode): readonly OpenApiObject[] {
+  return Object.entries(object.fields).map(([name, field]) => parameterOf(location, name, field));
 }
 
 /** A parameter with its schema, which keeps its description beside the parameter's own. */

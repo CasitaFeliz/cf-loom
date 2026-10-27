@@ -1,21 +1,21 @@
-import type { Client, ReceivedOutcome } from '@cf-loom/client';
+import type { Client } from '@cf-loom/client';
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
-  defineEvent,
   defineGroup,
   defineGuard,
-  defineSubscription,
+  defineService,
   type Endpoint,
   notFound,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { type CheckedOutcome, handle, success, type WithResources } from '@cf-loom/handlers';
 import { expect, test } from 'vitest';
 import { z } from 'zod';
-import { fakeEvent, fakeProvider } from './index.ts';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
+import { fakeProvider } from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -38,130 +38,159 @@ const getPayment = defineEndpoint({
   rejections: [notFound],
 });
 
-const paymentSettledV1 = defineEvent({
-  name: 'PaymentSettled',
-  version: 1,
-  visibility: 'internal',
-  description: 'A payment was settled',
-  body: z.object({ paymentId: z.string() }),
-});
-
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
 ) {
   const listed = Object.values(endpoints) as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  const events = { paymentSettledV1 };
-  return { name, version: '1.0.0', endpoints, events, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment }), {
-  endpoints: [getPayment],
-  events: [paymentSettledV1],
+/** The Provider's Contract Package, as a Consumer imports it. */
+const payments = contractPackageOf({ getPayment });
+
+const paymentsDependency = defineDependency({
+  endpoints: [payments.endpoints.getPayment],
 });
 
-const PAYMENT_ID = 'pay-1';
-const amount = 1200;
+const settlePayment = defineEndpoint({
+  name: 'settlePayment',
+  method: 'POST',
+  path: '/payments/:paymentId/settle',
+  visibility: 'internal',
+  description: 'Settles a payment once the Provider has it',
+  input: { params: z.object({ paymentId: z.string() }) },
+  success: { status: 200, body: z.object({ outcomes: z.array(z.string()) }) },
+});
 
-type PaymentOutcome = ReceivedOutcome<typeof paymentsDeps, 'getPayment'>;
+type Resources = { readonly payments: Client<typeof paymentsDependency, 'x-api-key'> };
+type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
-/** The code under test: it asks for a payment until the Provider answers it, keeping each Outcome. */
-class SettlementService {
-  readonly outcomes: PaymentOutcome[] = [];
-  readonly #payments: Client<typeof paymentsDeps, 'x-api-key'>;
-
-  constructor(payments: Client<typeof paymentsDeps, 'x-api-key'>) {
-    this.#payments = payments;
-  }
-
-  async settle(paymentId: string): Promise<void> {
+/** The Handler under test: it asks for a payment until the Provider answers it, and answers each Outcome it received, as JSON. */
+const settlePaymentHandler = handle(
+  settlePayment,
+  async ({ params }, _call, { resources: { payments } }: Needs<'payments'>) => {
+    const outcomes: string[] = [];
     for (let attempt = 0; attempt < 7; attempt += 1) {
-      const outcome = await this.#payments.getPayment({ params: { paymentId } });
-      this.outcomes.push(outcome);
+      const outcome = await payments.getPayment({ params: { paymentId: params.paymentId } });
+      outcomes.push(JSON.stringify(outcome));
       if (outcome.kind === 'success') {
-        return;
+        break;
       }
     }
+    return success({ outcomes });
+  },
+);
+
+/** The Outcomes the Handler under test received, in order. */
+function received(answer: CheckedOutcome<typeof settlePayment>): unknown[] {
+  if (answer.kind !== 'success') {
+    throw new Error(`The Handler answered ${answer.kind}`);
   }
+  return answer.body.outcomes.map((outcome) => JSON.parse(outcome));
 }
 
-test('the README’s fakeProvider example runs: each Outcome in order, and the calls listed', async () => {
-  const payments = fakeProvider(paymentsDeps);
+test('the README’s fakeProvider example runs: a Handler called directly with the fake’s client receives each scripted Outcome', async () => {
+  const payments = fakeProvider(paymentsDependency);
   payments
     .on('getPayment')
     .once((r) => r.reject('NOT_FOUND'))
-    .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, {}))
-    .once((r) => r.fault({ committed: 'no', retryable: true }))
+    .once((r) => r.unknownRejection('CARD_EXPIRED'))
+    .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
     .once((r) => r.noConnection())
     .once((r) => r.reset())
     .once((r) => r.status(502))
-    .otherwise((r, { params }) => r.success({ id: params.paymentId, amount }));
+    .otherwise((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
 
-  const settlement = new SettlementService(payments.client({ headers: { 'x-api-key': 'k' } }));
-  await settlement.settle(PAYMENT_ID);
+  const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };
+  const answer = await settlePaymentHandler({ params: { paymentId: 'pay-1' } }, {}, { resources });
   const calls = payments.calls('getPayment');
 
-  expect(settlement.outcomes).toMatchObject([
-    { kind: 'rejection', known: true, code: 'NOT_FOUND', message: 'Not found', body: undefined },
-    { kind: 'rejection', known: false, code: 'CARD_EXPIRED', message: 'CARD_EXPIRED', body: {} },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'Internal error' },
-    { kind: 'fault', committed: 'no', retryable: true, message: 'No connection to the Provider' },
-    { kind: 'fault', committed: 'unknown', retryable: true, message: 'The connection failed' },
-    { kind: 'fault', committed: 'unknown', retryable: false, message: 'The Provider answered 502' },
-    { kind: 'success', value: { id: PAYMENT_ID, amount }, headers: {} },
+  expect(answer).toMatchObject({ kind: 'success', status: 200 });
+  expect(received(answer)).toMatchObject([
+    { kind: 'rejection', source: 'provider', code: 'NOT_FOUND', status: 404, message: 'Not found' },
+    {
+      kind: 'unknown-rejection',
+      source: 'provider',
+      code: 'CARD_EXPIRED',
+      status: 422,
+      message: 'CARD_EXPIRED',
+    },
+    {
+      kind: 'fault',
+      source: 'provider',
+      status: 503,
+      committed: 'no',
+      retryable: true,
+      message: 'Internal error',
+      retryAfter: '30',
+    },
+    {
+      kind: 'fault',
+      source: 'no-connection',
+      committed: 'no',
+      retryable: true,
+      message: 'No connection to the Provider',
+    },
+    {
+      kind: 'fault',
+      source: 'connection-lost',
+      committed: 'unknown',
+      retryable: true,
+      message: 'The connection failed',
+    },
+    {
+      kind: 'fault',
+      source: 'status',
+      status: 502,
+      committed: 'unknown',
+      retryable: false,
+      message: 'The Provider answered 502',
+    },
+    { kind: 'success', status: 200, body: { id: 'pay-1', amount: 1200 } },
   ]);
-  const input = { params: { paymentId: PAYMENT_ID }, headers: { 'x-api-key': 'k' } };
-  expect(calls).toEqual(Array.from({ length: 7 }, () => ({ kind: 'valid', input })));
+  const input = { params: { paymentId: 'pay-1' }, headers: { 'x-api-key': 'k' } };
+  expect(calls).toEqual(Array.from({ length: 7 }, () => input));
 });
 
-test('the README’s fakeEvent example runs: a faked PaymentSettled reaches notifyOnSettledHandler', async () => {
-  const notifyOnSettled = defineSubscription({
-    name: 'notify-on-settled',
-    event: paymentsDeps.events.paymentSettledV1,
-  });
-  const received: unknown[] = [];
-  const notifications = { send: async (paymentId: string) => void received.push({ paymentId }) };
-  const notifyOnSettledHandler = handle(
-    withReader(notifyOnSettled, paymentsDeps.events.paymentSettledV1.body),
-    async (
-      body,
-      _meta,
-      { resources }: WithResources<{ readonly notifications: typeof notifications }>,
-    ) => {
-      await resources.notifications.send(body.paymentId);
-    },
-  );
+test('the README’s verify example runs: a fake all of whose steps were taken verifies, and one left a step does not', async () => {
+  const payments = fakeProvider(paymentsDependency);
+  payments
+    .on('getPayment')
+    .once((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
+  const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };
+  const unsettled = fakeProvider(paymentsDependency);
+  unsettled.on('getPayment').once((r) => r.fault({ committed: 'no', retryable: true }));
 
-  const settled = fakeEvent(paymentsDeps.events.paymentSettledV1, { paymentId: PAYMENT_ID });
-  const answer = await notifyOnSettledHandler(
-    settled,
-    { messageId: 'PaymentSettled.v1:pay-1', factId: 'pay-1', deliveryCount: 1 },
-    { resources: { notifications } },
-  );
+  await settlePaymentHandler({ params: { paymentId: 'pay-1' } }, {}, { resources });
 
-  expect(answer).toBeUndefined();
-  expect(received).toEqual([{ paymentId: PAYMENT_ID }]);
+  expect(() => payments.verify()).not.toThrow();
+  expect(() => unsettled.verify()).toThrow('payments-service: getPayment: 1 once step left unused');
+});
+
+test('the entry exports fakeProvider and FakeProviderError alone, as the README lists them', async () => {
+  const entry = await import('./index.ts');
+
+  const exported = Object.keys(entry).sort();
+
+  expect(exported).toEqual(['FakeProviderError', 'fakeProvider']);
 });

@@ -6,26 +6,32 @@ import {
   defineSubscription,
   notFound,
   openEnumReader,
+  type ServiceContract,
 } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   admit,
-  type CommandHandler,
   type EndpointHandler,
-  type EventHandler,
+  type EndpointImplementation,
   type Fault,
   fault,
-  type GuardCall,
   type GuardHandler,
+  type HandledBy,
   type HandlerMap,
+  type HandlerMapOf,
   handle,
+  type MessageHandler,
+  type MessageImplementation,
   type MessageMeta,
+  type NoResources,
+  type Pairing,
+  type ResourcesNotAnnotated,
   type ResourcesOf,
+  readersOf,
   reject,
   success,
   type WithResources,
-  withReader,
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -37,21 +43,25 @@ const apiKey = defineGuard({
   context: z.object({ callerId: z.string() }),
 });
 
-function anEndpoint<const Name extends string>(name: Name) {
-  return defineEndpoint({
-    name,
-    method: 'GET',
-    path: '/orders/:orderId',
-    visibility: 'public',
-    description: 'One order by id',
-    input: { params: z.object({ orderId: z.uuid() }) },
-    success: { status: 200, body: z.object({ id: z.uuid() }) },
-    rejections: [notFound],
-  });
-}
+const permission = defineGuard({
+  name: 'permission',
+  description: 'The Caller holds every listed permission',
+  guards: [apiKey],
+  qualifier: z.array(z.enum(['orders:read', 'orders:edit'])).min(1),
+});
 
-const getOrder = anEndpoint('getOrder');
-const findOrder = anEndpoint('findOrder');
+const orderEndpoint = {
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order by id',
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 200, body: z.object({ id: z.uuid() }) },
+  rejections: [notFound],
+} as const;
+
+const getOrder = defineEndpoint({ ...orderEndpoint, name: 'getOrder' });
+const findOrder = defineEndpoint({ ...orderEndpoint, name: 'findOrder' });
 
 function aCommand<const Name extends string>(name: Name) {
   return defineCommand({
@@ -67,9 +77,6 @@ const refundCardV1 = aCommand('RefundCard');
 
 const statusReader = z.object({ orderId: z.uuid(), status: openEnumReader(['pending', 'paid']) });
 
-const chargeCard = withReader(chargeCardV1, statusReader);
-const refundCard = withReader(refundCardV1, statusReader);
-
 const orderPaidV1 = defineEvent({
   name: 'OrderPaid',
   version: 1,
@@ -78,63 +85,104 @@ const orderPaidV1 = defineEvent({
   body: z.object({ orderId: z.uuid() }),
 });
 
-const notifyOnPaidV1 = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+const notifyOnPaidV1 = defineSubscription({
+  name: 'notifyOnPaid',
+  description: 'Notify on paid',
+  event: orderPaidV1,
+});
 
-const notifyOnPaid = withReader(notifyOnPaidV1, statusReader);
+const readers = readersOf({
+  commands: {
+    chargeCardV1: { declaration: chargeCardV1, reader: statusReader },
+    refundCardV1: { declaration: refundCardV1, reader: statusReader },
+  },
+  subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: statusReader } },
+});
 
-const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+const chargeCard = readers.commands.chargeCardV1;
+const refundCard = readers.commands.refundCardV1;
+const notifyOnPaid = readers.subscriptions.notifyOnPaid;
+
+const meta = { messageId: 'command.ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+
+const handleRefusal =
+  'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader, as the readers file exports it: readers.commands.<name> or readers.subscriptions.<name>';
 
 describe('handle', () => {
-  test('a Handler returned by handle() is a function that carries its Element', () => {
+  test('a Handler returned by handle() is a function that carries its declaration', () => {
     const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID }));
 
     expect(typeof getOrderHandler).toBe('function');
-    expect(getOrderHandler.element).toBe(getOrder);
+    expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
   test('handle() given something that is no Endpoint, Guard or paired Command or Subscription throws', () => {
-    const notAnElement = { ...getOrder };
+    const copiedEndpoint = { ...getOrder };
 
-    const write = () => handle(notAnElement, () => success({ id: ORDER_ID }));
+    const write = () => handle(copiedEndpoint, () => success({ id: ORDER_ID }));
 
-    expect(write).toThrow(
-      'handle() takes an Endpoint or a Guard, or a Command or Subscription paired with its Reader by withReader()',
-    );
+    expect(write).toThrow(handleRefusal);
   });
 
-  test("a Message Handler carries the root's own Command or Subscription as its element", () => {
+  test("a Message Handler carries the Root's own Command or Subscription as its declaration", () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const notifyOnPaidStub = handle.stub(notifyOnPaid);
 
-    const elements = [chargeCardHandler.element, notifyOnPaidStub.element];
+    const declarations = [chargeCardHandler.declaration, notifyOnPaidStub.declaration];
 
-    expect(elements).toEqual([chargeCardV1, notifyOnPaidV1]);
-    expect(elements[0]).toBe(chargeCardV1);
-    expect(elements[1]).toBe(notifyOnPaidV1);
+    expect(declarations).toEqual([chargeCardV1, notifyOnPaidV1]);
+    expect(declarations[0]).toBe(chargeCardV1);
+    expect(declarations[1]).toBe(notifyOnPaidV1);
   });
 
   test('handle() given a bare Command or Subscription is a type error and throws', () => {
     const writes = [
-      // @ts-expect-error a Command is handled only paired with its Reader
+      // @ts-expect-error a Command is handled only as the readers file pairs it
       () => handle(chargeCardV1, () => undefined),
-      // @ts-expect-error a Subscription is handled only paired with its Reader
+      // @ts-expect-error a Subscription is handled only as the readers file pairs it
       () => handle.stub(notifyOnPaidV1),
     ];
 
     for (const write of writes) {
-      expect(write).toThrow('paired with its Reader by withReader()');
+      expect(write).toThrow(handleRefusal);
     }
   });
 
-  test('a Handler of one Command is not a Handler of another', () => {
+  test("handle() of a Command's pairing returns a MessageHandler of that pairing", () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
 
-    // @ts-expect-error a Handler is nominal over its Command
-    const refundCardHandler: CommandHandler<typeof refundCard> = chargeCardHandler;
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expect(chargeCardHandler.declaration).toBe(chargeCardV1);
+  });
 
-    expectTypeOf(chargeCardHandler).toEqualTypeOf<CommandHandler<typeof chargeCard>>();
-    expectTypeOf(handle.stub(notifyOnPaid)).toEqualTypeOf<EventHandler<typeof notifyOnPaid>>();
-    expect(refundCardHandler.element).toBe(chargeCardV1);
+  test("handle() of a Subscription's pairing returns a MessageHandler of that pairing", () => {
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
+
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
+  });
+
+  test('handle.stub() of a pairing returns a MessageHandler taking no Resources', () => {
+    const chargeCardStub = handle.stub(chargeCard);
+    const notifyOnPaidStub = handle.stub(notifyOnPaid);
+
+    expectTypeOf(chargeCardStub).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expectTypeOf(notifyOnPaidStub).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
+    expect([chargeCardStub.declaration, notifyOnPaidStub.declaration]).toEqual([
+      chargeCardV1,
+      notifyOnPaidV1,
+    ]);
+  });
+
+  test('a MessageHandler is assignable to the MessageHandler of no other pairing, whichever kind', () => {
+    type Pairings = typeof chargeCard | typeof refundCard | typeof notifyOnPaid;
+    type PairingsItIsAssignedTo<Target extends Pairing> = Target extends Pairing
+      ? [MessageHandler<Target>] extends [MessageHandler<Exclude<Pairings, Target>>]
+        ? Target
+        : never
+      : never;
+
+    expectTypeOf<PairingsItIsAssignedTo<Pairings>>().toBeNever();
   });
 
   test("a Message Handler's body is typed by its Reader, Unknown cases included", () => {
@@ -161,7 +209,57 @@ describe('handle', () => {
       { ...meta, headers: { traceparent: '00-abc-def-01' } },
     );
     expectTypeOf<MessageMeta['headers']>().toEqualTypeOf<Readonly<Record<string, string>>>();
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
+  });
+
+  test('a direct call without lastAttempt gives the Handler lastAttempt false', async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, meta);
+    await notifyOnPaidHandler(
+      { orderId: ORDER_ID, status: 'paid' },
+      { ...meta, lastAttempt: true },
+    );
+
+    expect(given.map(({ lastAttempt }) => lastAttempt)).toEqual([false, true]);
+  });
+
+  test('a direct call without a signal gives the Handler a signal that is not aborted', async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, meta);
+
+    expect(given[0]?.signal).toBeInstanceOf(AbortSignal);
+    expect(given[0]?.signal.aborted).toBe(false);
+  });
+
+  test("a direct call's signal reaches the Handler as given", async () => {
+    const given: MessageMeta[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaid, (_body, received) => {
+      given.push(received);
+    });
+    const signal = AbortSignal.abort(new Error('shutting down'));
+
+    await notifyOnPaidHandler({ orderId: ORDER_ID, status: 'paid' }, { ...meta, signal });
+
+    expect(given[0]?.signal).toBe(signal);
+  });
+
+  test("MessageMeta's signal is an AbortSignal, and a direct call takes one or leaves it out", () => {
+    const notifyOnPaidHandler = handle(notifyOnPaid, () => undefined);
+
+    expectTypeOf<MessageMeta['signal']>().toEqualTypeOf<AbortSignal>();
+    expectTypeOf(notifyOnPaidHandler).toBeCallableWith({ orderId: ORDER_ID, status: 'paid' }, meta);
+    expectTypeOf(notifyOnPaidHandler).toBeCallableWith(
+      { orderId: ORDER_ID, status: 'paid' },
+      { ...meta, signal: new AbortController().signal },
+    );
   });
 
   test("a Message Handler's direct call answers a Fault or nothing", () => {
@@ -184,9 +282,9 @@ describe('handle', () => {
     const chargeCardHandler = handle(chargeCard, async () => {});
     const notifyOnPaidHandler = handle(notifyOnPaid, () => {});
 
-    expectTypeOf(chargeCardHandler).toEqualTypeOf<CommandHandler<typeof chargeCard>>();
-    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<EventHandler<typeof notifyOnPaid>>();
-    expect(notifyOnPaidHandler.element).toBe(notifyOnPaidV1);
+    expectTypeOf(chargeCardHandler).toEqualTypeOf<MessageHandler<typeof chargeCard>>();
+    expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<MessageHandler<typeof notifyOnPaid>>();
+    expect(notifyOnPaidHandler.declaration).toBe(notifyOnPaidV1);
   });
 
   test('an Endpoint implementation that takes no parameters keeps its literal types', () => {
@@ -202,7 +300,7 @@ describe('handle', () => {
     const echoSmallHandler = handle(echoSmall, () => success({ headers: { 'x-small': 1.5e-7 } }));
 
     expectTypeOf(echoSmallHandler).toEqualTypeOf<EndpointHandler<typeof echoSmall>>();
-    expect(echoSmallHandler.element).toBe(echoSmall);
+    expect(echoSmallHandler.declaration).toBe(echoSmall);
   });
 
   test('a Handler written for an Endpoint or a Guard has its Handler type', () => {
@@ -211,7 +309,7 @@ describe('handle', () => {
 
     expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(apiKeyHandler).toEqualTypeOf<GuardHandler<typeof apiKey>>();
-    expect(apiKeyHandler.element).toBe(apiKey);
+    expect(apiKeyHandler.declaration).toBe(apiKey);
   });
 
   test('an implementation returning any value but nothing or a Fault is a type error', () => {
@@ -227,16 +325,16 @@ describe('handle', () => {
 
     expectTypeOf(endpointStub).toEqualTypeOf<EndpointHandler<typeof getOrder>>();
     expectTypeOf(guardStub).toEqualTypeOf<GuardHandler<typeof apiKey>>();
-    expect(guardStub.element).toBe(apiKey);
+    expect(guardStub.declaration).toBe(apiKey);
   });
 
   test('a Handler of one Endpoint is not a Handler of another', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    // @ts-expect-error a Handler is nominal over its Element
+    // @ts-expect-error a Handler is nominal over its declaration
     const findOrderHandler: EndpointHandler<typeof findOrder> = getOrderHandler;
 
-    expect(findOrderHandler.element).toBe(getOrder);
+    expect(findOrderHandler.declaration).toBe(getOrder);
   });
 
   test('a Handler of one Guard is not a Handler of another', () => {
@@ -251,7 +349,7 @@ describe('handle', () => {
     // @ts-expect-error a Handler is nominal over its Guard
     const tenantKeyHandler: GuardHandler<typeof tenantKey> = apiKeyHandler;
 
-    expect(tenantKeyHandler.element).toBe(apiKey);
+    expect(tenantKeyHandler.declaration).toBe(apiKey);
   });
 
   test('an implementation that returns no Outcome answers the Fault, a TypeError as cause', async () => {
@@ -275,7 +373,7 @@ describe('handle', () => {
 
     expect(admission).toMatchObject({
       kind: 'fault',
-      cause: new TypeError("apiKey's Handler returned no Outcome but undefined"),
+      cause: new TypeError("apiKey's Handler returned no Admission but undefined"),
     });
   });
 });
@@ -287,18 +385,18 @@ describe('handle and Resources', () => {
   test('handle() infers the Resources an EndpointHandler takes from its last parameter', () => {
     const getOrderHandler = handle(
       getOrder,
-      (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+      (_input, _call, { resources }: WithResources<OrdersTaken>) =>
         resources.orders.find(ORDER_ID) === undefined
           ? reject(notFound)
           : success({ id: ORDER_ID }),
     );
 
     expectTypeOf(getOrderHandler).toEqualTypeOf<EndpointHandler<typeof getOrder, OrdersTaken>>();
-    expect(getOrderHandler.element).toBe(getOrder);
+    expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
   test('a direct call without the Resources the Handler takes is a type error, and one that takes none needs no last argument', () => {
-    const takes = handle(getOrder, (_input, _context, { resources }: WithResources<OrdersTaken>) =>
+    const takes = handle(getOrder, (_input, _call, { resources }: WithResources<OrdersTaken>) =>
       resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
     );
     const takesNone = handle(getOrder, () => reject(notFound));
@@ -321,7 +419,7 @@ describe('handle and Resources', () => {
     type CallersTaken = { readonly callers: { readonly byKey: (key: string) => string } };
     const apiKeyHandler = handle(
       apiKey,
-      (_demands, _context, { resources }: GuardCall<typeof apiKey, CallersTaken>) =>
+      (_demands, _call, { resources }: WithResources<CallersTaken>) =>
         admit({ callerId: resources.callers.byKey('k') }),
     );
     const demands = { headers: { 'x-api-key': 'k' } };
@@ -338,6 +436,25 @@ describe('handle and Resources', () => {
       { resources: { callers: { byKey: () => 'c-1' } } },
     );
     expect(calls).toBeDefined();
+  });
+
+  test('Needs<…> types a Qualifier Guard’s last parameter, its Qualifier in the second', () => {
+    type Resources = { readonly permissions: { readonly held: readonly string[] } };
+    type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+    const permissionHandler = handle(
+      permission,
+      (_demands, { qualifier }, { resources: { permissions } }: Needs<'permissions'>) =>
+        qualifier.every((code) => permissions.held.includes(code)) ? admit() : admit(),
+    );
+
+    expectTypeOf(permissionHandler).toEqualTypeOf<
+      GuardHandler<typeof permission, Pick<Resources, 'permissions'>>
+    >();
+    expectTypeOf<
+      ResourcesOf<{ guards: { permission: typeof permissionHandler } }>
+    >().toEqualTypeOf<{
+      readonly permissions: { readonly held: readonly string[] };
+    }>();
   });
 
   test('handle() infers the Resources a Message Handler takes from its last parameter', () => {
@@ -362,10 +479,10 @@ describe('handle and Resources', () => {
     ];
 
     expectTypeOf(chargeCardHandler).toEqualTypeOf<
-      CommandHandler<typeof chargeCard, NotificationsTaken>
+      MessageHandler<typeof chargeCard, NotificationsTaken>
     >();
     expectTypeOf(notifyOnPaidHandler).toEqualTypeOf<
-      EventHandler<typeof notifyOnPaid, NotificationsTaken>
+      MessageHandler<typeof notifyOnPaid, NotificationsTaken>
     >();
     expectTypeOf(chargeCardHandler).toBeCallableWith(body, meta, {
       resources: { notifications: { send: () => undefined } },
@@ -373,32 +490,63 @@ describe('handle and Resources', () => {
     expect(calls).toBeDefined();
   });
 
-  test('a Handler that takes none, with an unannotated last parameter, may find its resources undefined', () => {
-    type NoResourcesTaken = Readonly<Record<never, never>>;
-
+  test('a Handler that takes none, with an unannotated last parameter, finds its resources ResourcesNotAnnotated or undefined', () => {
     const handlers = [
-      handle(getOrder, (_input, _context, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(getOrder, (_input, _call, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
         return reject(notFound);
       }),
-      handle(chargeCard, (_body, _meta, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(chargeCard, (_body, _meta, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
       }),
-      handle(notifyOnPaid, (_body, _meta, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(notifyOnPaid, (_body, _meta, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
       }),
-      handle(apiKey, (_demands, _context, call) => {
-        expectTypeOf(call.resources).toEqualTypeOf<NoResourcesTaken | undefined>();
+      handle(apiKey, (_demands, _call, last) => {
+        expectTypeOf(last.resources).toEqualTypeOf<ResourcesNotAnnotated | undefined>();
         return admit({ callerId: 'c-1' });
       }),
     ];
 
-    expect(handlers.map(({ element }) => element)).toEqual([
+    expect(handlers.map(({ declaration }) => declaration)).toEqual([
       getOrder,
       chargeCardV1,
       notifyOnPaidV1,
       apiKey,
     ]);
+  });
+
+  test('an unannotated Handler that destructures its resources is a type error naming ResourcesNotAnnotated', () => {
+    const write = () =>
+      // @ts-expect-error Property 'orders' does not exist on type 'ResourcesNotAnnotated | undefined'
+      handle(getOrder, (_input, _call, { resources: { orders } }) =>
+        orders === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+      );
+
+    expect(write).toBeTypeOf('function');
+  });
+
+  test('an implementation whose last parameter holds anything beside resources is a type error', () => {
+    type Orders = { readonly orders: { readonly find: (orderId: string) => string | undefined } };
+    const written = (
+      _input: unknown,
+      _call: unknown,
+      last: { readonly resources: Orders; readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+    const intersected = (
+      _input: unknown,
+      _call: unknown,
+      last: WithResources<Orders> & { readonly extra: number },
+    ) => (last.extra === 0 ? reject(notFound) : success({ id: ORDER_ID }));
+
+    const write = () => [
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, written),
+      // @ts-expect-error the last parameter holds only resources
+      handle(getOrder, intersected),
+    ];
+
+    expect(write).toBeTypeOf('function');
   });
 
   test('a stub takes no Resources', () => {
@@ -419,12 +567,19 @@ describe('ResourcesOf', () => {
   type Orders = { readonly find: (orderId: string) => string | undefined };
   type Callers = { readonly byKey: (key: string) => string };
   type Resources = { readonly orders: Orders; readonly callers: Callers };
+  type Alien = { readonly db: number };
   type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+  const unreadable = "A Handler's Resources are unreadable: typed any; type them, as Needs<…> does";
+  const unspecified =
+    "A Handler's Resources are unspecified: its brand alone, HandledBy<typeof getOrder>, or a map annotated HandlerMapOf<typeof contract> without the Service's Resources; annotate HandlerMapOf<typeof contract, Resources>, NoResources when the Service has none";
+  const keyless =
+    'The last parameter takes Resources with no key: name what it reads, as Needs<…> does, or leave it out';
+  const plain = "HandlerMapOf takes the Contract's own type, typeof contract, not ServiceContract";
 
   test('a Handler map holds every Resource any of its Handlers takes, and a stub takes none', () => {
     const handlers = {
       endpoints: {
-        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+        getOrder: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
           resources.orders.find(ORDER_ID) === undefined
             ? reject(notFound)
             : success({ id: ORDER_ID }),
@@ -432,13 +587,8 @@ describe('ResourcesOf', () => {
         findOrder: handle.stub(findOrder),
       },
       guards: {
-        apiKey: handle(
-          apiKey,
-          (
-            _demands,
-            _context,
-            { resources }: GuardCall<typeof apiKey, Pick<Resources, 'callers'>>,
-          ) => admit({ callerId: resources.callers.byKey('k') }),
+        apiKey: handle(apiKey, (_demands, _call, { resources }: Needs<'callers'>) =>
+          admit({ callerId: resources.callers.byKey('k') }),
         ),
       },
     };
@@ -447,7 +597,256 @@ describe('ResourcesOf', () => {
       readonly orders: Orders;
       readonly callers: Callers;
     }>();
-    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+    expect(handlers.endpoints.getOrder.declaration).toBe(getOrder);
+  });
+
+  test('an implementation typed by its last parameter gives a Handler that takes those Resources', () => {
+    const implementation: EndpointImplementation<typeof getOrder, Needs<'orders'>> = (
+      _input,
+      _call,
+      { resources },
+    ) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID });
+
+    expectTypeOf(handle(getOrder, implementation)).toEqualTypeOf<
+      EndpointHandler<typeof getOrder, Pick<Resources, 'orders'>>
+    >();
+  });
+
+  test('a Message implementation typed by its last parameter gives a Handler that takes those Resources', () => {
+    const chargeCardImplementation: MessageImplementation<typeof chargeCard, Needs<'orders'>> = (
+      _body,
+      _meta,
+      { resources },
+    ) => {
+      resources.orders.find(ORDER_ID);
+    };
+    const notifyOnPaidImplementation: MessageImplementation<
+      typeof notifyOnPaid,
+      Needs<'callers'>
+    > = (_body, _meta, { resources }) => {
+      resources.callers.byKey('k');
+    };
+
+    expectTypeOf(handle(chargeCard, chargeCardImplementation)).toEqualTypeOf<
+      MessageHandler<typeof chargeCard, Pick<Resources, 'orders'>>
+    >();
+    expectTypeOf(handle(notifyOnPaid, notifyOnPaidImplementation)).toEqualTypeOf<
+      MessageHandler<typeof notifyOnPaid, Pick<Resources, 'callers'>>
+    >();
+  });
+
+  test('handle() keeps the any an implementation types its Resources as, every kind alike', () => {
+    /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
+    const handlers = [
+      handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+        resources ? reject(notFound) : success({ id: ORDER_ID }),
+      ),
+      handle(apiKey, (_demands, _call, { resources }: WithResources<any>) =>
+        admit({ callerId: resources.callerId }),
+      ),
+      handle(chargeCard, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+      handle(notifyOnPaid, (_body, _meta, { resources }: WithResources<any>) => {
+        resources.notifications.send();
+      }),
+      handle<typeof getOrder, any>(getOrder, () => reject(notFound)),
+      handle(getOrder, (_input, _call, last: any) => (last ? reject(notFound) : reject(notFound))),
+    ] as const;
+
+    expectTypeOf(handlers[0]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[1]).toEqualTypeOf<GuardHandler<typeof apiKey, any>>();
+    expectTypeOf(handlers[2]).toEqualTypeOf<MessageHandler<typeof chargeCard, any>>();
+    expectTypeOf(handlers[3]).toEqualTypeOf<MessageHandler<typeof notifyOnPaid, any>>();
+    expectTypeOf(handlers[4]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    expectTypeOf(handlers[5]).toEqualTypeOf<EndpointHandler<typeof getOrder, any>>();
+    /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
+    expect(handlers.map(({ declaration }) => declaration)).toEqual([
+      getOrder,
+      apiKey,
+      chargeCardV1,
+      notifyOnPaidV1,
+      getOrder,
+      getOrder,
+    ]);
+  });
+
+  test('a Handler whose Resources are any makes ResourcesOf name the cause', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
+    const loose = handle(getOrder, (_input, _call, { resources }: WithResources<any>) =>
+      resources ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+    const handlers = { endpoints: { getOrder: loose } };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unreadable);
+  });
+
+  test('every Handler carries in its brand the Resources its direct call takes, every kind alike', () => {
+    const takers = {
+      endpoint: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
+      ),
+      guard: handle(apiKey, (_demands, _call, { resources }: Needs<'callers'>) =>
+        admit({ callerId: resources.callers.byKey('k') }),
+      ),
+      command: handle(chargeCard, (_body, _meta, { resources }: Needs<'orders'>) => {
+        resources.orders.find(ORDER_ID);
+      }),
+      subscription: handle(notifyOnPaid, (_body, _meta, { resources }: Needs<'callers'>) => {
+        resources.callers.byKey('k');
+      }),
+    };
+
+    expectTypeOf(takers.endpoint).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers.guard).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers.command).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers.subscription).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers.endpoint).not.toExtend<HandledBy<typeof getOrder, Alien>>();
+    expectTypeOf(takers.guard).not.toExtend<HandledBy<typeof apiKey, Alien>>();
+    expectTypeOf(takers.command).not.toExtend<HandledBy<typeof chargeCardV1, Alien>>();
+    expectTypeOf(takers.subscription).not.toExtend<HandledBy<typeof notifyOnPaidV1, Alien>>();
+    expect(takers.endpoint.declaration).toBe(getOrder);
+  });
+
+  test('a Handler that takes none, left out, unannotated or a Stub, fits a map of any Resources, every kind alike', () => {
+    const takers = [
+      handle(getOrder, () => reject(notFound)),
+      handle(getOrder, (_input, _call, _last) => reject(notFound)),
+      handle.stub(getOrder),
+      handle(apiKey, () => admit({ callerId: 'c-1' })),
+      handle(apiKey, (_demands, _call, _last) => admit({ callerId: 'c-1' })),
+      handle.stub(apiKey),
+      handle(chargeCard, () => undefined),
+      handle(chargeCard, (_body, _meta, _last) => undefined),
+      handle.stub(chargeCard),
+      handle(notifyOnPaid, () => undefined),
+      handle(notifyOnPaid, (_body, _meta, _last) => undefined),
+      handle.stub(notifyOnPaid),
+    ] as const;
+
+    expectTypeOf(takers[0]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[1]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[2]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[3]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[4]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[5]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[6]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[7]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[8]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[9]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers[10]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers[11]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expect(takers.map(({ declaration }) => declaration)).toHaveLength(12);
+  });
+
+  test('a Handler typed by its brand alone makes ResourcesOf name the cause', () => {
+    const bare: HandledBy<typeof getOrder> = handle(
+      getOrder,
+      (_input, _call, { resources }: Needs<'orders'>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
+    );
+    const handlers = { endpoints: { getOrder: bare } };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unspecified);
+    expect(bare.declaration).toBe(getOrder);
+  });
+
+  test('a brand alone names Resources of never, which no Handler that takes some fits', () => {
+    expectTypeOf<HandledBy<typeof getOrder>>().toEqualTypeOf<HandledBy<typeof getOrder, never>>();
+    expectTypeOf<HandledBy<typeof getOrder>>().not.toExtend<
+      HandledBy<typeof getOrder, Resources>
+    >();
+    expectTypeOf<HandledBy<typeof getOrder>>().not.toExtend<
+      HandledBy<typeof getOrder, NoResources>
+    >();
+    expect(getOrder.name).toBe('getOrder');
+  });
+
+  test('NoResources is the Resources of a Service with none: only Handlers that take none fit', () => {
+    const takesNone = handle(getOrder, () => reject(notFound));
+    const takesSome = handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
+      resources.orders.find(ORDER_ID) === undefined ? reject(notFound) : success({ id: ORDER_ID }),
+    );
+
+    expectTypeOf(takesNone).toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expectTypeOf(handle.stub(getOrder)).toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expectTypeOf(takesSome).not.toExtend<HandledBy<typeof getOrder, NoResources>>();
+    expect(takesNone.declaration).toBe(getOrder);
+  });
+
+  test('a Handler or a table typed any makes ResourcesOf name the cause', () => {
+    /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
+    const copied: any = Object.create(handle.stub(getOrder));
+
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: any } }>>().toHaveProperty(unreadable);
+    expectTypeOf<ResourcesOf<{ endpoints: any }>>().toHaveProperty(unreadable);
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof copied } }>>().toHaveProperty(
+      unreadable,
+    );
+    /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
+    expect(copied.declaration).toBe(getOrder);
+  });
+
+  test('a Handler map that holds its readers counts only its Handlers', () => {
+    const handlers = {
+      endpoints: { getOrder: handle.stub(getOrder) },
+      guards: {},
+      commands: {
+        chargeCardV1: handle(chargeCard, (_body, _meta, { resources }: Needs<'orders'>) => {
+          resources.orders.find(ORDER_ID);
+        }),
+      },
+      subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
+      readers,
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{ readonly orders: Orders }>();
+    expect(handlers.readers).toBe(readers);
+  });
+
+  test('a last parameter whose Resources hold no key makes a direct call and ResourcesOf name the cause', () => {
+    const input = { params: { orderId: ORDER_ID } };
+    const noKeys = {
+      // biome-ignore lint/complexity/noBannedTypes: the {} this test is about
+      empty: handle(getOrder, (_input, _call, _last: WithResources<{}>) => reject(notFound)),
+      object: handle(getOrder, (_input, _call, _last: WithResources<object>) => reject(notFound)),
+      nothing: handle(getOrder, (_input, _call, _last: Needs<never>) => reject(notFound)),
+    };
+
+    const calls = () => [
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.empty(input, {}),
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.object(input, {}, { resources: {} }),
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.nothing(input, {}),
+    ];
+
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.empty } }>>().toHaveProperty(
+      keyless,
+    );
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.object } }>>().toHaveProperty(
+      keyless,
+    );
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.nothing } }>>().toHaveProperty(
+      keyless,
+    );
+    expect(calls).toBeDefined();
+  });
+
+  test('a Handler map of a Contract typed plain ServiceContract names the cause in every table', () => {
+    type Plain = HandlerMapOf<ServiceContract>;
+
+    expectTypeOf<Plain['endpoints']>().toHaveProperty(plain);
+    expectTypeOf<Plain['guards']>().toHaveProperty(plain);
+    expectTypeOf<Plain['commands']>().toHaveProperty(plain);
+    expectTypeOf<Plain['subscriptions']>().toHaveProperty(plain);
+    expect(plain).toBeTypeOf('string');
   });
 
   test('a Handler map none of whose Handlers takes Resources holds none', () => {
@@ -460,19 +859,19 @@ describe('ResourcesOf', () => {
     expectTypeOf<
       ResourcesOf<{ endpoints: Record<never, never>; guards: Record<never, never> }>
     >().toEqualTypeOf<Readonly<Record<never, never>>>();
-    expect(handlers.guards.apiKey.element).toBe(apiKey);
+    expect(handlers.guards.apiKey.declaration).toBe(apiKey);
   });
 
   test('the Resources of Handlers that take the same key are the intersection of what they take', () => {
     type Narrow = { readonly orders: { readonly find: () => string } };
     const handlers = {
       endpoints: {
-        getOrder: handle(getOrder, (_input, _context, { resources }: Needs<'orders'>) =>
+        getOrder: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
           resources.orders.find(ORDER_ID) === undefined
             ? reject(notFound)
             : success({ id: ORDER_ID }),
         ),
-        findOrder: handle(findOrder, (_input, _context, { resources }: WithResources<Narrow>) =>
+        findOrder: handle(findOrder, (_input, _call, { resources }: WithResources<Narrow>) =>
           resources.orders.find() === undefined ? reject(notFound) : success({ id: ORDER_ID }),
         ),
       },
@@ -481,29 +880,76 @@ describe('ResourcesOf', () => {
     expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{
       readonly orders: Orders & Narrow['orders'];
     }>();
-    expect(handlers.endpoints.findOrder.element).toBe(findOrder);
+    expect(handlers.endpoints.findOrder.declaration).toBe(findOrder);
   });
 });
 
-describe('withReader', () => {
-  test('withReader returns a frozen pairing', () => {
-    const pairing = withReader(chargeCardV1, statusReader);
+describe('readersOf', () => {
+  test('readersOf returns the table and each of its pairings frozen', () => {
+    const table = readersOf({
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: statusReader } },
+      subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: statusReader } },
+    });
 
-    const frozen = Object.isFrozen(pairing);
+    const frozen = [
+      table,
+      table.commands,
+      table.subscriptions,
+      table.commands.chargeCardV1,
+      table.subscriptions.notifyOnPaid,
+    ].map(Object.isFrozen);
 
-    expect(frozen).toBe(true);
+    expect(frozen).toEqual([true, true, true, true, true]);
   });
 
-  test('withReader given something that is no Command or Subscription, or no zod schema, throws', () => {
-    const pairs = [
-      () => withReader(getOrder as never, statusReader),
-      () => withReader({ ...chargeCardV1 }, statusReader),
-      () => withReader(chargeCardV1, { _zod: {} } as never),
-    ];
+  test('readersOf keeps each pairing as written, typed by its Reader', () => {
+    const table = readersOf({
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: statusReader } },
+      subscriptions: {},
+    });
 
-    for (const pair of pairs) {
-      expect(pair).toThrow('withReader() takes');
-    }
+    expectTypeOf(table.commands.chargeCardV1.reader).toEqualTypeOf<typeof statusReader>();
+    expect(table.commands.chargeCardV1.declaration).toBe(chargeCardV1);
+  });
+
+  test.each([
+    [
+      'an Endpoint',
+      'commands.x',
+      { commands: { x: { declaration: getOrder, reader: statusReader } } },
+    ],
+    [
+      'a copy of a Command',
+      'commands.x',
+      { commands: { x: { declaration: { ...chargeCardV1 }, reader: statusReader } } },
+    ],
+    [
+      'a Command with no zod schema',
+      'commands.x',
+      { commands: { x: { declaration: chargeCardV1, reader: { _zod: {} } } } },
+    ],
+    [
+      'a Subscription with no Reader',
+      'subscriptions.x',
+      { subscriptions: { x: { declaration: notifyOnPaidV1 } } },
+    ],
+  ])('readersOf given %s names the key it refuses', (_what, key, pairing) => {
+    const pair = () => readersOf({ commands: {}, subscriptions: {}, ...pairing } as never);
+
+    expect(pair).toThrow(
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,
+    );
+  });
+
+  test.each([
+    ['commands', { subscriptions: {} }],
+    ['subscriptions', { commands: {} }],
+  ])('readersOf given a table without %s names it', (key, tables) => {
+    const pair = () => readersOf(tables as never);
+
+    expect(pair).toThrow(
+      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${key}`,
+    );
   });
 });
 
@@ -513,14 +959,15 @@ describe('HandlerMap', () => {
       endpoints: {},
       guards: {},
       commands: { chargeCardV1: handle.stub(chargeCard) },
-      subscriptions: { 'notify-on-paid': handle.stub(notifyOnPaid) },
-      deprecatedAt: {},
+      subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
+      readers,
     };
 
     const map: HandlerMap = generated;
 
     expectTypeOf(generated).toExtend<HandlerMap>();
-    expect(map.subscriptions['notify-on-paid']?.element).toBe(notifyOnPaidV1);
+    const { notifyOnPaid: mapped } = map.subscriptions;
+    expect(mapped?.declaration).toBe(notifyOnPaidV1);
   });
 
   test('refuses a map whose commands hold the Handler of an Endpoint', () => {
@@ -529,26 +976,26 @@ describe('HandlerMap', () => {
       guards: {},
       commands: { chargeCardV1: handle.stub(getOrder) },
       subscriptions: {},
-      deprecatedAt: {},
+      readers,
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
-    expect(generated.commands.chargeCardV1.element).toBe(getOrder);
+    expect(generated.commands.chargeCardV1.declaration).toBe(getOrder);
   });
 
-  test('takes the map handlers.generated.ts exports, Handlers by name and the stamps', () => {
+  test('takes the map handlers.generated.ts exports, Handlers by name', () => {
     const generated = {
       endpoints: { getOrder: handle.stub(getOrder), findOrder: handle.stub(findOrder) },
       guards: { apiKey: handle.stub(apiKey) },
       commands: {},
       subscriptions: {},
-      deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
+      readers: readersOf({ commands: {}, subscriptions: {} }),
     };
 
     const map: HandlerMap = generated;
 
     expectTypeOf(generated).toExtend<HandlerMap>();
-    expect(map.guards['apiKey']?.element).toBe(apiKey);
+    expect(map.guards['apiKey']?.declaration).toBe(apiKey);
   });
 
   test('refuses a map whose Handler is no Handler', () => {
@@ -557,10 +1004,38 @@ describe('HandlerMap', () => {
       guards: {},
       commands: {},
       subscriptions: {},
-      deprecatedAt: {},
+      readers,
     };
 
     expectTypeOf(generated).not.toExtend<HandlerMap>();
     expect(generated.endpoints.getOrder()).toBeUndefined();
+  });
+
+  test('refuses a map without the readers the readers file exports', () => {
+    const generated = {
+      endpoints: {},
+      guards: {},
+      commands: {},
+      subscriptions: {},
+    };
+
+    expectTypeOf(generated).not.toExtend<HandlerMap>();
+    expect(generated.commands).toEqual({});
+  });
+
+  test('refuses a map whose readers are no pairings of Commands and Subscriptions', () => {
+    const generated = {
+      endpoints: {},
+      guards: {},
+      commands: {},
+      subscriptions: {},
+      readers: {
+        commands: { chargeCardV1: { declaration: getOrder, reader: statusReader } },
+        subscriptions: {},
+      },
+    };
+
+    expectTypeOf(generated).not.toExtend<HandlerMap>();
+    expect(generated.readers.commands.chargeCardV1.declaration).toBe(getOrder);
   });
 });

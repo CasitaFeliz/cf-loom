@@ -6,36 +6,37 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 
 ## Packages
 
-| Package | Used by | Provides |
+| Package | Used by | For |
 | --- | --- | --- |
-| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declarations: `defineContract`, `defineApplication`, `defineDefinitions`, `defineGroup`, `defineEndpoint`, `defineGuard`, `defineRejection`, `defineEvent`, `defineCommand`, `defineSubscription`, `defineDependencies`, `openEnum`; `openEnumReader`, which generated readers call; the Standard Rejections `invalidInput`, `notFound`, `notImplemented` |
-| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | `handle`, `handle.stub`, `withReader`, `success`, `reject`, `admit`, `fault`, `isRejectionOf`; the `Outcome`, `Admission` and Handler types (`EndpointHandler`, `GuardHandler`, `CommandHandler`, `EventHandler`), `WithReader`, `CommandImplementation`, `EventImplementation` and `MessageMeta`; `WithResources`, `ResourcesOf`, and `DirectCall`, `GuardCall` and `MessageCall`, the last argument of a direct call; `InvalidInputError` and `InvalidOutcomeError`, which a direct call throws; the `HandlerMap` type |
-| [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | `serve`; the `Http`, `ServeOptions`, `ServedFault` and `AnsweredRequest` types |
-| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | Adapter: `nodeHttp`, `nodeListener` |
-| [`@cf-loom/client`](packages/client/README.md) | Callers | `client`; the `Client<D, Configured>` type, `ClientOptions`, `CallInput`, the `ReceivedOutcome` it returns and the types of `inferFault` and `onDeprecation` |
-| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | `messaging`, connecting a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; `PublishError`, `InvalidMessageError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them |
-| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | Adapter: `jetstream`, whose `apply` applies a broker plan; the `JetStreamBrokerOptions`, `JetStreamBroker`, `BrokerPlan`, `BrokerPlanStream`, `BrokerPlanConsumer`, `BrokerLimits`, `StreamLimits`, `DurableConsumerLimits` and `Duration` types; `@nats-io/jetstream` and `@nats-io/nats-core` are optional peer dependencies |
-| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests and local development | In-memory adapter: `memory`; the `MemoryBroker`, `RecordedMessage`, `DeliveryMeta` and `PendingMessage` types |
-| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | `fakeProvider` and `FakeProviderError`; the `FakeProvider`, `Script`, `StepBuilder` and `FakeCall` types; `fakeEvent` |
-| [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command; `defineConfig` |
+| [`@cf-loom/contract`](packages/contract/README.md) | Services, Applications, Definitions Packages | Declaring a Service's or an Application's Contract, or a Definitions Package |
+| [`@cf-loom/handlers`](packages/handlers/README.md) | Services | Implementing a Contract's Endpoints, Guards, Commands and Subscriptions, and calling the Handlers directly in tests |
+| [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | Answering a Contract's Endpoints over HTTP with their Handlers |
+| [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The server's adapter for `node:http` |
+| [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
+| [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
+| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a broker plan |
+| [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
+| [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
+| [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
 
 The packages are published to npmjs.com with access restricted to members of the @cf-loom npm organization: install them logged in with an npm account that is a member. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
 
-How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
+Each package's README lists what it exports. How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
 ## A first Service
 
-Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider` and `fakeEvent`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through the in-memory adapter in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' CommandHandler for `ChargeCard` handle.
+Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through `memory()` in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' Message Handler for `ChargeCard` handle.
 
 ### Layout
 
 ```
 src/
 ├── contract/                              declarations only
-│   ├── index.ts                           export const contract = defineContract({...})
-│   ├── endpoints/
+│   ├── index.ts                           export const contract = defineService({...})
+│   ├── groups/
+│   │   └── orders.group.ts                what the Group orders lists
+│   ├── endpoints/                         each Element's file under its kind, then its Group
 │   │   └── orders/
-│   │       ├── orders.group.ts
 │   │       ├── get-order.endpoint.ts
 │   │       └── create-order.endpoint.ts
 │   ├── guards/
@@ -45,43 +46,90 @@ src/
 │   ├── schemas/                           zod schemas the declarations share
 │   │   └── order.schema.ts
 │   ├── events/
-│   │   ├── order-created.v1.event.ts
-│   │   └── order-created.v2.event.ts
+│   │   └── orders/
+│   │       ├── order-created.v1.event.ts
+│   │       └── order-created.v2.event.ts
 │   ├── commands/
-│   │   └── charge-card.v1.command.ts
+│   │   └── orders/
+│   │       └── charge-card.v1.command.ts
 │   ├── subscriptions/
-│   │   └── notify-on-settled.subscription.ts
+│   │   └── orders/
+│   │       └── notify-on-settled.subscription.ts
 │   └── dependencies/
-│       └── payments-service.dependencies.ts
+│       └── payments-service.dependency.ts
 ├── endpoints/orders/get-order.handler.ts  Handlers by Group and name, by default (see Stubs and the Handler map)
 ├── guards/api-key.handler.ts
-├── commands/charge-card.v1.handler.ts
-├── subscriptions/notify-on-settled.handler.ts
-├── handlers.generated.ts                  the Handler map; regenerated, never edited
-├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
+├── commands/orders/charge-card.v1.handler.ts
+├── subscriptions/orders/notify-on-settled.handler.ts
+├── handlers.generated.ts                  the Handler map, carrying the `readers`; regenerated, never edited
+├── readers.generated.ts                   the readers: Reader schemas of the Service's own Events and Commands, with the type of each recursive def, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 .cf-loom/
 └── contract-package/                      the Contract Package cf-loom package writes; built, never edited
+cf-loom.config.ts                          optional: where the Handlers and the generated files sit
+contract.snapshot.json                     the declared Snapshot generate writes; committed, never edited
 ```
 
-The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages listed as Dependencies (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
+The Handlers and the two generated files sit where the tree shows by default; a Service places them elsewhere with `layout` in an optional `cf-loom.config.ts` (see [The layout field](packages/cli/README.md#the-layout-field)), as billing-service does. `contract.snapshot.json` is committed, so every change to the Contract shows in review, and `.cf-loom/` holds only output. File names are kebab-case: the Guard `apiKey` lives in `api-key.guard.ts` and its Handler in `api-key.handler.ts`. Files under `src/contract/` should import only each other, `zod`, `@cf-loom/contract`, Definitions Packages and the Contract Packages whose Elements it uses, so the Contract builds and publishes on its own; a Contract file that imports the Service's code runs that code on every cf-loom command (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live)).
 
-A Definitions Package is laid out the same way under `src/definitions/`: its root `index.ts` exports `definitions` and every declaration Services import, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services list.
+A Definitions Package is laid out the same way under `src/definitions/`: its Root `index.ts` exports its Definitions object (`init` names it `definitions`) and every Guard, Rejection and schema Services import, and nothing else, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services import.
 
 The examples in the package READMEs follow this layout and leave out imports of `zod`, `@cf-loom/contract` and sibling files.
 
+### Set up
+
+A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
+
+- `"type": "module"`: every `cf-loom` command exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, in kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
+- `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
+
+`zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
+
+| For | Install |
+| --- | --- |
+| Every package | `@cf-loom/contract` and `zod`; `@cf-loom/cli` as a devDependency |
+| A Service or a Definitions Package | `typescript` as a devDependency |
+| A Service | `@types/node` as a devDependency |
+| Endpoints | `@cf-loom/handlers` and `@cf-loom/server` |
+| Messages | `@cf-loom/handlers` and `@cf-loom/messaging`; on JetStream also `@nats-io/jetstream`, `@nats-io/nats-core` and a transport such as `@nats-io/transport-node`, all on one version (see [JetStream](packages/messaging/README.md#jetstream)) |
+| Calling a Provider | `@cf-loom/client`, and the Provider's Contract Package as an ordinary dependency |
+| Tests of a Consumer | `@cf-loom/testing` as a devDependency |
+| A Definitions Package | `@cf-loom/contract` and `zod` as `peerDependencies` too (see [Definitions Packages](packages/contract/README.md#definitions-packages)) |
+
+Use TypeScript 7, the version cf-loom is built and tested with; 5.x does not type-check a Message Handler. `publish` builds a Service's Contract Package with the `tsc` of the `typescript` installed in the project. Relative imports name the `.ts` file, which `tsc` accepts only with `allowImportingTsExtensions` (it reports TS5097 on each import otherwise), and a Service needs `@types/node` named in `types`, which defaults to none. `init` writes no `tsconfig.json`; this one type-checks a Service that Node runs from source:
+
+```json
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
+```
+
+A project that emits with `tsc` sets `rewriteRelativeImportExtensions`, a `rootDir` and an `outDir` in place of `allowImportingTsExtensions` and `noEmit`. Put `.cf-loom/` in `.gitignore`.
+
+`check` and `publish` read the registry through the `npm` on your `PATH`, so they need an npm login that can read the scope's registry, even before the first publish; `generate`, `verify` and `package` run offline (see [Configuration](packages/cli/README.md#configuration)).
+
 ### Declare
 
-`cf-loom init service` creates the root under `src/contract/`, and `cf-loom add-endpoint`, `add-guard`, `add-rejection`, `add-event`, `add-command`, `add-subscription` and `add-dependency` create each declaration (see [Commands](packages/cli/README.md#commands)). What each declaration holds is in the [`@cf-loom/contract` README](packages/contract/README.md); the tools are configured in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
+`cf-loom init service` creates the Root under `src/contract/`; every other declaration is a file you write there, where [Layout](#layout) puts it, and a Group or the Root lists it. What each declaration holds, with an example of each, is in the [`@cf-loom/contract` README](packages/contract/README.md), and the declarations in [`examples/`](examples) (`orders-service`, `billing-service`, `org-definitions`) are complete ones; a Service that sets `layout` configures the tools in `cf-loom.config.ts` (see [Configuration](packages/cli/README.md#configuration)).
 
 ### Generate
 
-`cf-loom generate` writes the stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md).
+`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). Which files a formatter must leave byte for byte, and the LF line endings that the `.gitattributes` `init` writes keeps, are described under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
 
 ### Implement
 
-Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its stub imports from the readers (`handle(chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
+Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its Stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
 
 ### Serve
 
@@ -89,8 +137,64 @@ Replace each stub with `handle(…, async (…) => …)`: an [EndpointHandler](p
 
 ### Test
 
-A Handler is called directly, with the Resources the test builds (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through the [in-memory adapter](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@cf-loom/testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
+A Handler is called directly, with the Resources the test builds (see [Testing a Service's own code](packages/handlers/README.md#testing-a-services-own-code)), Messages run through [`memory()`](packages/messaging/README.md#in-memory), and the Providers a Service depends on are faked with `@cf-loom/testing` (see [Faking Providers](packages/testing/README.md#faking-providers)).
 
 ### Publish
 
 `cf-loom package` writes the Contract Package to `.cf-loom/contract-package/`, to build and try it before publishing (see [Commands](packages/cli/README.md#commands)). `cf-loom check` runs the Compatibility Check against the Baseline, and `cf-loom publish` publishes the Contract Package; when to publish is the organization's (see [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check) in COMPATIBILITY.md).
+
+Until cf-loom 1.0.0, publish only prereleases: run `npx cf-loom check --prerelease` and `npx cf-loom publish --prerelease`. A plain `publish` publishes 1.0.0 for a package never published, and promotes a prerelease Baseline to a version that is not one. [Before cf-loom 1.0.0](packages/cli/README.md#before-cf-loom-100) in the CLI README says why, and what to do when an upgraded cf-loom refuses a Baseline an older one published.
+
+#### Check in CI
+
+A CI job runs plain commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
+
+```sh
+npx cf-loom verify
+npx cf-loom check
+```
+
+Before cf-loom 1.0.0, run `check --prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
+
+Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
+
+```
+Checked against @org/contract-orders-service@1.0.0
+endpoints.GET /orders/{} (getOrder) schema field-removed at success.body.placedAt: Breaking, needs a Breaking Change Approval
+Would publish @org/contract-orders-service@2.0.0 (major)
+```
+
+and stderr says `1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it`. A Neutral Change needs none, and `check` exits 0:
+
+```
+Checked against @org/contract-billing-service@1.0.0
+subscriptions.draftInvoiceOnCreated description-changed: Neutral
+No Change needs a Breaking Change Approval
+Would publish @org/contract-billing-service@1.0.1 (patch)
+```
+
+A refused Change fails the check whatever Approval is given: here an Event's body lost a field, which only a new Message Version may change (see [Messages](COMPATIBILITY.md#messages) in COMPATIBILITY.md). `check` exits 1 and stderr says `The check failed: 1 Change(s) refused`:
+
+```
+Checked against @org/contract-orders-service@1.0.0
+events.OrderCreated@1 schema field-removed at body.placedAt (message): Breaking, refused; make the change in a new Message Version
+```
+
+A job that reads one document runs `cf-loom check --json`, whose `errors` hold what stderr says (see [--json](packages/cli/README.md#--json) in the CLI README).
+
+#### Trying a Contract Package before publishing
+
+`cf-loom package` writes the Contract Package ready for `tsc`, and a Consumer installs that folder from disk (`link:` as billing-service's package.json has it, or `file:`) before anything is published:
+
+```sh
+npx cf-loom package
+npx tsc -p .cf-loom/contract-package
+```
+
+The folder's package.json is version `0.0.0`, so a Consumer that installs it records `against: '0.0.0'` for the Provider, and `check` and `publish` say that the registry does not list it (see [Configuration](packages/cli/README.md#configuration) in the CLI README), `publish` with exit 3:
+
+```
+dependencies.orders-service is against @org/contract-orders-service@0.0.0, which the registry does not list: install a published version
+```
+
+Once the Provider is published, install that version in the Consumer: `check` and `publish` stop on the stale Snapshot, with exit 1, until `cf-loom generate` records it.

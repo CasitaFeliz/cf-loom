@@ -21,7 +21,7 @@ export const authorizationScheme: OpenApiObject = {
 
 /** An Endpoint's headers without the authorization one, and what that one stands for. */
 export type HeadersAndAuthorization = {
-  readonly headers: ObjectNode | null;
+  readonly headers: ObjectNode;
   readonly authorization: Authorization | undefined;
 };
 
@@ -31,8 +31,8 @@ export function separatedAuthorizationOf(
   guards: ServiceSnapshot['guards'],
 ): HeadersAndAuthorization {
   const { headers } = endpoint.input;
-  const header = headers?.fields[authorizationHeader];
-  if (headers === null || header === undefined) {
+  const header = headers.fields[authorizationHeader];
+  if (header === undefined) {
     return { headers, authorization: undefined };
   }
   const others = Object.entries(headers.fields).filter(([name]) => name !== authorizationHeader);
@@ -49,7 +49,7 @@ function schemesOf(
 ): readonly string[] {
   const demanding = endpoint.guards
     .map(({ guard }) => guard)
-    .filter((name) => guards[name]?.demands.headers?.fields[authorizationHeader] !== undefined);
+    .filter((name) => guards[name]?.demands.headers.fields[authorizationHeader] !== undefined);
   return demanding.length === 0 ? [authorizationHeader] : demanding.sort(byCodePoint);
 }
 

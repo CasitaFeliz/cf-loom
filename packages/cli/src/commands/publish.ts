@@ -1,93 +1,116 @@
-import { canonicalTextOf, publishedSnapshotOf, versionBumpOf } from '@cf-loom/contract/internal';
-import { type Peers, peerRangesOf } from '../contract-package/index.ts';
-import type { Run } from '../project/index.ts';
-import { comparedLinesOf } from './check-lines.ts';
-import { endingOf } from './checked.ts';
-import { type Comparison, checkedFrom, committedBuiltOf, comparisonOf } from './comparison.ts';
-import { done, type Exit, type Stopped, toolingError } from './exit.ts';
-import { builtPeersOf } from './peers.ts';
-import { publishedPackageOf, type ToPublish } from './published-package.ts';
-import {
-  type DerivedVersion,
-  type Deriving,
-  derivedVersionOf,
-  type PublishOptions,
-} from './published-version.ts';
+import { canonicalTextOf, publishedSnapshotOf } from '@cf-loom/contract/internal';
+import { runningGeneratorOf } from '../project/index.ts';
+import type { Derived, DerivedVersion, DeriveOptions } from '../versioning/index.ts';
+import { comparedLinesOf, notAboveOf, nothingToPublishOf, wouldPublishOf } from './check-lines.ts';
+import { type Checked, endingOf } from './checked.ts';
+import { checkedDocumentOf } from './checked-document.ts';
+import { derivedCheckedOf } from './derivation.ts';
+import { checkFailed, done, type Exit, toolingError } from './exit.ts';
+import { type Prepared, preparedOf } from './prepared.ts';
+import { type PublishMode, publishedPackageOf, type ToPublish } from './published-package.ts';
+import type { Run } from './run.ts';
 
-/** What a publish goes on with once the Snapshot is compared: the comparison and the peers the package is built with. */
-type Prepared = {
-  readonly kind: 'prepared';
-  readonly comparison: Comparison;
-  readonly peers: Peers;
-};
+/** How `publish` was asked to run: publish even when nothing changed, as a prerelease of the version it derives, and stopping before `npm publish`. */
+export type PublishOptions = DeriveOptions & { readonly dryRun: boolean };
 
 /**
  * Publishes the package of the committed Snapshot through the organization's npm: checked against
- * its Baseline, refused when a Change is Not allowed, at the version its Changes and peer ranges
- * derive, with the Baseline's history merged in; it never waits on a Breaking Change Approval.
+ * its Baseline, failing on a version the registry does not list that the Contract is declared
+ * against, then on a refused Change, at the version its Changes and peer ranges derive,
+ * with the Baseline's history merged in; it never waits on a Breaking Change Approval. A dry run
+ * stages and builds the package and stops before `npm publish`.
  */
 export async function publish(run: Run, options: PublishOptions): Promise<Exit> {
-  const prepared = await preparedOf(run);
+  const prepared = await preparedOf(run, undefined);
   if (prepared.kind === 'stopped') {
     return prepared.exit;
   }
-  const checked = checkedFrom(prepared.comparison);
-  const { status, stderr } = endingOf(checked.changes);
-  const opening = comparedLinesOf(checked);
-  if (status === 1) {
-    return { status, stdout: opening, stderr };
+  const checked = derivedCheckedOf(prepared, options);
+  const { derivation } = checked;
+  run.report({
+    lines: comparedLinesOf(checked),
+    fields: { ...checkedDocumentOf(checked), published: false },
+  });
+  if (derivation.kind === 'refused') {
+    run.report({ ending: endingOf(checked.changes) });
   }
-  const derived = derivedVersionOf(derivingOf(prepared, options));
-  if (derived.kind === 'unchanged') {
-    const same = `${checked.packageName}@${derived.baseline}`;
-    const nothing = `Nothing to publish: the Snapshot and peer ranges are those of ${same}`;
-    return done([...opening, `${nothing}; --force publishes anyway`]);
+  if (prepared.unlisted.length > 0) {
+    return { status: 3, stdout: [], stderr: prepared.unlisted };
   }
-  const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived));
-  if (put.kind === 'failed') {
-    return { status: 3, stdout: [], stderr: [put.message, ...left] };
+  switch (derivation.kind) {
+    case 'refused':
+      return checkFailed([]);
+    case 'against':
+      throw new Error('publish compared with a version --against named: a bug.');
+    case 'derived':
+      return await derivedExit(run, { prepared, checked, options }, derivation.derived);
   }
-  const published = `Published ${checked.packageName}@${derived.version}`;
-  return { status: 0, stdout: [...opening, published], stderr: left };
 }
 
-async function preparedOf(run: Run): Promise<Prepared | Stopped> {
-  const built = await committedBuiltOf(run);
-  if (built.kind === 'stopped') {
-    return built;
-  }
-  const peers = builtPeersOf(built);
-  if (peers.kind === 'failed') {
-    return { kind: 'stopped', exit: toolingError(peers.message) };
-  }
-  const comparison = await comparisonOf(built, run);
-  if (comparison.kind === 'stopped') {
-    return comparison;
-  }
-  return { kind: 'prepared', comparison, peers: peers.peers };
-}
+/** What a publish whose check found no refused Change goes on with. */
+type Publishing = {
+  readonly prepared: Prepared;
+  readonly checked: Checked;
+  readonly options: PublishOptions;
+};
 
-/** What the version is derived from: the Baseline and how far the Changes and peers move from it, and every listed version. */
-function derivingOf({ comparison, peers }: Prepared, options: PublishOptions): Deriving {
-  switch (comparison.kind) {
-    case 'no-baseline': {
-      const { why } = comparison;
-      const versions = why.kind === 'only-prereleases' ? why.versions : [];
-      return { baseline: undefined, versions, ...options };
+/** The exit of a publish that derived: there is nothing to publish, the version would not be above the Baseline, or it puts the version. */
+async function derivedExit(run: Run, publishing: Publishing, derived: Derived): Promise<Exit> {
+  const { prepared, checked, options } = publishing;
+  switch (derived.kind) {
+    case 'unchanged': {
+      const nothing = nothingToPublishOf(checked.packageName, derived.baseline);
+      return done([`${nothing}; --force publishes anyway`], {});
     }
-    case 'baseline': {
-      const { read, report } = comparison;
-      const bump = versionBumpOf(report, { baseline: read.peers, proposed: peerRangesOf(peers) });
-      const baseline = { version: read.snapshot.version, bump };
-      return { baseline, versions: read.versions, ...options };
+    case 'not-above':
+      return toolingError(notAboveOf(checked.packageName, derived));
+    case 'version': {
+      const mode = options.dryRun ? 'dry-run' : 'publish';
+      return await putExit(run, { prepared, checked, derived, mode });
     }
   }
 }
 
-/** The Snapshot as published at the derived version, with the Baseline's history merged in. */
-function toPublishOf({ comparison, peers }: Prepared, { version, tag }: DerivedVersion): ToPublish {
+/** A publish that goes on: the comparison it was prepared from, what `check` reported of it, the version it derived and what it does with the built package. */
+type Ready = {
+  readonly prepared: Prepared;
+  readonly checked: Checked;
+  readonly derived: DerivedVersion;
+  readonly mode: PublishMode;
+};
+
+async function putExit(run: Run, { prepared, checked, derived, mode }: Ready): Promise<Exit> {
+  const { put, left } = await publishedPackageOf(run, toPublishOf(prepared, derived, mode));
+  switch (put.kind) {
+    case 'failed':
+      return { status: 3, stdout: [], stderr: [put.message, ...left] };
+    case 'published': {
+      const published = `Published ${checked.packageName}@${derived.version}`;
+      run.report({ lines: [published], fields: { published: true } });
+      return { status: 0, stdout: [], stderr: left };
+    }
+    case 'built': {
+      const would = wouldPublishOf(checked.packageName, derived);
+      const stopped = `${would}: --dry-run stopped before npm publish`;
+      return { status: 0, stdout: [stopped], stderr: left };
+    }
+  }
+}
+
+/** The Snapshot as published at the derived version by the CLI that runs, with the Baseline's history merged in. */
+function toPublishOf(
+  { comparison, peerRanges }: Prepared,
+  { version, tag }: DerivedVersion,
+  mode: PublishMode,
+): ToPublish {
   const { project, snapshot } = comparison.built;
-  const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
-  const published = publishedSnapshotOf(baseline, snapshot, version);
-  return { project, published, text: canonicalTextOf(published), peers, tag };
+  const { compared, listing } = comparison;
+  const baseline = compared.kind === 'baseline' ? compared.baseline.snapshot : undefined;
+  const published = publishedSnapshotOf(baseline, snapshot, {
+    version,
+    generator: runningGeneratorOf(),
+  });
+  const text = canonicalTextOf(published);
+  const declared = comparison.built;
+  return { mode, project, declared, published, text, peerRanges, tag, listing };
 }

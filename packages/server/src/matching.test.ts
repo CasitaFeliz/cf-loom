@@ -1,6 +1,6 @@
-import { defineContract, defineEndpoint, defineGroup, type Endpoint } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineService, type Endpoint } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { serve } from './index.ts';
 
@@ -62,6 +62,17 @@ const getRoot = defineEndpoint({
   success: { status: 200, body: z.object({ root: z.boolean() }) },
 });
 
+const archiveOrder = defineEndpoint({
+  name: 'archiveOrder',
+  method: 'POST',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'Archives one order',
+  lifecycle: 'retired',
+  input: { params: z.object({ orderId: z.string() }) },
+  success: { status: 204 },
+});
+
 const handlers = {
   endpoints: {
     getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId, extra: true })),
@@ -71,20 +82,26 @@ const handlers = {
     getRoot: handle(getRoot, () => success({ root: true })),
   },
   guards: {},
-  deprecatedAt: {},
 };
 
 function contractOf(endpoints: readonly [Endpoint, ...Endpoint[]]) {
-  return defineContract({
+  return defineService({
     name: 'orders-service',
     groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints })],
   });
 }
 
-const http = serve(
-  contractOf([getOrder, getSummary, getInvoice, getLatestItem, getItem, getRoot]),
-  handlers,
-);
+const contract = contractOf([
+  archiveOrder,
+  getOrder,
+  getSummary,
+  getInvoice,
+  getLatestItem,
+  getItem,
+  getRoot,
+]);
+
+const http = serve(contract, handlers, {});
 
 const noSuchEndpoint = {
   fault: {
@@ -116,17 +133,36 @@ describe('serve: matching a request to an Endpoint', () => {
     expect(answer).toEqual({ status: 404, body: noSuchEndpoint });
   });
 
-  test('a declared path with another method, HEAD on a GET Endpoint included, is NO_SUCH_ENDPOINT', async () => {
-    const answers = [
-      await answerOf('/orders/o-1', { method: 'HEAD' }),
-      await answerOf('/orders/o-1', { method: 'DELETE' }),
-    ];
+  test('without a fallback, another method on a declared path is METHOD_NOT_ALLOWED, its Allow listing the path’s methods once', async () => {
+    const response = await http(new Request('http://test/items/latest', { method: 'DELETE' }));
 
-    expect(answers.map(({ status }) => status)).toEqual([404, 404]);
-    expect(answers[1]?.body).toEqual(noSuchEndpoint);
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET');
+    expect(await response.json()).toEqual({
+      fault: {
+        code: 'METHOD_NOT_ALLOWED',
+        committed: 'no',
+        retryable: false,
+        message: 'No Endpoint has this method on this path',
+      },
+    });
   });
 
-  test('OPTIONS and a CORS preflight are NO_SUCH_ENDPOINT unless declared', async () => {
+  test('Allow lists a Retired Endpoint’s method too, in code point order', async () => {
+    const response = await http(new Request('http://test/orders/o-1', { method: 'PUT' }));
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET, POST');
+  });
+
+  test('HEAD on a path whose only Endpoint is a GET is METHOD_NOT_ALLOWED, with Allow: GET', async () => {
+    const response = await http(new Request('http://test/invoices/i-1', { method: 'HEAD' }));
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get('allow')).toBe('GET');
+  });
+
+  test('OPTIONS and a CORS preflight on a declared path are METHOD_NOT_ALLOWED without a fallback', async () => {
     const preflight = {
       method: 'OPTIONS',
       headers: { origin: 'http://app', 'access-control-request-method': 'GET' },
@@ -137,10 +173,7 @@ describe('serve: matching a request to an Endpoint', () => {
       await answerOf('/orders/o-1', preflight),
     ];
 
-    expect(answers).toEqual([
-      { status: 404, body: noSuchEndpoint },
-      { status: 404, body: noSuchEndpoint },
-    ]);
+    expect(answers.map(({ status }) => status)).toEqual([405, 405]);
   });
 
   test('an Endpoint at the root path answers there, and only there', async () => {
@@ -169,8 +202,8 @@ describe('serve: matching a request to an Endpoint', () => {
   });
 
   test('a literal beats a param at the first segment where they differ, whichever is declared first', async () => {
-    const literalLast = serve(contractOf([getOrder, getSummary]), handlers);
-    const literalFirst = serve(contractOf([getSummary, getOrder]), handlers);
+    const literalLast = serve(contractOf([getOrder, getSummary]), handlers, {});
+    const literalFirst = serve(contractOf([getSummary, getOrder]), handlers, {});
 
     const answers = [
       await (await literalLast(new Request('http://test/orders/summary'))).json(),
@@ -246,5 +279,76 @@ describe('serve: matching a request to an Endpoint', () => {
         },
       },
     });
+  });
+});
+
+describe('serve: the fallback', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const notOurs = new Response(null, { status: 404 });
+
+  test('a request no declared Endpoint matches reaches the fallback, and its Response is returned as is', async () => {
+    const fallback = async () => notOurs;
+
+    const response = await serve(contract, handlers, { fallback })(new Request('http://test/x'));
+
+    expect(response).toBe(notOurs);
+  });
+
+  test('a Retired Endpoint still answers RETIRED with a fallback', async () => {
+    const fallback = async () => notOurs;
+
+    const response = await serve(contract, handlers, { fallback })(
+      new Request('http://test/items/latest'),
+    );
+
+    expect(response.status).toBe(410);
+  });
+
+  test('OPTIONS on a declared path reaches the fallback, as a CORS preflight does', async () => {
+    const preflight = new Response(null, { status: 204 });
+    const fallback = async () => preflight;
+
+    const response = await serve(contract, handlers, { fallback })(
+      new Request('http://test/orders/o-1', { method: 'OPTIONS' }),
+    );
+
+    expect(response).toBe(preflight);
+  });
+
+  test('the fallback receives the request’s body unread', async () => {
+    let received = '';
+    const fallback = async (request: Request) => {
+      received = await request.text();
+      return notOurs;
+    };
+
+    await serve(contract, handlers, { fallback })(
+      new Request('http://test/uploads', { method: 'POST', body: 'a file' }),
+    );
+
+    expect(received).toBe('a file');
+  });
+
+  test('without a fallback, an undeclared path is NO_SUCH_ENDPOINT', async () => {
+    const answer = await answerOf('/healthz');
+
+    expect(answer).toEqual({ status: 404, body: noSuchEndpoint });
+  });
+
+  test('a fallback that rejects is answered with the internal Fault and logged, and the Http resolves', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const broken = new Error('the fallback broke');
+    const fallback = async () => Promise.reject(broken);
+
+    const response = await serve(contract, handlers, { fallback })(new Request('http://test/x'));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
+    });
+    expect(logged).toHaveBeenCalledWith('serve: the fallback rejected', broken);
   });
 });

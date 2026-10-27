@@ -1,7 +1,4 @@
-/** The kebab-case of a camelCase name, as files are named: `getOrder` is `get-order`. */
-export function kebabCaseOf(name: string): string {
-  return name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-}
+import { kebabCaseOf } from '@cf-loom/contract/internal';
 
 /** The kebab-case of an UPPER_SNAKE_CASE Rejection code: `ORDER_LOCKED` is `order-locked`. */
 export function kebabCaseOfCode(code: string): string {
@@ -9,18 +6,18 @@ export function kebabCaseOfCode(code: string): string {
 }
 
 /**
- * The camelCase of a name's alphanumeric words, as code names it: `order-locked` is
- * `orderLocked`, and `Tree Node` is `treeNode`.
+ * The camelCase of an UPPER_SNAKE_CASE Rejection code, which never loses information: `ORDER_LOCKED`
+ * is `orderLocked`, and a word that starts with a digit keeps its underscore, so `ORDER_V_2` is
+ * `orderV_2` and `ORDER_V2` is `orderV2`.
  */
-export function camelCaseOf(name: string): string {
-  const words = name.split(/[^A-Za-z0-9]+/).filter((word) => word !== '');
-  const [first = '', ...rest] = words;
-  return [lowerFirst(first), ...rest.map(upperFirst)].join('');
+export function camelCaseOfCode(code: string): string {
+  const [first = '', ...rest] = code.toLowerCase().split('_');
+  return [first, ...rest.map(laterWordOf)].join('');
 }
 
 /** A Message's name as files are named: `ChargeCard` is `charge-card`. */
 export function messageFileNameOf(name: string): string {
-  return kebabCaseOf(camelCaseOf(name));
+  return kebabCaseOf(lowerFirst(name));
 }
 
 /** A Message Version's file name stem, `order-created.v2`, as README's Layout names its files. */
@@ -34,6 +31,10 @@ export function messageVersionStemOf(message: {
 /** The PascalCase of a camelCase name, as a type names it. */
 export function pascalCaseOf(name: string): string {
   return upperFirst(name);
+}
+
+function laterWordOf(word: string): string {
+  return /^[0-9]/.test(word) ? `_${word}` : upperFirst(word);
 }
 
 function lowerFirst(word: string): string {

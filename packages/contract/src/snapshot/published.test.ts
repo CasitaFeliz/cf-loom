@@ -15,6 +15,34 @@ import {
   type SubscriptionSnapshot,
 } from '../internal/index.ts';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
+const standardCodes = {
+  [invalidInputCode]: {
+    origin: 'standard',
+    status: 400,
+    message: 'Invalid',
+    headers: { type: 'object', fields: {} },
+    body: { type: 'object', fields: {} },
+  },
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+} as const;
+
 function aPublishedService(
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
@@ -24,18 +52,19 @@ function aPublishedService(
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
-    definitions: {},
+    formerInputs: [],
     standardRejections: {
-      invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-      notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+      invalidInput: invalidInputCode,
+      notFound: notFoundCode,
+      notImplemented: notImplementedCode,
     },
+    groups: { orders: { description: 'Orders' } },
     defs: {},
     endpoints: {},
     events: {},
     commands: {},
     guards: {},
-    codes: {},
+    codes: standardCodes,
     subscriptions: {},
     dependencies: {},
     ...fields,
@@ -50,16 +79,22 @@ const getOrder = {
   description: 'One order',
   params: ['orderId'],
   guards: [],
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: {
+    params: { type: 'object', fields: { orderId: { required: true, schema: { type: 'string' } } } },
+    query: { type: 'object', fields: {} },
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
   rejections: [],
 } as const satisfies EndpointSnapshot;
 
 const orderPlaced = {
+  group: 'orders',
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',
-  body: { type: 'object', mode: 'strict', fields: {} },
+  body: { type: 'object', fields: {} },
 } as const satisfies EventSnapshot;
 
 const retiredGetOrder = { ...getOrder, lifecycle: 'retired', retiredIn: '3.0.0' } as const;
@@ -117,7 +152,7 @@ describe('the published Snapshot', () => {
       endpoints: { 'GET /orders/{}': retiredGetOrder, 'DELETE /orders/{}': endpointTombstone },
       events: { 'OrderPlaced@1': orderPlaced, 'OrderPurged@1': tombstone },
       subscriptions: {
-        'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
       },
     });
 
@@ -157,7 +192,7 @@ describe('the published Snapshot’s types', () => {
   });
 
   test('the Snapshot a decoder returns is a PublishedSnapshot', () => {
-    const decoded = decodeSnapshot(canonicalTextOf(aPublishedService()));
+    const decoded = decodeSnapshot(canonicalTextOf(aPublishedService({ groups: {} })));
 
     if (decoded.kind === 'decoded') {
       expectTypeOf(decoded.snapshot).toEqualTypeOf<PublishedSnapshot>();
@@ -168,6 +203,7 @@ describe('the published Snapshot’s types', () => {
 
   test('a declared Subscription carries no removedIn', () => {
     const subscription: SubscriptionSnapshot = {
+      description: 'Receives it',
       event: 'orders-service:OrderPlaced@1',
       // @ts-expect-error removedIn belongs to the published Snapshot's tombstone
       removedIn: '3.2.0',

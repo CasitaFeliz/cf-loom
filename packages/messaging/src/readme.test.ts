@@ -1,8 +1,14 @@
-import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';
-import { handle, type WithResources, withReader } from '@cf-loom/handlers';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+} from '@cf-loom/contract';
+import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Broker, type BrokerConsumer, messaging, type OutgoingMessage } from './index.ts';
+import { type Broker, type DurableConsumer, messaging, type OutgoingMessage } from './index.ts';
 
 const money = z.object({ amount: z.number(), currency: z.string() });
 
@@ -30,34 +36,45 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const notifyOnCreated = defineSubscription({ name: 'notify-on-created', event: orderCreatedV2 });
+const notifyOnCreated = defineSubscription({
+  name: 'notifyOnCreated',
+  description: 'Notify on created',
+  event: orderCreatedV2,
+});
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
-  subscriptions: [notifyOnCreated],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+      subscriptions: [notifyOnCreated],
+    }),
+  ],
 });
 
 type Resources = { readonly notifications: { readonly send: (orderId: string) => Promise<void> } };
 type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
-/** A broker that records what is published and the consumers it is given, built on the public `Broker` type. */
+/** A broker that records what is published and the Durable consumers it is given, built on the public `Broker` type. */
 function aBroker() {
   const published: OutgoingMessage[] = [];
-  const consumers: BrokerConsumer[] = [];
+  const durableConsumers: DurableConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
       publish: async (message) => {
         published.push(message);
+        return { duplicate: false };
       },
       consume: async (given) => {
-        consumers.push(...given);
+        durableConsumers.push(...given);
       },
       close: async () => undefined,
     }),
   };
-  return { broker, published, consumers };
+  return { broker, published, durableConsumers };
 }
 
 describe('the messaging README', () => {
@@ -67,37 +84,45 @@ describe('the messaging README', () => {
     const total = { amount: 12, currency: 'EUR' };
     const order = { id: orderId };
     const traceparent = '00-abc-def-01';
-    const v1 = { orderId, total: total.amount };
-    const v2 = { orderId, total };
+    const headers: Readonly<Record<string, string>> = { traceparent };
+    const meta = { factId: 'o-1:created', headers };
     const { publisher, sender, close } = await messaging(contract, broker);
 
-    await publisher.publish('OrderCreated', {
-      v1: { orderId, total: total.amount },
-      v2: { orderId, total },
-    });
-    await sender.send('ChargeCard', { orderId });
-    await publisher.publish(
+    const { duplicates } = await publisher.publish(
       'OrderCreated',
-      { v1, v2 },
-      { factId: `${order.id}:created`, headers: { traceparent } },
+      { v1: { orderId, total: total.amount }, v2: { orderId, total } },
+      { factId: `${order.id}:created` },
+    );
+    await sender.send(
+      'ChargeCard',
+      { orderId },
+      { factId: `${meta.factId}:charge`, headers: { traceparent: meta.headers['traceparent'] } },
     );
     await close();
 
-    expect(published.map((message) => message.messageId).slice(3)).toEqual([
-      'OrderCreated.v1:o-1:created',
-      'OrderCreated.v2:o-1:created',
+    expect(duplicates).toEqual([]);
+    expect(published.map((message) => message.messageId)).toEqual([
+      'event.OrderCreated.v2:o-1:created',
+      'event.OrderCreated.v1:o-1:created',
+      'command.ChargeCard.v1:o-1:created:charge',
     ]);
-    expect(published[4]?.headers).toEqual({ traceparent });
+    expect(published[2]?.headers).toEqual({ traceparent });
   });
 
   test('the Message Handlers example runs through consume, reading its meta', async () => {
-    const { broker, consumers } = aBroker();
+    const { broker, durableConsumers } = aBroker();
     const received: unknown[] = [];
     const resources: Resources = {
       notifications: { send: async (orderId) => void received.push(orderId) },
     };
+    const readers = readersOf({
+      commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
+      subscriptions: {
+        notifyOnCreated: { declaration: notifyOnCreated, reader: orderCreatedV2.body },
+      },
+    });
     const notifyOnCreatedHandler = handle(
-      withReader(notifyOnCreated, orderCreatedV2.body),
+      readers.subscriptions.notifyOnCreated,
       async (
         body,
         { messageId, factId, deliveryCount, headers },
@@ -110,27 +135,32 @@ describe('the messaging README', () => {
     const running = await messaging(contract, broker);
     await running.consume(
       {
-        commands: { chargeCardV1: handle(withReader(chargeCardV1, chargeCardV1.body), () => {}) },
-        subscriptions: { 'notify-on-created': notifyOnCreatedHandler },
+        commands: { chargeCardV1: handle(readers.commands.chargeCardV1, () => {}) },
+        subscriptions: { notifyOnCreated: notifyOnCreatedHandler },
+        readers,
       },
       { resources },
     );
     const meta = {
-      messageId: 'OrderCreated.v2:o-1:created',
+      messageId: 'event.OrderCreated.v2:o-1:created',
       factId: 'o-1:created',
       deliveryCount: 2,
       headers: { traceparent: '00-abc-def-01' },
     };
     const body = { orderId: 'o-1', total: { amount: 12, currency: 'EUR' } };
-    const consumer = consumers.find((candidate) => candidate.element === notifyOnCreated);
+    const durableConsumer = durableConsumers.find(
+      (candidate) => candidate.durable === 'orders-service_notify-on-created',
+    );
 
-    const settlement = await consumer?.receive({
+    const settlement = await durableConsumer?.receive({
       ...meta,
+      lastAttempt: false,
+      waitMs: undefined,
       body: new TextEncoder().encode(JSON.stringify(body)),
     });
     await running.close();
 
-    expect(settlement).toEqual({ kind: 'acked' });
+    expect(settlement).toBe('acked');
     expect(received).toEqual(['o-1', meta]);
   });
 });

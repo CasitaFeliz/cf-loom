@@ -1,26 +1,25 @@
-import { byCodePoint } from '@cf-loom/contract/internal';
-import {
-  camelCaseOf,
-  kebabCaseOf,
-  kebabCaseOfCode,
-  messageVersionStemOf,
-} from '../source-text/index.ts';
+import { codeNameOf, kebabCaseOf } from '@cf-loom/contract/internal';
+import { camelCaseOfCode, kebabCaseOfCode, messageVersionStemOf } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
-import { declaredFiles } from './paths.ts';
+import { declaredFolders, packagePaths } from './paths.ts';
+
+/** An Element the package exports, which its Provider's name marks: an Endpoint by name, an Event's Message Version by name and version. */
+export type ProvidedDeclaration =
+  | { readonly kind: 'endpoint'; readonly name: string }
+  | { readonly kind: 'event'; readonly name: string; readonly version: number };
 
 /**
- * A declaration the package writes a file of its own for: an Endpoint or a Guard by name, a
- * Rejection by code, an Event's Message Version by name and version.
+ * A declaration the package writes a file of its own for: an Element it exports, a Guard by name,
+ * a Rejection by code.
  */
 export type PackagedDeclaration =
-  | { readonly kind: 'endpoint'; readonly name: string }
+  | ProvidedDeclaration
   | { readonly kind: 'guard'; readonly name: string }
-  | { readonly kind: 'rejection'; readonly code: string }
-  | { readonly kind: 'event'; readonly name: string; readonly version: number };
+  | { readonly kind: 'rejection'; readonly code: string };
 
 /** The file of a declaration in the package, its name in kebab-case. */
 export function fileOf(declared: PackagedDeclaration): string {
-  const { folder } = declaredFiles[declared.kind];
+  const folder = declaredFolders[declared.kind];
   switch (declared.kind) {
     case 'endpoint':
     case 'guard':
@@ -33,7 +32,7 @@ export function fileOf(declared: PackagedDeclaration): string {
 }
 
 /**
- * The name a declaration is exported under, suffixed by its kind as every generated name is,
+ * The name a declaration is exported under, with the word of its kind as every generated name has,
  * so names of different kinds never meet: `ORDER_LOCKED` is `orderLockedRejection`.
  */
 export function bindingOf(declared: PackagedDeclaration): string {
@@ -43,27 +42,37 @@ export function bindingOf(declared: PackagedDeclaration): string {
     case 'guard':
       return `${declared.name}Guard`;
     case 'rejection':
-      return `${camelCaseOf(kebabCaseOfCode(declared.code))}Rejection`;
+      return `${camelCaseOfCode(declared.code)}Rejection`;
     case 'event':
-      return `${camelCaseOf(declared.name)}EventV${declared.version}`;
+      return codeNameOf(declared, 'Event');
   }
+}
+
+/** The Provider's Standard Rejections, which their module declares and each Endpoint module imports to carry them. */
+export const standardRejectionsSibling: Sibling = {
+  name: 'standardRejections',
+  path: packagePaths.standardRejections,
+  kind: 'value',
+};
+
+function constructorOf(declared: ProvidedDeclaration): string {
+  switch (declared.kind) {
+    case 'endpoint':
+      return 'providedEndpoint';
+    case 'event':
+      return 'providedEvent';
+  }
+}
+
+/**
+ * The line a package opens an Element's declaration with: its constructor, given `markedBy`, the
+ * text of the Provider it marks the Element with.
+ */
+export function providedOpeningOf(declared: ProvidedDeclaration, markedBy: string): string {
+  return `export const ${bindingOf(declared)} = loom.${constructorOf(declared)}(${markedBy}, {`;
 }
 
 /** A declaration as another file of the package imports it. */
 export function siblingOf(declared: PackagedDeclaration): Sibling {
   return { name: bindingOf(declared), path: fileOf(declared), kind: 'value' };
-}
-
-/** The first two codes, in code point order, whose names in the package are one. */
-export function collidingCodesOf(codes: readonly string[]): readonly [string, string] | undefined {
-  const codeByBinding = new Map<string, string>();
-  for (const code of [...codes].sort(byCodePoint)) {
-    const binding = bindingOf({ kind: 'rejection', code });
-    const earlier = codeByBinding.get(binding);
-    if (earlier !== undefined) {
-      return [earlier, code];
-    }
-    codeByBinding.set(binding, code);
-  }
-  return undefined;
 }

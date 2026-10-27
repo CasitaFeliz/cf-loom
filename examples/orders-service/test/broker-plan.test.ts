@@ -6,14 +6,14 @@ const serviceDir = join(import.meta.dirname, '..');
 const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
 
 describe('the broker plan', () => {
-  test('cf-loom broker-plan --json prints the stream and the two durable consumers the Service needs', () => {
+  test('cf-loom broker-plan --json prints the stream and the two Durable consumers the Service needs', () => {
     const ran = spawnSync(process.execPath, [bin, 'broker-plan', '--json'], {
       cwd: serviceDir,
       encoding: 'utf8',
     });
 
     expect({ status: ran.status, stderr: ran.stderr }).toEqual({ status: 0, stderr: '' });
-    expect(JSON.parse(ran.stdout)).toEqual({
+    expect(JSON.parse(ran.stdout).plan).toEqual({
       prefix: null,
       streams: {
         'orders-service': {
@@ -24,7 +24,7 @@ describe('the broker plan', () => {
           ],
         },
       },
-      consumers: {
+      durableConsumers: {
         'orders-service_charge-on-created': {
           service: 'orders-service',
           stream: 'orders-service',

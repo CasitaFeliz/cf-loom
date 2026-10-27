@@ -115,6 +115,24 @@ const resolved = declared.map((code) => resolveCode(snapshot.codes, code));
 const businessCodes = resolved.filter(isBusinessRejection);
 ```
 
+**C29. A read whose depth the author controls uses an explicit stack, never recursion.** A walk of zod schemas,
+nested through defs, lazies or wrappers, of Snapshot nodes through `ref`s, of failure trees or of nested JSON keeps
+the parts it has still to read in an array and loops over it, as `leadsBackWithNoNode` and `refusalsIn` do; a walk that
+must return to a part after reading what it holds keeps one frame per part on that array, as the walker's driver
+does. *Why:* the call stack is a few thousand frames, set by Node rather than by any rule of the Contract, so a read
+that recurses fails a Contract the documents allow, at a depth that shifts with the shape and with the field order.
+
+```ts
+// bad
+function reachedFrom(node: SchemaNode): readonly SchemaNode[] {
+  return [node, ...refsOf(node).flatMap((ref) => reachedFrom(defs[ref.name]))];
+}
+
+// good
+const pending = [node];
+for (let next = pending.pop(); next !== undefined; next = pending.pop()) { … }
+```
+
 ## Expressions and idioms
 
 **C10. Filter with a type guard** **(lint)**. `.filter(isEvent)` with `function isEvent(message: Message): message is
@@ -150,8 +168,9 @@ shows its state; a fold hides it in the accumulator's shape.
 
 **C13. Names come from the vocabulary.** A thing is called what [CONTEXT.md](CONTEXT.md) calls it, in camelCase or
 PascalCase: a Contract, an Element, an Endpoint, a Guard, an Outcome, a Rejection, a Fault, a Message Version, a Fact
-id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_. A new concept gets its word
-in CONTEXT.md with the change that introduces it. *Why:* one word per concept lets the code, the documents and the
+id, a Subscription, a Snapshot, a Baseline; never a word CONTEXT.md lists under _Avoid_ as a name for that entry's own
+thing (`request` is no violation in `HandledRequest`, which is no Command). A new concept gets its word in CONTEXT.md
+with the change that introduces it. *Why:* one word per concept lets the code, the documents and the
 people say the same thing.
 
 **C14. No vague names.** Not `one`, `entry`, `item`, `common`, `data`, `info`, `result2`, `tmp`; a single letter only
@@ -195,7 +214,7 @@ verifyGenerated(contract);   // or generate(contract, { mode: 'verify' })
 ```
 
 **C18. Expected failures are values.** A failure the code expects (a construct the allow-list refuses, invalid
-Input, a missing durable consumer, a registry that cannot be reached) is a member of a closed union returned to the
+Input, a missing Durable consumer, a registry that cannot be reached) is a member of a closed union returned to the
 caller and decided with a `switch` (C16); cf-loom adds no `Result` library, so its packages keep no runtime dependency
 besides their peers. A `throw` is for a bug, with a message a developer reads. A user's Handler that throws is not a
 bug of cf-loom: the runtime catches it and answers a Fault, as the design says. *Why:* a failure that throws is a
@@ -259,8 +278,9 @@ expected, in that order, without scrolling.
 
 **C26. Test the compatibility we have, never one we do not.** Snapshots of every released format, the Wire protocol
 and the public APIs are compatibility we have: their fixtures and tests stay. No test of a shim (C5), no "still
-accepts the old shape" for a shape nothing released, no test that a private helper returns a value. *Why:* such a test
-pins the thing the next change must delete.
+accepts the old shape" for a shape nothing released, no test that a private helper returns a value. A public record's
+key set is pinned by one type test in its package's `types.test.ts`; a test never asserts the absence of one field.
+*Why:* such a test pins the thing the next change must delete.
 
 ## Reviewing
 

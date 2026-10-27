@@ -1,9 +1,10 @@
 import {
   defineApplication,
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
+  defineService,
   type Endpoint,
 } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
@@ -36,6 +37,7 @@ const findOrder = defineEndpoint({
   visibility: 'public',
   description: 'Finds an order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 204 },
 });
 
@@ -50,7 +52,7 @@ const oldOrders = defineEndpoint({
   success: { status: 204 },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
@@ -67,7 +69,6 @@ const handlers = {
     findOrder: handle(findOrder, () => success()),
   },
   guards: { apiKey: handle(apiKey, () => admit()) },
-  deprecatedAt: { findOrder: '2026-10-17T09:30:00Z' },
 };
 
 describe('serve: what it checks before the first request', () => {
@@ -77,25 +78,28 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, other: handlers.endpoints.getOrder },
     };
 
-    const http = serve(contract, extra);
+    const http = serve(contract, extra, {});
 
     expect(typeof http).toBe('function');
   });
 
-  test('a root that is no Contract throws', () => {
+  test('a Root that is no Service’s Contract throws', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
-    const serving = () => serve(application as never, handlers);
+    const serving = () => serve(application as never, handlers, {});
 
-    expect(serving).toThrow('serve() takes a Contract declared with defineContract');
+    expect(serving).toThrow("serve() takes a Service's Contract declared with defineService");
   });
 
   test('a live Endpoint without a Handler throws, naming it', () => {
     const missing = { ...handlers, endpoints: { getOrder: handlers.endpoints.getOrder } };
 
-    const serving = () => serve(contract, missing);
+    // @ts-expect-error findOrder has no Handler
+    const serving = () => serve(contract, missing, {});
 
-    expect(serving).toThrow('endpoints.findOrder has no Handler in the Handler map');
+    expect(serving).toThrow(
+      'endpoints.findOrder has no Handler in the Handler map: run cf-loom generate',
+    );
   });
 
   test('a Handler written for another Endpoint throws, naming the Endpoint', () => {
@@ -104,79 +108,56 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, findOrder: handlers.endpoints.getOrder },
     };
 
-    const serving = () => serve(contract, swapped as never);
+    // @ts-expect-error findOrder holds the Handler of getOrder
+    const serving = () => serve(contract, swapped, {});
 
-    expect(serving).toThrow(
-      'endpoints.findOrder holds no Handler handle() returned for it: run cf-loom generate',
-    );
+    expect(serving).toThrow('endpoints.findOrder holds the Handler written for getOrder');
   });
 
   test('a value handle() did not return throws, naming the Endpoint', () => {
-    const lookalike = Object.assign(() => undefined, { element: findOrder });
+    const lookalike = Object.assign(() => undefined, { declaration: findOrder });
     const forged = { ...handlers, endpoints: { ...handlers.endpoints, findOrder: lookalike } };
 
-    const serving = () => serve(contract, forged);
+    // @ts-expect-error a wrapper is no Handler handle() returned
+    const serving = () => serve(contract, forged, {});
 
-    expect(serving).toThrow('endpoints.findOrder holds no Handler handle() returned for it');
+    expect(serving).toThrow(
+      'endpoints.findOrder holds a value handle() did not return: wrap inside the implementation instead',
+    );
+  });
+
+  test('a Handler written for another copy of the Endpoint throws, asking whether it was loaded twice', () => {
+    const copy = defineEndpoint({
+      name: 'findOrder',
+      method: 'GET',
+      path: '/orders/find',
+      visibility: 'public',
+      description: 'Finds an order',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2026-10-17T09:30:00Z',
+      success: { status: 204 },
+    });
+    const copied = {
+      ...handlers,
+      endpoints: { ...handlers.endpoints, findOrder: handle(copy, () => success()) },
+    };
+
+    const serving = () => serve(contract, copied, {});
+
+    expect(serving).toThrow(
+      'endpoints.findOrder holds a Handler written for another copy of findOrder: is @cf-loom/contract or the Contract loaded twice?',
+    );
   });
 
   test('a Guard a live Endpoint attaches without a Handler throws, naming it', () => {
     const missing = { ...handlers, guards: {} };
 
-    const serving = () => serve(contract, missing);
-
-    expect(serving).toThrow('guards.apiKey has no Handler in the Handler map');
-  });
-
-  test('a Deprecated Endpoint without its deprecatedAt throws, since the map is stale', () => {
-    const stale = { ...handlers, deprecatedAt: {} };
-
-    const serving = () => serve(contract, stale);
+    // @ts-expect-error apiKey has no Handler
+    const serving = () => serve(contract, missing, {});
 
     expect(serving).toThrow(
-      'deprecatedAt.findOrder is missing or not an instant in the Handler map: run cf-loom generate',
+      'guards.apiKey has no Handler in the Handler map: run cf-loom generate',
     );
-  });
-
-  test.each([
-    'Oct 17 2026',
-    '2026-10-17',
-    '2026-10-17T09:30:00.000Z',
-    '2026-10-17T09:30:00+02:00',
-    'yesterday',
-  ])('a deprecatedAt that is not a stamp generate writes, %s, throws', (stamp) => {
-    const loose = { ...handlers, deprecatedAt: { findOrder: stamp } };
-
-    const serving = () => serve(contract, loose);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
-  });
-
-  test('a map with no deprecatedAt at all throws the same, never a TypeError', () => {
-    const { deprecatedAt: _stamps, ...withoutStamps } = handlers;
-
-    const serving = () => serve(contract, withoutStamps as never);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
-  });
-
-  test('a stamp for an Active Endpoint or a name the Contract lacks is ignored', () => {
-    const extra = {
-      ...handlers,
-      deprecatedAt: { ...handlers.deprecatedAt, getOrder: 'junk', other: 'junk' },
-    };
-
-    const http = serve(contract, extra);
-
-    expect(typeof http).toBe('function');
-  });
-
-  test('a stamp the map only inherits is no stamp', () => {
-    const inherited = { ...handlers, deprecatedAt: Object.create(handlers.deprecatedAt) };
-
-    const serving = () => serve(contract, inherited);
-
-    expect(serving).toThrow('deprecatedAt.findOrder is missing or not an instant');
   });
 
   test.each([
@@ -196,8 +177,24 @@ describe('serve: what it checks before the first request', () => {
       },
       'header-names',
     ],
+    [
+      'an Input header the Fetch standard keeps for the user agent',
+      { input: { headers: z.object({ cookie: z.string() }) } },
+      'header-names',
+    ],
+    [
+      'a Success header a browser hides',
+      {
+        success: {
+          status: 200,
+          headers: z.object({ 'set-cookie': z.string() }),
+          body: z.object({}),
+        },
+      },
+      'header-names',
+    ],
   ])('an Endpoint with %s throws, as generate words it', (_case, written, rule) => {
-    const odd: Endpoint = defineEndpoint({
+    const odd = defineEndpoint({
       name: 'odd',
       method: 'GET',
       path: '/odd',
@@ -205,20 +202,50 @@ describe('serve: what it checks before the first request', () => {
       description: 'An odd one',
       success: { status: 204 },
       ...(written as object),
-    } as never);
-    const withOdd = defineContract({
+    } as never) as Endpoint;
+    const withOdd = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
     });
 
     const serving = () =>
-      serve(withOdd, {
-        endpoints: { odd: handle(odd, () => success()) },
-        guards: {},
-        deprecatedAt: {},
-      });
+      serve(
+        withOdd,
+        {
+          endpoints: { odd: handle(odd, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
     expect(serving).toThrow(` ${rule}: `);
+  });
+
+  test('an Endpoint that answers a Rejection with a header name the host owns throws, as generate words it', () => {
+    const clobbering = defineRejection({
+      code: 'CLOBBERING',
+      status: 409,
+      message: 'It clobbers the Envelope’s content type',
+      headers: z.object({ 'content-type': z.string() }),
+    });
+    const odd = defineEndpoint({
+      name: 'odd',
+      method: 'GET',
+      path: '/odd',
+      visibility: 'public',
+      description: 'An odd one',
+      success: { status: 204 },
+      rejections: [clobbering],
+    });
+    const withOdd = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
+    });
+
+    const serving = () =>
+      serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} }, {});
+
+    expect(serving).toThrow(' header-names: ');
   });
 
   test('a header an Endpoint and its Guard declare with two shapes throws, as generate words it', () => {
@@ -237,35 +264,42 @@ describe('serve: what it checks before the first request', () => {
       input: { headers: z.object({ 'x-tenant': z.string() }) },
       success: { status: 204 },
     });
-    const withListed = defineContract({
+    const withListed = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [listed] })],
     });
 
     const serving = () =>
-      serve(withListed, {
-        endpoints: { listed: handle(listed, () => success()) },
-        guards: { tenant: handle(tenant, () => admit()) },
-        deprecatedAt: {},
-      });
+      serve(
+        withListed,
+        {
+          endpoints: { listed: handle(listed, () => success()) },
+          guards: { tenant: handle(tenant, () => admit()) },
+        },
+        {},
+      );
 
     expect(serving).toThrow(' input-conflict: ');
   });
 
   test('a Handler the map only inherits is no Handler', () => {
-    const inherited = { ...handlers, endpoints: Object.create(handlers.endpoints) };
+    const inheriting: typeof handlers.endpoints = Object.create(handlers.endpoints);
+    const inherited = { ...handlers, endpoints: inheriting };
 
-    const serving = () => serve(contract, inherited);
+    const serving = () => serve(contract, inherited, {});
 
-    expect(serving).toThrow('endpoints.getOrder has no Handler in the Handler map');
+    expect(serving).toThrow(
+      'endpoints.getOrder has no Handler in the Handler map: run cf-loom generate',
+    );
   });
 
   test('a GuardHandler written for another Guard throws, naming the Guard', () => {
     const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit()) } };
 
-    const serving = () => serve(contract, swapped as never);
+    // @ts-expect-error apiKey holds the Handler of legacyKey
+    const serving = () => serve(contract, swapped, {});
 
-    expect(serving).toThrow('guards.apiKey holds no Handler handle() returned for it');
+    expect(serving).toThrow('guards.apiKey holds the Handler written for legacyKey');
   });
 
   test('a text part that holds no zod schema throws, as generate words it', () => {
@@ -278,19 +312,22 @@ describe('serve: what it checks before the first request', () => {
       input: { query: { term: z.string() } as never },
       success: { status: 204 },
     });
-    const withLookup = defineContract({
+    const withLookup = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [lookup] })],
     });
 
     const serving = () =>
-      serve(withLookup, {
-        endpoints: { lookup: handle(lookup, () => success()) },
-        guards: {},
-        deprecatedAt: {},
-      });
+      serve(
+        withLookup,
+        {
+          endpoints: { lookup: handle(lookup, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
-    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-a-schema');
+    expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-a-schema');
   });
 
   test('a text part the walker refuses throws, as generate words it', () => {
@@ -303,21 +340,22 @@ describe('serve: what it checks before the first request', () => {
       input: { query: z.object({ at: z.date() as never }) },
       success: { status: 204 },
     });
-    const withSince = defineContract({
+    const withSince = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [since] })],
     });
 
     const serving = () =>
-      serve(withSince, {
-        endpoints: { since: handle(since, () => success()) },
-        guards: {},
-        deprecatedAt: {},
-      });
+      serve(
+        withSince,
+        {
+          endpoints: { since: handle(since, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
-    expect(serving).toThrow(
-      'groups.orders.endpoints.GET /since.input.query.fields.at not allowed: z.date()',
-    );
+    expect(serving).toThrow('endpoints.GET /since (since) input.query.at not allowed: z.date()');
   });
 
   test('a text part that is no object throws, as generate words it', () => {
@@ -330,18 +368,21 @@ describe('serve: what it checks before the first request', () => {
       input: { query: z.string() as never },
       success: { status: 204 },
     });
-    const withLookup = defineContract({
+    const withLookup = defineService({
       name: 'orders-service',
       groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [lookup] })],
     });
 
     const serving = () =>
-      serve(withLookup, {
-        endpoints: { lookup: handle(lookup, () => success()) },
-        guards: {},
-        deprecatedAt: {},
-      });
+      serve(
+        withLookup,
+        {
+          endpoints: { lookup: handle(lookup, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
-    expect(serving).toThrow('groups.orders.endpoints.GET /lookup.input.query not-an-object-schema');
+    expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-an-object-schema');
   });
 });

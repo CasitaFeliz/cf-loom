@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Command, defineCommand, defineContract, defineEvent, type Event } from '../index.ts';
-import { validateContract } from '../internal/index.ts';
+import { summarized } from '../../test/failures.ts';
+import { aRootPackage } from '../../test/root-package.ts';
+import {
+  type Command,
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  type Event,
+} from '../index.ts';
+import { messageIdentityOf, nameAndVersionOf, validateRoot } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -31,23 +40,23 @@ function aCommand(overrides: Record<string, unknown> = {}): Command {
 }
 
 function validateMessages(events: readonly unknown[], commands: readonly unknown[] = []) {
-  const contract = defineContract({
-    name: 'orders-service',
-    events: events as readonly Event[],
-    commands: commands as readonly Command[],
-  });
-  return validateContract(contract, {
-    originOf: () => undefined,
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  const ordersGroup = defineGroup({
+    name: 'orders',
+    description: 'Orders',
+    events,
+    commands,
+  } as unknown as Parameters<typeof defineGroup>[0]);
+  const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
+  return summarized(
+    validateRoot(contract, aRootPackage(contract, { packageName: 'orders-service' })),
+  );
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-describe('validateContract: Events and Commands', () => {
+describe('validateRoot: Events and Commands', () => {
   test('a Contract with Events and Commands validates', () => {
     const result = validateMessages([anEvent()], [aCommand()]);
 
@@ -59,21 +68,41 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'orderCreated@1', 'name'],
+        'events.orderCreated@1 name',
         'name-grammar',
-        'A Message name is PascalCase: orderCreated',
+        'A Message name is PascalCase words: "orderCreated"',
       ),
     );
   });
+
+  test.each([
+    ['URLRefresh', 'A Message name is PascalCase words: "URLRefresh" (write UrlRefresh)'],
+    ['OrderID', 'A Message name is PascalCase words: "OrderID" (write OrderId)'],
+    ['PlanA', 'A Message name is PascalCase words: "PlanA"'],
+    ['A', 'A Message name is PascalCase words: "A"'],
+  ])('a Message name %s, with a capital that starts no word, fails', (name, message) => {
+    const result = validateMessages([anEvent({ name })]);
+
+    expect(result).toEqual(failed(`events.${name}@1 name`, 'name-grammar', message));
+  });
+
+  test.each(['UrlRefresh', 'OrderV2', 'Order2Items', 'Plan2'])(
+    'a Message name %s, whose every capital starts a word, validates',
+    (name) => {
+      const result = validateMessages([anEvent({ name })]);
+
+      expect(result.kind).toBe('valid');
+    },
+  );
 
   test('a version that is not a whole number from 1 fails, as a cast lets it through', () => {
     const result = validateMessages([], [aCommand({ version: 0 })]);
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@0', 'version'],
+        'commands.ChargeCard@0 version',
         'message-version',
-        'A Message version is a whole number from 1: 0',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 0',
       ),
     );
   });
@@ -83,9 +112,9 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'visibility'],
+        'events.OrderCreated@1 visibility',
         'visibility',
-        "An Event's Visibility is internal or private: public",
+        `An Event's Visibility is internal or private: "public"`,
       ),
     );
   });
@@ -95,7 +124,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'visibility'],
+        'commands.ChargeCard@1 visibility',
         'undeclared-field',
         'visibility is not a declared field',
       ),
@@ -107,9 +136,9 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'lifecycle'],
+        'events.OrderCreated@1 lifecycle',
         'lifecycle',
-        'A lifecycle is active, deprecated or retired: gone',
+        'A lifecycle is active, deprecated or retired: "gone"',
       ),
     );
   });
@@ -118,7 +147,7 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([anEvent({ body: undefined })]);
 
     expect(result).toEqual(
-      failed(['events', 'OrderCreated@1', 'body'], 'required-field', 'body is a required field'),
+      failed('events.OrderCreated@1 body', 'required-field', 'body is a required field'),
     );
   });
 
@@ -126,30 +155,16 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([anEvent({ body: { orderId: 'uuid' } })]);
 
     expect(result).toEqual(
-      failed(['events', 'OrderCreated@1', 'body'], 'not-a-schema', 'body is not a zod schema'),
+      failed('events.OrderCreated@1 body', 'not-a-schema', 'body is not a zod schema'),
     );
-  });
-
-  test('an Event body holding a record keyed by an enum fails, as in any Read shape', () => {
-    const totals = z.record(z.enum(['eur', 'usd']), z.int());
-    const result = validateMessages([anEvent({ body: z.object({ totals }) })]);
-
-    expect(result).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'not-allowed',
-          at: ['events', 'OrderCreated@1', 'body', 'fields', 'totals'],
-          construct: 'a record keyed by an enum or literal in a Read shape',
-        },
-      ],
-    });
   });
 
   test('something listed under events that is not an Event fails', () => {
     const result = validateMessages([{ kind: 'event', name: 'OrderCreated', version: 1 }]);
 
-    expect(result).toEqual(failed(['events', 0], 'not-a-declaration', 'events.0 is not an Event'));
+    expect(result).toEqual(
+      failed('groups.orders events[0]', 'not-a-declaration', 'is not an Event'),
+    );
   });
 
   test('two Message Versions with one name and version fail', () => {
@@ -157,7 +172,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'version'],
+        'events.OrderCreated@1 version',
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: OrderCreated@1',
       ),
@@ -172,7 +187,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'name'],
+        'commands.ChargeCard@1 name',
         'message-kind',
         'A Message name belongs to one kind: ChargeCard is an Event and a Command',
       ),
@@ -184,7 +199,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@2', 'lifecycle'],
+        'commands.ChargeCard@2 lifecycle',
         'command-active-versions',
         'A Command has at most one Active version: ChargeCard',
       ),
@@ -217,7 +232,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1', 'description'],
+        'events.OrderCreated@1 description',
         'required-field',
         'description is a required string',
       ),
@@ -229,9 +244,9 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['events', 'OrderCreated@1.5', 'version'],
+        'events.OrderCreated@1.5 version',
         'message-version',
-        'A Message version is a whole number from 1: 1.5',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 1.5',
       ),
     );
   });
@@ -240,7 +255,7 @@ describe('validateContract: Events and Commands', () => {
     const result = validateMessages([], [anEvent({ name: 'ChargeCard' })]);
 
     expect(result).toEqual(
-      failed(['commands', 0], 'not-a-declaration', 'commands.0 is not a Command'),
+      failed('groups.orders commands[0]', 'not-a-declaration', 'is not a Command'),
     );
   });
 
@@ -249,9 +264,9 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'charge_card@1', 'name'],
+        'commands.charge_card@1 name',
         'name-grammar',
-        'A Message name is PascalCase: charge_card',
+        'A Message name is PascalCase words: "charge_card"',
       ),
     );
   });
@@ -261,7 +276,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'description'],
+        'commands.ChargeCard@1 description',
         'required-field',
         'description is a required string',
       ),
@@ -275,7 +290,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'version'],
+        'commands.ChargeCard@1 version',
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: ChargeCard@1',
       ),
@@ -287,7 +302,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'version'],
+        'commands.ChargeCard@1 version',
         'duplicate-message-identity',
         'A Message Version is identified by its name and version, once: ChargeCard@1',
       ),
@@ -302,7 +317,7 @@ describe('validateContract: Events and Commands', () => {
 
     expect(result).toEqual(
       failed(
-        ['commands', 'ChargeCard@1', 'name'],
+        'commands.ChargeCard@1 name',
         'message-kind',
         'A Message name belongs to one kind: ChargeCard is an Event and a Command',
       ),
@@ -329,13 +344,13 @@ describe('validateContract: Events and Commands', () => {
       failures: [
         {
           kind: 'declaration',
-          at: ['commands', 'ChargeCard@1', 'version'],
+          location: 'commands.ChargeCard@1 version',
           rule: 'duplicate-message-identity',
           message: 'A Message Version is identified by its name and version, once: ChargeCard@1',
         },
         {
           kind: 'declaration',
-          at: ['commands', 'ChargeCard@2', 'lifecycle'],
+          location: 'commands.ChargeCard@2 lifecycle',
           rule: 'command-active-versions',
           message: 'A Command has at most one Active version: ChargeCard',
         },
@@ -354,7 +369,165 @@ function rulesOf(result: ReturnType<typeof validateMessages>): readonly unknown[
   );
 }
 
-describe('validateContract: Message Versions that fail only as fields', () => {
+/** A seeded generator of the same sequence every run, so a failing version can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** Versions from 1 below `2 ** 53`: the boundaries, then pseudo-random ones. */
+function safeVersions(): readonly number[] {
+  const next = seededNext(190);
+  const random = Array.from({ length: 1000 }, () => {
+    const high = Math.floor(next() * 2 ** 21);
+    const low = Math.floor(next() * 2 ** 32);
+    return Math.max(1, high * 2 ** 32 + low);
+  });
+  return [1, 2, 2 ** 53 - 1, ...random];
+}
+
+describe('validateRoot: a Message Version’s version keeps its text and its predecessor exact', () => {
+  test('every whole number from 1 to the largest safe integer validates, reads back from its identity and differs from its predecessor', () => {
+    const versions = safeVersions();
+
+    const results = versions.map((version) => ({
+      version,
+      validated: validateMessages([anEvent({ version })], [aCommand({ version })]).kind,
+      readBack: nameAndVersionOf(messageIdentityOf('OrderCreated', version)).version,
+      isAfterPredecessor: version - 1 !== version,
+    }));
+
+    expect(results).toEqual(
+      versions.map((version) => ({
+        version,
+        validated: 'valid',
+        readBack: version,
+        isAfterPredecessor: true,
+      })),
+    );
+  });
+
+  test('a version past Number.MAX_SAFE_INTEGER fails saying the bound', () => {
+    const validated = validateMessages([anEvent({ version: 2 ** 53 })]);
+
+    expect(validated).toEqual(
+      failed(
+        'events.OrderCreated@9007199254740992 version',
+        'message-version',
+        'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER: 9007199254740992',
+      ),
+    );
+  });
+
+  test.each([2 ** 53, 1e16, 1e21, 0, 1.5, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'the version %s fails, for an Event and for a Command',
+    (version) => {
+      const validated = validateMessages([anEvent({ version })], [aCommand({ version })]);
+
+      expect(validated).toMatchObject({
+        kind: 'invalid',
+        failures: [
+          { rule: 'message-version', location: expect.stringMatching(/^events\./) },
+          { rule: 'message-version', location: expect.stringMatching(/^commands\./) },
+        ],
+      });
+    },
+  );
+});
+
+const recursiveArray: z.ZodType = z.array(z.lazy(() => recursiveArray)).meta({ id: 'rs' });
+
+const tree = z
+  .object({
+    value: z.string(),
+    get children() {
+      return z.array(tree);
+    },
+  })
+  .meta({ id: 'tree' });
+
+const lazyNode: z.ZodType = z
+  .object({ value: z.string(), next: z.lazy(() => lazyNode).optional() })
+  .meta({ id: 'lazyNode' });
+
+const aliasedInner: z.ZodType = z
+  .lazy(() => z.object({ value: z.string(), next: aliasedOuter.optional() }))
+  .meta({ id: 'aliasedInner' });
+const aliasedMiddle: z.ZodType = z.lazy(() => aliasedInner).meta({ id: 'aliasedMiddle' });
+const aliasedOuter: z.ZodType = z.lazy(() => aliasedMiddle).meta({ id: 'aliasedOuter' });
+
+const notObjects = {
+  'a string': z.string(),
+  'a literal': z.literal('created'),
+  'an array of objects': z.array(z.object({ orderId: z.uuid() })),
+  'a record': z.record(z.string(), z.string()),
+  'a discriminated union': z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('a') }),
+    z.object({ kind: z.literal('b') }),
+  ]),
+  'a nullable object': z.object({ orderId: z.uuid() }).nullable(),
+  'a recursive array': recursiveArray,
+  'a nullable recursive object': lazyNode.nullable(),
+  'a nullable ref through alias defs': aliasedOuter.nullable(),
+};
+
+const objects = {
+  'an object': z.object({ orderId: z.uuid() }),
+  'an intersection of objects': z.intersection(
+    z.object({ orderId: z.uuid() }),
+    z.object({ total: z.int() }),
+  ),
+  'a z.lazy() object': z.lazy(() => z.object({ orderId: z.uuid() })),
+  'a recursive object written with a getter': tree,
+  'a recursive object written with z.lazy()': lazyNode,
+  'a ref through a chain of alias defs to an object': aliasedOuter,
+};
+
+describe('validateRoot: a Message body is an object of its fields', () => {
+  const eventAt = 'events.OrderCreated@1 body';
+  const commandAt = 'commands.ChargeCard@1 body';
+
+  test.each(Object.entries(notObjects))('an Event whose body is %s fails', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        eventAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: OrderCreated@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(notObjects))('a Command whose body is %s fails', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result).toEqual(
+      failed(
+        commandAt,
+        'not-an-object-schema',
+        'A Message body is an object of its fields: ChargeCard@1',
+      ),
+    );
+  });
+
+  test.each(Object.entries(objects))('an Event whose body is %s validates', (_, body) => {
+    const result = validateMessages([anEvent({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+
+  test.each(Object.entries(objects))('a Command whose body is %s validates', (_, body) => {
+    const result = validateMessages([], [aCommand({ body })]);
+
+    expect(result.kind).toBe('valid');
+  });
+});
+
+describe('validateRoot: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],
     [

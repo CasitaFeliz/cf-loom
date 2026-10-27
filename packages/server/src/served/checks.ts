@@ -1,22 +1,20 @@
-import type { Contract, Endpoint, Guard } from '@cf-loom/contract';
+import type { Endpoint, Guard, ServiceContract } from '@cf-loom/contract';
 import {
   failureLineOf,
-  isContract,
-  isStamp,
-  ownOf,
+  isServiceContract,
   type TextPartNodes,
   walkedTextPartsOf,
 } from '@cf-loom/contract/internal';
 import type { HandlerMap } from '@cf-loom/handlers';
 import { mappedHandlerOf } from '@cf-loom/handlers/internal';
 
-/** What of the Handler map `serve` reads: the Handlers of Endpoints and Guards, and the stamps. */
-export type ServedHandlers = Pick<HandlerMap, 'endpoints' | 'guards' | 'deprecatedAt'>;
+/** What of the Handler map `serve` reads: the Handlers of Endpoints and Guards. */
+export type ServedHandlers = Pick<HandlerMap, 'endpoints' | 'guards'>;
 
-/** The root `serve` answers for, which must be a Contract; anything else is a bug of the Service. */
-export function contractOf(root: unknown): Contract {
-  if (!isContract(root)) {
-    throw new Error('serve() takes a Contract declared with defineContract');
+/** The Root `serve` answers for, which must be a Service's Contract; anything else is a bug of the Service. */
+export function contractOf(root: unknown): ServiceContract {
+  if (!isServiceContract(root)) {
+    throw new Error("serve() takes a Service's Contract declared with defineService");
   }
   return root;
 }
@@ -25,7 +23,7 @@ export function contractOf(root: unknown): Contract {
 export function endpointHandlerOf(
   handlers: ServedHandlers,
   endpoint: Endpoint,
-): { readonly element: Endpoint } {
+): { readonly declaration: Endpoint } {
   return mappedHandlerOf(handlers.endpoints, { map: 'endpoints', key: endpoint.name }, endpoint);
 }
 
@@ -33,13 +31,17 @@ export function endpointHandlerOf(
 export function guardHandlerOf(
   handlers: ServedHandlers,
   guard: Guard,
-): { readonly element: Guard } {
+): { readonly declaration: Guard } {
   return mappedHandlerOf(handlers.guards, { map: 'guards', key: guard.name }, guard);
 }
 
-/** The walked text parts of every Endpoint and Guard, which must be what `generate` accepts. */
+/**
+ * The walked text parts of every Endpoint and Guard, which must be what `generate` accepts, every
+ * Rejection's headers judged with them: `serve` holds every text part to the rules `generate`
+ * holds it to, and reads each request by the nodes the walk gives an Endpoint or a Guard.
+ */
 export function checkedTextPartsOf(
-  contract: Contract,
+  contract: ServiceContract,
 ): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
   const walked = walkedTextPartsOf(contract);
   if (walked.kind === 'invalid') {
@@ -47,20 +49,4 @@ export function checkedTextPartsOf(
     throw new Error(`serve() takes a Contract generate accepts:\n${lines.join('\n')}`);
   }
   return walked.nodes;
-}
-
-/**
- * The stamp a Deprecated Endpoint's responses carry, which the map must hold as `generate` writes
- * it; none for any other Endpoint, whatever the map holds.
- */
-export function deprecatedAtOf(handlers: ServedHandlers, endpoint: Endpoint): string | undefined {
-  if (endpoint.lifecycle !== 'deprecated') {
-    return undefined;
-  }
-  const stamp = ownOf(handlers.deprecatedAt, endpoint.name);
-  if (!isStamp(stamp)) {
-    const message = `deprecatedAt.${endpoint.name} is missing or not an instant in the Handler map: run cf-loom generate`;
-    throw new Error(message);
-  }
-  return stamp;
 }

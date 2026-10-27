@@ -1,16 +1,23 @@
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
-  type ExportedSnapshot,
+  providedEndpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import {
+  providedSnapshotOf,
+  reservedResponseOf,
+  snapshotOf,
+  validateRoot,
+} from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { FakeProviderError, fakeProvider } from './index.ts';
 
 const apiKey = defineGuard({
@@ -71,53 +78,85 @@ function latestPayment(fields: {
   });
 }
 
+/** A Private `latestPayment` that is Deprecated, which a Private Endpoint may be and stays live. */
+const deprecatedLatestPayment = defineEndpoint({
+  name: 'getLatestPayment',
+  method: 'GET',
+  path: '/payments/latest',
+  visibility: 'private',
+  description: 'The latest payment',
+  lifecycle: 'deprecated',
+  deprecatedAt: '2026-11-01T00:00:00Z',
+  success: { status: 200, body: z.object({ id: z.string() }) },
+});
+
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declared: readonly Endpoint[] = Object.values(endpoints),
 ) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
+  const standardRejections = providedStandardRejections({
     invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'The request is invalid' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  });
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
 const payments = contractPackageOf({ getPayment, capturePayment, getSummary });
 
-/** The Provider's Contract Package as another cf-loom wrote it: a `format` of its own and no entry a listed Endpoint could find. */
-function inFormat(contractPackage: typeof payments, format: unknown): typeof payments {
-  const exportedSnapshot = { ...contractPackage.exportedSnapshot, format, endpoints: {} };
-  return { ...contractPackage, exportedSnapshot: exportedSnapshot as ExportedSnapshot };
+/**
+ * The Provider's Contract Package as another cf-loom wrote it: its `getPayment` carrying the cut
+ * that `change` makes of a copy of its own.
+ */
+function withCut(change: (cut: Record<string, unknown>) => void): typeof payments {
+  const { getPayment: written } = payments.endpoints;
+  const cut: Record<string, unknown> = structuredClone(providedSnapshotOf(written));
+  change(cut);
+  const getPayment = providedEndpoint(
+    { name: 'payments-service', standardRejections: payments.standardRejections },
+    written,
+    cut,
+  );
+  return { ...payments, endpoints: { ...payments.endpoints, getPayment } };
 }
 
-const paymentsDeps = defineDependencies(payments, { endpoints: [getPayment, capturePayment] });
+/** The entry of `getPayment` in a cut. */
+function entryOf(cut: Record<string, unknown>): Record<string, unknown> {
+  const endpoints = cut['endpoints'] as Record<string, Record<string, unknown>>;
+  const entry = endpoints['GET /payments/{}'];
+  if (entry === undefined) {
+    throw new Error('The fixture has no GET /payments/{}');
+  }
+  return entry;
+}
+
+const paymentsDependency = defineDependency({
+  endpoints: [payments.endpoints.getPayment, payments.endpoints.capturePayment],
+});
 
 const at = 'https://payments-service.test';
 
 /** A fake whose every listed Endpoint counts the steps it took. */
 function countingFake(options: { readonly baseUrl?: string } = {}) {
-  const fake = fakeProvider(paymentsDeps, options);
+  const fake = fakeProvider(paymentsDependency, options);
   const taken = { getPayment: 0, capturePayment: 0 };
   fake.on('getPayment').otherwise((builder, { params }) => {
     taken.getPayment += 1;
@@ -130,15 +169,179 @@ function countingFake(options: { readonly baseUrl?: string } = {}) {
   return { fake, taken };
 }
 
+/** A fake of `getPayment` whose Provider also declares `latest`, which its Contract Package does not export. */
+function fakeBesides(latest: Endpoint) {
+  const declared = [getPayment, capturePayment, getSummary, latest];
+  const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
+  const dependency = defineDependency({ endpoints: [provider.endpoints.getPayment] });
+  const fake = fakeProvider(dependency);
+  const taken = { getPayment: 0 };
+  fake.on('getPayment').otherwise((builder, { params }) => {
+    taken.getPayment += 1;
+    return builder.success({ id: params.paymentId });
+  });
+  return { fake, taken };
+}
+
+/**
+ * A fake over a Provider that exports `GET /p/:x/b` and also declares a Retired `GET /p/a/:y`,
+ * which `shadowing` lists, and a live Private `GET /p/a/c`, which it does not.
+ */
+function fakeOverPaths() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const first = defineEndpoint({
+    ...base,
+    name: 'getFirst',
+    path: '/p/:x/b',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const retired = defineEndpoint({
+    ...base,
+    name: 'getRetired',
+    path: '/p/a/:y',
+    visibility: 'internal',
+    lifecycle: 'retired',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const hidden = defineEndpoint({
+    ...base,
+    name: 'getHidden',
+    path: '/p/a/c',
+    visibility: 'private',
+  });
+  const provider = contractPackageOf({ getFirst: first }, [first, retired, hidden]);
+  const dependency = defineDependency({ endpoints: [provider.endpoints.getFirst] });
+  const fake = fakeProvider(dependency);
+  const taken = { getFirst: 0 };
+  fake.on('getFirst').otherwise((builder) => {
+    taken.getFirst += 1;
+    return builder.success();
+  });
+  return { fake, taken };
+}
+
+/**
+ * A fake of a Dependency listing `GET /alpha/:x`, `GET /beta/:y` and `GET /beta/first`, in that
+ * order, over a Provider that also declares a Retired `GET /beta/latest` and a live Private
+ * `GET /beta/stats`, which only the cut of `getBeta`, not the first listed Endpoint's, lists as
+ * `shadowing`.
+ */
+function fakeOverTwoEndpoints() {
+  const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+  const getAlpha = defineEndpoint({
+    ...base,
+    name: 'getAlpha',
+    path: '/alpha/:x',
+    visibility: 'internal',
+    input: { params: z.object({ x: z.string() }) },
+  });
+  const getBeta = defineEndpoint({
+    ...base,
+    name: 'getBeta',
+    path: '/beta/:y',
+    visibility: 'internal',
+    input: { params: z.object({ y: z.string() }) },
+  });
+  const getBetaFirst = defineEndpoint({
+    ...base,
+    name: 'getBetaFirst',
+    path: '/beta/first',
+    visibility: 'internal',
+  });
+  const betaLatest = defineEndpoint({
+    ...base,
+    name: 'betaLatest',
+    path: '/beta/latest',
+    visibility: 'internal',
+    lifecycle: 'retired',
+  });
+  const betaStats = defineEndpoint({
+    ...base,
+    name: 'betaStats',
+    path: '/beta/stats',
+    visibility: 'private',
+  });
+  const exported = { getAlpha, getBeta, getBetaFirst };
+  const provider = contractPackageOf(exported, [...Object.values(exported), betaLatest, betaStats]);
+  const dependency = defineDependency({
+    endpoints: [
+      provider.endpoints.getAlpha,
+      provider.endpoints.getBeta,
+      provider.endpoints.getBetaFirst,
+    ],
+  });
+  const fake = fakeProvider(dependency);
+  const taken = { getAlpha: 0, getBeta: 0, getBetaFirst: 0 };
+  fake.on('getAlpha').otherwise((builder) => {
+    taken.getAlpha += 1;
+    return builder.success();
+  });
+  fake.on('getBeta').otherwise((builder) => {
+    taken.getBeta += 1;
+    return builder.success();
+  });
+  fake.on('getBetaFirst').otherwise((builder) => {
+    taken.getBetaFirst += 1;
+    return builder.success();
+  });
+  return { fake, taken };
+}
+
 function captureInit(body: string, contentType = 'application/json'): RequestInit {
   return { method: 'POST', headers: { 'content-type': contentType }, body };
+}
+
+const tagPayment = defineEndpoint({
+  name: 'tagPayment',
+  method: 'POST',
+  path: '/payments/:paymentId/tags',
+  visibility: 'internal',
+  description: 'Tags a payment',
+  input: {
+    params: z.object({ paymentId: z.string() }),
+    query: z.object({ expand: z.array(z.string()) }),
+    headers: z.object({ 'x-trace': z.string() }),
+    body: z.object({ labels: z.array(z.string()), detail: z.object({ note: z.string() }) }),
+  },
+  success: { status: 204 },
+});
+
+const taggingDependencyPackage = contractPackageOf({ tagPayment });
+const taggingDependency = defineDependency({
+  endpoints: [taggingDependencyPackage.endpoints.tagPayment],
+});
+
+/** The Input of a tagPayment call, as a test that wrote to it would see it. */
+type Tagged = {
+  params: { paymentId: string };
+  query: { expand: string[] };
+  headers: { 'x-trace': string };
+  body: { labels: string[]; detail: { note: string } };
+};
+
+/** An invalid call, as a test that wrote to it would see it. */
+type Invalid = {
+  issues: { in: string; path: (string | number)[]; code: string; message: string }[];
+};
+
+/** A fake of tagPayment that took one request, and the call it recorded. */
+async function taggedOnce() {
+  const fake = fakeProvider(taggingDependency);
+  fake.on('tagPayment').otherwise((builder) => builder.success());
+  const init = captureInit('{"labels":["a"],"detail":{"note":"n"}}');
+  const headers = { ...init.headers, 'x-trace': 't-1' };
+  await fake.fetch(new Request(`${at}/payments/pay-1/tags?expand=x`, { ...init, headers }));
+  return fake.calls('tagPayment')[0] as unknown as Tagged;
 }
 
 describe('fakeProvider: requests', () => {
   test('a param that breaks its schema answers the invalid-input Rejection, takes no step and is recorded', async () => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } });
+    const response = await fake.fetch(
+      new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     expect(response.status).toBe(422);
     expect(await response.json()).toEqual({
@@ -153,9 +356,8 @@ describe('fakeProvider: requests', () => {
       },
     });
     expect(taken.getPayment).toBe(0);
-    expect(fake.calls('getPayment')).toEqual([
+    expect(fake.invalidCalls('getPayment')).toEqual([
       {
-        kind: 'invalid',
         issues: [
           { in: 'params', path: ['paymentId'], code: 'too_small', message: expect.any(String) },
         ],
@@ -166,7 +368,7 @@ describe('fakeProvider: requests', () => {
   test('a missing demanded header answers alone, before the Input is read', async () => {
     const { fake } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab`, {});
+    const response = await fake.fetch(new Request(`${at}/payments/ab`));
 
     expect(await response.json()).toMatchObject({
       rejection: { body: { issues: [{ in: 'headers', path: ['x-api-key'], code: 'required' }] } },
@@ -183,7 +385,7 @@ describe('fakeProvider: requests', () => {
   ])('%s answers malformed alone', async (_name, init, message) => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch(`${at}/payments/ab/capture`, init);
+    const response = await fake.fetch(new Request(`${at}/payments/ab/capture`, init));
 
     expect(await response.json()).toMatchObject({
       rejection: { body: { issues: [{ in: 'body', path: [], code: 'malformed', message }] } },
@@ -192,43 +394,104 @@ describe('fakeProvider: requests', () => {
   });
 
   test('a valid request reaches its step with its Input parsed, unknown keys stripped', async () => {
-    const fake = fakeProvider(paymentsDeps);
+    const fake = fakeProvider(paymentsDependency);
     const inputs: unknown[] = [];
     fake.on('capturePayment').otherwise((builder, input) => {
       inputs.push(input);
       return builder.success({ id: input.params.paymentId, amount: input.body.amount });
     });
 
-    await fake.fetch(`${at}/payments/pay-1/capture`, captureInit('{"amount":5,"note":"x"}'));
+    await fake.fetch(
+      new Request(`${at}/payments/pay-1/capture`, captureInit('{"amount":5,"note":"x"}')),
+    );
 
     expect(inputs).toEqual([{ params: { paymentId: 'pay-1' }, body: { amount: 5 } }]);
-    expect(fake.calls('capturePayment')).toEqual([{ kind: 'valid', input: inputs[0] }]);
+    expect(fake.calls('capturePayment')).toEqual([inputs[0]]);
+  });
+
+  test('a step that writes to its Input leaves the recorded call as received', async () => {
+    const fake = fakeProvider(paymentsDependency);
+    fake.on('capturePayment').otherwise((builder, input) => {
+      input.params.paymentId = 'rewritten';
+      input.body.amount = 999;
+      return builder.success({ id: input.params.paymentId, amount: input.body.amount });
+    });
+
+    await fake.fetch(new Request(`${at}/payments/pay-1/capture`, captureInit('{"amount":5}')));
+
+    expect(fake.calls('capturePayment')).toEqual([
+      { params: { paymentId: 'pay-1' }, body: { amount: 5 } },
+    ]);
   });
 
   test('text parts are converted by their nodes, a repeated query key as a list', async () => {
-    const fake = fakeProvider(paymentsDeps);
+    const fake = fakeProvider(paymentsDependency);
     fake.on('getPayment').otherwise((r, { params }) => r.success({ id: params.paymentId }));
 
-    await fake.fetch(`${at}/payments/pay-1?expand=a&expand=b`, { headers: { 'x-api-key': 'k' } });
+    await fake.fetch(
+      new Request(`${at}/payments/pay-1?expand=a&expand=b`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     expect(fake.calls('getPayment')).toEqual([
       {
-        kind: 'valid',
-        input: {
-          params: { paymentId: 'pay-1' },
-          query: { expand: ['a', 'b'] },
-          headers: { 'x-api-key': 'k' },
-        },
+        params: { paymentId: 'pay-1' },
+        query: { expand: ['a', 'b'] },
+        headers: { 'x-api-key': 'k' },
       },
     ]);
+  });
+
+  test('calls lists only the requests read as valid, each its parsed Input, in arrival order', async () => {
+    const { fake } = countingFake();
+    const headers = { 'x-api-key': 'k' };
+
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-2`, { headers }));
+
+    expect(fake.calls('getPayment')).toEqual([
+      { params: { paymentId: 'pay-1' }, query: {}, headers },
+      { params: { paymentId: 'pay-2' }, query: {}, headers },
+    ]);
+  });
+
+  test('invalidCalls lists the Issues of each request answered with invalid input, in arrival order', async () => {
+    const { fake } = countingFake();
+    const headers = { 'x-api-key': 'k' };
+
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers }));
+    await fake.fetch(new Request(`${at}/payments/pay-2`));
+
+    const issueOf = (where: string, path: string, code: string) => ({
+      in: where,
+      path: [path],
+      code,
+      message: expect.any(String),
+    });
+    expect(fake.invalidCalls('getPayment')).toEqual([
+      { issues: [issueOf('params', 'paymentId', 'too_small')] },
+      { issues: [issueOf('headers', 'x-api-key', 'required')] },
+    ]);
+  });
+
+  test('a Request is answered whole, with nothing given beside it', async () => {
+    const { fake } = countingFake();
+    const request = new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } });
+
+    const response = await fake.fetch(request);
+
+    expect(await response.json()).toEqual({ id: 'pay-1' });
   });
 
   test('a request to another origin still reaches the fake', async () => {
     const { fake, taken } = countingFake();
 
-    const response = await fake.fetch('http://elsewhere.example/payments/pay-1', {
-      headers: { 'x-api-key': 'k' },
-    });
+    const response = await fake.fetch(
+      new Request('http://elsewhere.example/payments/pay-1', {
+        headers: { 'x-api-key': 'k' },
+      }),
+    );
 
     expect(response.status).toBe(200);
     expect(taken.getPayment).toBe(1);
@@ -240,71 +503,207 @@ describe('fakeProvider: requests', () => {
     const outcome = await fake.client({ headers: { 'x-api-key': 'k' } }).getPayment({
       params: { paymentId: 'pay-1' },
     });
-    const outside = fake.fetch('https://gateway.test/payments/pay-1', {});
+    const outside = fake.fetch(new Request('https://gateway.test/payments/pay-1'));
 
-    expect(outcome).toEqual({ kind: 'success', value: { id: 'pay-1' }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: 'pay-1' } });
     await expect(outside).rejects.toThrow(
       "payments-service: the path /payments/pay-1 is outside the base URL's path /payments-api/",
     );
   });
 
-  test('an unlisted Endpoint whose literal beats a listed param is a mistake, not that param', async () => {
+  test('a request won by an Endpoint the Dependency does not list, whose literal beats a listed param, is the one mistake naming it', async () => {
     const { fake, taken } = countingFake();
 
-    const answering = fake.fetch(`${at}/payments/summary`, { headers: { 'x-api-key': 'k' } });
+    const answering = fake.fetch(
+      new Request(`${at}/payments/summary`, { headers: { 'x-api-key': 'k' } }),
+    );
 
     await expect(answering).rejects.toThrow(FakeProviderError);
-    await expect(answering).rejects.toThrow('does not list GET /payments/summary');
+    await expect(answering).rejects.toThrow(
+      'payments-service: the request is won by GET /payments/summary, which the Dependency does not list',
+    );
     expect(taken.getPayment).toBe(0);
   });
 
-  test.each([
-    ['Private', latestPayment({ visibility: 'private', lifecycle: 'active' })],
-    ['Retired', latestPayment({ visibility: 'internal', lifecycle: 'retired' })],
-  ])(
-    'a %s Endpoint whose literal would beat a listed param never takes a request: the param does',
-    async (_, latest) => {
-      const declared = [getPayment, capturePayment, getSummary, latest];
-      const provider = contractPackageOf({ getPayment, capturePayment, getSummary }, declared);
-      const deps = defineDependencies(provider, { endpoints: [getPayment] });
-      const fake = fakeProvider(deps);
-      fake
-        .on('getPayment')
-        .otherwise((builder, { params }) => builder.success({ id: params.paymentId }));
+  test.each(['private', 'internal'] as const)(
+    'a request a Retired %s Endpoint wins is answered RETIRED as serve answers it, and takes no step',
+    async (visibility) => {
+      const { fake, taken } = fakeBesides(latestPayment({ visibility, lifecycle: 'retired' }));
 
-      const response = await fake.fetch(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } });
+      const response = await fake.fetch(
+        new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+      );
 
-      expect(await response.json()).toEqual({ id: 'latest' });
+      const retired = reservedResponseOf('RETIRED');
+      expect(response.status).toBe(retired.status);
+      expect(response.headers.get('content-type')).toBe(retired.headers.get('content-type'));
+      expect(await response.text()).toBe(await retired.text());
+      expect(response.headers.has('deprecation')).toBe(false);
+      expect(taken.getPayment).toBe(0);
     },
   );
 
+  test.each([
+    ['a live Private Endpoint takes', '/p/a/c'],
+    ['only a Retired Endpoint shadowing lists would take', '/p/a/z'],
+  ])(
+    'a request no listed Endpoint matches, which %s, is the mistake of matching none',
+    async (_, path) => {
+      const { fake, taken } = fakeOverPaths();
+
+      const answering = fake.fetch(new Request(`https://payments-service.test${path}`));
+
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        `payments-service: no Endpoint the Dependency lists is GET ${path} under /`,
+      );
+      expect(taken.getFirst).toBe(0);
+    },
+  );
+
+  test('a request an exported Endpoint matches and a shadowing Retired one wins is answered RETIRED', async () => {
+    const { fake, taken } = fakeOverPaths();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/p/a/b'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getFirst).toBe(0);
+  });
+
+  test.each([
+    ['Active', latestPayment({ visibility: 'private', lifecycle: 'active' })],
+    ['Deprecated', deprecatedLatestPayment],
+  ])(
+    'a request a %s Private Endpoint wins is the one mistake naming it, and takes no step',
+    async (_, latest) => {
+      const { fake, taken } = fakeBesides(latest);
+
+      const answering = fake.fetch(
+        new Request(`${at}/payments/latest`, { headers: { 'x-api-key': 'k' } }),
+      );
+
+      await expect(answering).rejects.toThrow(FakeProviderError);
+      await expect(answering).rejects.toThrow(
+        'payments-service: the request is won by GET /payments/latest, which the Dependency does not list',
+      );
+      expect(taken.getPayment).toBe(0);
+    },
+  );
+
+  test('a request a Retired Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is answered RETIRED as serve answers it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const response = await fake.fetch(new Request('https://payments-service.test/beta/latest'));
+
+    const retired = reservedResponseOf('RETIRED');
+    expect(response.status).toBe(retired.status);
+    expect(await response.text()).toBe(await retired.text());
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request a live Private Endpoint wins, which only a later Endpoint’s cut lists as shadowing, is a mistake naming it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    const answering = fake.fetch(new Request('https://payments-service.test/beta/stats'));
+
+    await expect(answering).rejects.toThrow(FakeProviderError);
+    await expect(answering).rejects.toThrow(
+      'payments-service: the request is won by GET /beta/stats, which the Dependency does not list',
+    );
+    expect(taken.getBeta).toBe(0);
+  });
+
+  test('a request an exported literal wins over an exported param is answered by that literal once, whichever cuts list it', async () => {
+    const { fake, taken } = fakeOverTwoEndpoints();
+
+    await fake.fetch(new Request('https://payments-service.test/beta/first'));
+    await fake.fetch(new Request('https://payments-service.test/beta/other'));
+
+    expect(taken).toEqual({ getAlpha: 0, getBeta: 1, getBetaFirst: 1 });
+  });
+
+  test('a Dependency with no Endpoint, written through a cast, is a bug, refused when the fake is created', () => {
+    const empty = defineDependency({ endpoints: [] } as unknown as Parameters<
+      typeof defineDependency
+    >[0]);
+
+    const create = () => fakeProvider(empty);
+
+    expect(create).toThrow('A Dependency lists at least one Endpoint, so its fake has a Provider');
+  });
+
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
-    const create = () => fakeProvider(paymentsDeps, { baseUrl: 'https://gateway.test/api?x=1' });
+    const create = () =>
+      fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/api?x=1' });
 
     expect(create).toThrow('has a query or a fragment');
   });
 
   test('a baseUrl with a username or a password is a bug, refused when the fake is created', () => {
     const create = () =>
-      fakeProvider(paymentsDeps, { baseUrl: 'https://ann:secret@gateway.test/' });
+      fakeProvider(paymentsDependency, { baseUrl: 'https://ann:secret@gateway.test/' });
 
     expect(create).toThrow('has a username or a password');
   });
 
-  test('a Contract Package in a format the fake does not read is a bug, refused when it is created', () => {
-    const newer = defineDependencies(inFormat(payments, 2), { endpoints: [getPayment] });
+  test('a baseUrl that is no http or https URL is a bug, refused when the fake is created, without its credentials', () => {
+    const create = () =>
+      fakeProvider(paymentsDependency, { baseUrl: 'ftp://ann:secret@gateway.test/api?x=1' });
 
-    const create = () => fakeProvider(newer);
-
-    expect(create).toThrow(
-      "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
-    );
+    expect(create).toThrow(new Error("The baseUrl's scheme ftp: is no http or https"));
   });
+
+  test.each([
+    {
+      given: 'in a format the fake does not read',
+      damage: (cut: Record<string, unknown>) => {
+        cut['format'] = 2;
+      },
+      refusal:
+        "payments-service's exported Snapshot is in format 2, newer than this cf-loom reads: upgrade the @cf-loom packages",
+    },
+    {
+      given: 'with an Endpoint entry that lacks its name',
+      damage: (cut: Record<string, unknown>) => {
+        delete entryOf(cut)['name'];
+      },
+      refusal:
+        "payments-service's exported Snapshot is malformed: endpoints.GET /payments/{}.name is missing",
+    },
+    {
+      given: 'with a shadowing key that is no Endpoint’s identity',
+      damage: (cut: Record<string, unknown>) => {
+        Reflect.set(cut['shadowing'] as object, 'garbage', { lifecycle: 'retired' });
+      },
+      refusal:
+        "payments-service's exported Snapshot is malformed: shadowing.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
+    },
+    {
+      given: 'with an endpoints key that is no Endpoint’s identity',
+      damage: (cut: Record<string, unknown>) => {
+        Reflect.set(cut['endpoints'] as object, 'garbage', entryOf(cut));
+      },
+      refusal:
+        "payments-service's exported Snapshot is malformed: endpoints.garbage is not an Endpoint’s identity: a method and a path with its params as {}",
+    },
+  ])(
+    'an Endpoint whose exported Snapshot cut is $given is a bug, refused when the fake is created',
+    ({ damage, refusal }) => {
+      const provider = withCut(damage);
+      const refused = defineDependency({ endpoints: [provider.endpoints.getPayment] });
+
+      const create = () => fakeProvider(refused);
+
+      expect(create).toThrow(refusal);
+    },
+  );
 
   test('a path that only begins like the base URL’s path lies outside it', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/api' });
 
-    const answering = fake.fetch('https://gateway.test/apix/payments/pay-1', {});
+    const answering = fake.fetch(new Request('https://gateway.test/apix/payments/pay-1'));
 
     await expect(answering).rejects.toThrow(
       "the path /apix/payments/pay-1 is outside the base URL's path /api/",
@@ -314,9 +713,11 @@ describe('fakeProvider: requests', () => {
   test('a path that begins with an empty segment is matched as a path, never as a host', async () => {
     const { fake, taken } = countingFake();
 
-    const answering = fake.fetch(`${at}//elsewhere/payments/pay-1`, {
-      headers: { 'x-api-key': 'k' },
-    });
+    const answering = fake.fetch(
+      new Request(`${at}//elsewhere/payments/pay-1`, {
+        headers: { 'x-api-key': 'k' },
+      }),
+    );
 
     await expect(answering).rejects.toThrow(FakeProviderError);
     expect(taken.getPayment).toBe(0);
@@ -326,33 +727,108 @@ describe('fakeProvider: requests', () => {
     const { fake, taken } = countingFake();
     const reason = new Error('Gave up');
 
-    const answering = fake.fetch(`${at}/payments/pay-1`, {
-      headers: { 'x-api-key': 'k' },
-      signal: AbortSignal.abort(reason),
-    });
+    const answering = fake.fetch(
+      new Request(`${at}/payments/pay-1`, {
+        headers: { 'x-api-key': 'k' },
+        signal: AbortSignal.abort(reason),
+      }),
+    );
 
     await expect(answering).rejects.toBe(reason);
     expect(fake.calls('getPayment')).toEqual([]);
     expect(taken.getPayment).toBe(0);
   });
 
-  test('calls are a frozen copy', async () => {
-    const { fake } = countingFake();
-    await fake.fetch(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } });
+  test('unknownRejection of the Provider’s not-found code answers it as declared, though no exported Endpoint lists it', async () => {
+    const fake = fakeProvider(paymentsDependency);
+    fake.on('getPayment').otherwise((r) => r.unknownRejection('NOT_FOUND'));
 
-    const calls = fake.calls('getPayment');
+    const response = await fake.fetch(
+      new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }),
+    );
 
-    expect(Object.isFrozen(calls)).toBe(true);
-    expect(fake.calls('getPayment')).not.toBe(calls);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      rejection: { code: 'NOT_FOUND', message: 'Not found' },
+    });
   });
 
-  test('a path no exported Endpoint matches is a mistake naming the path and the base URL', async () => {
+  test.each([
+    ['a param', (call: Tagged) => Object.assign(call.params, { paymentId: 'x' })],
+    ['a query list that grows', (call: Tagged) => call.query.expand.push('y')],
+    ['a query list item', (call: Tagged) => Object.assign(call.query.expand, ['y'])],
+    ['a header', (call: Tagged) => Object.assign(call.headers, { 'x-trace': 'x' })],
+    ['a body list', (call: Tagged) => Object.assign(call.body.labels, ['y'])],
+    [
+      'a nested object of the body',
+      (call: Tagged) => Object.assign(call.body.detail, { note: 'y' }),
+    ],
+    ['the body', (call: Tagged) => Object.assign(call.body, { detail: {} })],
+    ['the Input', (call: Tagged) => Object.assign(call, { params: {} })],
+  ])('a write to %s of a recorded call throws', async (_part, write) => {
+    const call = await taggedOnce();
+
+    const writing = () => write(call);
+
+    expect(writing).toThrow(TypeError);
+  });
+
+  test.each([
+    ['the call', (call: Invalid) => Object.assign(call, { issues: [] })],
+    [
+      'its list of issues',
+      (call: Invalid) => call.issues.push({ in: 'body', path: [], code: 'x', message: 'x' }),
+    ],
+    ['an issue', (call: Invalid) => Object.assign(call.issues[0] as object, { code: 'x' })],
+    [
+      'the path of an issue',
+      (call: Invalid) => (call.issues[0] as Invalid['issues'][number]).path.push('x'),
+    ],
+  ])('%s of an invalid call cannot be written to', async (_part, write) => {
+    const { fake } = countingFake();
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }));
+    const [call] = fake.invalidCalls('getPayment') as unknown as Invalid[];
+
+    const writing = () => write(call as Invalid);
+
+    expect(writing).toThrow(TypeError);
+  });
+
+  test('calls and invalidCalls are frozen copies', async () => {
+    const { fake } = countingFake();
+    await fake.fetch(new Request(`${at}/payments/pay-1`, { headers: { 'x-api-key': 'k' } }));
+    await fake.fetch(new Request(`${at}/payments/ab`, { headers: { 'x-api-key': 'k' } }));
+
+    const calls = fake.calls('getPayment');
+    const invalidCalls = fake.invalidCalls('getPayment');
+
+    expect(Object.isFrozen(calls)).toBe(true);
+    expect(Object.isFrozen(invalidCalls)).toBe(true);
+    expect(fake.calls('getPayment')).not.toBe(calls);
+    expect(fake.invalidCalls('getPayment')).not.toBe(invalidCalls);
+  });
+
+  test('a path no listed Endpoint matches is a mistake naming the path and the base URL', async () => {
     const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
 
-    const answering = fake.fetch('https://gateway.test/payments-api/refunds/r-1', {});
+    const answering = fake.fetch(new Request('https://gateway.test/payments-api/refunds/r-1'));
 
     await expect(answering).rejects.toThrow(
-      'payments-service: no Endpoint it exports is GET /refunds/r-1 under /payments-api/',
+      'payments-service: no Endpoint the Dependency lists is GET /refunds/r-1 under /payments-api/',
+    );
+  });
+
+  test('a method the listed path does not take is a mistake naming the path’s methods', async () => {
+    const { fake } = countingFake({ baseUrl: 'https://gateway.test/payments-api' });
+
+    const answering = fake.fetch(
+      new Request('https://gateway.test/payments-api/payments/pay-1', {
+        method: 'DELETE',
+      }),
+    );
+
+    await expect(answering).rejects.toThrow(
+      'payments-service: no Endpoint the Dependency lists is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
     );
   });
 });

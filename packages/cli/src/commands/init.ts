@@ -1,24 +1,42 @@
-import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
-import { configFile } from '../config/index.ts';
+import { type RootKind, rootNameProblemOf } from '@cf-loom/contract/internal';
 import {
   oneLineOf,
   type PackageName,
   projectPackageOf,
-  type RootKind,
   rootFiles,
   rootPlaces,
 } from '../loading/index.ts';
-import type { Run } from '../project/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
-import { configTemplateOf, rootTemplateOf } from './templates.ts';
+import { attributesToAppendOf, gitAttributesFile } from './git-attributes.ts';
+import type { Run } from './run.ts';
+import { rootTemplateOf } from './templates.ts';
 
-/** The files `init` writes, each path relative to the project with its text. */
-type Written = readonly { readonly path: string; readonly text: string }[];
+/** What `init` appends to `.gitattributes`, and the bytes the file held before, if it existed. */
+type Appended = { readonly text: string; readonly original: Buffer | undefined };
+
+/** What `init` writes: the Root, and the lines it appends to `.gitattributes`, if it lacks any. */
+type Planned = {
+  readonly kind: 'planned';
+  readonly root: { readonly path: string; readonly text: string };
+  readonly attributes: Appended | undefined;
+};
+
+type Refused = { readonly kind: 'refused'; readonly message: string };
 
 /**
- * Creates a root that declares nothing yet, and `cf-loom.config.ts` when the project has none. It
- * checks every target before writing and never overwrites, so it writes everything or nothing.
+ * Creates a Root that declares nothing yet, and makes `.gitattributes` keep the line endings of
+ * the files `generate` writes. It checks every target before writing and never overwrites, so it
+ * writes everything or nothing; a `.gitattributes` it finds only gets the lines it lacks.
  */
 export function init({ cwd }: Run, kind: RootKind): Exit {
   const projectPackage = projectPackageOf(cwd);
@@ -29,42 +47,70 @@ export function init({ cwd }: Run, kind: RootKind): Exit {
   if (planned.kind === 'refused') {
     return toolingError(planned.message);
   }
-  const failure = writeAll(cwd, planned.written);
+  const failure = writeAll(cwd, planned);
   if (failure !== undefined) {
     return toolingError(`init cannot write: ${failure}`);
   }
-  return done([`Created ${rootPlaces[kind].file}`]);
+  return writtenExitOf(planned);
+}
+
+/** The files `init` created and the one it updated, as its lines and its document both say them. */
+function writtenExitOf({ root, attributes }: Planned): Exit {
+  const created = [root.path];
+  const updated: string[] = [];
+  if (attributes?.original !== undefined) {
+    updated.push(gitAttributesFile);
+  } else if (attributes !== undefined) {
+    created.push(gitAttributesFile);
+  }
+  const lines = [
+    ...created.map((path) => `Created ${path}`),
+    ...updated.map((path) => `Updated ${path}`),
+  ];
+  return done(lines, { created, updated });
 }
 
 /** What `init` would write, or the first target that stops it. */
-function plannedOf(
-  cwd: string,
-  kind: RootKind,
-  packageName: PackageName,
-):
-  | { readonly kind: 'planned'; readonly written: Written }
-  | { readonly kind: 'refused'; readonly message: string } {
+function plannedOf(cwd: string, kind: RootKind, packageName: PackageName): Planned | Refused {
   const existing = rootFiles.find((file) => existsSync(join(cwd, file)));
   if (existing !== undefined) {
-    return { kind: 'refused', message: `${existing} already exists` };
+    return refused(`${existing} already exists`);
   }
   const { file } = rootPlaces[kind];
   const blocking = foldersOf(file).find((folder) => isNoFolder(join(cwd, folder)));
   if (blocking !== undefined) {
-    return { kind: 'refused', message: `${blocking} is no folder: init cannot write ${file}` };
+    return refused(`${blocking} is no folder: init cannot write ${file}`);
+  }
+  const problem = rootNameProblemOf(kind, packageName.name);
+  if (problem !== undefined) {
+    return refused(`package.json names "${packageName.name}", but ${problem}: rename the package`);
+  }
+  const attributes = attributesOf(cwd);
+  if (attributes.kind === 'refused') {
+    return attributes;
   }
   const root = { path: file, text: rootTemplateOf(kind, packageName.name) };
-  if (existsSync(join(cwd, configFile))) {
-    const refused = { kind: 'refused', message: `${configFile} is no file` } as const;
-    return statSync(join(cwd, configFile)).isFile()
-      ? { kind: 'planned', written: [root] }
-      : refused;
+  return { kind: 'planned', root, attributes: attributes.appended };
+}
+
+function refused(message: string): Refused {
+  return { kind: 'refused', message };
+}
+
+/** The lines `.gitattributes` lacks, or why it cannot be read. */
+function attributesOf(
+  cwd: string,
+): { readonly kind: 'read'; readonly appended: Appended | undefined } | Refused {
+  let original: Buffer | undefined;
+  try {
+    original = readFileSync(join(cwd, gitAttributesFile));
+  } catch (e) {
+    if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT')) {
+      return refused(`${gitAttributesFile} cannot be read: ${oneLineOf(e, cwd)}`);
+    }
   }
-  if (packageName.scope === undefined) {
-    return { kind: 'refused', message: `package.json names no scope to write ${configFile} with` };
-  }
-  const config = { path: configFile, text: configTemplateOf(packageName.scope) };
-  return { kind: 'planned', written: [root, config] };
+  const text = attributesToAppendOf(original?.toString('utf8'));
+  return { kind: 'read', appended: text === undefined ? undefined : { text, original } };
 }
 
 /** The folders a file sits in under the project, outermost first. */
@@ -78,24 +124,49 @@ function isNoFolder(path: string): boolean {
 }
 
 /**
- * Writes every file in order; on a failure removes the files it wrote and the folders it created,
- * innermost first, and says why.
+ * Writes the Root, then appends to `.gitattributes`; on a failure removes the Root and the
+ * folders it created, innermost first, puts back the bytes `.gitattributes` held, and says why.
  */
-function writeAll(cwd: string, written: Written): string | undefined {
-  const writtenPaths: string[] = [];
+function writeAll(cwd: string, { root, attributes }: Planned): string | undefined {
+  const created: string[] = [];
   try {
-    for (const { path, text } of written) {
-      const created = foldersOf(path).filter((folder) => !existsSync(join(cwd, folder)));
-      writtenPaths.push(...created);
-      mkdirSync(dirname(join(cwd, path)), { recursive: true });
-      writeFileSync(join(cwd, path), text, { flag: 'wx' });
-      writtenPaths.push(path);
+    const folders = foldersOf(root.path).filter((folder) => !existsSync(join(cwd, folder)));
+    created.push(...folders);
+    mkdirSync(dirname(join(cwd, root.path)), { recursive: true });
+    writeFileSync(join(cwd, root.path), root.text, { flag: 'wx' });
+    created.push(root.path);
+    if (attributes !== undefined) {
+      appendAttributes(cwd, attributes);
     }
     return undefined;
   } catch (e) {
-    for (const path of writtenPaths.reverse()) {
+    for (const path of created.reverse()) {
       rmSync(join(cwd, path), { force: true, recursive: true });
     }
     return oneLineOf(e, cwd);
+  }
+}
+
+/** Appends to `.gitattributes`, the last write of `init`; a file that was there is written back as it was if the append fails. */
+function appendAttributes(cwd: string, { text, original }: Appended): void {
+  const path = join(cwd, gitAttributesFile);
+  try {
+    appendFileSync(path, text);
+  } catch (e) {
+    restoreFile(path, original);
+    throw e;
+  }
+}
+
+/** Puts back the bytes a file held, or removes a file `init` was creating; a file that cannot be written has not changed. */
+function restoreFile(path: string, original: Buffer | undefined): void {
+  try {
+    if (original === undefined) {
+      rmSync(path, { force: true });
+    } else {
+      writeFileSync(path, original);
+    }
+  } catch {
+    return;
   }
 }

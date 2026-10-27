@@ -1,5 +1,6 @@
-import { follows, kebabCase } from '../validation/index.ts';
+import { follows, kebabCase, ruleOf } from '../declarations/index.ts';
 import { subjectVersionOf } from '../written/index.ts';
+import { kebabCaseOf } from './identifiers.ts';
 
 /** The header the Fact id travels in, never parsed out of the broker message id. */
 export const factIdHeader = 'Cf-Loom-Fact-Id';
@@ -7,20 +8,29 @@ export const factIdHeader = 'Cf-Loom-Fact-Id';
 /** The header the broker message id travels in, which the broker deduplicates by. */
 export const brokerMessageIdHeader = 'Nats-Msg-Id';
 
+/** A Message Version's subject within its Service's stream, `<event|command>.<Name>.v<n>`, which the subject and the broker message id share. */
+function streamSubjectOf(message: {
+  readonly kind: 'event' | 'command';
+  readonly name: string;
+  readonly version: number;
+}): string {
+  return `${message.kind}.${subjectVersionOf(message)}`;
+}
+
 /** The subject a Message Version travels on, unprefixed: `<service>.<event|command>.<Name>.v<n>`. */
 export function subjectOf(
   service: string,
   message: { readonly kind: 'event' | 'command'; readonly name: string; readonly version: number },
 ): string {
-  return `${service}.${message.kind}.${subjectVersionOf(message)}`;
+  return `${service}.${streamSubjectOf(message)}`;
 }
 
-/** The broker message id a Message is sent with, `<Name>.v<n>:<factId>`, unique in its stream since a name has one kind. */
+/** The broker message id a Message is sent with, `<event|command>.<Name>.v<n>:<factId>`: its subject after the Service's name, so it is unique in the Service's stream, then the Fact id. */
 export function brokerMessageIdOf(
-  message: { readonly name: string; readonly version: number },
+  message: { readonly kind: 'event' | 'command'; readonly name: string; readonly version: number },
   factId: string,
 ): string {
-  return `${subjectVersionOf(message)}:${factId}`;
+  return `${streamSubjectOf(message)}:${factId}`;
 }
 
 /** The broker headers a Message travels with: its transport headers, its broker message id in `Nats-Msg-Id` and its Fact id in `Cf-Loom-Fact-Id`. */
@@ -90,27 +100,30 @@ function joinedByName(entries: readonly (readonly [string, string])[]): Map<stri
   return valueByName;
 }
 
-/** The stream of a Service, named after it: its own Messages travel on it, and a consumer of its Events reads it. */
+/** The stream of a Service, named after it: its own Messages travel on it, and a Durable consumer of its Events reads it. */
 export function streamNameOf(service: string): string {
   return service;
 }
 
-/** What has a durable consumer: a Subscription by its name, or a Command's Message Version. */
+/** What has a Durable consumer: a Subscription by its name, or a Command's Message Version. */
 export type DurableConsumed =
   | { readonly kind: 'subscription'; readonly name: string }
   | { readonly kind: 'command'; readonly name: string; readonly version: number };
 
-/** The durable consumer of a Subscription, `<service>_<name>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
+/** The Durable consumer of a Subscription, `<service>_<name in kebab-case>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
 export function durableNameOf(service: string, consumed: DurableConsumed): string {
   switch (consumed.kind) {
     case 'subscription':
-      return `${service}_${consumed.name}`;
+      return `${service}_${kebabCaseOf(consumed.name)}`;
     case 'command':
       return `${service}_command_${consumed.name}_v${consumed.version}`;
   }
 }
 
-/** Whether a text may prefix a Broker's names: kebab-case, as a Service name, so it holds no `_`, `.`, `*` or `>`. */
+/** What a Broker prefix is, as every refusal of one says it: `kebab-case of at most 64 characters, such as staging`. */
+export const brokerPrefixRule = `${ruleOf(kebabCase)}, such as staging`;
+
+/** Whether a text may prefix a Broker's names: kebab-case of at most 64 characters, as a Service name, so it holds no `_`, `.`, `*` or `>`. */
 export function isBrokerPrefix(text: string): boolean {
   return follows(kebabCase, text);
 }
@@ -120,7 +133,7 @@ export function prefixedSubjectOf(prefix: string | null, subject: string): strin
   return prefix === null ? subject : `${prefix}.${subject}`;
 }
 
-/** A stream's or durable consumer's name with the prefix in front, `staging_orders-service`, or the name itself without one. */
+/** A stream's or Durable consumer's name with the prefix in front, `staging_orders-service`, or the name itself without one. */
 export function prefixedNameOf(prefix: string | null, name: string): string {
   return prefix === null ? name : `${prefix}_${name}`;
 }

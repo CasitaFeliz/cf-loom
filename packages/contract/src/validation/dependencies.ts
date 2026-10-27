@@ -1,147 +1,117 @@
-import { isEndpoint, isEvent, reaches, type Visibility } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import {
+  type Endpoint,
+  isEndpoint,
+  isProvidedElement,
+  providerOf,
+  type Root,
+  reaches,
+} from '../declarations/index.ts';
+import { byCodePoint, fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
-  entriesOf,
-  isPlainObject,
-  type LocatedDependencies,
-  partOf,
-  type Root,
-  textOf,
+  isEmptyField,
+  type LocatedDependency,
+  listOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
-const selection = 'A Dependency selects Elements its Provider exports';
+const exportedRule = "A Dependency lists Endpoints a Provider's Contract Package exports";
 
-/** An Element a Dependency selected, by its name in code, and where it sits. */
-type Selected = { readonly at: Path; readonly name: string; readonly element: unknown };
+/** An Endpoint a Dependency lists and where it sits, by its position in the list. */
+type Selected = { readonly at: Place; readonly endpoint: Endpoint };
 
 /**
- * A Service reaches the Elements its Provider exports, and never a Private one; an Application,
- * outside the network, Public Endpoints only. A Dependency lists only Events a Subscription uses.
+ * A Dependency lists one or more Endpoints, all one Provider's, each once: Endpoints a Provider's
+ * Contract Package exports, never a Private one, and for an Application, outside the network,
+ * Public ones only. What its list holds that is no Endpoint is the structure rule's.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const { root, dependencies, subscriptions } = declarations;
-  const subscribed = new Set(subscriptions.map(({ subscription }) => subscription.event));
-  return dependencies.flatMap((located) => {
-    const exported = exportedOf(located);
+  const rootKind = declarations.root.kind;
+  return declarations.dependencies.flatMap((located) => {
+    if (isEmptyField(located.dependency.endpoints)) {
+      return [
+        failure(located.at, 'dependency-selection', 'A Dependency lists at least one Endpoint'),
+      ];
+    }
+    const selected = selectedOf(located);
     return [
-      ...selectedOf(located, 'endpoints').flatMap((selected) =>
-        selectedEndpointFailures(selected, exported, root.kind),
-      ),
-      ...selectedOf(located, 'events').flatMap((selected) =>
-        eventFailures(selected, { exported, rootKind: root.kind, subscribed }),
-      ),
+      ...providerFailures(located.at, selected),
+      ...selected.flatMap((listed) => selectedFailures(listed, rootKind)),
+      ...repeatedFailures(selected),
     ];
   });
 }
 
-function selectedOf(
-  { at, dependencies }: LocatedDependencies,
-  part: 'endpoints' | 'events',
-): readonly Selected[] {
-  return entriesOf(dependencies[part]).map(([name, element]) => ({
-    at: [...at, part, name],
-    name,
-    element,
-  }));
+function selectedOf({ at, dependency }: LocatedDependency): readonly Selected[] {
+  const listed = listOf<unknown>(dependency.endpoints).map((endpoint, index) => {
+    return { at: inside(at, fieldStep('endpoints'), indexStep(index)), endpoint };
+  });
+  return listed.filter(isSelected);
 }
 
-/**
- * The Elements a Dependency's Provider exports, read once per Dependency; a map that is no object
- * is the field rules' finding, and nothing is judged against it.
- */
-type Exported = {
-  readonly endpoints: ReadonlySet<unknown> | undefined;
-  readonly events: ReadonlySet<unknown> | undefined;
-};
-
-function exportedOf({ dependencies }: LocatedDependencies): Exported {
-  const exported: Partial<Record<'endpoints' | 'events', unknown>> = partOf(dependencies.exported);
-  return {
-    endpoints: isPlainObject(exported.endpoints)
-      ? new Set(Object.values(exported.endpoints))
-      : undefined,
-    events: isPlainObject(exported.events) ? new Set(Object.values(exported.events)) : undefined,
-  };
+function isSelected(listed: {
+  readonly at: Place;
+  readonly endpoint: unknown;
+}): listed is Selected {
+  return isEndpoint(listed.endpoint);
 }
 
-function selectedEndpointFailures(
-  { at, name, element }: Selected,
-  exported: Exported,
+/** The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL. */
+function providerFailures(at: Place, selected: readonly Selected[]): readonly DeclarationFailure[] {
+  const providers = new Set(selected.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
+  if (providers.size < 2) {
+    return [];
+  }
+  const names = [...providers].sort(byCodePoint).join(', ');
+  const message = `A Dependency lists one Provider's Endpoints: ${names}`;
+  return [failure(at, 'dependency-selection', message)];
+}
+
+function isName(provider: string | undefined): provider is string {
+  return provider !== undefined;
+}
+
+function selectedFailures(
+  { at, endpoint }: Selected,
   rootKind: Root['kind'],
 ): readonly DeclarationFailure[] {
-  if (!isEndpoint(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Endpoint`)];
+  if (!isProvidedElement(endpoint)) {
+    const message = `${exportedRule}: ${endpoint.name} is no Provider's`;
+    return [failure(at, 'dependency-selection', message)];
   }
   const packageKind = rootKind === 'application' ? 'application' : 'service';
-  if (!reaches(packageKind, element.visibility)) {
-    return [unreachableEndpointFailure({ at, name }, element.visibility)];
-  }
-  if (exported.endpoints !== undefined && !exported.endpoints.has(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
+  if (!reaches(packageKind, endpoint.visibility)) {
+    return [unreachableEndpointFailure(at, endpoint)];
   }
   return [];
 }
 
-/** A Private Endpoint is nobody's to select; an Internal one is a Service's only, never an Application's. */
-function unreachableEndpointFailure(
-  { at, name }: Pick<Selected, 'at' | 'name'>,
-  visibility: Visibility,
-): DeclarationFailure {
+/** A Private Endpoint is nobody's to list; an Internal one is a Service's only, never an Application's. */
+function unreachableEndpointFailure(at: Place, endpoint: Endpoint): DeclarationFailure {
+  const { visibility } = endpoint;
   if (visibility === 'private') {
-    return failure(at, 'dependency-selection', `${selection}: ${name} is private`);
+    return failure(at, 'dependency-selection', `${exportedRule}: ${labelOf(endpoint)} is private`);
   }
-  const message = `An Application depends on Public Endpoints only: ${name} is ${textOf(visibility)}`;
+  const message = `An Application depends on Public Endpoints only: ${labelOf(endpoint)} is ${visibility}`;
   return failure(at, 'application-dependency', message);
 }
 
-/** What a Dependency's selected Event is judged against: its Provider's exports, its root and the Events subscribed to. */
-type EventContext = {
-  readonly exported: Exported;
-  readonly rootKind: Root['kind'];
-  readonly subscribed: ReadonlySet<unknown>;
-};
-
-/** An Event that fails selection is not also reported as unused: one cause, once. */
-function eventFailures(selected: Selected, context: EventContext): readonly DeclarationFailure[] {
-  const failures = selectedEventFailures(selected, context.exported, context.rootKind);
-  if (failures.length > 0) {
-    return failures;
+/** Each listing of an Endpoint after its first, in the list's order. */
+function repeatedFailures(selected: readonly Selected[]): readonly DeclarationFailure[] {
+  const seen = new Set<Endpoint>();
+  const failures: DeclarationFailure[] = [];
+  for (const { at, endpoint } of selected) {
+    if (seen.has(endpoint)) {
+      const message = `A Dependency lists each Endpoint once: ${labelOf(endpoint)} is listed twice`;
+      failures.push(failure(at, 'dependency-selection', message));
+    }
+    seen.add(endpoint);
   }
-  return unusedEventFailures(selected, context.subscribed);
+  return failures;
 }
 
-function selectedEventFailures(
-  { at, name, element }: Selected,
-  exported: Exported,
-  rootKind: Root['kind'],
-): readonly DeclarationFailure[] {
-  if (rootKind === 'application') {
-    return [
-      failure(at, 'application-dependency', `An Application subscribes to no Event: ${name}`),
-    ];
-  }
-  if (!isEvent(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not an Event`)];
-  }
-  if (!reaches('service', element.visibility)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is private`)];
-  }
-  if (exported.events !== undefined && !exported.events.has(element)) {
-    return [failure(at, 'dependency-selection', `${selection}: ${name} is not one of them`)];
-  }
-  return [];
-}
-
-/** A Dependency lists an Event only for a Subscription, since a Dependency names only what its owner uses. */
-function unusedEventFailures(
-  { at, name, element }: Selected,
-  subscribed: ReadonlySet<unknown>,
-): readonly DeclarationFailure[] {
-  if (subscribed.has(element)) {
-    return [];
-  }
-  const message = `A Dependency lists only Events a Subscription uses: ${name}`;
-  return [failure(at, 'unused-dependency-event', message)];
+/** An Endpoint as a Dependency's failure names it: with its Provider, when one marks it. */
+function labelOf(endpoint: Endpoint): string {
+  const provider = providerOf(endpoint);
+  return provider === undefined ? endpoint.name : `${provider}'s ${endpoint.name}`;
 }

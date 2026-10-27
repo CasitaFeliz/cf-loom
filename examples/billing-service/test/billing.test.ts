@@ -1,8 +1,9 @@
 import { FakeProviderError, fakeProvider } from '@cf-loom/testing';
-import { contract as orders } from '@org/contract-orders-service';
+import * as ordersPackage from '@org/contract-orders-service';
 import { describe, expect, test } from 'vitest';
+import createInvoiceHandler from '../src/billing/create-invoice.handler.ts';
 import { invoiceFor } from '../src/billing/invoice-for.ts';
-import { ordersDeps } from '../src/contract/dependencies/orders-service.dependencies.ts';
+import { ordersDependency } from '../src/contract/dependencies/orders-service.dependency.ts';
 
 const ORDER_ID = '7d4f0a52-3c1b-4e8a-9f6d-1a2b3c4d5e6f';
 const total = { amount: 4200, currency: 'EUR' };
@@ -16,7 +17,7 @@ const paidOrder = {
 
 /** orders-service faked, and a client over it holding billing's key. */
 function fakeOrders() {
-  const fake = fakeProvider(ordersDeps);
+  const fake = fakeProvider(ordersDependency);
   const client = fake.client({ headers: { 'x-api-key': 'billing-key' } });
   return { fake, client };
 }
@@ -135,7 +136,7 @@ describe('invoiceFor', () => {
           case 'status':
             return respond.status(502);
           case 'unknown-code':
-            return respond.reject({ unknown: 'ORDER_ARCHIVED' }, {});
+            return respond.unknownRejection('ORDER_ARCHIVED');
         }
       });
 
@@ -153,7 +154,9 @@ describe('invoiceFor', () => {
       fake.on('getOrder').otherwise((respond) => {
         switch (code) {
           case 'UNAUTHENTICATED':
-            return respond.reject('UNAUTHENTICATED');
+            return respond.reject('UNAUTHENTICATED', {
+              headers: { 'www-authenticate': 'ApiKey realm="orders-service"' },
+            });
           case 'NOT_YET_IMPLEMENTED':
             return respond.reject('NOT_YET_IMPLEMENTED');
           case 'BAD_REQUEST':
@@ -166,6 +169,42 @@ describe('invoiceFor', () => {
       expect(invoicing).toEqual({ kind: 'unavailable', retryable: false });
     },
   );
+
+  test('the fake records the api key the client sends, as getOrder’s Input', async () => {
+    const { fake, client } = fakeOrders();
+    fake.on('getOrder').otherwise((r) => r.success(paidOrder));
+
+    await client.getOrder({ params: { orderId: ORDER_ID } });
+
+    expect(fake.calls('getOrder')).toEqual([
+      { params: { orderId: ORDER_ID }, headers: { 'x-api-key': 'billing-key' } },
+    ]);
+  });
+
+  test('a step answers UNAUTHENTICATED, with its www-authenticate header, from the api key the client sent', async () => {
+    const fake = fakeProvider(ordersDependency);
+    const challenge = 'ApiKey realm="orders-service"';
+    fake
+      .on('getOrder')
+      .otherwise((r, { headers }) =>
+        headers['x-api-key'] === 'orders-key'
+          ? r.success(paidOrder)
+          : r.reject('UNAUTHENTICATED', { headers: { 'www-authenticate': challenge } }),
+      );
+    const wrongKey = fake.client({ headers: { 'x-api-key': 'WRONG' } });
+    const rightKey = fake.client({ headers: { 'x-api-key': 'orders-key' } });
+
+    const refused = await wrongKey.getOrder({ params: { orderId: ORDER_ID } });
+    const admitted = await rightKey.getOrder({ params: { orderId: ORDER_ID } });
+
+    expect(refused).toMatchObject({
+      kind: 'rejection',
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      headers: { 'www-authenticate': challenge },
+    });
+    expect(admitted.kind).toBe('success');
+  });
 
   test('a scripted order that breaks orders-service’s Contract fails the test', async () => {
     const { fake, client } = fakeOrders();
@@ -186,8 +225,9 @@ describe('a client of the faked orders-service', () => {
 
     expect(outcome).toMatchObject({
       kind: 'rejection',
-      known: true,
+      source: 'client',
       code: 'BAD_REQUEST',
+      status: 400,
       message: 'The request is invalid',
     });
     expect(fake.calls('getOrder')).toHaveLength(0);
@@ -204,10 +244,27 @@ describe('a client of the faked orders-service', () => {
   });
 });
 
-describe('the Contract Package of orders-service', () => {
-  test('it exports the Public and Internal Endpoints, never the Private health', () => {
-    const exported = Object.keys(orders.endpoints);
+describe('createInvoice called directly over the faked orders-service', () => {
+  test('a mistake the Handler answers as a Fault is still reported by verify()', async () => {
+    const { fake, client } = fakeOrders();
 
-    expect(exported).toEqual(['createOrder', 'getOrder']);
+    const outcome = await createInvoiceHandler(
+      { body: { orderId: ORDER_ID } },
+      {},
+      { resources: { orders: client } },
+    );
+
+    expect(outcome).toMatchObject({ kind: 'fault', cause: expect.any(FakeProviderError) });
+    expect(() => fake.verify()).toThrow(
+      "orders-service: getOrder: it was never scripted: on('getOrder') gives it steps",
+    );
+  });
+});
+
+describe('the Contract Package of orders-service', () => {
+  test('it exports each Public and Internal Element by name, never the Private health, and no contract', () => {
+    const exported = Object.keys(ordersPackage).sort();
+
+    expect(exported).toEqual(['createOrderEndpoint', 'getOrderEndpoint', 'orderCreatedEventV1']);
   });
 });

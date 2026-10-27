@@ -1,4 +1,4 @@
-import { defineContract, defineEndpoint, defineGroup, defineGuard } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -51,22 +51,25 @@ const lookup = defineEndpoint({
   success: { status: 200, body: echoed },
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'pages-service',
   groups: [
     defineGroup({ name: 'pages', description: 'Pages', endpoints: [getPage, search, lookup] }),
   ],
 });
 
-const http = serve(contract, {
-  endpoints: {
-    getPage: handle(getPage, (input) => success({ received: input as never })),
-    search: handle(search, (input) => success({ received: input as never })),
-    lookup: handle(lookup, (input) => success({ received: input as never })),
+const http = serve(
+  contract,
+  {
+    endpoints: {
+      getPage: handle(getPage, (input) => success({ received: input as never })),
+      search: handle(search, (input) => success({ received: input as never })),
+      lookup: handle(lookup, (input) => success({ received: input as never })),
+    },
+    guards: { tenant: handle(tenant, () => admit()) },
   },
-  guards: { tenant: handle(tenant, () => admit()) },
-  deprecatedAt: {},
-});
+  {},
+);
 
 /** What every Handler here answers: the Input it received, part by part. */
 type Echo = { readonly received: Readonly<Record<string, Readonly<Record<string, unknown>>>> };

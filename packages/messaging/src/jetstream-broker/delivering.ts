@@ -1,14 +1,14 @@
 import { receivedHeadersOf } from '@cf-loom/contract/internal';
 import type { Settlement } from '../broker/index.ts';
-import type { FoundDurable } from './finding.ts';
-import { waitOf, whileWorking } from './in-progress.ts';
+import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
+import { waitOf } from './waits.ts';
 
 /**
- * Hands one Message to its Handler and applies the Settlement it comes back with; one whose
- * `receive` rejects is left to NATS, and one without cf-loom's ids is ended, since cf-loom never published it.
+ * Hands one Message to its Handler with the wait NATS gives that delivery, and applies the
+ * Settlement it comes back with; one without cf-loom's ids is ended, since cf-loom never published it.
  */
-export async function deliver(message: PulledMessage, durable: FoundDurable): Promise<void> {
+export async function deliver(message: PulledMessage, found: FoundDurableConsumer): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
   if (read.kind === 'missing') {
     message.term(read.names.map((name) => `no ${name} header`).join(', '));
@@ -16,14 +16,16 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   }
   const { messageId, factId, headers } = read;
   const { deliveryCount } = message;
-  const delivery = { messageId, factId, deliveryCount, headers, body: message.data };
-  const wait = waitOf(durable.waits, deliveryCount);
-  const settlement = await whileWorking(message, wait, () =>
-    durable.consumer.receive(delivery),
-  ).catch(() => undefined);
-  if (settlement !== undefined) {
-    applySettlement(message, settlement);
-  }
+  const lastAttempt = isLastDelivery(found.maxDeliver, deliveryCount);
+  const waitMs = waitOf(found.waits, deliveryCount);
+  const delivered = { messageId, factId, deliveryCount, lastAttempt, waitMs };
+  const delivery = { ...delivered, headers, body: message.data };
+  applySettlement(message, await found.durableConsumer.receive(delivery));
+}
+
+/** Whether NATS delivers no more after this delivery: a limit set, and reached. */
+function isLastDelivery(maxDeliver: number, deliveryCount: number): boolean {
+  return maxDeliver > 0 && deliveryCount >= maxDeliver;
 }
 
 function headerEntriesOf(message: PulledMessage): readonly (readonly [string, string])[] {
@@ -37,7 +39,7 @@ function headerEntriesOf(message: PulledMessage): readonly (readonly [string, st
 }
 
 function applySettlement(message: PulledMessage, settlement: Settlement): void {
-  switch (settlement.kind) {
+  switch (settlement) {
     case 'acked':
       message.ack();
       return;
@@ -45,6 +47,9 @@ function applySettlement(message: PulledMessage, settlement: Settlement): void {
       message.term();
       return;
     case 'pending':
+      return;
+    case 'handed-back':
+      message.nak();
       return;
   }
 }

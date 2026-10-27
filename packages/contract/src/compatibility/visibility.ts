@@ -1,4 +1,10 @@
-import type { Visibility } from '../declarations/index.ts';
+import { isLive, type Visibility } from '../declarations/index.ts';
+import {
+  type EndpointSnapshot,
+  isDeclared,
+  type PublishedServiceSnapshot,
+  type ServiceSnapshot,
+} from '../snapshot/index.ts';
 import type { Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
 
@@ -31,6 +37,7 @@ export function siteVisibilityOf(pair: Pair<Visible>): Visibility {
     case 'dropped':
       return pair.baseline.visibility;
     case 'kept':
+    case 'retired':
       return widerOf(pair.baseline.visibility, pair.proposed.visibility);
   }
 }
@@ -49,4 +56,57 @@ function widthOf(visibility: Visibility): number {
     case 'public':
       return 2;
   }
+}
+
+/**
+ * The widest Visibility of the declared Endpoints of either Snapshot that name each key, so a
+ * Change to what they name reaches every Consumer that can see one; a Retired Endpoint answers
+ * only `RETIRED`, so it counts toward none.
+ */
+export function widestVisibilitiesOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+  namesOf: (endpoint: EndpointSnapshot) => readonly string[],
+): ReadonlyMap<string, Visibility> {
+  return widestOf(liveEndpointsOf(baseline, proposed), namesOf);
+}
+
+/**
+ * The widest Visibility of the Endpoints and Events of either Snapshot, those Retired left out,
+ * that each Group lists; a Command or a Subscription is Private, so it widens none.
+ */
+export function widestGroupVisibilitiesOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+): ReadonlyMap<string, Visibility> {
+  const events = [
+    ...Object.values(baseline.events).filter(isDeclared),
+    ...Object.values(proposed.events),
+  ].filter(isLive);
+  const listed = [...liveEndpointsOf(baseline, proposed), ...events];
+  return widestOf(listed, (element) => [element.group]);
+}
+
+/** The Endpoints of either Snapshot that are declared and not Retired. */
+function liveEndpointsOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+): readonly EndpointSnapshot[] {
+  return [
+    ...Object.values(baseline.endpoints).filter(isDeclared),
+    ...Object.values(proposed.endpoints),
+  ].filter(isLive);
+}
+
+function widestOf<Element extends Visible>(
+  elements: readonly Element[],
+  namesOf: (element: Element) => readonly string[],
+): ReadonlyMap<string, Visibility> {
+  const visibilities = new Map<string, Visibility>();
+  for (const element of elements) {
+    for (const name of namesOf(element)) {
+      visibilities.set(name, widerOf(visibilities.get(name) ?? 'private', element.visibility));
+    }
+  }
+  return visibilities;
 }

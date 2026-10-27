@@ -1,12 +1,12 @@
 import {
   bodyOf,
   type ReadingSource,
-  reservedResponseOf,
   type TextSource,
   textPartsOf,
 } from '@cf-loom/contract/internal';
+import type { HandledRequest } from '@cf-loom/handlers';
 import type { LiveEndpoint, ServedContract } from '../served/index.ts';
-import type { Answered } from './runs.ts';
+import { type Answered, reservedAnsweredOf } from './runs.ts';
 
 /** One request to a live Endpoint: the Endpoint, the request, and where its text comes from. */
 export type Call = {
@@ -14,6 +14,11 @@ export type Call = {
   readonly request: Request;
   readonly source: TextSource;
 };
+
+/** What a Handler is given of a request beside its Input: its signal and its headers, as received. */
+export function handledRequestOf({ signal, headers }: Request): HandledRequest {
+  return { signal, headers };
+}
 
 /**
  * Where `serve` reads a request's parts from: each party's text by its walked nodes, and the body
@@ -28,8 +33,7 @@ export function partsOf(
     body: async () => {
       const body = await bodyOf(call.request, served.maxBodyBytes);
       if (body.kind === 'too-large') {
-        const response = reservedResponseOf('BODY_TOO_LARGE');
-        return { kind: 'stopped', answer: { kind: 'fault', response } };
+        return { kind: 'stopped', answer: reservedAnsweredOf('BODY_TOO_LARGE') };
       }
       return body;
     },

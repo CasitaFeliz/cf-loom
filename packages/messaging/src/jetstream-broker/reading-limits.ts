@@ -1,5 +1,5 @@
 import { inspect } from 'node:util';
-import { problemLineOf, problemOf } from '@cf-loom/contract/internal';
+import { type Problem, problemLineOf, readWith } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 import {
   type DurableConsumerLimits,
@@ -69,7 +69,6 @@ const durationText = 'a duration such as 500ms, 30s, 2m, 1h or 7d';
 const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
   input === 'unlimited' ? -1 : countOf(input),
 );
-const notAnObject = { error: () => 'is not an object' };
 
 const streamShape = {
   retention: choice(retentions).optional(),
@@ -81,21 +80,21 @@ const streamShape = {
   storage: choice(storages).optional(),
 } satisfies Record<keyof StreamLimits, z.ZodType>;
 
-const durableShape = {
+const durableConsumerShape = {
   deliverPolicy: choice(deliverPolicies).optional(),
   ackWait: readAs(`${durationText}, or a list of them`, nanosListOf).optional(),
   maxDeliver: unlimitedCount.optional(),
   maxAckPending: unlimitedCount.optional(),
 } satisfies Record<keyof DurableConsumerLimits, z.ZodType>;
 
-const streamLimits = z.strictObject(streamShape, notAnObject);
-const durableLimits = z.strictObject(durableShape, notAnObject);
+const streamLimits = z.strictObject(streamShape);
+const durableConsumerLimits = z.strictObject(durableConsumerShape);
 
 /** The name of each setting of a stream's limits. */
 export const streamSettingNames = streamLimits.keyof().options;
 
-/** The name of each setting of a durable consumer's limits. */
-export const durableSettingNames = durableLimits.keyof().options;
+/** The name of each setting of a Durable consumer's limits. */
+export const durableConsumerSettingNames = durableConsumerLimits.keyof().options;
 
 /** The settings of limits that are not `undefined`, which leaves one unset like a missing key. */
 function definedOf<Limits extends object>(
@@ -124,31 +123,25 @@ function entriesOf<Entry>(entries: Readonly<Record<string, Entry | undefined>>) 
 const definedStreamLimits = streamLimits.transform((limits) =>
   definedOf(streamSettingNames, limits),
 );
-const definedDurableLimits = durableLimits.transform((limits) =>
-  definedOf(durableSettingNames, limits),
+const definedDurableConsumerLimits = durableConsumerLimits.transform((limits) =>
+  definedOf(durableConsumerSettingNames, limits),
 );
 
-const brokerLimits = z.strictObject(
-  {
-    streamDefaults: definedStreamLimits.optional(),
-    consumerDefaults: definedDurableLimits.optional(),
-    streams: z
-      .record(z.string(), definedStreamLimits.optional(), notAnObject)
-      .transform(entriesOf)
-      .optional(),
-    consumers: z
-      .record(z.string(), definedDurableLimits.optional(), notAnObject)
-      .transform(entriesOf)
-      .optional(),
-  },
-  notAnObject,
-);
+const brokerLimits = z.strictObject({
+  streamDefaults: definedStreamLimits.optional(),
+  durableConsumerDefaults: definedDurableConsumerLimits.optional(),
+  streams: z.record(z.string(), definedStreamLimits.optional()).transform(entriesOf).optional(),
+  durableConsumers: z
+    .record(z.string(), definedDurableConsumerLimits.optional())
+    .transform(entriesOf)
+    .optional(),
+});
 
 /** A stream's limits as NATS counts them, each possibly unset. */
 export type NatsStreamLimits = z.output<typeof streamLimits>;
 
-/** A durable consumer's limits as NATS counts them, each possibly unset. */
-export type NatsDurableLimits = z.output<typeof durableLimits>;
+/** A Durable consumer's limits as NATS counts them, each possibly unset. */
+export type NatsDurableConsumerLimits = z.output<typeof durableConsumerLimits>;
 
 /** The limits a Service passed, every value in NATS's units. */
 export type NatsBrokerLimits = z.output<typeof brokerLimits>;
@@ -165,14 +158,13 @@ export type ReadLimits =
 
 /** Reads the limits a Service passed, which only a JSON file or untyped code can get wrong. */
 export function readLimits(limits: unknown): ReadLimits {
-  const parsed = brokerLimits.safeParse(limits);
-  if (!parsed.success) {
-    return { kind: 'refused', lines: parsed.error.issues.map(lineOf) };
+  const read = readWith(brokerLimits, limits, 'BrokerLimits');
+  if (read.kind === 'refused') {
+    return { kind: 'refused', lines: read.problems.map(lineOf) };
   }
-  return { kind: 'read', limits: parsed.data };
+  return { kind: 'read', limits: read.value };
 }
 
-function lineOf(issue: z.core.$ZodIssue): string {
-  const problem = problemOf([issue], 'BrokerLimits');
+function lineOf(problem: Problem): string {
   return problemLineOf({ at: ['limits', ...problem.at], reason: problem.reason });
 }

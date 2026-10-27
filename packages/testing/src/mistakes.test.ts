@@ -1,17 +1,19 @@
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
   notFound,
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { FakeProviderError, fakeProvider, type ScriptedAnswer, type StepBuilder } from './index.ts';
 
 /** The payments Endpoints, with a schema for their Open Enum: as declared, or as read. */
@@ -45,39 +47,36 @@ const declared = paymentEndpointsOf(openEnum(['pending', 'settled']));
 const readers = paymentEndpointsOf(openEnumReader(['pending', 'settled']));
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declaredEndpoints: readonly Endpoint[],
 ) {
   const listed = declaredEndpoints as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values(declared)), {
-  endpoints: [readers.getPayment],
+const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
+const paymentsDependency = defineDependency({
+  endpoints: [paymentsDependencyPackage.endpoints.getPayment],
 });
 
 const params = { paymentId: 'pay-1' };
@@ -97,7 +96,7 @@ function firstLineOf(error: unknown): string | undefined {
   return error instanceof Error ? error.message.split('\n')[0] : undefined;
 }
 
-type Builder = StepBuilder<typeof readers.getPayment, (typeof paymentsDeps)['standardRejections']>;
+type Builder = StepBuilder<typeof paymentsDependency, 'getPayment'>;
 
 function circular(): unknown {
   const value: Record<string, unknown> = {};
@@ -107,9 +106,74 @@ function circular(): unknown {
 const headers = { 'x-note': 'fine' };
 const body = { id: 'pay-1', amount: 5, stage: 'pending' } as const;
 
+const committedGiven = ['no', 'yes', 'unknown', 'maybe', undefined];
+const retryableGiven = [true, false, 'yes'];
+const messageGiven = ['A message', 1, undefined];
+const retryAfterGiven = [undefined, 0, 30, -1, 1.5, '30', Number.NaN, 2 ** 53];
+
+/** What a test may give `r.fault`, each field one a Caller reads or not, or left out. */
+type ScriptedFaultCase = {
+  readonly committed?: unknown;
+  readonly retryable?: unknown;
+  readonly message?: unknown;
+  readonly retryAfter?: unknown;
+  readonly code?: unknown;
+};
+
+/**
+ * Every Fault a test may script, a field the Caller reads or not; a message left out is the default,
+ * and a Reserved code is the old way to script one.
+ */
+const scriptedFaults: readonly ScriptedFaultCase[] = [
+  ...committedGiven.flatMap((committed) =>
+    retryableGiven.flatMap((retryable) =>
+      messageGiven.flatMap((message) =>
+        retryAfterGiven.map((retryAfter) => ({
+          committed,
+          retryable,
+          ...(message === undefined ? {} : { message }),
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        })),
+      ),
+    ),
+  ),
+  { code: 'RETIRED' },
+];
+
+/** Whether a Caller reads a scripted Fault as a Fault Envelope. */
+function isReadableFault(fault: ScriptedFaultCase): boolean {
+  const message: unknown = 'message' in fault ? fault.message : 'Internal error';
+  return (
+    ['no', 'yes', 'unknown'].includes(String(fault.committed)) &&
+    typeof fault.retryable === 'boolean' &&
+    typeof message === 'string'
+  );
+}
+
+/** How a retryAfter of the table is named in a refusal: a string quoted, a number as written. */
+function namedRetryAfter(seconds: unknown): string {
+  return typeof seconds === 'string' ? JSON.stringify(seconds) : String(seconds);
+}
+
+/**
+ * Why a readable Fault's retryAfter cannot travel as Retry-After, if it cannot: first it is no
+ * whole number of seconds from 0, then the Fault is not retryable.
+ */
+function retryAfterRefusalOf(fault: ScriptedFaultCase): string | undefined {
+  if (!('retryAfter' in fault)) {
+    return undefined;
+  }
+  const seconds = fault.retryAfter;
+  const isWhole = typeof seconds === 'number' && Number.isSafeInteger(seconds) && seconds >= 0;
+  if (!isWhole) {
+    return `retryAfter is no whole number of seconds from 0: got ${namedRetryAfter(seconds)}`;
+  }
+  return fault.retryable === true ? undefined : 'retryAfter is given only to a retryable Fault';
+}
+
 describe('fakeProvider: a test’s mistakes', () => {
   test('a mistake passes through the client as FakeProviderError, never as an Outcome', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').once((r) => r.success({ headers, body }));
     const client = payments.client();
     await client.getPayment({ params });
@@ -123,8 +187,173 @@ describe('fakeProvider: a test’s mistakes', () => {
     );
   });
 
+  test('the mistake of no step left names the request and the once steps scripted', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').once((r) => r.success({ headers, body }));
+    const client = payments.client();
+    await client.getPayment({ params });
+
+    const error = await client.getPayment({ params }).catch((e: unknown) => e);
+
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: no step is left and no otherwise answers: request 2, after 1 once step',
+    );
+  });
+
+  test.each(scriptedFaults.filter((fault) => !isReadableFault(fault)))(
+    'r.fault(%j) is a mistake, since no Caller would read it as a Fault',
+    async (scripted) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        "payments-service: getPayment: r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string",
+      );
+    },
+  );
+
+  test.each(
+    scriptedFaults.filter(
+      (fault) => isReadableFault(fault) && retryAfterRefusalOf(fault) !== undefined,
+    ),
+  )(
+    'r.fault(%j) is a mistake naming the retryAfter rule, since no Retry-After could carry it',
+    async (scripted) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.fault: ${retryAfterRefusalOf(scripted)}`,
+      );
+    },
+  );
+
+  test.each([
+    { label: '-1', given: -1, named: '-1' },
+    { label: '1.5', given: 1.5, named: '1.5' },
+    { label: '"30"', given: '30', named: '"30"' },
+    { label: 'NaN', given: Number.NaN, named: 'NaN' },
+    { label: '2 ** 53', given: 2 ** 53, named: '9007199254740992' },
+    { label: '{}', given: {}, named: 'an object' },
+    { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
+    { label: '[1]', given: [1], named: 'a list' },
+    { label: '1n', given: 1n, named: '1' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
+  ])(
+    'r.fault with retryAfter $label is a mistake naming the retryAfter rule',
+    async ({ given, named }) => {
+      const payments = fakeProvider(paymentsDependency);
+      const scripted = { committed: 'no', retryable: true, retryAfter: given };
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.fault: retryAfter is no whole number of seconds from 0: got ${named}`,
+      );
+    },
+  );
+
+  test('r.fault with retryAfter on a Fault that is not retryable is a mistake, never a dropped Retry-After', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { committed: 'no', retryable: false, retryAfter: 30 };
+    payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FakeProviderError);
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: r.fault: retryAfter is given only to a retryable Fault',
+    );
+  });
+
+  test.each(
+    scriptedFaults.filter(
+      (fault) => isReadableFault(fault) && retryAfterRefusalOf(fault) === undefined,
+    ),
+  )('r.fault(%j) answers a Fault the Caller reads', async (scripted) => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+    const outcome = await payments.client().getPayment({ params });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'provider',
+      committed: scripted.committed,
+      retryable: scripted.retryable,
+    });
+    const sent = outcome.kind === 'fault' ? outcome.retryAfter : undefined;
+    expect(sent).toBe(scripted.retryAfter === undefined ? undefined : String(scripted.retryAfter));
+  });
+
+  test.each([
+    { label: '"BOGUS"', given: 'BOGUS', named: '"BOGUS"' },
+    { label: '"retired"', given: 'retired', named: '"retired"' },
+    { label: 'undefined', given: undefined, named: 'undefined' },
+    { label: 'null', given: null, named: 'null' },
+    { label: '1', given: 1, named: '1' },
+    { label: '1n', given: 1n, named: '1' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
+  ])(
+    'r.reserved($label) is a mistake naming the Reserved codes, never a TypeError',
+    async ({ given, named }) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.reserved(given as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.reserved takes a Reserved code, RETIRED, NO_SUCH_ENDPOINT, METHOD_NOT_ALLOWED, BODY_TOO_LARGE or INVALID_OUTCOME, not ${named}`,
+      );
+    },
+  );
+
+  test.each([1, null, ['x']])(
+    'r.unknownRejection with the message %j is a mistake, since no Caller would read it as a Rejection',
+    async (message) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments
+        .on('getPayment')
+        .otherwise((r) => r.unknownRejection('CARD_EXPIRED', { message } as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        'payments-service: getPayment: r.unknownRejection takes message a string',
+      );
+    },
+  );
+
   test('an Endpoint never scripted is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     const calling = payments.client().getPayment({ params });
 
@@ -133,8 +362,8 @@ describe('fakeProvider: a test’s mistakes', () => {
     );
   });
 
-  test('a Success that breaks its readers lists each Issue on its own line, never the value', async () => {
-    const payments = fakeProvider(paymentsDeps);
+  test('a Success that breaks its readers lists each Issue on its own line as the contract writes it, never the value', async () => {
+    const payments = fakeProvider(paymentsDependency);
     const secret = 'secret-id-12345';
     payments
       .on('getPayment')
@@ -151,14 +380,14 @@ describe('fakeProvider: a test’s mistakes', () => {
     const lines = String((error as Error).message).split('\n');
     expect(lines).toEqual([
       'payments-service: getPayment: the scripted Success breaks its readers',
-      expect.stringMatching(/^ {2}success\.body at amount: too_small: /),
-      '  success.body at stage: invalid_value: A declared value, not an Unknown case',
+      expect.stringMatching(/^payments-service: getPayment: success\.body\.amount too_small: /),
+      'payments-service: getPayment: success.body.stage invalid_value: A declared value, not an Unknown case',
     ]);
     expect((error as Error).message).not.toContain(secret);
   });
 
   test('a bare string where an Open Enum is declared is a mistake: an unknown value is { unknown }', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) =>
       // @ts-expect-error a value the Open Enum does not declare is written as its Unknown case
       r.success({ headers, body: { ...body, stage: 'refunded' } }),
@@ -166,33 +395,43 @@ describe('fakeProvider: a test’s mistakes', () => {
 
     const calling = payments.client().getPayment({ params });
 
-    await expect(calling).rejects.toThrow(/success\.body at stage: invalid_value/);
+    await expect(calling).rejects.toThrow(/success\.body\.stage invalid_value/);
   });
 
   test('a header that cannot travel as text is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.success({ headers: { 'x-note': 'a\nb' }, body }));
 
     const calling = payments.client().getPayment({ params });
 
-    await expect(calling).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    await expect(calling).rejects.toThrow(/success\.headers\.x-note invalid_format/);
   });
 
   test.each([
     [
       'a code the Endpoint answers',
       'NOT_FOUND',
-      'NOT_FOUND is a code the Endpoint answers, not one the Provider does not declare',
+      "NOT_FOUND is a code the Endpoint answers: r.reject('NOT_FOUND') answers it",
     ],
-    ['a reserved code', 'RETIRED', 'RETIRED is a reserved code, which r.fault({ code }) answers'],
+    [
+      'the Standard invalid-input code, which every Endpoint answers',
+      'INVALID_INPUT',
+      "INVALID_INPUT is a code the Endpoint answers: r.reject('INVALID_INPUT') answers it",
+    ],
+    ['a Reserved code', 'RETIRED', 'RETIRED is a Reserved code, which r.reserved answers'],
     [
       'a code that is no UPPER_SNAKE_CASE',
       'card-expired',
-      'card-expired is no UPPER_SNAKE_CASE, so no Contract can declare it',
+      'card-expired is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it',
     ],
-  ])('r.reject({ unknown }) with %s is a mistake', async (_name, code, message) => {
-    const payments = fakeProvider(paymentsDeps);
-    payments.on('getPayment').otherwise((r) => r.reject({ unknown: code }, {}));
+    [
+      'a code of more than 64 characters',
+      'A'.repeat(65),
+      `${'A'.repeat(65)} is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it`,
+    ],
+  ])('r.unknownRejection with %s is a mistake', async (_name, code, message) => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.unknownRejection(code));
 
     const error = await payments
       .client()
@@ -215,8 +454,10 @@ describe('fakeProvider: a test’s mistakes', () => {
   ])(
     'a body that is no JSON, %s, for a code the Provider does not declare is a mistake',
     async (_name, value) => {
-      const payments = fakeProvider(paymentsDeps);
-      payments.on('getPayment').otherwise((r) => r.reject({ unknown: 'CARD_EXPIRED' }, value));
+      const payments = fakeProvider(paymentsDependency);
+      payments
+        .on('getPayment')
+        .otherwise((r) => r.unknownRejection('CARD_EXPIRED', { body: value }));
 
       const calling = payments.client().getPayment({ params });
 
@@ -238,9 +479,8 @@ describe('fakeProvider: a test’s mistakes', () => {
       'a getter that throws in a Rejection body',
       (r: Builder) => r.reject('INVALID_INPUT', throwingGetter() as never),
     ],
-    ['a reserved code that is none', (r: Builder) => r.fault({ code: 'BOGUS' } as never)],
   ])('%s is a mistake, never what was thrown', async (_name, step) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
 
     const error = await payments
@@ -252,9 +492,30 @@ describe('fakeProvider: a test’s mistakes', () => {
     expect(firstLineOf(error)).toMatch(/^payments-service: getPayment: the scripted /);
   });
 
+  test('a body given for a code that declares none is a mistake, never dropped', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    // @ts-expect-error NOT_FOUND declares no body
+    payments.on('getPayment').otherwise((r) => r.reject('NOT_FOUND', { x: 1 }));
+
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FakeProviderError);
+    expect((error as Error).message).toBe(
+      [
+        'payments-service: getPayment: the scripted NOT_FOUND breaks its readers',
+        'payments-service: getPayment: body invalid_type: Expected no value',
+      ].join('\n'),
+    );
+  });
+
   test('what fails while a scripted answer is sent is kept as the mistake’s cause', async () => {
-    const payments = fakeProvider(paymentsDeps);
-    payments.on('getPayment').otherwise((r) => r.fault({ code: 'BOGUS' } as never));
+    const payments = fakeProvider(paymentsDependency);
+    payments
+      .on('getPayment')
+      .otherwise((r) => r.success({ headers, body: throwingGetter() as typeof body }));
 
     const error = await payments
       .client()
@@ -264,11 +525,11 @@ describe('fakeProvider: a test’s mistakes', () => {
     expect(firstLineOf(error)).toBe(
       'payments-service: getPayment: the scripted answer cannot be sent',
     );
-    expect(error).toMatchObject({ cause: expect.any(TypeError) });
+    expect(error).toMatchObject({ cause: expect.objectContaining({ message: 'Unreadable' }) });
   });
 
   test('a step returning what cannot be checked for an answer is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     const trap = new Proxy(
       {},
       {
@@ -284,20 +545,25 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toThrow(FakeProviderError);
   });
 
-  test('a code the Endpoint does not answer, given as declared, is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+  test('a code the Endpoint does not answer, given to r.reject, is a mistake naming r.unknownRejection', async () => {
+    const payments = fakeProvider(paymentsDependency);
     // @ts-expect-error getPayment answers no PAYMENT_LOST
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOST'));
 
-    const calling = payments.client().getPayment({ params });
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
 
-    await expect(calling).rejects.toThrow('the Endpoint answers no code PAYMENT_LOST');
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: the Endpoint answers no code PAYMENT_LOST; r.unknownRejection sends a code the listed Endpoints do not declare',
+    );
   });
 
   test.each([200, 199, 600, 502.5])(
     'r.status(%i) is a mistake: the client would not infer a Fault',
     async (status) => {
-      const payments = fakeProvider(paymentsDeps);
+      const payments = fakeProvider(paymentsDependency);
       payments.on('getPayment').otherwise((r) => r.status(status));
 
       const calling = payments.client().getPayment({ params });
@@ -310,7 +576,7 @@ describe('fakeProvider: a test’s mistakes', () => {
     ['a value that cannot be sent', { 'retry-after': 'a\nb' }],
     ['a name that cannot be sent', { 'bad name': '1' }],
   ])('r.status with a header holding %s is a mistake', async (_name, headers) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.status(503, headers));
 
     const calling = payments.client().getPayment({ params });
@@ -321,12 +587,9 @@ describe('fakeProvider: a test’s mistakes', () => {
 
   test.each([
     ['r.status given a symbol', (r: Builder) => r.status(Symbol('s') as never)],
-    [
-      'r.reject({ unknown }) given a symbol',
-      (r: Builder) => r.reject({ unknown: Symbol('s') as never }, null),
-    ],
+    ['r.unknownRejection given a symbol', (r: Builder) => r.unknownRejection(Symbol('s') as never)],
   ])('%s is a mistake, never a TypeError the client takes for a Fault', async (_name, step) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
 
     const error = await payments
@@ -341,7 +604,7 @@ describe('fakeProvider: a test’s mistakes', () => {
   });
 
   test('a step that returns no answer built with its r is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(() => ({}) as ScriptedAnswer);
 
     const calling = payments.client().getPayment({ params });
@@ -350,7 +613,7 @@ describe('fakeProvider: a test’s mistakes', () => {
   });
 
   test('a step that throws is a mistake carrying what it threw, a TypeError included', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     const thrown = new TypeError('Cannot read properties of undefined');
     payments.on('getPayment').otherwise(() => {
       throw thrown;
@@ -362,18 +625,20 @@ describe('fakeProvider: a test’s mistakes', () => {
     await expect(calling).rejects.toMatchObject({ name: 'FakeProviderError', cause: thrown });
   });
 
-  test('an Endpoint the Dependency does not list is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+  test('a request no listed Endpoint matches is a mistake naming the request', async () => {
+    const payments = fakeProvider(paymentsDependency);
 
-    const answering = payments.fetch('https://payments-service.test/payments', {});
+    const answering = payments.fetch(new Request('https://payments-service.test/payments'));
 
-    await expect(answering).rejects.toThrow('the Dependency does not list GET /payments');
+    await expect(answering).rejects.toThrow(
+      'payments-service: no Endpoint the Dependency lists is GET /payments under /',
+    );
   });
 
   test('a path outside the base URL is a mistake', async () => {
-    const payments = fakeProvider(paymentsDeps, { baseUrl: 'https://gateway.test/pay' });
+    const payments = fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/pay' });
 
-    const answering = payments.fetch('https://gateway.test/payments/pay-1', {});
+    const answering = payments.fetch(new Request('https://gateway.test/payments/pay-1'));
 
     await expect(answering).rejects.toThrow(FakeProviderError);
   });

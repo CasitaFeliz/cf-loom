@@ -1,22 +1,38 @@
-import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
+import {
+  declaredCodesOf,
+  declaredEndpointsOf,
+  defScopesOf,
+  type PublishedApplicationSnapshot,
+  type PublishedServiceSnapshot,
+  type PublishedSnapshot,
+} from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
-import { usesOf } from './uses.ts';
+import { paramProblemsOf } from './params.ts';
+import {
+  codeStatusProblemsOf,
+  standardBodyProblemsOf,
+  standardHeaderProblemsOf,
+} from './standard-codes.ts';
+import { notEndpointIdentity } from './texts.ts';
+import { unusedProblemsOf } from './unused.ts';
+import { type Use, usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
 type Located = { readonly at: Path; readonly text: string };
 
-/**
- * The first identity a Snapshot holds that is none, a name it uses and does not hold (a `ref`'s
- * def, a code an Endpoint or Guard lists, or a Guard), or a def that leads back to itself with no
- * node between; `undefined` when there is none.
- */
+/** The first name or identity a Snapshot holds or uses that `generate` never writes, judged across its places. */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
     ...identityProblemsOf(snapshot),
+    ...paramProblemsOf(snapshot),
     ...unheldProblemsOf(snapshot),
+    ...standardBodyProblemsOf(snapshot),
+    ...standardHeaderProblemsOf(snapshot),
+    ...codeStatusProblemsOf(snapshot),
     ...nodelessCycleProblemsOf(snapshot),
+    ...unusedProblemsOf(snapshot),
   ][0];
 }
 
@@ -42,7 +58,7 @@ type Form = { readonly isForm: (text: string) => boolean; readonly reason: strin
 
 const endpointIdentity: Form = {
   isForm: (text) => readEndpointIdentity(text) !== undefined,
-  reason: 'is not an Endpoint’s identity: a method and a path with its params as {}',
+  reason: notEndpointIdentity,
 };
 const messageIdentity: Form = {
   isForm: (text) => readMessageIdentity(text) !== undefined,
@@ -81,33 +97,37 @@ function dependencyProblems(
       text: id,
     })),
   );
-  const events = providers.flatMap(([provider, dependency]) =>
-    dependency.events.map((text, index) => ({
-      at: ['dependencies', provider, 'events', index],
-      text,
-    })),
-  );
-  return [...unreadable(ids, endpointIdentity), ...unreadable(events, messageIdentity)];
+  return unreadable(ids, endpointIdentity);
 }
 
 const unheld = {
   def: 'names a def the Snapshot does not hold',
   code: 'lists a code the Snapshot does not hold',
+  'standard-code': 'names a code the Snapshot does not hold',
   guard: 'names a Guard the Snapshot does not hold',
+  group: 'names a Group the Snapshot does not hold',
+  endpoint: 'names an Endpoint the Snapshot does not declare, or holds Retired',
+} as const;
+
+const heldRemoved = {
+  code: 'lists a code the Snapshot holds removed',
+  'standard-code': 'names a code the Snapshot holds removed',
 } as const;
 
 function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
-  const defs = new Map(Object.entries(snapshot.defs));
   const problems: Problem[] = [];
-  for (const [name, def] of defs) {
-    if (leadsBackWithNoNode(name, def, defs)) {
-      problems.push({
-        at: ['defs', name],
-        reason: 'leads back to itself through refs, unions and allOfs alone',
-      });
+  for (const scope of defScopesOf(snapshot)) {
+    const defs = new Map(Object.entries(scope.defs));
+    for (const [name, def] of defs) {
+      if (leadsBackWithNoNode(name, def, defs)) {
+        problems.push({
+          at: [...scope.at, name],
+          reason: 'leads back to itself through refs, unions and allOfs alone',
+        });
+      }
     }
   }
   return problems;
@@ -117,7 +137,33 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
-  const held = { def: snapshot.defs, code: snapshot.codes, guard: snapshot.guards };
-  const missing = usesOf(snapshot).filter((use) => !Object.hasOwn(held[use.kind], use.name));
-  return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));
+  const live = Object.fromEntries(declaredCodesOf(snapshot.codes));
+  const held = {
+    code: live,
+    'standard-code': live,
+    guard: snapshot.guards,
+    group: snapshot.kind === 'service' ? snapshot.groups : {},
+    endpoint: Object.fromEntries(
+      declaredEndpointsOf(snapshot).filter(([, endpoint]) => endpoint.lifecycle !== 'retired'),
+    ),
+  };
+  const missing = usesOf(snapshot).filter((use) => !holds(use, held));
+  return missing.map((use) => ({
+    at: use.at,
+    reason: `${unheldReasonOf(use, snapshot)}: ${use.name}`,
+  }));
+}
+
+/** Why a use's name is not held: a code held removed where a live one is meant, or not held at all. */
+function unheldReasonOf(use: Use, { codes }: Pick<PublishedServiceSnapshot, 'codes'>): string {
+  if ((use.kind === 'code' || use.kind === 'standard-code') && Object.hasOwn(codes, use.name)) {
+    return heldRemoved[use.kind];
+  }
+  return unheld[use.kind];
+}
+
+/** Whether the names a use resolves in hold it: a `ref`'s own defs, else the Snapshot's map of its kind. */
+function holds(use: Use, held: Record<Exclude<Use['kind'], 'def'>, object>): boolean {
+  const names = use.kind === 'def' ? use.defs : held[use.kind];
+  return Object.hasOwn(names, use.name);
 }

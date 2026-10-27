@@ -1,6 +1,6 @@
 import { notFound } from '@cf-loom/contract';
 import { fault, handle, reject, success } from '@cf-loom/handlers';
-import { createInvoice } from '../contract/endpoints/invoices/create-invoice.endpoint.ts';
+import { createInvoice } from '../contract/endpoints/billing/create-invoice.endpoint.ts';
 import { orderLocked } from '../contract/rejections/order-locked.rejection.ts';
 import { orderNotBillable } from '../contract/rejections/order-not-billable.rejection.ts';
 import type { Needs } from '../resources.ts';
@@ -8,7 +8,7 @@ import { invoiceFor } from './invoice-for.ts';
 
 export default handle(
   createInvoice,
-  async ({ body }, _context, { resources: { orders } }: Needs<'orders'>) => {
+  async ({ body }, _call, { resources: { orders } }: Needs<'orders'>) => {
     const invoicing = await invoiceFor(orders, body.orderId);
     switch (invoicing.kind) {
       case 'invoice':

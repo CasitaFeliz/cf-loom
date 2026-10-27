@@ -1,142 +1,118 @@
 import {
   decodeSnapshot,
-  ownOf,
   type PeerRanges,
   type PublishedSnapshot,
   problemLineOf,
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
-import { isRootKind, publishedNameOf } from '../loading/index.ts';
-import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
+import { newerFormatTextOf } from '../loading/index.ts';
+import { type Choice, choiceOf, unlistedAgainstOf } from './against.ts';
+import { type Found, foundIn } from './found-version.ts';
+import type { NpmPlace } from './npm.ts';
+import { versionsOf } from './package-versions.ts';
 import { snapshotTextOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';
-import {
-  type BaselineSource,
-  baselineVersionOf,
-  metadataFrom,
-  type VersionMetadata,
-  type Versions,
-  versionsFrom,
-} from './versions.ts';
+import type { BaselineSource, Listing } from './versions.ts';
 
-/** Why a package has no Baseline: the registry npm reads its scope from does not know it, or it has only prereleases. */
-export type NoBaseline =
-  | UnknownPackage
-  | { readonly kind: 'only-prereleases'; readonly versions: readonly string[] };
+/** A package that lists versions, none of which cf-loom published. */
+export type NonePublished = { readonly kind: 'none-published' };
 
-/** A package's Baseline as its registry holds it, why it has none, or why it cannot be read. */
+/** Why a package has no Baseline: the registry npm reads it from does not know it, or none of its versions carries `cfLoom`. */
+export type NoBaseline = UnknownPackage | NonePublished;
+
+/** A package's Baseline as its registry holds it: the published Snapshot compared with, its peer ranges, and how it was chosen. */
+export type Baseline = {
+  readonly kind: 'baseline';
+  /** The published Snapshot of the Baseline, or of the one `--against` names. */
+  readonly snapshot: PublishedSnapshot;
+  /** That version's peer ranges, which the peer rule compares with the proposed ones. */
+  readonly peers: PeerRanges;
+  /** How the version compared with was chosen: the Baseline, or the one `--against` named. */
+  readonly chosen: Choice['kind'];
+};
+
+/** What a read of a package gives: what the registry lists for it, whatever came of its Baseline, then the Baseline or why there is none; or why the package cannot be read. */
 export type ReadBaseline =
   | {
-      readonly kind: 'baseline';
-      readonly packageName: string;
-      /** The published Snapshot of the highest version that is not a prerelease. */
-      readonly snapshot: PublishedSnapshot;
-      /** That version's peer ranges, which the peer rule compares with the proposed ones. */
-      readonly peers: PeerRanges;
-      /** Every published version, prereleases included, lowest first. */
-      readonly versions: readonly string[];
+      readonly kind: 'read';
+      readonly listing: Listing;
+      readonly baseline: Baseline | NoBaseline;
     }
-  | { readonly kind: 'no-baseline'; readonly packageName: string; readonly why: NoBaseline }
   | Failed;
 
 type Declared = Pick<Snapshot, 'kind' | 'name'>;
 
-/** npm's 404 for a package, before anything is known of why the registry lacks it. */
-type NotFound = { readonly kind: 'not-found' };
+/** The package whose Baseline is read: its name, the declared Snapshot it publishes, and the version `check --against` names. */
+export type BaselineQuery = {
+  readonly packageName: string;
+  readonly declared: Declared;
+  readonly against: string | undefined;
+};
 
-const unnamable = failed(
-  'cannot name the package to read: a scope and a Snapshot name must be texts, and a Snapshot kind must be service, application or definitions',
-);
-
-/** A package and every version it lists, lowest first. */
-type Published = { readonly packageName: string; readonly versions: readonly string[] };
+const unnamable = failed('cannot name the package to read: a package name must be a text');
 
 /**
  * Reads, through the organization's own npm, the Baseline of the package a declared Snapshot
- * publishes as under `scope`: the highest published version that is not a prerelease, its
- * metadata, and only its `snapshot.json`; anything that cannot be proven fails closed.
+ * publishes as: the highest version that is not a prerelease and carries `cfLoom`, else the
+ * highest prerelease that does, or the one `against` names; its metadata, and only its
+ * `snapshot.json`; anything that cannot be proven fails closed.
  */
 export async function baselineOf(
   npm: NpmPlace,
-  declared: Declared,
-  scope: string,
+  { packageName, declared, against }: BaselineQuery,
 ): Promise<ReadBaseline> {
-  const packageName = packageNameOf(scope, declared);
   if (typeof packageName !== 'string') {
-    return packageName;
+    return unnamable;
   }
   const listed = await versionsOf(npm, packageName);
   switch (listed.kind) {
     case 'failed':
       return listed;
     case 'not-found':
-      return await baselineOfMissing(npm, packageName, scope);
+      return against === undefined
+        ? await baselineOfMissing(npm, packageName)
+        : unlistedAgainstOf(packageName, against);
     case 'versions':
-      return await baselineAmong(npm, { packageName, versions: listed.versions }, declared);
+      return await baselineAmong(npm, listed.listing, { declared, against });
   }
 }
 
-/** The package's name, or why none can be named: a caller outside the types may pass anything. */
-function packageNameOf(scope: unknown, declared: unknown): string | Failed {
-  const name = ownOf(declared, 'name');
-  const kind = ownOf(declared, 'kind');
-  if (typeof scope !== 'string' || typeof name !== 'string' || typeof kind !== 'string') {
-    return unnamable;
+async function baselineOfMissing(npm: NpmPlace, packageName: string): Promise<ReadBaseline> {
+  const unknown = await unknownPackageOf(npm, packageName);
+  if (unknown.kind === 'failed') {
+    return unknown;
   }
-  return isRootKind(kind) ? publishedNameOf(scope, { kind, name }) : unnamable;
-}
-
-async function baselineOfMissing(
-  npm: NpmPlace,
-  packageName: string,
-  scope: string,
-): Promise<ReadBaseline> {
-  const unknown = await unknownPackageOf(npm, packageName, scope);
-  return unknown.kind === 'failed' ? unknown : { kind: 'no-baseline', packageName, why: unknown };
-}
-
-async function versionsOf(
-  npm: NpmPlace,
-  packageName: string,
-): Promise<Versions | NotFound | Failed> {
-  const call = { label: `npm view ${packageName}`, args: ['view', packageName, 'versions'] };
-  const run = await jsonFromNpm(npm, call);
-  switch (run.kind) {
-    case 'json':
-      return versionsFrom(packageName, run.value);
-    case 'refused':
-      return refusedViewOf(packageName, run);
-    case 'failed':
-      return run;
-  }
-}
-
-function refusedViewOf(packageName: string, refused: Refused): NotFound | Failed {
-  if (refused.code !== 'E404') {
-    return failed(refused.message);
-  }
-  if (refused.summary.startsWith('Unpublished on')) {
-    const gone = 'its Baseline is gone, so nothing can be checked against it';
-    return failed(`${packageName} was unpublished: ${refused.summary}; ${gone}`);
-  }
-  return { kind: 'not-found' };
+  return { kind: 'read', listing: { packageName, versions: [] }, baseline: unknown };
 }
 
 async function baselineAmong(
   npm: NpmPlace,
-  { packageName, versions }: Published,
-  declared: Declared,
+  listing: Listing,
+  { declared, against }: Pick<BaselineQuery, 'declared' | 'against'>,
 ): Promise<ReadBaseline> {
-  const version = baselineVersionOf(versions);
-  if (version === undefined) {
-    return { kind: 'no-baseline', packageName, why: { kind: 'only-prereleases', versions } };
+  const choice = await choiceOf(npm, listing, against);
+  if (choice.kind === 'failed') {
+    return choice;
   }
-  const source = { spec: `${packageName}@${version}`, version, declared };
-  const metadata = await metadataOf(npm, source);
-  if (metadata.kind === 'failed') {
-    return metadata;
+  const { packageName } = listing;
+  const found = await foundIn(npm, choice, { packageName, declared });
+  switch (found.kind) {
+    case 'found':
+      return await baselineRead(npm, found, { listing, chosen: choice.kind });
+    case 'none-found':
+      return { kind: 'read', listing, baseline: { kind: 'none-published' } };
+    case 'failed':
+      return found;
   }
+}
+
+/** The Baseline's `snapshot.json`, read from its tarball and checked against the version, with its peer ranges. */
+async function baselineRead(
+  npm: NpmPlace,
+  { source, metadata }: Found,
+  { listing, chosen }: Pick<Baseline, 'chosen'> & { readonly listing: Listing },
+): Promise<ReadBaseline> {
   const text = await snapshotTextOf(npm, { spec: source.spec, digests: metadata.digests });
   if (text.kind === 'failed') {
     return text;
@@ -146,27 +122,8 @@ async function baselineAmong(
     return snapshot;
   }
   const { peers } = metadata;
-  return { kind: 'baseline', packageName, snapshot: snapshot.snapshot, peers, versions };
-}
-
-async function metadataOf(
-  npm: NpmPlace,
-  source: BaselineSource,
-): Promise<VersionMetadata | Failed> {
-  const { spec } = source;
-  const fields = ['version', 'cfLoom', 'peerDependencies', 'dist'];
-  const run = await jsonFromNpm(npm, {
-    label: `npm view ${spec}`,
-    args: ['view', spec, ...fields],
-  });
-  switch (run.kind) {
-    case 'json':
-      return metadataFrom(source, run.value);
-    case 'refused':
-      return failed(run.message);
-    case 'failed':
-      return run;
-  }
+  const baseline = { kind: 'baseline', snapshot: snapshot.snapshot, peers, chosen } as const;
+  return { kind: 'read', listing, baseline };
 }
 
 function snapshotFrom(
@@ -178,10 +135,8 @@ function snapshotFrom(
   switch (decoded.kind) {
     case 'no-json':
       return failed(`${spec}'s snapshot.json is no JSON (${decoded.reason})`);
-    case 'newer-format': {
-      const newer = `in format ${decoded.format}, newer than this cf-loom reads: upgrade @cf-loom/cli`;
-      return failed(`${spec}'s snapshot.json is ${newer}`);
-    }
+    case 'newer-format':
+      return failed(newerFormatTextOf(`${spec}'s snapshot.json`, decoded.format));
     case 'malformed':
       return failed(`${spec}'s snapshot.json is malformed: ${problemLineOf(decoded)}`);
     case 'decoded': {

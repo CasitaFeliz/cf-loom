@@ -1,27 +1,35 @@
 import type { Client } from '@cf-loom/client';
 import {
-  type ContractPackage,
-  defineCommand,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
-  defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
-  defineSubscription,
+  defineService,
   type Endpoint,
-  type Event,
   type InputOf,
   notFound,
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
-import { handle, withReader } from '@cf-loom/handlers';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { type FakeCall, fakeEvent, fakeProvider, type ScriptedAnswer } from './index.ts';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
+import {
+  type FakeClientOptions,
+  type FakeProvider,
+  type FakeProviderError,
+  type FakeProviderOptions,
+  fakeProvider,
+  type InvalidCall,
+  type Script,
+  type ScriptedAnswer,
+  type Step,
+  type StepBuilder,
+} from './index.ts';
 
 const apiKey = defineGuard({
   name: 'apiKey',
@@ -36,6 +44,19 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     status: 409,
     message: 'The payment is locked',
     body: z.object({ lockedAt: z.iso.datetime() }),
+  });
+  const throttled = defineRejection({
+    code: 'THROTTLED',
+    status: 429,
+    message: 'Too many requests',
+    headers: z.object({ 'retry-after': z.int() }),
+    body: z.object({ limit: z.int() }),
+  });
+  const unauthorized = defineRejection({
+    code: 'UNAUTHORIZED',
+    status: 401,
+    message: 'Sign in first',
+    headers: z.object({ 'www-authenticate': z.string() }),
   });
   const getPayment = defineEndpoint({
     name: 'getPayment',
@@ -68,51 +89,64 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     description: 'Every payment',
     success: { status: 200, body: z.array(z.string()) },
   });
-  return { getPayment, tagPayment, listPayments };
+  const refundPayment = defineEndpoint({
+    name: 'refundPayment',
+    method: 'POST',
+    path: '/payments/:paymentId/refund',
+    visibility: 'internal',
+    description: 'Refunds a payment',
+    input: { params: z.object({ paymentId: z.string() }) },
+    success: { status: 204 },
+    rejections: [throttled, unauthorized],
+  });
+  return { getPayment, tagPayment, listPayments, refundPayment };
 }
 
 const declared = paymentEndpointsOf(openEnum(['pending', 'settled']));
 const readers = paymentEndpointsOf(openEnumReader(['pending', 'settled']));
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declaredEndpoints: readonly Endpoint[],
 ) {
   const listed = declaredEndpoints as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
+  const standardRejections = providedStandardRejections({
     notFound: { code: 'NO_PAYMENT', status: 404, message: 'No such payment' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  });
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf(readers, Object.values(declared)), {
-  endpoints: [readers.getPayment, readers.tagPayment],
+const paymentsDependencyPackage = contractPackageOf(readers, Object.values(declared));
+const paymentsDependency = defineDependency({
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.tagPayment,
+    paymentsDependencyPackage.endpoints.refundPayment,
+  ],
 });
 
 describe('fakeProvider: types', () => {
   test('on and calls take the names of listed Endpoints only', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     // @ts-expect-error listPayments is exported but not listed
     const unlisted = () => payments.on('listPayments');
@@ -121,18 +155,87 @@ describe('fakeProvider: types', () => {
 
     expect([unlisted, unknown]).toHaveLength(2);
     expectTypeOf(payments.calls('getPayment')).toEqualTypeOf<
-      readonly FakeCall<typeof readers.getPayment>[]
+      readonly {
+        readonly params: { readonly paymentId: string };
+        readonly headers: { readonly 'x-api-key': string };
+      }[]
     >();
+    expectTypeOf(payments.invalidCalls('getPayment')).toEqualTypeOf<readonly InvalidCall[]>();
+  });
+
+  test('a call is readonly at every depth', () => {
+    const payments = fakeProvider(paymentsDependency);
+    type Call = ReturnType<typeof payments.calls<'getPayment'>>[number];
+
+    const writingPart = (call: Call) => {
+      // @ts-expect-error a recorded call is never written to
+      call.params = { paymentId: 'x' };
+    };
+    const writingParam = (call: Call) => {
+      // @ts-expect-error a recorded call is never written to at any depth
+      call.params.paymentId = 'x';
+    };
+
+    expect([writingPart, writingParam]).toHaveLength(2);
+    expectTypeOf<Call>().toEqualTypeOf<{
+      readonly params: { readonly paymentId: string };
+      readonly headers: { readonly 'x-api-key': string };
+    }>();
+  });
+
+  test('verify takes nothing and returns nothing', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    expectTypeOf(payments.verify).toEqualTypeOf<() => void>();
+  });
+
+  test('a call is the parsed Input itself, read with no narrowing', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const paymentId = payments.calls('getPayment')[0]?.params.paymentId;
+
+    expectTypeOf(paymentId).toEqualTypeOf<string | undefined>();
+    expect(paymentId).toBeUndefined();
+  });
+
+  test('an invalid call holds the Issues of the invalid-input Rejection', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const issues = payments.invalidCalls('getPayment')[0]?.issues;
+
+    expectTypeOf(issues).toEqualTypeOf<InvalidCall['issues'] | undefined>();
+    expect(issues).toBeUndefined();
+  });
+
+  test('on(name) is the Script of that name, whose once takes a Step keyed by the Dependency and the name', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const step: Step<typeof paymentsDependency, 'getPayment'> = (r) => r.reject('NO_PAYMENT');
+
+    const script = payments.on('getPayment').once(step);
+
+    expectTypeOf(script).toEqualTypeOf<Script<typeof paymentsDependency, 'getPayment'>>();
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('Script, Step and StepBuilder refuse a name the Dependency does not list', () => {
+    // @ts-expect-error listPayments is exported but not listed
+    type UnlistedScript = Script<typeof paymentsDependency, 'listPayments'>;
+    // @ts-expect-error listPayments is exported but not listed
+    type UnlistedStep = Step<typeof paymentsDependency, 'listPayments'>;
+    // @ts-expect-error no Endpoint has this name
+    type UnlistedBuilder = StepBuilder<typeof paymentsDependency, 'getPayments'>;
+
+    expectTypeOf<[UnlistedScript, UnlistedStep, UnlistedBuilder]>().not.toBeNever();
   });
 
   test('reject takes the Endpoint’s codes, the Provider’s Standard ones included, each with its body', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments
       .on('getPayment')
       .once((r) => r.reject('NO_PAYMENT'))
       .once((r) => r.reject('PAYMENT_LOCKED', { lockedAt: '2026-10-19T10:00:00Z' }))
-      .once((r) => r.reject({ unknown: 'CARD_EXPIRED' }, { any: 'thing' }))
+      .once((r) => r.unknownRejection('CARD_EXPIRED', { body: { any: 'thing' } }))
       // @ts-expect-error a declared body is required
       .once((r) => r.reject('PAYMENT_LOCKED'))
       // @ts-expect-error the Provider resolved notFound to NO_PAYMENT
@@ -143,17 +246,129 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
+  test('reject takes one code with its own body, never a code not narrowed to one', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const code = Math.random() > 0.5 ? ('NO_PAYMENT' as const) : ('PAYMENT_LOCKED' as const);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error a code that may be either is paired with neither body
+      .once((r) => r.reject(code))
+      // @ts-expect-error NO_PAYMENT declares no body, so the body fits only one of the two
+      .once((r) => r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' }))
+      .otherwise((r) =>
+        code === 'PAYMENT_LOCKED'
+          ? r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' })
+          : r.reject(code),
+      );
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('reject takes { headers, body } for a code that declares headers, never a bare body or none', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('refundPayment')
+      .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }))
+      .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'Bearer' } }))
+      // @ts-expect-error a code that declares headers takes them
+      .once((r) => r.reject('UNAUTHORIZED'))
+      // @ts-expect-error a code that declares headers takes { headers, body }, not a bare body
+      .once((r) => r.reject('THROTTLED', { limit: 5 }))
+      // @ts-expect-error a code that declares a body takes it beside its headers
+      .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 } }))
+      // @ts-expect-error a code that declares no body takes none beside its headers
+      .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'B' }, body: {} }))
+      // @ts-expect-error a header is typed by its Reader
+      .otherwise((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 3 } }));
+
+    expect(payments.calls('refundPayment')).toEqual([]);
+  });
+
+  test('reject takes no body for a code that declares none', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error NO_PAYMENT declares no body, so none is given, not even undefined
+      .once((r) => r.reject('NO_PAYMENT', undefined));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault takes retryAfter only with retryable true', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
+      .once((r) => r.fault({ committed: 'no', retryable: true }))
+      // @ts-expect-error a Fault that is not retryable takes no retryAfter
+      .once((r) => r.fault({ committed: 'no', retryable: false, retryAfter: 30 }))
+      // @ts-expect-error retryAfter is whole seconds, a number
+      .otherwise((r) => r.fault({ committed: 'no', retryable: true, retryAfter: '30' }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault with a boolean retryable takes no retryAfter', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const retryable: boolean = Math.random() > 0.5;
+
+    payments
+      .on('getPayment')
+      .once((r) => r.fault({ committed: 'no', retryable }))
+      // @ts-expect-error a retryable that may be false takes no retryAfter
+      .otherwise((r) => r.fault({ committed: 'no', retryable, retryAfter: 30 }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault refuses a code, which r.reserved takes', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error a Reserved code is no Fault
+      .once((r) => r.fault({ code: 'RETIRED' }))
+      // @ts-expect-error a Fault carries no code
+      .once((r) => r.fault({ committed: 'yes', retryable: true, code: 'RETIRED' }))
+      .otherwise((r) => r.reserved('RETIRED'));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.reserved takes only a Reserved code', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      .once((r) => r.reserved('NO_SUCH_ENDPOINT'))
+      // @ts-expect-error BOGUS is no Reserved code
+      .once((r) => r.reserved('BOGUS'))
+      // @ts-expect-error a Reserved code is a string
+      .once((r) => r.reserved(410))
+      // @ts-expect-error a Reserved code is given alone
+      .otherwise((r) => r.reserved('RETIRED', { retryAfter: 30 }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
   test('success takes the Success as a Caller reads it: an Open Enum’s Unknown case, never a bare string', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments
       .on('getPayment')
       .once((r) => r.success({ id: 'pay-1', stage: { unknown: 'refunded' } }))
       // @ts-expect-error a value the Open Enum does not declare is its Unknown case
       .otherwise((r) => r.success({ id: 'pay-1', stage: 'refunded' }));
+    const withBody = { headers: { 'x-tag': 'settled' as const }, body: { x: 1 } };
     payments
       .on('tagPayment')
       .once((r) => r.success({ headers: { 'x-tag': 'settled' } }))
+      // @ts-expect-error a headers-only Success takes no body, in a literal or not
+      .once((r) => r.success(withBody))
       // @ts-expect-error declared headers are passed with the Success
       .otherwise((r) => r.success());
 
@@ -161,7 +376,7 @@ describe('fakeProvider: types', () => {
   });
 
   test('a step receives the Endpoint’s Input as the Provider parses it, and returns a ScriptedAnswer', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     payments.on('getPayment').otherwise((builder, input) => {
       expectTypeOf(input).toEqualTypeOf<InputOf<typeof readers.getPayment>>();
@@ -174,109 +389,111 @@ describe('fakeProvider: types', () => {
   });
 
   test('client() with headers is a client with those headers configured', () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
 
     const configured = payments.client({ headers: { 'x-api-key': 'k' } });
     const bare = payments.client();
 
-    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDeps, 'x-api-key'>>();
-    expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDeps>>();
-    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment']);
+    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDependency, 'x-api-key'>>();
+    expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDependency>>();
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
   });
-});
 
-const settledBody = z.object({
-  paymentId: z.uuid(),
-  status: openEnumReader(['settled', 'refunded']),
-});
+  test('client() refuses an options variable holding headers and a fetch of its own', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, fetch: globalThis.fetch };
 
-const paymentSettledV1 = defineEvent({
-  name: 'PaymentSettled',
-  version: 1,
-  visibility: 'internal',
-  description: 'A payment was settled',
-  body: settledBody,
-});
+    // @ts-expect-error fetch is not a declared field: the fake's own is the client's
+    const clientOf = () => payments.client(options);
 
-const paymentAuditedV1 = defineEvent({
-  name: 'PaymentAudited',
-  version: 1,
-  visibility: 'private',
-  description: 'A payment was audited',
-  body: settledBody,
-});
+    expect(clientOf).toBeTypeOf('function');
+  });
 
-const chargeCardV1 = defineCommand({
-  name: 'ChargeCard',
-  version: 1,
-  description: 'Charges a card',
-  body: settledBody,
-});
+  test('client() refuses an options variable holding headers and a baseUrl', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, baseUrl: 'https://elsewhere.test' };
 
-const settledPackage = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: {},
-  events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
+    // @ts-expect-error baseUrl is not a declared field: the fake's is the client's
+    const clientOf = () => payments.client(options);
 
-const settledDeps = defineDependencies(settledPackage, { events: [paymentSettledV1] });
+    expect(clientOf).toBeTypeOf('function');
+  });
 
-const PAYMENT_ID = '0b5e1c9a-52f7-4c63-9a0e-3d8f2b7a1c44';
+  test('client() refuses an options variable holding headers and a misspelled inferFault', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, inferFalt: () => undefined };
 
-describe('fakeEvent: types', () => {
-  test('fakeEvent takes and returns the body a Subscription’s Handler reads, Unknown cases included', () => {
-    const settledEvent = settledDeps.events.paymentSettledV1;
-    const subscription = defineSubscription({ name: 'notify-on-settled', event: settledEvent });
-    const handler = handle(withReader(subscription, settledEvent.body), () => undefined);
-    type Read = Parameters<typeof handler>[0];
+    // @ts-expect-error inferFalt is not a declared field
+    const clientOf = () => payments.client(options);
 
-    const faked = fakeEvent(settledEvent, {
-      paymentId: PAYMENT_ID,
-      status: { unknown: 'disputed' },
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('client() accepts an options variable holding only declared fields, headers configured', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, inferFault: () => undefined };
+
+    const configured = payments.client(options);
+
+    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDependency, 'x-api-key'>>();
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
+  });
+
+  test('client() gives a function written inline in its options its parameter types', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const configured = payments.client({
+      inferFault: (_happened, inferred) => {
+        expectTypeOf(inferred.retryable).toEqualTypeOf<boolean>();
+        return undefined;
+      },
     });
 
-    expectTypeOf(faked).toEqualTypeOf<Read>();
-    expect(faked).toEqual({ paymentId: PAYMENT_ID, status: { unknown: 'disputed' } });
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
+  });
+});
+
+describe('the records a test reads and writes', () => {
+  test('FakeProviderOptions hold the base URL, and no more', () => {
+    expectTypeOf<keyof FakeProviderOptions>().toEqualTypeOf<'baseUrl'>();
   });
 
-  test('a body of the wrong shape is a type error', () => {
-    const settledEvent = settledDeps.events.paymentSettledV1;
-
-    // @ts-expect-error the body has a paymentId, not an id
-    const misnamed = () => fakeEvent(settledEvent, { id: PAYMENT_ID, status: 'settled' });
-    // @ts-expect-error a value the Open Enum does not declare is its Unknown case
-    const bare = () => fakeEvent(settledEvent, { paymentId: PAYMENT_ID, status: 'disputed' });
-
-    expect([misnamed, bare]).toHaveLength(2);
+  test('FakeClientOptions hold the client’s headers, inference and Deprecation hook, and no more', () => {
+    expectTypeOf<keyof FakeClientOptions<typeof paymentsDependency>>().toEqualTypeOf<
+      'headers' | 'inferFault' | 'onDeprecation'
+    >();
   });
 
-  test('a Command is a type error', () => {
-    // @ts-expect-error a Command is never exported, so there is no Provider’s Command to fake
-    const faking = () => fakeEvent(chargeCardV1, { paymentId: PAYMENT_ID, status: 'settled' });
-
-    expect(faking).toBeTypeOf('function');
+  test('a FakeProvider holds its fetch, client, scripts, calls and verify, and no more', () => {
+    expectTypeOf<keyof FakeProvider<typeof paymentsDependency>>().toEqualTypeOf<
+      'fetch' | 'client' | 'on' | 'calls' | 'invalidCalls' | 'verify'
+    >();
   });
 
-  test('a Private Event is a type error', () => {
-    // @ts-expect-error a Private Event is always the Service’s own
-    const faking = () => fakeEvent(paymentAuditedV1, { paymentId: PAYMENT_ID, status: 'settled' });
-
-    expect(faking).toBeTypeOf('function');
+  test('an InvalidCall holds the Issues, and no more', () => {
+    expectTypeOf<keyof InvalidCall>().toEqualTypeOf<'issues'>();
   });
 
-  test('an Event typed as any Event, its Visibility unknown, is a type error', () => {
-    const widened: Event = paymentSettledV1;
+  test('a Script holds once and otherwise, and no more', () => {
+    expectTypeOf<keyof Script<typeof paymentsDependency, 'getPayment'>>().toEqualTypeOf<
+      'once' | 'otherwise'
+    >();
+  });
 
-    // @ts-expect-error only an Event known to be exported can be a Provider's
-    const faking = () => fakeEvent(widened, { paymentId: PAYMENT_ID, status: 'settled' });
+  test('a StepBuilder holds the ways to answer, and no more', () => {
+    expectTypeOf<keyof StepBuilder<typeof paymentsDependency, 'getPayment'>>().toEqualTypeOf<
+      | 'success'
+      | 'reject'
+      | 'unknownRejection'
+      | 'fault'
+      | 'reserved'
+      | 'noConnection'
+      | 'reset'
+      | 'status'
+    >();
+  });
 
-    expect(faking).toBeTypeOf('function');
+  test('a FakeProviderError holds nothing beside an Error’s own', () => {
+    expectTypeOf<Exclude<keyof FakeProviderError, keyof Error>>().toBeNever();
   });
 });

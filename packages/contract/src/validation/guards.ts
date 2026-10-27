@@ -1,7 +1,14 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
 import { isDeclaration, isGuard } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import {
+  fieldStep,
+  indexStep,
+  inFields,
+  inside,
+  type Place,
+  withinStack,
+} from '../walker/index.ts';
 import {
   attachedGuardOf,
   isPlainObject,
@@ -13,12 +20,12 @@ import {
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
-import { undeclaredKeysOf } from './qualifiers.ts';
+import { strippedKeysOf } from './qualifiers.ts';
 import type { Nodes } from './schemas.ts';
 
 /** An Attachment of an Endpoint, where it sits, and the Guard it names when it names one. */
 type Listed = {
-  readonly at: Path;
+  readonly at: Place;
   readonly attachment: Attachment;
   readonly guard: Guard | undefined;
 };
@@ -37,7 +44,11 @@ export function guardFailures({ at, guard }: LocatedGuard): readonly Declaration
   }
   const refused = (['params', 'body'] as const).filter((part) => demands[part] !== undefined);
   return refused.map((part) =>
-    failure([...at, 'demands', part], 'guard-demands', 'A Guard demands only headers and query'),
+    failure(
+      inFields(at, 'demands', part),
+      'guard-demands',
+      'A Guard demands only headers and query',
+    ),
   );
 }
 
@@ -61,7 +72,7 @@ export function attachmentFailures({
 }
 
 /** What names no Guard is no Attachment, unless it is an object whose `guard` the field rule reports. */
-function noAttachmentFailures(at: Path, attachment: unknown): readonly DeclarationFailure[] {
+function noAttachmentFailures(at: Place, attachment: unknown): readonly DeclarationFailure[] {
   const judgedByFields =
     isPlainObject(attachment) && !isDeclaration(attachment) && isWithoutValue(attachment['guard']);
   if (judgedByFields) {
@@ -70,7 +81,7 @@ function noAttachmentFailures(at: Path, attachment: unknown): readonly Declarati
   return [failure(at, 'not-an-attachment', 'An Attachment is a Guard or { guard, qualifier }')];
 }
 
-/** A Qualifier is a value its schema accepts whose objects hold only the keys it declares. */
+/** A Qualifier is a value its schema accepts whose parse drops no key. */
 export function qualifierFailures(
   located: LocatedEndpoint,
   nodes: Nodes,
@@ -80,32 +91,39 @@ export function qualifierFailures(
     .flatMap((qualified) => valueFailures(qualified, nodes));
 }
 
-function listedOf(at: Path, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
+function listedOf(at: Place, endpoint: LocatedEndpoint['endpoint']): readonly Listed[] {
   return listOf(endpoint.guards).map((attachment, index) => ({
-    at: [...at, 'guards', index],
+    at: inside(at, fieldStep('guards'), indexStep(index)),
     attachment,
     guard: attachedGuardOf(attachment),
   }));
 }
 
+/**
+ * Only a Qualifier whose schema walked is parsed: a walked schema holds no transform, default or
+ * catch, so its parse differs from the value only by the keys it strips.
+ */
 function valueFailures(
   { at, attachment, guard }: Qualified,
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
-  const node = nodes.nodeOf(guard, 'qualifier');
-  if (guard.qualifier === undefined || node === undefined || isWithoutValue(attachment.qualifier)) {
+  const isWalked = nodes.nodeOf(guard, 'qualifier') !== undefined;
+  const { qualifier } = guard;
+  if (qualifier === undefined || !isWalked || isWithoutValue(attachment.qualifier)) {
     return [];
   }
-  const qualifierAt = [...at, 'qualifier'];
-  if (!safeParse(guard.qualifier, attachment.qualifier).success) {
+  const qualifierAt = inFields(at, 'qualifier');
+  const parsed = withinStack(() => safeParse(qualifier, attachment.qualifier));
+  if (parsed?.success !== true) {
     const message = `${textOf(guard.name)} takes a Qualifier its schema accepts`;
     return [failure(qualifierAt, 'qualifier-value', message)];
   }
-  const undeclared = undeclaredKeysOf(attachment.qualifier, node, nodes.defs);
-  if (undeclared.length === 0) {
+  const stripped = strippedKeysOf(attachment.qualifier, parsed.data);
+  if (stripped.length === 0) {
     return [];
   }
-  const message = `A Qualifier holds only the keys its schema declares: ${undeclared.join(', ')}`;
+  const keys = stripped.join(', ');
+  const message = `A Qualifier holds only the keys its schema keeps when zod parses it: ${keys}`;
   return [failure(qualifierAt, 'qualifier-keys', message)];
 }
 

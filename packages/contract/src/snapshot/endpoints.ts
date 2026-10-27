@@ -13,31 +13,40 @@ import {
 } from '../written/index.ts';
 import { codeOfStandard, sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
-import { deprecationOf, type Stamping } from './deprecation.ts';
-import { inputOf } from './input.ts';
-import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './types.ts';
+import { inputOf, textPartOf } from './input.ts';
+import type {
+  AttachmentSnapshot,
+  EndpointFields,
+  EndpointLifecycle,
+  EndpointSnapshot,
+  SuccessSnapshot,
+} from './types.ts';
 
 /** Every Endpoint by its identity, its Input merged and its codes resolved. */
 export function endpointSnapshotsOf(
   endpoints: readonly LocatedEndpoint[],
   sources: SnapshotSources,
-  stamping: Stamping,
 ): Readonly<Record<string, EndpointSnapshot>> {
   const entries = endpoints.map(({ endpoint, group }) => {
     const identity = identityOf(endpoint.method, endpoint.path);
-    const lifecycle = lifecycleOf(endpoint);
-    const deprecation = deprecationOf({ identity, lifecycle }, stamping);
-    const snapshot = { ...endpointOf(endpoint, group.name, sources), lifecycle, ...deprecation };
+    const snapshot = {
+      ...endpointOf(endpoint, group.name, sources),
+      ...endpointLifecycleOf(endpoint),
+    };
     return [identity, snapshot] as const;
   });
   return Object.fromEntries(entries);
 }
 
-function endpointOf(
-  endpoint: Endpoint,
-  group: string,
-  sources: SnapshotSources,
-): Omit<EndpointSnapshot, 'lifecycle' | 'deprecatedAt'> {
+/** An Endpoint's lifecycle, with the instant it declares it is Deprecated as of when it is Deprecated. */
+function endpointLifecycleOf(endpoint: Endpoint): EndpointLifecycle {
+  if (endpoint.lifecycle === 'deprecated') {
+    return { lifecycle: 'deprecated', deprecatedAt: endpoint.deprecatedAt };
+  }
+  return { lifecycle: lifecycleOf(endpoint) };
+}
+
+function endpointOf(endpoint: Endpoint, group: string, sources: SnapshotSources): EndpointFields {
   const guards = attachedGuardsOf(endpoint);
   return {
     name: endpoint.name,
@@ -62,7 +71,7 @@ function attachmentOf(attachment: Attachment): AttachmentSnapshot {
 function successOf(endpoint: Endpoint, { nodeOf }: SnapshotSources): SuccessSnapshot {
   return {
     status: endpoint.success.status,
-    headers: nodeOf(endpoint, 'success.headers') ?? null,
+    headers: textPartOf(nodeOf(endpoint, 'success.headers')),
     body: nodeOf(endpoint, 'success.body') ?? null,
   };
 }

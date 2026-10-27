@@ -1,7 +1,5 @@
-/** How the tools are configured for one Service, Application or Definitions Package. */
+/** How the tools are configured for one Service; a project without `cf-loom.config.ts` takes every default. */
 export type Config = {
-  /** The npm scope the Contract Package is published under and Definitions Packages are found in. */
-  readonly scope: string;
   /**
    * Where a Service's Handler files and the files `generate` regenerates live; a field left out
    * keeps its default. Only a Service has one.
@@ -18,9 +16,9 @@ export type Layout = {
   readonly endpoint?: `src/${string}.handler.ts`;
   /** A GuardHandler's path from `{name}`; `src/guards/{name}.handler.ts` by default. */
   readonly guard?: `src/${string}.handler.ts`;
-  /** A CommandHandler's path from `{name}` and `{version}`; `src/commands/{name}.v{version}.handler.ts` by default. */
+  /** A Command's Message Handler's path from `{group}`, `{name}` and `{version}`; `src/commands/{group}/{name}.v{version}.handler.ts` by default. */
   readonly command?: `src/${string}.handler.ts`;
-  /** An EventHandler's path from `{name}`, the Subscription's; `src/subscriptions/{name}.handler.ts` by default. */
+  /** A Subscription's Message Handler's path from `{group}` and `{name}`, the Subscription's; `src/subscriptions/{group}/{name}.handler.ts` by default. */
   readonly subscription?: `src/${string}.handler.ts`;
   /** The Handler map's file; `src/handlers.generated.ts` by default. */
   readonly handlerMap?: `src/${string}.generated.ts`;
@@ -29,8 +27,8 @@ export type Layout = {
 };
 
 /**
- * Declares the configuration of `cf-loom.config.ts`, exported as `config`, so a missing or
- * misspelled field is a type error where it is written.
+ * Declares the configuration of `cf-loom.config.ts`, exported as `config`, so a misspelled field
+ * is a type error where it is written.
  */
 export function defineConfig(config: Config): Config {
   return config;

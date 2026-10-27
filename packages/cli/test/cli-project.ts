@@ -129,10 +129,10 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
-/** A project around a Contract root file named `orders-service`, with the CLI's configuration. */
+/** A project around a Service's Root file named `orders-service`, with the CLI's configuration. */
 export function aContractProject(root: readonly string[]): Readonly<Record<string, string>> {
   return {
     'package.json': manifest,
@@ -141,7 +141,7 @@ export function aContractProject(root: readonly string[]): Readonly<Record<strin
   };
 }
 
-/** The files of a project whose root is an Application. */
+/** The files of a project whose Root is an Application’s Contract. */
 export const anApplication: Readonly<Record<string, string>> = {
   'package.json': manifest,
   'cf-loom.config.ts': config,
@@ -151,12 +151,12 @@ export const anApplication: Readonly<Record<string, string>> = {
   ]),
 };
 
-/** The files of a project whose root is a Definitions Package. */
+/** The files of a project whose Root is a Definitions Package. */
 export const aDefinitionsPackage: Readonly<Record<string, string>> = {
   'package.json': manifest,
   'cf-loom.config.ts': config,
   'src/definitions/index.ts': lines([
     "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'orders-service' });",
+    'export const definitions = defineDefinitions({});',
   ]),
 };

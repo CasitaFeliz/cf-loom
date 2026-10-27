@@ -1,54 +1,91 @@
-import { type Definitions, isGuard, isRejection } from '../declarations/index.ts';
+import { type Guard, isRejection, type Rejection, type Root } from '../declarations/index.ts';
+import { placeOf } from '../walker/index.ts';
 import {
   type Declarations,
-  type LocatedDefinitions,
   listOf,
+  type Members,
   reachedGuardsOf,
   textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
-/** What a Definitions Package's module exports, as the tooling imported it: nothing when unknown. */
-export type ExportsOf = (definitions: Definitions) => readonly unknown[];
-
 /**
- * A Definitions Package lists every Guard and Rejection it exports or its Guards reach, through
- * their `guards` and their `rejections`, so where each came from is read from its lists alone.
+ * A Definitions Package's Root file exports what it shares and nothing else beside its Root:
+ * Guards, Rejections and zod schemas, among them every Guard and Rejection an exported Guard
+ * reaches, since Services import them to attach and to reject.
  */
-export function unlistedFailures(
-  { allPackages }: Declarations,
-  exportsOf: ExportsOf,
+export function exportFailures(
+  { root, ownMembers }: Declarations,
+  rootExports: Readonly<Record<string, unknown>>,
 ): readonly DeclarationFailure[] {
-  return allPackages.flatMap((located) => packageFailures(located, exportsOf(located.definitions)));
-}
-
-function packageFailures(
-  { at, definitions }: LocatedDefinitions,
-  exported: readonly unknown[],
-): readonly DeclarationFailure[] {
-  const listedGuards: readonly unknown[] = listOf(definitions.guards);
-  const listedRejections: readonly unknown[] = listOf(definitions.rejections);
-  const reached = reachedGuardsOf([...listedGuards, ...exported.filter(isGuard)]);
-  const answered = reached.flatMap((guard) => listOf(guard.rejections));
-  const rejections = [...new Set([...answered, ...exported])].filter(isRejection);
-  const unlistedGuards = reached.filter((guard) => !listedGuards.includes(guard));
-  const unlistedRejections = rejections.filter(
-    (rejection) => !listedRejections.includes(rejection),
-  );
+  if (ownMembers === undefined) {
+    return [];
+  }
+  const memberNames = new Set(ownMembers.map(({ name }) => name));
+  const others = Object.keys(rootExports).filter((name) => !memberNames.has(name));
   return [
-    ...unlistedGuards.map(({ name }) =>
-      failure([...at, 'guards'], 'definitions-unlisted', `${guardsMessage}: ${textOf(name)}`),
-    ),
-    ...unlistedRejections.map(({ code }) =>
-      failure(
-        [...at, 'rejections'],
-        'definitions-unlisted',
-        `${rejectionsMessage}: ${textOf(code)}`,
-      ),
-    ),
+    ...others.map((name) => otherExportFailure(name, rootExports[name], root)),
+    ...ownMembers.filter(({ name }) => name === '__proto__').map(protoFailure),
+    ...unexportedFailures(ownMembers),
   ];
 }
 
-const guardsMessage = 'A Definitions Package lists every Guard it exports or its Guards reach';
-const rejectionsMessage =
-  'A Definitions Package lists every Rejection it exports or its Guards reach';
+/** A value a Root file exports, under the name it exports it as. */
+type ExportedAs = { readonly name: string; readonly value: unknown };
+
+function otherExportFailure(name: string, value: unknown, root: Root): DeclarationFailure {
+  const at = placeOf({ kind: 'export', name }, value);
+  if (name === '__proto__') {
+    return protoFailure({ name, value });
+  }
+  if (value === root) {
+    return failure(
+      at,
+      'definitions-export',
+      `${exportsOnly}: its definitions once, not as ${name}`,
+    );
+  }
+  return failure(at, 'definitions-export', `${exportsOnly}: ${name} is none of them`);
+}
+
+function protoFailure({ name, value }: ExportedAs): DeclarationFailure {
+  const message = `${exportsOnly}: nothing named __proto__, which no Snapshot can hold`;
+  return failure(placeOf({ kind: 'export', name }, value), 'definitions-export', message);
+}
+
+/** Each Guard or Rejection an exported Guard reaches unexported, reported once, at the first export, in code point order, that reaches it. */
+function unexportedFailures(members: Members): readonly DeclarationFailure[] {
+  const exported = new Set<unknown>(members.map(({ value }) => value));
+  const reported = new Set<Guard | Rejection>();
+  const failures: DeclarationFailure[] = [];
+  for (const member of members) {
+    const reached = member.kind === 'guard' ? reachOf(member.value) : [];
+    for (const declaration of reached.filter((value) => !exported.has(value))) {
+      if (!reported.has(declaration)) {
+        const label = 'code' in declaration ? declaration.code : declaration.name;
+        const message = `${exportsReach}: ${textOf(label)}`;
+        failures.push(
+          failure(
+            placeOf({ kind: 'export', name: member.name }, member.value),
+            'definitions-unexported',
+            message,
+          ),
+        );
+      }
+      reported.add(declaration);
+    }
+  }
+  return failures;
+}
+
+/** The Guards a Guard reaches through the Guards each lists, itself left out, and the Rejections all of them answer. */
+function reachOf(guard: Guard): readonly (Guard | Rejection)[] {
+  const guards = reachedGuardsOf([guard]);
+  const rejections = guards.flatMap((reached) => listOf(reached.rejections)).filter(isRejection);
+  return [...guards.filter((reached) => reached !== guard), ...new Set(rejections)];
+}
+
+const exportsOnly =
+  "A Definitions Package's Root file exports only its definitions, Guards, Rejections and zod schemas";
+const exportsReach =
+  'A Definitions Package exports every Guard and Rejection its Guards reach, since Services import them to attach and to reject';

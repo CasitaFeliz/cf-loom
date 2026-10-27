@@ -1,22 +1,24 @@
 import { client } from '@cf-loom/client';
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   type Endpoint,
   notFound,
   openEnum,
   openEnumReader,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
 import { type ServedFault, serve } from '@cf-loom/server';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
 
 /** The payments Endpoints, with a schema for each Open Enum: as declared, or as read. */
@@ -34,6 +36,7 @@ function paymentEndpointsOf<const Stage extends z.ZodType>(stage: Stage) {
     visibility: 'internal',
     description: 'One payment',
     lifecycle: 'deprecated',
+    deprecatedAt: '1970-01-01T00:00:00Z',
     input: { params: z.object({ paymentId: z.string().min(3) }) },
     success: {
       status: 200,
@@ -63,44 +66,43 @@ const readers = paymentEndpointsOf(openEnumReader(['pending', 'settled']));
 const { getPayment, capturePayment, paymentLocked } = declared;
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
   declaredEndpoints: readonly Endpoint[],
 ) {
   const listed = declaredEndpoints as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(
-  contractPackageOf({ getPayment: readers.getPayment, capturePayment: readers.capturePayment }, [
-    getPayment,
-    capturePayment,
-  ]),
-  { endpoints: [readers.getPayment, readers.capturePayment] },
+const paymentsDependencyPackage = contractPackageOf(
+  { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
+  [getPayment, capturePayment],
 );
+const paymentsDependency = defineDependency({
+  endpoints: [
+    paymentsDependencyPackage.endpoints.getPayment,
+    paymentsDependencyPackage.endpoints.capturePayment,
+  ],
+});
 
 const headers = { 'x-stage': 'settled', 'x-count': 0.000_000_15 } as const;
 const body = { stage: 'pending', id: 'pay-1', amount: 5 } as const;
@@ -110,18 +112,21 @@ const locked = { reason: 'settled', lockedAt: '2026-10-19T10:00:00Z' } as const;
 /** What the Provider reports to its Service through `onServiceFault`. */
 const serviceFaults: ServedFault[] = [];
 
+/** The Provider's Contract. */
+const paymentsService = defineService({
+  name: 'payments-service',
+  groups: [
+    defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      endpoints: [getPayment, capturePayment],
+    }),
+  ],
+});
+
 /** The Provider itself, its Handler answering by the payment asked for. */
 const served = serve(
-  defineContract({
-    name: 'payments-service',
-    groups: [
-      defineGroup({
-        name: 'payments',
-        description: 'Payments',
-        endpoints: [getPayment, capturePayment],
-      }),
-    ],
-  }),
+  paymentsService,
   {
     endpoints: {
       getPayment: handle(getPayment, ({ params }) => {
@@ -141,14 +146,17 @@ const served = serve(
       capturePayment: handle(capturePayment, () => success()),
     },
     guards: {},
-    deprecatedAt: { getPayment: '1970-01-01T00:00:00Z' },
   },
-  { onServiceFault: (serviceFault) => serviceFaults.push(serviceFault) },
+  {
+    onServiceFault: (serviceFault) => {
+      serviceFaults.push(serviceFault);
+    },
+  },
 );
 
 /** The fake, scripted to answer each payment as the Provider's Handler does. */
 function scriptedFake() {
-  const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+  const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
   payments.on('getPayment').otherwise((builder, { params }) => {
     switch (params.paymentId) {
       case 'missing':
@@ -182,7 +190,146 @@ const capture = (body: string, contentType = 'application/json'): RequestInit =>
   body,
 });
 
+/** Every Fault `fault()` builds from what a Handler gives it, a message given or not. */
+const faultsGiven = (['no', 'yes', 'unknown'] as const).flatMap((committed) =>
+  [undefined, 'Down for now'].flatMap((message) =>
+    [
+      { retryable: false },
+      { retryable: true },
+      { retryable: true, retryAfter: 0 },
+      { retryable: true, retryAfter: 30 },
+    ].map((given) => ({ committed, ...given, ...(message === undefined ? {} : { message }) })),
+  ),
+);
+
+/** The Provider itself, its Handler returning the Fault it is given. */
+function servedFaultOf(given: (typeof faultsGiven)[number]) {
+  const endpoints = {
+    getPayment: handle(getPayment, () => fault(given as never)),
+    capturePayment: handle(capturePayment, () => success()),
+  };
+  return serve(paymentsService, { endpoints, guards: {} }, { onServiceFault: () => undefined });
+}
+
 describe('fakeProvider and serve answer alike', () => {
+  test('a code another Endpoint declares, sent by r.unknownRejection, is answered with the bytes serve sends for it', async () => {
+    const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
+    payments
+      .on('capturePayment')
+      .otherwise((r) => r.unknownRejection('PAYMENT_LOCKED', { body: locked }));
+
+    const fromServe = await served(new Request('http://payments.test/payments/locked'));
+    const fromFake = await payments.fetch(
+      new Request('http://payments.test/payments/pay-1/capture', capture('{"amount":1}')),
+    );
+
+    expect(fromFake.status).toBe(fromServe.status);
+    expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+    expect(await fromFake.text()).toBe(await fromServe.text());
+  });
+
+  test.each(faultsGiven)(
+    'the Fault %j is answered with the bytes serve sends for it, Retry-After included',
+    async (given) => {
+      const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
+      payments.on('getPayment').otherwise((r) => r.fault(given as never));
+      const url = 'http://payments.test/payments/pay-1';
+
+      const fromServe = await servedFaultOf(given)(new Request(url));
+      const fromFake = await payments.fetch(new Request(url));
+
+      expect(fromFake.status).toBe(fromServe.status);
+      expect(fromFake.headers.get('retry-after')).toBe(fromServe.headers.get('retry-after'));
+      expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+      expect(await fromFake.text()).toBe(await fromServe.text());
+    },
+  );
+
+  test('a request a Retired Endpoint the Provider does not export wins is answered with the bytes serve sends for it', async () => {
+    const retired = defineEndpoint({
+      name: 'getLatestPayment',
+      method: 'GET',
+      path: '/payments/latest',
+      visibility: 'internal',
+      lifecycle: 'retired',
+      description: 'The latest payment',
+      success: { status: 200, body: z.object({ id: z.string() }) },
+    });
+    const endpoints = [getPayment, capturePayment, retired] as const;
+    const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
+    const root = defineService({ name: 'payments-service', groups: [group] });
+    const handlers = {
+      getPayment: handle(getPayment, () => success({ headers, body })),
+      capturePayment: handle(capturePayment, () => success()),
+    };
+    const providing = serve(root, { endpoints: handlers, guards: {} }, {});
+    const provider = contractPackageOf(
+      { getPayment: readers.getPayment, capturePayment: readers.capturePayment },
+      endpoints,
+    );
+    const dependency = defineDependency({
+      endpoints: [provider.endpoints.getPayment],
+    });
+    const payments = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
+    const url = 'http://payments.test/payments/latest';
+
+    const fromServe = await providing(new Request(url));
+    const fromFake = await payments.fetch(new Request(url));
+
+    expect(fromServe.status).toBe(410);
+    expect(fromFake.status).toBe(fromServe.status);
+    expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+    expect(await fromFake.text()).toBe(await fromServe.text());
+  });
+
+  test.each(['/p/a/b', '/p/q/b'])(
+    'a request to %s, which an exported Endpoint matches, is answered with the bytes serve sends for it',
+    async (path) => {
+      const base = { method: 'GET', description: 'An Endpoint', success: { status: 204 } } as const;
+      const first = defineEndpoint({
+        ...base,
+        name: 'getFirst',
+        path: '/p/:x/b',
+        visibility: 'internal',
+        input: { params: z.object({ x: z.string() }) },
+      });
+      const retired = defineEndpoint({
+        ...base,
+        name: 'getRetired',
+        path: '/p/a/:y',
+        visibility: 'internal',
+        lifecycle: 'retired',
+        input: { params: z.object({ y: z.string() }) },
+      });
+      const hidden = defineEndpoint({
+        ...base,
+        name: 'getHidden',
+        path: '/p/a/c',
+        visibility: 'private',
+      });
+      const endpoints = [first, retired, hidden] as const;
+      const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
+      const root = defineService({ name: 'payments-service', groups: [group] });
+      const handlers = {
+        getFirst: handle(first, () => success()),
+        getHidden: handle(hidden, () => success()),
+      };
+      const providing = serve(root, { endpoints: handlers, guards: {} }, {});
+      const provider = contractPackageOf({ getFirst: first }, endpoints);
+      const dependency = defineDependency({ endpoints: [provider.endpoints.getFirst] });
+      const paths = fakeProvider(dependency, { baseUrl: 'http://payments.test' });
+      paths.on('getFirst').otherwise((r) => r.success());
+      const url = `http://payments.test${path}`;
+
+      const fromServe = await providing(new Request(url));
+      const fromFake = await paths.fetch(new Request(url));
+
+      expect(fromFake.status).toBe(fromServe.status);
+      expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+      expect(await fromFake.text()).toBe(await fromServe.text());
+    },
+  );
+
   test.each([
     ['a Success with its headers', '/payments/pay-1', {}],
     ['a Standard Rejection', '/payments/missing', {}],
@@ -197,26 +344,27 @@ describe('fakeProvider and serve answer alike', () => {
     const url = `http://payments.test${path}`;
 
     const fromServe = await seenOf(await served(new Request(url, init)));
-    const fromFake = await seenOf(await scriptedFake().fetch(url, init));
+    const fromFake = await seenOf(await scriptedFake().fetch(new Request(url, init)));
 
     expect(fromFake).toEqual(fromServe);
   });
 
   test('a Success header that cannot travel: serve answers INVALID_OUTCOME and the fake calls the script a mistake at the same header', async () => {
     const url = 'http://payments.test/payments/unsendable';
-    const payments = fakeProvider(paymentsDeps, { baseUrl: 'http://payments.test' });
+    const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
     payments.on('getPayment').otherwise((r) => r.success({ headers: unsendable, body }));
     serviceFaults.length = 0;
 
     const fromServe = await served(new Request(url));
-    const fromFake = payments.fetch(url, {});
+    const fromFake = payments.fetch(new Request(url));
 
-    await expect(fromFake).rejects.toThrow(/success\.headers at x-note: invalid_format/);
+    await expect(fromFake).rejects.toThrow(/success\.headers\.x-note invalid_format/);
     expect(await fromServe.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
     expect(serviceFaults).toEqual([
       {
         kind: 'invalid-outcome',
-        endpoint: 'getPayment',
+        declaration: expect.objectContaining({ name: 'getPayment' }),
+        name: 'getPayment',
         issues: [
           {
             part: 'success.headers',
@@ -279,14 +427,16 @@ const packagedRefund = defineEndpoint({
   success: { status: 204 },
 });
 
-const refundDeps = defineDependencies(
-  contractPackageOf({ refundPayment: packagedRefund }, [refundPayment]),
-  { endpoints: [packagedRefund] },
-);
+const refundDependencyPackage = contractPackageOf({ refundPayment: packagedRefund }, [
+  refundPayment,
+]);
+const refundDependency = defineDependency({
+  endpoints: [refundDependencyPackage.endpoints.refundPayment],
+});
 
 /** The Provider of `refundPayment`, every GuardHandler admitting, so no run stops the reading. */
 const servedRefund = serve(
-  defineContract({
+  defineService({
     name: 'payments-service',
     groups: [
       defineGroup({ name: 'payments', description: 'Payments', endpoints: [refundPayment] }),
@@ -295,8 +445,8 @@ const servedRefund = serve(
   {
     endpoints: { refundPayment: handle(refundPayment, () => success()) },
     guards: { merchant: handle(merchant, () => admit()), region: handle(region, () => admit()) },
-    deprecatedAt: {},
   },
+  {},
 );
 
 /** A call's Input as a Caller passes it to `refundPayment`. */
@@ -367,15 +517,15 @@ describe('serve, the client and fakeProvider read a request alike', () => {
     ],
   ])('%s', async (_name, input) => {
     const [url, init] = requestOf(input);
-    const fake = fakeProvider(refundDeps, { baseUrl: 'http://payments.test' });
+    const fake = fakeProvider(refundDependency, { baseUrl: 'http://payments.test' });
     fake.on('refundPayment').otherwise((r) => r.success());
-    const caller = client(refundDeps, {
+    const caller = client(refundDependency, {
       baseUrl: 'http://payments.test',
-      fetch: (sentUrl, sentInit) => servedRefund(new Request(sentUrl, sentInit)),
+      fetch: servedRefund,
     });
 
     const fromServe = await seenOf(await servedRefund(new Request(url, init)));
-    const fromFake = await seenOf(await fake.fetch(url, init));
+    const fromFake = await seenOf(await fake.fetch(new Request(url, init)));
     const fromClient = await caller.refundPayment(input as never);
 
     expect(fromFake).toEqual(fromServe);

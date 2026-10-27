@@ -1,29 +1,41 @@
 import {
   type AttachmentSnapshot,
   type EndpointSnapshot,
+  type ExportedCut,
+  exportedCutOf,
   isDeclaredRejection,
   type ListedRejection,
   methodAndPathOf,
   ownRejectionsOf,
+  type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
 import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
-import { elementLinesOf } from './element-lines.ts';
+import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
-import { bindingOf, fileOf, siblingOf } from './names.ts';
-import { partsLinesOf } from './schema-lines.ts';
+import {
+  bindingOf,
+  fileOf,
+  providedOpeningOf,
+  siblingOf,
+  standardRejectionsSibling,
+} from './names.ts';
+import { declaredTextPartOf, partsLinesOf } from './schema-lines.ts';
 
 /**
- * An exported Endpoint rebuilt from its Snapshot entry, so its Input, Success and Rejections type
- * as the Service's do: its Input as declared, since Consumers write what the Service reads.
+ * An exported Endpoint rebuilt from its Snapshot entry and marked as the Service's, so its Input,
+ * Success and Rejections type as the Service's do: its Input as declared, since Consumers write
+ * what the Service reads. It carries the Service's Standard Rejections and the exported Snapshot
+ * cut to it, so a Consumer that imports it needs nothing else of the package.
  */
 export function endpointModuleOf(
   exported: ExportedEndpoint,
-  snapshot: Pick<ServiceSnapshot, 'standardRejections' | 'guards'>,
+  snapshot: ServiceSnapshot | PublishedServiceSnapshot,
 ): SchemaFile {
   const { endpoint } = exported;
+  const packaged = { kind: 'endpoint', name: endpoint.name } as const;
   const needs = loomNeeds();
   const rejections = ownRejectionsOf(endpoint, snapshot);
   const guards = endpoint.guards.map(({ guard }) => siblingOf({ kind: 'guard', name: guard }));
@@ -31,12 +43,22 @@ export function endpointModuleOf(
     .filter(isDeclaredRejection)
     .map(({ code }) => siblingOf({ kind: 'rejection', code }));
   const file = packageModuleOf({
-    path: fileOf({ kind: 'endpoint', name: endpoint.name }),
-    body: endpointBodyOf(exported, rejections, needs),
-    siblings: [...guards, ...declared],
+    path: fileOf(packaged),
+    body: [
+      ...deprecatedLinesOf(endpoint),
+      providedOpeningOf(packaged, providerTextOf(snapshot.name)),
+      ...endpointBodyOf(exported, rejections, needs),
+      closingLineOf(exportedCutOf(snapshot, exported.id)),
+    ],
+    siblings: [...guards, ...declared, standardRejectionsSibling],
     needs,
   });
   return { file, defUses: [...needs.defs.values()] };
+}
+
+/** The Provider an Endpoint is marked with: its name, and its Standard Rejections, which the module imports. */
+function providerTextOf(provider: string): string {
+  return `{ name: ${stringLiteralOf(provider)}, ${standardRejectionsSibling.name} }`;
 }
 
 /** Its Success and Rejections as readers, since Consumers read them; its Guards attached. */
@@ -49,28 +71,41 @@ function endpointBodyOf(
   const reader: Writing = { mode: 'reader', needs };
   const listed = rejections.map(rejectionNameOf);
   return [
-    `export const ${bindingOf({ kind: 'endpoint', name: endpoint.name })} = loom.defineEndpoint({`,
     `  name: ${stringLiteralOf(endpoint.name)},`,
     ...identityLinesOf(id, endpoint),
     ...elementLinesOf(endpoint),
+    ...deprecationLinesOf(endpoint),
     ...guardsLinesOf(endpoint.guards),
     ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
     ...(listed.length === 0 ? [] : [`  rejections: [${listed.join(', ')}],`]),
-    '});',
   ];
 }
 
-/** The Input as a Service declares it: its params an open object, since the path decides them. */
-function declaredInputOf(input: EndpointSnapshot['input']): EndpointSnapshot['input'] {
-  const params = input.params === null ? null : { ...input.params, mode: 'open' as const };
-  return { ...input, params };
+/** The close of the declaration, with the Endpoint's cut passed beside it. */
+function closingLineOf(cut: ExportedCut): string {
+  return `}, ${jsonLiteralOf(cut, 'indented')});`;
+}
+
+/** An Endpoint's Input as the author declared it: its text parts only when they declare something. */
+function declaredInputOf({ params, query, headers, body }: EndpointSnapshot['input']) {
+  return {
+    params,
+    query: declaredTextPartOf(query),
+    headers: declaredTextPartOf(headers),
+    body,
+  };
 }
 
 /** The method and path of an identity, its params' names put back in order. */
 function identityLinesOf(id: string, endpoint: EndpointSnapshot): readonly string[] {
   const { method, path } = methodAndPathOf(id, endpoint.params);
   return [`  method: ${stringLiteralOf(method)},`, `  path: ${stringLiteralOf(path)},`];
+}
+
+/** The instant a Deprecated Endpoint is Deprecated as of, which `defineEndpoint` requires beside its lifecycle. */
+function deprecationLinesOf({ deprecatedAt }: EndpointSnapshot): readonly string[] {
+  return deprecatedAt === undefined ? [] : [`  deprecatedAt: ${stringLiteralOf(deprecatedAt)},`];
 }
 
 /** The Attachments in order: a Guard bare, or with its Qualifier as the JSON recorded. */
@@ -89,9 +124,10 @@ function guardsLinesOf(guards: readonly AttachmentSnapshot[]): readonly string[]
 /** A Success's status, then its headers and body when it declares them. */
 function successFieldsOf(endpoint: EndpointSnapshot, reader: Writing): string {
   const { status, headers, body } = endpoint.success;
+  const declared = declaredTextPartOf(headers);
   const fields = [
     `status: ${status}`,
-    ...(headers === null ? [] : [`headers: ${zodExpressionOf(headers, reader)}`]),
+    ...(declared === null ? [] : [`headers: ${zodExpressionOf(declared, reader)}`]),
     ...(body === null ? [] : [`body: ${zodExpressionOf(body, reader)}`]),
   ];
   return fields.join(', ');

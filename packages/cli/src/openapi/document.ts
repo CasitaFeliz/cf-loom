@@ -1,5 +1,6 @@
 import { byCodePoint, type ServiceSnapshot } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
+import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { authorizationScheme } from './authorization.ts';
 import { envelopeComponentsOf } from './envelopes.ts';
 import type { OpenApiObject } from './objects.ts';
@@ -18,7 +19,7 @@ import {
 export type OpenApiDocument = {
   readonly openapi: '3.1.1';
   readonly info: { readonly title: string; readonly version: string };
-  readonly tags: readonly { readonly name: string }[];
+  readonly tags: readonly GroupTag[];
   readonly paths: Readonly<Record<string, Readonly<Record<string, OpenApiObject>>>>;
   readonly components: {
     readonly schemas: Readonly<Record<string, JsonSchema>>;
@@ -47,16 +48,16 @@ export function openApiDocumentOf(snapshot: ServiceSnapshot, version: string): O
     snapshot.defs,
     '2020-12',
   );
-  if (defs.kind === 'unnamed') {
-    return { kind: 'unnamed', line: defs.line };
-  }
   const envelopes = envelopeComponentsOf(rejectionsOf(endpoints));
   const document: OpenApiDocument = {
     openapi: '3.1.1',
     info: { title: snapshot.name, version },
-    tags: tagsOf(listed),
+    tags: groupTagsOf(
+      snapshot.groups,
+      listed.map(({ endpoint }) => endpoint.group),
+    ),
     paths: pathsOf(endpoints),
-    components: componentsOf({ ...defs.schemas, ...envelopes }, endpoints),
+    components: componentsOf({ ...defs, ...envelopes }, endpoints),
   };
   return { kind: 'written', document };
 }
@@ -72,17 +73,12 @@ function rejectionsOf(endpoints: readonly ServedEndpoint[]): readonly ServedReje
   return [...rejectionByCode.values()];
 }
 
-function tagsOf(listed: readonly ListedEndpoint[]): readonly { readonly name: string }[] {
-  const groups = [...new Set(listed.map(({ endpoint }) => endpoint.group))];
-  return groups.sort(byCodePoint).map((name) => ({ name }));
-}
-
 /** The path items in code point order of their template, each holding its OpenAPI operations by method. */
 function pathsOf(endpoints: readonly ServedEndpoint[]): OpenApiDocument['paths'] {
   const operationsByPath = new Map<string, Record<string, OpenApiObject>>();
   for (const { method, path, endpoint, served } of endpoints) {
     const operations = operationsByPath.get(path) ?? {};
-    operations[method.toLowerCase()] = operationOf(method, endpoint, served);
+    operations[method.toLowerCase()] = operationOf(endpoint, served);
     operationsByPath.set(path, operations);
   }
   const items = [...operationsByPath].map(([path, operations]) => [path, byName(operations)]);

@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { defineCommand, defineContract, defineEvent } from '../index.ts';
+import { aRootPackage } from '../../test/root-package.ts';
+import { defineCommand, defineEvent, defineGroup, defineService } from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
   decodeBrokerPlan,
-  schemaOriginsOf,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -26,21 +26,22 @@ const chargeCardV1 = defineCommand({
 });
 
 function aServicePlan(prefix: string | null): BrokerPlan {
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
-    events: [orderCreatedV1],
-    commands: [chargeCardV1],
+    groups: [
+      defineGroup({
+        name: 'messages',
+        description: 'Messages',
+        events: [orderCreatedV1],
+        commands: [chargeCardV1],
+      }),
+    ],
   });
-  const validated = validateContract(root, {
-    originOf: schemaOriginsOf([]),
-    packageName: 'orders-service',
-    exportsOf: () => [],
-  });
+  const validated = validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -48,15 +49,15 @@ function aServicePlan(prefix: string | null): BrokerPlan {
 }
 
 const ordersStream = 'staging_orders-service';
-const invoiceConsumer = 'staging_billing-service_draft-invoice';
+const invoiceDurableConsumer = 'staging_billing-service_draft-invoice';
 const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
 
 function aPlan(fields: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     prefix: 'staging',
     streams: { [ordersStream]: { service: 'orders-service', subjects: [orderCreated] } },
-    consumers: {
-      [invoiceConsumer]: {
+    durableConsumers: {
+      [invoiceDurableConsumer]: {
         service: 'billing-service',
         stream: ordersStream,
         subject: orderCreated,
@@ -72,15 +73,15 @@ function aPlanWithStream(fields: Record<string, unknown>, name = ordersStream) {
   return aPlan({ streams: { [name]: stream } });
 }
 
-/** A prefixed plan with one durable consumer, whose fields are `fields` over the valid ones. */
-function aPlanWithConsumer(fields: Record<string, unknown>, name = invoiceConsumer) {
-  const consumer = {
+/** A prefixed plan with one Durable consumer, whose fields are `fields` over the valid ones. */
+function aPlanWithDurableConsumer(fields: Record<string, unknown>, name = invoiceDurableConsumer) {
+  const durableConsumer = {
     service: 'billing-service',
     stream: ordersStream,
     subject: orderCreated,
     ...fields,
   };
-  return aPlan({ consumers: { [name]: consumer } });
+  return aPlan({ durableConsumers: { [name]: durableConsumer } });
 }
 
 function malformed(reason: string) {
@@ -102,8 +103,8 @@ describe('reading a broker plan', () => {
     },
   );
 
-  test('a plan with no stream and no durable consumer decodes', () => {
-    const plan = { prefix: null, streams: {}, consumers: {} };
+  test('a plan with no stream and no Durable consumer decodes', () => {
+    const plan = { prefix: null, streams: {}, durableConsumers: {} };
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
   });
@@ -117,9 +118,13 @@ describe('reading a broker plan', () => {
   test.each([
     ['something that is no object', 'a plan', '(root) is not an object'],
     ['the errors document broker-plan prints', { errors: ['no snapshot'] }, 'prefix is missing'],
-    ['a plan with no prefix', { streams: {}, consumers: {} }, 'prefix is missing'],
-    ['a plan with no streams', { prefix: null, consumers: {} }, 'streams is missing'],
-    ['a plan with no durable consumers', { prefix: null, streams: {} }, 'consumers is missing'],
+    ['a plan with no prefix', { streams: {}, durableConsumers: {} }, 'prefix is missing'],
+    ['a plan with no streams', { prefix: null, durableConsumers: {} }, 'streams is missing'],
+    [
+      'a plan with no Durable consumers',
+      { prefix: null, streams: {} },
+      'durableConsumers is missing',
+    ],
     ['a plan whose prefix is no text', aPlan({ prefix: 1 }), 'prefix is not a text or null'],
     ['a plan whose streams are a list', aPlan({ streams: [] }), 'streams is not an object'],
     [
@@ -148,31 +153,31 @@ describe('reading a broker plan', () => {
       `streams.${ordersStream}.subjects.0 is not a text`,
     ],
     [
-      'a durable consumer with no stream',
-      aPlanWithConsumer({ stream: undefined }),
-      `consumers.${invoiceConsumer}.stream is missing`,
+      'a Durable consumer with no stream',
+      aPlanWithDurableConsumer({ stream: undefined }),
+      `durableConsumers.${invoiceDurableConsumer}.stream is missing`,
     ],
     [
-      'a durable consumer with no subject',
-      aPlanWithConsumer({ subject: undefined }),
-      `consumers.${invoiceConsumer}.subject is missing`,
+      'a Durable consumer with no subject',
+      aPlanWithDurableConsumer({ subject: undefined }),
+      `durableConsumers.${invoiceDurableConsumer}.subject is missing`,
     ],
     [
-      'a durable consumer with a key the shape does not have',
-      aPlanWithConsumer({ ackWait: '30s' }),
-      `consumers.${invoiceConsumer}.ackWait is a key the broker plan does not define`,
+      'a Durable consumer with a key the shape does not have',
+      aPlanWithDurableConsumer({ ackWait: '30s' }),
+      `durableConsumers.${invoiceDurableConsumer}.ackWait is a key the broker plan does not define`,
     ],
   ])('%s is malformed, naming where', (_, value, reason) => {
     expect(decodeBrokerPlan(value)).toEqual(malformed(reason));
   });
 
-  test.each(['stag_ing', 'a.b', 'Staging', ''])(
-    'a plan whose prefix "%s" is not kebab-case is malformed',
+  test.each(['stag_ing', 'a.b', 'Staging', '', 'a'.repeat(65)])(
+    'a plan whose prefix "%s" is not a Broker prefix is malformed',
     (prefix) => {
-      const plan = { prefix, streams: {}, consumers: {} };
+      const plan = { prefix, streams: {}, durableConsumers: {} };
 
       expect(decodeBrokerPlan(plan)).toEqual(
-        malformed('prefix is not kebab-case, such as staging'),
+        malformed('prefix is not kebab-case of at most 64 characters, such as staging'),
       );
     },
   );
@@ -189,19 +194,19 @@ describe('reading a broker plan', () => {
       `streams.${ordersStream}.subjects.1 does not carry the prefix staging`,
     ],
     [
-      'a durable consumer name',
-      aPlanWithConsumer({}, 'billing-service_draft-invoice'),
-      'consumers.billing-service_draft-invoice does not carry the prefix staging',
+      'a Durable consumer name',
+      aPlanWithDurableConsumer({}, 'billing-service_draft-invoice'),
+      'durableConsumers.billing-service_draft-invoice does not carry the prefix staging',
     ],
     [
-      'a durable consumer stream',
-      aPlanWithConsumer({ stream: 'orders-service' }),
-      `consumers.${invoiceConsumer}.stream does not carry the prefix staging`,
+      'a Durable consumer stream',
+      aPlanWithDurableConsumer({ stream: 'orders-service' }),
+      `durableConsumers.${invoiceDurableConsumer}.stream does not carry the prefix staging`,
     ],
     [
-      'a durable consumer subject',
-      aPlanWithConsumer({ subject: 'orders-service.event.OrderCreated.v1' }),
-      `consumers.${invoiceConsumer}.subject does not carry the prefix staging`,
+      'a Durable consumer subject',
+      aPlanWithDurableConsumer({ subject: 'orders-service.event.OrderCreated.v1' }),
+      `durableConsumers.${invoiceDurableConsumer}.subject does not carry the prefix staging`,
     ],
   ])(
     'a prefixed plan whose %s does not carry the prefix is malformed, naming it',
@@ -214,7 +219,7 @@ describe('reading a broker plan', () => {
     const plan = {
       prefix: null,
       streams: { 'orders-service': { service: 'orders-service', subjects: ['orders-service.x'] } },
-      consumers: {},
+      durableConsumers: {},
     };
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });

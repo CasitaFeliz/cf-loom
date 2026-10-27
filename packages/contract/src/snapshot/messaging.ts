@@ -10,13 +10,14 @@ import {
 import type { SnapshotSources } from './context.ts';
 import type { CommandSnapshot, EventSnapshot, SubscriptionSnapshot } from './types.ts';
 
-/** Every Event's Message Version by identity, with its Visibility, lifecycle, description and body. */
+/** Every Event's Message Version by identity, with its Group, Visibility, lifecycle, description and body. */
 export function eventSnapshotsOf(
   events: readonly LocatedEvent[],
   sources: SnapshotSources,
 ): Readonly<Record<string, EventSnapshot>> {
-  const entries = events.map(({ event }) => {
+  const entries = events.map(({ event, group }) => {
     const snapshot: EventSnapshot = {
+      group: group.name,
       visibility: event.visibility,
       lifecycle: lifecycleOf(event),
       description: event.description,
@@ -27,13 +28,14 @@ export function eventSnapshotsOf(
   return Object.fromEntries(entries);
 }
 
-/** Every Command's Message Version by identity; a Command is always Private, so it writes no Visibility. */
+/** Every Command's Message Version by identity, with its Group; a Command is always Private, so it writes no Visibility. */
 export function commandSnapshotsOf(
   commands: readonly LocatedCommand[],
   sources: SnapshotSources,
 ): Readonly<Record<string, CommandSnapshot>> {
-  const entries = commands.map(({ command }) => {
+  const entries = commands.map(({ command, group }) => {
     const snapshot: CommandSnapshot = {
+      group: group.name,
       lifecycle: lifecycleOf(command),
       description: command.description,
       body: bodyOf(command, sources),
@@ -43,13 +45,15 @@ export function commandSnapshotsOf(
   return Object.fromEntries(entries);
 }
 
-/** Every Subscription by name, with its Event's Service before the Event's identity. */
+/** Every Subscription by name, with its Group, and its Event's Service before the Event's identity. */
 export function subscriptionSnapshotsOf(
   subscriptions: readonly ValidatedSubscription[],
 ): Readonly<Record<string, SubscriptionSnapshot>> {
-  const entries = subscriptions.map(({ subscription, service }) => {
+  const entries = subscriptions.map(({ subscription, group, service }) => {
     const { name, version } = subscription.event;
     const snapshot: SubscriptionSnapshot = {
+      group: group.name,
+      description: subscription.description,
       event: eventReferenceOf(service, name, version),
     };
     return [subscription.name, snapshot] as const;

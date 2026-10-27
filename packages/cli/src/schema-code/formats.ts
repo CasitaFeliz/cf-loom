@@ -1,45 +1,10 @@
 import {
-  type HashFormat,
+  formatConstructorOf,
   hashPartsOf,
   isHashFormat,
   type StringFormat,
 } from '@cf-loom/contract/internal';
 import { jsonLiteralOf, keyOf, stringLiteralOf } from '../source-text/index.ts';
-
-/** The zod constructor of each format zod builds by name, as generated code calls it. */
-const constructorByFormat: Readonly<Record<Exclude<StringFormat, HashFormat>, string>> = {
-  guid: 'z.guid',
-  uuid: 'z.uuid',
-  email: 'z.email',
-  url: 'z.url',
-  emoji: 'z.emoji',
-  nanoid: 'z.nanoid',
-  cuid: 'z.cuid',
-  cuid2: 'z.cuid2',
-  ulid: 'z.ulid',
-  xid: 'z.xid',
-  ksuid: 'z.ksuid',
-  datetime: 'z.iso.datetime',
-  date: 'z.iso.date',
-  time: 'z.iso.time',
-  duration: 'z.iso.duration',
-  ipv4: 'z.ipv4',
-  ipv6: 'z.ipv6',
-  mac: 'z.mac',
-  cidrv4: 'z.cidrv4',
-  cidrv6: 'z.cidrv6',
-  base64: 'z.base64',
-  base64url: 'z.base64url',
-  e164: 'z.e164',
-  // biome-ignore lint/style/useNamingConvention: SNAPSHOT.md's name of the format
-  credit_card: 'z.creditCard',
-  iban: 'z.iban',
-  jwt: 'z.jwt',
-  hex: 'z.hex',
-  hostname: 'z.hostname',
-  // biome-ignore lint/style/useNamingConvention: SNAPSHOT.md's name of the format
-  currency_code: 'z.currencyCode',
-};
 
 /**
  * The zod call that builds a format with the options the Snapshot records, so the generated
@@ -53,7 +18,7 @@ export function formatCallOf(
     const { algorithm, encoding } = hashPartsOf(format);
     return `z.hash(${stringLiteralOf(algorithm)}, { enc: ${stringLiteralOf(encoding)} })`;
   }
-  const call = constructorByFormat[format];
+  const call = formatConstructorOf(format);
   return options === undefined ? `${call}()` : `${call}(${optionsTextOf(options)})`;
 }
 

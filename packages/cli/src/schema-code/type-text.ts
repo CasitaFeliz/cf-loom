@@ -27,8 +27,6 @@ function shapeTypeOf(node: SchemaNode, writing: Writing): string {
       return 'number';
     case 'boolean':
       return 'boolean';
-    case 'literal':
-      return literalOf(node.value);
     case 'enum':
       return enumTypeOf(node, mode);
     case 'object':

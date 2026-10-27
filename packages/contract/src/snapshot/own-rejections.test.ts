@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   notFound,
 } from '../index.ts';
 import {
@@ -14,7 +15,7 @@ import {
   ownRejectionsOf,
   type ServiceSnapshot,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({ code: 'UNAUTHENTICATED', status: 401, message: 'No' });
@@ -41,18 +42,13 @@ const updateOrder = defineEndpoint({
 
 function declaredSnapshot(): ServiceSnapshot {
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [updateOrder] });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'orders-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -65,7 +61,7 @@ function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'A Guard',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,

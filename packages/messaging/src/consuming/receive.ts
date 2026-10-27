@@ -1,73 +1,85 @@
 import { jsonOfBytes, malformedBodyIssueOf } from '@cf-loom/contract/internal';
 import type { Fault } from '@cf-loom/handlers';
 import { type MessageRun, runMessage } from '@cf-loom/handlers/internal';
-import type { ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
+import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
-import { type About, aboutOf, type Report } from './faults.ts';
+import { type DeliveryEnds, OneDelivery } from './deadline.ts';
+import type { Settled } from './details.ts';
+import { type About, aboutOf, type ConsumedFault, type Report } from './faults.ts';
 
 /** A pulled Subscription or Command Version, the Handler the map holds for it and the Resources it runs with. */
 export type Pulled = {
   readonly consumed: Consumed;
-  readonly handler: { readonly element: Consumed['element'] };
+  readonly handler: { readonly declaration: Consumed['declaration'] };
   readonly resources: unknown;
 };
 
-/** What became of one delivery once its Handler ran, reported when it ended or failed. */
+/** A run as the Broker would settle it, before its Fault is reported. */
+type Ran = Omit<Settled, 'hookFailure'>;
+
+/** How one delivery is settled: where its Fault is reported, and what ends it early. */
+export type Settling = { readonly report: Report; readonly ends: DeliveryEnds };
+
+/**
+ * What became of one delivery, unless `close`'s signal hands it back first: its Handler's run, or a
+ * `DeadlineError` once its wait passed, every Fault reported.
+ */
 export async function settlementOf(
   pulled: Pulled,
   delivery: Delivery,
-  report: Report,
-): Promise<Settlement> {
-  const run = await runOf(pulled, delivery);
-  const settlement = settlementOfRun(run, aboutOf(pulled.consumed, delivery));
-  const fault = faultOf(settlement);
-  if (fault !== undefined) {
-    report(fault);
-  }
-  return settlement;
+  { report, ends }: Settling,
+): Promise<Settled> {
+  const one = new OneDelivery(delivery.waitMs, ends);
+  const about = aboutOf(pulled.consumed, delivery);
+  const running = runOf(pulled, delivery, one.signal);
+  return await one.settled(running, (run) => reportedOf(run, about, report));
 }
 
-/** What `onServiceFault` hears of a settlement: nothing when acknowledged or a retryable Fault. */
-function faultOf(settlement: Settlement): ConsumedFault | undefined {
-  switch (settlement.kind) {
-    case 'acked':
-      return undefined;
-    case 'pending':
-    case 'ended':
-      return settlement.fault;
+/** What became of one delivery once its Handler ran or its wait passed; a hook that failed leaves it pending, since the Service did not hear of the Fault. */
+async function reportedOf(run: MessageRun, about: About, report: Report): Promise<Settled> {
+  const { settlement, fault } = ranOf(run, about);
+  if (fault === undefined) {
+    return { settlement, fault, hookFailure: undefined };
   }
+  const hookFailure = await report(fault);
+  if (hookFailure !== undefined) {
+    return { settlement: 'pending', fault, hookFailure };
+  }
+  return { settlement, fault, hookFailure };
 }
 
 /** The Handler's run on the body received, or the body's one Issue when it is no UTF-8 JSON. */
-async function runOf({ handler, resources }: Pulled, delivery: Delivery): Promise<MessageRun> {
+async function runOf(
+  { handler, resources }: Pulled,
+  delivery: Delivery,
+  signal: AbortSignal,
+): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
-    return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
+    return { kind: 'invalid-call', issues: [malformedBodyIssueOf('body', json.message)] };
   }
-  const { messageId, factId, deliveryCount, headers } = delivery;
-  const meta = { messageId, factId, deliveryCount, headers };
+  const { messageId, factId, deliveryCount, lastAttempt, headers } = delivery;
+  const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
   return await runMessage(handler, { body: json.value, meta, resources });
 }
 
-/** A run as the broker settles it: a body that breaks its Reader ends, a throw stays pending. */
-function settlementOfRun(run: MessageRun, about: About): Settlement {
+/** A run as the Broker settles it: a body that breaks its Reader ends, a throw stays pending. */
+function ranOf(run: MessageRun, about: About): Ran {
   switch (run.kind) {
-    case 'invalid-input':
-      return { kind: 'ended', fault: { ...about, kind: 'invalid-body', issues: run.issues } };
+    case 'invalid-call':
+      return { settlement: 'ended', fault: { ...about, kind: 'invalid-body', issues: run.issues } };
     case 'thrown':
-      return { kind: 'pending', fault: { ...about, kind: 'thrown', cause: run.cause } };
+      return { settlement: 'pending', fault: { ...about, kind: 'thrown', cause: run.cause } };
     case 'answered':
-      return answeredSettlementOf(run.answer, about);
+      return answeredOf(run.answer, about);
   }
 }
 
 /** Nothing acknowledges; a retryable Fault waits for redelivery; any other Fault ends it. */
-function answeredSettlementOf(answer: Fault | undefined, about: About): Settlement {
+function answeredOf(answer: Fault | undefined, about: About): Ran {
   if (answer === undefined) {
-    return { kind: 'acked' };
+    return { settlement: 'acked', fault: undefined };
   }
-  if (answer.retryable) {
-    return { kind: 'pending', fault: undefined };
-  }
-  return { kind: 'ended', fault: { ...about, kind: 'returned', fault: answer } };
+  const fault: ConsumedFault = { ...about, kind: 'returned', fault: answer };
+  return { settlement: answer.retryable ? 'pending' : 'ended', fault };
 }

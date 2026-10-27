@@ -1,21 +1,22 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { summarized } from '../../test/failures.ts';
+import { aRootPackage } from '../../test/root-package.ts';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineRejection,
+  defineService,
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { type RootPackage, snapshotOf, validateContract } from '../internal/index.ts';
+import { type Root, validateRoot } from '../internal/index.ts';
 
-/** Validates a root as the package it names: its package.json named as the root is. */
-function validateInPackage(root: unknown, originOf: RootPackage['originOf']) {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const packageName = typeof name === 'string' ? name : '';
-  return validateContract(root, { originOf, packageName, exportsOf: () => [] });
+/** Validates a Root as the package it names: its package.json named as the Root is. */
+function validateInPackage(root: Root) {
+  return summarized(validateRoot(root, aRootPackage(root)));
 }
 
 const listing = {
@@ -32,22 +33,29 @@ function headersOf(shape: Record<string, core.$ZodType>) {
   return z.object(shape) as z.ZodObject;
 }
 
+/** A 401 Rejection declaring the headers it is given, whose names the types cannot judge. */
+function aRejectionWith(headers: z.ZodObject) {
+  return defineRejection({
+    code: 'UNAUTHENTICATED',
+    status: 401,
+    message: 'Unauthenticated',
+    headers,
+  });
+}
+
 function validateEndpoint(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(
-    defineContract({ name: 'orders-service', groups: [orders] }),
-    () => undefined,
-  );
+  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
 }
 
-function failed(at: readonly (string | number)[], rule: string, message: string) {
-  return { kind: 'invalid', failures: [{ kind: 'declaration', at, rule, message }] };
+function failed(location: string, rule: string, message: string) {
+  return { kind: 'invalid', failures: [{ kind: 'declaration', location, rule, message }] };
 }
 
-const endpointAt = ['groups', 'orders', 'endpoints', 'GET /orders'];
+const endpointAt = 'endpoints.GET /orders (listOrders)';
 const text = 'travels as text: a string, number, boolean, literal or enum';
 
-describe('validateContract: text-only headers, query and path params', () => {
+describe('validateRoot: text-only headers, query and path params', () => {
   test('strings, numbers, booleans, literals and enums validate in every text part', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -76,11 +84,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-client'],
-        'not-text',
-        `A header ${text}: x-client`,
-      ),
+      failed(`${endpointAt} input.headers.x-client`, 'not-text', `A header ${text}: x-client`),
     );
   });
 
@@ -91,11 +95,7 @@ describe('validateContract: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
-      failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-tags'],
-        'not-text',
-        `A header ${text}: x-tags`,
-      ),
+      failed(`${endpointAt} input.headers.x-tags`, 'not-text', `A header ${text}: x-tags`),
     );
   });
 
@@ -106,11 +106,45 @@ describe('validateContract: text-only headers, query and path params', () => {
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
+      failed(`${endpointAt} success.headers.x-page`, 'not-text', `A header ${text}: x-page`),
+    );
+  });
+
+  test('a Rejection header that is an object fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realm': z.object({ id: z.string() }) }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed('codes.UNAUTHENTICATED headers.x-realm', 'not-text', `A header ${text}: x-realm`),
+    );
+  });
+
+  test('a Rejection header that is a list fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realms': z.array(z.string()) }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed('codes.UNAUTHENTICATED headers.x-realms', 'not-text', `A header ${text}: x-realms`),
+    );
+  });
+
+  test('a nullable Rejection header fails', () => {
+    const rejection = aRejectionWith(z.object({ 'x-realm': z.string().nullable() }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
       failed(
-        [...endpointAt, 'success', 'headers', 'fields', 'x-page'],
-        'not-text',
-        `A header ${text}: x-page`,
+        'codes.UNAUTHENTICATED headers.x-realm',
+        'nullable-text',
+        'A header is never nullable: x-realm',
       ),
+    );
+  });
+
+  test('a Rejection header of a text type validates', () => {
+    const rejection = aRejectionWith(
+      z.object({ 'www-authenticate': z.string(), 'retry-after': z.int().optional() }),
+    );
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] })).kind).toBe(
+      'valid',
     );
   });
 
@@ -122,7 +156,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'filter'],
+        `${endpointAt} input.query.filter`,
         'not-text',
         `A query param ${text}, or a list of those: filter`,
       ),
@@ -137,7 +171,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'filters'],
+        `${endpointAt} input.query.filters`,
         'not-text',
         `A query param ${text}, or a list of those: filters`,
       ),
@@ -153,7 +187,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'endpoints.GET /orders/{} (listOrders) input.params.orderId',
         'not-text',
         `A path param ${text}: orderId`,
       ),
@@ -168,7 +202,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query', 'fields', 'page'],
+        `${endpointAt} input.query.page`,
         'nullable-text',
         'A query param is never nullable: page',
       ),
@@ -184,7 +218,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
+        'endpoints.GET /orders/{} (listOrders) input.params.orderId',
         'nullable-text',
         'A path param is never nullable: orderId',
       ),
@@ -199,7 +233,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'x-tenant'],
+        `${endpointAt} input.headers.x-tenant`,
         'nullable-text',
         'A header is never nullable: x-tenant',
       ),
@@ -215,7 +249,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
       failed(
-        ['guards', 'signed', 'demands', 'headers', 'fields', 'x-signature'],
+        'guards.signed demands.headers.x-signature',
         'not-text',
         `A header ${text}: x-signature`,
       ),
@@ -227,7 +261,7 @@ describe('validateContract: text-only headers, query and path params', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers'],
+        `${endpointAt} input.headers`,
         'not-an-object-schema',
         'headers is an object of its fields',
       ),
@@ -235,12 +269,12 @@ describe('validateContract: text-only headers, query and path params', () => {
   });
 });
 
-describe('validateContract: a text part that is itself nullable', () => {
+describe('validateRoot: a text part that is itself nullable', () => {
   test('a nullable headers object fails', () => {
     const headers = z.object({ 'x-tenant': z.string() }).nullable() as unknown as z.ZodObject;
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { headers } }))).toEqual(
-      failed([...endpointAt, 'input', 'headers'], 'nullable-text', 'headers is never nullable'),
+      failed(`${endpointAt} input.headers`, 'nullable-text', 'headers is never nullable'),
     );
   });
 
@@ -248,12 +282,12 @@ describe('validateContract: a text part that is itself nullable', () => {
     const query = z.object({ page: z.int() }).nullable() as unknown as z.ZodObject;
 
     expect(validateEndpoint(defineEndpoint({ ...listing, input: { query } }))).toEqual(
-      failed([...endpointAt, 'input', 'query'], 'nullable-text', 'query is never nullable'),
+      failed(`${endpointAt} input.query`, 'nullable-text', 'query is never nullable'),
     );
   });
 });
 
-describe('validateContract: header names', () => {
+describe('validateRoot: header names', () => {
   test('an upper-case Input header name fails', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -262,7 +296,7 @@ describe('validateContract: header names', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers', 'fields', 'X-Tenant'],
+        `${endpointAt} input.headers.X-Tenant`,
         'header-names',
         'Header names are lower-case: X-Tenant',
       ),
@@ -277,9 +311,21 @@ describe('validateContract: header names', () => {
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'success', 'headers', 'fields', 'Content-Location'],
+        `${endpointAt} success.headers.Content-Location`,
         'header-names',
         'Header names are lower-case: Content-Location',
+      ),
+    );
+  });
+
+  test('an upper-case Rejection header name fails', () => {
+    const rejection = aRejectionWith(headersOf({ 'WWW-Authenticate': z.string() }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        'codes.UNAUTHENTICATED headers.WWW-Authenticate',
+        'header-names',
+        'Header names are lower-case: WWW-Authenticate',
       ),
     );
   });
@@ -293,7 +339,7 @@ describe('validateContract: header names', () => {
 
     expect(validateEndpoint(defineEndpoint({ ...listing, guards: [apiKey] }))).toEqual(
       failed(
-        ['guards', 'apiKey', 'demands', 'headers', 'fields', 'X-Api-Key'],
+        'guards.apiKey demands.headers.X-Api-Key',
         'header-names',
         'Header names are lower-case: X-Api-Key',
       ),
@@ -301,7 +347,7 @@ describe('validateContract: header names', () => {
   });
 });
 
-/** An Endpoint declaring one header name where a header can be declared: Input, Success or a Guard's demands. */
+/** An Endpoint declaring one header name where a header can be declared: Input, Success, a Rejection or a Guard's demands. */
 const headerPositions = {
   input: (name: string) =>
     defineEndpoint({ ...listing, input: { headers: headersOf({ [name]: z.string() }) } }),
@@ -310,6 +356,8 @@ const headerPositions = {
       ...listing,
       success: { ...listing.success, headers: headersOf({ [name]: z.string() }) },
     }),
+  rejection: (name: string) =>
+    defineEndpoint({ ...listing, rejections: [aRejectionWith(headersOf({ [name]: z.string() }))] }),
   demands: (name: string) =>
     defineEndpoint({
       ...listing,
@@ -324,8 +372,49 @@ const headerPositions = {
 } as const;
 
 const positions = Object.keys(headerPositions) as (keyof typeof headerPositions)[];
+const requestPositions = ['input', 'demands'] as const;
+const responsePositions = ['success', 'rejection'] as const;
 
-const reservedHeaderNames = [
+/** The names the Fetch standard forbids in a request by name alone, copied from its source as an oracle. */
+const fetchForbiddenRequestNames = [
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+];
+
+/** Names under the two prefixes the Fetch standard keeps, `proxy-` and `sec-`. */
+const fetchForbiddenRequestPrefixed = [
+  'sec-fetch-site',
+  'sec-fetch-mode',
+  'sec-x',
+  'proxy-authorization',
+  'proxy-connection',
+];
+
+/** Names that merely contain a reserved prefix's letters. */
+const nearPrefixNames = ['secret', 'x-sec-id', 'proxy', 'x-proxy-id'];
+
+const bodyAndCfLoomNames = ['content-type', 'content-encoding', 'content-range', 'deprecation'];
+
+const hostOwnedResponseNames = [
   'content-length',
   'transfer-encoding',
   'connection',
@@ -335,25 +424,118 @@ const reservedHeaderNames = [
   'te',
   'trailer',
   'host',
-  'content-type',
-  'deprecation',
+  ...bodyAndCfLoomNames,
+];
+
+const browserHiddenResponseNames = ['set-cookie', 'set-cookie2'];
+
+/** Reserved in a request and free in a response. */
+const requestOnlyNames = [
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'origin',
+  'referer',
+  'via',
+  'sec-fetch-site',
+  'sec-x',
+  'proxy-authorization',
 ];
 
 const notTokens = ['x y', 'héader', 'a:b', '', 'x"y', 'x/y'];
 
-describe('validateContract: header names are lower-case RFC 9110 tokens no host owns', () => {
-  test.each(
-    positions.flatMap((position) => reservedHeaderNames.map((name) => [position, name] as const)),
-  )('a %s header named %s, which the host or cf-loom owns, fails', (position, name) => {
-    const validated = validateEndpoint(headerPositions[position](name));
+const requestReserved = (name: string) => ({
+  rule: 'header-names',
+  message: `A request header the Fetch standard keeps for the user agent, or cf-loom owns, is reserved: ${name}`,
+});
 
-    expect(validated).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        { rule: 'header-names', message: `A header the host or cf-loom owns is reserved: ${name}` },
-      ],
-    });
-  });
+const responseReserved = (name: string) => ({
+  rule: 'header-names',
+  message: `A response header the host or cf-loom owns, or a browser hides, is reserved: ${name}`,
+});
+
+function crossed<Side extends string>(sides: readonly Side[], names: readonly string[]) {
+  return sides.flatMap((side) => names.map((name) => [side, name] as const));
+}
+
+describe('validateRoot: header names are lower-case RFC 9110 tokens no other party owns', () => {
+  test.each(crossed(requestPositions, fetchForbiddenRequestNames))(
+    'a %s header named %s, which the Fetch standard keeps for the user agent, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(requestPositions, fetchForbiddenRequestPrefixed))(
+    'a %s header named %s, under a prefix the Fetch standard keeps, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(requestPositions, nearPrefixNames))(
+    'a %s header named %s, which only looks like a kept prefix, validates',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
+
+  test.each(crossed(requestPositions, bodyAndCfLoomNames))(
+    'a %s header named %s, which the body or cf-loom owns, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, hostOwnedResponseNames))(
+    'a %s header named %s, which the host or cf-loom owns, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [responseReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, browserHiddenResponseNames))(
+    'a %s header named %s, which a browser hides, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [responseReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, requestOnlyNames))(
+    'a %s header named %s, reserved only in requests, validates',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
+
+  test.each(requestPositions)(
+    'a %s header named set-cookie2, reserved only in responses, validates',
+    (position) => {
+      const validated = validateEndpoint(headerPositions[position]('set-cookie2'));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
 
   test.each(positions.flatMap((position) => notTokens.map((name) => [position, name] as const)))(
     'a %s header named %j, which is no token, fails',
@@ -369,14 +551,14 @@ describe('validateContract: header names are lower-case RFC 9110 tokens no host 
     },
   );
 
-  test.each(positions)('a %s header named cookie validates', (position) => {
-    const validated = validateEndpoint(headerPositions[position]('cookie'));
+  test.each(positions)('a %s header named content-location validates', (position) => {
+    const validated = validateEndpoint(headerPositions[position]('content-location'));
 
     expect(validated.kind).toBe('valid');
   });
 });
 
-describe('validateContract: one schema per header or query name on an Endpoint', () => {
+describe('validateRoot: one schema per header or query name on an Endpoint', () => {
   const userToken = defineGuard({
     name: 'userToken',
     description: 'A signed-in user',
@@ -408,7 +590,7 @@ describe('validateContract: one schema per header or query name on an Endpoint',
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'headers'],
+        `${endpointAt} input.headers`,
         'input-conflict',
         'A header has one schema across an Endpoint and its Guards: authorization differs between listOrders and userToken',
       ),
@@ -435,135 +617,10 @@ describe('validateContract: one schema per header or query name on an Endpoint',
 
     expect(validateEndpoint(endpoint)).toEqual(
       failed(
-        [...endpointAt, 'input', 'query'],
+        `${endpointAt} input.query`,
         'input-conflict',
         'A query param has one schema across an Endpoint and its Guards: tenant differs between userToken and tenant',
       ),
     );
-  });
-});
-
-describe('validateContract: a record keyed by an enum or literal as query or headers', () => {
-  const keyed = () => z.record(z.enum(['tenant']), z.string()) as unknown as z.ZodObject;
-  const refusal = {
-    kind: 'not-allowed',
-    construct: 'a record keyed by an enum or literal as query or headers',
-    instead: 'z.object()',
-  };
-
-  test.each([
-    ['an Endpoint’s query', { input: { query: keyed() } }, [...endpointAt, 'input', 'query']],
-    ['an Endpoint’s headers', { input: { headers: keyed() } }, [...endpointAt, 'input', 'headers']],
-    [
-      'Success headers',
-      { success: { ...listing.success, headers: keyed() } },
-      [...endpointAt, 'success', 'headers'],
-    ],
-  ])('a keyed record as %s fails', (_part, declared, at) => {
-    const validated = validateEndpoint(defineEndpoint({ ...listing, ...declared } as never));
-
-    expect(validated).toEqual({ kind: 'invalid', failures: [{ ...refusal, at }] });
-  });
-
-  test.each([
-    ['query', { query: keyed() }],
-    ['headers', { headers: keyed() }],
-  ])('a keyed record a Guard demands as %s fails', (part, demands) => {
-    const tenant = defineGuard({ name: 'tenant', description: 'A tenant', demands });
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, guards: [tenant] }));
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [{ ...refusal, at: ['guards', 'tenant', 'demands', part] }],
-    });
-  });
-
-  test('a keyed record as query fails whether the Endpoint or only its Guard declares it', () => {
-    const tenant = defineGuard({
-      name: 'tenant',
-      description: 'A tenant',
-      demands: { query: keyed() },
-    });
-    const endpoint = defineEndpoint({
-      ...listing,
-      guards: [tenant],
-      input: { query: keyed() },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [
-        { ...refusal, at: [...endpointAt, 'input', 'query'] },
-        { ...refusal, at: ['guards', 'tenant', 'demands', 'query'] },
-      ],
-    });
-  });
-
-  test('a keyed record as query fails once, its values not judged as text', () => {
-    const query = z.record(z.enum(['tenant']), z.object({})) as unknown as z.ZodObject;
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
-
-    expect(validated).toEqual({
-      kind: 'invalid',
-      failures: [{ ...refusal, at: [...endpointAt, 'input', 'query'] }],
-    });
-  });
-
-  test('a keyed record as params has its values judged as text', () => {
-    const params = z.record(z.enum(['orderId']), z.object({})) as unknown as z.ZodObject;
-    const endpoint = defineEndpoint({
-      ...listing,
-      path: '/orders/:orderId',
-      input: { params },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated).toEqual(
-      failed(
-        ['groups', 'orders', 'endpoints', 'GET /orders/{}', 'input', 'params', 'fields', 'orderId'],
-        'not-text',
-        `A path param ${text}: orderId`,
-      ),
-    );
-  });
-
-  test('a keyed record in a query field is reported once, as a field that is not text', () => {
-    const query = z.object({ tenant: z.record(z.enum(['a']), z.string()) }) as z.ZodObject;
-
-    const validated = validateEndpoint(defineEndpoint({ ...listing, input: { query } }));
-
-    expect(validated).toEqual(
-      failed(
-        [...endpointAt, 'input', 'query', 'fields', 'tenant'],
-        'not-text',
-        `A query param ${text}, or a list of those: tenant`,
-      ),
-    );
-  });
-
-  test('a keyed record as params is allowed and stored strict, since the path decides their keys', () => {
-    const params = z.record(z.enum(['orderId']), z.uuid()) as unknown as z.ZodObject;
-    const endpoint = defineEndpoint({
-      ...listing,
-      path: '/orders/:orderId',
-      input: { params },
-    } as never);
-
-    const validated = validateEndpoint(endpoint);
-
-    expect(validated.kind).toBe('valid');
-    const context = { generator: 'cf-loom@1.0.0', packages: [], committed: undefined, now: 0 };
-    const snapshot = validated.kind === 'valid' ? snapshotOf(validated, context) : undefined;
-    const stored = snapshot?.kind === 'service' ? snapshot.endpoints['GET /orders/{}'] : undefined;
-    expect(stored?.input.params).toEqual({
-      type: 'object',
-      mode: 'strict',
-      fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
-    });
   });
 });

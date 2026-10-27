@@ -1,19 +1,23 @@
 import { Buffer } from 'node:buffer';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { oneLineOf } from '../loading/index.ts';
+import { snapshotFormatOf } from '@cf-loom/contract/internal';
+import { newerFormatTextOf, oneLineOf } from '../loading/index.ts';
 import { type Tooling, tooling } from './failures.ts';
 
 /** The file `generate` writes the declared Snapshot to, next to `cf-loom.config.ts`. */
 export const snapshotFile = 'contract.snapshot.json';
 
-/** The committed `contract.snapshot.json` as read: none, its bytes and their JSON, or no JSON. */
+/** The committed `contract.snapshot.json` as read: none, its bytes, or no JSON. */
 export type Committed =
   | { readonly kind: 'none' }
-  | { readonly kind: 'json'; readonly bytes: Buffer; readonly parsed: unknown }
+  | { readonly kind: 'json'; readonly bytes: Buffer }
   | { readonly kind: 'no-json'; readonly reason: string };
 
-/** The committed `contract.snapshot.json` as read, or the tooling error of a file that cannot be. */
+/**
+ * The committed `contract.snapshot.json` as read, or the tooling error of a file that cannot be,
+ * a format newer than this cf-loom reads included.
+ */
 export function committedOf(directory: string): Committed | Tooling {
   const path = join(directory, snapshotFile);
   if (!existsSync(path)) {
@@ -24,10 +28,19 @@ export function committedOf(directory: string): Committed | Tooling {
     return bytes;
   }
   try {
-    return { kind: 'json', bytes, parsed: JSON.parse(bytes.toString('utf8')) };
+    return jsonOf(bytes, JSON.parse(bytes.toString('utf8')));
   } catch (e) {
     return { kind: 'no-json', reason: oneLineOf(e, directory) };
   }
+}
+
+/** The committed JSON, unless it names a format newer than this cf-loom reads. */
+function jsonOf(bytes: Buffer, parsed: unknown): Committed | Tooling {
+  const format = snapshotFormatOf(parsed);
+  if (format.kind === 'newer-format') {
+    return tooling(newerFormatTextOf(snapshotFile, format.format));
+  }
+  return { kind: 'json', bytes };
 }
 
 function bytesOf(path: string, directory: string): Buffer | Tooling {

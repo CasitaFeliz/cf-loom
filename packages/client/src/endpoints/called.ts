@@ -1,49 +1,84 @@
-import type { Dependencies, Endpoint, StandardRejections } from '@cf-loom/contract';
+import type {
+  Dependency,
+  Endpoint,
+  ProvidedEndpoint,
+  ProvidedStandardRejections,
+} from '@cf-loom/contract';
 import {
-  type AnswerableRejection,
   answerableByCodeOf,
+  carriedStandardRejectionsOf,
+  exportedCodeOf,
   exportedEntryOf,
+  isRejection,
   type ObjectNode,
+  providedSnapshotOf,
+  providerOf,
+  type ReadShape,
+  rejectionShapeOf,
+  successShapeOf,
 } from '@cf-loom/contract/internal';
 
-/** Any Dependency, whatever it selects and whatever Standard codes its Provider resolved. */
-export type AnyDependencies = Dependencies<
-  Readonly<Record<string, Endpoint>>,
-  unknown,
-  StandardRejections
->;
+/** Any Dependency, whatever it lists and whatever Standard codes its Provider resolved. */
+export type AnyDependency = Dependency<readonly ProvidedEndpoint[]>;
 
-/** What an Endpoint is called through of its Dependency: its Provider, Standard codes and nodes. */
-export type Providing = Pick<
-  AnyDependencies,
-  'provider' | 'standardRejections' | 'exportedSnapshot'
+/** The Endpoints a Dependency lists. */
+export type ListedEndpoints<D extends AnyDependency> = D['endpoints'];
+
+/** The name of each Endpoint a Dependency lists: a method of its client and a script of its fake. */
+export type ListedName<D extends AnyDependency> = ListedEndpoints<D>[number]['name'];
+
+/** The Endpoint a Dependency lists under a name. */
+export type ListedEndpoint<D extends AnyDependency, Name> = Extract<
+  ListedEndpoints<D>[number],
+  { readonly name: Name }
 >;
 
 /**
+ * A Success or a Rejection an Endpoint answers, prepared once: its shape, and the node its headers
+ * are read by, none for a Standard Rejection, which declares no headers.
+ */
+export type CalledShape = {
+  readonly shape: ReadShape;
+  readonly headers: ObjectNode | undefined;
+};
+
+/**
  * One listed Endpoint as the client calls it and reads its answers, prepared once: the header
- * names its Input declares, its Success headers' nodes, and its Rejections by their resolved code.
+ * names its Input declares, its Success, and its Rejections by their resolved code.
  */
 export type CalledEndpoint = {
   readonly provider: string;
   readonly name: string;
   readonly endpoint: Endpoint;
   readonly inputHeaderNames: ReadonlySet<string>;
-  readonly successHeaders: ObjectNode | undefined;
-  readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
-  readonly standards: StandardRejections;
+  readonly success: CalledShape;
+  readonly rejections: ReadonlyMap<string, CalledShape>;
+  readonly standards: ProvidedStandardRejections;
 };
 
-/** An Endpoint a Dependency lists, prepared for calling, its nodes read from its Snapshot entry. */
-export function calledEndpointOf(endpoint: Endpoint, providing: Providing): CalledEndpoint {
-  const entry = exportedEntryOf(providing, endpoint);
-  const standards = providing.standardRejections;
+/**
+ * An Endpoint a Dependency lists, prepared for calling, its nodes read from its entry and its
+ * codes' in the exported Snapshot cut it carries, and its Standard Rejections the ones it carries.
+ */
+export function calledEndpointOf(endpoint: ProvidedEndpoint): CalledEndpoint {
+  const exported = providedSnapshotOf(endpoint);
+  const provider = providerOf(endpoint);
+  const entry = exportedEntryOf(provider, exported, endpoint);
+  const standards = carriedStandardRejectionsOf(endpoint);
+  const answered = answerableByCodeOf(endpoint, standards);
+  const rejections = [...answered].map(([code, rejection]): readonly [string, CalledShape] => {
+    const headers = isRejection(rejection)
+      ? exportedCodeOf(provider, exported, code).headers
+      : undefined;
+    return [code, { shape: rejectionShapeOf(rejection, standards), headers }];
+  });
   return {
-    provider: providing.provider,
+    provider,
     name: endpoint.name,
     endpoint,
-    inputHeaderNames: new Set(Object.keys(entry.input.headers?.fields ?? {})),
-    successHeaders: entry.success.headers ?? undefined,
-    rejectionsByCode: answerableByCodeOf(endpoint, standards),
+    inputHeaderNames: new Set(Object.keys(entry.input.headers.fields)),
+    success: { shape: successShapeOf(endpoint), headers: entry.success.headers },
+    rejections: new Map(rejections),
     standards,
   };
 }

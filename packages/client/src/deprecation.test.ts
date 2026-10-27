@@ -1,15 +1,17 @@
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
-  type StandardRejections,
+  type ProvidedStandardRejections,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { client, type DeprecationNotice } from './index.ts';
 
 const listOrders = defineEndpoint({
@@ -19,6 +21,7 @@ const listOrders = defineEndpoint({
   visibility: 'public',
   description: 'Every order',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
 });
 
@@ -29,6 +32,7 @@ const listCarts = defineEndpoint({
   visibility: 'public',
   description: 'Every cart',
   lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
   success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
 });
 
@@ -46,44 +50,42 @@ const ping = defineEndpoint({
  * Standard Rejections, and the Snapshot its declarations give, cut to what it exports.
  */
 function contractPackageOf<
-  const Endpoints extends ContractPackage['endpoints'],
-  const Standards extends StandardRejections,
+  const Endpoints extends Readonly<Record<string, Exportable>>,
+  const Standards extends ProvidedStandardRejections,
 >(endpoints: Endpoints, standardRejections: Standards, declared = Object.values(endpoints)) {
   const listed = declared as unknown as [Endpoint];
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: listed });
-  const root = defineContract({ name: 'orders-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'orders-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'orders-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'orders-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
   const name = 'orders-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const defaultStandards = {
-  invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-} as const;
+const defaultStandards = providedStandardRejections();
 
 const orders = contractPackageOf({ listOrders, listCarts, ping }, defaultStandards);
 
-const ordersDeps = defineDependencies(orders, { endpoints: [listOrders, listCarts, ping] });
+const ordersDependency = defineDependency({
+  endpoints: [orders.endpoints.listOrders, orders.endpoints.listCarts, orders.endpoints.ping],
+});
 
 /** What a Deprecated Endpoint answers: its response with `Deprecation`, here a Rejection. */
-async function deprecated(url: string): Promise<Response> {
-  if (url.endsWith('/ping')) {
+async function deprecated(request: Request): Promise<Response> {
+  if (request.url.endsWith('/ping')) {
     return new Response(null, { status: 204 });
   }
   const headers = { deprecation: '@1792229400' };
@@ -99,7 +101,7 @@ afterEach(() => {
 describe('the Deprecation warning', () => {
   test('is told once per method of a client, naming the Provider, the Endpoint and when', async () => {
     const notices: DeprecationNotice[] = [];
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: deprecated,
       onDeprecation: (notice) => notices.push(notice),
@@ -118,23 +120,38 @@ describe('the Deprecation warning', () => {
 
   test('goes to the console without onDeprecation, once per client', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const first = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
-    const second = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const first = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const second = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
     await first.listOrders();
     await first.listOrders();
     await second.listOrders();
 
     expect(warn.mock.calls).toEqual([
-      ['orders-service: listOrders is Deprecated since 2026-10-17T09:30:00Z'],
-      ['orders-service: listOrders is Deprecated since 2026-10-17T09:30:00Z'],
+      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
+      ['orders-service: listOrders is Deprecated as of 2026-10-17T09:30:00Z'],
+    ]);
+  });
+
+  test('a response carrying an instant still to come warns with the same wording', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const scheduled = async () =>
+      new Response(JSON.stringify({ ids: [] }), {
+        headers: { deprecation: '@32472144000', 'content-type': 'application/json' },
+      });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: scheduled });
+
+    await orders.listOrders();
+
+    expect(warn.mock.calls).toEqual([
+      ['orders-service: listOrders is Deprecated as of 2999-01-01T00:00:00Z'],
     ]);
   });
 
   test('an instant before 1970 is told, and one past the Date range is not', async () => {
     const notices: DeprecationNotice[] = [];
     const answering = (deprecation: string) =>
-      client(ordersDeps, {
+      client(ordersDependency, {
         baseUrl: 'http://orders.test',
         fetch: async () => Response.json({ ids: [] }, { headers: { deprecation } }),
         onDeprecation: (notice) => notices.push(notice),
@@ -153,7 +170,7 @@ describe('the Deprecation warning', () => {
   test('what onDeprecation throws is caught and written to the console, and the Outcome returned', async () => {
     const error = new Error('a bug in the hook');
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const orders = client(ordersDeps, {
+    const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: async () => {
         const headers = { deprecation: '@1792229400' };
@@ -166,13 +183,46 @@ describe('the Deprecation warning', () => {
 
     const outcome = await orders.listOrders();
 
-    expect(outcome).toEqual({ kind: 'success', value: { ids: ['o-1'] }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
     expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
+  });
+
+  test('what an async onDeprecation rejects with is caught and written to the console, and the Outcome returned', async () => {
+    const error = new Error('a bug in the hook');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        Response.json({ ids: ['o-1'] }, { headers: { deprecation: '@1792229400' } }),
+      onDeprecation: async () => {
+        throw error;
+      },
+    });
+
+    const outcome = await orders.listOrders();
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
+    await vi.waitFor(() => {
+      expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
+    });
+  });
+
+  test('an onDeprecation that never settles does not hold back the Outcome', async () => {
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        Response.json({ ids: ['o-1'] }, { headers: { deprecation: '@1792229400' } }),
+      onDeprecation: () => new Promise<void>(() => undefined),
+    });
+
+    const outcome = await orders.listOrders();
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
   });
 
   test('is not told for an Active Endpoint', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const orders = client(ordersDeps, { baseUrl: 'http://orders.test', fetch: deprecated });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: deprecated });
 
     await orders.ping();
 
@@ -182,13 +232,13 @@ describe('the Deprecation warning', () => {
 
 describe('fetch', () => {
   test('without the option, the global fetch is called, as it is at the call', async () => {
-    const orders = client(ordersDeps, { baseUrl: 'http://orders.test' });
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test' });
     const global = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', global);
 
     const outcome = await orders.ping();
 
-    expect(outcome).toEqual({ kind: 'success', value: undefined, headers: {} });
+    expect(outcome).toStrictEqual({ kind: 'success', status: 204 });
     expect(global).toHaveBeenCalledOnce();
   });
 });

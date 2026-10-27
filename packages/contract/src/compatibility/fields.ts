@@ -1,27 +1,20 @@
-import { type Field, isKeyedRecord, type ObjectNode, type Path } from '../walker/index.ts';
+import type { Field } from '../walker/index.ts';
+import { fieldStep, type Step } from '../walker/index.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import { type Finding, found, inside, type NodePairOf } from './findings.ts';
 
-/**
- * How two objects differ: a change of mode is a different type, so no field is compared then;
- * otherwise each field, in code point order, added, removed, made required or optional, and its
- * schema.
- */
+/** How two objects differ: each field, in code point order, added, removed, made required or optional, and its schema. */
 export function objectFindingsOf({ baseline, proposed }: NodePairOf<'object'>): readonly Finding[] {
-  if (baseline.mode !== proposed.mode) {
-    return [found({ kind: 'mode-changed', from: baseline.mode, to: proposed.mode })];
-  }
-  const fields = counterpartsOf(baseline.fields, proposed.fields);
-  return fields.flatMap((field) => fieldFindingsOf(field, baseline));
+  return counterpartsOf(baseline.fields, proposed.fields).flatMap(fieldFindingsOf);
 }
 
-function fieldFindingsOf(field: Counterpart<Field>, object: ObjectNode): readonly Finding[] {
-  const steps = ['fields', field.key];
+function fieldFindingsOf(field: Counterpart<Field>): readonly Finding[] {
+  const steps = [fieldStep(field.key)];
   switch (field.kind) {
     case 'added':
       return [found({ kind: 'field-added', required: field.proposed.required }, steps)];
     case 'removed':
-      return [found(removalOf(object), steps)];
+      return [found({ kind: 'field-removed' }, steps)];
     case 'kept':
       return [
         ...requirednessFindingsOf(field.baseline, field.proposed, steps),
@@ -30,12 +23,11 @@ function fieldFindingsOf(field: Counterpart<Field>, object: ObjectNode): readonl
   }
 }
 
-/** A key gone from a record keyed by an enum or literal refuses it from then on. */
-function removalOf(object: ObjectNode): { readonly kind: 'key-removed' | 'field-removed' } {
-  return { kind: isKeyedRecord(object) ? 'key-removed' : 'field-removed' };
-}
-
-function requirednessFindingsOf(baseline: Field, proposed: Field, steps: Path): readonly Finding[] {
+function requirednessFindingsOf(
+  baseline: Field,
+  proposed: Field,
+  steps: readonly Step[],
+): readonly Finding[] {
   if (baseline.required === proposed.required) {
     return [];
   }

@@ -1,81 +1,141 @@
-import type { AnyDependencies } from '@cf-loom/client/internal';
-import type { Endpoint, StandardRejections } from '@cf-loom/contract';
+import { type AnyDependency, baseUrlOf } from '@cf-loom/client/internal';
+import type {
+  Endpoint,
+  Lifecycle,
+  ProvidedEndpoint,
+  ProvidedStandardRejections,
+} from '@cf-loom/contract';
 import {
   type AnswerableRejection,
   answerableByCodeOf,
-  checkExportedFormat,
+  carriedStandardRejectionsOf,
+  declaredByCodeOf,
+  type EndpointPath,
   type EndpointSnapshot,
+  type ExportedCut,
+  endpointPathOf,
   exportedEntryOf,
-  type Matchable,
+  identityOf,
   methodAndPathOf,
   pathSegmentsOf,
+  providedSnapshotOf,
+  providerOf,
   type TextPartNodes,
   textPartNodesOf,
 } from '@cf-loom/contract/internal';
 
-/** An Endpoint a Dependency lists, prepared once for the requests that reach it. */
-export type ListedEndpoint = {
+/** An Endpoint a Dependency lists, where it is reached and what its requests are read by, prepared once. */
+export type ListedEndpoint = EndpointPath & {
+  readonly kind: 'listed';
   readonly provider: string;
   readonly name: string;
   readonly endpoint: Endpoint;
   readonly nodes: TextPartNodes;
   readonly deprecatedAt: string | undefined;
   readonly rejectionsByCode: ReadonlyMap<string, AnswerableRejection>;
-  readonly standards: StandardRejections;
+  /** Every code the listed Endpoints declare, by its resolved code, this one's among them, and the Standard ones. */
+  readonly declaredByCode: ReadonlyMap<string, AnswerableRejection>;
+  readonly standards: ProvidedStandardRejections;
 };
 
-/** An Endpoint the Provider exports, matched as `serve` would, and the listed one it is, if any. */
-export type ExportedEndpoint = Matchable & {
-  readonly identity: string;
-  readonly listed: ListedEndpoint | undefined;
-};
-
-/** A Provider as its fake answers it: where it is reached, and every Endpoint it exports. */
-export type Provided = {
-  readonly provider: string;
-  readonly base: URL;
-  readonly exported: readonly ExportedEndpoint[];
+/** A declared Endpoint the Dependency does not list that wins a URL a listed one matches. */
+export type ShadowingEndpoint = EndpointPath & {
+  readonly kind: 'shadowing';
+  readonly lifecycle: Lifecycle;
 };
 
 /**
- * A Dependency's Provider, prepared once: every Endpoint its Contract Package exports, so routing
- * precedence is the Provider's, and each listed one with what its requests are read by.
+ * A Provider as its fake answers it: where it is reached, what a Consumer may send (the Endpoints
+ * the Dependency lists), and which declared Endpoint wins a request among those and the ones their
+ * cuts list as `shadowing`.
  */
-export function providedOf(deps: AnyDependencies, base: URL): Provided {
-  checkExportedFormat(deps);
-  const listedByEntry = new Map<EndpointSnapshot, ListedEndpoint>();
-  for (const [name, endpoint] of Object.entries(deps.endpoints)) {
-    const entry = exportedEntryOf(deps, endpoint);
-    listedByEntry.set(entry, listedEndpointOf(deps, { name, endpoint, entry }));
-  }
-  const entries = Object.entries(deps.exportedSnapshot.endpoints);
-  const exported = entries.map(([identity, entry]) => {
-    const { method, path } = methodAndPathOf(identity, entry.params);
-    const segments = pathSegmentsOf(path);
-    return { identity, method, segments, listed: listedByEntry.get(entry) };
-  });
-  return { provider: deps.provider, base, exported };
-}
-
-/** A listed Endpoint by its name in code, its packaged declaration and its exported entry. */
-type Listing = {
-  readonly name: string;
-  readonly endpoint: Endpoint;
-  readonly entry: EndpointSnapshot;
+export type FakedProvider = {
+  readonly provider: string;
+  readonly base: URL;
+  readonly listed: readonly ListedEndpoint[];
+  readonly declared: readonly (ListedEndpoint | ShadowingEndpoint)[];
 };
 
+/**
+ * A Dependency's Provider, prepared once from the Endpoints it lists: each read from the exported
+ * Snapshot cut it carries, and with those every other one their cuts list as `shadowing`, so the
+ * winner of a request is the Provider's.
+ */
+export function fakedProviderOf(
+  dependency: AnyDependency,
+  baseUrl: string | URL | undefined,
+): FakedProvider {
+  const { endpoints } = dependency;
+  const { name, standardRejections } = listedProviderOf(dependency);
+  const base = baseUrlOf(baseUrl ?? `https://${name}.test`);
+  const declaredByCode = declaredByCodeOf(endpoints, standardRejections);
+  const cuts = endpoints.map(cutOf);
+  const listed = cuts.map((cut) =>
+    listedEndpointOf(cut, { name, standardRejections }, declaredByCode),
+  );
+  const declared = [...listed, ...shadowingEndpointsOf(cuts)];
+  return { provider: name, base, listed, declared };
+}
+
+/** The Provider whose Endpoints a Dependency lists, as they carry it: its name, which names its fake, and its Standard Rejections. */
+type ListedProvider = {
+  readonly name: string;
+  readonly standardRejections: ProvidedStandardRejections;
+};
+
+function listedProviderOf(dependency: AnyDependency): ListedProvider {
+  const [first] = dependency.endpoints;
+  if (first === undefined) {
+    throw new Error('A Dependency lists at least one Endpoint, so its fake has a Provider');
+  }
+  return { name: providerOf(first), standardRejections: carriedStandardRejectionsOf(first) };
+}
+
+/** A listed Endpoint as its own cut holds it: its identity, its entry, and the Endpoints the cut lists as `shadowing`. */
+type Cut = {
+  readonly endpoint: ProvidedEndpoint;
+  readonly identity: string;
+  readonly entry: EndpointSnapshot;
+  readonly shadowing: ExportedCut['shadowing'];
+};
+
+function cutOf(endpoint: ProvidedEndpoint): Cut {
+  const snapshot = providedSnapshotOf(endpoint);
+  const entry = exportedEntryOf(providerOf(endpoint), snapshot, endpoint);
+  const identity = identityOf(endpoint.method, endpoint.path);
+  return { endpoint, identity, entry, shadowing: snapshot.shadowing };
+}
+
+/** The Endpoints the cuts list as `shadowing` that the Dependency does not list, each once. */
+function shadowingEndpointsOf(cuts: readonly Cut[]): readonly ShadowingEndpoint[] {
+  const listed = new Set(cuts.map(({ identity }) => identity));
+  const shadowing = new Map(cuts.flatMap((cut) => Object.entries(cut.shadowing)));
+  return [...shadowing]
+    .filter(([identity]) => !listed.has(identity))
+    .map(([identity, { lifecycle }]) => {
+      return { kind: 'shadowing', ...endpointPathOf(identity), lifecycle };
+    });
+}
+
 function listedEndpointOf(
-  deps: AnyDependencies,
-  { name, endpoint, entry }: Listing,
+  { endpoint, identity, entry }: Cut,
+  provider: ListedProvider,
+  declaredByCode: ReadonlyMap<string, AnswerableRejection>,
 ): ListedEndpoint {
-  const standards = deps.standardRejections;
+  const standards = provider.standardRejections;
+  const { method, path } = methodAndPathOf(identity, entry.params);
   return {
-    provider: deps.provider,
-    name,
+    kind: 'listed',
+    identity,
+    method,
+    segments: pathSegmentsOf(path),
+    provider: provider.name,
+    name: endpoint.name,
     endpoint,
     nodes: textPartNodesOf(entry),
     deprecatedAt: entry.deprecatedAt,
     rejectionsByCode: answerableByCodeOf(endpoint, standards),
+    declaredByCode,
     standards,
   };
 }

@@ -8,6 +8,7 @@ import {
   subjectOf,
 } from '@cf-loom/contract/internal';
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
+import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeaders, brokerHeadersName } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
@@ -15,17 +16,19 @@ import type { AsyncApiObject } from './objects.ts';
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
   readonly asyncapi: '3.1.0';
-  readonly info: { readonly title: string; readonly version: string };
+  readonly info: {
+    readonly title: string;
+    readonly version: string;
+    readonly tags: readonly GroupTag[];
+  };
   readonly defaultContentType: string;
   readonly channels: Readonly<Record<string, AsyncApiObject>>;
   readonly operations: Readonly<Record<string, AsyncApiObject>>;
   readonly components: { readonly schemas: Readonly<Record<string, JsonSchema>> };
 };
 
-/** The document of a Service's Events, or the line saying what of its Snapshot AsyncAPI cannot name. */
-export type AsyncApiWritten =
-  | { readonly kind: 'written'; readonly document: AsyncApiDocument }
-  | { readonly kind: 'unnamed'; readonly line: string };
+/** The document of a Service's Events. */
+export type AsyncApiWritten = { readonly kind: 'written'; readonly document: AsyncApiDocument };
 
 /** The AsyncAPI document of the Events a Service publishes at a version, each subject under the prefix, if one is given. */
 export function asyncApiDocumentOf(
@@ -39,16 +42,20 @@ export function asyncApiDocumentOf(
     snapshot.defs,
     'draft-07',
   );
-  if (defs.kind === 'unnamed') {
-    return { kind: 'unnamed', line: defs.line };
-  }
   const document: AsyncApiDocument = {
     asyncapi: '3.1.0',
-    info: { title: snapshot.name, version },
+    info: {
+      title: snapshot.name,
+      version,
+      tags: groupTagsOf(
+        snapshot.groups,
+        published.map(({ event }) => event.group),
+      ),
+    },
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
-    components: { schemas: schemasOf(defs.schemas, published) },
+    components: { schemas: schemasOf(defs, published) },
   };
   return { kind: 'written', document };
 }

@@ -1,32 +1,41 @@
-import { checkExportedFormat } from '@cf-loom/contract/internal';
-import { type AnyDependencies, calledEndpointOf } from '../endpoints/index.ts';
+import type { Http } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
-import type { Client, ClientOptions, ConfiguredName, Fetch } from './client-types.ts';
+import type { Client, ClientOptions, ConfiguredName } from './client-types.ts';
 import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
 
 /**
- * A client of the Endpoints a Dependency lists, one method each, named after it: each returns the
- * Outcome and never throws for a Rejection or a Fault.
+ * A client of the Endpoints a Dependency lists, one method each, named after it, calling its
+ * Provider at `baseUrl`, an http or https URL: each returns the Outcome and never throws for a
+ * Rejection or a Fault; what a header function, `fetch` or `inferFault` throws otherwise reaches
+ * the Caller.
  */
 export function client<
-  const Deps extends AnyDependencies,
-  Configured extends ConfiguredName<Deps> = never,
->(deps: Deps, options: ClientOptions<Deps, Configured>): Client<Deps, Configured> {
+  const D extends AnyDependency,
+  Configured extends ConfiguredName<D> = never,
+  const Given = unknown,
+>(
+  dependency: D,
+  options: ClientOptions<D, Configured> &
+    Given &
+    NoInfer<DeclaredFieldsRule<Given, ClientOptions<D, Configured>>>,
+): Client<D, Configured> {
   const calling: Calling = {
     base: baseUrlOf(options.baseUrl),
     fetch: options.fetch ?? globalFetch,
     headers: options.headers ?? {},
     inferFault: options.inferFault,
   };
-  checkExportedFormat(deps);
   const onDeprecation = options.onDeprecation ?? warnDeprecation;
-  const methods = Object.entries(deps.endpoints).map(([name, endpoint]) => {
-    const called = calledEndpointOf(endpoint, deps);
-    return [name, methodOf(called, calling, deprecationWatchOf(called, onDeprecation))] as const;
+  const methods = dependency.endpoints.map((endpoint) => {
+    const called = calledEndpointOf(endpoint);
+    const method = methodOf(called, calling, deprecationWatchOf(called, onDeprecation));
+    return [endpoint.name, method] as const;
   });
-  return Object.freeze(Object.fromEntries(methods)) as Client<Deps, Configured>;
+  return Object.freeze(Object.fromEntries(methods)) as Client<D, Configured>;
 }
 
 /** The global `fetch` as it is when a call is made, not when the client was created. */
-const globalFetch: Fetch = (url, init) => fetch(url, init);
+const globalFetch: Http = (request) => fetch(request);

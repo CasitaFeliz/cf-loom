@@ -1,17 +1,19 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
-  type CodeSnapshot,
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Difference,
   type Field,
   type GuardSnapshot,
   type ObjectNode,
-  type Path,
+  type PublishedCode,
   type PublishedDefinitionsSnapshot,
+  type RemovedCode,
   type SchemaNode,
+  type Step,
 } from '../internal/index.ts';
 
 const unauthenticated = 'UNAUTHENTICATED';
@@ -19,9 +21,9 @@ const orderLocked = 'ORDER_LOCKED';
 const orderGone = 'ORDER_GONE';
 const notFound = 'NOT_FOUND';
 const standardRejections: DefinitionsSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
 
 const aString: SchemaNode = { type: 'string' };
@@ -35,7 +37,7 @@ function optional(schema: SchemaNode): Field {
 }
 
 function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode {
-  return { type: 'object', mode: 'open', fields };
+  return { type: 'object', fields };
 }
 
 function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSnapshot {
@@ -43,10 +45,9 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -56,7 +57,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
 function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
@@ -65,29 +66,30 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
     ...fields,
   };
 }
 
-function aCode(fields: Partial<CodeSnapshot> = {}): CodeSnapshot {
+function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
   return {
     origin: 'local',
     status: 409,
     message: 'The order is locked',
+    headers: { type: 'object', fields: {} },
     body: null,
-    removed: false,
     ...fields,
   };
 }
 
+function aRemovedCode(fields: Partial<RemovedCode> = {}): RemovedCode {
+  return { ...aCode(), removedIn: '3.2.0', defs: {}, ...fields };
+}
+
 function reportOf(baseline: PublishedDefinitionsSnapshot, proposed: DefinitionsSnapshot) {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -104,11 +106,15 @@ function guardChangesOf(from: GuardSnapshot, to: GuardSnapshot): readonly Change
 }
 
 function breaking(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'breaking', approval: 'needed' };
+  return { site, difference, class: 'breaking', verdict: 'approval-needed' };
+}
+
+function neutral(site: ChangeSite, difference: Difference): Change {
+  return { site, difference, class: 'neutral', verdict: 'allowed' };
 }
 
 function additive(site: ChangeSite, difference: Difference): Change {
-  return { site, difference, class: 'additive' };
+  return { site, difference, class: 'additive', verdict: 'allowed' };
 }
 
 function placeOf(site: ChangeSite): string {
@@ -116,8 +122,11 @@ function placeOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
-    case 'shared-schema':
+    case 'group':
+    case 'export':
     case 'subscription':
+    case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -126,12 +135,25 @@ function placeOf(site: ChangeSite): string {
   }
 }
 
-function inputField(at: Path, isRequired: boolean): Difference {
+function demandAt(part: 'query' | 'headers', name: string): readonly Step[] {
+  return [
+    { kind: 'part', name: 'demands' },
+    { kind: 'part', name: part },
+    { kind: 'field', name },
+  ];
+}
+
+function inputField(at: readonly Step[], isRequired: boolean): Difference {
   const shape = { kind: 'field-added', required: isRequired } as const;
   return { kind: 'schema', position: 'input', at, shape };
 }
 
-const guardSite: ChangeSite = { kind: 'guard', name: 'authenticated' };
+const standardSite: ChangeSite = {
+  kind: 'standard-rejection',
+  name: 'notFound',
+  visibility: 'public',
+};
+const guardSite: ChangeSite = { kind: 'guard', name: 'authenticated', visibility: 'public' };
 
 function codeSite(code: string): ChangeSite {
   return { kind: 'code', code, visibility: 'public' };
@@ -162,47 +184,52 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     expect(changes).toEqual([
       breaking(guardSite, { kind: 'removed' }),
-      additive({ kind: 'guard', name: 'signedIn' }, { kind: 'added' }),
+      additive({ kind: 'guard', name: 'signedIn', visibility: 'public' }, { kind: 'added' }),
     ]);
   });
 
   test('a required demand added to a Guard is Breaking and needs an Approval', () => {
     const query = anOpenObject({ token: required(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+    );
 
-    expect(changes).toEqual([
-      breaking(guardSite, inputField(['demands', 'query', 'fields', 'token'], true)),
-    ]);
+    expect(changes).toEqual([breaking(guardSite, inputField(demandAt('query', 'token'), true))]);
   });
 
   test('an optional query demand added is Additive', () => {
     const query = anOpenObject({ token: optional(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: null, query } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+    );
 
-    expect(changes).toEqual([
-      additive(guardSite, inputField(['demands', 'query', 'fields', 'token'], false)),
-    ]);
+    expect(changes).toEqual([additive(guardSite, inputField(demandAt('query', 'token'), false))]);
   });
 
-  test('an optional header demand with a format added is Breaking by the header text rule, beside its Additive field Change', () => {
-    const at = ['demands', 'headers', 'fields', 'x-trace'];
+  test('an optional header demand with a format added is one Breaking Change, by the header text rule alone', () => {
+    const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional({ type: 'string', format: 'uuid' }) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: traced, query: { type: 'object', fields: {} } } }),
+    );
 
-    expect(changes).toEqual([
-      additive(guardSite, inputField(at, false)),
-      breaking(guardSite, { kind: 'header-refuses-text', at }),
-    ]);
+    expect(changes).toEqual([breaking(guardSite, { kind: 'header-refuses-text', at })]);
   });
 
   test('an optional header demand that accepts every text added is Additive', () => {
-    const at = ['demands', 'headers', 'fields', 'x-trace'];
+    const at = demandAt('headers', 'x-trace');
     const traced = anOpenObject({ 'x-trace': optional(aString) });
 
-    const changes = guardChangesOf(aGuard(), aGuard({ demands: { headers: traced, query: null } }));
+    const changes = guardChangesOf(
+      aGuard(),
+      aGuard({ demands: { headers: traced, query: { type: 'object', fields: {} } } }),
+    );
 
     expect(changes).toEqual([additive(guardSite, inputField(at, false))]);
   });
@@ -210,26 +237,19 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   test('removing a demand is Additive', () => {
     const query = anOpenObject({ token: required(aString) });
 
-    const changes = guardChangesOf(aGuard({ demands: { headers: null, query } }), aGuard());
+    const changes = guardChangesOf(
+      aGuard({ demands: { headers: { type: 'object', fields: {} }, query } }),
+      aGuard(),
+    );
 
     expect(changes).toEqual([
       additive(guardSite, {
         kind: 'schema',
         position: 'input',
-        at: ['demands', 'query', 'fields', 'token'],
+        at: demandAt('query', 'token'),
         shape: { kind: 'field-removed' },
       }),
     ]);
-  });
-
-  test('demands declared where there were none compare as an open object with no fields', () => {
-    const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
-    const empty = { headers: anOpenObject(), query: anOpenObject() };
-    const proposed = aDefinitions({ guards: { authenticated: aGuard({ demands: empty }) } });
-
-    const report = reportOf(baseline, proposed);
-
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
   });
 
   test.each([
@@ -242,18 +262,22 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   });
 
   test.each([
-    ['Context', { context: { type: 'object', mode: 'strict', fields: {} } }],
-    ['guards', { guards: ['session'] }],
-    ['qualifier', { qualifier: { type: 'string' } }],
-    ['description', { description: 'Checks the session' }],
-    ['origin', { origin: '@org/definitions@5.0.0#authenticated' }],
-  ] as const)('a Guard’s %s changed gives no Change, only a changed hash', (_name, fields) => {
+    ['Context', { context: { type: 'object', fields: {} } }, { kind: 'context-changed' }],
+    ['guards', { guards: ['session'] }, { kind: 'guards-changed' }],
+    ['qualifier', { qualifier: { type: 'string' } }, { kind: 'qualifier-changed' }],
+    ['description', { description: 'Checks the session' }, { kind: 'description-changed' }],
+    [
+      'origin',
+      { origin: '@org/definitions@5.0.0#authenticated' },
+      { kind: 'origin-changed', from: 'local', to: '@org/definitions@5.0.0#authenticated' },
+    ],
+  ] as const)('a Guard’s %s changed is one Neutral Change', (_name, fields, difference) => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
     const proposed = aDefinitions({ guards: { authenticated: aGuard(fields) } });
 
     const report = reportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report.changes).toEqual([neutral(guardSite, difference)]);
   });
 
   test('a Guard’s Changes come: query, headers, then Rejections', () => {
@@ -263,11 +287,9 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
 
     const changes = guardChangesOf(aGuard(), to);
 
-    const traceAt = ['demands', 'headers', 'fields', 'x-trace'];
     expect(changes).toEqual([
-      breaking(guardSite, inputField(['demands', 'query', 'fields', 'token'], true)),
-      additive(guardSite, inputField(traceAt, false)),
-      breaking(guardSite, { kind: 'header-refuses-text', at: traceAt }),
+      breaking(guardSite, inputField(demandAt('query', 'token'), true)),
+      breaking(guardSite, { kind: 'header-refuses-text', at: demandAt('headers', 'x-trace') }),
       additive(guardSite, { kind: 'rejection-added', code: unauthenticated }),
     ]);
   });
@@ -309,16 +331,16 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       codes: { [notFound]: aCode({ origin: 'standard', status: 404 }) },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([additive(codeSite(orderGone), { kind: 'added' })]);
+    expect(changes).toEqual([
+      additive(codeSite(orderGone), { kind: 'added' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
+    ]);
   });
 
   test('a code’s status changed is Breaking on a Public code site', () => {
@@ -333,16 +355,18 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
   });
 
   test('a removed code not declared again is carried with no Change', () => {
-    const baseline = aBaselineDefinitions({ codes: { [orderLocked]: aCode({ removed: true }) } });
+    const baseline = aBaselineDefinitions({
+      codes: { [orderLocked]: aRemovedCode() },
+    });
 
     const report = reportOf(baseline, aDefinitions());
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test('a removed code declared again is added and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
-      codes: { [orderLocked]: aCode({ status: 409, removed: true }) },
+      codes: { [orderLocked]: aRemovedCode({ status: 409 }) },
     });
     const proposed = aDefinitions({ codes: { [orderLocked]: aCode({ status: 422 }) } });
 
@@ -354,18 +378,74 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     ]);
   });
 
+  describe('a removed code whose body reaches a recursive def, declared again', () => {
+    const ref: SchemaNode = { type: 'ref', name: 'tree' };
+    const body = anOpenObject({ tree: required(ref) });
+    const treeWith = (...labels: string[]): ObjectNode =>
+      anOpenObject({
+        children: required({ type: 'array', items: ref }),
+        ...Object.fromEntries(labels.map((label) => [label, required(aString)])),
+      });
+
+    function declaredAgain(held: { removedWith: ObjectNode; since: ObjectNode; now: ObjectNode }) {
+      const baseline = aBaselineDefinitions({
+        defs: { tree: held.since },
+        codes: {
+          [orderLocked]: aRemovedCode({ body, defs: { tree: held.removedWith } }),
+          [orderGone]: aCode({ body }),
+        },
+      });
+      const proposed = aDefinitions({
+        defs: { tree: held.now },
+        codes: { [orderLocked]: aCode({ body }), [orderGone]: aCode({ body }) },
+      });
+      return changesOf(baseline, proposed).filter(
+        ({ site }) => site.kind === 'code' && site.code === orderLocked,
+      );
+    }
+
+    test('whose def lost a field since it was removed is Breaking, as against the version that removed it', () => {
+      const changes = declaredAgain({
+        removedWith: treeWith('label'),
+        since: treeWith(),
+        now: treeWith(),
+      });
+
+      expect(changes).toEqual([
+        additive(codeSite(orderLocked), { kind: 'added' }),
+        breaking(codeSite(orderLocked), {
+          kind: 'schema',
+          position: 'success',
+          at: [
+            { kind: 'part', name: 'body' },
+            { kind: 'field', name: 'tree' },
+            { kind: 'field', name: 'label' },
+          ],
+          shape: { kind: 'field-removed' },
+        }),
+      ]);
+    });
+
+    test('with the def it was removed with is only added, though the Snapshot’s def of that name has since grown a field', () => {
+      const changes = declaredAgain({
+        removedWith: treeWith('label'),
+        since: treeWith('label', 'note'),
+        now: treeWith('label'),
+      });
+
+      expect(changes).toEqual([additive(codeSite(orderLocked), { kind: 'added' })]);
+    });
+  });
+
   test('a Standard Rejection resolving to a code a user Rejection once used is added and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
-        [orderGone]: aCode({ status: 409, removed: true }),
+        [orderGone]: aRemovedCode({ status: 409 }),
       },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
@@ -374,6 +454,8 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     expect(changes).toEqual([
       additive(codeSite(orderGone), { kind: 'added' }),
       breaking(codeSite(orderGone), { kind: 'status-changed', from: 409, to: 404 }),
+      neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
     ]);
   });
 
@@ -385,21 +467,21 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       },
     });
     const proposed = aDefinitions({
-      standardRejections: {
-        ...standardRejections,
-        notFound: { ...standardRejections.notFound, code: orderGone },
-      },
+      standardRejections: { ...standardRejections, notFound: orderGone },
       codes: { [orderGone]: aCode({ origin: 'standard', status: 404 }) },
     });
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes).toEqual([]);
+    expect(changes).toEqual([
+      neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
+      neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
+    ]);
   });
 
   test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes by code in code point order', () => {
     const proposed = aDefinitions({
-      schemas: { money: anOpenObject() },
+      exports: schemaExports({ money: anOpenObject() }),
       guards: { authenticated: aGuard() },
       codes: { [orderLocked]: aCode(), [orderGone]: aCode() },
     });
@@ -407,7 +489,7 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     const changes = changesOf(aBaselineDefinitions(), proposed);
 
     expect(changes.map(({ site }) => [site.kind, placeOf(site)])).toEqual([
-      ['shared-schema', 'money'],
+      ['export', 'money'],
       ['guard', 'authenticated'],
       ['code', orderGone],
       ['code', orderLocked],

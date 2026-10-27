@@ -1,10 +1,10 @@
-import type { Contract } from '@cf-loom/contract';
+import type { ServiceContract } from '@cf-loom/contract';
 import {
   type BrokerPlan,
   brokerPlanOf,
-  schemaOriginsOf,
+  providerOf,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '@cf-loom/contract/internal';
 import { jetstreamManager, type StreamConfig, type StreamInfo } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
@@ -12,7 +12,7 @@ import { connect } from '@nats-io/transport-node';
 /** A stream as a test arranges it. */
 export type ArrangedStream = { readonly name: string; readonly subjects: readonly string[] };
 
-/** Creates a stream as a test arranges it, with the NATS client and not through `apply`, and the NATS settings given over NATS's defaults. */
+/** Creates a stream as a test arranges it, with the NATS client and not through `applyBrokerPlan`, and the NATS settings given over NATS's defaults. */
 export async function arrangeStream(
   url: string,
   stream: ArrangedStream,
@@ -56,14 +56,14 @@ export async function dropStream(url: string, name: string): Promise<void> {
 }
 
 /** The broker plan `cf-loom broker-plan` derives from a Service's Contract under a prefix. */
-export function planOf(contract: Contract, prefix: string | null): BrokerPlan {
+export function planOf(contract: ServiceContract, prefix: string | null): BrokerPlan {
   return brokerPlanOf(serviceSnapshotOf(contract), prefix);
 }
 
 /** Creates the streams of a Service's broker plan under a prefix, as the organization's tooling would from `cf-loom broker-plan`. */
 export async function arrangePlanOf(
   url: string,
-  contract: Contract,
+  contract: ServiceContract,
   prefix: string | null,
 ): Promise<void> {
   const plan = planOf(contract, prefix);
@@ -72,18 +72,30 @@ export async function arrangePlanOf(
   }
 }
 
-function serviceSnapshotOf(contract: Contract) {
-  const originOf = schemaOriginsOf([]);
-  const validated = validateContract(contract, {
-    originOf,
+/** The Snapshot of a Service's Contract, each Provider whose Events it receives installed as a Contract Package at 1.0.0. */
+function serviceSnapshotOf(contract: ServiceContract) {
+  const received = (contract.groups ?? [])
+    .flatMap((group) => group.subscriptions ?? [])
+    .map(({ event }) => event);
+  const providers = new Set(received.map((event) => providerOf(event)));
+  providers.delete(undefined);
+  const contractPackages = [...providers].map((provider) => ({
+    kind: 'identified' as const,
+    packageName: `@org/contract-${provider}`,
+    version: '1.0.0',
+    elements: received.filter((event) => providerOf(event) === provider),
+    reaches: [],
+  }));
+  const validated = validateRoot(contract, {
     packageName: contract.name,
-    exportsOf: () => [],
+    packages: [],
+    contractPackages,
+    rootExports: {},
   });
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }

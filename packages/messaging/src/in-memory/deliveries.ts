@@ -1,22 +1,24 @@
-import type { BrokerConsumer, ConsumedFault, Delivery, Settlement } from '../broker/index.ts';
-import { consumedFaultLinesOf, receiveFailureLineOf } from '../consuming/index.ts';
+import type { Delivery, Settlement } from '../broker/index.ts';
+import {
+  type CoreDurableConsumer,
+  consumedFaultLinesOf,
+  type Settled,
+} from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
-import { DeliveryLine } from './line.ts';
+import { DeliveryLine, isCut } from './line.ts';
 import { PendingList } from './pending.ts';
 import type { PendingMessage } from './types.ts';
 
-/** A delivery whose `receive` rejected is left for redelivery, as the Broker's `receive` says. */
-const leftPending: Settlement = { kind: 'pending', fault: undefined };
-
 /** How severe a settlement is, the most severe first. */
-const bySeverity: readonly Settlement['kind'][] = ['ended', 'pending', 'acked'];
+const bySeverity: readonly Settlement[] = ['ended', 'pending', 'handed-back', 'acked'];
 
-/** What a `memory()` does with its consumers: delivers to them one at a time, and keeps what became of each delivery. */
+/** What a `memory()` does with its Durable consumers: delivers to them one at a time, and keeps what became of each delivery. */
 export class Deliveries {
   readonly #line: DeliveryLine;
   readonly #pending = new PendingList();
   readonly #failures = new Failures();
+  #left = false;
 
   constructor() {
     this.#line = new DeliveryLine((cut) =>
@@ -24,32 +26,53 @@ export class Deliveries {
     );
   }
 
-  /** Lines deliveries up without waiting for them; a cut drops them, and `settled()` reports it. */
+  /**
+   * Lines deliveries up without running them: they run while `settled()`, `deliver()` or
+   * `redeliver()` drives the line, the last two through their own deliveries only. A cut drops
+   * them, and `settled()` reports it, while a delivery that fails on its own reaches the runtime,
+   * as nothing waits for it. Once the line is left, nothing is lined up: each is pending at once.
+   */
   lineUp(attempts: readonly Attempt[]): void {
-    for (const { consumer, delivery } of attempts) {
-      this.#line.add(() => this.#attempt(consumer, delivery)).catch(() => undefined);
+    for (const attempt of attempts) {
+      if (this.#left) {
+        this.#leave(attempt);
+        continue;
+      }
+      this.#lined(attempt).catch(unlessCut);
     }
   }
 
-  /** Lines deliveries up and waits for them: the most severe settlement, or the cut that dropped one. */
-  async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement['kind']> {
-    const lined = attempts.map(({ consumer, delivery }) =>
-      this.#line.add(() => this.#attempt(consumer, delivery)),
-    );
-    const kinds = await Promise.all(lined);
-    return bySeverity.find((kind) => kinds.includes(kind)) ?? 'acked';
+  /** Lines deliveries up and runs the line through them, those lined up before them first: the most severe settlement, or the cut that dropped one. */
+  async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement> {
+    const lined = attempts.map((attempt) => this.#lined(attempt));
+    void this.#line.driveLined();
+    const settlements = await Promise.all(lined);
+    return bySeverity.find((settlement) => settlements.includes(settlement)) ?? 'acked';
   }
 
-  /** Lines every Message pending now up again, each for the consumer it is pending for, and waits for them. */
+  /** Lines every Message pending now up again, each for the Durable consumer it is pending for, runs the line through them and waits for them. */
   async redeliver(): Promise<void> {
     const pending = this.#pending.attempts();
-    await Promise.all(pending.map((attempt) => this.#line.add(() => this.#again(attempt))));
+    const lined = pending.map((attempt) =>
+      this.#line.add(
+        () => this.#again(attempt),
+        () => undefined,
+      ),
+    );
+    void this.#line.driveLined();
+    await Promise.all(lined);
   }
 
-  /** Waits until nothing is in flight, then rejects if anything failed since the last time. */
+  /** Runs the line until nothing is lined up, then rejects if anything failed since the last time. */
   async settled(): Promise<void> {
-    await this.#line.idle();
+    await this.#line.driveAll();
     this.#failures.report();
+  }
+
+  /** Leaves every Message lined up pending, and every Message lined up from now on, once the `closing` the core hands `consume` aborted. */
+  leaveLined(): void {
+    this.#left = true;
+    this.#line.leaveAll();
   }
 
   pending(): readonly PendingMessage[] {
@@ -57,51 +80,66 @@ export class Deliveries {
   }
 
   /** A pending Message delivered as its next attempt, unless it left the list since `redeliver` was called. */
-  async #again({ consumer, delivery }: Attempt): Promise<void> {
-    const current = this.#pending.attemptFor(consumer, delivery.messageId);
+  async #again({ durableConsumer, delivery }: Attempt): Promise<void> {
+    const current = this.#pending.attemptFor(durableConsumer, delivery.messageId);
     if (current === undefined) {
       return;
     }
     const next = { ...current.delivery, deliveryCount: current.delivery.deliveryCount + 1 };
-    await this.#attempt(consumer, next);
+    await this.#attempt(durableConsumer, next);
   }
 
-  async #attempt(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement['kind']> {
-    const settlement = await this.#received(consumer, delivery);
-    this.#apply(consumer, delivery, settlement);
-    return settlement.kind;
+  #lined(attempt: Attempt): Promise<Settlement> {
+    const { durableConsumer, delivery } = attempt;
+    return this.#line.add(
+      () => this.#attempt(durableConsumer, delivery),
+      () => this.#leave(attempt),
+    );
   }
 
-  async #received(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
-    try {
-      return await consumer.receive(delivery);
-    } catch (cause) {
-      const lines = [receiveFailureLineOf(consumer, delivery)];
-      this.#failures.record({ lines, cause });
-      return leftPending;
-    }
+  /** A Message left unrun is pending, as one left by the core while closing is. */
+  #leave(attempt: Attempt): Settlement {
+    this.#pending.put(attempt);
+    return 'pending';
+  }
+
+  async #attempt(durableConsumer: CoreDurableConsumer, delivery: Delivery): Promise<Settlement> {
+    const settled = await durableConsumer.settle(delivery);
+    this.#apply(durableConsumer, delivery, settled);
+    return settled.settlement;
   }
 
   /** What became of a delivery, kept in the list of pending Messages and the failures. */
-  #apply(consumer: BrokerConsumer, delivery: Delivery, settlement: Settlement): void {
-    switch (settlement.kind) {
+  #apply(durableConsumer: CoreDurableConsumer, delivery: Delivery, settled: Settled): void {
+    switch (settled.settlement) {
       case 'acked':
-        this.#pending.leave(consumer, delivery.messageId);
-        return;
+        this.#pending.leave(durableConsumer, delivery.messageId);
+        break;
       case 'pending':
-        this.#pending.put({ consumer, delivery });
-        this.#failed(settlement.fault);
-        return;
+      case 'handed-back':
+        this.#pending.put({ durableConsumer, delivery });
+        break;
       case 'ended':
-        this.#pending.leave(consumer, delivery.messageId);
-        this.#failed(settlement.fault);
-        return;
+        this.#pending.leave(durableConsumer, delivery.messageId);
+        break;
     }
+    this.#failed(settled);
   }
 
-  #failed(fault: ConsumedFault | undefined): void {
+  /** The Fault a delivery reported, then the hook's failure, each for `settled()` to report. */
+  #failed({ fault, hookFailure }: Settled): void {
     if (fault !== undefined) {
       this.#failures.record({ lines: consumedFaultLinesOf(fault), cause: fault });
     }
+    if (hookFailure !== undefined) {
+      this.#failures.record({ lines: [hookFailure], cause: undefined });
+    }
+  }
+}
+
+/** Lets a cut go, which `settled()` already reports, and rethrows anything else. */
+function unlessCut(reason: unknown): void {
+  if (!isCut(reason)) {
+    throw reason;
   }
 }

@@ -1,14 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  const at = { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  return refusalsOf(walkSchemas([{ at, schema }], () => undefined));
 }
 
 function walkedTo(node: SchemaNode) {
-  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+  return { located: [{ kind: 'walked', value: node }], defs: {} };
 }
 
 describe('walkSchemas: arrays and tuples', () => {

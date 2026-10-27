@@ -1,28 +1,36 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../../test/providers.ts';
+import { anInstalledContract, aRootPackage } from '../../test/root-package.ts';
 import {
-  type ContractPackage,
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
   notFound,
+  providedEndpoint,
+  providedEvent,
+  type Rejection,
 } from '../index.ts';
 import {
   canonicalTextOf,
+  isEmptyTextPart,
+  originPackagesOf,
+  publishedSnapshotOf,
+  type ResolvedContractPackage,
   type ResolvedDefinitions,
+  type Root,
+  type RootKind,
   type Snapshot,
-  type SnapshotContext,
-  schemaOriginsOf,
   snapshotOf,
-  validateContract,
+  validateRoot,
 } from '../internal/index.ts';
 
 const money = z.object({ amount: z.int(), currency: z.string() });
@@ -31,6 +39,7 @@ const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
   message: 'Unauthenticated',
+  headers: z.object({ 'www-authenticate': z.string().describe('The scheme to sign in with') }),
 });
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 const unusedRejection = defineRejection({ code: 'UNUSED', status: 410, message: 'Unused' });
@@ -52,10 +61,6 @@ const permission = defineGuard({
 const unusedGuard = defineGuard({ name: 'unusedGuard', description: 'Attached by no Endpoint' });
 
 const orgDefinitions = defineDefinitions({
-  name: 'definitions',
-  guards: [userToken, permission, unusedGuard],
-  schemas: { money },
-  rejections: [unauthenticated, forbidden, unusedRejection],
   standardRejections: {
     invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'The request is invalid' },
   },
@@ -97,6 +102,8 @@ function aGetOrder(
 
 const getOrder = aGetOrder([orderLocked, notFound]);
 
+const deprecatedAt = '2026-10-17T09:30:00Z';
+
 const editOrder = defineEndpoint({
   name: 'editOrder',
   method: 'PATCH',
@@ -104,6 +111,7 @@ const editOrder = defineEndpoint({
   visibility: 'internal',
   description: 'Edits one line',
   lifecycle: 'deprecated',
+  deprecatedAt,
   guards: [userToken, { guard: permission, qualifier: ['orders:read', 'orders:edit'] }],
   input: {
     params: z.object({ orderId: z.uuid(), lineId: z.uuid() }),
@@ -121,32 +129,40 @@ const ordersGroup = defineGroup({
   endpoints: [getOrder, editOrder],
 });
 
-const getPayment = defineEndpoint({
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.uuid() }) },
-  success: { status: 200, body: z.object({ amount: z.int() }) },
-});
-const listPayments = defineEndpoint({
-  name: 'listPayments',
-  method: 'GET',
-  path: '/payments',
-  visibility: 'public',
-  description: 'Every payment',
-  success: { status: 200, body: z.object({ count: z.int() }) },
-});
+const getPayment = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+const listPayments = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'listPayments',
+    method: 'GET',
+    path: '/payments',
+    visibility: 'public',
+    description: 'Every payment',
+    success: { status: 200, body: z.object({ count: z.int() }) },
+  },
+  undefined,
+);
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
   description: 'A payment was settled',
   body: z.object({ paymentId: z.uuid() }),
 });
-const paymentFailedV1 = defineEvent({
+const paymentFailedV1 = providedEvent('payments-service', {
   name: 'PaymentFailed',
   version: 1,
   visibility: 'internal',
@@ -154,72 +170,94 @@ const paymentFailedV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: { getPayment, listPayments },
-  events: { paymentSettledV1, paymentFailedV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
+/** What the payments-service's Contract Package exports, by name. */
+const payments = { getPayment, listPayments, paymentSettledV1, paymentFailedV1 };
 
-const paymentsDeps = defineDependencies(payments, {
-  endpoints: [payments.endpoints.getPayment, payments.endpoints.listPayments],
-  events: [payments.events.paymentSettledV1, payments.events.paymentFailedV1],
-});
+/** The Contract Package of payments-service as installed beside the Roots under test: at 5.1.0. */
+const paymentsPackage = anInstalledContract('payments-service', payments, { version: '5.1.0' });
+
+/** An Endpoint with the Provider's name as another package may export it: equal to getPayment, and not the same object. */
+const aGetPaymentOfItsOwn = providedEndpoint(
+  aProvider('payments-service'),
+  {
+    name: 'getPayment',
+    method: 'GET',
+    path: '/payments/:paymentId',
+    visibility: 'public',
+    description: 'One payment by id',
+    input: { params: z.object({ paymentId: z.uuid() }) },
+    success: { status: 200, body: z.object({ amount: z.int() }) },
+  },
+  undefined,
+);
+
+const paymentsDependency = defineDependency({ endpoints: [getPayment, listPayments] });
 
 const orgPackage: ResolvedDefinitions = {
+  kind: 'identified',
   definitions: orgDefinitions,
   packageName: '@org/definitions',
   version: '4.2.0',
+  reaches: [],
+  exports: {
+    definitions: orgDefinitions,
+    userToken,
+    permission,
+    unusedGuard,
+    money,
+    unauthenticated,
+    forbidden,
+    unusedRejection,
+  },
 };
 
 const notifyOnSettled = defineSubscription({
-  name: 'notify-on-settled',
-  event: paymentsDeps.events.paymentSettledV1,
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
+  event: paymentSettledV1,
 });
 const notifyOnFailed = defineSubscription({
-  name: 'notify-on-failed',
-  event: paymentsDeps.events.paymentFailedV1,
+  name: 'notifyOnFailed',
+  description: 'Notifies the customer of each payment failed',
+  event: paymentFailedV1,
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  definitions: [orgDefinitions],
-  groups: [ordersGroup],
-  subscriptions: [notifyOnSettled, notifyOnFailed],
-  dependencies: [paymentsDeps],
+  standardRejections: orgDefinitions,
+  groups: [
+    ordersGroup,
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      subscriptions: [notifyOnSettled, notifyOnFailed],
+    }),
+  ],
+  dependencies: [paymentsDependency],
 });
 
-const stampedAt = '2026-10-17T09:30:00Z';
-
-function aContext(overrides: Partial<SnapshotContext> = {}): SnapshotContext {
-  return {
-    generator: '@cf-loom/cli@2.1.0',
-    packages: [orgPackage],
-    committed: undefined,
-    now: Date.parse('2026-10-18T12:00:00.750Z'),
-    ...overrides,
-  };
-}
-
-function snapshotFor(root: unknown, context: SnapshotContext = aContext()): Snapshot {
-  const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
-  const originOf = schemaOriginsOf(context.packages);
-  const packageName = String(name);
-  const validated = validateContract(root, { originOf, packageName, exportsOf: () => [] });
+/** The Snapshot of a Root, beside the Definitions Packages installed, `@org/definitions` by default. */
+function snapshotFor(
+  root: Root,
+  packages: readonly ResolvedDefinitions[] = [orgPackage],
+  contractPackages: readonly ResolvedContractPackage[] = [paymentsPackage],
+): Snapshot {
+  const { definitions: _root, ...exported } = orgPackage.exports;
+  const rootExports = root === orgDefinitions ? exported : {};
+  const rootPackage = aRootPackage(root, { packages, contractPackages, rootExports });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, context);
+  return snapshotOf(validated);
 }
 
-function serviceSnapshot(root: unknown = contract, context: SnapshotContext = aContext()) {
-  const snapshot = snapshotFor(root, context);
+function serviceSnapshot(
+  root: Root = contract,
+  packages: readonly ResolvedDefinitions[] = [orgPackage],
+  contractPackages: readonly ResolvedContractPackage[] = [paymentsPackage],
+) {
+  const snapshot = snapshotFor(root, packages, contractPackages);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
@@ -250,8 +288,8 @@ function searchQueryOf({
     success: { status: 200, body: z.object({ count: z.int() }) },
   });
   const group = defineGroup({ name: 'search', description: 'Search', endpoints: [search] });
-  const root = defineContract({ name: 'search-service', groups: [group] });
-  return serviceSnapshot(root, aContext({ packages: [] })).endpoints['GET /search']?.input.query;
+  const root = defineService({ name: 'search-service', groups: [group] });
+  return serviceSnapshot(root, []).endpoints['GET /search']?.input.query;
 }
 
 /**
@@ -287,12 +325,27 @@ function codeReachSnapshot() {
     description: 'Orders',
     endpoints: [getOrder, purgeOrders],
   });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
-    definitions: [orgDefinitions],
+    standardRejections: orgDefinitions,
     groups: [group],
   });
   return serviceSnapshot(root);
+}
+
+/** A Service whose one Endpoint answers the Rejection, with no Definitions Package. */
+function serviceRejecting(rejection: Rejection) {
+  const getOrders = defineEndpoint({
+    name: 'getOrders',
+    method: 'GET',
+    path: '/orders',
+    visibility: 'public',
+    description: 'Every order',
+    success: { status: 200, body: z.object({ count: z.int() }) },
+    rejections: [rejection],
+  });
+  const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrders] });
+  return serviceSnapshot(defineService({ name: 'orders-service', groups: [group] }), []);
 }
 
 function textOf(snapshot: Snapshot): string {
@@ -300,20 +353,41 @@ function textOf(snapshot: Snapshot): string {
 }
 
 describe('snapshotOf: a Service', () => {
-  test('the top level names the format, the kind, the Contract, the generator and the Definitions Packages at their versions', () => {
+  test('the top level holds the format, the kind, the Contract’s name and what it declares, and no more', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      generator: '@cf-loom/cli@2.1.0',
-      definitions: { '@org/definitions': '4.2.0' },
       events: {},
       commands: {},
       subscriptions: {},
     });
-    expect(snapshot).not.toHaveProperty('version');
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'codes',
+      'commands',
+      'defs',
+      'dependencies',
+      'endpoints',
+      'events',
+      'format',
+      'groups',
+      'guards',
+      'kind',
+      'name',
+      'standardRejections',
+      'subscriptions',
+    ]);
+  });
+
+  test('groups holds each Group by name with its description', () => {
+    const snapshot = serviceSnapshot();
+
+    expect(snapshot.groups).toEqual({
+      messages: { description: 'Messages' },
+      orders: { description: 'Order lifecycle' },
+    });
   });
 
   test('an Endpoint is written by its identity with its Group, Visibility, lifecycle, description and param names', () => {
@@ -334,44 +408,31 @@ describe('snapshotOf: a Service', () => {
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.params).toEqual(['orderId', 'lineId']);
   });
 
-  test('params are stored strict and every headers object open', () => {
+  test('params hold exactly the path’s params', () => {
     const snapshot = serviceSnapshot();
-    const getOrderSnapshot = snapshot.endpoints['GET /orders/{}'];
-    const editOrderSnapshot = snapshot.endpoints['PATCH /orders/{}/lines/{}'];
 
-    expect(getOrderSnapshot?.input.params?.mode).toBe('strict');
-    expect(getOrderSnapshot?.input.headers?.mode).toBe('open');
-    expect(editOrderSnapshot?.success.headers?.mode).toBe('open');
-    expect(snapshot.guards['apiKey']?.demands.headers?.mode).toBe('open');
-  });
+    const params = snapshot.endpoints['PATCH /orders/{}/lines/{}']?.input.params;
 
-  test('params written as a record keyed by an enum are stored strict, a field per key', () => {
-    const lookup = defineEndpoint({
-      name: 'lookup',
-      method: 'GET',
-      path: '/lookup/:id',
-      visibility: 'public',
-      description: 'Lookup',
-      input: { params: z.record(z.enum(['id']), z.string()) },
-      success: { status: 204 },
-    } as never);
-    const group = defineGroup({ name: 'lookup', description: 'Lookup', endpoints: [lookup] });
-    const root = defineContract({ name: 'lookup-service', groups: [group] });
-
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
-
-    expect(snapshot.endpoints['GET /lookup/{}']?.input.params).toEqual({
+    expect(params).toEqual({
       type: 'object',
-      mode: 'strict',
-      fields: { id: { required: true, schema: { type: 'string' } } },
+      fields: {
+        orderId: { required: true, schema: { type: 'string', format: 'uuid' } },
+        lineId: { required: true, schema: { type: 'string', format: 'uuid' } },
+      },
     });
   });
 
-  test('the parts an Endpoint does not declare are null', () => {
+  test('the bodies an Endpoint does not declare are null, and the text parts have no field', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['GET /orders/{}']?.input).toMatchObject({ query: null, body: null });
-    expect(snapshot.endpoints['GET /orders/{}']?.success.headers).toBeNull();
+    expect(snapshot.endpoints['GET /orders/{}']?.input).toMatchObject({
+      query: { type: 'object', fields: {} },
+      body: null,
+    });
+    expect(snapshot.endpoints['GET /orders/{}']?.success.headers).toEqual({
+      type: 'object',
+      fields: {},
+    });
     expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.success).toMatchObject({
       status: 204,
       body: null,
@@ -406,7 +467,6 @@ describe('snapshotOf: a Service', () => {
 
     expect(query).toEqual({
       type: 'object',
-      mode: 'open',
       fields: {
         text: { required: true, schema: { type: 'string' } },
         tenant: { required: true, schema: { type: 'string' } },
@@ -453,14 +513,12 @@ describe('snapshotOf: a Service', () => {
         demands: {
           headers: {
             type: 'object',
-            mode: 'open',
             fields: { 'x-api-key': { required: true, schema: { type: 'string' } } },
           },
-          query: null,
+          query: { type: 'object', fields: {} },
         },
         context: {
           type: 'object',
-          mode: 'open',
           fields: { callerId: { required: true, schema: { type: 'string' } } },
         },
         rejections: ['UNAUTHENTICATED'],
@@ -475,7 +533,7 @@ describe('snapshotOf: a Service', () => {
           min: 1,
           items: { type: 'enum', values: ['orders:edit', 'orders:read'], open: false },
         },
-        demands: { headers: null, query: null },
+        demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
         context: null,
         rejections: ['FORBIDDEN'],
       },
@@ -499,7 +557,7 @@ describe('snapshotOf: a Service', () => {
     { reach: 'a Guard at the end of the attached chain answers', code: 'DEEP', written: true },
     { reach: 'only a Private Endpoint lists', code: 'PURGED', written: true },
     {
-      reach: 'only a listed Definitions Package declares, and no Endpoint reaches',
+      reach: 'only an imported Definitions Package declares, and no Endpoint reaches',
       code: 'UNUSED',
       written: false,
     },
@@ -509,99 +567,117 @@ describe('snapshotOf: a Service', () => {
     expect(code in snapshot.codes).toBe(written);
   });
 
-  test('a code carries its origin, status, message and body, and is not removed', () => {
+  test('a code carries its origin, status, message, headers and body, and is not removed', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.codes['ORDER_LOCKED']).toEqual({
       origin: 'local',
       status: 409,
       message: 'The order can no longer be changed',
+      headers: { type: 'object', fields: {} },
       body: {
         type: 'object',
-        mode: 'open',
         fields: { lockedAt: { required: true, schema: { type: 'string', format: 'datetime' } } },
       },
-      removed: false,
     });
     expect(snapshot.codes['UNAUTHENTICATED']).toEqual({
       origin: '@org/definitions@4.2.0',
       status: 401,
       message: 'Unauthenticated',
+      headers: {
+        type: 'object',
+        fields: {
+          'www-authenticate': {
+            required: true,
+            schema: { type: 'string', description: 'The scheme to sign in with' },
+          },
+        },
+      },
       body: null,
-      removed: false,
     });
   });
 
-  test('a code declared twice is written with the first declaration’s message, a Definitions Package’s before an Endpoint’s', () => {
-    const lockedAgain = defineRejection({
-      code: 'UNAUTHENTICATED',
-      status: 401,
-      message: 'Declared again',
-    });
-    const ping = defineEndpoint({
-      name: 'ping',
-      method: 'GET',
-      path: '/ping',
-      visibility: 'public',
-      description: 'Ping',
-      success: { status: 200, body: z.object({ ok: z.boolean() }) },
-      rejections: [lockedAgain],
-    });
-    const group = defineGroup({ name: 'ping', description: 'Ping', endpoints: [ping] });
-    const root = defineContract({
-      name: 'ping-service',
-      definitions: [orgDefinitions],
-      groups: [group],
+  test('the headers a Rejection declares are recorded under its code beside a body', () => {
+    const rateLimited = defineRejection({
+      code: 'RATE_LIMITED',
+      status: 429,
+      message: 'Slow down',
+      headers: z.object({ 'retry-after': z.int(), 'x-limit': z.string().optional() }),
+      body: z.object({ limit: z.int() }),
     });
 
-    const snapshot = serviceSnapshot(root);
+    const snapshot = serviceRejecting(rateLimited);
 
-    expect(snapshot.codes['UNAUTHENTICATED']?.message).toBe('Unauthenticated');
+    expect(snapshot.codes['RATE_LIMITED']).toMatchObject({
+      headers: {
+        type: 'object',
+        fields: {
+          'retry-after': { required: true, schema: { type: 'number', int: true } },
+          'x-limit': { required: false, schema: { type: 'string' } },
+        },
+      },
+      body: {
+        type: 'object',
+        fields: { limit: { required: true, schema: { type: 'number', int: true } } },
+      },
+    });
   });
 
-  test('Standard Rejections are resolved with their origin: the Definitions Package’s, else cf-loom’s', () => {
+  test('a code that declares no headers records an open object with no field, as a Standard Rejection’s does', () => {
+    const snapshot = serviceRejecting(unusedRejection);
+
+    expect(snapshot.codes['UNUSED']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['NOT_FOUND']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['NOT_IMPLEMENTED']?.headers).toEqual({ type: 'object', fields: {} });
+    expect(snapshot.codes['INVALID_INPUT']?.headers).toEqual({ type: 'object', fields: {} });
+  });
+
+  test('standardRejections maps each Standard Rejection to the code it resolved to', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.standardRejections).toEqual({
-      invalidInput: {
-        origin: '@org/definitions@4.2.0',
-        code: 'BAD_REQUEST',
-        status: 400,
-        message: 'The request is invalid',
-        body: expect.objectContaining({ type: 'object' }),
-      },
-      notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: {
-        origin: 'standard',
-        code: 'NOT_IMPLEMENTED',
-        status: 501,
-        message: 'Not implemented',
-      },
+      invalidInput: 'BAD_REQUEST',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
+    });
+  });
+
+  test('each Standard Rejection’s status, message and origin are its code’s, under codes', () => {
+    const snapshot = serviceSnapshot();
+
+    expect(snapshot.codes['BAD_REQUEST']).toMatchObject({
+      origin: '@org/definitions@4.2.0',
+      status: 400,
+      message: 'The request is invalid',
     });
     expect(snapshot.codes['NOT_FOUND']).toEqual({
       origin: 'standard',
       status: 404,
       message: 'Not found',
+      headers: { type: 'object', fields: {} },
       body: null,
-      removed: false,
+    });
+    expect(snapshot.codes['NOT_IMPLEMENTED']).toMatchObject({
+      origin: 'standard',
+      status: 501,
+      message: 'Not implemented',
     });
   });
 
-  test('the invalid-input Rejection carries cf-loom’s body, its issues', () => {
+  test('the invalid-input Rejection carries cf-loom’s body, its issues, with in and code as Open Enums', () => {
     const snapshot = serviceSnapshot();
     const issue = {
       type: 'object',
-      mode: 'open',
       fields: {
         in: {
           required: true,
-          schema: { type: 'enum', values: ['body', 'headers', 'params', 'query'], open: false },
+          schema: { type: 'enum', values: ['body', 'headers', 'params', 'query'], open: true },
         },
         path: {
           required: true,
           schema: {
             type: 'array',
-            items: { type: 'union', options: [{ type: 'number' }, { type: 'string' }] },
+            items: { type: 'union', options: [{ type: 'string' }, { type: 'number' }] },
           },
         },
         code: {
@@ -619,21 +695,17 @@ describe('snapshotOf: a Service', () => {
               'too_small',
               'unrecognized_key',
             ],
-            open: false,
+            open: true,
           },
         },
         message: { required: true, schema: { type: 'string' } },
       },
     };
 
-    expect(snapshot.standardRejections.invalidInput.body).toEqual({
+    expect(snapshot.codes['BAD_REQUEST']?.body).toEqual({
       type: 'object',
-      mode: 'open',
       fields: { issues: { required: true, schema: { type: 'array', items: issue } } },
     });
-    expect(snapshot.codes['BAD_REQUEST']?.body).toEqual(
-      snapshot.standardRejections.invalidInput.body,
-    );
   });
 
   test('a shared schema from a Definitions Package carries its origin with its name', () => {
@@ -644,7 +716,7 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('Dependencies are written by Provider with against, Endpoints by id and Events by identity, sorted', () => {
+  test('Dependencies are written by Provider with against and Endpoints by id, sorted, and no Events', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot.dependencies).toEqual({
@@ -654,9 +726,47 @@ describe('snapshotOf: a Service', () => {
           { id: 'GET /payments', name: 'listPayments' },
           { id: 'GET /payments/{}', name: 'getPayment' },
         ],
-        events: ['PaymentFailed@1', 'PaymentSettled@1'],
       },
     });
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnFailed: { event: 'payments-service:PaymentFailed@1' },
+      notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
+    });
+  });
+
+  test('a Dependency is against the version of the installed package, whatever else its package exports', () => {
+    const installed = anInstalledContract('payments-service', payments, {
+      packageName: '@org/contract-payments-service',
+      version: '7.0.2',
+    });
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [installed]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('7.0.2');
+  });
+
+  test('a Dependency is not against another installed package whose contract has the Provider’s name but Elements of its own', () => {
+    const lookalike = anInstalledContract('payments-service', [aGetPaymentOfItsOwn], {
+      packageName: '@org/payments-lookalike',
+      version: '9.9.9',
+    });
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [lookalike, paymentsPackage]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('5.1.0');
+  });
+
+  test('a Dependency is against the package that exports the Provider’s Elements, not the one that re-exports them', () => {
+    const original = anInstalledContract('payments-service', payments, { version: '5.1.0' });
+    const wrapper = anInstalledContract('payments-service', payments, {
+      packageName: '@org/payments-wrapper',
+      version: '9.9.9',
+      reaches: [original],
+    });
+
+    const snapshot = serviceSnapshot(contract, [orgPackage], [wrapper, original]);
+
+    expect(snapshot.dependencies['payments-service']?.against).toBe('5.1.0');
   });
 
   test('recursive schemas are written once under defs and referenced', () => {
@@ -668,7 +778,7 @@ describe('snapshotOf: a Service', () => {
           return z.array(category);
         },
       })
-      .meta({ id: 'Category' });
+      .meta({ id: 'category' });
     const tree = defineEndpoint({
       name: 'tree',
       method: 'GET',
@@ -678,15 +788,15 @@ describe('snapshotOf: a Service', () => {
       success: { status: 200, body: category },
     });
     const group = defineGroup({ name: 'tree', description: 'Tree', endpoints: [tree] });
-    const root = defineContract({ name: 'tree-service', groups: [group] });
+    const root = defineService({ name: 'tree-service', groups: [group] });
 
-    const snapshot = serviceSnapshot(root, aContext({ packages: [] }));
+    const snapshot = serviceSnapshot(root, []);
 
     expect(snapshot.endpoints['GET /tree']?.success.body).toEqual({
       type: 'ref',
-      name: 'Category',
+      name: 'category',
     });
-    expect(Object.keys(snapshot.defs)).toEqual(['Category']);
+    expect(Object.keys(snapshot.defs)).toEqual(['category']);
   });
 });
 
@@ -716,31 +826,143 @@ const chargeCardV1 = defineCommand({
 
 /** A Service that declares Messages and subscribes to its own Event and to a Dependency's. */
 function messagingSnapshot(declared: {
-  readonly events?: readonly (typeof orderCreatedV1 | typeof orderCreatedV2)[];
-  readonly commands?: readonly (typeof chargeCardV1)[];
+  readonly events?: readonly [typeof orderCreatedV1 | typeof orderCreatedV2];
+  readonly commands?: readonly [typeof chargeCardV1];
 }) {
-  const auditOrders = defineSubscription({ name: 'audit-orders', event: orderCreatedV2 });
-  const root = defineContract({
-    name: 'orders-service',
-    events: declared.events ?? [orderCreatedV1, orderCreatedV2],
-    commands: declared.commands ?? [chargeCardV1],
-    subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
-    dependencies: [paymentsDeps],
+  const auditOrders = defineSubscription({
+    name: 'auditOrders',
+    description: 'Audits each order created',
+    event: orderCreatedV2,
   });
-  return serviceSnapshot(root, aContext({ packages: [] }));
+  const root = defineService({
+    name: 'orders-service',
+    groups: [
+      defineGroup({
+        name: 'orders',
+        description: 'Orders',
+        events: declared.events ?? [orderCreatedV1, orderCreatedV2],
+      }),
+      defineGroup({
+        name: 'payments',
+        description: 'Payments',
+        commands: declared.commands ?? [chargeCardV1],
+        subscriptions: [auditOrders, notifyOnSettled, notifyOnFailed],
+      }),
+    ],
+    dependencies: [paymentsDependency],
+  });
+  return serviceSnapshot(root, []);
 }
 
 const orderIdBody = {
   type: 'object',
-  mode: 'open',
   fields: { orderId: { required: true, schema: { type: 'string', format: 'uuid' } } },
 };
 
+describe('snapshotOf: one Snapshot for one Contract', () => {
+  const emptyPart = { type: 'object', fields: {} };
+
+  /** A one-Endpoint Service whose Endpoint declares the parts given and attaches a Guard that demands the part given. */
+  function aPingService(parts: {
+    readonly input?: { readonly query?: z.ZodObject; readonly headers?: z.ZodObject };
+    readonly headers?: z.ZodObject;
+    readonly demands?: { readonly query?: z.ZodObject; readonly headers?: z.ZodObject };
+  }) {
+    const gate = defineGuard({ name: 'gate', description: 'A gate', demands: parts.demands ?? {} });
+    const ping = defineEndpoint({
+      name: 'ping',
+      method: 'GET',
+      path: '/ping',
+      visibility: 'public',
+      description: 'Answers',
+      guards: [gate],
+      input: parts.input ?? {},
+      success: {
+        status: 200,
+        body: z.object({ ok: z.boolean() }),
+        ...(parts.headers === undefined ? {} : { headers: parts.headers }),
+      },
+    });
+    const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
+    return defineService({ name: 'ping-service', groups: [group] });
+  }
+
+  test.each([
+    ['an Endpoint’s query', { input: { query: z.object({}) } }],
+    ['an Endpoint’s headers', { input: { headers: z.object({}) } }],
+    ['a Success’s headers', { headers: z.object({}) }],
+    ['a Guard’s demanded query', { demands: { query: z.object({}) } }],
+    ['a Guard’s demanded headers', { demands: { headers: z.object({}) } }],
+  ])(
+    '%s declared with no field writes the same Snapshot as one not declared',
+    (_name, declared) => {
+      const empty = canonicalTextOf(snapshotFor(aPingService(declared), []));
+      const undeclared = canonicalTextOf(snapshotFor(aPingService({}), []));
+
+      expect(empty).toBe(undeclared);
+    },
+  );
+
+  test('a text part with no field is an open object with no field, never null', () => {
+    const snapshot = snapshotFor(aPingService({}), []);
+    if (snapshot.kind !== 'service') {
+      throw new Error('The fixture is no Service');
+    }
+
+    const endpoint = snapshot.endpoints['GET /ping'];
+    expect([endpoint?.input.query, endpoint?.input.headers, endpoint?.success.headers]).toEqual([
+      emptyPart,
+      emptyPart,
+      emptyPart,
+    ]);
+    expect(snapshot.guards['gate']?.demands).toEqual({ headers: emptyPart, query: emptyPart });
+  });
+});
+
+/** A one-Endpoint Service whose Endpoint declares one query field and no headers. */
+function aPingServiceWithQuery() {
+  const ping = defineEndpoint({
+    name: 'ping',
+    method: 'GET',
+    path: '/ping',
+    visibility: 'public',
+    description: 'Answers',
+    input: { query: z.object({ page: z.string() }) },
+    success: { status: 204 },
+  });
+  const group = defineGroup({ name: 'health', description: 'Health', endpoints: [ping] });
+  return defineService({ name: 'ping-service', groups: [group] });
+}
+
+describe('isEmptyTextPart', () => {
+  test('is the text part the Snapshot writes where none is declared, and no other', () => {
+    const snapshot = snapshotFor(aPingServiceWithQuery(), []);
+    if (snapshot.kind !== 'service') {
+      throw new Error('The fixture is no Service');
+    }
+    const input = snapshot.endpoints['GET /ping']?.input;
+
+    expect(input === undefined ? [] : [input.headers, input.query].map(isEmptyTextPart)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  test.each([
+    ['a description', { type: 'object', fields: {}, description: 'The query' }],
+    ['an example', { type: 'object', fields: {}, examples: [{}] }],
+    ['an origin', { type: 'object', fields: {}, origin: '@org/definitions@1.0.0#query' }],
+  ] as const)('is not a part that carries %s', (_name, part) => {
+    expect(isEmptyTextPart(part)).toBe(false);
+  });
+});
+
 describe('snapshotOf: Messages and Subscriptions', () => {
-  test('Events are written by identity with their Visibility, lifecycle, description and body', () => {
+  test('Events are written by identity with their Group, Visibility, lifecycle, description and body', () => {
     const snapshot = messagingSnapshot({});
 
     expect(snapshot.events['OrderCreated@1']).toEqual({
+      group: 'orders',
       visibility: 'internal',
       lifecycle: 'deprecated',
       description: 'An order was placed',
@@ -748,11 +970,12 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     });
   });
 
-  test('Commands are written by identity with no Visibility', () => {
+  test('Commands are written by identity with their Group and no Visibility', () => {
     const snapshot = messagingSnapshot({});
 
     expect(snapshot.commands).toEqual({
       'ChargeCard@1': {
+        group: 'payments',
         lifecycle: 'active',
         description: 'Charges the order’s card',
         body: orderIdBody,
@@ -778,6 +1001,7 @@ describe('snapshotOf: Messages and Subscriptions', () => {
     const snapshot = messagingSnapshot({ commands: [retiredV1] });
 
     expect(snapshot.commands['ChargeCard@1']).toEqual({
+      group: 'payments',
       lifecycle: 'retired',
       description: 'Charges the order’s card',
       body: orderIdBody,
@@ -787,17 +1011,83 @@ describe('snapshotOf: Messages and Subscriptions', () => {
   test('a Subscription to the Service’s own Event writes the Service’s name before the Event’s identity', () => {
     const snapshot = messagingSnapshot({});
 
-    expect(snapshot.subscriptions['audit-orders']).toEqual({
-      event: 'orders-service:OrderCreated@2',
+    expect(snapshot.subscriptions).toMatchObject({
+      auditOrders: { event: 'orders-service:OrderCreated@2' },
     });
   });
 
-  test('a Subscription to a Dependency’s Event writes the Provider’s name before the Event’s identity', () => {
+  test('a Subscription to a Provider’s Event writes the Provider’s name before the Event’s identity', () => {
     const snapshot = messagingSnapshot({});
 
-    expect(snapshot.subscriptions['notify-on-settled']).toEqual({
-      event: 'payments-service:PaymentSettled@1',
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnSettled: { event: 'payments-service:PaymentSettled@1' },
     });
+  });
+
+  test('a Subscription writes its Group', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions).toMatchObject({ notifyOnSettled: { group: 'payments' } });
+  });
+
+  test('two Message Versions of one Command are written each with its own Group', () => {
+    const chargeCardV2 = defineCommand({
+      name: 'ChargeCard',
+      version: 2,
+      description: 'Charges the order’s card, again',
+      lifecycle: 'deprecated',
+      body: orderBody,
+    });
+    const root = defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({ name: 'orders', description: 'Orders', commands: [chargeCardV1] }),
+        defineGroup({ name: 'payments', description: 'Payments', commands: [chargeCardV2] }),
+      ],
+    });
+
+    const snapshot = serviceSnapshot(root, []);
+
+    expect(snapshot.commands).toMatchObject({
+      'ChargeCard@1': { group: 'orders' },
+      'ChargeCard@2': { group: 'payments' },
+    });
+  });
+
+  test('a Subscription writes its description', () => {
+    const snapshot = messagingSnapshot({});
+
+    expect(snapshot.subscriptions).toMatchObject({
+      notifyOnSettled: { description: 'Notifies the customer of each payment settled' },
+    });
+  });
+
+  test('two Subscriptions whose names differ only in the case of a letter get two keys', () => {
+    const settle2xy = defineSubscription({
+      name: 'settle2xy',
+      description: 'Settles lower',
+      event: orderCreatedV2,
+    });
+    const settle2Xy = defineSubscription({
+      name: 'settle2Xy',
+      description: 'Settles upper',
+      event: orderCreatedV2,
+    });
+    const root = defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV2],
+          subscriptions: [settle2xy, settle2Xy],
+        }),
+      ],
+    });
+
+    const snapshot = serviceSnapshot(root, []);
+
+    expect(Object.keys(snapshot.subscriptions).toSorted()).toEqual(['settle2Xy', 'settle2xy']);
   });
 
   test('Message Versions are keyed in code point order in the canonical text', () => {
@@ -808,81 +1098,84 @@ describe('snapshotOf: Messages and Subscriptions', () => {
       description: 'An order was placed',
       body: orderBody,
     });
-    const root = defineContract({
+    const root = defineService({
       name: 'orders-service',
-      events: [orderCreatedV2, orderCreatedV10],
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: [orderCreatedV2, orderCreatedV10],
+        }),
+      ],
     });
 
-    const text = textOf(serviceSnapshot(root, aContext({ packages: [] })));
+    const text = textOf(serviceSnapshot(root, []));
 
     expect(text.indexOf('"OrderCreated@10"')).toBeLessThan(text.indexOf('"OrderCreated@2"'));
   });
 });
 
 describe('snapshotOf: deprecatedAt', () => {
-  test('a Deprecated Endpoint keeps the deprecatedAt of the committed Snapshot', () => {
-    const committed = {
-      endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stampedAt } },
-    };
-
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
-
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(stampedAt);
-  });
-
-  test('an Endpoint first seen Deprecated is stamped with the clock, to the second', () => {
+  test('a Deprecated Endpoint carries the deprecatedAt its declaration states', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-      '2026-10-18T12:00:00Z',
-    );
+    expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(deprecatedAt);
   });
 
-  test.each([
-    '2026-10-17T09:30:00.000Z',
-    '2026-10-17T09:30:00+00:00',
-    '2026-02-30T09:30:00Z',
-    'yesterday',
-    1760693400,
-  ])(
-    'a committed deprecatedAt that is no UTC instant to the second, %s, is stamped again',
-    (stamp) => {
-      const committed = { endpoints: { 'PATCH /orders/{}/lines/{}': { deprecatedAt: stamp } } };
+  test('a future deprecatedAt is carried as declared', () => {
+    const scheduled = defineEndpoint({
+      name: 'scheduled',
+      method: 'GET',
+      path: '/scheduled',
+      visibility: 'public',
+      description: 'Deprecated as of a day to come',
+      lifecycle: 'deprecated',
+      deprecatedAt: '2999-01-01T00:00:00Z',
+      success: { status: 204 },
+    });
+    const root = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [scheduled] })],
+    });
 
-      const snapshot = serviceSnapshot(contract, aContext({ committed }));
+    const snapshot = serviceSnapshot(root, []);
 
-      expect(snapshot.endpoints['PATCH /orders/{}/lines/{}']?.deprecatedAt).toBe(
-        '2026-10-18T12:00:00Z',
-      );
-    },
-  );
+    expect(snapshot.endpoints['GET /scheduled']?.deprecatedAt).toBe('2999-01-01T00:00:00Z');
+  });
 
-  test('an Active Endpoint carries no deprecatedAt, whatever the committed Snapshot says', () => {
-    const committed = { endpoints: { 'GET /orders/{}': { deprecatedAt: stampedAt } } };
+  test('an Active Endpoint’s entry holds the parts of its declaration, and no more', () => {
+    const snapshot = serviceSnapshot();
 
-    const snapshot = serviceSnapshot(contract, aContext({ committed }));
-
-    expect(snapshot.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
+    expect(Object.keys(snapshot.endpoints['GET /orders/{}'] ?? {}).sort()).toEqual([
+      'description',
+      'group',
+      'guards',
+      'input',
+      'lifecycle',
+      'name',
+      'params',
+      'rejections',
+      'success',
+      'visibility',
+    ]);
   });
 });
 
 describe('snapshotOf: an Application', () => {
   test('an Application’s Snapshot holds only its Dependencies', () => {
-    const adminDeps = defineDependencies(payments, { endpoints: [payments.endpoints.getPayment] });
-    const application = defineApplication({ name: 'web-admin', dependencies: [adminDeps] });
+    const adminDependency = defineDependency({ endpoints: [getPayment] });
+    const application = defineApplication({ name: 'web-admin', dependencies: [adminDependency] });
 
-    const snapshot = snapshotFor(application, aContext({ packages: [] }));
+    const snapshot = snapshotFor(application, []);
 
     expect(snapshot).toEqual({
       format: 1,
       kind: 'application',
       name: 'web-admin',
-      generator: '@cf-loom/cli@2.1.0',
       dependencies: {
         'payments-service': {
           against: '5.1.0',
           endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
-          events: [],
         },
       },
     });
@@ -891,23 +1184,30 @@ describe('snapshotOf: an Application', () => {
 
 describe('snapshotOf: a Definitions Package', () => {
   test('a Definitions Package’s Snapshot writes every Guard, shared schema and code it declares, as local', () => {
-    const snapshot = snapshotFor(orgDefinitions, aContext({ packages: [] }));
+    const snapshot = snapshotFor(orgDefinitions, []);
 
     expect(snapshot).toMatchObject({
       format: 1,
       kind: 'definitions',
-      name: 'definitions',
-      generator: '@cf-loom/cli@2.1.0',
+      name: '@org/definitions',
       defs: {},
-      schemas: {
+      exports: {
+        forbidden: { kind: 'rejection', code: 'FORBIDDEN' },
         money: {
-          type: 'object',
-          mode: 'open',
-          fields: {
-            amount: { required: true, schema: { type: 'number', int: true } },
-            currency: { required: true, schema: { type: 'string' } },
+          kind: 'schema',
+          schema: {
+            type: 'object',
+            fields: {
+              amount: { required: true, schema: { type: 'number', int: true } },
+              currency: { required: true, schema: { type: 'string' } },
+            },
           },
         },
+        permission: { kind: 'guard', guard: 'permission' },
+        unauthenticated: { kind: 'rejection', code: 'UNAUTHENTICATED' },
+        unusedGuard: { kind: 'guard', guard: 'unusedGuard' },
+        unusedRejection: { kind: 'rejection', code: 'UNUSED' },
+        userToken: { kind: 'guard', guard: 'userToken' },
       },
     });
     expect(snapshot.kind === 'definitions' && Object.keys(snapshot.guards).sort()).toEqual([
@@ -916,52 +1216,133 @@ describe('snapshotOf: a Definitions Package', () => {
       'userToken',
     ]);
     expect(snapshot.kind === 'definitions' && snapshot.codes['UNUSED']?.origin).toBe('local');
-    expect(snapshot.kind === 'definitions' && snapshot.standardRejections.invalidInput.origin).toBe(
-      'local',
-    );
-    expect(snapshot).not.toHaveProperty('endpoints');
-    expect(snapshot).not.toHaveProperty('definitions');
+    expect(snapshot.kind === 'definitions' && snapshot.codes['BAD_REQUEST']?.origin).toBe('local');
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'codes',
+      'defs',
+      'exports',
+      'format',
+      'guards',
+      'kind',
+      'name',
+      'standardRejections',
+    ]);
+  });
+
+  test('a Definitions Package’s standardRejections maps each Standard Rejection to its code', () => {
+    const snapshot = snapshotFor(orgDefinitions, []);
+
+    expect(snapshot.kind === 'definitions' && snapshot.standardRejections).toEqual({
+      invalidInput: 'BAD_REQUEST',
+      notFound: 'NOT_FOUND',
+      notImplemented: 'NOT_IMPLEMENTED',
+    });
+  });
+});
+
+describe('the kind of a Root', () => {
+  test('a Root’s declared Snapshot has the kind its declaration has, for every kind of Root', () => {
+    const roots = [
+      defineService({ name: 'orders-service' }),
+      defineApplication({ name: 'web-admin' }),
+      defineDefinitions({}),
+    ] satisfies readonly Root[];
+
+    const kinds = roots.map((root) => snapshotFor(root, []).kind);
+
+    expect(kinds).toEqual(['service', 'application', 'definitions']);
+    expect(kinds).toEqual(roots.map((root) => root.kind));
+  });
+
+  test('the kind of a Root is the kind of its Snapshot', () => {
+    const service = defineService({ name: 'orders-service' });
+
+    const kind: RootKind = snapshotFor(service, []).kind;
+
+    expectTypeOf<RootKind>().toEqualTypeOf<Snapshot['kind']>();
+    expect(kind).toBe(service.kind);
   });
 });
 
 describe('canonicalTextOf', () => {
-  test('keys are sorted by code point, indented by two spaces, with a final newline', () => {
+  test('the heading comes first, then keys by code point, indented by two spaces, with a final newline', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
-    const text = textOf(snapshotFor(application, aContext({ packages: [] })));
+    const text = textOf(snapshotFor(application, []));
 
     expect(text).toBe(
       [
         '{',
-        '  "dependencies": {},',
         '  "format": 1,',
-        '  "generator": "@cf-loom/cli@2.1.0",',
         '  "kind": "application",',
-        '  "name": "web-admin"',
+        '  "name": "web-admin",',
+        '  "dependencies": {}',
         '}',
         '',
       ].join('\n'),
     );
   });
 
+  test('a published Snapshot’s heading runs format, kind, name, version, generator', () => {
+    const application = defineApplication({ name: 'web-admin', dependencies: [] });
+    const declared = snapshotFor(application, []);
+    const heading = { version: '3.4.0', generator: '@cf-loom/cli@2.1.0' };
+
+    const published = publishedSnapshotOf(undefined, declared, heading);
+
+    expect(canonicalTextOf(published).split('\n').slice(0, 7)).toEqual([
+      '{',
+      '  "format": 1,',
+      '  "kind": "application",',
+      '  "name": "web-admin",',
+      '  "version": "3.4.0",',
+      '  "generator": "@cf-loom/cli@2.1.0",',
+      '  "dependencies": {}',
+    ]);
+  });
+
+  test('a published Definitions Package’s heading runs format, kind, name, version, generator', () => {
+    const declared = snapshotFor(orgDefinitions, []);
+    const heading = { version: '4.2.0', generator: '@cf-loom/cli@2.1.0' };
+
+    const published = publishedSnapshotOf(undefined, declared, heading);
+
+    expect(canonicalTextOf(published).split('\n').slice(1, 6)).toEqual([
+      '  "format": 1,',
+      '  "kind": "definitions",',
+      '  "name": "@org/definitions",',
+      '  "version": "4.2.0",',
+      '  "generator": "@cf-loom/cli@2.1.0",',
+    ]);
+  });
+
+  test('a nested object that holds a heading key keeps its keys sorted by code point', () => {
+    const written = JSON.parse(textOf(serviceSnapshot()));
+
+    const endpointKeys = Object.keys(written.endpoints['GET /orders/{}']);
+
+    expect(Object.keys(written).slice(0, 3)).toEqual(['format', 'kind', 'name']);
+    expect(endpointKeys).toContain('name');
+    expect(endpointKeys).toEqual([...endpointKeys].sort());
+  });
+
   test('the same Contract written in another order gives the same bytes', () => {
-    const reordered = defineContract({
+    const reordered = defineService({
       name: 'orders-service',
-      definitions: [orgDefinitions],
+      standardRejections: orgDefinitions,
       groups: [
         defineGroup({
           name: 'orders',
           description: 'Order lifecycle',
           endpoints: [editOrder, aGetOrder([notFound, orderLocked])],
         }),
-      ],
-      subscriptions: [notifyOnFailed, notifyOnSettled],
-      dependencies: [
-        defineDependencies(payments, {
-          endpoints: [payments.endpoints.listPayments, payments.endpoints.getPayment],
-          events: [payments.events.paymentFailedV1, payments.events.paymentSettledV1],
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          subscriptions: [notifyOnFailed, notifyOnSettled],
         }),
       ],
+      dependencies: [defineDependency({ endpoints: [listPayments, getPayment] })],
     });
 
     const written = textOf(snapshotFor(contract));
@@ -984,10 +1365,151 @@ describe('canonicalTextOf', () => {
       success: { status: 200, body: variants },
     });
     const group = defineGroup({ name: 'tagged', description: 'Tagged', endpoints: [tagged] });
-    const root = defineContract({ name: 'tagged-service', groups: [group] });
+    const root = defineService({ name: 'tagged-service', groups: [group] });
 
-    const text = textOf(snapshotFor(root, aContext({ packages: [] })));
+    const text = textOf(snapshotFor(root, []));
 
     expect(text.indexOf('"\\"a\\"": {')).toBeLessThan(text.indexOf('"1": {'));
+  });
+});
+
+describe('originPackagesOf', () => {
+  test('a Contract that takes its Guards, codes and schemas from a Definitions Package names that package at its version', () => {
+    const snapshot = serviceSnapshot();
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toEqual([{ packageName: '@org/definitions', version: '4.2.0' }]);
+  });
+
+  test('a Contract that takes nothing from a Definitions Package names none', () => {
+    const own = defineService({ name: 'orders-service' });
+
+    const packages = originPackagesOf(snapshotFor(own, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('a Definitions Package’s own Snapshot, whose origins are local, names none', () => {
+    const packages = originPackagesOf(snapshotFor(orgDefinitions, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('an Application names none', () => {
+    const application = defineApplication({ name: 'web-admin', dependencies: [] });
+
+    const packages = originPackagesOf(snapshotFor(application, []));
+
+    expect(packages).toEqual([]);
+  });
+
+  test('each package version is named once, by package then version, wherever its origin sits', () => {
+    const snapshot = structuredClone(serviceSnapshot());
+    const guards = Object.values(snapshot.guards);
+    const codes = Object.values(snapshot.codes);
+    Object.assign(guards[0] ?? {}, { origin: '@other/auth@1.0.0' });
+    Object.assign(codes[0] ?? {}, { origin: '@org/definitions@3.9.0' });
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toEqual([
+      { packageName: '@org/definitions', version: '3.9.0' },
+      { packageName: '@org/definitions', version: '4.2.0' },
+      { packageName: '@other/auth', version: '1.0.0' },
+    ]);
+  });
+
+  const onlyHere = '@org/only-here@1.2.3#shape';
+
+  const messages = defineGroup({
+    name: 'messages',
+    description: 'Messages',
+    events: [
+      defineEvent({
+        name: 'OrderPlaced',
+        version: 1,
+        visibility: 'internal',
+        description: 'An order was placed',
+        body: z.object({ orderId: z.string() }),
+      }),
+    ],
+    commands: [
+      defineCommand({
+        name: 'ChargeCard',
+        version: 1,
+        description: 'Charges the card',
+        body: z.object({ orderId: z.string() }),
+      }),
+    ],
+  });
+
+  /** A Snapshot whose origins are all `local`, so a test puts one origin in the place it tests. */
+  function withoutOrigins(snapshot: Snapshot): Snapshot {
+    const text = JSON.stringify(snapshot);
+    return JSON.parse(text, (key, value) => (key === 'origin' ? 'local' : value));
+  }
+
+  /** The Snapshot with `origin` on what sits at the path. */
+  function withOriginAt(snapshot: Snapshot, path: readonly string[], origin: string): Snapshot {
+    const copy = structuredClone(snapshot);
+    let place: unknown = copy;
+    for (const step of path) {
+      place = Reflect.get(Object(place), step);
+    }
+    Object.assign(Object(place), { origin });
+    return copy;
+  }
+
+  const service = () => withoutOrigins(serviceSnapshot());
+  const withMessages = () =>
+    withoutOrigins(snapshotFor(defineService({ name: 'orders-service', groups: [messages] }), []));
+  const definitions = () => withoutOrigins(snapshotFor(orgDefinitions, []));
+
+  test.each([
+    {
+      place: 'an Endpoint’s Input',
+      snapshot: service,
+      at: ['endpoints', 'GET /orders/{}', 'input', 'headers'],
+    },
+    {
+      place: 'an Endpoint’s Success',
+      snapshot: service,
+      at: ['endpoints', 'GET /orders/{}', 'success', 'body'],
+    },
+    { place: 'an Event’s body', snapshot: withMessages, at: ['events', 'OrderPlaced@1', 'body'] },
+    { place: 'a Command’s body', snapshot: withMessages, at: ['commands', 'ChargeCard@1', 'body'] },
+    { place: 'a Guard’s schema', snapshot: service, at: ['guards', 'userToken', 'context'] },
+    { place: 'a code’s body', snapshot: service, at: ['codes', 'ORDER_LOCKED', 'body'] },
+    { place: 'a Guard', snapshot: service, at: ['guards', 'userToken'] },
+    { place: 'a code', snapshot: service, at: ['codes', 'ORDER_LOCKED'] },
+    {
+      place: 'a Definitions Package’s shared schema',
+      snapshot: definitions,
+      at: ['exports', 'money', 'schema'],
+    },
+  ])('an origin only on $place is read', ({ snapshot, at }) => {
+    const edited = withOriginAt(snapshot(), at, onlyHere);
+
+    const packages = originPackagesOf(edited);
+
+    expect(packages).toEqual([{ packageName: '@org/only-here', version: '1.2.3' }]);
+  });
+
+  test('origins that are all local, or the standard ones, name no package', () => {
+    const packages = originPackagesOf(service());
+
+    expect(packages).toEqual([]);
+  });
+
+  test('the origin of a schema in a def is read too, whatever it follows', () => {
+    const snapshot = {
+      ...serviceSnapshot(),
+      defs: { shared: { type: 'string', origin: '@org/shapes@2.0.0#shared' } },
+    } as const;
+
+    const packages = originPackagesOf(snapshot);
+
+    expect(packages).toContainEqual({ packageName: '@org/shapes', version: '2.0.0' });
   });
 });

@@ -17,7 +17,9 @@ export const eventVisibilities = ['internal', 'private'] as const;
 export type EventVisibility = (typeof eventVisibilities)[number];
 
 /** An Element's lifecycle: the one it declares, or Active when it leaves it out. */
-export function lifecycleOf(element: { readonly lifecycle?: Lifecycle | undefined }): Lifecycle {
+export function lifecycleOf<Declared extends Lifecycle>(element: {
+  readonly lifecycle?: Declared | undefined;
+}): Declared | 'active' {
   return element.lifecycle === undefined ? 'active' : element.lifecycle;
 }
 
@@ -25,6 +27,11 @@ export function lifecycleOf(element: { readonly lifecycle?: Lifecycle | undefine
 export function isLive(element: { readonly lifecycle?: string | undefined }): boolean {
   return element.lifecycle !== 'retired';
 }
+
+/** The members of a union of declarations that are not Retired: the type twin of `isLive`. */
+export type LiveOf<Declared> = Declared extends { readonly lifecycle: 'retired' }
+  ? never
+  : Declared;
 
 /**
  * Whether a Dependency of a Service or of an Application may target an Element of a Visibility: a

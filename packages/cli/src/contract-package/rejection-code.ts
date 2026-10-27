@@ -3,19 +3,20 @@ import { loomNeeds, type Writing } from '../schema-code/index.ts';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, type PackagedDeclaration } from './names.ts';
-import { schemaLineOf } from './schema-lines.ts';
+import { declaredTextPartOf, schemaLineOf } from './schema-lines.ts';
 
-/** A Rejection by its code, its body a reader, since Callers read it. */
+/** A Rejection by its code, its headers and body readers, since Callers read them. */
 export function rejectionModuleOf(
   declared: Extract<PackagedDeclaration, { readonly kind: 'rejection' }>,
   code: CodeSnapshot,
 ): SchemaFile {
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    `export const ${bindingOf(declared)} = loom.defineRejection({`,
+    `export const ${bindingOf(declared)} = loom.providedRejection({`,
     `  code: ${stringLiteralOf(declared.code)},`,
     `  status: ${code.status},`,
     `  message: ${stringLiteralOf(code.message)},`,
+    ...schemaLineOf('headers', declaredTextPartOf(code.headers), reader),
     ...schemaLineOf('body', code.body, reader),
     '});',
   ];

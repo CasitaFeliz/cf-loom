@@ -1,16 +1,19 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { aProvider } from '../../test/providers.ts';
 import {
-  type ContractPackage,
+  type Contract,
   defineApplication,
   defineCommand,
-  defineContract,
   defineDefinitions,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineEvent,
   defineGroup,
+  defineService,
   defineSubscription,
+  providedEndpoint,
+  providedEvent,
 } from '../index.ts';
 
 const getPayment = defineEndpoint({
@@ -41,114 +44,168 @@ const paymentSettledV1 = defineEvent({
   body: z.object({ paymentId: z.uuid() }),
 });
 
-const payments = {
-  name: 'payments-service',
-  version: '5.1.0',
-  endpoints: { getPayment, refundPayment },
-  events: { paymentSettledV1 },
-  standardRejections: {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  },
-  exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-} as const satisfies ContractPackage;
+const refundCardV1 = defineCommand({
+  name: 'RefundCard',
+  version: 1,
+  description: 'Refunds the payment’s card',
+  body: z.object({ paymentId: z.uuid() }),
+});
 
-describe('defineContract', () => {
-  test('a Contract keeps what its root lists by identity', () => {
-    const definitions = defineDefinitions({ name: 'definitions' });
+const auditOnSettled = defineSubscription({
+  name: 'auditOnSettled',
+  description: 'Audits each payment settled',
+  event: paymentSettledV1,
+});
+
+/** The payments-service's Elements as its Contract Package exports them by name. */
+const payments = {
+  endpoints: {
+    getPayment: providedEndpoint(aProvider('payments-service'), getPayment, undefined),
+    refundPayment: providedEndpoint(aProvider('payments-service'), refundPayment, undefined),
+  },
+  events: { paymentSettledV1: providedEvent('payments-service', paymentSettledV1) },
+};
+
+describe('defineService', () => {
+  test('a Service’s Contract is what was written with the kind service, frozen', () => {
+    const service = defineService({ name: 'orders-service' });
+
+    expect(service).toEqual({ kind: 'service', name: 'orders-service' });
+    expect(Object.isFrozen(service)).toBe(true);
+  });
+
+  test('definitions is a type error: what a Service’s Contract reaches says which Definitions Packages it uses', () => {
+    // @ts-expect-error: definitions is not a declared field
+    const contract = defineService({ name: 'orders-service', definitions: [] });
+
+    expect(contract.kind).toBe('service');
+  });
+
+  test('a Service’s Contract keeps what its Root lists by identity', () => {
+    const definitions = defineDefinitions({});
     const paymentsGroup = defineGroup({
       name: 'payments',
       description: 'Payments',
       endpoints: [getPayment],
     });
-    const paymentsDeps = defineDependencies(payments, { endpoints: [refundPayment] });
+    const paymentsDependency = defineDependency({
+      endpoints: [payments.endpoints.refundPayment],
+    });
 
-    const contract = defineContract({
+    const contract = defineService({
       name: 'orders-service',
-      definitions: [definitions],
+      standardRejections: definitions,
       groups: [paymentsGroup],
-      dependencies: [paymentsDeps],
+      dependencies: [paymentsDependency],
     });
 
     expect(contract.groups[0]).toBe(paymentsGroup);
-    expect(contract.definitions[0]).toBe(definitions);
-    expect(contract.dependencies[0]).toBe(paymentsDeps);
-    expect(contract.kind).toBe('contract');
+    expect(contract.standardRejections).toBe(definitions);
+    expect(contract.dependencies[0]).toBe(paymentsDependency);
+    expect(contract.kind).toBe('service');
   });
 
-  test('a Contract keeps its Events, Commands and Subscriptions by identity', () => {
-    const orderCreatedV1 = defineEvent({
-      name: 'OrderCreated',
-      version: 1,
-      visibility: 'internal',
-      description: 'An order was placed',
-      body: z.object({ orderId: z.uuid() }),
-    });
-    const chargeCardV1 = defineCommand({
-      name: 'ChargeCard',
-      version: 1,
-      description: 'Charges the order’s card',
-      body: z.object({ orderId: z.uuid() }),
-    });
-    const notifyOnCreated = defineSubscription({
-      name: 'notify-on-created',
-      event: orderCreatedV1,
+  test('a Service’s Contract keeps each Group’s Command and Subscription with its exact type', () => {
+    const paymentsGroup = defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      events: [paymentSettledV1],
+      commands: [refundCardV1],
+      subscriptions: [auditOnSettled],
     });
 
-    const contract = defineContract({
-      name: 'orders-service',
-      events: [orderCreatedV1],
-      commands: [chargeCardV1],
-      subscriptions: [notifyOnCreated],
-    });
+    const contract = defineService({ name: 'payments-service', groups: [paymentsGroup] });
 
-    expect(contract.events[0]).toBe(orderCreatedV1);
-    expect(contract.commands[0]).toBe(chargeCardV1);
-    expect(contract.subscriptions[0]).toBe(notifyOnCreated);
+    expectTypeOf(contract.groups[0].commands[0]).toEqualTypeOf(refundCardV1);
+    expectTypeOf(contract.groups[0].subscriptions[0]).toEqualTypeOf(auditOnSettled);
+    expect(contract.groups[0].commands[0]).toBe(refundCardV1);
   });
 });
 
 describe('defineApplication', () => {
   test('an Application may depend on Public Endpoints', () => {
-    const publicDeps = defineDependencies(payments, { endpoints: [getPayment] });
+    const publicDependency = defineDependency({
+      endpoints: [payments.endpoints.getPayment],
+    });
 
-    const application = defineApplication({ name: 'web-admin', dependencies: [publicDeps] });
+    const application = defineApplication({ name: 'web-admin', dependencies: [publicDependency] });
 
-    expect(application.dependencies[0]).toBe(publicDeps);
+    expect(application.dependencies[0]).toBe(publicDependency);
   });
 
   test('an Application depending on an Internal Endpoint is a type error', () => {
-    const internalDeps = defineDependencies(payments, { endpoints: [refundPayment] });
+    const internalDependency = defineDependency({
+      endpoints: [payments.endpoints.refundPayment],
+    });
 
-    // @ts-expect-error an Application runs outside the internal network
-    const declare = () => defineApplication({ name: 'web-admin', dependencies: [internalDeps] });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('an Application depending on an Event is a type error', () => {
-    const eventDeps = defineDependencies(payments, { events: [paymentSettledV1] });
-
-    // @ts-expect-error an Application subscribes to no Event
-    const declare = () => defineApplication({ name: 'web-admin', dependencies: [eventDeps] });
+    const declare = () =>
+      // @ts-expect-error an Application runs outside the internal network
+      defineApplication({ name: 'web-admin', dependencies: [internalDependency] });
 
     expect(declare).not.toThrow();
   });
 
-  test('an Application without dependencies is a type error', () => {
-    // @ts-expect-error an Application lists its Dependencies
-    const declare = () => defineApplication({ name: 'web-admin' });
+  test('an Application depending on an Internal Endpoint is refused with the Endpoint’s name', () => {
+    const internalDependency = defineDependency({
+      endpoints: [payments.endpoints.refundPayment],
+    });
+    type Written = Parameters<
+      typeof defineApplication<{
+        readonly name: 'web-admin';
+        readonly dependencies: readonly [typeof internalDependency];
+      }>
+    >[0];
 
-    expect(declare).not.toThrow();
+    expectTypeOf<
+      Written['dependencies']
+    >().toExtend<'An Application depends on Public Endpoints only: refundPayment is internal'>();
+  });
+
+  test('an Application may list no Dependencies, which means it depends on nothing', () => {
+    const application = defineApplication({ name: 'web-admin' });
+
+    expect(application).toEqual({ kind: 'application', name: 'web-admin' });
   });
 });
 
-describe('the roots’ fields', () => {
-  test('an undeclared field on a Contract is a type error', () => {
-    // @ts-expect-error a Contract lists its Endpoints through its Groups
-    const declare = () => defineContract({ name: 'orders-service', endpoints: [] });
+describe('Contract', () => {
+  test('a Service’s and an Application’s Contract are Contracts, a Definitions Package is not', () => {
+    const service = defineService({ name: 'orders-service' });
+    const application = defineApplication({ name: 'web-admin' });
+    const definitions = defineDefinitions({});
 
+    expectTypeOf(service).toExtend<Contract>();
+    expectTypeOf(application).toExtend<Contract>();
+    expectTypeOf(definitions).not.toExtend<Contract>();
+    expect([service.kind, application.kind]).toEqual(['service', 'application']);
+  });
+});
+
+describe('the Roots’ fields', () => {
+  test('an undeclared field on a Service’s Contract is a type error', () => {
+    // @ts-expect-error a Service’s Contract lists its Endpoints through its Groups
+    const declare = () => defineService({ name: 'orders-service', endpoints: [] });
+
+    expect(declare).not.toThrow();
+  });
+
+  test.each([
+    [
+      'events',
+      // @ts-expect-error a Service’s Contract lists its Events through its Groups
+      () => defineService({ name: 'payments-service', events: [paymentSettledV1] }),
+    ],
+    [
+      'commands',
+      // @ts-expect-error a Service’s Contract lists its Commands through its Groups
+      () => defineService({ name: 'payments-service', commands: [refundCardV1] }),
+    ],
+    [
+      'subscriptions',
+      // @ts-expect-error a Service’s Contract lists its Subscriptions through its Groups
+      () => defineService({ name: 'payments-service', subscriptions: [auditOnSettled] }),
+    ],
+  ])('a Service’s Root that lists %s is a type error', (_field, declare) => {
     expect(declare).not.toThrow();
   });
 
@@ -161,18 +218,17 @@ describe('the roots’ fields', () => {
   });
 });
 
-describe('a declared root’s containers', () => {
-  test('a Contract freezes its lists', () => {
+describe('a declared Root’s containers', () => {
+  test('a Service’s Contract freezes its lists', () => {
     const groups = [
       defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] }),
     ];
 
-    const contract = defineContract({ name: 'payments-service', groups, definitions: [] });
+    const contract = defineService({ name: 'payments-service', groups });
     groups.pop();
 
     expect(contract.groups).toHaveLength(1);
     expect(Object.isFrozen(contract.groups)).toBe(true);
-    expect(Object.isFrozen(contract.definitions)).toBe(true);
   });
 
   test('an Application freezes its list of Dependencies', () => {

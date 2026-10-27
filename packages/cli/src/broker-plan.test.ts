@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { bin } from '../test/cf-loom-run.ts';
 import { aDeadAddress } from '../test/dead-address.ts';
-import { payments } from '../test/payments-package.ts';
+import { installedPayments, paymentsSpecifier } from '../test/payments-package.ts';
 import { usage } from '../test/usage.ts';
 
 const cliDir = join(import.meta.dirname, '..');
@@ -103,7 +103,7 @@ const manifest = JSON.stringify({ name: '@org/orders-service', type: 'module' })
 const config = lines([
   "import { defineConfig } from '@cf-loom/cli';",
   '',
-  "export const config = defineConfig({ scope: '@org' });",
+  'export const config = defineConfig({});',
 ]);
 
 const messages = lines([
@@ -160,12 +160,58 @@ const messages = lines([
   '});',
 ]);
 
-const notifyOnSettled =
-  "defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 })";
+const notifyOnSettled = 'notifyOnSettled';
 
-const auditCreated = "defineSubscription({ name: 'audit-created', event: orderCreatedV2 })";
+const auditCreated = 'auditCreated';
 
-/** What a messaging root lists, each as the text of one of `defineContract`'s fields. */
+/** The Subscriptions among `listed`, each exported under its name, with the imports they need. */
+function subscriptionsFile(listed: readonly string[]): string {
+  const subscriptions: Readonly<Record<string, readonly string[]>> = {
+    [notifyOnSettled]: [
+      importOf('{ paymentSettledV1 }', paymentsSpecifier),
+      '',
+      'export const notifyOnSettled = defineSubscription({',
+      "  name: 'notifyOnSettled',",
+      "  description: 'Notify on settled',",
+      '  event: paymentSettledV1,',
+      '});',
+    ],
+    [auditCreated]: [
+      importOf('{ orderCreatedV2 }', './messages.ts'),
+      '',
+      'export const auditCreated = defineSubscription({',
+      "  name: 'auditCreated',",
+      "  description: 'Audit created',",
+      '  event: orderCreatedV2,',
+      '});',
+    ],
+  };
+  return lines([
+    "import { defineSubscription } from '@cf-loom/contract';",
+    ...listed.flatMap((name) => subscriptions[name] ?? []),
+  ]);
+}
+
+/** The names a Root lists in one field, from the text of its list. */
+function namesListed(list: string): readonly string[] {
+  return list
+    .slice(1, -1)
+    .split(',')
+    .map((name) => name.trim())
+    .filter((name) => name !== '');
+}
+
+/** The file of `messages` without the declarations that no list names, so each one it exports is listed. */
+function messagesFile(listed: readonly string[]): string {
+  const blocks = messages.trimEnd().split('\n\n');
+  const kept = blocks.filter((block) => {
+    const name = /^export const (\w+) =/.exec(block)?.[1];
+    return name === undefined || listed.includes(name);
+  });
+  return lines([kept.join('\n\n')]);
+}
+
+/** What a messaging Root's Group lists, each as the text of one of `defineGroup`'s fields; an empty one is left out. */
 type MessagingLists = {
   readonly events?: string;
   readonly commands?: string;
@@ -175,37 +221,47 @@ type MessagingLists = {
 /**
  * A Service named `orders-service` with the Events `OrderCreated@1` (Deprecated), `OrderCreated@2`
  * and `OrderPurged@1` (Retired), the Commands `ChargeCard@1` (Deprecated), `ChargeCard@2` and
- * `RefundCard@1` (Retired), and the Subscriptions `notify-on-settled`, to the Event `PaymentSettled@1`
- * of the Dependency `payments-service`, and `audit-created`, to its own `OrderCreated@2`.
+ * `RefundCard@1` (Retired), and the Subscriptions `notifyOnSettled`, to the Event `PaymentSettled@1`
+ * of the Dependency `payments-service`, and `auditCreated`, to its own `OrderCreated@2`; a list
+ * that names fewer leaves the others out of the files, since a file exports only what is listed.
  */
 function aMessagingService({
   events = '[orderCreatedV1, orderCreatedV2, orderPurgedV1]',
   commands = '[chargeCardV1, chargeCardV2, refundCardV1]',
-  subscriptions = [notifyOnSettled, auditCreated],
+  subscriptions: listed = [notifyOnSettled, auditCreated],
 }: MessagingLists = {}): Readonly<Record<string, string>> {
+  const messageNames = [...namesListed(events), ...namesListed(commands)];
+  const grouped = [
+    ['events', events],
+    ['commands', commands],
+    ['subscriptions', `[${listed.join(', ')}]`],
+  ]
+    .filter(([, list]) => list !== '[]')
+    .map(([field, list]) => `  ${field}: ${list},`);
   const root = lines([
-    "import { defineContract, defineDependencies, defineSubscription } from '@cf-loom/contract';",
-    importOf(
-      '{ chargeCardV1, chargeCardV2, orderCreatedV1, orderCreatedV2, orderPurgedV1, refundCardV1 }',
-      './messages.ts',
-    ),
-    importOf('{ paymentSettledV1, payments }', './payments.ts'),
+    "import { defineService, defineDependency, defineGroup } from '@cf-loom/contract';",
+    ...(messageNames.length > 0
+      ? [importOf(`{ ${[...messageNames].sort().join(', ')} }`, './messages.ts')]
+      : []),
+    importOf(`{ ${[...listed].sort().join(', ')} }`, './subscriptions.ts'),
     '',
-    'const paymentsDeps = defineDependencies(payments, { events: [paymentSettledV1] });',
+    'const orders = defineGroup({',
+    "  name: 'orders',",
+    "  description: 'Orders',",
+    ...grouped,
+    '});',
     '',
-    'export const contract = defineContract({',
+    'export const contract = defineService({',
     "  name: 'orders-service',",
-    `  events: ${events},`,
-    `  commands: ${commands},`,
-    `  subscriptions: [${subscriptions.join(', ')}],`,
-    '  dependencies: [paymentsDeps],',
+    '  groups: [orders],',
     '});',
   ]);
   return {
     'package.json': manifest,
     'cf-loom.config.ts': config,
-    'src/contract/messages.ts': messages,
-    'src/contract/payments.ts': payments,
+    'src/contract/messages.ts': messagesFile(messageNames),
+    ...installedPayments(),
+    'src/contract/subscriptions.ts': subscriptionsFile(listed),
     'src/contract/index.ts': root,
   };
 }
@@ -221,9 +277,9 @@ function aServiceWithoutMessages(): Readonly<Record<string, string>> {
     'package.json': manifest,
     'cf-loom.config.ts': config,
     'src/contract/index.ts': lines([
-      "import { defineContract } from '@cf-loom/contract';",
+      "import { defineService } from '@cf-loom/contract';",
       '',
-      "export const contract = defineContract({ name: 'orders-service' });",
+      "export const contract = defineService({ name: 'orders-service' });",
     ]),
   };
 }
@@ -242,11 +298,16 @@ const aDefinitionsPackage = {
   'cf-loom.config.ts': config,
   'src/definitions/index.ts': lines([
     "import { defineDefinitions } from '@cf-loom/contract';",
-    "export const definitions = defineDefinitions({ name: 'orders-service' });",
+    'export const definitions = defineDefinitions({});',
   ]),
 };
 
 const staleSnapshotLine = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
+
+/** The document `broker-plan --json` prints for the Service of `theReadmeService`: the plan the messaging README shows, in the one document every command prints. */
+function planDocument(): string {
+  return JSON.stringify({ format: 1, status: 0, plan: readmePlan() });
+}
 
 /** The plan the messaging README shows for the Service of `theReadmeService`, as the README writes it. */
 function readmePlan(): unknown {
@@ -271,7 +332,7 @@ describe('cf-loom broker-plan', () => {
     );
   });
 
-  test('a Retired Event or Command Version has no subject in the stream, and a Retired Command Version has no durable consumer', () => {
+  test('a Retired Event or Command Version has no subject in the stream, and a Retired Command Version has no Durable consumer', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -281,7 +342,7 @@ describe('cf-loom broker-plan', () => {
     expect(ran.stdout).not.toContain('RefundCard');
   });
 
-  test('a Deprecated Command Version keeps its subject and its durable consumer, <service>_command_<Name>_v<n>', () => {
+  test('a Deprecated Command Version keeps its subject and its Durable consumer, <service>_command_<Name>_v<n>', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -292,7 +353,7 @@ describe('cf-loom broker-plan', () => {
     expect(printedLines(ran.stdout)[0]).toContain(' orders-service.command.ChargeCard.v1 ');
   });
 
-  test('a Subscription’s durable consumer, <service>_<name>, reads its Provider’s stream on its Event’s subject, and one to the Service’s own Event reads its own stream', () => {
+  test('a Subscription’s Durable consumer, <service>_<name>, reads its Provider’s stream on its Event’s subject, and one to the Service’s own Event reads its own stream', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -305,7 +366,7 @@ describe('cf-loom broker-plan', () => {
     );
   });
 
-  test('a Service that publishes and sends nothing has no stream, only the durable consumers of its Subscriptions', () => {
+  test('a Service that publishes and sends nothing has no stream, only the Durable consumers of its Subscriptions', () => {
     const project = aGeneratedProject(
       aMessagingService({ events: '[]', commands: '[]', subscriptions: [notifyOnSettled] }),
     );
@@ -320,14 +381,14 @@ describe('cf-loom broker-plan', () => {
     });
   });
 
-  test('a Service with no Messages says it needs no stream and no durable consumer', () => {
+  test('a Service with no Messages says it needs no stream and no Durable consumer', () => {
     const project = aGeneratedProject(aServiceWithoutMessages());
 
     const ran = cfLoom(project, 'broker-plan');
 
     expect(ran).toEqual({
       status: 0,
-      stdout: 'orders-service needs no stream and no durable consumer\n',
+      stdout: 'orders-service needs no stream and no Durable consumer\n',
       stderr: '',
     });
   });
@@ -337,10 +398,10 @@ describe('cf-loom broker-plan', () => {
 
     const ran = cfLoom(project, 'broker-plan', '--json');
 
-    expect(ran).toEqual({ status: 0, stdout: `${JSON.stringify(readmePlan())}\n`, stderr: '' });
+    expect(ran).toEqual({ status: 0, stdout: `${planDocument()}\n`, stderr: '' });
   });
 
-  test('--prefix puts the prefix in front of every subject, stream and durable consumer name', () => {
+  test('--prefix puts the prefix in front of every subject, stream and Durable consumer name', () => {
     const project = aGeneratedProject(theReadmeService());
 
     const ran = cfLoom(project, 'broker-plan', '--prefix', 'staging');
@@ -362,7 +423,7 @@ describe('cf-loom broker-plan', () => {
     const ran = cfLoom(project, 'broker-plan', '--prefix', 'staging', '--json');
 
     expect(ran.status).toBe(0);
-    expect(JSON.parse(ran.stdout)).toEqual({
+    expect(JSON.parse(ran.stdout).plan).toEqual({
       prefix: 'staging',
       streams: {
         'staging_orders-service': {
@@ -374,7 +435,7 @@ describe('cf-loom broker-plan', () => {
           ],
         },
       },
-      consumers: {
+      durableConsumers: {
         'staging_orders-service_command_ChargeCard_v1': {
           service: 'orders-service',
           stream: 'staging_orders-service',
@@ -394,7 +455,7 @@ describe('cf-loom broker-plan', () => {
 
     const ran = await cfLoomOffline(project, 'broker-plan', '--json');
 
-    expect(ran).toEqual({ status: 0, stdout: `${JSON.stringify(readmePlan())}\n`, stderr: '' });
+    expect(ran).toEqual({ status: 0, stdout: `${planDocument()}\n`, stderr: '' });
   });
 });
 
@@ -416,7 +477,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshotLine}\n` });
   });
 
-  test('a root that breaks a rule fails broker-plan with generate’s lines', () => {
+  test('a Root that breaks a rule fails broker-plan with generate’s lines', () => {
     const project = aProject({
       ...aMessagingService(),
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
@@ -428,7 +489,24 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
+    });
+  });
+
+  test('a Dependency written as the types refuse fails with its line, never as a Root that threw', () => {
+    const service = aMessagingService();
+    const root = (service['src/contract/index.ts'] ?? '').replace(
+      '  groups: [orders],',
+      '  groups: [orders],\n  dependencies: [defineDependency({ endpoints: [undefined] } as never)],',
+    );
+    const project = aProject({ ...service, 'src/contract/index.ts': root });
+
+    const ran = cfLoom(project, 'broker-plan');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: '(root) dependencies[0].endpoints[0] not-a-declaration: is not an Endpoint\n',
     });
   });
 
@@ -443,7 +521,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran.status).toBe(3);
     expect(ran.stdout).toBe('');
     expect(ran.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 
@@ -490,7 +568,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
 
       expect(ran).toEqual({
         status,
-        stdout: `${JSON.stringify({ status, errors: [line] })}\n`,
+        stdout: `${JSON.stringify({ format: 1, status, errors: [line] })}\n`,
         stderr: `${line}\n`,
       });
     },
@@ -498,8 +576,9 @@ describe('cf-loom broker-plan: what it refuses', () => {
 
   test.for([
     ['a prefix with an underscore', ['--prefix', 'stag_ing']],
+    ['a prefix of 65 characters', ['--prefix', 'a'.repeat(65)]],
     ['no prefix after the option', ['--prefix']],
-  ] as const)('a prefix that is not kebab-case is a usage error: %s', ([_case, options]) => {
+  ] as const)('a prefix that is not a Broker prefix is a usage error: %s', ([_case, options]) => {
     const project = aProject({});
 
     const ran = cfLoom(project, 'broker-plan', ...options);
@@ -507,7 +586,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: `--prefix takes a prefix in kebab-case, such as staging. ${usage}\n`,
+      stderr: `--prefix takes a prefix in kebab-case of at most 64 characters, such as staging. ${usage}\n`,
     });
   });
 

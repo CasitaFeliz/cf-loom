@@ -1,12 +1,16 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
   type ChangeSite,
   type CodeSnapshot,
+  type CommandSnapshot,
   type ComparedReport,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
@@ -15,12 +19,14 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
+  type Verdict,
   versionBumpOf,
 } from '../internal/index.ts';
 
 const publicEndpoint: ChangeSite = {
   kind: 'endpoint',
   identity: 'GET /orders/{}',
+  name: 'getOrder',
   visibility: 'public',
 };
 const internalEvent: ChangeSite = {
@@ -31,6 +37,7 @@ const internalEvent: ChangeSite = {
 const privateEndpoint: ChangeSite = {
   kind: 'endpoint',
   identity: 'POST /orders/purge',
+  name: 'purgeOrders',
   visibility: 'private',
 };
 const privateEvent: ChangeSite = {
@@ -38,28 +45,32 @@ const privateEvent: ChangeSite = {
   identity: 'OrderAudited@1',
   visibility: 'private',
 };
-const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1' };
-const subscription: ChangeSite = { kind: 'subscription', name: 'notify-on-placed' };
-const sharedSchema: ChangeSite = { kind: 'shared-schema', name: 'money' };
+const command: ChangeSite = { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' };
+const subscription: ChangeSite = {
+  kind: 'subscription',
+  name: 'notifyOnPlaced',
+  visibility: 'private',
+};
+const sharedSchema: ChangeSite = { kind: 'export', name: 'money', visibility: 'public' };
 
-function aBreakingChange(site: ChangeSite, approval: 'needed' | 'not-needed' = 'needed'): Change {
-  return { site, difference: { kind: 'retired' }, class: 'breaking', approval };
+function aBreakingChange(site: ChangeSite, verdict: Verdict = 'approval-needed'): Change {
+  return { site, difference: { kind: 'retired' }, class: 'breaking', verdict };
 }
 
 function anAdditiveChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'added' }, class: 'additive' };
+  return { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' };
 }
 
 function aNeutralChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'tombstoned' }, class: 'neutral' };
+  return { site, difference: { kind: 'tombstoned' }, class: 'neutral', verdict: 'allowed' };
 }
 
-function aNotAllowedChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'deleted' }, class: 'not-allowed' };
+function aRefusedChange(site: ChangeSite): Change {
+  return { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' };
 }
 
-function aReport(changes: readonly Change[], hashChanged = true): ComparedReport {
-  return { kind: 'compared', changes, hashChanged };
+function aReport(changes: readonly Change[]): ComparedReport {
+  return { changes };
 }
 
 function peersMoving(baseline: string, proposed: string): PeerMove {
@@ -71,7 +82,6 @@ function anApplication(): ApplicationSnapshot {
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
   };
 }
@@ -80,7 +90,6 @@ function ordersDependency(against: string): ApplicationSnapshot['dependencies'][
   return {
     against,
     endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-    events: [],
   };
 }
 
@@ -92,13 +101,12 @@ const serviceHeading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections: {
-    invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-    notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+    invalidInput: 'INVALID_INPUT',
+    notFound: 'NOT_FOUND',
+    notImplemented: 'NOT_IMPLEMENTED',
   },
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
@@ -110,26 +118,31 @@ const serviceHeading = {
 
 const idParams: EndpointSnapshot['input']['params'] = {
   type: 'object',
-  mode: 'strict',
   fields: { id: { required: true, schema: { type: 'string' } } },
 };
 
-function anEndpointOf(
+function anEndpointOf<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
   visibility: EndpointSnapshot['visibility'],
-  fields: Partial<EndpointSnapshot> = {},
-): EndpointSnapshot {
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'latestOrder',
     group: 'orders',
     visibility,
-    lifecycle: 'active',
     description: 'An Endpoint',
     params: [],
     guards: [],
-    input: { params: null, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: null,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -137,28 +150,38 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
   const getOrder = anEndpointOf(visibility, {
     name: 'getOrder',
     params: ['id'],
-    input: { params: idParams, query: null, headers: null, body: null },
+    input: {
+      params: idParams,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
   });
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
     version: '3.4.0',
-    endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
+    generator: publishedBy,
+    formerInputs: [],
+    endpoints: { [orderById]: getOrder },
   };
   const proposed: ServiceSnapshot = {
     ...serviceHeading,
     endpoints: { [orderById]: getOrder, [latestOrder]: anEndpointOf(visibility) },
   };
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
 const orderLocked = 'ORDER_LOCKED';
 
 function aCode(status: number): CodeSnapshot {
-  return { origin: 'local', status, message: 'The order is locked', body: null, removed: false };
+  return {
+    origin: 'local',
+    status,
+    message: 'The order is locked',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  };
 }
 
 function aGuard(): GuardSnapshot {
@@ -167,7 +190,7 @@ function aGuard(): GuardSnapshot {
     description: 'Authenticates the Caller',
     guards: [],
     qualifier: null,
-    demands: { headers: null, query: null },
+    demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
   };
@@ -178,7 +201,9 @@ function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): C
   const baseline: PublishedServiceSnapshot = {
     ...serviceHeading,
     version: '3.4.0',
-    endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
+    generator: publishedBy,
+    formerInputs: [],
+    endpoints: { [latestOrder]: endpoint },
     codes: { [orderLocked]: aCode(409) },
   };
   const proposed: ServiceSnapshot = {
@@ -194,10 +219,9 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections: serviceHeading.standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -207,7 +231,7 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 function aBaselineDefinitions(
   fields: Partial<PublishedDefinitionsSnapshot> = {},
 ): PublishedDefinitionsSnapshot {
-  return { ...aDefinitions(), version: '4.2.0', ...fields };
+  return { ...aDefinitions(), version: '4.2.0', generator: publishedBy, ...fields };
 }
 
 function comparedReportOf(
@@ -215,9 +239,6 @@ function comparedReportOf(
   proposed: ServiceSnapshot | DefinitionsSnapshot,
 ): ComparedReport {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report;
 }
 
@@ -244,13 +265,21 @@ describe('versionBumpOf', () => {
     expect(bumps).toEqual(['minor', 'minor']);
   });
 
-  test('a changed hash with Neutral Changes only, or none classified, bumps patch', () => {
+  test('Neutral Changes only bump patch', () => {
     const neutral = aReport([aNeutralChange(publicEndpoint)]);
-    const unclassified = aReport([]);
+    const onPrivate = aReport([aNeutralChange(privateEndpoint)]);
 
-    const bumps = [neutral, unclassified].map((report) => versionBumpOf(report, unmoved));
+    const bumps = [neutral, onPrivate].map((report) => versionBumpOf(report, unmoved));
 
     expect(bumps).toEqual(['patch', 'patch']);
+  });
+
+  test('no Change and no peer move leave the version unchanged', () => {
+    const report = aReport([]);
+
+    const bump = versionBumpOf(report, unmoved);
+
+    expect(bump).toBe('unchanged');
   });
 
   test('Changes on Private Elements only bump patch, however Breaking', () => {
@@ -266,11 +295,67 @@ describe('versionBumpOf', () => {
   });
 
   test('a Command’s Breaking Change bumps patch: a Command is always Private', () => {
-    const report = aReport([aBreakingChange(command, 'not-needed'), anAdditiveChange(command)]);
+    const report = aReport([aBreakingChange(command, 'allowed'), anAdditiveChange(command)]);
 
     const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('patch');
+  });
+
+  test('adding a Command bumps patch: no Consumer reads a Command', () => {
+    const added: CommandSnapshot = {
+      group: 'orders',
+      lifecycle: 'active',
+      description: 'Charge a card',
+      body: { type: 'object', fields: {} },
+    };
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
+      endpoints: {},
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: {},
+      commands: { 'ChargeCard@1': added },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(versionBumpOf(report, unmoved)).toBe('patch');
+  });
+
+  test('a Breaking change to a Public Event’s body is refused, so it bumps patch', () => {
+    const event = (fields: Record<string, { required: boolean; schema: { type: 'string' } }>) =>
+      ({
+        group: 'orders',
+        visibility: 'public',
+        lifecycle: 'active',
+        description: 'An order was placed',
+        body: { type: 'object', fields },
+      }) as const;
+    const baseline: PublishedServiceSnapshot = {
+      ...serviceHeading,
+      version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
+      endpoints: {},
+      events: { 'OrderPlaced@1': event({}) },
+    };
+    const proposed: ServiceSnapshot = {
+      ...serviceHeading,
+      endpoints: {},
+      events: { 'OrderPlaced@1': event({ note: { required: true, schema: { type: 'string' } } }) },
+    };
+
+    const report = comparedReportOf(baseline, proposed);
+
+    expect(report.changes.map(({ class: changeClass, verdict }) => [changeClass, verdict])).toEqual(
+      [['breaking', 'refused']],
+    );
+    expect(versionBumpOf(report, unmoved)).toBe('patch');
   });
 
   test('a Change on a Subscription never bumps past patch: a Subscription is the Service’s own', () => {
@@ -282,10 +367,12 @@ describe('versionBumpOf', () => {
   });
 
   test('a change only to a Public Endpoint Retired on both sides bumps patch', () => {
-    const retired = anEndpointOf('public', { lifecycle: 'retired' });
+    const retired = anEndpointOf('public', {}, { lifecycle: 'retired' });
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
       endpoints: { [orderById]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
     };
     const proposed: ServiceSnapshot = {
@@ -303,7 +390,7 @@ describe('versionBumpOf', () => {
       site: sharedSchema,
       difference: { kind: 'removed' },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([removed]), unmoved);
@@ -356,11 +443,15 @@ describe('versionBumpOf', () => {
       difference: {
         kind: 'schema',
         position: 'input',
-        at: ['input', 'body', 'fields', 'amount'],
+        at: [
+          { kind: 'part', name: 'input' },
+          { kind: 'part', name: 'body' },
+          { kind: 'field', name: 'amount' },
+        ],
         shape: { kind: 'field-added', required: true },
       },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([bodyChange]), unmoved);
@@ -378,14 +469,17 @@ describe('versionBumpOf', () => {
 
   test('narrowing an Internal Event bumps major', () => {
     const event: EventSnapshot = {
+      group: 'orders',
       visibility: 'internal',
       lifecycle: 'active',
       description: 'An order was placed',
-      body: { type: 'object', mode: 'strict', fields: {} },
+      body: { type: 'object', fields: {} },
     };
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
+      generator: publishedBy,
+      formerInputs: [],
       endpoints: {},
       events: { 'OrderPlaced@1': { ...event, lifecycle: 'active' } },
     };
@@ -413,7 +507,7 @@ describe('versionBumpOf', () => {
       site: publicEndpoint,
       difference: { kind: 'visibility-narrowed', from: 'public', to: 'private' },
       class: 'breaking',
-      approval: 'needed',
+      verdict: 'approval-needed',
     };
 
     const bump = versionBumpOf(aReport([narrowed]), unmoved);
@@ -437,6 +531,7 @@ describe('versionBumpOf', () => {
     const baseline: PublishedApplicationSnapshot = {
       ...anApplication(),
       version: '1.0.0',
+      generator: publishedBy,
       dependencies: { 'orders-service': ordersDependency('3.4.0') },
     };
     const proposed: ApplicationSnapshot = {
@@ -445,21 +540,34 @@ describe('versionBumpOf', () => {
     };
     const report = compatibilityReportOf(baseline, proposed);
 
-    const bump = report.kind === 'compared' ? versionBumpOf(report, unmoved) : 'no-baseline';
+    const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('patch');
   });
 
   test('an unchanged hash with unchanged peers is unchanged, so publish does nothing', () => {
-    const report = aReport([], false);
+    const report = aReport([]);
 
     const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('unchanged');
   });
 
-  test('a Not allowed Change does not bump past patch', () => {
-    const report = aReport([aNotAllowedChange(publicEndpoint)]);
+  test('a refused Additive Change on a Public Endpoint bumps patch, not minor', () => {
+    const broughtBack: Change = {
+      site: publicEndpoint,
+      difference: { kind: 'retired-brought-back', lifecycle: 'active' },
+      class: 'additive',
+      verdict: 'refused',
+    };
+
+    const bump = versionBumpOf(aReport([broughtBack]), unmoved);
+
+    expect(bump).toBe('patch');
+  });
+
+  test('a refused Change on a Public Endpoint does not bump past patch', () => {
+    const report = aReport([aRefusedChange(publicEndpoint)]);
 
     const bump = versionBumpOf(report, unmoved);
 
@@ -467,7 +575,7 @@ describe('versionBumpOf', () => {
   });
 
   test('a changed peer range bumps even when the hash is unchanged', () => {
-    const report = aReport([], false);
+    const report = aReport([]);
 
     const bump = versionBumpOf(report, peersMoving('^4.1.0', '^4.6.7'));
 
@@ -477,37 +585,37 @@ describe('versionBumpOf', () => {
 
 describe('versionBumpOf, the peer rule', () => {
   test('a peer moving to a new major bumps major with an unchanged Snapshot', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^5.0.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^4.1.0', '^5.0.0'));
 
     expect(bump).toBe('major');
   });
 
   test('any other change to a peer range bumps minor', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^4.1.0', '^4.6.7'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^4.1.0', '^4.6.7'));
 
     expect(bump).toBe('minor');
   });
 
   test('^0.1.0 to ^0.2.0 is a new major, as a caret reads it', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.2.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.1.0', '^0.2.0'));
 
     expect(bump).toBe('major');
   });
 
   test('^0.1.0 to ^0.1.5 is not a new major', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.1.0', '^0.1.5'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.1.0', '^0.1.5'));
 
     expect(bump).toBe('minor');
   });
 
   test('^0.0.3 to ^0.0.4 is a new major', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^0.0.3', '^0.0.4'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^0.0.3', '^0.0.4'));
 
     expect(bump).toBe('major');
   });
 
   test('a prerelease range keeps its line: ^1.0.0-rc.1 to ^1.2.0 bumps minor', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('^1.0.0-rc.1', '^1.2.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('^1.0.0-rc.1', '^1.2.0'));
 
     expect(bump).toBe('minor');
   });
@@ -517,7 +625,7 @@ describe('versionBumpOf, the peer rule', () => {
     ['a caret on a partial version', '^4.1', '^4.2.0'],
     ['a comparator range', '>=4.1.0', '>=4.2.0'],
   ])('%s counts as a new major, since no overlap can be proven', (_name, baseline, proposed) => {
-    const bump = versionBumpOf(aReport([], false), peersMoving(baseline, proposed));
+    const bump = versionBumpOf(aReport([]), peersMoving(baseline, proposed));
 
     expect(bump).toBe('major');
   });
@@ -526,13 +634,13 @@ describe('versionBumpOf, the peer rule', () => {
     const added: PeerMove = { baseline: {}, proposed: { zod: '^4.1.0' } };
     const dropped: PeerMove = { baseline: { zod: '^4.1.0' }, proposed: {} };
 
-    const bumps = [added, dropped].map((peers) => versionBumpOf(aReport([], false), peers));
+    const bumps = [added, dropped].map((peers) => versionBumpOf(aReport([]), peers));
 
     expect(bumps).toEqual(['minor', 'minor']);
   });
 
   test('a range that is not a caret and stays the same is no change', () => {
-    const bump = versionBumpOf(aReport([], false), peersMoving('>=4.1.0', '>=4.1.0'));
+    const bump = versionBumpOf(aReport([]), peersMoving('>=4.1.0', '>=4.1.0'));
 
     expect(bump).toBe('unchanged');
   });
@@ -543,7 +651,7 @@ describe('versionBumpOf, the peer rule', () => {
       proposed: { zod: '^4.6.7', '@cf-loom/contract': '^2.0.0' },
     };
 
-    const bump = versionBumpOf(aReport([], false), peers);
+    const bump = versionBumpOf(aReport([]), peers);
 
     expect(bump).toBe('major');
   });

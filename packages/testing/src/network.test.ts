@@ -1,15 +1,17 @@
 import { client } from '@cf-loom/client';
 import {
-  type ContractPackage,
-  defineContract,
-  defineDependencies,
+  defineDependency,
   defineEndpoint,
   defineGroup,
+  defineService,
   type Endpoint,
 } from '@cf-loom/contract';
-import { exportedSnapshotOf, snapshotOf, validateContract } from '@cf-loom/contract/internal';
+import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
+import { aRootPackage } from '../test/root-package.ts';
+import { providedStandardRejections } from '../test/standard-rejections.ts';
 import { fakeProvider } from './index.ts';
 
 const getPayment = defineEndpoint({
@@ -23,51 +25,49 @@ const getPayment = defineEndpoint({
 });
 
 /** The Provider's Contract Package, as `cf-loom package` writes it from its declarations. */
-function contractPackageOf<const Endpoints extends ContractPackage['endpoints']>(
+function contractPackageOf<const Endpoints extends Readonly<Record<string, Exportable>>>(
   endpoints: Endpoints,
 ) {
   const listed = Object.values(endpoints) as unknown as [Endpoint];
   const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: listed });
-  const root = defineContract({ name: 'payments-service', groups: [group] });
-  const rootPackage = {
-    packageName: 'payments-service',
-    originOf: () => undefined,
-    exportsOf: () => [],
-  };
-  const validated = validateContract(root, rootPackage);
+  const root = defineService({ name: 'payments-service', groups: [group] });
+  const rootPackage = aRootPackage(root, { packageName: 'payments-service' });
+  const validated = validateRoot(root, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  const context = { generator: 'test', packages: [], committed: undefined, now: 0 };
-  const snapshot = snapshotOf(validated, context);
+  const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
     throw new Error('The fixture is no Service');
   }
-  const exportedSnapshot = exportedSnapshotOf(snapshot);
-  const standardRejections = {
-    invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-  } as const;
+  const standardRejections = providedStandardRejections();
   const name = 'payments-service';
-  return { name, version: '1.0.0', endpoints, events: {}, standardRejections, exportedSnapshot };
+  const provided = providedEndpointsOf({ name, standardRejections }, endpoints, snapshot);
+  return {
+    name,
+    endpoints: provided,
+    events: {},
+    standardRejections,
+  };
 }
 
-const paymentsDeps = defineDependencies(contractPackageOf({ getPayment }), {
-  endpoints: [getPayment],
+const paymentsDependencyPackage = contractPackageOf({ getPayment });
+const paymentsDependency = defineDependency({
+  endpoints: [paymentsDependencyPackage.endpoints.getPayment],
 });
 
 const params = { paymentId: 'pay-1' };
 
 describe('fakeProvider: what the client infers its Fault from', () => {
   test('noConnection is a refused connection: committed no, retryable', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.noConnection());
 
     const outcome = await payments.client().getPayment({ params });
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'no-connection',
       committed: 'no',
       retryable: true,
       message: 'No connection to the Provider',
@@ -76,13 +76,14 @@ describe('fakeProvider: what the client infers its Fault from', () => {
   });
 
   test('reset is a connection reset after sending: committed unknown, retryable', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.reset());
 
     const outcome = await payments.client().getPayment({ params });
 
     expect(outcome).toMatchObject({
       kind: 'fault',
+      source: 'connection-lost',
       committed: 'unknown',
       retryable: true,
       message: 'The connection failed',
@@ -95,28 +96,30 @@ describe('fakeProvider: what the client infers its Fault from', () => {
     [503, { 'retry-after': '30' }, { committed: 'unknown', retryable: true, retryAfter: '30' }],
     [429, {}, { committed: 'no', retryable: true }],
   ] as const)('status(%i) is inferred from the status alone', async (status, headers, fault) => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) => r.status(status, headers));
 
     const outcome = await payments.client().getPayment({ params });
 
     expect(outcome).toEqual({
       kind: 'fault',
+      source: 'status',
+      status,
       message: `The Provider answered ${status}`,
       ...fault,
     });
   });
 
   test('a client the code builds itself over payments.fetch reaches the fake', async () => {
-    const payments = fakeProvider(paymentsDeps);
+    const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r, input) => r.success({ id: input.params.paymentId }));
-    const own = client(paymentsDeps, {
+    const own = client(paymentsDependency, {
       baseUrl: 'https://payments.internal.example',
       fetch: payments.fetch,
     });
 
     const outcome = await own.getPayment({ params });
 
-    expect(outcome).toEqual({ kind: 'success', value: { id: 'pay-1' }, headers: {} });
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { id: 'pay-1' } });
   });
 });

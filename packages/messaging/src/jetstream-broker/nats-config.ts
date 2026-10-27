@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import type { ConsumerConfig, StreamConfig } from '@nats-io/jetstream';
-import { durableShapeOf } from './durable-shape.ts';
-import type { NatsDurableLimits, NatsStreamLimits, SetLimits } from './reading-limits.ts';
+import type { StreamConfig } from '@nats-io/jetstream';
+import { type DurableConsumerSettings, durableConsumerShapeOf } from './durable-consumer-shape.ts';
+import type { NatsDurableConsumerLimits, NatsStreamLimits, SetLimits } from './reading-limits.ts';
 
 /** A stream's limits as the NATS settings nats.js takes, the same for creating the stream and for updating it. */
 export function streamConfigOf(limits: SetLimits<NatsStreamLimits>): Partial<StreamConfig> {
@@ -15,17 +15,17 @@ export function streamConfigOf(limits: SetLimits<NatsStreamLimits>): Partial<Str
 }
 
 /**
- * A pull durable consumer's limits as the NATS settings nats.js takes, the same for creating it and
- * for updating it; the backoff is always sent, empty for one ack wait, so an update clears an old one.
+ * A Durable consumer's limits as the NATS settings nats.js takes for a pull consumer, the same for
+ * creating it and for updating it; the backoff is always sent, empty for one ack wait, so an update clears an old one.
  */
-export function durableConfigOf(
-  durable: { readonly name: string; readonly subject: string },
-  limits: SetLimits<NatsDurableLimits>,
-): Partial<ConsumerConfig> {
+export function durableConsumerConfigOf(
+  durableConsumer: { readonly name: string; readonly subject: string },
+  limits: SetLimits<NatsDurableConsumerLimits>,
+): DurableConsumerSettings {
   const [firstWait, ...laterWaits] = limits.ackWait;
   return {
-    durable_name: durable.name,
-    ...durableShapeOf(durable.subject),
+    durable_name: durableConsumer.name,
+    ...durableConsumerShapeOf(durableConsumer.subject),
     deliver_policy: limits.deliverPolicy,
     ack_wait: firstWait,
     backoff: laterWaits.length === 0 ? [] : [...limits.ackWait],

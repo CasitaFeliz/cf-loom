@@ -1,28 +1,27 @@
+import type { ValidatedProvider } from '../validation/index.ts';
 import { byCodePoint } from '../walker/index.ts';
-import { identityOf, type LocatedDependencies, messageIdentityOf } from '../written/index.ts';
+import { identityOf } from '../written/index.ts';
 import type { DependencySnapshot } from './types.ts';
 
 /**
- * The Dependencies by Provider, each with the version it was declared against, its Endpoints by
- * identity with their names and its Events by identity, sorted since their order means nothing.
+ * Each Provider a Contract uses, by its Dependencies or its Subscriptions, against the version of
+ * the installed package its Elements come from, with the Endpoints its Dependencies list by
+ * identity with their names, sorted since neither their order nor how they are split into
+ * Dependencies means anything. The Events a Contract receives are its Subscriptions'.
  */
 export function dependencySnapshotsOf(
-  located: readonly LocatedDependencies[],
+  providers: readonly ValidatedProvider[],
 ): Readonly<Record<string, DependencySnapshot>> {
-  const entries = located.map(({ dependencies }) => {
-    const endpoints = Object.values(dependencies.endpoints).map(({ method, path, name }) => ({
-      id: identityOf(method, path),
-      name,
+  const entries = providers.map(({ name, endpoints, from }) => {
+    const listed = endpoints.map((endpoint) => ({
+      id: identityOf(endpoint.method, endpoint.path),
+      name: endpoint.name,
     }));
-    const events = Object.values(dependencies.events).map(({ name, version }) =>
-      messageIdentityOf(name, version),
-    );
-    const dependency: DependencySnapshot = {
-      against: dependencies.against,
-      endpoints: endpoints.sort((left, right) => byCodePoint(left.id, right.id)),
-      events: events.sort(byCodePoint),
+    const snapshot: DependencySnapshot = {
+      against: from.version,
+      endpoints: listed.sort((left, right) => byCodePoint(left.id, right.id)),
     };
-    return [dependencies.provider, dependency] as const;
+    return [name, snapshot] as const;
   });
   return Object.fromEntries(entries);
 }

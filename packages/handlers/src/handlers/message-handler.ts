@@ -1,66 +1,37 @@
-import type { Command, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
-import type { MessageMeta } from '../calls/index.ts';
+import type { DirectMeta, MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
-import type { WithReader } from './reader.ts';
-import type { CallArgument, NoResources, ResourcesField } from './resources.ts';
+import type { HandledBy } from './handler.ts';
+import type {
+  CallArgument,
+  LastNotAnnotated,
+  NoResources,
+  ResourcesField,
+  ResourcesLast,
+} from './resources.ts';
 
-/** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
-type ReadBodyOf<Target extends WithReader> = core.output<Target['reader']>;
+/**
+ * The body a Message Handler receives, as its pairing's Reader schema reads it: Unknown cases included,
+ * so a helper it calls is typed by what any later compatible version may send.
+ */
+export type ReceivedBodyOf<Target extends Pairing> = core.output<Target['reader']>;
 
-/** The meta a direct call takes: `headers` left out is `{}`. */
-export type DirectMeta = Omit<MessageMeta, 'headers'> & {
-  readonly headers?: MessageMeta['headers'];
-};
+/** The Fault a Message Handler returns: a `Fault` with no `retryAfter`, since the Durable consumer's configuration decides redelivery. */
+export type MessageFault = Fault & { readonly retryAfter?: never };
 
-/** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a Fault. */
-type Answered = undefined | Fault;
+/** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a MessageFault. */
+type Answered = undefined | MessageFault;
 
-/** What a CommandHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Command, or a Fault; may be async. */
-export type CommandImplementation<
-  Target extends WithReader<Command>,
-  Resources extends object = NoResources,
-> = (
-  body: ReadBodyOf<Target>,
-  meta: MessageMeta,
-  call: MessageCall<Resources>,
-) => Answered | Promise<Answered>;
+/** What a Message Handler's implementation returns, given the body as its Reader reads it, its meta, and last the Resources it takes, `Needs<'payments'>`: nothing, which acknowledges the Message, or a `MessageFault`; may be async. */
+export type MessageImplementation<
+  Target extends Pairing,
+  Last extends ResourcesLast<Last> = LastNotAnnotated,
+> = (body: ReceivedBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
-/** What an EventHandler's implementation returns, given the body, its meta and the Resources it takes: nothing, which acknowledges the Event, or a Fault; may be async. */
-export type EventImplementation<
-  Target extends WithReader<Subscription>,
-  Resources extends object = NoResources,
-> = (
-  body: ReadBodyOf<Target>,
-  meta: MessageMeta,
-  call: MessageCall<Resources>,
-) => Answered | Promise<Answered>;
-
-/** The last argument of a Message Handler's direct call: the Resources it takes. */
-export type MessageCall<Resources extends object = NoResources> = ResourcesField<Resources>;
-
-/** The Handler of a Command's Message Version: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
-export type CommandHandler<
-  Target extends WithReader<Command>,
-  Resources extends object = NoResources,
-> = {
-  (
-    body: ReadBodyOf<Target>,
-    meta: DirectMeta,
-    ...call: CallArgument<MessageCall<Resources>>
-  ): Promise<Fault | undefined>;
-  readonly element: Target['element'];
-};
-
-/** The Handler of a Subscription: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
-export type EventHandler<
-  Target extends WithReader<Subscription>,
-  Resources extends object = NoResources,
-> = {
-  (
-    body: ReadBodyOf<Target>,
-    meta: DirectMeta,
-    ...call: CallArgument<MessageCall<Resources>>
-  ): Promise<Fault | undefined>;
-  readonly element: Target['element'];
-};
+/** The Handler of a Command's Message Version or of a Subscription, written for its pairing in the readers file: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
+export type MessageHandler<Target extends Pairing, Resources extends object = NoResources> = ((
+  body: ReceivedBodyOf<Target>,
+  meta?: DirectMeta,
+  ...last: CallArgument<ResourcesField<Resources>>
+) => Promise<Fault | undefined>) &
+  HandledBy<Target['declaration'], Resources>;

@@ -11,8 +11,8 @@ export type Committed = (typeof committedValues)[number];
 /** The one text a Fault says by default, so no internal detail reaches a Caller. */
 export const internalError = 'Internal error';
 
-/** How a reserved code travels: its status, whether the change was committed, and its fixed text. */
-type ReservedFault = {
+/** How a Fault with a Reserved code travels: its status, whether the change was committed, and its fixed text. */
+type ReservedCodeFault = {
   readonly status: number;
   readonly committed: Committed;
   readonly message: string;
@@ -23,7 +23,7 @@ type ReservedFault = {
  * received. `INVALID_OUTCOME`'s `committed` is `serve`'s: the Outcome may have been committed
  * before it broke the Contract, while the client's depends on what failed.
  */
-export const reservedFaults = {
+export const reservedCodeFaults = {
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   RETIRED: { status: 410, committed: 'no', message: 'The Endpoint is retired' },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
@@ -33,6 +33,12 @@ export const reservedFaults = {
     message: 'No Endpoint has this method and path',
   },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
+  METHOD_NOT_ALLOWED: {
+    status: 405,
+    committed: 'no',
+    message: 'No Endpoint has this method on this path',
+  },
+  // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   BODY_TOO_LARGE: { status: 413, committed: 'no', message: 'The body is too large' },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   INVALID_OUTCOME: {
@@ -40,7 +46,7 @@ export const reservedFaults = {
     committed: 'unknown',
     message: 'The Outcome broke the Contract',
   },
-} as const satisfies Readonly<Record<ReservedCode, ReservedFault>>;
+} as const satisfies Readonly<Record<ReservedCode, ReservedCodeFault>>;
 
 /** A Rejection's Envelope, as it travels over HTTP. */
 export type RejectionEnvelope = {
@@ -90,17 +96,23 @@ export function envelopeOf(received: unknown): RejectionEnvelope | FaultEnvelope
   if (isRejectionShape(rejection)) {
     return rejectionEnvelopeOf(rejection);
   }
-  const fault = ownOf(received, 'fault');
-  if (isFaultShape(fault)) {
-    const { committed, retryable, message } = fault;
-    const code = isReservedCode(fault.code) ? fault.code : undefined;
-    return faultEnvelopeOf(
-      code === undefined
-        ? { committed, retryable, message }
-        : { code, committed, retryable, message },
-    );
+  const fault = travelingFaultOf(ownOf(received, 'fault'));
+  return fault === undefined ? undefined : faultEnvelopeOf(fault);
+}
+
+/**
+ * The Fault a received value is, read by its fields alone; a code that is not reserved is dropped.
+ * None when it is no Fault, which a Caller then does not read as one.
+ */
+export function travelingFaultOf(received: unknown): TravelingFault | undefined {
+  if (!isFaultShape(received)) {
+    return undefined;
   }
-  return undefined;
+  const { committed, retryable, message } = received;
+  const code = isReservedCode(received.code) ? received.code : undefined;
+  return code === undefined
+    ? { committed, retryable, message }
+    : { code, committed, retryable, message };
 }
 
 type RejectionFields = {

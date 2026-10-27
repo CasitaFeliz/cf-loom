@@ -1,36 +1,59 @@
 export { canonicalSnapshotOf, canonicalTextOf, hashedTextOf } from './canonical.ts';
-export type { ResolvedDefinitions, SnapshotContext } from './context.ts';
-export { checkExportedFormat, exportedEntryOf, textPartNodesOf } from './exported.ts';
-export { exportedSnapshotOf } from './exported-snapshot.ts';
+export type { Keyed, SchemaHolder } from './declared.ts';
+export {
+  declaredEndpointsOf,
+  declaredMessagesOf,
+  declaredSubscriptionsOf,
+} from './declared.ts';
+export type { DefScope, SnapshotNode } from './def-scopes.ts';
+export { defScopesOf } from './def-scopes.ts';
+export { exportedCodeOf, exportedEntryOf, textPartNodesOf } from './exported.ts';
+export { exportedCutOf, exportedSnapshotOf } from './exported-snapshot.ts';
 export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
-export { schemaOriginsOf } from './origins.ts';
+export { isEmptyTextPart } from './input.ts';
+export {
+  nestingFailureOf,
+  nodeNestingLimit,
+  snapshotNestingLimit,
+  tooDeepNodePathOf,
+  tooDeepPathOf,
+} from './nesting.ts';
+export { codeNodesOf, inputNodesOf } from './nodes.ts';
+export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {
   DeclaredElement,
   EndpointTombstone,
+  FormerInput,
   MessageTombstone,
+  PackagedSnapshot,
   PublishedApplicationSnapshot,
+  PublishedCode,
   PublishedCommand,
   PublishedDefinitionsSnapshot,
   PublishedElement,
   PublishedEndpoint,
   PublishedEvent,
+  PublishedHeading,
   PublishedServiceSnapshot,
   PublishedSnapshot,
+  RemovedCode,
   SubscriptionTombstone,
 } from './published.ts';
-export { isDeclared, isSubscriptionTombstone } from './published.ts';
-export type { VersionBump } from './semantic-version.ts';
 export {
-  bumpedVersionOf,
-  caretLineOf,
-  compareSemanticVersions,
-  isPrerelease,
-  isSemanticVersion,
-  nextPrereleaseOf,
-} from './semantic-version.ts';
+  declaredCodesOf,
+  formerInputsOf,
+  heldFormerInputsOf,
+  isDeclared,
+  isRemoved,
+  isSubscriptionTombstone,
+  removedCodesOf,
+} from './published.ts';
+export { reachedGuardNamesOf } from './reached-guards.ts';
+export type { SemanticVersionParts, VersionBump } from './semantic-version.ts';
+export { caretLineOf, isSemanticVersion, semanticVersionPartsOf } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';
 export type {
   ApplicationSnapshot,
@@ -40,13 +63,20 @@ export type {
   CommandSnapshot,
   DefinitionsSnapshot,
   DependencySnapshot,
+  EndpointFields,
+  EndpointLifecycle,
   EndpointSnapshot,
   EventSnapshot,
+  ExportedCut,
   ExportedSnapshot,
+  ExportSnapshot,
+  GroupSnapshot,
   GuardSnapshot,
+  InputSnapshot,
   ServiceSnapshot,
+  ShadowingSnapshot,
   Snapshot,
   SnapshotFormat,
   SubscriptionSnapshot,
 } from './types.ts';
-export { snapshotFormats } from './types.ts';
+export { snapshotFormats, writtenSnapshotFormat } from './types.ts';

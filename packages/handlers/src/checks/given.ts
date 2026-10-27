@@ -3,30 +3,33 @@ import {
   contextProvidersOf,
   demandParts,
   inputParts,
+  ownOf,
+  parsedPartOf,
   parsedPartsOf,
   schemaOf,
 } from '@cf-loom/contract/internal';
-import {
-  type Checked,
-  checkedAll,
-  checkedPart,
-  fieldOf,
-  type Issue,
-  withIssues,
-} from './checked.ts';
+import { type Checked, checkedAll, type Issue, withIssues } from './checked.ts';
 
-/** What one call of an EndpointHandler is given, before it is checked; its Resources are passed on unchecked. */
+/**
+ * What a request carries beside its Input, for cancelling and tracing: its abort signal and its
+ * headers as received, never validated and never Input.
+ */
+export type HandledRequest = { readonly signal: AbortSignal; readonly headers: Headers };
+
+/** What one call of an EndpointHandler is given, before it is checked; its request and Resources are passed on unchecked. */
 export type EndpointGiven = {
   readonly input: unknown;
   readonly context: unknown;
+  readonly request: HandledRequest;
   readonly resources: unknown;
 };
 
-/** What one call of a GuardHandler is given, before it is checked; its Resources are passed on unchecked. */
+/** What one call of a GuardHandler is given, before it is checked; its request and Resources are passed on unchecked. */
 export type GuardGiven = {
   readonly demands: unknown;
   readonly context: unknown;
   readonly qualifier: unknown;
+  readonly request: HandledRequest;
   readonly resources: unknown;
 };
 
@@ -58,7 +61,7 @@ export function checkedGuardCall(
   return checkedAll({
     demands: parsedPartsOf(demandParts, schemaAt, given.demands),
     context: checkedContext(guard, given.context),
-    qualifier: checkedPart('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
+    qualifier: parsedPartOf('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
   });
 }
 
@@ -69,8 +72,8 @@ export function checkedGuardCall(
 function checkedContext(receiving: Endpoint | Guard, context: unknown): Checked<ValuesByField> {
   const providers = contextProvidersOf(receiving);
   const checks = providers.map((guard) => {
-    const given = { value: fieldOf(context, guard.name), at: [guard.name] };
-    return [guard.name, checkedPart('context', schemaOf(guard, 'context'), given)] as const;
+    const given = { value: ownOf(context, guard.name), at: [guard.name] };
+    return [guard.name, parsedPartOf('context', schemaOf(guard, 'context'), given)] as const;
   });
   const provided = providers.map((guard) => guard.name);
   return withIssues(checkedAll(Object.fromEntries(checks)), unrecognizedIssues(context, provided));

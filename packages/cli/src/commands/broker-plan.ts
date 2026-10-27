@@ -1,7 +1,5 @@
 import { type BrokerPlan, brokerPlanOf } from '@cf-loom/contract/internal';
-import { builtOf, type Run } from '../project/index.ts';
-import type { Output } from './check.ts';
-import { errorsExitOf } from './check-json.ts';
+import { builtOf } from '../project/index.ts';
 import {
   committedStopOf,
   done,
@@ -10,6 +8,7 @@ import {
   type Stopped,
   toolingError,
 } from './exit.ts';
+import type { Run } from './run.ts';
 
 /** The broker plan of a Service, with its name for the line that says the plan is empty. */
 type Planned = { readonly kind: 'planned'; readonly service: string; readonly plan: BrokerPlan };
@@ -18,26 +17,16 @@ type Planned = { readonly kind: 'planned'; readonly service: string; readonly pl
  * Prints the broker plan of a Service from the committed Snapshot, which must be what `generate`
  * would write; an Application or a Definitions Package has none.
  */
-export async function brokerPlanCommand(
-  run: Run,
-  prefix: string | null,
-  output: Output,
-): Promise<Exit> {
+export async function brokerPlanCommand(run: Run, prefix: string | null): Promise<Exit> {
   const planned = await plannedOf(run, prefix);
-  switch (output) {
-    case 'lines':
-      return planned.kind === 'stopped'
-        ? planned.exit
-        : done(brokerPlanLinesOf(planned.plan, planned.service));
-    case 'json':
-      return planned.kind === 'stopped'
-        ? errorsExitOf(planned.exit)
-        : done([JSON.stringify(planned.plan)]);
+  if (planned.kind === 'stopped') {
+    return planned.exit;
   }
+  return done(brokerPlanLinesOf(planned.plan, planned.service), { plan: planned.plan });
 }
 
 async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Stopped> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }
@@ -61,14 +50,15 @@ function noPlanLine(root: string): string {
   return `${root} has no broker plan: only a Service's Messages travel through the Broker`;
 }
 
-/** The lines `broker-plan` prints: each stream with its subjects, then each durable consumer, or that the Service needs none. */
+/** The lines `broker-plan` prints: each stream with its subjects, then each Durable consumer, or that the Service needs none. */
 function brokerPlanLinesOf(plan: BrokerPlan, service: string): readonly string[] {
   const streams = Object.entries(plan.streams).map(
     ([name, stream]) => `Stream ${name}: ${stream.subjects.join(' ')}`,
   );
-  const consumers = Object.entries(plan.consumers).map(
-    ([name, consumer]) => `Durable consumer ${name} on ${consumer.stream}: ${consumer.subject}`,
+  const durableConsumers = Object.entries(plan.durableConsumers).map(
+    ([name, durableConsumer]) =>
+      `Durable consumer ${name} on ${durableConsumer.stream}: ${durableConsumer.subject}`,
   );
-  const lines = [...streams, ...consumers];
-  return lines.length === 0 ? [`${service} needs no stream and no durable consumer`] : lines;
+  const lines = [...streams, ...durableConsumers];
+  return lines.length === 0 ? [`${service} needs no stream and no Durable consumer`] : lines;
 }

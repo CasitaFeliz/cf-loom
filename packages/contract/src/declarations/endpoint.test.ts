@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   defineEndpoint,
+  defineGuard,
   defineRejection,
   type InputOf,
   invalidInput,
@@ -89,6 +90,62 @@ describe('defineEndpoint', () => {
   });
 });
 
+describe('defineEndpoint names', () => {
+  test('a name JavaScript calls on its own is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error then is a name JavaScript calls on its own
+        name: 'then',
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a name every object already has is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error toString is a name every object already has
+        name: 'toString',
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a word code cannot bind a name by is a type error', () => {
+    const declareClass = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error class is an ECMAScript reserved word
+        name: 'class',
+      });
+    const declareHandle = () =>
+      defineEndpoint({
+        ...getOrder,
+        // @ts-expect-error every stub imports handle
+        name: 'handle',
+      });
+
+    expect(declareClass).not.toThrow();
+    expect(declareHandle).not.toThrow();
+  });
+
+  test('a name typed as a string skips the rule', () => {
+    const name: string = 'then';
+
+    const endpoint = defineEndpoint({ ...getOrder, name });
+
+    expect(endpoint.name).toBe('then');
+  });
+
+  test('a name that only contains a reserved name compiles and stays a literal', () => {
+    const endpoint = defineEndpoint({ ...getOrder, name: 'thenable' });
+
+    expectTypeOf(endpoint.name).toEqualTypeOf<'thenable'>();
+  });
+});
+
 describe('defineEndpoint path params', () => {
   test('a path’s :name missing from params is a type error', () => {
     const declare = () =>
@@ -142,6 +199,19 @@ describe('defineEndpoint path params', () => {
   });
 });
 
+describe('defineEndpoint methods', () => {
+  test('HEAD is no method an Endpoint declares: a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error HEAD is no Method
+        method: 'HEAD',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineEndpoint bodies', () => {
   test('a body on GET is a type error', () => {
     const declare = () =>
@@ -149,41 +219,6 @@ describe('defineEndpoint bodies', () => {
         ...listOrders,
         // @ts-expect-error a GET takes no body
         input: { body: z.object({ status: z.string() }) },
-      });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('a body on HEAD is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        method: 'HEAD',
-        success: { status: 200 },
-        // @ts-expect-error a HEAD takes no body
-        input: { body: z.object({ status: z.string() }) },
-      });
-
-    expect(declare).not.toThrow();
-  });
-
-  test('a HEAD Endpoint answers a status and headers but no body', () => {
-    const checkOrders = defineEndpoint({
-      ...listOrders,
-      method: 'HEAD',
-      success: { status: 200, headers: z.object({ 'x-total': z.int() }) },
-    });
-
-    expect(checkOrders.success.status).toBe(200);
-  });
-
-  test('a HEAD Endpoint’s Success with a body is a type error', () => {
-    const declare = () =>
-      defineEndpoint({
-        ...listOrders,
-        method: 'HEAD',
-        // @ts-expect-error a HEAD Endpoint answers no body
-        success: { status: 200, body: orderBody },
       });
 
     expect(declare).not.toThrow();
@@ -248,6 +283,53 @@ describe('defineEndpoint Rejections', () => {
     expect(endpoint.rejections).toEqual([notFound, orderLocked]);
   });
 
+  test('an Endpoint listing one Rejection twice is a type error', () => {
+    const orderLocked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error ORDER_LOCKED is listed twice
+        rejections: [orderLocked, notFound, orderLocked],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing two Rejections with one code is a type error', () => {
+    const locked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+    const lockedAgain = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error ORDER_LOCKED is listed twice
+        rejections: [locked, lockedAgain],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing notFound twice is a type error', () => {
+    const declare = () =>
+      defineEndpoint({
+        ...listOrders,
+        // @ts-expect-error notFound is listed twice
+        rejections: [notFound, notFound],
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('an Endpoint listing two different Rejections is not an error', () => {
+    const locked = defineRejection({ code: 'ORDER_LOCKED', status: 409, message: 'Locked' });
+    const gone = defineRejection({ code: 'ORDER_GONE', status: 410, message: 'Gone' });
+
+    const endpoint = defineEndpoint({ ...listOrders, rejections: [locked, gone, notFound] });
+
+    expect(endpoint.rejections).toEqual([locked, gone, notFound]);
+  });
+
   test('an Endpoint listing invalidInput is a type error', () => {
     // @ts-expect-error invalidInput is always added
     const declare = () => defineEndpoint({ ...listOrders, rejections: [invalidInput] });
@@ -299,6 +381,34 @@ describe('defineEndpoint header names', () => {
   });
 });
 
+describe('defineEndpoint lifecycle', () => {
+  const deprecatedAt = '2026-11-01T00:00:00Z';
+
+  test('a Deprecated Endpoint declares the instant it is Deprecated as of', () => {
+    const endpoint = defineEndpoint({ ...listOrders, lifecycle: 'deprecated', deprecatedAt });
+
+    expect(endpoint.deprecatedAt).toBe(deprecatedAt);
+  });
+
+  test('a Deprecated Endpoint without deprecatedAt is a type error', () => {
+    // @ts-expect-error a Deprecated Endpoint declares deprecatedAt
+    const declare = () => defineEndpoint({ ...listOrders, lifecycle: 'deprecated' });
+
+    expect(declare).not.toThrow();
+  });
+
+  test.each([
+    ['an Endpoint with no lifecycle', {}],
+    ['an Active Endpoint', { lifecycle: 'active' }],
+    ['a Retired Endpoint', { lifecycle: 'retired' }],
+  ] as const)('deprecatedAt on %s is a type error', (_name, lifecycle) => {
+    // @ts-expect-error only a Deprecated Endpoint declares deprecatedAt
+    const declare = () => defineEndpoint({ ...listOrders, ...lifecycle, deprecatedAt });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineEndpoint fields', () => {
   test('an undeclared field is a type error', () => {
     // @ts-expect-error group is not a field of an Endpoint
@@ -323,6 +433,86 @@ describe('a declared Endpoint’s containers', () => {
     expect(Object.isFrozen(endpoint.success)).toBe(true);
     expect(Object.isFrozen(endpoint.rejections)).toBe(true);
     expect(Object.isFrozen(orderParams)).toBe(false);
+  });
+});
+
+/** A Guard whose Qualifier is any list, its type kept shallow for the type checker. */
+const anyList = defineGuard({
+  name: 'anyList',
+  description: 'Any list',
+  qualifier: z.array(z.json()) as z.ZodType<readonly unknown[]>,
+});
+
+/** The Qualifier a declared Endpoint holds for its one Attachment. */
+function qualifierOf(qualifier: unknown): unknown {
+  const endpoint = defineEndpoint({
+    ...listOrders,
+    guards: [{ guard: anyList, qualifier: qualifier as readonly unknown[] }],
+  });
+  const [attachment] = endpoint.guards ?? [];
+  return attachment !== undefined && 'qualifier' in attachment ? attachment.qualifier : undefined;
+}
+
+/** `depth` lists, each holding the next, the innermost empty. */
+function aNestOfLists(depth: number): unknown[] {
+  const outermost: unknown[] = [];
+  let list = outermost;
+  for (let level = 1; level < depth; level++) {
+    const held: unknown[] = [];
+    list.push(held);
+    list = held;
+  }
+  return outermost;
+}
+
+/** The first `count` lists of a nest, outermost first, each the first item of the one before. */
+function listsOf(nest: unknown, count: number): readonly unknown[] {
+  const lists: unknown[] = [];
+  for (let list = nest; Array.isArray(list) && lists.length < count; list = list[0]) {
+    lists.push(list);
+  }
+  return lists;
+}
+
+describe('a declared Endpoint’s Qualifiers', () => {
+  test('a Qualifier nested 100,000 lists deep is copied and frozen at every depth', () => {
+    const written = aNestOfLists(100_000);
+
+    const declared = qualifierOf(written);
+
+    const writtenLists = listsOf(written, 100_000);
+    const declaredLists = listsOf(declared, 100_000);
+    expect(declaredLists).toHaveLength(100_000);
+    expect(declaredLists.every((list) => Object.isFrozen(list))).toBe(true);
+    expect(declaredLists.some((list, depth) => list === writtenLists[depth])).toBe(false);
+  });
+
+  test.for([...Array.from({ length: 65 }, (_, depth) => depth), 10_000])(
+    'a Qualifier holding itself %i lists below it is a frozen copy that holds itself as deep',
+    (depth) => {
+      const written = aNestOfLists(depth + 1);
+      const innermost = listsOf(written, depth + 1).at(-1) as unknown[];
+      innermost.push(written);
+
+      const declared = qualifierOf(written);
+
+      const declaredLists = listsOf(declared, depth + 1);
+      const heldAtTheEnd = (declaredLists.at(-1) as unknown[]).at(-1);
+      expect(declared !== written).toBe(true);
+      expect(declaredLists.every((list) => Object.isFrozen(list))).toBe(true);
+      expect(heldAtTheEnd === declared).toBe(true);
+    },
+  );
+
+  test('an object a Qualifier holds twice is copied once, both places holding that copy', () => {
+    const shared = { scope: ['orders:read'] };
+
+    const declared = qualifierOf([{ read: shared, also: [shared] }]);
+
+    const [{ read, also }] = declared as [{ read: unknown; also: readonly unknown[] }];
+    expect(read).not.toBe(shared);
+    expect(also[0]).toBe(read);
+    expect(Object.isFrozen(read)).toBe(true);
   });
 });
 

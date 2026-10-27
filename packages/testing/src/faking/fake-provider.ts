@@ -1,62 +1,73 @@
-import { type Client, type ClientOptions, client, type Fetch } from '@cf-loom/client';
-import { type AnyDependencies, baseUrlOf, type ConfiguredName } from '@cf-loom/client/internal';
-import { providedOf } from '../provided/index.ts';
+import { type Client, type ClientOptions, client } from '@cf-loom/client';
+import type {
+  AnyDependency,
+  ConfiguredName,
+  ListedEndpoint,
+  ListedName,
+} from '@cf-loom/client/internal';
+import type { Http, InputOf } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import { fakedProviderOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
-import type { FakeCall } from './calls.ts';
+import type { Frozen, InvalidCall } from './calls.ts';
 import { type Faking, fakeFetchOf, fakingOf } from './fetch.ts';
+import { throwMistakes } from './verify.ts';
 
-/** Where a fake is reached: `https://<provider>.test` unless a test names another base URL. */
+/** Where a fake is reached: `https://<provider>.test`, its Endpoints' Provider, unless a test names another base URL. */
 export type FakeProviderOptions = { readonly baseUrl?: string | URL };
 
 /** What `payments.client()` takes: a client's options, its `fetch` and base URL the fake's own. */
 export type FakeClientOptions<
-  Deps extends AnyDependencies,
-  Configured extends string = never,
-> = Omit<ClientOptions<Deps, Configured>, 'baseUrl' | 'fetch'>;
-
-type ListedName<Deps extends AnyDependencies> = keyof Deps['endpoints'] & string;
+  D extends AnyDependency,
+  Configured extends ConfiguredName<D> = never,
+> = Omit<ClientOptions<D, Configured>, 'baseUrl' | 'fetch'>;
 
 /**
  * A fake of the Provider a Dependency names: its `fetch`, a real client over it, each listed
- * Endpoint's script, and the calls each received.
+ * Endpoint's script, the calls each received, valid and invalid, and `verify()`.
  */
-export type FakeProvider<Deps extends AnyDependencies> = {
-  readonly fetch: Fetch;
-  client<Configured extends ConfiguredName<Deps> = never>(
-    options?: FakeClientOptions<Deps, Configured>,
-  ): Client<Deps, Configured>;
-  on<Name extends ListedName<Deps>>(
+export type FakeProvider<D extends AnyDependency> = {
+  readonly fetch: Http;
+  client<Configured extends ConfiguredName<D> = never, const Given = unknown>(
+    options?: FakeClientOptions<D, Configured> &
+      Given &
+      NoInfer<DeclaredFieldsRule<Given, FakeClientOptions<D, Configured>>>,
+  ): Client<D, Configured>;
+  on<Name extends ListedName<D>>(name: Name): Script<D, Name>;
+  /** The requests the Endpoint read as valid, in the order they reached `fetch`, each a frozen copy of its parsed Input. */
+  calls<Name extends ListedName<D>>(
     name: Name,
-  ): Script<Deps['endpoints'][Name], Deps['standardRejections']>;
-  calls<Name extends ListedName<Deps>>(name: Name): readonly FakeCall<Deps['endpoints'][Name]>[];
+  ): readonly Frozen<InputOf<ListedEndpoint<D, Name>>>[];
+  /** The requests the Endpoint answered with the invalid-input Rejection, in the order they reached `fetch`. */
+  invalidCalls<Name extends ListedName<D>>(name: Name): readonly InvalidCall[];
+  /**
+   * Throws what the test got wrong so far, wherever the code under test caught it: every mistake
+   * `fetch` threw, and one a step made after its request was aborted, then each Endpoint's `once`
+   * steps no request took; returns when there is none.
+   */
+  verify(): void;
 };
 
 /**
- * Fakes the Provider of a Dependency, checked against the Snapshot its Contract Package exports,
- * so it answers only what that Provider could.
+ * Fakes the Provider of a Dependency, checked against the exported Snapshot cut each listed
+ * Endpoint carries, so it answers only what that Provider could.
  */
-export function fakeProvider<const Deps extends AnyDependencies>(
-  deps: Deps,
+export function fakeProvider<const D extends AnyDependency>(
+  dependency: D,
   options: FakeProviderOptions = {},
-): FakeProvider<Deps> {
-  const base = baseUrlOf(options.baseUrl ?? `https://${deps.provider}.test`);
-  const faking: Faking = fakingOf(providedOf(deps, base));
+): FakeProvider<D> {
+  const faked = fakedProviderOf(dependency, options.baseUrl);
+  const { base } = faked;
+  const faking: Faking = fakingOf(faked);
   const fetch = fakeFetchOf(faking);
-  const fake: FakeProvider<Deps> = {
+  const fake: FakeProvider<D> = {
     fetch,
-    client: (clientOptions) => client(deps, { ...clientOptions, baseUrl: base, fetch }),
-    on: (name) => faking.scriptedByNameOf(name).script as ScriptOf<Deps, typeof name>,
-    calls: (name) => faking.calls.callsOf(name) as readonly FakeCallOf<Deps, typeof name>[],
+    client: (clientOptions) => client(dependency, { ...clientOptions, baseUrl: base, fetch }),
+    on: (name) => faking.scriptedByNameOf(name).script as Script<D, typeof name>,
+    calls: (name) =>
+      faking.calls.callsOf(name) as readonly Frozen<InputOf<ListedEndpoint<D, typeof name>>>[],
+    invalidCalls: (name) => faking.calls.invalidCallsOf(name),
+    verify: () => throwMistakes(faking),
   };
   return Object.freeze(fake);
 }
-
-/** One script for every Endpoint, typed where a test reaches it by name. */
-type ScriptOf<Deps extends AnyDependencies, Name extends ListedName<Deps>> = Script<
-  Deps['endpoints'][Name],
-  Deps['standardRejections']
->;
-
-type FakeCallOf<Deps extends AnyDependencies, Name extends ListedName<Deps>> = FakeCall<
-  Deps['endpoints'][Name]
->;

@@ -2,13 +2,19 @@ import type { z } from 'zod';
 import {
   canonicalSnapshotOf,
   type NamedFormat,
+  nodeNestingLimit,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormatOf,
+  snapshotNestingLimit,
+  tooDeepNodePathOf,
+  tooDeepPathOf,
 } from '../snapshot/index.ts';
-import { problemOf } from '../validation/index.ts';
+import { readWith } from '../validation/index.ts';
+import { formerInputProblemsOf } from './former-inputs.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
+import { formatDefiner } from './texts.ts';
 
 /** A `snapshot.json` as decoded: the published Snapshot, or why it cannot be trusted. */
 export type DecodedSnapshot =
@@ -23,9 +29,8 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<PublishedSnapshot>>>
 
 /**
  * A `snapshot.json` from the registry, decoded by the format it names into the published Snapshot
- * in canonical order; anything its format does not define, a name it uses and does not hold, or a
- * def that leads back to itself with no node between, is refused rather than read as far as it
- * goes.
+ * in canonical order; anything `generate` and `publish` never write that would make the Check or
+ * the hash wrong is refused rather than read as far as it goes.
  */
 export function decodeSnapshot(text: string): DecodedSnapshot {
   const parsed = parsedJsonOf(text);
@@ -33,9 +38,15 @@ export function decodeSnapshot(text: string): DecodedSnapshot {
     return parsed;
   }
   const format = snapshotFormatOf(parsed.json);
-  return format.kind === 'known'
-    ? decodedWithinStack(structures[format.format], parsed.json)
-    : format;
+  if (format.kind !== 'known') {
+    return format;
+  }
+  const tooDeep = tooDeepPathOf(parsed.json);
+  if (tooDeep !== undefined) {
+    const reason = `nests deeper than ${snapshotNestingLimit} levels`;
+    return { kind: 'malformed', at: tooDeep, reason };
+  }
+  return decodedWithinStack(structures[format.format], parsed.json);
 }
 
 type Parsed =
@@ -66,13 +77,18 @@ function decodedWithinStack(
 }
 
 function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): DecodedSnapshot {
-  const structured = structure.safeParse(json);
-  if (!structured.success) {
-    return { kind: 'malformed', ...problemOf(structured.error.issues, 'its format') };
+  const structured = readWith(structure, json, formatDefiner);
+  if (structured.kind === 'refused') {
+    return { kind: 'malformed', ...structured.problems[0] };
   }
-  const problem = heldProblemOf(structured.data);
+  const tooDeep = tooDeepNodePathOf(structured.value);
+  if (tooDeep !== undefined) {
+    const reason = `a schema nests deeper than ${nodeNestingLimit} levels`;
+    return { kind: 'malformed', at: tooDeep, reason };
+  }
+  const problem = heldProblemOf(structured.value) ?? formerInputProblemsOf(structured.value)[0];
   if (problem !== undefined) {
     return { kind: 'malformed', ...problem };
   }
-  return { kind: 'decoded', snapshot: canonicalSnapshotOf(structured.data) };
+  return { kind: 'decoded', snapshot: canonicalSnapshotOf(structured.value) };
 }

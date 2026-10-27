@@ -1,5 +1,5 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
-import { builtOf, type Run } from '../project/index.ts';
+import { builtOf } from '../project/index.ts';
 import {
   committedStopOf,
   done,
@@ -8,6 +8,7 @@ import {
   type Stopped,
   toolingError,
 } from './exit.ts';
+import type { Run } from './run.ts';
 
 /** The Snapshot of a Service whose committed file is what `generate` would write. */
 export type CommittedService = {
@@ -23,13 +24,13 @@ type Written =
 /**
  * The Service a command that prints a document works on, from the committed Snapshot, which must be
  * what `generate` would write, so the document describes the reviewed file; an Application or a
- * Definitions Package stops it with the line `noDocumentLineOf` words for the root.
+ * Definitions Package stops it with the line `noDocumentLineOf` words for the Root.
  */
 export async function committedServiceOf(
   run: Run,
   noDocumentLineOf: (root: string) => string,
 ): Promise<CommittedService | Stopped> {
-  const built = await builtOf(run, 'committed');
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }
@@ -52,6 +53,8 @@ export function writtenDocumentExitOf(written: Written): Exit {
     case 'unnamed':
       return toolingError(written.line);
     case 'written':
-      return done(JSON.stringify(written.document, null, 2).split('\n'));
+      return done(JSON.stringify(written.document, null, 2).split('\n'), {
+        document: written.document,
+      });
   }
 }

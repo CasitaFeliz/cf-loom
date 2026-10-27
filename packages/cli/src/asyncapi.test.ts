@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   aContractProject,
@@ -84,10 +82,10 @@ function targetOf(ref: string): unknown {
 
 /** The lines that declare the Events of `theService`, around the Commands and Subscription. */
 const theEvents = [
-  "import { defineCommand, defineContract, defineEvent, defineSubscription } from '@cf-loom/contract';",
+  "import { defineCommand, defineService, defineEvent, defineGroup, defineSubscription } from '@cf-loom/contract';",
   "import { z } from 'zod';",
-  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
-  "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purge-node' });",
+  "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
+  "const purgeNode = z.object({ get next() { return purgeNode.optional(); } }).meta({ id: 'purgeNode' });",
   'export const orderCreatedV1 = defineEvent({',
   "  name: 'OrderCreated',",
   '  version: 1,',
@@ -107,7 +105,7 @@ const theEvents = [
   "  name: 'OrderNoted',",
   '  version: 1,',
   "  visibility: 'private',",
-  "  description: '',",
+  "  description: 'A note was added to an order',",
   '  body: z.object({',
   '    note: z.string().describe("A note\\u2028on the order"),',
   "    root: tree.nullable().describe('The root'),",
@@ -141,75 +139,51 @@ const theEvents = [
   "  description: 'Charges a card',",
   '  body: z.object({ orderId: z.uuid() }),',
   '});',
-  "const auditCreated = defineSubscription({ name: 'audit-created', event: orderCreatedV2 });",
+  "export const auditCreated = defineSubscription({ name: 'auditCreated', description: 'Audit created', event: orderCreatedV2 });",
 ];
 
-/** A Service named `orders-service` with an Event of each Visibility and Lifecycle, a Command and a Subscription. */
+/**
+ * A Service named `orders-service` with an Event of each Visibility and Lifecycle in the Groups
+ * `trees`, `orders` and `notes`, its one Retired Event alone in `purges`, and a Command and a
+ * Subscription.
+ */
 const theService = aContractProject([
   ...theEvents,
-  'export const contract = defineContract({',
-  "  name: 'orders-service',",
-  '  events: [orderCreatedV1, orderCreatedV2, orderNotedV1, orderPurgedV1, treeGrownV1],',
+  "const trees = defineGroup({ name: 'trees', description: 'Trees', events: [treeGrownV1] });",
+  'const orders = defineGroup({',
+  "  name: 'orders',",
+  "  description: 'Orders',",
+  '  events: [orderCreatedV1, orderCreatedV2],',
   '  commands: [chargeCardV1],',
   '  subscriptions: [auditCreated],',
   '});',
+  "const notes = defineGroup({ name: 'notes', description: 'Notes', events: [orderNotedV1] });",
+  "const purges = defineGroup({ name: 'purges', description: 'Purges', events: [orderPurgedV1] });",
+  "export const contract = defineService({ name: 'orders-service', groups: [trees, orders, notes, purges] });",
 ]);
 
 /** A Service named `orders-service` that declares no Event. */
 const aServiceWithoutEvents = aContractProject([
-  "import { defineContract } from '@cf-loom/contract';",
+  "import { defineService } from '@cf-loom/contract';",
   '',
-  "export const contract = defineContract({ name: 'orders-service' });",
+  "export const contract = defineService({ name: 'orders-service' });",
 ]);
-
-/** A Service whose Events have the recursive schemas given as their bodies, in the order given. */
-function aServiceWithBodies(recursive: readonly string[]): Readonly<Record<string, string>> {
-  const declared = recursive.map((id, index) => [
-    `const body${index} = z.object({ get next() { return body${index}.optional(); } }).meta({ id: '${id}' });`,
-    `export const posted${index} = defineEvent({`,
-    `  name: 'Posted${index}', version: 1, visibility: 'internal',`,
-    `  description: 'Posted', body: body${index},`,
-    '});',
-  ]);
-  const names = recursive.map((_id, index) => `posted${index}`);
-  return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
-    "import { z } from 'zod';",
-    ...declared.flat(),
-    `export const contract = defineContract({ name: 'orders-service', events: [${names.join(', ')}] });`,
-  ]);
-}
-
-/**
- * A project of `aServiceWithBodies` whose committed Snapshot is current, though `generate` refuses
- * the recursion ids, since the readers could not name them: the Snapshot of named ids, renamed.
- */
-function aProjectCommittedWithBodies(recursive: readonly string[]): string {
-  const placeholders = recursive.map((_id, index) => `tree-${index}`);
-  const named = aGeneratedProject(aServiceWithBodies(placeholders));
-  let snapshot = readFileSync(join(named, 'contract.snapshot.json'), 'utf8');
-  for (const [index, placeholder] of placeholders.entries()) {
-    snapshot = snapshot.replaceAll(JSON.stringify(placeholder), JSON.stringify(recursive[index]));
-  }
-  const project = aProject(aServiceWithBodies(recursive));
-  write(project, { 'contract.snapshot.json': snapshot });
-  return project;
-}
 
 /** A Service whose one Event, in the Lifecycle given, has a recursive def as its body, with a description and an example. */
 function aServiceWithDescribedTree(
   lifecycle: 'active' | 'deprecated',
 ): Readonly<Record<string, string>> {
   return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { defineService, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
-    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree-node' });",
+    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'treeNode' });",
     'export const treeGrownV1 = defineEvent({',
     `  name: 'TreeGrown', version: 1, visibility: 'internal', lifecycle: '${lifecycle}',`,
     "  description: 'A tree grew',",
     "  body: z.lazy(() => tree).meta({ description: 'The tree', examples: [{ label: 'a', children: [] }] }),",
     '});',
-    "export const contract = defineContract({ name: 'orders-service', events: [treeGrownV1] });",
+    "const trees = defineGroup({ name: 'trees', description: 'Trees', events: [treeGrownV1] });",
+    "export const contract = defineService({ name: 'orders-service', groups: [trees] });",
   ]);
 }
 
@@ -231,10 +205,11 @@ function aServiceWithVersions(count: number): Readonly<Record<string, string>> {
   ]);
   const names = versions.map((version) => `orderCreatedV${version}`);
   return aContractProject([
-    "import { defineContract, defineEvent } from '@cf-loom/contract';",
+    "import { defineService, defineEvent, defineGroup } from '@cf-loom/contract';",
     "import { z } from 'zod';",
     ...declared.flat(),
-    `export const contract = defineContract({ name: 'orders-service', events: [${names.join(', ')}] });`,
+    `const orders = defineGroup({ name: 'orders', description: 'Orders', events: [${names.join(', ')}] });`,
+    "export const contract = defineService({ name: 'orders-service', groups: [orders] });",
   ]);
 }
 
@@ -264,6 +239,14 @@ describe('cf-loom asyncapi', () => {
 
   test('the document is at version 0.0.0', () => {
     expect(valueAt(document, 'info', 'version')).toBe('0.0.0');
+  });
+
+  test('the document’s tags are the Groups of its Events that are not Retired, each once, in code point order, with their descriptions', () => {
+    expect(valueAt(document, 'info', 'tags')).toEqual([
+      { name: 'notes', description: 'Notes' },
+      { name: 'orders', description: 'Orders' },
+      { name: 'trees', description: 'Trees' },
+    ]);
   });
 
   test('the document’s default content type is application/json', () => {
@@ -303,7 +286,7 @@ describe('cf-loom asyncapi: the channels', () => {
   });
 
   test('the channels’ addresses are the Event subjects broker-plan puts in the Service’s stream', () => {
-    const plan = JSON.parse(cfLoom(fixture, 'broker-plan', '--json').stdout);
+    const { plan } = JSON.parse(cfLoom(fixture, 'broker-plan', '--json').stdout);
     const subjects = valueAt(plan, 'streams', 'orders-service', 'subjects') as string[];
     const addresses = Object.values(valueAt(document, 'channels') as object).map((channel) =>
       valueAt(channel, 'address'),
@@ -357,20 +340,12 @@ describe('cf-loom asyncapi: the channels', () => {
     );
   });
 
-  test('a message of an Event with no description has none', () => {
-    expect(messageOf('OrderNoted@1')).not.toHaveProperty('description');
-  });
-
   test('Internal and Private Events are both written, each with its Visibility as x-cf-loom-visibility', () => {
     const visibilities = ['OrderCreated@2', 'OrderNoted@1'].map((identity) =>
       valueAt(channelOf(identity), 'x-cf-loom-visibility'),
     );
 
     expect(visibilities).toEqual(['internal', 'private']);
-  });
-
-  test('a Retired Message Version has no channel', () => {
-    expect(valueAt(document, 'channels')).not.toHaveProperty('OrderPurged@1');
   });
 
   test('a Command is not written', () => {
@@ -399,12 +374,8 @@ describe('cf-loom asyncapi: the operations', () => {
     ]);
   });
 
-  test('a Retired Message Version has no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('OrderPurged@1');
-  });
-
-  test('a Subscription adds no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('audit-created');
+  test('a send operation is tagged with its Event’s Group', () => {
+    expect(valueAt(operationOf('OrderNoted@1'), 'tags')).toEqual([{ name: 'notes' }]);
   });
 });
 
@@ -460,7 +431,11 @@ describe('cf-loom asyncapi: the payloads', () => {
   });
 
   test('an Active Message Version’s payload is not marked deprecated', () => {
-    expect(payloadOf('OrderCreated@2')).not.toHaveProperty('deprecated');
+    expect(payloadOf('OrderCreated@2')).toStrictEqual({
+      type: 'object',
+      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      required: ['orderId', 'total'],
+    });
   });
 
   test('a Deprecated Message Version whose body is a recursive def is deprecated', () => {
@@ -509,10 +484,6 @@ describe('cf-loom asyncapi: the payloads', () => {
     });
   });
 
-  test('a def only a Retired Message Version reaches is not a component', () => {
-    expect(valueAt(document, 'components', 'schemas')).not.toHaveProperty('PurgeNodeDef');
-  });
-
   test('every $ref of the document names a component, a channel or a message of a channel', () => {
     const refs = refsOf(document);
 
@@ -547,6 +518,14 @@ describe('cf-loom asyncapi: the headers', () => {
     expect(valueAt(headers, 'properties', 'Nats-Msg-Id')).toMatchObject({
       type: 'string',
       minLength: 1,
+    });
+  });
+
+  test('the broker headers describe Nats-Msg-Id as event.<Name>.v<version>:<Fact id>', () => {
+    const headers = componentOf('BrokerHeaders');
+
+    expect(valueAt(headers, 'properties', 'Nats-Msg-Id')).toMatchObject({
+      description: expect.stringContaining('event.<Name>.v<version>:<Fact id>'),
     });
   });
 
@@ -619,7 +598,12 @@ describe('cf-loom asyncapi: what it prints', () => {
   });
 
   test('an operation’s keys are in AsyncAPI’s usual order', () => {
-    expect(keysOf(operationOf('OrderCreated@2'))).toEqual(['action', 'channel', 'messages']);
+    expect(keysOf(operationOf('OrderCreated@2'))).toEqual([
+      'action',
+      'channel',
+      'tags',
+      'messages',
+    ]);
   });
 
   test('a description holding U+2028 is printed as its JSON escape and parses back to the same text', () => {
@@ -655,7 +639,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused).toEqual({ status: 1, stdout: '', stderr: `${staleSnapshotLine}\n` });
   });
 
-  test('a root that breaks a rule fails asyncapi with generate’s lines', () => {
+  test('a Root that breaks a rule fails asyncapi with generate’s lines', () => {
     const project = aProject({
       ...theService,
       'package.json': JSON.stringify({ name: '@org/billing-service', type: 'module' }),
@@ -667,7 +651,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
       status: 1,
       stdout: '',
       stderr:
-        'name package-name: A root is named as its package.json, without the scope: billing-service\n',
+        'src/contract/index.ts: (root) name package-name: A Root is named as its package.json, without the scope: "orders-service" is written, package.json names "billing-service"\n',
     });
   });
 
@@ -679,7 +663,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused.status).toBe(3);
     expect(refused.stdout).toBe('');
     expect(refused.stderr).toMatch(
-      /^contract\.snapshot\.json is no JSON \([^\n]+\): restore it or delete it, then run cf-loom generate\n$/,
+      /^contract\.snapshot\.json is no JSON \([^\n]+\): run cf-loom generate\n$/,
     );
   });
 
@@ -707,31 +691,6 @@ describe('cf-loom asyncapi: what it refuses', () => {
     });
   });
 
-  test('a recursion id that is no name in code is a tooling error', () => {
-    const project = aProjectCommittedWithBodies(['1tree']);
-
-    const refused = cfLoom(project, 'asyncapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr: 'The recursion id 1tree is no name in code: rename it\n',
-    });
-  });
-
-  test('two recursion ids that are one name in code are a tooling error', () => {
-    const project = aProjectCommittedWithBodies(['tree-node', 'tree_node']);
-
-    const refused = cfLoom(project, 'asyncapi');
-
-    expect(refused).toEqual({
-      status: 3,
-      stdout: '',
-      stderr:
-        'The recursion ids tree-node and tree_node are one name in code: rename one of them\n',
-    });
-  });
-
   test('asyncapi takes no argument', () => {
     const project = aProject({});
 
@@ -756,15 +715,14 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused).toEqual({
       status: 3,
       stdout: '',
-      stderr: `--prefix takes a prefix in kebab-case, such as staging. ${usage}\n`,
+      stderr: `--prefix takes a prefix in kebab-case of at most 64 characters, such as staging. ${usage}\n`,
     });
   });
 
   test.for([
     ['--out', ['--out', 'folder'], 'Only package takes --out'],
-    ['--json', ['--json'], 'Only check and broker-plan take --json'],
     ['--force', ['--force'], 'Only publish takes --force'],
-    ['--prerelease', ['--prerelease'], 'Only publish takes --prerelease'],
+    ['--prerelease', ['--prerelease'], 'Only check and publish take --prerelease'],
   ] as const)('asyncapi does not take %s', ([_option, options, message]) => {
     const project = aProject({});
 

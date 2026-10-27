@@ -1,4 +1,4 @@
-import { defineCommand, defineContract, defineEvent } from '@cf-loom/contract';
+import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
 import { jetstream as jetStreamClientOf, jetstreamManager } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
@@ -6,8 +6,8 @@ import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vit
 import { z } from 'zod';
 import { withMethods } from '../../test/connections.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, dropStream } from '../../test/streams.ts';
-import { messaging, PublishError } from '../index.ts';
+import { arrangePlanOf, arrangeStream, dropStream } from '../../test/streams.ts';
+import { InvalidMessageError, MessageNotSentError, messaging } from '../index.ts';
 import { jetstream } from './index.ts';
 
 const orderCreatedV1 = defineEvent({
@@ -34,10 +34,16 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
-const contract = defineContract({
+const contract = defineService({
   name: 'orders-service',
-  events: [orderCreatedV1, orderCreatedV2],
-  commands: [chargeCardV1],
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+    }),
+  ],
 });
 
 let server: NatsServer;
@@ -136,6 +142,13 @@ async function messagesIn(stream: string): Promise<number> {
   return (await manager.streams.info(stream)).state.messages;
 }
 
+/** Sets the largest Message, headers and body together, a stream stores, with the NATS client as an organization's tooling would. */
+async function limitMessageSize(stream: string, bytes: number): Promise<void> {
+  const manager = await jetstreamManager(await aConnection());
+  // biome-ignore lint/style/useNamingConvention: nats.js spells the setting `max_msg_size`
+  await manager.streams.update(stream, { max_msg_size: bytes });
+}
+
 async function rejectionOf(call: Promise<unknown>): Promise<unknown> {
   return call.then(
     () => undefined,
@@ -157,7 +170,7 @@ describe('publishing over jetstream()', () => {
     await expect(storedOn(stream, subject(1))).resolves.toEqual({
       body: '{"orderId":"o-1"}',
       headers: {
-        'Nats-Msg-Id': 'OrderCreated.v1:o-1:created',
+        'Nats-Msg-Id': 'event.OrderCreated.v1:o-1:created',
         'Cf-Loom-Fact-Id': 'o-1:created',
         traceparent: '00-abc-def-01',
       },
@@ -165,11 +178,40 @@ describe('publishing over jetstream()', () => {
     await expect(storedOn(stream, subject(2))).resolves.toEqual({
       body: '{"orderId":"o-1","total":12}',
       headers: {
-        'Nats-Msg-Id': 'OrderCreated.v2:o-1:created',
+        'Nats-Msg-Id': 'event.OrderCreated.v2:o-1:created',
         'Cf-Loom-Fact-Id': 'o-1:created',
         traceparent: '00-abc-def-01',
       },
     });
+  });
+
+  test('an OrderCreated whose newest version is larger than max_payload is sent as no version, and retrying the same Fact id fails the same way', async () => {
+    const { publisher, stream } = await aMessaging();
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o'.repeat(1_100_000), total: 12 } };
+
+    const first = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+    const retry = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+
+    expect(first).toBeInstanceOf(MessageNotSentError);
+    expect(first).toMatchObject({ factId: 'o-1', sent: [] });
+    expect(retry).toMatchObject({ factId: 'o-1', sent: [] });
+    await expect(messagesIn(stream)).resolves.toBe(0);
+  });
+
+  test('an OrderCreated whose newest version is larger than the stream’s max_msg_size is sent as no version, refused by the server', async () => {
+    const { publisher, stream } = await aMessaging();
+    await limitMessageSize(stream, 2_000);
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o'.repeat(3_000), total: 12 } };
+
+    const error = await rejectionOf(publisher.publish('OrderCreated', bodies, { factId: 'o-1' }));
+
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect(error).toMatchObject({
+      factId: 'o-1',
+      sent: [],
+      cause: { message: expect.stringContaining('message size exceeds maximum allowed') },
+    });
+    await expect(messagesIn(stream)).resolves.toBe(0);
   });
 
   test('send stores the Command’s body on its prefixed subject with its broker message id', async () => {
@@ -181,13 +223,16 @@ describe('publishing over jetstream()', () => {
       storedOn(stream, `${prefix}.orders-service.command.ChargeCard.v1`),
     ).resolves.toEqual({
       body: '{"orderId":"o-1"}',
-      headers: { 'Nats-Msg-Id': 'ChargeCard.v1:o-1:charge', 'Cf-Loom-Fact-Id': 'o-1:charge' },
+      headers: {
+        'Nats-Msg-Id': 'command.ChargeCard.v1:o-1:charge',
+        'Cf-Loom-Fact-Id': 'o-1:charge',
+      },
     });
   });
 
   test('a publish whose broker headers take exactly the bytes JetStream stores stores each version with its Fact id and transport headers as given', async () => {
     const { publisher, prefix, stream } = await aMessaging();
-    const pad = 'p'.repeat(65_458);
+    const pad = 'p'.repeat(65_452);
 
     await publisher.publish(
       'OrderCreated',
@@ -199,7 +244,7 @@ describe('publishing over jetstream()', () => {
       return storedOn(stream, `${prefix}.orders-service.event.OrderCreated.v${version}`);
     };
     const expected = (version: number) => ({
-      'Nats-Msg-Id': `OrderCreated.v${version}:o-1`,
+      'Nats-Msg-Id': `event.OrderCreated.v${version}:o-1`,
       'Cf-Loom-Fact-Id': 'o-1',
       'x-pad': pad,
     });
@@ -207,20 +252,18 @@ describe('publishing over jetstream()', () => {
     await expect(stored(2)).resolves.toMatchObject({ headers: expected(2) });
   });
 
-  test('a publish with broker headers one byte over rejects with cf-loom’s error, not a PublishError, and the stream stores nothing', async () => {
+  test('a publish with broker headers one byte over rejects with InvalidMessageError, not MessageNotSentError, and the stream stores nothing', async () => {
     const { publisher, stream } = await aMessaging();
     const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
-    const padded = { 'x-pad': 'p'.repeat(65_459) };
+    const padded = { 'x-pad': 'p'.repeat(65_453) };
 
     const error = await rejectionOf(
       publisher.publish('OrderCreated', bodies, { factId: 'o-1', headers: padded }),
     );
 
-    expect(error).not.toBeInstanceOf(PublishError);
+    expect(error).toBeInstanceOf(InvalidMessageError);
     expect(error).toMatchObject({
-      message: expect.stringMatching(
-        /^The broker headers of OrderCreated@1 would take 65536 bytes/,
-      ),
+      message: expect.stringMatching(/^OrderCreated@1: The broker headers would take 65536 bytes/),
     });
     await expect(messagesIn(stream)).resolves.toBe(0);
   });
@@ -248,42 +291,114 @@ describe('publishing over jetstream()', () => {
     await expect(messagesIn(stream)).resolves.toBe(1);
   });
 
-  test('publishing the same fact again resolves, and the stream keeps one Message per version', async () => {
+  test('an Event and a Command with one name and version, published and sent with one Fact id, are both stored in the stream', async () => {
+    const chargeEvent = defineEvent({
+      name: 'Charge',
+      version: 1,
+      visibility: 'internal',
+      description: 'A charge was made',
+      body: z.object({ orderId: z.string() }),
+    });
+    const chargeCommand = defineCommand({
+      name: 'Charge',
+      version: 1,
+      description: 'Makes a charge',
+      body: z.object({ orderId: z.string() }),
+    });
+    const sameName = defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'charges',
+          description: 'Charges',
+          events: [chargeEvent],
+          commands: [chargeCommand],
+        }),
+      ],
+    });
+    const prefix = aPrefix();
+    const stream = `${prefix}_orders-service`;
+    await arrangeStream(server.url, {
+      name: stream,
+      subjects: [
+        `${prefix}.orders-service.event.Charge.v1`,
+        `${prefix}.orders-service.command.Charge.v1`,
+      ],
+    });
+    const { publisher, sender } = await messaging(
+      sameName,
+      jetstream({ connect: aConnection, prefix }),
+    );
+    const body = { orderId: 'o-1' };
+
+    await publisher.publish('Charge', { v1: body }, { factId: 'o-1' });
+    await sender.send('Charge', body, { factId: 'o-1' });
+
+    await expect(messagesIn(stream)).resolves.toBe(2);
+    await expect(
+      storedOn(stream, `${prefix}.orders-service.event.Charge.v1`),
+    ).resolves.toMatchObject({
+      headers: { 'Nats-Msg-Id': 'event.Charge.v1:o-1' },
+    });
+    await expect(
+      storedOn(stream, `${prefix}.orders-service.command.Charge.v1`),
+    ).resolves.toMatchObject({ headers: { 'Nats-Msg-Id': 'command.Charge.v1:o-1' } });
+  });
+
+  test('publishing the same Fact id twice resolves to every version as a duplicate, and the stream keeps one Message per version', async () => {
     const { publisher, stream } = await aMessaging();
     const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
-    await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
+    const first = await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
 
-    const again = publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
+    const again = await publisher.publish('OrderCreated', bodies, { factId: 'o-1:created' });
 
-    await expect(again).resolves.toBeUndefined();
+    expect(first).toEqual({ factId: 'o-1:created', duplicates: [] });
+    expect(again).toEqual({
+      factId: 'o-1:created',
+      duplicates: ['OrderCreated@2', 'OrderCreated@1'],
+    });
     await expect(messagesIn(stream)).resolves.toBe(2);
+  });
+
+  test('sending the same Fact id twice resolves duplicate true', async () => {
+    const { sender } = await aMessaging();
+    const first = await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'o-1:charge' });
+
+    const again = await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'o-1:charge' });
+
+    expect([first, again]).toEqual([
+      { factId: 'o-1:charge', duplicate: false },
+      { factId: 'o-1:charge', duplicate: true },
+    ]);
   });
 
   test.each([
     [
       { headers: { 'trace id': 'x' } },
-      /^The transport header name "trace id" cannot travel over NATS/,
+      /^headers\."trace id": The transport header name "trace id" cannot travel over NATS/,
     ],
-    [{ factId: 'o-1 ' }, /^A Fact id is a non-empty string /],
+    [{ factId: 'o-1 ' }, /^factId: A Fact id is a non-empty string /],
     [
       { headers: { 'Nats-Expected-Stream': 'other' } },
-      /^The transport header Nats-Expected-Stream takes a name /,
+      /^headers\.Nats-Expected-Stream: The transport header Nats-Expected-Stream takes a name /,
     ],
   ])(
-    'publish with %j rejects with cf-loom’s error, not the NATS client’s, and the stream stores nothing',
+    'publish with %j rejects with InvalidMessageError, not the NATS client’s error, and the stream stores nothing',
     async (options, message) => {
       const { publisher, stream } = await aMessaging();
       const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
 
-      const error = await rejectionOf(publisher.publish('OrderCreated', bodies, options));
+      const error = await rejectionOf(
+        publisher.publish('OrderCreated', bodies, { factId: 'f-120', ...options }),
+      );
 
-      expect(error).not.toBeInstanceOf(PublishError);
+      expect(error).toBeInstanceOf(InvalidMessageError);
       expect(error).toMatchObject({ message: expect.stringMatching(message) });
       await expect(messagesIn(stream)).resolves.toBe(0);
     },
   );
 
-  test('a publish the NATS client rejects rejects with a PublishError whose cause is that very error', async () => {
+  test('a publish the NATS client rejects rejects with a MessageNotSentError whose cause is that very error', async () => {
     const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
@@ -295,32 +410,40 @@ describe('publishing over jetstream()', () => {
     refusing.refuse(refusal);
 
     const error = await rejectionOf(
-      publisher.publish('OrderCreated', {
-        v1: { orderId: 'o-1' },
-        v2: { orderId: 'o-1', total: 1 },
-      }),
+      publisher.publish(
+        'OrderCreated',
+        {
+          v1: { orderId: 'o-1' },
+          v2: { orderId: 'o-1', total: 1 },
+        },
+        { factId: 'f-121' },
+      ),
     );
 
-    expect(error).toBeInstanceOf(PublishError);
-    expect((error as PublishError).cause).toBe(refusal);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect((error as MessageNotSentError).cause).toBe(refusal);
   });
 
-  test('a publish to a stream that no longer exists rejects with a PublishError, sending nothing', async () => {
+  test('a publish to a stream that no longer exists rejects with a MessageNotSentError, sending nothing', async () => {
     const { publisher, stream } = await aMessaging();
     await dropStream(server.url, stream);
 
     const error = await rejectionOf(
-      publisher.publish('OrderCreated', {
-        v1: { orderId: 'o-1' },
-        v2: { orderId: 'o-1', total: 1 },
-      }),
+      publisher.publish(
+        'OrderCreated',
+        {
+          v1: { orderId: 'o-1' },
+          v2: { orderId: 'o-1', total: 1 },
+        },
+        { factId: 'f-122' },
+      ),
     );
 
-    expect(error).toBeInstanceOf(PublishError);
-    expect((error as PublishError).sent).toEqual([]);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect((error as MessageNotSentError).sent).toEqual([]);
   });
 
-  test('a send the NATS client rejects rejects with that very error', async () => {
+  test('a send the NATS client rejects rejects with a MessageNotSentError whose cause is that very error', async () => {
     const refusing = aWatchedConnect();
     const prefix = aPrefix();
     await arrangePlanOf(server.url, contract, prefix);
@@ -328,9 +451,12 @@ describe('publishing over jetstream()', () => {
     const refusal = new Error('the Broker refused it');
     refusing.refuse(refusal);
 
-    const sending = sender.send('ChargeCard', { orderId: 'o-1' });
+    const error = await rejectionOf(
+      sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-123' }),
+    );
 
-    await expect(sending).rejects.toBe(refusal);
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect(error).toMatchObject({ factId: 'f-123', sent: [], cause: refusal });
   });
 
   test('close closes the connection the Service’s connect returned', async () => {
@@ -370,7 +496,7 @@ describe('publishing over jetstream()', () => {
       jetstream({ connect: watching.connect, prefix, jetstream: { timeout: 1234 } }),
     );
 
-    await sender.send('ChargeCard', { orderId: 'o-1' });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-124' });
 
     const subject = `${prefix}.orders-service.command.ChargeCard.v1`;
     const published = watching.requests.filter((request) => request.subject === subject);

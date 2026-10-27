@@ -1,20 +1,24 @@
 import { loomNeeds, type Writing } from '../schema-code/index.ts';
 import { stringLiteralOf } from '../source-text/index.ts';
-import { elementLinesOf } from './element-lines.ts';
+import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEvent } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
-import { bindingOf, fileOf } from './names.ts';
+import { fileOf, providedOpeningOf } from './names.ts';
 import { schemaLineOf } from './schema-lines.ts';
 
 /**
- * An exported Event's Message Version rebuilt from its Snapshot entry with `defineEvent`, its body
- * a Reader schema, since its Subscribers read it.
+ * An exported Event's Message Version rebuilt from its Snapshot entry with `providedEvent`, its
+ * body a Reader schema, since its Subscribers read it, and marked as `provider`'s.
  */
-export function eventModuleOf({ name, version, event }: ExportedEvent): SchemaFile {
+export function eventModuleOf(
+  { name, version, event }: ExportedEvent,
+  provider: string,
+): SchemaFile {
   const declared = { kind: 'event', name, version } as const;
   const reader: Writing = { mode: 'reader', needs: loomNeeds() };
   const body = [
-    `export const ${bindingOf(declared)} = loom.defineEvent({`,
+    ...deprecatedLinesOf(event),
+    providedOpeningOf(declared, stringLiteralOf(provider)),
     `  name: ${stringLiteralOf(name)},`,
     `  version: ${version},`,
     ...elementLinesOf(event),

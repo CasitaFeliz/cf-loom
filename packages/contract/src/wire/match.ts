@@ -1,13 +1,20 @@
-import type { PathSegment } from '../written/index.ts';
+import { endpointSegmentsOf, type PathSegment } from '../written/index.ts';
 import type { TextSource } from './text-parts.ts';
 import { isSegmentText, segmentTextOf } from './url-text.ts';
 
 /** What a request is matched against: a declared method and the segments of its path. */
 export type Matchable = { readonly method: string; readonly segments: readonly PathSegment[] };
 
-/** The declared Endpoint a request matched, with where its text comes from, or none. */
+/** A declared Endpoint as routing reads it: its identity, method and path segments. */
+export type EndpointPath = Matchable & { readonly identity: string };
+
+/**
+ * The declared Endpoint a request matched, with where its text comes from; the methods its path
+ * takes when declared Endpoints have the path but none the method; or none.
+ */
 export type Match<Matched extends Matchable> =
   | { readonly kind: 'none' }
+  | { readonly kind: 'other-method'; readonly allowed: readonly string[] }
   | { readonly kind: 'matched'; readonly matched: Matched; readonly source: TextSource };
 
 /**
@@ -26,7 +33,7 @@ export function matchOf<Matched extends Matchable>(
   }
   const best = matchedOf(declared, request.method, texts);
   if (best === undefined) {
-    return { kind: 'none' };
+    return unmatchedOf(declared, texts);
   }
   const params = paramsOf(best.segments, texts);
   const source = { params, query: url.searchParams, headers: request.headers };
@@ -49,6 +56,29 @@ export function matchedOf<Matched extends Matchable>(
     }
   }
   return best;
+}
+
+/** No Endpoint with this method: the methods of those that have the path, or none. */
+function unmatchedOf<Matched extends Matchable>(
+  declared: readonly Matched[],
+  texts: readonly string[],
+): Match<Matched> {
+  const allowed = methodsOnPathOf(declared, texts);
+  return allowed.length === 0 ? { kind: 'none' } : { kind: 'other-method', allowed };
+}
+
+/** The methods declared Endpoints take on a request's path, once each in code point order, as `Allow` lists them. */
+export function allowedMethodsOf(
+  declared: readonly Matchable[],
+  request: Request,
+): readonly string[] {
+  const texts = segmentTextsOf(new URL(request.url).pathname);
+  return texts.every(isSegmentText) ? methodsOnPathOf(declared, texts) : [];
+}
+
+function methodsOnPathOf(declared: readonly Matchable[], texts: readonly string[]): string[] {
+  const onPath = declared.filter((candidate) => isMatchedBy(candidate.segments, texts));
+  return [...new Set(onPath.map(({ method }) => method))].sort();
 }
 
 /** The decoded segments of a request path; the root has none. */
@@ -86,4 +116,38 @@ function paramsOf(
     }
   }
   return Object.fromEntries(params);
+}
+
+/** A segment text no literal spells, so only a param matches it. */
+export const unmatchedText = '{}';
+
+/**
+ * The segment texts of a URL two Endpoints both match, a literal where either has one and
+ * `unmatchedText` where both have a param, or `undefined` when they share no URL.
+ */
+export function sharedUrlOf(left: Matchable, right: Matchable): readonly string[] | undefined {
+  if (left.method !== right.method || left.segments.length !== right.segments.length) {
+    return undefined;
+  }
+  const texts: string[] = [];
+  for (const [index, segment] of left.segments.entries()) {
+    const text = sharedTextAt(segment, right.segments[index]);
+    if (text === undefined) {
+      return undefined;
+    }
+    texts.push(text);
+  }
+  return texts;
+}
+
+function sharedTextAt(left: PathSegment, right: PathSegment | undefined): string | undefined {
+  if (left.kind === 'literal') {
+    return right?.kind === 'literal' && right.text !== left.text ? undefined : left.text;
+  }
+  return right?.kind === 'literal' ? right.text : unmatchedText;
+}
+
+/** An Endpoint's identity as routing reads it, a `{}` as a param. */
+export function endpointPathOf(identity: string): EndpointPath {
+  return { identity, ...endpointSegmentsOf(identity) };
 }

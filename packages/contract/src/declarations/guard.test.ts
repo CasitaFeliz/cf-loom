@@ -187,6 +187,19 @@ describe('defineGuard', () => {
   });
 });
 
+describe('defineGuard names', () => {
+  test('a name every object already has is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        // @ts-expect-error toString is a name every object already has
+        name: 'toString',
+        description: 'A Guard',
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineGuard fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>
@@ -222,6 +235,40 @@ describe('a declared Guard’s containers', () => {
     expect(Object.isFrozen(tenant.demands)).toBe(true);
     expect(Object.isFrozen(tenant.guards)).toBe(true);
     expect(Object.isFrozen(tenant.rejections)).toBe(true);
+  });
+});
+
+describe('defineGuard Rejections', () => {
+  test('a Guard listing one Rejection twice is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'apiKey',
+        description: 'A key per Caller',
+        // @ts-expect-error UNAUTHENTICATED is listed twice
+        rejections: [unauthenticated, unauthenticated],
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
+describe('defineGuard Rejections with one code', () => {
+  test('a Guard listing two Rejections with one code is a type error', () => {
+    const unauthenticatedAgain = defineRejection({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+      message: 'Unauthenticated again',
+    });
+
+    const declare = () =>
+      defineGuard({
+        name: 'apiKey',
+        description: 'A key per Caller',
+        // @ts-expect-error UNAUTHENTICATED is listed twice
+        rejections: [unauthenticated, unauthenticatedAgain],
+      });
+
+    expect(declare).not.toThrow();
   });
 });
 

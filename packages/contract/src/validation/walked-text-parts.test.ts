@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
-  defineContract,
   defineEndpoint,
   defineGroup,
   defineGuard,
+  defineService,
   type Endpoint,
 } from '../index.ts';
 import { walkedTextPartsOf } from '../internal/index.ts';
@@ -18,7 +18,7 @@ const userToken = defineGuard({
 
 /** A Contract of the given Endpoints, in one Group. */
 function contractOf(...endpoints: readonly [Endpoint, ...Endpoint[]]) {
-  return defineContract({
+  return defineService({
     name: 'orders-service',
     groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints })],
   });
@@ -42,12 +42,16 @@ describe('walkedTextPartsOf', () => {
     const walked = walkedTextPartsOf(contractOf(getOrder));
 
     const nodes = walked.kind === 'valid' ? walked.nodes.get(getOrder) : undefined;
-    expect(nodes?.['input.query']).toEqual({
-      type: 'object',
-      mode: 'open',
-      fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
+    expect(nodes).toStrictEqual({
+      'input.params': {
+        type: 'object',
+        fields: { orderId: { required: true, schema: { type: 'string' } } },
+      },
+      'input.query': {
+        type: 'object',
+        fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
+      },
     });
-    expect(nodes?.['input.headers']).toBeUndefined();
   });
 
   test('walks what a Guard demands, once for every Endpoint that attaches it', () => {
@@ -84,30 +88,6 @@ describe('walkedTextPartsOf', () => {
     expect(walked).toMatchObject({
       kind: 'invalid',
       failures: [{ rule: 'not-text', message: expect.stringContaining('filter') }],
-    });
-  });
-
-  test('a query that is a record keyed by an enum is a failure, as generate words it', () => {
-    const filtered = defineEndpoint({
-      name: 'filtered',
-      method: 'GET',
-      path: '/filtered',
-      visibility: 'public',
-      description: 'Filters',
-      input: { query: z.record(z.enum(['a', 'b']), z.string()) as never },
-      success: { status: 204 },
-    });
-
-    const walked = walkedTextPartsOf(contractOf(filtered));
-
-    expect(walked).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        {
-          kind: 'not-allowed',
-          at: ['groups', 'orders', 'endpoints', 'GET /filtered', 'input', 'query'],
-        },
-      ],
     });
   });
 

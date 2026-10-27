@@ -1,21 +1,41 @@
-import { eventVisibilities, isMessageVersion, lifecycleOf } from '../declarations/index.ts';
+import {
+  eventVisibilities,
+  isMessageVersion,
+  lifecycleOf,
+  messageBodyRefusal,
+  messageVersionRefusal,
+} from '../declarations/index.ts';
+import { inFields, resolvedRefOf, type SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
   type LocatedCommand,
   type LocatedEvent,
   messageIdentityOf,
-  textOf,
+  slotAt,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type ClosedValue, closedValueFailures, lifecycle } from './closed-values.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { repeated } from './names.ts';
+import type { Nodes } from './schemas.ts';
 
 /** An Event's or a Command's Message Version where it sits, read the same for both kinds. */
 type LocatedMessage = {
   readonly at: LocatedEvent['at'];
   readonly message: LocatedEvent['event'] | LocatedCommand['command'];
 };
+
+/** The declared Events and Commands, each with where it sits. */
+function locatedMessagesOf({ events, commands }: Declarations): {
+  readonly events: readonly LocatedMessage[];
+  readonly commands: readonly LocatedMessage[];
+} {
+  return {
+    events: events.map(({ at, event }) => ({ at, message: event })),
+    commands: commands.map(({ at, command }) => ({ at, message: command })),
+  };
+}
 
 const eventVisibility: ClosedValue = {
   rule: 'visibility',
@@ -25,16 +45,18 @@ const eventVisibility: ClosedValue = {
 
 /** The rules of the declared Message Versions, judged without the Baseline's tombstones. */
 export function messageFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const events = declarations.events.map(({ at, event }) => ({ at, message: event }));
-  const commands = declarations.commands.map(({ at, command }) => ({ at, message: command }));
+  const { events, commands } = locatedMessagesOf(declarations);
   const messages = [...events, ...commands];
   return [
     ...messages.flatMap(versionFailures),
     ...declarations.events.flatMap(({ at, event }) =>
-      closedValueFailures({ at: [...at, 'visibility'], value: event.visibility }, eventVisibility),
+      closedValueFailures(
+        { at: inFields(at, 'visibility'), value: event.visibility },
+        eventVisibility,
+      ),
     ),
     ...messages.flatMap(({ at, message }) =>
-      closedValueFailures({ at: [...at, 'lifecycle'], value: message.lifecycle }, lifecycle),
+      closedValueFailures({ at: inFields(at, 'lifecycle'), value: message.lifecycle }, lifecycle),
     ),
     ...identityFailures(events),
     ...identityFailures(commands),
@@ -43,13 +65,47 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
   ];
 }
 
+/** A Message body is an object of its fields, judged on the walked node, so a Message can grow. */
+export function messageBodyFailures(
+  declarations: Declarations,
+  { nodeOf, defs }: Nodes,
+): readonly DeclarationFailure[] {
+  const { events, commands } = locatedMessagesOf(declarations);
+  const located = [...events, ...commands];
+  const notObjects = located.filter(({ message }) => {
+    const body = nodeOf(message, 'body');
+    return body !== undefined && !isObjectOf(body, defs);
+  });
+  return notObjects.map((message) =>
+    failure(
+      slotAt(message.at, 'body'),
+      'not-an-object-schema',
+      `${messageBodyRefusal}: ${identityOf(message)}`,
+    ),
+  );
+}
+
+/** Whether a node is an object, a `ref` read through its def and any alias defs; a nullable one is not. */
+function isObjectOf(node: SchemaNode, defs: Nodes['defs']): boolean {
+  if (node.type !== 'ref') {
+    return node.type === 'object' && node.nullable !== true;
+  }
+  const resolved = resolvedRefOf(node, defs);
+  return (
+    resolved !== undefined &&
+    !resolved.nullable &&
+    resolved.def.type === 'object' &&
+    resolved.def.nullable !== true
+  );
+}
+
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
   const { version } = message;
   if (isWithoutValue(version) || isMessageVersion(version)) {
     return [];
   }
-  const text = `A Message version is a whole number from 1: ${textOf(version)}`;
-  return [failure([...at, 'version'], 'message-version', text)];
+  const text = `${messageVersionRefusal}: ${writtenTextOf(version)}`;
+  return [failure(inFields(at, 'version'), 'message-version', text)];
 }
 
 /** Whether a Message Version is named by a string; any other name already fails as a field. */
@@ -69,7 +125,7 @@ function identityOf({ message }: LocatedMessage): string {
 function identityFailures(messages: readonly LocatedMessage[]): readonly DeclarationFailure[] {
   return repeated(messages.filter(isIdentified), identityOf).map((located) =>
     failure(
-      [...located.at, 'version'],
+      inFields(located.at, 'version'),
       'duplicate-message-identity',
       `A Message Version is identified by its name and version, once: ${identityOf(located)}`,
     ),
@@ -88,7 +144,7 @@ function kindFailures(
   const firsts = shared.filter((located) => !repeats.has(located));
   return firsts.map(({ at, message }) =>
     failure(
-      [...at, 'name'],
+      inFields(at, 'name'),
       'message-kind',
       `A Message name belongs to one kind: ${message.name} is an Event and a Command`,
     ),
@@ -103,7 +159,7 @@ function activeCommandFailures(commands: readonly LocatedMessage[]): readonly De
   const versions = active.filter((located) => !repeatedIdentities.has(located));
   return repeated(versions, ({ message }) => message.name).map(({ at, message }) =>
     failure(
-      [...at, 'lifecycle'],
+      inFields(at, 'lifecycle'),
       'command-active-versions',
       `A Command has at most one Active version: ${message.name}`,
     ),

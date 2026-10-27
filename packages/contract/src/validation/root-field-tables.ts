@@ -1,39 +1,37 @@
 import type {
-  Application,
+  ApplicationContract,
   Command,
-  Contract,
   Definitions,
-  Dependencies,
+  Dependency,
   Event,
-  ExportedElements,
   Group,
+  ServiceContract,
   Subscription,
 } from '../declarations/index.ts';
 import type { Declarations } from '../written/index.ts';
 import type { Fields, KnownFields } from './declared-fields.ts';
 
-const contractFields = {
+const serviceFields = {
   declared: {
     kind: true,
     name: true,
-    definitions: true,
+    standardRejections: true,
     groups: true,
-    events: true,
-    commands: true,
-    subscriptions: true,
     dependencies: true,
   },
   required: { kind: true, name: true },
   strings: { kind: true, name: true },
+  nonBlank: {},
   objects: {},
-} satisfies Fields<Contract>;
+} satisfies Fields<ServiceContract>;
 
 const applicationFields = {
   declared: { kind: true, name: true, dependencies: true },
-  required: { kind: true, name: true, dependencies: true },
+  required: { kind: true, name: true },
   strings: { kind: true, name: true },
+  nonBlank: {},
   objects: {},
-} satisfies Fields<Application>;
+} satisfies Fields<ApplicationContract>;
 
 /** The fields of an Event's Message Version. */
 export const eventFields = {
@@ -55,6 +53,7 @@ export const eventFields = {
     body: true,
   },
   strings: { kind: true, name: true, visibility: true, description: true, lifecycle: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Event>;
 
@@ -70,83 +69,66 @@ export const commandFields = {
   },
   required: { kind: true, name: true, version: true, description: true, body: true },
   strings: { kind: true, name: true, description: true, lifecycle: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Command>;
 
 /** The fields of a Subscription. */
 export const subscriptionFields = {
-  declared: { kind: true, name: true, event: true },
-  required: { kind: true, name: true, event: true },
-  strings: { kind: true, name: true },
+  declared: { kind: true, name: true, description: true, event: true },
+  required: { kind: true, name: true, description: true, event: true },
+  strings: { kind: true, name: true, description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Subscription>;
 
 /** The fields of a Definitions Package. */
 export const definitionsFields = {
-  declared: {
-    kind: true,
-    name: true,
-    guards: true,
-    schemas: true,
-    rejections: true,
-    standardRejections: true,
-  },
-  required: { kind: true, name: true },
-  strings: { kind: true, name: true },
-  objects: { schemas: true, standardRejections: true },
+  declared: { kind: true, standardRejections: true },
+  required: { kind: true },
+  strings: { kind: true },
+  nonBlank: {},
+  objects: { standardRejections: true },
 } satisfies Fields<Definitions>;
 
 /** The fields of a Group. */
 export const groupFields = {
-  declared: { kind: true, name: true, description: true, endpoints: true },
-  required: { kind: true, name: true, description: true, endpoints: true },
+  declared: {
+    kind: true,
+    name: true,
+    description: true,
+    endpoints: true,
+    events: true,
+    commands: true,
+    subscriptions: true,
+  },
+  required: { kind: true, name: true, description: true },
   strings: { kind: true, name: true, description: true },
+  nonBlank: { description: true },
   objects: {},
 } satisfies Fields<Group>;
 
-/** The fields of a Dependency, as `defineDependencies` builds it. */
-export const dependenciesFields = {
-  declared: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  required: {
-    kind: true,
-    provider: true,
-    against: true,
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-  strings: { kind: true, provider: true, against: true },
-  objects: {
-    standardRejections: true,
-    endpoints: true,
-    events: true,
-    exported: true,
-    exportedSnapshot: true,
-  },
-} satisfies Fields<Dependencies>;
+/**
+ * A Dependency's fields as the field rules judge them: its Endpoints are the Dependency rule's,
+ * which reports an empty or missing list in its own terms.
+ */
+type DependencyFields = {
+  readonly kind: Dependency['kind'];
+  readonly endpoints?: unknown;
+};
 
-/** The Elements a Dependency keeps as its Provider exported them. */
-export const exportedFields = {
-  declared: { endpoints: true, events: true },
-  required: { endpoints: true, events: true },
-  strings: {},
-  objects: { endpoints: true, events: true },
-} satisfies Fields<ExportedElements>;
+/** The fields of a Dependency, as `defineDependency` builds it. */
+export const dependencyFields = {
+  declared: { kind: true, endpoints: true },
+  required: { kind: true },
+  strings: { kind: true },
+  nonBlank: {},
+  objects: {},
+} satisfies Fields<DependencyFields>;
 
-/** The fields of each kind of root. */
+/** The fields of each kind of Root. */
 export const rootFields: Readonly<Record<Declarations['root']['kind'], KnownFields>> = {
-  contract: contractFields,
+  service: serviceFields,
   application: applicationFields,
   definitions: definitionsFields,
 };

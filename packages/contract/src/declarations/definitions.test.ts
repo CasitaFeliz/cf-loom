@@ -11,27 +11,32 @@ import {
 } from '../index.ts';
 
 describe('defineDefinitions', () => {
-  test('a Definitions Package keeps its Guards, schemas and Rejections by identity', () => {
-    const money = z.object({ amount: z.int(), currency: z.string() });
-    const userToken = defineGuard({ name: 'userToken', description: 'A signed-in user' });
-    const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
+  test('guards, schemas and rejections are type errors: what the Root file exports is what a Definitions Package shares', () => {
+    // @ts-expect-error: guards is not a declared field
+    const guards = defineDefinitions({ guards: [] });
+    // @ts-expect-error: schemas is not a declared field
+    const schemas = defineDefinitions({ schemas: {} });
+    // @ts-expect-error: rejections is not a declared field
+    const rejections = defineDefinitions({ rejections: [] });
 
+    expect([guards, schemas, rejections].map(({ kind }) => kind)).toEqual([
+      'definitions',
+      'definitions',
+      'definitions',
+    ]);
+  });
+
+  test('a name is a type error: the package.json a Definitions Package is published from names it', () => {
     const definitions = defineDefinitions({
+      // @ts-expect-error: name is not a declared field
       name: 'definitions',
-      guards: [userToken],
-      schemas: { money },
-      rejections: [forbidden],
     });
 
-    expect(definitions.schemas.money).toBe(money);
-    expect(definitions.guards[0]).toBe(userToken);
-    expect(definitions.rejections[0]).toBe(forbidden);
     expect(definitions.kind).toBe('definitions');
   });
 
   test('a Definitions Package may declare its Standard Rejections’ codes, statuses and messages', () => {
     const definitions = defineDefinitions({
-      name: 'definitions',
       standardRejections: {
         invalidInput: { code: 'BAD_REQUEST', status: 422, message: 'Bad request' },
         notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
@@ -44,7 +49,6 @@ describe('defineDefinitions', () => {
   test('notImplemented’s status must be 501', () => {
     const declare = () =>
       defineDefinitions({
-        name: 'definitions',
         standardRejections: {
           // @ts-expect-error not implemented is always 501
           notImplemented: { code: 'NOT_IMPLEMENTED', status: 500, message: 'Not implemented' },
@@ -57,7 +61,6 @@ describe('defineDefinitions', () => {
   test('invalidInput’s status must be a 4xx', () => {
     const declare = () =>
       defineDefinitions({
-        name: 'definitions',
         standardRejections: {
           // @ts-expect-error invalid input is a 4xx
           invalidInput: { code: 'BAD_REQUEST', status: 501, message: 'Bad request' },
@@ -70,7 +73,6 @@ describe('defineDefinitions', () => {
   test('a Standard Rejection declares no body', () => {
     const declare = () =>
       defineDefinitions({
-        name: 'definitions',
         standardRejections: {
           notFound: {
             code: 'NOT_FOUND',
@@ -84,37 +86,41 @@ describe('defineDefinitions', () => {
 
     expect(declare).not.toThrow();
   });
+
+  test('a Standard Rejection declares no headers', () => {
+    const declare = () =>
+      defineDefinitions({
+        standardRejections: {
+          notFound: {
+            code: 'NOT_FOUND',
+            status: 404,
+            message: 'Not found',
+            // @ts-expect-error a Standard Rejection answers no declared headers
+            headers: z.object({ 'x-resource': z.string() }),
+          },
+        },
+      });
+
+    expect(declare).not.toThrow();
+  });
 });
 
 describe('defineDefinitions fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>
       // @ts-expect-error a Definitions Package owns no Endpoints
-      defineDefinitions({ name: 'definitions', endpoints: [] });
+      defineDefinitions({ endpoints: [] });
 
     expect(declare).not.toThrow();
   });
 });
 
 describe('a declared Definitions Package’s containers', () => {
-  test('a Definitions Package freezes its lists and maps and keeps its schemas', () => {
-    const money = z.object({ amount: z.int() });
-    const schemas = { money };
+  test('a Definitions Package freezes its Standard Rejections', () => {
     const notFound = { code: 'NOT_FOUND', status: 404, message: 'Not found' } as const;
 
-    const definitions = defineDefinitions({
-      name: 'definitions',
-      guards: [],
-      schemas,
-      rejections: [],
-      standardRejections: { notFound },
-    });
-    Reflect.set(schemas, 'money', z.object({}));
+    const definitions = defineDefinitions({ standardRejections: { notFound } });
 
-    expect(definitions.schemas.money).toBe(money);
-    expect(Object.isFrozen(definitions.schemas)).toBe(true);
-    expect(Object.isFrozen(definitions.guards)).toBe(true);
-    expect(Object.isFrozen(definitions.rejections)).toBe(true);
     expect(Object.isFrozen(definitions.standardRejections)).toBe(true);
     expect(Object.isFrozen(definitions.standardRejections.notFound)).toBe(true);
   });
@@ -124,7 +130,6 @@ describe('defineDefinitions nested fields', () => {
   test('an undeclared Standard Rejection is a type error', () => {
     const declare = () =>
       defineDefinitions({
-        name: 'definitions',
         standardRejections: {
           invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'Bad request' },
           // @ts-expect-error notFund is not a Standard Rejection
@@ -138,7 +143,6 @@ describe('defineDefinitions nested fields', () => {
   test('an undeclared field in a Standard Rejection is a type error', () => {
     const declare = () =>
       defineDefinitions({
-        name: 'definitions',
         standardRejections: {
           notFound: {
             code: 'NOT_FOUND',
@@ -154,43 +158,15 @@ describe('defineDefinitions nested fields', () => {
   });
 });
 
-describe('a Definitions Package with a schema named kind', () => {
-  test('a Definitions Package freezes its schemas even when one is named kind', () => {
-    const kind = z.enum(['retail', 'wholesale']);
-
-    const definitions = defineDefinitions({ name: 'definitions', schemas: { kind } });
-
-    expect(Object.isFrozen(definitions.schemas)).toBe(true);
-    expect(definitions.schemas.kind).toBe(kind);
-  });
-});
-
 describe('a Definitions Package with containers the author froze', () => {
   test('an author-frozen standardRejections still gets frozen entries', () => {
     const standardRejections = Object.freeze({
       notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' } as const,
     });
 
-    const definitions = defineDefinitions({ name: 'definitions', standardRejections });
+    const definitions = defineDefinitions({ standardRejections });
 
     expect(Object.isFrozen(definitions.standardRejections.notFound)).toBe(true);
-  });
-
-  test('a declaration nested in a container keeps its identity', () => {
-    const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
-
-    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
-
-    expect(definitions.rejections[0]).toBe(forbidden);
-  });
-
-  test('a zod schema keeps its identity and still parses', () => {
-    const money = z.object({ amount: z.int() });
-
-    const definitions = defineDefinitions({ name: 'definitions', schemas: { money } });
-
-    expect(definitions.schemas.money).toBe(money);
-    expect(definitions.schemas.money.safeParse({ amount: 5 }).success).toBe(true);
   });
 });
 
@@ -258,10 +234,10 @@ describe('declarations from another copy of @cf-loom/contract', () => {
       kind: 'rejection',
     } as const;
 
-    const definitions = defineDefinitions({ name: 'definitions', rejections: [forbidden] });
+    const guard = defineGuard({ name: 'admin', description: 'An admin', rejections: [forbidden] });
 
-    expect(definitions.rejections[0]).not.toBe(forbidden);
-    expect(definitions.rejections[0]).toEqual(forbidden);
+    expect(guard.rejections[0]).not.toBe(forbidden);
+    expect(guard.rejections[0]).toEqual(forbidden);
   });
 
   test('a declaration shows no brand in its keys or its JSON', () => {

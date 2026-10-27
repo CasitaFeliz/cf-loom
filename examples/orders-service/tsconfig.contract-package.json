@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "composite": true,
-    "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/contract-package.tsbuildinfo"
+    "tsBuildInfoFile": "${configDir}/.cf-loom/contract-package/dist/contract-package.tsbuildinfo"
   },
   "extends": "./.cf-loom/contract-package/tsconfig.json",
   "references": [

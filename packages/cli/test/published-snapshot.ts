@@ -8,30 +8,53 @@ export type Declared = { readonly kind: Kind; readonly name: string };
 export const orders = { kind: 'service', name: 'orders-service' } as const satisfies Declared;
 export const ordersPackage = '@org/contract-orders-service';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
 const standardRejections: Extract<PublishedSnapshot, { kind: 'service' }>['standardRejections'] = {
-  invalidInput: {
+  invalidInput: invalidInputCode,
+  notFound: notFoundCode,
+  notImplemented: notImplementedCode,
+};
+
+const standardCodes = {
+  [invalidInputCode]: {
     origin: 'standard',
-    code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    headers: { type: 'object', fields: {} },
+    body: { type: 'object', fields: {} },
   },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
-};
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    headers: { type: 'object', fields: {} },
+    body: null,
+  },
+} as const;
 
 const serviceBody = {
   kind: 'service',
-  definitions: {},
   standardRejections,
+  groups: {},
   defs: {},
   endpoints: {},
   events: {},
   commands: {},
   guards: {},
-  codes: {},
+  codes: standardCodes,
   subscriptions: {},
   dependencies: {},
+  formerInputs: [],
 } as const;
 
 const applicationBody = { kind: 'application', dependencies: {} } as const;
@@ -40,9 +63,9 @@ const definitionsBody = {
   kind: 'definitions',
   standardRejections,
   defs: {},
-  schemas: {},
+  exports: {},
   guards: {},
-  codes: {},
+  codes: standardCodes,
 } as const;
 
 /** The Snapshot of a package that declares nothing, as a registry holds it for `version`. */

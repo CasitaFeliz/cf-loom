@@ -2,23 +2,22 @@ import * as built from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { refusalsOf } from '../../test/failures.ts';
 import { openEnum } from '../index.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
-  return walkSchemas([{ at: ['body'], schema }], () => undefined);
+  const at = { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  return refusalsOf(walkSchemas([{ at, schema }], () => undefined));
 }
 
 function walkedTo(node: SchemaNode) {
-  return { located: [{ at: ['body'], walked: { kind: 'walked', value: node } }], defs: {} };
+  return { located: [{ kind: 'walked', value: node }], defs: {} };
 }
 
-function refusedAt(at: readonly (string | number)[], construct: string) {
+function refusedAt(at: string, construct: string) {
   const failure = { kind: 'not-allowed', at, construct };
-  return {
-    located: [{ at: ['body'], walked: { kind: 'not-allowed', failures: [failure] } }],
-    defs: {},
-  };
+  return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
 const card = z.object({ type: z.literal('card'), last4: z.string() });
@@ -26,18 +25,16 @@ const transfer = z.object({ type: z.literal('transfer'), iban: z.string() });
 
 const cardNode = {
   type: 'object',
-  mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'card' } },
+    type: { required: true, schema: { type: 'enum', values: ['card'], open: false } },
     last4: { required: true, schema: { type: 'string' } },
   },
 } as const;
 
 const transferNode = {
   type: 'object',
-  mode: 'open',
   fields: {
-    type: { required: true, schema: { type: 'literal', value: 'transfer' } },
+    type: { required: true, schema: { type: 'enum', values: ['transfer'], open: false } },
     iban: { required: true, schema: { type: 'string' } },
   },
 } as const;
@@ -81,12 +78,62 @@ describe('walkSchemas: enums', () => {
   });
 });
 
-describe('walkSchemas: unions', () => {
-  test('a union holds its options', () => {
-    expect(walkBody(z.union([z.string(), z.number()]))).toEqual(
-      walkedTo({ type: 'union', options: [{ type: 'number' }, { type: 'string' }] }),
-    );
+const declaredOptions = [
+  { name: 'a string', schema: z.string(), node: { type: 'string' } },
+  {
+    name: 'an object',
+    schema: z.object({ id: z.string() }),
+    node: {
+      type: 'object',
+      fields: { id: { required: true, schema: { type: 'string' } } },
+    },
+  },
+  {
+    name: 'an array',
+    schema: z.array(z.number()),
+    node: { type: 'array', items: { type: 'number' } },
+  },
+] as const;
+
+const closedValues = [
+  { name: 'a literal d', schema: z.literal('d') },
+  { name: 'a literal a', schema: z.literal('a') },
+  { name: 'an enum of c and b', schema: z.enum(['c', 'b']) },
+] as const;
+
+/** Every order the items can be declared in. */
+function ordersOf<Item>(items: readonly Item[]): readonly (readonly Item[])[] {
+  if (items.length <= 1) {
+    return [items];
+  }
+  return items.flatMap((item, index) => {
+    const others = items.filter((_, other) => other !== index);
+    return ordersOf(others).map((order) => [item, ...order]);
   });
+}
+
+function titled<Item extends { readonly name: string }>(order: readonly Item[]) {
+  return [order.map(({ name }) => name).join(', then '), order] as const;
+}
+
+describe('walkSchemas: unions', () => {
+  test.each(ordersOf(declaredOptions).map(titled))(
+    'a union of %s keeps that order',
+    (_names, options) => {
+      const walked = walkBody(z.union(options.map(({ schema }) => schema)));
+
+      expect(walked).toEqual(walkedTo({ type: 'union', options: options.map(({ node }) => node) }));
+    },
+  );
+
+  test.each(ordersOf(closedValues).map(titled))(
+    'a union of %s is one enum with sorted values',
+    (_names, options) => {
+      const walked = walkBody(z.union(options.map(({ schema }) => schema)));
+
+      expect(walked).toEqual(walkedTo({ type: 'enum', values: ['a', 'b', 'c', 'd'], open: false }));
+    },
+  );
 
   test('a union of described literals is an enum, without their descriptions', () => {
     const flag = z.union([z.literal('on').describe('Switched on'), z.literal('off')]);
@@ -136,7 +183,7 @@ describe('walkSchemas: discriminated unions', () => {
 
     const walked = walkBody(z.discriminatedUnion('ok', [yes, quoted]));
 
-    expect(walked.located[0]?.walked).toMatchObject({
+    expect(walked.located[0]).toMatchObject({
       kind: 'walked',
       value: {
         variants: { true: {}, '"true"': {} },
@@ -148,10 +195,7 @@ describe('walkSchemas: discriminated unions', () => {
     const either = z.object({ type: z.literal(['card', 'debit']) });
 
     expect(walkBody(z.discriminatedUnion('type', [either, transfer]))).toEqual(
-      refusedAt(
-        ['body', 'variants', 0],
-        'a discriminated union variant whose discriminator has several values',
-      ),
+      refusedAt('<|0>', 'a discriminated union variant whose discriminator has several values'),
     );
   });
 
@@ -167,7 +211,7 @@ describe('walkSchemas: discriminated unions', () => {
     const otherCard = z.object({ type: z.literal('card'), token: z.string() });
 
     expect(walkBody(z.discriminatedUnion('type', [card, otherCard]))).toEqual(
-      refusedAt(['body'], 'two discriminated union variants with the same discriminator value'),
+      refusedAt('', 'two discriminated union variants with the same discriminator value'),
     );
   });
 
@@ -175,10 +219,7 @@ describe('walkSchemas: discriminated unions', () => {
     const anyType = z.object({ type: z.string() });
 
     expect(walkBody(z.discriminatedUnion('type', [card, anyType]))).toEqual(
-      refusedAt(
-        ['body', 'variants', 1],
-        'a discriminated union variant whose discriminator is not a literal',
-      ),
+      refusedAt('<|1>', 'a discriminated union variant whose discriminator is not a literal'),
     );
   });
 
@@ -187,7 +228,7 @@ describe('walkSchemas: discriminated unions', () => {
 
     expect(walkBody(z.discriminatedUnion('type', [card, wire]))).toEqual(
       refusedAt(
-        ['body', 'variants', 1],
+        '<type="wire">',
         'a discriminated union variant whose discriminator is not a literal',
       ),
     );
@@ -199,7 +240,7 @@ describe('walkSchemas: discriminated unions', () => {
     ]);
 
     expect(walkBody(z.discriminatedUnion('type', [card, nested]))).toEqual(
-      refusedAt(['body', 'variants', 1], 'a discriminated union as a variant of another'),
+      refusedAt('<type="wallet">', 'a discriminated union as a variant of another'),
     );
   });
 
@@ -217,7 +258,21 @@ describe('walkSchemas: discriminated unions', () => {
     const variants = [card, variant] as unknown as [typeof card];
 
     expect(walkBody(z.discriminatedUnion('type', variants))).toEqual(
-      refusedAt(['body', 'variants', 1], 'a discriminated union variant that is not an object'),
+      refusedAt('<|1>', 'a discriminated union variant that is not an object'),
     );
+  });
+});
+
+describe('walkSchemas: choices without options', () => {
+  test('a discriminated union without options fails by that name', () => {
+    const schema = z.discriminatedUnion('type', [] as unknown as [typeof card]);
+
+    expect(walkBody(schema)).toEqual(refusedAt('', 'a z.discriminatedUnion() without options'));
+  });
+
+  test('a union without options fails as a union, not as an enum', () => {
+    const schema = z.union([] as unknown as [typeof card]);
+
+    expect(walkBody(schema)).toEqual(refusedAt('', 'a z.union() without options'));
   });
 });

@@ -1,35 +1,57 @@
-import type { Command, Subscription } from '@cf-loom/contract';
-import type { Fault, Issue } from '@cf-loom/handlers';
-import type * as core from 'zod/v4/core';
-
 /** A broker as `connect` takes it: what an adapter returns, `jetstream()`, `memory()` or an organization's own. */
 export type Broker = {
-  readonly connect: (service: BrokerService) => Promise<BrokerConnection>;
+  readonly connect: (serviceStream: ServiceStream) => Promise<BrokerConnection>;
 };
 
 /**
- * What `connect` tells the broker, unprefixed: the Service's name, the stream named after it, and
- * the subjects of the Messages it publishes and sends, which that stream must hold.
+ * What `connect` tells the broker, unprefixed: the stream named after the Service and the subjects
+ * of the Messages it publishes and sends, which that stream must hold.
  */
-export type BrokerService = {
-  readonly name: string;
+export type ServiceStream = {
   readonly stream: string;
   readonly subjects: readonly string[];
 };
 
 /** One messaging's connection to a broker. */
 export type BrokerConnection = {
-  /** Sends one Message and resolves once the broker has taken it. */
-  readonly publish: (message: OutgoingMessage) => Promise<void>;
+  /** Sends one Message and resolves once the Broker has taken it, saying whether it dropped it as a duplicate. */
+  readonly publish: (message: OutgoingMessage) => Promise<BrokerAck>;
   /**
-   * Hands the consumers to the broker; resolves once consuming has started and rejects having
-   * started nothing. Once `closing` aborts, or if it already has, it hands nothing more to `receive`;
-   * a Message still handed over is left pending by the core.
+   * Hands the Durable consumers to the broker; resolves once consuming has started and rejects having
+   * started nothing. Once `run.closing` aborts, or if it already has, it hands nothing more to
+   * `receive`; a Message still handed over is left pending by the core.
    */
-  readonly consume: (consumers: readonly BrokerConsumer[], closing: AbortSignal) => Promise<void>;
-  /** Called once every `receive` has settled; ends what `consume` started and finishes applying any Settlement. */
+  readonly consume: (
+    durableConsumers: readonly DurableConsumer[],
+    run: ConsumeRun,
+  ) => Promise<void>;
+  /**
+   * Called once every `receive` has settled, or once `close`'s signal aborted and each delivery
+   * still settling was handed back; ends what `consume` started and finishes applying any Settlement.
+   */
   readonly close: () => Promise<void>;
 };
+
+/** What `consume` hands the adapter besides the Durable consumers: the signal the core aborts when `close()` starts, and where it reports a Durable consumer that stopped or resumed being pulled from. */
+export type ConsumeRun = {
+  readonly closing: AbortSignal;
+  /**
+   * Called once when a Durable consumer stops being pulled from, with why, and once when its pulls are
+   * answered again, naming it by its `durable`, as the core named it; the core drops what comes
+   * once `closing` has aborted. Returns at once; a `durable` the core did not hand this `consume`
+   * throws.
+   */
+  readonly troubled: (trouble: DurableConsumerTrouble) => void;
+};
+
+/** A Durable consumer an adapter stopped pulling from, with why, or whose pulls are answered again. */
+export type DurableConsumerTrouble = { readonly durableConsumer: DurableConsumer } & (
+  | { readonly kind: 'pull-failed'; readonly cause: unknown }
+  | { readonly kind: 'recovered' }
+);
+
+/** What the Broker answers a Message it took: whether it already held one with that `messageId` and dropped this one. */
+export type BrokerAck = { readonly duplicate: boolean };
 
 /** A Message as it leaves: its subject, ids, transport headers and UTF-8 JSON body, unprefixed. */
 export type OutgoingMessage = {
@@ -40,45 +62,38 @@ export type OutgoingMessage = {
   readonly body: Uint8Array;
 };
 
-/**
- * The durable consumer of a Subscription or a Command Version whose Handler is pulled: what it
- * consumes and the Reader its Handler reads with, and `receive`, which runs that Handler.
- */
-export type BrokerConsumer = {
+/** The Durable consumer of a Subscription or a Command Version whose Handler is pulled, and `receive`, which runs that Handler. */
+export type DurableConsumer = {
   readonly durable: string;
   readonly stream: string;
   readonly subject: string;
-  readonly element: Subscription | Command;
-  readonly reader: core.$ZodType;
+  /**
+   * Runs the Handler and resolves with the Settlement to apply, even when `onServiceFault` throws
+   * or rejects, which the core logs and answers `'pending'`.
+   */
   readonly receive: (delivery: Delivery) => Promise<Settlement>;
 };
 
-/** One Message as an adapter hands it to `receive`: its ids, which attempt, its transport headers and its body as received. */
+/** One Message as an adapter hands it to `receive`: its ids, which attempt, whether the Broker will deliver it again, how long the Broker waits for its acknowledgement, its transport headers and its body as received. */
 export type Delivery = {
   readonly messageId: string;
   readonly factId: string;
   readonly deliveryCount: number;
+  /** Whether this is the last delivery the Broker makes; `false` when the Broker sets no limit or the adapter cannot know. */
+  readonly lastAttempt: boolean;
+  /**
+   * How long, in milliseconds, the Broker waits for this delivery's acknowledgement before it delivers
+   * the Message again, which is how long the core waits for its Handler; `undefined` when the Broker
+   * has no such wait or the adapter cannot know, and the Handler is waited for however long it runs.
+   */
+  readonly waitMs: number | undefined;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Uint8Array;
 };
 
-/** What became of a delivery: acknowledged, left for redelivery, or ended; with what `onServiceFault` received, if anything. */
-export type Settlement =
-  | { readonly kind: 'acked' }
-  | { readonly kind: 'pending'; readonly fault: ConsumedFault | undefined }
-  | { readonly kind: 'ended'; readonly fault: ConsumedFault };
-
 /**
- * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
- * the Command's Message Version it handles, by name or identity, the Message, then why.
+ * What the adapter does with a delivery: acknowledge it, leave it for redelivery, end it (JetStream
+ * `term`), or hand it back for redelivery now (JetStream `nak`), which only the core answers, once
+ * `close`'s signal aborted, never for a Handler's answer.
  */
-export type ConsumedFault = {
-  readonly element: string;
-  readonly subject: string;
-  readonly messageId: string;
-  readonly factId: string;
-} & (
-  | { readonly kind: 'invalid-body'; readonly issues: readonly Issue[] }
-  | { readonly kind: 'returned'; readonly fault: Fault }
-  | { readonly kind: 'thrown'; readonly cause: unknown }
-);
+export type Settlement = 'acked' | 'pending' | 'ended' | 'handed-back';

@@ -1,12 +1,13 @@
 import { isDeclaration } from '../declarations/index.ts';
-import type { Path } from '../walker/index.ts';
+import { fieldStep, indexStep, inFields, inside, type Place, placeOf } from '../walker/index.ts';
 import {
   type Declarations,
-  entriesOf,
   isMissing,
   isPlainObject,
   isWithoutValue,
   listOf,
+  type NamedDefinitions,
+  standardRejectionsDeclarerOf,
   type WrittenObject,
 } from '../written/index.ts';
 import type { KnownFields } from './declared-fields.ts';
@@ -25,26 +26,26 @@ import {
 import {
   commandFields,
   definitionsFields,
-  dependenciesFields,
+  dependencyFields,
   eventFields,
-  exportedFields,
   groupFields,
   rootFields,
   subscriptionFields,
 } from './root-field-tables.ts';
 
 /** An object an author wrote, where it sits, and the fields its kind declares. */
-export type Written = { readonly at: Path; readonly value: unknown; readonly fields: KnownFields };
+export type Written = { readonly at: Place; readonly value: unknown; readonly fields: KnownFields };
 
 /** A written object the rules can read field by field. */
 export type Readable = Written & { readonly value: WrittenObject };
 
-/** Every object an author writes holds only the fields its kind declares, every one it requires, and strings where typed so. */
+/** Every object an author writes holds only the fields its kind declares, every one it requires, strings where typed so, and no blank `description` or `message`. */
 export function fieldFailures(declarations: Declarations): readonly DeclarationFailure[] {
   return readableOf(declarations).flatMap((written) => [
     ...undeclaredFailures(written),
     ...requiredFailures(written),
     ...stringFailures(written),
+    ...blankFailures(written),
   ]);
 }
 
@@ -54,37 +55,59 @@ export function readableOf(declarations: Declarations): readonly Readable[] {
 }
 
 function writtenOf(declarations: Declarations): readonly Written[] {
-  const {
-    root,
-    allPackages,
-    groups,
-    listedDefinitions,
-    endpoints,
-    guards,
-    rejections,
-    dependencies,
-  } = declarations;
   return [
-    { at: [], value: root, fields: rootFields[root.kind] },
-    ...listedDefinitions.map(({ at, definitions }) => written(at, definitions, definitionsFields)),
+    ...contractWrittenOf(declarations),
+    ...elementsWrittenOf(declarations),
+    ...standardsWrittenOf(declarations),
+    ...messagingWrittenOf(declarations),
+  ];
+}
+
+/** The Root, the Definitions object it names for its Standard Rejections, and its Groups. */
+function contractWrittenOf(declarations: Declarations): readonly Written[] {
+  const { root, standardRejectionsSource, groups } = declarations;
+  return [
+    { at: placeOf({ kind: 'root' }, root), value: root, fields: rootFields[root.kind] },
+    ...(standardRejectionsSource === undefined
+      ? []
+      : [
+          written(
+            standardRejectionsSource.at,
+            standardRejectionsSource.definitions,
+            definitionsFields,
+          ),
+        ]),
     ...groups.map(({ at, group }) => written(at, group, groupFields)),
+  ];
+}
+
+/** The Endpoints, Guards, Rejections and Dependencies, each with the objects it holds. */
+function elementsWrittenOf(declarations: Declarations): readonly Written[] {
+  const { endpoints, guards, rejections, dependencies } = declarations;
+  return [
     ...endpoints.flatMap(({ at, endpoint }) => [
       written(at, endpoint, endpointFields),
-      written([...at, 'input'], endpoint.input, inputFields),
-      written([...at, 'success'], endpoint.success, successFields),
+      written(inFields(at, 'input'), endpoint.input, inputFields),
+      written(inFields(at, 'success'), endpoint.success, successFields),
       ...attachmentsOf(at, endpoint.guards),
     ]),
     ...guards.flatMap(({ at, guard }) => [
       written(at, guard, guardFields),
-      written([...at, 'demands'], guard.demands, demandsFields),
+      written(inFields(at, 'demands'), guard.demands, demandsFields),
     ]),
     ...rejections.map(({ at, rejection }) => written(at, rejection, rejectionFields)),
-    ...dependencies.flatMap(({ at, dependencies: listed }) => [
-      written(at, listed, dependenciesFields),
-      written([...at, 'exported'], listed.exported, exportedFields),
-    ]),
-    ...allPackages.flatMap(standardRejectionsOf),
-    ...messagingWrittenOf(declarations),
+    ...dependencies.map(({ at, dependency }) => written(at, dependency, dependencyFields)),
+  ];
+}
+
+/** The `standardRejections` map of the package that declares them, and each declaration in it. */
+function standardsWrittenOf(declarations: Declarations): readonly Written[] {
+  const declarer = standardRejectionsDeclarerOf(declarations);
+  return [
+    ...(declarer === undefined ? [] : [standardRejectionsMapOf(declarer)]),
+    ...declarations.standardRejections.map(({ at, declaration }) =>
+      written(at, declaration, standardRejectionFields),
+    ),
   ];
 }
 
@@ -101,34 +124,28 @@ function messagingWrittenOf({ events, commands, subscriptions }: Declarations): 
  * A qualified Attachment is a plain object that is no declaration: a declaration here is no
  * Attachment, which the Attachment rule reports once.
  */
-function attachmentsOf(at: Path, attachments: unknown): readonly Written[] {
+function attachmentsOf(at: Place, attachments: unknown): readonly Written[] {
   return listOf(attachments)
-    .map((attachment, index) => written([...at, 'guards', index], attachment, attachmentFields))
+    .map((attachment, index) =>
+      written(inside(at, fieldStep('guards'), indexStep(index)), attachment, attachmentFields),
+    )
     .filter(({ value }) => isPlainObject(value) && !isDeclaration(value));
 }
 
-/** The `standardRejections` map of a Definitions Package and each declaration in it. */
-function standardRejectionsOf({
-  at,
-  definitions,
-}: Declarations['allPackages'][number]): readonly Written[] {
-  const mapAt = [...at, 'standardRejections'];
-  return [
-    written(mapAt, definitions.standardRejections, standardRejectionsFields),
-    ...entriesOf(definitions.standardRejections).map(([name, declaration]) =>
-      written([...mapAt, name], declaration, standardRejectionFields),
-    ),
-  ];
+/** The `standardRejections` map of a Definitions Package, whose declarations are written apart. */
+function standardRejectionsMapOf({ at, definitions }: NamedDefinitions): Written {
+  const mapAt = inFields(at, 'standardRejections');
+  return written(mapAt, definitions.standardRejections, standardRejectionsFields);
 }
 
-function written(at: Path, value: unknown, fields: KnownFields): Written {
+function written(at: Place, value: unknown, fields: KnownFields): Written {
   return { at, value, fields };
 }
 
 function undeclaredFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
   const undeclared = Object.keys(value).filter((field) => !Object.hasOwn(fields.declared, field));
   return undeclared.map((field) =>
-    failure([...at, field], 'undeclared-field', `${field} is not a declared field`),
+    failure(inFields(at, field), 'undeclared-field', `${field} is not a declared field`),
   );
 }
 
@@ -137,7 +154,7 @@ function requiredFailures({ at, value, fields }: Readable): readonly Declaration
   const missing = Object.keys(fields.required).filter((field) => isWithoutValue(value[field]));
   return missing.map((field) =>
     failure(
-      [...at, field],
+      inFields(at, field),
       'required-field',
       Object.hasOwn(fields.strings, field)
         ? `${field} is a required string`
@@ -153,7 +170,20 @@ function stringFailures({ at, value, fields }: Readable): readonly DeclarationFa
       Object.hasOwn(fields.required, field) && isWithoutValue(value[field]);
     return !isRequiredWithoutValue && !isMissing(value[field]) && typeof value[field] !== 'string';
   });
-  return notStrings.map((field) => failure([...at, field], 'not-a-string', `${field} is a string`));
+  return notStrings.map((field) =>
+    failure(inFields(at, field), 'not-a-string', `${field} is a string`),
+  );
+}
+
+/** A `description` or a `message` says something: a string of spaces says nothing. */
+function blankFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
+  const blank = Object.keys(fields.nonBlank).filter((field) => {
+    const text = value[field];
+    return typeof text === 'string' && text.trim() === '';
+  });
+  return blank.map((field) =>
+    failure(inFields(at, field), 'blank-text', `A ${field} is never blank`),
+  );
 }
 
 /** What is written as no object is the structure rule's finding. */

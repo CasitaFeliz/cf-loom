@@ -1,4 +1,6 @@
 import type { ObjectNode, RefNode } from '../walker/index.ts';
+import { variantStep } from '../walker/index.ts';
+import { innerAnnotationFindingsOf } from './annotations.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
 import {
   type BothDefs,
@@ -9,7 +11,7 @@ import {
   type NodePairOf,
 } from './findings.ts';
 import { isUnchanged } from './refs.ts';
-import type { ShapeDifference } from './report.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 
 /**
  * How two discriminated unions differ. Variants are matched by discriminator value alone, so a
@@ -21,11 +23,15 @@ export function taggedFindingsOf({ baseline, proposed }: NodePairOf<'tagged'>): 
     const change = { from: baseline.discriminator, to: proposed.discriminator };
     return [found({ kind: 'discriminator-changed', ...change })];
   }
-  return counterpartsOf(baseline.variants, proposed.variants).map(variantFindingOf);
+  const variants = counterpartsOf(baseline.variants, proposed.variants);
+  return variants.map((variant) => variantFindingOf(variant, baseline.discriminator));
 }
 
-function variantFindingOf(variant: Counterpart<ObjectNode | RefNode>): Finding {
-  const steps = ['variants', variant.key];
+function variantFindingOf(
+  variant: Counterpart<ObjectNode | RefNode>,
+  discriminator: string,
+): Finding {
+  const steps = [variantStep(discriminator, variant.key)];
   switch (variant.kind) {
     case 'added':
       return found({ kind: 'variant-added' }, steps);
@@ -39,12 +45,13 @@ function variantFindingOf(variant: Counterpart<ObjectNode | RefNode>): Finding {
 /**
  * The plain-union rule: any change to two nodes' options or items, or to a def their `ref`s reach,
  * is the one `difference`, Breaking in every Position, since none can be proven compatible. Their
- * options compare in shape order, which a Neutral annotation cannot change.
+ * options compare in declared order, and an `allOf`'s items in shape order; a Neutral annotation
+ * changes neither, and is told apart as Neutral.
  */
 export function plainUnionFindingsOf(
   pair: NodePair,
   defs: BothDefs,
   difference: ShapeDifference,
 ): readonly Finding[] {
-  return isUnchanged(pair, defs) ? [] : [found(difference)];
+  return isUnchanged(pair, defs) ? innerAnnotationFindingsOf(pair, defs) : [found(difference)];
 }

@@ -20,12 +20,30 @@ export function isPlainObject(value: unknown): value is WrittenObject {
   return prototype === Object.prototype || prototype === null;
 }
 
-/** A value a map holds itself under a name; nothing it only inherits, nor anything of a list or a non-object. */
+/**
+ * A value a map holds itself under a name, as JSON holds it: nothing it only inherits, so a key a
+ * Contract names never reads `Object.prototype`'s; nor anything of a list or a non-object.
+ */
 export function ownOf(map: unknown, name: string): unknown {
   if (typeof map !== 'object' || map === null || Array.isArray(map)) {
     return undefined;
   }
   return Object.hasOwn(map, name) ? Reflect.get(map, name) : undefined;
+}
+
+/**
+ * Whether a value is absent at a path: a step on the way, or the last, is a key the value does not
+ * hold itself, a hole of a list included, or the value there is `undefined`.
+ */
+export function isAbsentAt(input: unknown, path: readonly PropertyKey[]): boolean {
+  let value = input;
+  for (const step of path) {
+    if (typeof value !== 'object' || value === null || !Object.hasOwn(value, step)) {
+      return true;
+    }
+    value = Reflect.get(value, step);
+  }
+  return value === undefined;
 }
 
 /** A part a declaration may leave out is empty; what a cast put there that is no object is too. */
@@ -54,4 +72,17 @@ export function textOf(value: unknown): string {
     return Array.isArray(value) ? 'a list' : 'an object';
   }
   return String(value);
+}
+
+/**
+ * A written value as a message echoes it: a string JSON-quoted, so its spaces and line breaks
+ * show and `"409"` is told from `409`, anything else in `textOf`'s words.
+ */
+export function writtenTextOf(value: unknown): string {
+  return typeof value === 'string' ? JSON.stringify(value) : textOf(value);
+}
+
+/** Whether a list field lists nothing: left out or an empty list; anything else is the structure rule's. */
+export function isEmptyField(value: unknown): boolean {
+  return value === undefined || (Array.isArray(value) && value.length === 0);
 }

@@ -1,55 +1,101 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { importedModuleOf } from './imported.ts';
-import { type RootKind, rootFiles, rootKinds, rootPlaces } from './roots.ts';
+import { pathToFileURL } from 'node:url';
+import { byCodePoint, exportNamesOf, isRoot, type Root } from '@cf-loom/contract/internal';
+import { type ImportedPackage, importedRootOf } from './imported-packages.ts';
+import { rootFiles, rootPlaces } from './roots.ts';
 
 /**
- * What a project's root file exports as its root, the kind of root it is, the file, and everything
- * the file exports, which a Definitions Package lists; or why it could not be loaded.
+ * What a project's Root file exports as its Root and the name it exports it under, the file,
+ * everything else the file exports by name, which a Definitions Package shares, and every package
+ * its import reached; or why it could not be loaded.
  */
 export type LoadedRoot =
   | {
       readonly kind: 'loaded';
-      readonly root: unknown;
-      readonly rootKind: RootKind;
+      readonly root: Root;
+      readonly rootExportName: string;
       readonly file: string;
-      readonly exports: readonly unknown[];
+      readonly exports: Readonly<Record<string, unknown>>;
+      readonly imported: readonly ImportedPackage[];
     }
   | { readonly kind: 'failed'; readonly message: string };
 
 /**
- * Loads the root of the project in `directory` from the one root file it has, exported under one
- * name; whether what it exports is a valid root is the validation's to judge.
+ * Loads the Root of the project in `directory` from the one Root file it has, which exports one
+ * Root under any name.
  */
 export async function loadRoot(directory: string): Promise<LoadedRoot> {
   const present = rootFiles.filter((file) => existsSync(join(directory, file)));
   const [file, ...others] = present;
   if (file === undefined) {
-    return failed(`No root in ${rootFiles.join(' or ')}: run cf-loom init`);
+    return failed(`No Root in ${rootFiles.join(' or ')}: run cf-loom init`);
   }
   if (others.length > 0) {
-    return failed(`A project has one root: both ${present.join(' and ')} exist`);
+    return failed(`A project has one Root: both ${present.join(' and ')} exist`);
   }
-  const imported = await importedModuleOf(join(directory, file), directory);
+  const path = join(directory, file);
+  const target = { specifier: pathToFileURL(path).href, from: path };
+  const imported = await importedRootOf(target, join(directory, 'package.json'), directory);
   if (imported.kind === 'failed') {
     return failed(`${file} cannot be loaded: ${imported.message}`);
   }
-  const kinds = rootKinds.filter(
-    (rootKind) => imported.exports[exportedAs(rootKind)] !== undefined,
-  );
-  const [rootKind, ...more] = kinds;
-  if (rootKind === undefined) {
-    return failed(`${file} exports none of ${rootKinds.map(exportedAs).join(', ')}`);
+  const split = splitRoot(imported.exports);
+  if (split.kind === 'failed') {
+    return failed(`${file} ${split.reason}`);
   }
-  if (more.length > 0) {
-    return failed(`${file} exports one root, not ${kinds.map(exportedAs).join(' and ')}`);
-  }
-  const exports = Object.values(imported.exports);
-  return { kind: 'loaded', root: imported.exports[exportedAs(rootKind)], rootKind, file, exports };
+  const { root, rootExportName, exports } = split;
+  return { kind: 'loaded', root, rootExportName, file, exports, imported: imported.imported };
 }
 
-function exportedAs(rootKind: RootKind): string {
-  return rootPlaces[rootKind].exported;
+/** What a Root file exports: the Root, the name it exports it under, and everything else by name; or why it exports no one Root. */
+export type SplitRoot =
+  | {
+      readonly kind: 'split';
+      readonly root: Root;
+      readonly rootExportName: string;
+      readonly exports: Readonly<Record<string, unknown>>;
+    }
+  | { readonly kind: 'failed'; readonly reason: string };
+
+const { service, application, definitions } = rootPlaces;
+
+const noRoot = [
+  "exports no Root: a Service's Contract, an Application's Contract or a Definitions Package,",
+  `declared with ${service.define}, ${application.define} or ${definitions.define}`,
+].join(' ');
+
+/**
+ * Splits a Root file's exports into its Root, found among them by identity under any name, and
+ * the rest. The Root is taken under the first of its names in code point order and its other
+ * names stay among the rest, which a Definitions Package's rule judges.
+ */
+export function splitRoot(exported: Readonly<Record<string, unknown>>): SplitRoot {
+  const roots = rootsAmong(exported);
+  const [first, ...more] = roots;
+  if (first === undefined) {
+    return { kind: 'failed', reason: noRoot };
+  }
+  if (more.length > 0) {
+    const names = roots.map(({ name }) => name);
+    return { kind: 'failed', reason: `exports more than one Root: ${names.join(' and ')}` };
+  }
+  const { [first.name]: _root, ...exports } = exported;
+  return { kind: 'split', root: first.root, rootExportName: first.name, exports };
+}
+
+/** Each distinct Root among the exports with the first name it is exported under, in code point order of that name. */
+function rootsAmong(
+  exported: Readonly<Record<string, unknown>>,
+): readonly { readonly root: Root; readonly name: string }[] {
+  const roots: { readonly root: Root; readonly name: string }[] = [];
+  for (const root of new Set(Object.values(exported).filter(isRoot))) {
+    const [name] = exportNamesOf(exported, root);
+    if (name !== undefined) {
+      roots.push({ root, name });
+    }
+  }
+  return roots.sort((left, right) => byCodePoint(left.name, right.name));
 }
 
 function failed(message: string): LoadedRoot {

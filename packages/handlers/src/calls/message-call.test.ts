@@ -4,16 +4,20 @@ import {
   defineSubscription,
   openEnum,
   openEnumReader,
+  providedEvent,
 } from '@cf-loom/contract';
-import { describe, expect, test } from 'vitest';
+import { brokerMessageIdOf } from '@cf-loom/contract/internal';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Fault,
   fault,
   handle,
-  InvalidInputError,
+  InvalidCallError,
+  type MessageFault,
+  readersOf,
   success,
   type WithResources,
-  withReader,
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -39,9 +43,13 @@ const orderPaidV1 = defineEvent({
   body: writtenBody,
 });
 
-const notifyOnPaid = defineSubscription({ name: 'notify-on-paid', event: orderPaidV1 });
+const notifyOnPaid = defineSubscription({
+  name: 'notifyOnPaid',
+  description: 'Notify on paid',
+  event: orderPaidV1,
+});
 
-const paymentSettledV1 = defineEvent({
+const paymentSettledV1 = providedEvent('payments-service', {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
@@ -49,13 +57,43 @@ const paymentSettledV1 = defineEvent({
   body: readBody,
 });
 
-const notifyOnSettled = defineSubscription({ name: 'notify-on-settled', event: paymentSettledV1 });
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notify on settled',
+  event: paymentSettledV1,
+});
 
-const chargeCard = withReader(chargeCardV1, readBody);
-const notifyOnPaidReader = withReader(notifyOnPaid, readBody);
-const notifyOnSettledReader = withReader(notifyOnSettled, notifyOnSettled.event.body);
+const readers = readersOf({
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: readBody } },
+  subscriptions: {
+    notifyOnPaid: { declaration: notifyOnPaid, reader: readBody },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: notifyOnSettled.event.body },
+  },
+});
 
-const meta = { messageId: 'ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
+const chargeCard = readers.commands.chargeCardV1;
+const notifyOnPaidReader = readers.subscriptions.notifyOnPaid;
+const notifyOnSettledReader = readers.subscriptions.notifyOnSettled;
+
+const tree: z.ZodType = z.object({
+  get next() {
+    return tree.optional();
+  },
+});
+
+const nestV1 = defineCommand({
+  name: 'Nest',
+  version: 1,
+  description: 'A deep body',
+  body: tree,
+});
+
+const nesting = readersOf({
+  commands: { nestV1: { declaration: nestV1, reader: tree } },
+  subscriptions: {},
+}).commands.nestV1;
+
+const meta = { messageId: 'command.ChargeCard.v1:o-1', factId: 'o-1', deliveryCount: 1 };
 
 const body = { orderId: ORDER_ID, status: 'paid' } as const;
 
@@ -72,14 +110,14 @@ async function issuesOf(call: Promise<unknown>): Promise<unknown> {
     () => undefined,
     (e: unknown) => e,
   );
-  return error instanceof InvalidInputError ? error.issues : error;
+  return error instanceof InvalidCallError ? error.issues : error;
 }
 
 describe("a Message Handler's Resources", () => {
   type Notifications = { readonly send: (orderId: string) => void };
   type NotificationsTaken = { readonly notifications: Notifications };
 
-  test("a CommandHandler's and an EventHandler's implementation receive the Resources their direct call is given", async () => {
+  test("a Message Handler's implementation receives the Resources its direct call is given", async () => {
     const resources = { notifications: { send: () => undefined } };
     const received: unknown[] = [];
     const chargeCardHandler = handle(
@@ -130,7 +168,7 @@ describe("a Message Handler's body", () => {
     expect(received[0]).toEqual(written);
   });
 
-  test('a bare value an Open Enum does not declare throws InvalidInputError, as its reader refuses it', async () => {
+  test('a bare value an Open Enum does not declare throws InvalidCallError, as its reader refuses it', async () => {
     const { chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: ORDER_ID, status: 'refunded' } as never, meta);
@@ -138,7 +176,7 @@ describe("a Message Handler's body", () => {
     await expect(issuesOf(call)).resolves.toMatchObject([{ part: 'body', path: ['status'] }]);
   });
 
-  test('an Unknown case holding a declared value throws InvalidInputError', async () => {
+  test('an Unknown case holding a declared value throws InvalidCallError', async () => {
     const { chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: ORDER_ID, status: { unknown: 'paid' } }, meta);
@@ -146,7 +184,7 @@ describe("a Message Handler's body", () => {
     await expect(issuesOf(call)).resolves.toMatchObject([{ part: 'body', path: ['status'] }]);
   });
 
-  test('a body that breaks a constraint throws InvalidInputError at part body, one Issue per failure', async () => {
+  test('a body that breaks a constraint throws InvalidCallError at part body, one Issue per failure', async () => {
     const { received, chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: 'nope', status: 7 } as never, meta);
@@ -171,7 +209,7 @@ describe("a Message Handler's body", () => {
 
     expect(messages).toEqual([
       expect.stringMatching(/^ChargeCard@1: body\.orderId invalid_format: /),
-      expect.stringMatching(/^notify-on-settled: body\.orderId invalid_format: /),
+      expect.stringMatching(/^notifyOnSettled: body\.orderId invalid_format: /),
     ]);
     expect(messages.join('\n')).not.toContain('secret-value');
   });
@@ -187,7 +225,7 @@ describe("a Message Handler's body", () => {
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
   });
 
-  test("a Subscription to a Dependency's Event reads with that Event's body", async () => {
+  test("a Subscription to a Provider's Event reads with that Event's body", async () => {
     const received: unknown[] = [];
     const notifyOnSettledHandler = handle(notifyOnSettledReader, (given) => {
       received.push(given);
@@ -196,6 +234,29 @@ describe("a Message Handler's body", () => {
     await notifyOnSettledHandler({ orderId: ORDER_ID, status: { unknown: 'refunded' } }, meta);
 
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
+  });
+
+  test('a body nested past the stack throws InvalidCallError at body, and the implementation never runs', async () => {
+    let deep: object = {};
+    for (let depth = 0; depth < 5000; depth += 1) {
+      deep = { next: deep };
+    }
+    const received: unknown[] = [];
+    const nestHandler = handle(nesting, (given) => {
+      received.push(given);
+    });
+
+    const issues = await issuesOf(nestHandler(deep, meta));
+
+    expect(issues).toEqual([
+      {
+        part: 'body',
+        path: [],
+        code: 'malformed',
+        message: 'The value is nested too deeply to read',
+      },
+    ]);
+    expect(received).toEqual([]);
   });
 
   test('a throw while reading the body is rethrown', async () => {
@@ -220,7 +281,12 @@ describe("a Message Handler's meta", () => {
 
     await chargeCardHandler(body, meta);
 
-    expect(received[1]).toEqual({ ...meta, headers: {} });
+    expect(received[1]).toEqual({
+      ...meta,
+      lastAttempt: false,
+      headers: {},
+      signal: expect.any(AbortSignal),
+    });
   });
 
   test('two direct calls without headers each give the implementation its own headers', async () => {
@@ -239,7 +305,73 @@ describe("a Message Handler's meta", () => {
 
     await chargeCardHandler(body, { ...meta, headers });
 
-    expect(received[1]).toEqual({ ...meta, headers });
+    expect(received[1]).toEqual({
+      ...meta,
+      lastAttempt: false,
+      headers,
+      signal: expect.any(AbortSignal),
+    });
+  });
+});
+
+describe("a Message Handler's meta, left out", () => {
+  function receivingEvents() {
+    const received: unknown[] = [];
+    const notifyOnPaidHandler = handle(notifyOnPaidReader, (_given, givenMeta) => {
+      received.push(givenMeta);
+    });
+    return { received, notifyOnPaidHandler };
+  }
+
+  test("a direct call of a Subscription's Message Handler with no meta gives attempt 1, not the last, and no headers", async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body);
+
+    expect(received[0]).toMatchObject({ deliveryCount: 1, lastAttempt: false, headers: {} });
+  });
+
+  test('a direct call given only a Fact id gives the broker message id deliver derives from it', async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body, { factId: 'f-1' });
+
+    const messageId = brokerMessageIdOf(orderPaidV1, 'f-1');
+    expect(received[0]).toMatchObject({ factId: 'f-1', messageId });
+  });
+
+  test('two direct calls with no Fact id each get a different one', async () => {
+    const { received, notifyOnPaidHandler } = receivingEvents();
+
+    await notifyOnPaidHandler(body);
+    await notifyOnPaidHandler(body);
+
+    const [first, second] = received as { factId: string }[];
+    expect(first?.factId).not.toBe(second?.factId);
+  });
+
+  test("a direct call of a Command's Message Handler derives a broker message id that names its Message Version", async () => {
+    const { received, chargeCardHandler } = receiving();
+
+    await chargeCardHandler(body, { factId: 'f-1' });
+
+    expect(received[1]).toMatchObject({ messageId: 'command.ChargeCard.v1:f-1' });
+  });
+
+  test('the meta may be left out unless Resources are required, which the call then gives after it', () => {
+    type Taken = { readonly notifications: { readonly send: () => void } };
+    const plain = handle(chargeCard, () => undefined);
+    const withResources = handle(chargeCard, (_body, _meta, _last: WithResources<Taken>) => {
+      return undefined;
+    });
+    const resources = { notifications: { send: () => undefined } };
+
+    expectTypeOf(plain).toBeCallableWith(body);
+    expectTypeOf(plain).toBeCallableWith(body, { factId: 'f-1' });
+    // @ts-expect-error Resources required are given after the meta
+    const missing = () => withResources(body);
+    expectTypeOf(withResources).toBeCallableWith(body, {}, { resources });
+    expect(missing).toBeTypeOf('function');
   });
 });
 
@@ -259,6 +391,27 @@ describe("what a Message Handler's direct call answers", () => {
     const answer = await chargeCardHandler(body, meta);
 
     expect(answer).toBe(returned);
+  });
+
+  test('a Message Handler may return a retryable Fault, but not one with retryAfter', () => {
+    const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
+    const retryable = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
+    // @ts-expect-error the Durable consumer's configuration decides when the Message comes again
+    const timed = handle(chargeCard, () => later);
+
+    expect([typeof retryable, typeof timed]).toEqual(['function', 'function']);
+  });
+
+  test('a helper typed MessageFault serves a Message Handler, and one typed Fault does not', () => {
+    function unavailable(): MessageFault {
+      return fault({ committed: 'no', retryable: true });
+    }
+
+    const helped = handle(chargeCard, async (): Promise<MessageFault | undefined> => unavailable());
+    // @ts-expect-error a Message Handler's Fault is a MessageFault, with no retryAfter
+    const typedFault = handle(chargeCard, async (): Promise<Fault | undefined> => undefined);
+
+    expect([typeof helped, typeof typedFault]).toEqual(['function', 'function']);
   });
 
   test('what the Handler throws is rethrown, the same error', async () => {
@@ -314,13 +467,13 @@ describe("what a Message Handler's direct call answers", () => {
     );
   });
 
-  test('an EventHandler that returns something other than a Fault throws a TypeError naming no Fault', async () => {
+  test("a Subscription's Message Handler that returns something other than a Fault throws a TypeError naming no Fault", async () => {
     const notifyOnSettledHandler = handle(notifyOnSettledReader, () => success() as never);
 
     const call = notifyOnSettledHandler(body, meta);
 
     await expect(call).rejects.toEqual(
-      new TypeError("notify-on-settled's Handler returned no Fault but the kind success"),
+      new TypeError("notifyOnSettled's Handler returned no Fault but the kind success"),
     );
   });
 
@@ -342,15 +495,15 @@ describe('a Message Handler stub', () => {
     const call = stub(body, meta);
 
     await expect(call).rejects.toEqual(
-      new Error("notify-on-settled's Handler is a stub, which consume never runs"),
+      new Error("notifyOnSettled's Handler is a Stub, which consume never runs"),
     );
   });
 
-  test('a stub given a body that breaks the Contract throws InvalidInputError first', async () => {
+  test('a stub given a body that breaks the Contract throws InvalidCallError first', async () => {
     const stub = handle.stub(chargeCard);
 
     const call = stub({ orderId: 'nope', status: 'paid' }, meta);
 
-    await expect(call).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(call).rejects.toBeInstanceOf(InvalidCallError);
   });
 });

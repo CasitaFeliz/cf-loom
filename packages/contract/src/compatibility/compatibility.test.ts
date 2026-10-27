@@ -1,67 +1,78 @@
 import { describe, expect, test } from 'vitest';
+import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
   type ChangeSite,
   type CommandSnapshot,
-  type CompatibilityReport,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
+  firstPublishChangesOf,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
   type ServiceSnapshot,
   type Snapshot,
+  type Verdict,
 } from '../internal/index.ts';
 
 type Lifecycle = EndpointSnapshot['lifecycle'];
 type Visibility = EndpointSnapshot['visibility'];
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: { origin: 'standard', code: 'INVALID_INPUT', status: 400, message: 'Invalid' },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
+  invalidInput: 'INVALID_INPUT',
+  notFound: 'NOT_FOUND',
+  notImplemented: 'NOT_IMPLEMENTED',
 };
-const emptyObject = { type: 'object', mode: 'strict', fields: {} } as const;
+const emptyObject = { type: 'object', fields: {} } as const;
 const orderIdParam = {
   type: 'object',
-  mode: 'strict',
   fields: { orderId: { required: true, schema: { type: 'string' } } },
 } as const;
 const heading = {
   format: 1,
   kind: 'service',
   name: 'orders-service',
-  generator: '@cf-loom/cli@2.1.0',
-  definitions: {},
   standardRejections,
+  groups: {},
   defs: {},
   guards: {},
   codes: {},
   dependencies: {},
 } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: ['orderId'],
     guards: [],
-    input: { params: orderIdParam, query: null, headers: null, body: null },
-    success: { status: 200, headers: null, body: null },
+    input: {
+      params: orderIdParam,
+      query: { type: 'object', fields: {} },
+      headers: { type: 'object', fields: {} },
+      body: null,
+    },
+    success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
   return {
+    group: 'orders',
     visibility: 'internal',
     lifecycle: 'active',
     description: 'An order was placed',
@@ -71,7 +82,20 @@ function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
 }
 
 function aCommand(fields: Partial<CommandSnapshot> = {}): CommandSnapshot {
-  return { lifecycle: 'active', description: 'Charge a card', body: emptyObject, ...fields };
+  return {
+    group: 'orders',
+    lifecycle: 'active',
+    description: 'Charge a card',
+    body: emptyObject,
+    ...fields,
+  };
+}
+
+/** An Endpoint's lifecycle as the Snapshot writes it, a Deprecated one with its instant. */
+function endpointLifecycleOf(lifecycle: Lifecycle): EndpointLifecycle {
+  return lifecycle === 'deprecated'
+    ? { lifecycle, deprecatedAt: '2026-10-17T09:30:00Z' }
+    : { lifecycle };
 }
 
 function aLive<Element extends { readonly lifecycle: Lifecycle }>(
@@ -96,6 +120,8 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
   return {
     ...heading,
     version: '3.4.0',
+    generator: publishedBy,
+    formerInputs: [],
     endpoints: {},
     events: {},
     commands: {},
@@ -109,7 +135,6 @@ function anApplication(fields: Partial<ApplicationSnapshot> = {}): ApplicationSn
     format: 1,
     kind: 'application',
     name: 'web-app',
-    generator: '@cf-loom/cli@2.1.0',
     dependencies: {},
     ...fields,
   };
@@ -120,10 +145,9 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
     format: 1,
     kind: 'definitions',
     name: '@org/definitions',
-    generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
     codes: {},
     ...fields,
@@ -132,11 +156,8 @@ function aDefinitions(fields: Partial<DefinitionsSnapshot> = {}): DefinitionsSna
 
 const getOrder = { id: 'GET /orders/{}', name: 'getOrder' };
 
-function changesOf(baseline: PublishedSnapshot | undefined, proposed: Snapshot): readonly Change[] {
+function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
   const report = compatibilityReportOf(baseline, proposed);
-  if (report.kind !== 'compared') {
-    throw new Error('the Baseline was given, so the report must have compared');
-  }
   return report.changes;
 }
 
@@ -145,8 +166,11 @@ function identityOf(site: ChangeSite): string {
     case 'code':
       return site.code;
     case 'guard':
-    case 'shared-schema':
+    case 'group':
+    case 'export':
     case 'subscription':
+    case 'dependency':
+    case 'standard-rejection':
       return site.name;
     case 'endpoint':
     case 'event':
@@ -158,7 +182,7 @@ function identityOf(site: ChangeSite): string {
 type Element = {
   readonly name: string;
   readonly site: ChangeSite;
-  readonly retiring: 'needed' | 'not-needed';
+  readonly retiring: Verdict;
   readonly proposed: (lifecycle: Lifecycle) => Partial<ServiceSnapshot>;
   readonly live: (lifecycle: 'active' | 'deprecated') => Partial<PublishedServiceSnapshot>;
   readonly retired: () => Partial<PublishedServiceSnapshot>;
@@ -167,10 +191,16 @@ type Element = {
 
 const endpoint: Element = {
   name: 'Endpoint',
-  site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
-  retiring: 'needed',
-  proposed: (lifecycle) => ({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } }),
-  live: (lifecycle) => ({ endpoints: { 'GET /orders/{}': aLive(anEndpoint(), lifecycle) } }),
+  site: { kind: 'endpoint', identity: 'GET /orders/{}', name: 'getOrder', visibility: 'public' },
+  retiring: 'approval-needed',
+  proposed: (lifecycle) => ({
+    endpoints: { 'GET /orders/{}': anEndpoint({}, endpointLifecycleOf(lifecycle)) },
+  }),
+  live: (lifecycle) => ({
+    endpoints: {
+      'GET /orders/{}': aLive(anEndpoint({}, endpointLifecycleOf(lifecycle)), lifecycle),
+    },
+  }),
   retired: () => ({ endpoints: { 'GET /orders/{}': aRetired(anEndpoint()) } }),
   tombstone: () => ({
     endpoints: { 'GET /orders/{}': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getOrder' } },
@@ -179,7 +209,7 @@ const endpoint: Element = {
 const event: Element = {
   name: 'Event',
   site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
-  retiring: 'needed',
+  retiring: 'approval-needed',
   proposed: (lifecycle) => ({ events: { 'OrderPlaced@1': anEvent({ lifecycle }) } }),
   live: (lifecycle) => ({ events: { 'OrderPlaced@1': aLive(anEvent(), lifecycle) } }),
   retired: () => ({ events: { 'OrderPlaced@1': aRetired(anEvent()) } }),
@@ -187,8 +217,8 @@ const event: Element = {
 };
 const command: Element = {
   name: 'Command',
-  site: { kind: 'command', identity: 'ChargeCard@1' },
-  retiring: 'not-needed',
+  site: { kind: 'command', identity: 'ChargeCard@1', visibility: 'private' },
+  retiring: 'allowed',
   proposed: (lifecycle) => ({ commands: { 'ChargeCard@1': aCommand({ lifecycle }) } }),
   live: (lifecycle) => ({ commands: { 'ChargeCard@1': aLive(aCommand(), lifecycle) } }),
   retired: () => ({ commands: { 'ChargeCard@1': aRetired(aCommand()) } }),
@@ -210,7 +240,12 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Service against a Baseline of another kind',
     proposed: aProposed(),
-    baseline: { ...anApplication(), name: 'orders-service', version: '1.0.0' },
+    baseline: {
+      ...anApplication(),
+      name: 'orders-service',
+      version: '1.0.0',
+      generator: publishedBy,
+    },
   },
   {
     name: 'a Service against a Baseline of another name',
@@ -225,7 +260,7 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'an Application against a Baseline of another name',
     proposed: anApplication(),
-    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0' },
+    baseline: { ...anApplication(), name: 'other-app', version: '1.0.0', generator: publishedBy },
   },
   {
     name: 'a Definitions Package against a Baseline of another kind',
@@ -235,17 +270,24 @@ const mismatches: readonly Mismatch[] = [
   {
     name: 'a Definitions Package against a Baseline of another name',
     proposed: aDefinitions(),
-    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0' },
+    baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0', generator: publishedBy },
   },
 ];
 
 describe('compatibilityReportOf, presence', () => {
-  test('with no Baseline nothing is compared, so a first publish may start at any Message Version', () => {
+  test('with no Baseline only the numbering of Message Versions is judged, so a first publish starts at version 1', () => {
     const proposed = aProposed({ events: { 'OrderPlaced@3': anEvent() } });
 
-    const report = compatibilityReportOf(undefined, proposed);
+    const changes = firstPublishChangesOf(proposed);
 
-    expect(report).toEqual({ kind: 'no-baseline' } satisfies CompatibilityReport);
+    expect(changes).toEqual([
+      {
+        site: { kind: 'event', identity: 'OrderPlaced@3', visibility: 'internal' },
+        difference: { kind: 'version-gap', missing: 'OrderPlaced@2' },
+        class: 'additive',
+        verdict: 'refused',
+      },
+    ] satisfies Change[]);
   });
 
   test('a Snapshot identical to its Baseline has no Changes and an unchanged hash', () => {
@@ -254,13 +296,15 @@ describe('compatibilityReportOf, presence', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(elements)('adding a $name is Additive', ({ site, proposed }) => {
     const changes = changesOf(aBaseline(), aProposed(proposed('active')));
 
-    expect(changes).toEqual([{ site, difference: { kind: 'added' }, class: 'additive' }]);
+    expect(changes).toEqual([
+      { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' },
+    ]);
   });
 
   test.each(elements)(
@@ -268,35 +312,51 @@ describe('compatibilityReportOf, presence', () => {
     ({ site, retired }) => {
       const changes = changesOf(aBaseline(retired()), aProposed());
 
-      expect(changes).toEqual([{ site, difference: { kind: 'tombstoned' }, class: 'neutral' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'tombstoned' }, class: 'neutral', verdict: 'allowed' },
+      ]);
     },
   );
 
   test.each(eachLive)(
-    'deleting a $name that is $lifecycle in the Baseline is not allowed',
+    'deleting a $name that is $lifecycle in the Baseline is refused',
     ({ site, live, lifecycle }) => {
       const changes = changesOf(aBaseline(live(lifecycle)), aProposed());
 
-      expect(changes).toEqual([{ site, difference: { kind: 'deleted' }, class: 'not-allowed' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' },
+      ]);
     },
   );
+
+  test('a Change on an Endpoint dropped from the proposed Snapshot names it as the Baseline did', () => {
+    const baseline = aBaseline({
+      endpoints: { 'GET /orders/{}': aLive(anEndpoint({ name: 'fetchOrder' })) },
+    });
+
+    const changes = changesOf(baseline, aProposed());
+
+    expect(changes.map(({ site }) => site)).toEqual([
+      { kind: 'endpoint', identity: 'GET /orders/{}', name: 'fetchOrder', visibility: 'public' },
+    ]);
+  });
 
   test.each(elements)(
     'a $name tombstone the proposed Snapshot no longer declares is no Change',
     ({ tombstone }) => {
       const report = compatibilityReportOf(aBaseline(tombstone()), aProposed());
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
   test.each(elements)(
-    'declaring a $name at a tombstone’s identity is not allowed: a Retired identity is never reused',
+    'declaring a $name at a tombstone’s identity is refused: a Retired identity is never reused',
     ({ site, tombstone, proposed }) => {
       const changes = changesOf(aBaseline(tombstone()), aProposed(proposed('active')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'identity-reused' }, class: 'not-allowed' },
+        { site, difference: { kind: 'identity-reused' }, class: 'breaking', verdict: 'refused' },
       ]);
     },
   );
@@ -312,11 +372,12 @@ describe('compatibilityReportOf, presence', () => {
         site: { kind: 'event', identity: 'OrderPlaced@2', visibility: 'internal' },
         difference: { kind: 'added' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
 
-  test('moving an Endpoint’s path without retiring the old one is an added Endpoint and a deletion that is not allowed', () => {
+  test('moving an Endpoint’s path without retiring the old one is an added Endpoint and a deletion that is refused', () => {
     const baseline = aBaseline(endpoint.live('active'));
     const proposed = aProposed({
       endpoints: { 'GET /purchases/{}': anEndpoint({ params: ['purchaseId'] }) },
@@ -325,11 +386,22 @@ describe('compatibilityReportOf, presence', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      { site: endpoint.site, difference: { kind: 'deleted' }, class: 'not-allowed' },
       {
-        site: { kind: 'endpoint', identity: 'GET /purchases/{}', visibility: 'public' },
+        site: endpoint.site,
+        difference: { kind: 'deleted' },
+        class: 'breaking',
+        verdict: 'refused',
+      },
+      {
+        site: {
+          kind: 'endpoint',
+          identity: 'GET /purchases/{}',
+          name: 'getOrder',
+          visibility: 'public',
+        },
         difference: { kind: 'added' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
@@ -338,7 +410,7 @@ describe('compatibilityReportOf, presence', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }),
+        'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }),
         'GET /purchases/{}': anEndpoint({ params: ['purchaseId'] }),
       },
     });
@@ -362,7 +434,9 @@ describe('compatibilityReportOf, lifecycle', () => {
   test.each(elements)('marking a $name Deprecated is Additive', ({ site, live, proposed }) => {
     const changes = changesOf(aBaseline(live('active')), aProposed(proposed('deprecated')));
 
-    expect(changes).toEqual([{ site, difference: { kind: 'deprecated' }, class: 'additive' }]);
+    expect(changes).toEqual([
+      { site, difference: { kind: 'deprecated' }, class: 'additive', verdict: 'allowed' },
+    ]);
   });
 
   test.each(elements)(
@@ -370,7 +444,9 @@ describe('compatibilityReportOf, lifecycle', () => {
     ({ site, live, proposed }) => {
       const changes = changesOf(aBaseline(live('deprecated')), aProposed(proposed('active')));
 
-      expect(changes).toEqual([{ site, difference: { kind: 'reactivated' }, class: 'neutral' }]);
+      expect(changes).toEqual([
+        { site, difference: { kind: 'reactivated' }, class: 'neutral', verdict: 'allowed' },
+      ]);
     },
   );
 
@@ -380,7 +456,7 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(live('deprecated')), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired' }, class: 'breaking', approval: retiring },
+        { site, difference: { kind: 'retired' }, class: 'breaking', verdict: retiring },
       ]);
     },
   );
@@ -400,18 +476,23 @@ describe('compatibilityReportOf, lifecycle', () => {
         site: { kind: 'event', identity: 'OrderAudited@1', visibility: 'private' },
         difference: { kind: 'retired' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
     ]);
   });
 
   test.each(elements)(
-    'retiring a $name Active in the Baseline is not allowed: it must be Deprecated first',
+    'retiring a $name Active in the Baseline is refused: it must be Deprecated first',
     ({ site, live, proposed }) => {
       const changes = changesOf(aBaseline(live('active')), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired-before-deprecated' }, class: 'not-allowed' },
+        {
+          site,
+          difference: { kind: 'retired-before-deprecated' },
+          class: 'breaking',
+          verdict: 'refused',
+        },
       ]);
     },
   );
@@ -422,19 +503,29 @@ describe('compatibilityReportOf, lifecycle', () => {
       const changes = changesOf(aBaseline(), aProposed(proposed('retired')));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'added' }, class: 'additive' },
-        { site, difference: { kind: 'retired-before-deprecated' }, class: 'not-allowed' },
+        { site, difference: { kind: 'added' }, class: 'additive', verdict: 'allowed' },
+        {
+          site,
+          difference: { kind: 'retired-before-deprecated' },
+          class: 'breaking',
+          verdict: 'refused',
+        },
       ]);
     },
   );
 
   test.each(eachLive)(
-    'bringing a Retired $name back to $lifecycle is not allowed',
+    'bringing a Retired $name back to $lifecycle is refused',
     ({ site, retired, proposed, lifecycle }) => {
       const changes = changesOf(aBaseline(retired()), aProposed(proposed(lifecycle)));
 
       expect(changes).toEqual([
-        { site, difference: { kind: 'retired-brought-back', lifecycle }, class: 'not-allowed' },
+        {
+          site,
+          difference: { kind: 'retired-brought-back', lifecycle },
+          class: 'additive',
+          verdict: 'refused',
+        },
       ]);
     },
   );
@@ -444,7 +535,7 @@ describe('compatibilityReportOf, lifecycle', () => {
     ({ retired, proposed }) => {
       const report = compatibilityReportOf(aBaseline(retired()), aProposed(proposed('retired')));
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 });
@@ -453,17 +544,19 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
   const retiredEndpoint = aRetired(anEndpoint());
   const stillRetired = { lifecycle: 'retired' } as const;
   const requiredField = { required: true, schema: { type: 'string' } } as const;
-  const changedBody = { type: 'object', mode: 'strict', fields: { id: requiredField } } as const;
+  const changedBody = { type: 'object', fields: { id: requiredField } } as const;
   const rows = [
     {
       name: 'an Endpoint’s body',
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
         endpoints: {
-          'GET /orders/{}': anEndpoint({
-            ...stillRetired,
-            success: { status: 200, headers: null, body: changedBody },
-          }),
+          'GET /orders/{}': anEndpoint(
+            {
+              success: { status: 200, headers: { type: 'object', fields: {} }, body: changedBody },
+            },
+            stillRetired,
+          ),
         },
       },
     },
@@ -471,14 +564,14 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
       name: 'an Endpoint’s name',
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
-        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, name: 'fetchOrder' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({ name: 'fetchOrder' }, stillRetired) },
       },
     },
     {
       name: 'an Endpoint’s Visibility',
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
-        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, visibility: 'internal' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({ visibility: 'internal' }, stillRetired) },
       },
     },
     {
@@ -505,34 +598,43 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
   ];
 
   test.each(rows)(
-    'an Element Retired on both sides gives no Change when $name changes, only a changed hash',
+    'an Element Retired on both sides gives one Neutral retired-changed when $name changes',
     ({ baseline, proposed }) => {
       const report = compatibilityReportOf(aBaseline(baseline), aProposed(proposed));
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+      expect(
+        report.changes.map(({ difference, class: changeClass, verdict }) => [
+          difference.kind,
+          changeClass,
+          verdict,
+        ]),
+      ).toEqual([['retired-changed', 'neutral', 'allowed']]);
     },
   );
 
-  test('an Element retired in this change is still compared', () => {
+  test('an Element retired in this change is judged by its lifecycle, and what it declares only as retired-changed', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({
-          lifecycle: 'retired',
-          success: { status: 201, headers: null, body: null },
-        }),
+        'GET /orders/{}': anEndpoint(
+          { success: { status: 201, headers: { type: 'object', fields: {} }, body: null } },
+          { lifecycle: 'retired' },
+        ),
       },
     });
 
     const changes = changesOf(baseline, proposed);
 
-    expect(changes.map(({ difference }) => difference.kind)).toEqual(['retired', 'status-changed']);
+    expect(changes.map(({ difference }) => difference.kind)).toEqual([
+      'retired',
+      'retired-changed',
+    ]);
   });
 });
 
 describe('compatibilityReportOf, Visibility', () => {
-  function endpointVisible(visibility: Visibility, fields: Partial<EndpointSnapshot> = {}) {
-    return { endpoints: { 'GET /orders/{}': anEndpoint({ visibility, ...fields }) } };
+  function endpointVisible(visibility: Visibility, lifecycle?: EndpointLifecycle) {
+    return { endpoints: { 'GET /orders/{}': anEndpoint({ visibility }, lifecycle) } };
   }
 
   function publishedVisible(visibility: Visibility) {
@@ -547,9 +649,10 @@ describe('compatibilityReportOf, Visibility', () => {
 
     expect(changes).toEqual([
       {
-        site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
+        site: { ...endpoint.site, visibility: 'public' },
         difference: { kind: 'visibility-widened', from: 'private', to: 'public' },
         class: 'additive',
+        verdict: 'allowed',
       },
     ]);
   });
@@ -565,10 +668,10 @@ describe('compatibilityReportOf, Visibility', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility: from },
+          site: { ...endpoint.site, visibility: from },
           difference: { kind: 'visibility-narrowed', from, to },
           class: 'breaking',
-          approval: 'needed',
+          verdict: 'approval-needed',
         },
       ]);
     },
@@ -587,7 +690,7 @@ describe('compatibilityReportOf, Visibility', () => {
         site: { kind: 'event', identity: 'OrderPlaced@1', visibility: 'internal' },
         difference: { kind: 'visibility-narrowed', from: 'internal', to: 'private' },
         class: 'breaking',
-        approval: 'needed',
+        verdict: 'approval-needed',
       },
     ]);
   });
@@ -610,16 +713,13 @@ describe('compatibilityReportOf, Visibility', () => {
 
   test('each difference on one Element is its own Change: Deprecated and narrowed together give two', () => {
     const baseline = aBaseline(publishedVisible('public'));
-    const proposed = aProposed(endpointVisible('internal', { lifecycle: 'deprecated' }));
+    const proposed = aProposed(endpointVisible('internal', endpointLifecycleOf('deprecated')));
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes.map(({ site, difference }) => [site, difference.kind])).toEqual([
-      [{ kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' }, 'deprecated'],
-      [
-        { kind: 'endpoint', identity: 'GET /orders/{}', visibility: 'public' },
-        'visibility-narrowed',
-      ],
+      [{ ...endpoint.site, visibility: 'public' }, 'deprecated'],
+      [{ ...endpoint.site, visibility: 'public' }, 'visibility-narrowed'],
     ]);
   });
 
@@ -662,10 +762,15 @@ describe('compatibilityReportOf, renames', () => {
 
       expect(changes).toEqual([
         {
-          site: { kind: 'endpoint', identity: 'GET /orders/{}', visibility },
-          difference: { kind: 'renamed', from: 'getOrder', to: 'fetchOrder', visibility },
+          site: { ...endpoint.site, name: 'fetchOrder', visibility },
+          difference: {
+            kind: 'renamed',
+            from: 'getOrder',
+            to: 'fetchOrder',
+            baselineVisibility: visibility,
+          },
           class: 'breaking',
-          approval: 'needed',
+          verdict: 'approval-needed',
         },
       ]);
     },
@@ -728,37 +833,54 @@ describe('compatibilityReportOf, the report', () => {
     ]);
   });
 
-  test('an Application’s Dependencies give no Element Change, only a changed hash', () => {
-    const baseline: PublishedApplicationSnapshot = { ...anApplication(), version: '1.0.0' };
+  test('an Application’s Dependencies give Dependency Changes, never Element Changes', () => {
+    const baseline: PublishedApplicationSnapshot = {
+      ...anApplication(),
+      version: '1.0.0',
+      generator: publishedBy,
+    };
     const proposed = anApplication({
-      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder], events: [] } },
+      dependencies: { 'orders-service': { against: '3.4.0', endpoints: [getOrder] } },
     });
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report.changes).toEqual([
+      {
+        site: { kind: 'dependency', name: 'orders-service', visibility: 'private' },
+        difference: { kind: 'added' },
+        class: 'neutral',
+        verdict: 'allowed',
+      },
+    ]);
   });
 
-  test('a Definitions Package’s Snapshot gives no Element Change', () => {
-    const baseline: PublishedDefinitionsSnapshot = { ...aDefinitions(), version: '4.2.0' };
+  test('a Snapshot that differs where no rule looks is a bug, so the check throws', () => {
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...aDefinitions(),
+      version: '4.2.0',
+      generator: publishedBy,
+    };
     const proposed = aDefinitions({ defs: { money: emptyObject } });
 
-    const report = compatibilityReportOf(baseline, proposed);
+    const check = () => compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(check).toThrow('The Snapshot changed but no Change was found: a bug.');
   });
 
-  test('a Dependency declared against a newer version changes the hash', () => {
+  test('a Dependency declared against a newer version is one Neutral Change', () => {
     const baseline = aBaseline({
-      dependencies: { 'payments-service': { against: '5.1.0', endpoints: [], events: [] } },
+      dependencies: { 'payments-service': { against: '5.1.0', endpoints: [] } },
     });
     const proposed = aProposed({
-      dependencies: { 'payments-service': { against: '5.2.0', endpoints: [], events: [] } },
+      dependencies: { 'payments-service': { against: '5.2.0', endpoints: [] } },
     });
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: true });
+    expect(report.changes.map(({ difference }) => difference)).toEqual([
+      { kind: 'against-changed', from: '5.1.0', to: '5.2.0' },
+    ]);
   });
 
   test.each(['3.4.0', '10.0.0-rc.1'])(
@@ -769,16 +891,16 @@ describe('compatibilityReportOf, the report', () => {
         endpoints: { 'GET /orders/{}': aRetired(anEndpoint(), '2.0.0') },
         events: { 'OrderPlaced@1': { lifecycle: 'retired', retiredIn: '2.1.0' } },
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
         },
       });
       const proposed = aProposed({
-        endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }) },
       });
 
       const report = compatibilityReportOf(baseline, proposed);
 
-      expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+      expect(report).toEqual({ changes: [] });
     },
   );
 
@@ -788,7 +910,7 @@ describe('compatibilityReportOf, the report', () => {
 
     const report = compatibilityReportOf(baseline, proposed);
 
-    expect(report).toEqual({ kind: 'compared', changes: [], hashChanged: false });
+    expect(report).toEqual({ changes: [] });
   });
 
   test.each(mismatches)('$name is a bug, so the check throws', ({ proposed, baseline }) => {

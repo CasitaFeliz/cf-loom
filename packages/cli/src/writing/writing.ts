@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 import { oneLineOf } from '../loading/index.ts';
 
 /**
- * A file a command generates, relative to the project: one regenerated `always`, or a stub
+ * A file a command generates, relative to the project: one regenerated `always`, or a Stub
  * written `once`, never over a Handler that exists.
  */
 export type GeneratedFile = {
@@ -22,10 +22,10 @@ export type GeneratedFile = {
   readonly written: 'always' | 'once';
 };
 
-/** The files written, by path, or the file a write stopped at, in one line. */
+/** The files written, by path, or the file a write stopped at, in one line, with the files written before it. */
 export type Written =
   | { readonly kind: 'written'; readonly paths: readonly string[] }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly paths: readonly string[] };
 
 /** What became of one file: written, kept since its Handler exists, or why it failed. */
 type FileWrite =
@@ -35,7 +35,7 @@ type FileWrite =
 
 /**
  * Writes each file in order: a regenerated one beside its target under a name of this run's,
- * renamed over it, so a failed or concurrent write leaves a whole file; a stub only where no
+ * renamed over it, so a failed or concurrent write leaves a whole file; a Stub only where no
  * Handler exists. A rerun completes what a failure left undone.
  */
 export function writeFiles(directory: string, files: readonly GeneratedFile[]): Written {
@@ -43,7 +43,8 @@ export function writeFiles(directory: string, files: readonly GeneratedFile[]): 
   for (const file of files) {
     const written = writeFile(directory, file);
     if (written.kind === 'failed') {
-      return { kind: 'failed', message: `${file.path} cannot be written: ${written.reason}` };
+      const message = `${file.path} cannot be written: ${written.reason}`;
+      return { kind: 'failed', message, paths };
     }
     if (written.kind === 'written') {
       paths.push(file.path);
@@ -69,7 +70,7 @@ function writeFile(directory: string, file: GeneratedFile): FileWrite {
   }
 }
 
-/** A stub, written only where nothing is, so a Handler another run just wrote is kept too. */
+/** A Stub, written only where nothing is, so a Handler another run just wrote is kept too. */
 function writeOnce(path: string, file: GeneratedFile): FileWrite {
   try {
     writeFileSync(path, file.text, { flag: 'wx' });
@@ -82,10 +83,23 @@ function writeOnce(path: string, file: GeneratedFile): FileWrite {
   }
 }
 
+/** How the bytes of a file on disk differ from those expected: not at all, only by CRLF line endings, or otherwise. */
+export type FileComparison = 'same' | 'crlf' | 'different';
+
+/** Compares a file on disk with the bytes expected; a CRLF checkout of the expected text is told apart, never accepted. */
+export function fileComparisonOf(expected: Uint8Array, onDisk: Uint8Array): FileComparison {
+  const wanted = Buffer.from(expected);
+  const found = Buffer.from(onDisk);
+  if (wanted.equals(found)) {
+    return 'same';
+  }
+  const withLf = Buffer.from(found.toString('latin1').replaceAll('\r\n', '\n'), 'latin1');
+  return wanted.equals(withLf) ? 'crlf' : 'different';
+}
+
 /** A generated file on disk compared with what would be generated, or why it cannot be read. */
 export type Compared =
-  | { readonly kind: 'same' }
-  | { readonly kind: 'different' }
+  | { readonly kind: FileComparison }
   | { readonly kind: 'failed'; readonly message: string };
 
 /** Whether a generated file on disk holds exactly what would be generated, in one line if unreadable. */
@@ -95,9 +109,7 @@ export function comparedOf(directory: string, file: GeneratedFile): Compared {
     if (!existsSync(path) || !statSync(path).isFile()) {
       return { kind: 'different' };
     }
-    return Buffer.from(file.text).equals(readFileSync(path))
-      ? { kind: 'same' }
-      : { kind: 'different' };
+    return { kind: fileComparisonOf(Buffer.from(file.text), readFileSync(path)) };
   } catch (e) {
     return { kind: 'failed', message: `${file.path} cannot be read: ${oneLineOf(e, directory)}` };
   }

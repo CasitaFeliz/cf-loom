@@ -1,12 +1,11 @@
-import type { Endpoint, Guard, StandardRejections } from '@cf-loom/contract';
-import type * as core from 'zod/v4/core';
+import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   type EndpointRun,
   endpointRunOf,
   type GuardRun,
   guardRunOf,
-  type MessageElement,
   type MessageGiven,
+  type MessageHandled,
   type MessageRun,
   messageRunOf,
 } from '../calls/index.ts';
@@ -20,38 +19,31 @@ import {
   writtenOf,
 } from './written.ts';
 
-/** Whether a Handler is a stub, which `consume` does not pull from. */
+/** Whether a Handler is a Stub, which `consume` does not pull from. */
 export function isStub(handler: AnyHandler): boolean {
   return writtenOf(handler, isAnyWritten).stub;
 }
 
 /** Runs one call of an EndpointHandler, answering a broken Contract as a value, never a throw. */
 export function runEndpoint(
-  handler: { readonly element: Endpoint },
+  handler: { readonly declaration: Endpoint },
   given: EndpointGiven,
-  standards: StandardRejections,
 ): Promise<EndpointRun> {
-  return endpointRunOf(writtenOf(handler, isEndpointWritten), given, standards);
+  return endpointRunOf(writtenOf(handler, isEndpointWritten), given);
 }
 
 /** Runs one call of a GuardHandler, answering a broken Contract as a value, never a throw. */
 export function runGuard(
-  handler: { readonly element: Guard },
+  handler: { readonly declaration: Guard },
   given: GuardGiven,
-  standards: StandardRejections,
 ): Promise<GuardRun> {
-  return guardRunOf(writtenOf(handler, isGuardWritten), given, standards);
+  return guardRunOf(writtenOf(handler, isGuardWritten), given);
 }
 
 /** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */
 export function runMessage(
-  handler: { readonly element: MessageElement },
+  handler: { readonly declaration: MessageHandled },
   received: MessageGiven,
 ): Promise<MessageRun> {
   return messageRunOf(writtenOf(handler, isMessageWritten), received, checkedMessageBody);
-}
-
-/** The Reader schema a Message Handler reads a body with, as `withReader` paired it. */
-export function readerOf(handler: { readonly element: MessageElement }): core.$ZodType {
-  return writtenOf(handler, isMessageWritten).reader;
 }

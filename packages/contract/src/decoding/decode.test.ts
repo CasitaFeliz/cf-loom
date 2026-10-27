@@ -1,47 +1,82 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
+import { aRootPackage } from '../../test/root-package.ts';
+import { publishedAt, publishedServiceAt, schemaExports } from '../../test/snapshots.ts';
 import {
-  type ContractPackage,
   defineCommand,
-  defineContract,
-  defineDependencies,
   defineEndpoint,
   defineEvent,
   defineGroup,
   defineGuard,
   defineRejection,
+  defineService,
   defineSubscription,
+  providedEvent,
 } from '../index.ts';
 import {
   canonicalTextOf,
   type DecodedSnapshot,
   decodeSnapshot,
+  defScopesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
+  nodeNestingLimit,
   type ObjectNode,
+  type Path,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  publishedSnapshotOf,
   type RefNode,
   type SchemaNode,
-  schemaOriginsOf,
+  type ServiceSnapshot,
+  type Snapshot,
+  snapshotNestingLimit,
   snapshotOf,
-  validateContract,
+  validateRoot,
+  walkSchemas,
 } from '../internal/index.ts';
 
+const invalidInputCode = 'INVALID_INPUT';
+const notFoundCode = 'NOT_FOUND';
+const notImplementedCode = 'NOT_IMPLEMENTED';
+
 const standardRejections: PublishedServiceSnapshot['standardRejections'] = {
-  invalidInput: {
+  invalidInput: invalidInputCode,
+  notFound: notFoundCode,
+  notImplemented: notImplementedCode,
+};
+
+/** A text part with no field, as the Snapshot writes one declared empty or not declared. */
+const emptyPart = { type: 'object', fields: {} } as const;
+
+const standardCodes = {
+  [invalidInputCode]: {
     origin: 'standard',
-    code: 'INVALID_INPUT',
     status: 400,
     message: 'Invalid',
-    body: { type: 'object', mode: 'strict', fields: {} },
+    headers: emptyPart,
+    body: { type: 'object', fields: {} },
   },
-  notFound: { origin: 'standard', code: 'NOT_FOUND', status: 404, message: 'Not found' },
-  notImplemented: { origin: 'standard', code: 'NOT_IMPLEMENTED', status: 501, message: 'No' },
-};
+  [notFoundCode]: {
+    origin: 'standard',
+    status: 404,
+    message: 'Not found',
+    headers: emptyPart,
+    body: null,
+  },
+  [notImplementedCode]: {
+    origin: 'standard',
+    status: 501,
+    message: 'No',
+    headers: emptyPart,
+    body: null,
+  },
+} as const satisfies PublishedServiceSnapshot['codes'];
 
 function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServiceSnapshot {
   return {
@@ -50,14 +85,15 @@ function aService(fields: Partial<PublishedServiceSnapshot> = {}): PublishedServ
     name: 'orders-service',
     version: '3.4.0',
     generator: '@cf-loom/cli@2.1.0',
-    definitions: {},
+    formerInputs: [],
     standardRejections,
+    groups: { orders: { description: 'Order lifecycle' } },
     defs: {},
-    endpoints: {},
+    endpoints: { 'GET /orders/{}': anEndpoint },
     events: {},
     commands: {},
     guards: {},
-    codes: {},
+    codes: standardCodes,
     subscriptions: {},
     dependencies: {},
     ...fields,
@@ -89,9 +125,9 @@ function aDefinitions(
     generator: '@cf-loom/cli@2.1.0',
     standardRejections,
     defs: {},
-    schemas: {},
+    exports: schemaExports({}),
     guards: {},
-    codes: {},
+    codes: standardCodes,
     ...fields,
   };
 }
@@ -104,26 +140,40 @@ const anEndpoint = {
   description: 'One order',
   params: ['orderId'],
   guards: [],
-  input: { params: null, query: null, headers: null, body: null },
-  success: { status: 200, headers: null, body: null },
+  input: {
+    params: { type: 'object', fields: { orderId: { required: true, schema: { type: 'string' } } } },
+    query: emptyPart,
+    headers: emptyPart,
+    body: null,
+  },
+  success: { status: 200, headers: emptyPart, body: null },
   rejections: [],
 } as const satisfies EndpointSnapshot;
 
+/** The Endpoint fixture on a path with no params, as `POST /orders` has none. */
+const withoutParams = { ...anEndpoint, params: [], input: { ...anEndpoint.input, params: null } };
+
 const anEvent = {
+  group: 'orders',
   visibility: 'internal',
   lifecycle: 'active',
   description: 'An order was placed',
-  body: { type: 'object', mode: 'strict', fields: {} },
+  body: { type: 'object', fields: {} },
 } as const satisfies EventSnapshot;
 
-const aCommand = { lifecycle: 'active', description: 'Charge', body: anEvent.body } as const;
+const aCommand = {
+  group: 'orders',
+  lifecycle: 'active',
+  description: 'Charge',
+  body: anEvent.body,
+} as const;
 
 const aGuard = {
   origin: 'local',
   description: 'An API key',
   guards: [],
   qualifier: null,
-  demands: { headers: null, query: null },
+  demands: { headers: emptyPart, query: emptyPart },
   context: null,
   rejections: [],
 } as const satisfies GuardSnapshot;
@@ -132,7 +182,7 @@ const orderLocked = 'ORDER_LOCKED';
 const unauthenticated = 'UNAUTHENTICATED';
 const gone = 'GONE';
 
-const aCode = { origin: 'local', status: 409, message: 'Locked', body: null, removed: false };
+const aCode = { origin: 'local', status: 409, message: 'Locked', headers: emptyPart, body: null };
 
 const retiredEndpoint = { ...anEndpoint, lifecycle: 'retired', retiredIn: '3.0.0' } as const;
 const endpointTombstone = {
@@ -148,8 +198,17 @@ function aRef(name: string): RefNode {
   return { type: 'ref', name };
 }
 
+/** An array of arrays, `levels` deep, of strings. */
+function nestedArrays(levels: number): SchemaNode {
+  let nested: SchemaNode = stringNode;
+  for (let level = 0; level < levels; level++) {
+    nested = { type: 'array', items: nested };
+  }
+  return nested;
+}
+
 function anObjectOf(schema: SchemaNode): ObjectNode {
-  return { type: 'object', mode: 'open', fields: { name: { required: true, schema } } };
+  return { type: 'object', fields: { name: { required: true, schema } } };
 }
 
 /** A Snapshot's text as the registry holds it, whatever is wrong with it. */
@@ -160,6 +219,30 @@ function decodedFrom(snapshot: object): DecodedSnapshot {
 /** The Service fixture with fields written over it, right or wrong. */
 function serviceWith(fields: object): DecodedSnapshot {
   return decodedFrom({ ...aService(), ...fields });
+}
+
+/** The Endpoint fixture answering with a body that names each def, so the Snapshot uses them. */
+function reaching(
+  ...names: readonly string[]
+): EndpointSnapshot & { readonly lifecycle: 'active' } {
+  const fields = names.map((name) => [name, { required: true, schema: aRef(name) }]);
+  const body: ObjectNode = { type: 'object', fields: Object.fromEntries(fields) };
+  return { ...anEndpoint, success: { ...anEndpoint.success, body } };
+}
+
+/** The Service fixture holding defs its Endpoint uses, with fields written over it. */
+function aServiceUsing(
+  defs: Readonly<Record<string, SchemaNode>>,
+  fields: Partial<PublishedServiceSnapshot> = {},
+): PublishedServiceSnapshot {
+  const endpoints = { 'GET /orders/{}': reaching(...Object.keys(defs)) };
+  return aService({ defs, endpoints, ...fields });
+}
+
+/** The Service fixture holding defs its Endpoint uses, right or wrong. */
+function serviceUsing(defs: Readonly<Record<string, unknown>>): DecodedSnapshot {
+  const endpoints = { 'GET /orders/{}': reaching(...Object.keys(defs)) };
+  return serviceWith({ defs, endpoints });
 }
 
 function snapshotOfDecoded(result: DecodedSnapshot): PublishedSnapshot {
@@ -189,7 +272,6 @@ function elementOf(result: DecodedSnapshot): readonly (string | number)[] | unde
 
 const everyNode: SchemaNode = {
   type: 'object',
-  mode: 'open',
   fields: {
     text: {
       required: true,
@@ -219,7 +301,7 @@ const everyNode: SchemaNode = {
       },
     },
     flag: { required: true, schema: { type: 'boolean' } },
-    one: { required: true, schema: { type: 'literal', value: 'a' } },
+    one: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
     color: { required: true, schema: { type: 'enum', values: ['red', 2, true], open: true } },
     lookup: {
       required: true,
@@ -242,8 +324,9 @@ const everyNode: SchemaNode = {
         variants: {
           '"a"': {
             type: 'object',
-            mode: 'strict',
-            fields: { kind: { required: true, schema: { type: 'literal', value: 'a' } } },
+            fields: {
+              kind: { required: true, schema: { type: 'enum', values: ['a'], open: false } },
+            },
           },
           '"b"': aRef('tree'),
         },
@@ -251,14 +334,13 @@ const everyNode: SchemaNode = {
     },
     both: {
       required: true,
-      schema: { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] },
+      schema: { type: 'allOf', items: [{ type: 'json' }, { type: 'string' }] },
     },
   },
 };
 
 const treeDef: SchemaNode = {
   type: 'object',
-  mode: 'open',
   fields: { children: { required: true, schema: { type: 'array', items: aRef('tree') } } },
 };
 
@@ -266,26 +348,38 @@ describe('decodeSnapshot', () => {
   describe('what decodes', () => {
     test('a Service’s published Snapshot, written as canonical text, decodes to the same Snapshot', () => {
       const published = aService({
-        definitions: { '@org/definitions': '4.2.0' },
         defs: { tree: treeDef },
         endpoints: {
           'GET /orders/{}': {
             ...anEndpoint,
             guards: [{ guard: 'apiKey', qualifier: ['orders:read'] }],
-            input: { params: null, query: null, headers: null, body: aRef('tree') },
+            input: {
+              params: {
+                type: 'object',
+                fields: { orderId: { required: true, schema: { type: 'string' } } },
+              },
+              query: emptyPart,
+              headers: emptyPart,
+              body: aRef('tree'),
+            },
             rejections: ['ORDER_LOCKED'],
           },
         },
         events: { 'OrderPlaced@1': anEvent },
         commands: { 'ChargeCard@1': aCommand },
         guards: { apiKey: aGuard },
-        codes: { [orderLocked]: aCode },
-        subscriptions: { 'notify-on-placed': { event: 'orders-service:OrderPlaced@1' } },
+        codes: { ...standardCodes, [orderLocked]: aCode },
+        subscriptions: {
+          notifyOnPlaced: {
+            group: 'orders',
+            description: 'Receives it',
+            event: 'orders-service:OrderPlaced@1',
+          },
+        },
         dependencies: {
           'payments-service': {
             against: '5.1.0',
             endpoints: [{ id: 'GET /payments/{}', name: 'getPayment' }],
-            events: ['PaymentSettled@1'],
           },
         },
       });
@@ -295,9 +389,9 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a Snapshot built from a Contract decodes once it has a version', () => {
+    test('a Snapshot built from a Contract decodes once it has a version and a generator', () => {
       const snapshot = declaredSnapshot();
-      const published = { ...snapshot, version: '1.0.0' };
+      const published = { ...snapshot, ...publishedServiceAt('1.0.0') };
 
       const result = decodedFrom(published);
 
@@ -310,7 +404,8 @@ describe('decodeSnapshot', () => {
         endpoints: {
           'POST /orders': {
             ...anEndpoint,
-            input: { params: null, query: null, headers: null, body: everyNode },
+            params: [],
+            input: { params: null, query: emptyPart, headers: emptyPart, body: everyNode },
           },
         },
       });
@@ -326,7 +421,6 @@ describe('decodeSnapshot', () => {
           'orders-service': {
             against: '3.4.0',
             endpoints: [{ id: 'GET /orders/{}', name: 'getOrder' }],
-            events: ['OrderPlaced@1'],
           },
         },
       });
@@ -338,11 +432,15 @@ describe('decodeSnapshot', () => {
 
     test('a Definitions Package’s published Snapshot decodes, its shared schemas and removed codes included', () => {
       const published = aDefinitions({
-        schemas: { money: { type: 'object', mode: 'open', fields: {} } },
+        exports: {
+          ...schemaExports({ money: { type: 'object', fields: {} } }),
+          apiKey: { kind: 'guard', guard: 'apiKey' },
+        },
         guards: { apiKey: { ...aGuard, rejections: ['UNAUTHENTICATED'] } },
         codes: {
+          ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
-          [gone]: { ...aCode, status: 410, removed: true },
+          [gone]: { ...aCode, status: 410, removedIn: '3.2.0', defs: {} },
         },
       });
 
@@ -352,7 +450,9 @@ describe('decodeSnapshot', () => {
     });
 
     test('an Endpoint’s tombstone decodes with its name and retiredIn', () => {
-      const published = aService({ endpoints: { 'DELETE /orders/{}': endpointTombstone } });
+      const published = aService({
+        endpoints: { 'DELETE /orders/{}': endpointTombstone, 'GET /orders/{}': anEndpoint },
+      });
 
       const result = roundTrip(published);
 
@@ -385,7 +485,7 @@ describe('decodeSnapshot', () => {
     test('a removed Subscription decodes with its Event and removedIn', () => {
       const published = aService({
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
         },
       });
 
@@ -394,11 +494,37 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
     });
 
-    test('a removed code decodes with removed true and the status and body it last had', () => {
-      const body: SchemaNode = { type: 'object', mode: 'strict', fields: {} };
+    test('a removed code decodes with its removedIn and the status and body it last had', () => {
+      const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { [gone]: { ...aCode, status: 410, body, removed: true } },
+        codes: {
+          ...standardCodes,
+          [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0', defs: {} },
+        },
       });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the defs its body reached, though the Snapshot holds none', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aService({ codes: { ...standardCodes, [gone]: removed } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the def of a name the Snapshot holds as another def', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aServiceUsing(
+        { tree: anObjectOf(stringNode) },
+        { codes: { ...standardCodes, [gone]: removed } },
+      );
 
       const result = roundTrip(published);
 
@@ -434,7 +560,7 @@ describe('decodeSnapshot', () => {
         version: '0.3.0-rc.1',
         endpoints: { 'GET /orders/{}': { ...retiredEndpoint, retiredIn: '0.2.0-beta.4' } },
         subscriptions: {
-          'legacy-sync': { event: 'orders-service:OrderPlaced@1', removedIn: '0.3.0-rc.1' },
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '0.3.0-rc.1' },
         },
       });
 
@@ -445,7 +571,7 @@ describe('decodeSnapshot', () => {
 
     test('a Snapshot whose keys are out of code point order decodes in canonical order', () => {
       const published = aService({
-        endpoints: { 'POST /orders': anEndpoint, 'GET /orders/{}': anEndpoint },
+        endpoints: { 'POST /orders': withoutParams, 'GET /orders/{}': reaching('b', 'a') },
         defs: { b: { type: 'string' }, a: { type: 'string' } },
       });
 
@@ -465,7 +591,7 @@ describe('decodeSnapshot', () => {
         type: 'union',
         options: [{ type: 'array', items: aRef('listing') }, stringNode],
       };
-      const published = aService({ defs: { listing } });
+      const published = aServiceUsing({ listing });
 
       const result = roundTrip(published);
 
@@ -478,7 +604,7 @@ describe('decodeSnapshot', () => {
         discriminator: 'type',
         variants: { '"branch"': aRef('tree') },
       };
-      const published = aService({ defs: { tree } });
+      const published = aServiceUsing({ tree });
 
       const result = roundTrip(published);
 
@@ -486,7 +612,7 @@ describe('decodeSnapshot', () => {
     });
 
     test('an alias def of a recursive def decodes', () => {
-      const published = aService({ defs: { alias: aRef('tree'), tree: treeDef } });
+      const published = aServiceUsing({ alias: aRef('tree'), tree: treeDef });
 
       const result = roundTrip(published);
 
@@ -535,23 +661,23 @@ describe('decodeSnapshot', () => {
       },
     );
 
-    test('a Snapshot too large or nested too deeply to decode is malformed at the root, never a throw', () => {
+    test('a Snapshot nested far too deeply to decode is malformed at its depth limit, never a throw', () => {
       const nested =
         '{"type":"array","items":'.repeat(5000) + '{"type":"string"}' + '}'.repeat(5000);
       const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
 
       const result = decodeSnapshot(text);
 
-      expect(result).toEqual(malformedAt([], 'is too large or nests too deeply to decode'));
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
     });
 
     test('a shallow Snapshot whose canonical text outgrows a string is malformed at the root, never a throw', () => {
       const elements = Array(1_500_000).fill('1').join(',');
       const example = `${'['.repeat(250)}${elements}${']'.repeat(250)}`;
-      const text = JSON.stringify(aService()).replace(
-        '"defs":{}',
-        `"defs":{"a":{"type":"json","examples":[${example}]}}`,
-      );
+      const text = JSON.stringify(
+        aService({ endpoints: { 'GET /orders/{}': reaching('a') } }),
+      ).replace('"defs":{}', `"defs":{"a":{"type":"json","examples":[${example}]}}`);
 
       const result = decodeSnapshot(text);
 
@@ -592,26 +718,31 @@ describe('decodeSnapshot', () => {
       },
       {
         where: 'subscriptions',
-        snapshot: { ...aService(), subscriptions: protoKeyed({ event: 'orders-service:A@1' }) },
+        snapshot: {
+          ...aService(),
+          subscriptions: protoKeyed({
+            group: 'orders',
+            description: 'Receives it',
+            event: 'orders-service:A@1',
+          }),
+        },
         at: ['subscriptions', '__proto__'],
-      },
-      {
-        where: 'definitions',
-        snapshot: { ...aService(), definitions: protoKeyed('1.0.0') },
-        at: ['definitions', '__proto__'],
       },
       {
         where: 'an Application’s dependencies',
         snapshot: {
           ...anApplication(),
-          dependencies: protoKeyed({ against: '1.0.0', endpoints: [], events: [] }),
+          dependencies: protoKeyed({ against: '1.0.0', endpoints: [] }),
         },
         at: ['dependencies', '__proto__'],
       },
       {
-        where: 'a Definitions Package’s schemas',
-        snapshot: { ...aDefinitions(), schemas: protoKeyed({ type: 'string' }) },
-        at: ['schemas', '__proto__'],
+        where: 'a Definitions Package’s exports',
+        snapshot: {
+          ...aDefinitions(),
+          exports: protoKeyed({ kind: 'schema', schema: { type: 'string' } }),
+        },
+        at: ['exports', '__proto__'],
       },
       {
         where: 'an object node’s fields',
@@ -620,7 +751,6 @@ describe('decodeSnapshot', () => {
           defs: {
             tree: {
               type: 'object',
-              mode: 'open',
               fields: protoKeyed({ required: true, schema: { type: 'string' } }),
             },
           },
@@ -668,20 +798,160 @@ describe('decodeSnapshot', () => {
       ['a list', []],
       ['a number', 3],
     ])('a map given as %s is malformed at the map', (_, map) => {
-      const result = serviceWith({ definitions: map });
+      const result = serviceWith({ defs: map });
 
-      expect(result).toEqual(malformedAt(['definitions']));
+      expect(result).toEqual(malformedAt(['defs']));
+    });
+
+    test('a Service’s Snapshot with a definitions map is malformed: its origins say which packages it uses', () => {
+      const result = decodedFrom({ ...aService(), definitions: { '@org/definitions': '4.2.0' } });
+
+      expect(result).toEqual(malformedAt(['definitions'], 'is a key its format does not define'));
     });
 
     test('keys named like an Object’s own properties are kept as the keys they are', () => {
       const text: SchemaNode = { type: 'string' };
-      const published = aService({
-        defs: { constructor: text, toString: text, hasOwnProperty: text },
-      });
+      const published = aServiceUsing({ constructor: text, toString: text, hasOwnProperty: text });
 
       const result = roundTrip(published);
 
       expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test.each([
+      [
+        'an Endpoint’s query',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, input: { ...anEndpoint.input, query: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'input', 'query'],
+      ],
+      [
+        'an Endpoint’s headers',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, input: { ...anEndpoint.input, headers: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'input', 'headers'],
+      ],
+      [
+        'a Success’s headers',
+        {
+          endpoints: {
+            'GET /orders/{}': { ...anEndpoint, success: { ...anEndpoint.success, headers: null } },
+          },
+        },
+        ['endpoints', 'GET /orders/{}', 'success', 'headers'],
+      ],
+      [
+        'a code’s headers',
+        { codes: { ...standardCodes, [orderLocked]: { ...aCode, headers: null } } },
+        ['codes', orderLocked, 'headers'],
+      ],
+      [
+        'a Guard’s demanded query',
+        { guards: { apiKey: { ...aGuard, demands: { ...aGuard.demands, query: null } } } },
+        ['guards', 'apiKey', 'demands', 'query'],
+      ],
+      [
+        'a Guard’s demanded headers',
+        { guards: { apiKey: { ...aGuard, demands: { ...aGuard.demands, headers: null } } } },
+        ['guards', 'apiKey', 'demands', 'headers'],
+      ],
+    ])(
+      '%s given as null is malformed there: a text part is an object with no field when none is declared',
+      (_, fields, at) => {
+        const result = serviceWith(fields);
+
+        expect(elementOf(result)).toEqual(at.slice(0, 2));
+      },
+    );
+
+    describe('an Endpoint’s params are its identity’s, each a required field of input.params', () => {
+      const at = ['endpoints', 'GET /orders/{}'];
+      const paramsAt = [...at, 'input', 'params'];
+      const idField = { required: true, schema: { type: 'string' } } as const;
+
+      test.each([
+        [
+          'more names than the identity has {}',
+          { params: ['orderId', 'lineId'] },
+          [...at, 'params'],
+        ],
+        ['fewer names than the identity has {}', { params: [] }, [...at, 'params']],
+        ['a name twice', { params: ['orderId', 'orderId'] }, [...at, 'params']],
+        [
+          'null where the path has params',
+          { input: { ...anEndpoint.input, params: null } },
+          paramsAt,
+        ],
+        [
+          'a field named otherwise than the param',
+          { input: { ...anEndpoint.input, params: { type: 'object', fields: { id: idField } } } },
+          paramsAt,
+        ],
+        [
+          'a field beside the params',
+          {
+            input: {
+              ...anEndpoint.input,
+              params: { type: 'object', fields: { orderId: idField, lineId: idField } },
+            },
+          },
+          paramsAt,
+        ],
+        [
+          'an optional param',
+          {
+            input: {
+              ...anEndpoint.input,
+              params: { type: 'object', fields: { orderId: { ...idField, required: false } } },
+            },
+          },
+          [...paramsAt, 'fields', 'orderId'],
+        ],
+      ])('%s is malformed where it is', (_name, fields, expectedAt) => {
+        const result = serviceWith({
+          endpoints: { 'GET /orders/{}': { ...anEndpoint, ...fields } },
+        });
+
+        expect(result).toEqual(malformedAt(expectedAt));
+      });
+
+      test('a params object on a path without params is malformed at it', () => {
+        const result = serviceWith({
+          endpoints: {
+            'POST /orders': {
+              ...withoutParams,
+              input: { ...withoutParams.input, params: emptyPart },
+            },
+          },
+        });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'POST /orders', 'input', 'params']));
+      });
+
+      test('a tombstone names no params, so none are judged', () => {
+        const result = serviceWith({
+          endpoints: {
+            'GET /orders/{}': { lifecycle: 'retired', retiredIn: '1.0.0', name: 'getOrder' },
+            'POST /orders': withoutParams,
+          },
+        });
+
+        expect(result.kind).toBe('decoded');
+      });
+    });
+
+    test('a nullable def is malformed at the def: nullable belongs to a use of it', () => {
+      const tree: SchemaNode = { type: 'object', fields: {}, nullable: true };
+
+      const result = serviceWith({ defs: { tree } });
+
+      expect(result).toEqual(malformedAt(['defs', 'tree'], expect.stringContaining('nullable')));
     });
 
     test('a Snapshot without version is malformed at version: package writes none, only publish does', () => {
@@ -689,7 +959,7 @@ describe('decodeSnapshot', () => {
 
       const result = decodedFrom(declared);
 
-      expect(result).toEqual(malformedAt(['version']));
+      expect(result).toEqual(malformedAt(['version'], 'is missing'));
     });
 
     test.each(['3.4', 'v3.4.0', '^3.4.0', 'latest', 340])(
@@ -700,6 +970,28 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(malformedAt(['version']));
       },
     );
+
+    test('a generator that is no string is malformed at generator, in cf-loom’s words', () => {
+      const result = serviceWith({ generator: 42 });
+
+      expect(result).toEqual(malformedAt(['generator'], 'is not a string'));
+    });
+
+    test('a Snapshot without a generator is malformed at generator: it is missing', () => {
+      const { generator: _generator, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['generator'], 'is missing'));
+    });
+
+    test('a Snapshot without a kind is malformed at kind: it is missing', () => {
+      const { kind: _kind, ...declared } = aService();
+
+      const result = decodedFrom(declared);
+
+      expect(result).toEqual(malformedAt(['kind'], 'is missing'));
+    });
 
     test('a kind the format does not define is malformed at kind', () => {
       const result = serviceWith({ kind: 'library' });
@@ -725,9 +1017,40 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'format'],
       ],
       [
-        'an object mode',
-        { defs: { tree: { type: 'object', mode: 'loose', fields: {} } } },
+        'a literal node',
+        { defs: { tree: { type: 'literal', value: 'a' } } },
+        ['defs', 'tree', 'type'],
+      ],
+      [
+        'a mode on an object',
+        { defs: { tree: { type: 'object', mode: 'open', fields: {} } } },
         ['defs', 'tree', 'mode'],
+      ],
+      [
+        'a record keyed by an enum',
+        {
+          defs: {
+            tree: {
+              type: 'record',
+              key: { type: 'enum', values: ['a'], open: false },
+              value: { type: 'string' },
+            },
+          },
+        },
+        ['defs', 'tree', 'key', 'type'],
+      ],
+      [
+        'a nullable record key',
+        {
+          defs: {
+            tree: {
+              type: 'record',
+              key: { type: 'string', nullable: true },
+              value: { type: 'string' },
+            },
+          },
+        },
+        ['defs', 'tree', 'key', 'nullable'],
       ],
       [
         'a Standard Rejection',
@@ -755,7 +1078,6 @@ describe('decodeSnapshot', () => {
         'a field with a key of its own',
         {
           type: 'object',
-          mode: 'open',
           fields: { name: { required: true, schema: { type: 'string' }, extra: 1 } },
         },
         ['defs', 'tree', 'fields', 'name', 'extra'],
@@ -804,24 +1126,80 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
-      { name: 'notFound', rejection: standardRejections.notFound },
-      { name: 'notImplemented', rejection: standardRejections.notImplemented },
-    ])('a body on the $name Standard Rejection is malformed at the body', ({ name, rejection }) => {
-      const withBody = { ...rejection, body: { type: 'string' } };
+      { name: 'notFound', code: notFoundCode },
+      { name: 'notImplemented', code: notImplementedCode },
+    ] as const)(
+      'a body on the code the $name Standard Rejection names is malformed at the body',
+      ({ name, code }) => {
+        const codes = { ...standardCodes, [code]: { ...standardCodes[code], body: stringNode } };
 
-      const result = serviceWith({
-        standardRejections: { ...standardRejections, [name]: withBody },
-      });
+        const service = serviceWith({ codes });
+        const definitions = decodedFrom({ ...aDefinitions(), codes });
 
-      expect(result).toEqual(malformedAt(['standardRejections', name, 'body']));
+        const malformed = malformedAt(
+          ['codes', code, 'body'],
+          `holds a body, which the ${name} Standard Rejection never has`,
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
+
+    test.each([
+      { name: 'invalidInput', code: invalidInputCode },
+      { name: 'notFound', code: notFoundCode },
+      { name: 'notImplemented', code: notImplementedCode },
+    ] as const)(
+      'a header field on the code the $name Standard Rejection names is malformed at the headers',
+      ({ name, code }) => {
+        const headers = {
+          ...emptyPart,
+          fields: { 'x-note': { required: false, schema: stringNode } },
+        };
+        const codes = { ...standardCodes, [code]: { ...standardCodes[code], headers } };
+
+        const service = serviceWith({ codes });
+        const definitions = decodedFrom({ ...aDefinitions(), codes });
+
+        const malformed = malformedAt(
+          ['codes', code, 'headers'],
+          `holds headers, which the ${name} Standard Rejection never has`,
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
+
+    test('a described headers object without a field on the code a Standard Rejection names is malformed', () => {
+      const headers = { ...emptyPart, description: 'Sent with it' };
+      const codes = {
+        ...standardCodes,
+        [notFoundCode]: { ...standardCodes[notFoundCode], headers },
+      };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(
+        malformedAt(
+          ['codes', notFoundCode, 'headers'],
+          'holds headers, which the notFound Standard Rejection never has',
+        ),
+      );
+    });
+
+    test('no body on the code the invalidInput Standard Rejection names is malformed at the body', () => {
+      const code = invalidInputCode;
+      const codes = { ...standardCodes, [code]: { ...standardCodes[code], body: null } };
+
+      const service = serviceWith({ codes });
+      const definitions = decodedFrom({ ...aDefinitions(), codes });
+
+      const malformed = malformedAt(
+        ['codes', code, 'body'],
+        'holds no body, which the invalidInput Standard Rejection always has',
+      );
+      expect([service, definitions]).toEqual([malformed, malformed]);
     });
 
     test.each([
-      [
-        'a removedIn that is no semantic version',
-        { subscriptions: { 'legacy-sync': { event: 'orders-service:A@1', removedIn: 'gone' } } },
-        ['subscriptions', 'legacy-sync', 'removedIn'],
-      ],
       [
         'a Dependency’s Endpoint with a key of its own',
         {
@@ -838,7 +1216,9 @@ describe('decodeSnapshot', () => {
       [
         'a Guard’s demands with a key of its own',
         {
-          guards: { apiKey: { ...aGuard, demands: { headers: null, query: null, extra: 1 } } },
+          guards: {
+            apiKey: { ...aGuard, demands: { headers: emptyPart, query: emptyPart, extra: 1 } },
+          },
         },
         ['guards', 'apiKey', 'demands', 'extra'],
       ],
@@ -868,25 +1248,234 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['events', 'OrderPlaced@1']);
     });
 
-    test.each([
-      ['a node type', { defs: { tree: { type: 'bogus' } } }, ['defs', 'tree', 'type']],
-      ['a kind', { kind: 'library' }, ['kind']],
-    ])('%s the format does not define says it is no value its format defines', (_, fields, at) => {
-      const result = serviceWith(fields);
-
-      expect(result).toEqual(malformedAt(at, 'is not a value its format defines'));
-    });
-
-    test('an Element that fits none of the forms an Element takes is reported at the Element, with one reason', () => {
-      const endpoint = { ...anEndpoint, lifecycle: 'retired' };
-
-      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+    test('a node type the format does not define lists the node types it defines', () => {
+      const result = serviceWith({ defs: { tree: { type: 'bogus' } } });
 
       expect(result).toEqual(
         malformedAt(
-          ['endpoints', 'GET /orders/{}'],
-          'matches none of the forms its format defines',
+          ['defs', 'tree', 'type'],
+          expect.stringMatching(/^is none of "string", "number", "boolean", .*"ref"$/),
         ),
+      );
+    });
+
+    test('a kind the format does not define lists the kinds it defines', () => {
+      const result = serviceWith({ kind: 'library' });
+
+      expect(result).toEqual(
+        malformedAt(['kind'], 'is none of "service", "application", "definitions"'),
+      );
+    });
+
+    test.for([null, {}, ['a']])(
+      'an enum value that is no string, number or boolean is malformed at that value: %j',
+      (value) => {
+        const enumNode = { type: 'enum', values: [value], open: false };
+
+        const result = serviceWith({ defs: { tree: enumNode } });
+
+        expect(result).toEqual(
+          malformedAt(['defs', 'tree', 'values', 0], 'is not a string, a number, true or false'),
+        );
+      },
+    );
+
+    describe('an Element is read as declared or as a tombstone by its Group, a declared one by its lifecycle, so the key that breaks it is named', () => {
+      const deprecatedAt = '2026-10-17T09:30:00Z';
+      const elements = [
+        {
+          kind: 'Endpoint',
+          map: 'endpoints',
+          identity: 'GET /orders/{}',
+          forms: {
+            active: anEndpoint,
+            deprecated: { ...anEndpoint, lifecycle: 'deprecated', deprecatedAt },
+            retired: retiredEndpoint,
+            tombstone: endpointTombstone,
+          },
+        },
+        {
+          kind: 'Event',
+          map: 'events',
+          identity: 'OrderPlaced@1',
+          forms: {
+            active: anEvent,
+            deprecated: { ...anEvent, lifecycle: 'deprecated' },
+            retired: { ...anEvent, lifecycle: 'retired', retiredIn: '3.0.0' },
+            tombstone: messageTombstone,
+          },
+        },
+        {
+          kind: 'Command',
+          map: 'commands',
+          identity: 'ChargeCard@1',
+          forms: {
+            active: aCommand,
+            deprecated: { ...aCommand, lifecycle: 'deprecated' },
+            retired: { ...aCommand, lifecycle: 'retired', retiredIn: '3.0.0' },
+            tombstone: messageTombstone,
+          },
+        },
+      ];
+      const everyForm = elements.flatMap(({ kind, map, identity, forms }) =>
+        Object.entries(forms).map(([form, element]) => ({ kind, map, identity, form, element })),
+      );
+      const everyField = everyForm.flatMap((placed) =>
+        Object.keys(placed.element).map((field) => ({ ...placed, field })),
+      );
+
+      const declaredForms = elements.flatMap(({ kind, map, identity, forms }) => [
+        { kind, form: 'active', map, identity, element: forms.active },
+        { kind, form: 'deprecated', map, identity, element: forms.deprecated },
+      ]);
+
+      test.each(declaredForms)(
+        'the $form form of a published $kind without its Group is read as a tombstone, as the format defines',
+        ({ map, identity, element }) => {
+          const { group: _group, ...tombstoneLike } = element;
+
+          const result = serviceWith({ [map]: { [identity]: tombstoneLike } });
+
+          expect(result).toEqual(malformedAt([map, identity, 'lifecycle'], 'is not "retired"'));
+        },
+      );
+
+      test('a Retired Endpoint without its Group is read as a tombstone, so its first other key is named', () => {
+        const { group: _group, ...tombstoneLike } = retiredEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': tombstoneLike } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is a key its format does not define',
+          ),
+        );
+      });
+
+      test('a published Endpoint with a visibility that is no Visibility is malformed at the visibility', () => {
+        const endpoint = { ...anEndpoint, visibility: 'nope' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', 'GET /orders/{}', 'visibility'],
+            'is none of "public", "internal", "private"',
+          ),
+        );
+      });
+
+      test('a Deprecated Endpoint with a description that is no string is malformed at the description', () => {
+        const endpoint = { ...anEndpoint, lifecycle: 'deprecated', description: 42 };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'description'], 'is not a string'),
+        );
+      });
+
+      test.each(elements)(
+        'the tombstone of a published $kind with a key of its own is malformed at that key',
+        ({ map, identity, forms }) => {
+          const tombstone = { ...forms.tombstone, extra: true };
+
+          const result = serviceWith({ [map]: { [identity]: tombstone } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, 'extra'], 'is a key its format does not define'),
+          );
+        },
+      );
+
+      test.each([
+        [
+          'a lifecycle that is none of the three',
+          { ...anEndpoint, lifecycle: 'archived' },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        [
+          'a lifecycle that is no string',
+          { ...anEndpoint, lifecycle: null },
+          'is none of "active", "deprecated", "retired"',
+        ],
+        ['no lifecycle', { ...anEndpoint, lifecycle: undefined }, 'is missing'],
+      ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint, reason) => {
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'lifecycle'], reason));
+      });
+
+      test('an Endpoint without a visibility is malformed at the visibility: it is missing', () => {
+        const { visibility: _visibility, ...endpoint } = anEndpoint;
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'visibility'], 'is missing'),
+        );
+      });
+
+      test.each(everyForm)(
+        'the $form form of a published $kind holding a __proto__ key is malformed at that key, never dropped',
+        ({ map, identity, element }) => {
+          const holding = { ...element, ...protoKeyed(1) };
+
+          const result = serviceWith({ [map]: { [identity]: holding } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, '__proto__'], 'is a key its format does not define'),
+          );
+        },
+      );
+
+      test('a Retired Endpoint still declared without retiredIn is malformed at the retiredIn', () => {
+        const endpoint = { ...anEndpoint, lifecycle: 'retired' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'retiredIn'], 'is missing'),
+        );
+      });
+
+      test.each(elements)(
+        'the tombstone of a published $kind without retiredIn is malformed at the retiredIn: it is missing',
+        ({ map, identity, forms }) => {
+          const { retiredIn: _retiredIn, ...tombstone } = forms.tombstone;
+
+          const result = serviceWith({ [map]: { [identity]: tombstone } });
+
+          expect(result).toEqual(malformedAt([map, identity, 'retiredIn'], 'is missing'));
+        },
+      );
+
+      test.each([
+        ['a Retired Endpoint still declared', retiredEndpoint],
+        ['an Endpoint’s tombstone', endpointTombstone],
+      ])('%s with a retiredIn that is no semantic version keeps that reason', (_, retired) => {
+        const endpoint = { ...retired, retiredIn: 'three' };
+
+        const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+        expect(result).toEqual(
+          malformedAt(['endpoints', 'GET /orders/{}', 'retiredIn'], 'is not a semantic version'),
+        );
+      });
+
+      test.each(everyField)(
+        'the $form form of a published $kind with a $field of the wrong type is malformed at that $field',
+        ({ map, identity, element, field }) => {
+          const wrong = { ...element, [field]: null };
+          const zodsWording = /^(Invalid|Unrecognized|Too )/;
+
+          const result = serviceWith({ [map]: { [identity]: wrong } });
+
+          expect(result).toEqual(
+            malformedAt([map, identity, field], expect.not.stringMatching(zodsWording)),
+          );
+        },
       );
     });
 
@@ -894,6 +1483,146 @@ describe('decodeSnapshot', () => {
       const result = decodedFrom({ ...anApplication(), endpoints: {} });
 
       expect(result).toEqual(malformedAt(['endpoints']));
+    });
+
+    test.each([
+      { kind: 'an Event', map: 'events', key: 'OrderPlaced@1', declared: anEvent },
+      { kind: 'a Command', map: 'commands', key: 'ChargeCard@1', declared: aCommand },
+    ])('$kind declared without a Group is malformed in it', ({ map, key, declared }) => {
+      const { group: _group, ...ungrouped } = declared;
+
+      const result = serviceWith({ [map]: { [key]: ungrouped } });
+
+      expect(elementOf(result)).toEqual([map, key]);
+    });
+
+    test.each([
+      ['no description', { event: 'orders-service:OrderPlaced@1' }],
+      ['no Group', { description: 'Receives it', event: 'orders-service:OrderPlaced@1' }],
+      [
+        'a Group and a removedIn',
+        { group: 'orders', event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+      ],
+      [
+        'a description and a removedIn',
+        {
+          group: 'orders',
+          description: 'Receives it',
+          event: 'orders-service:OrderPlaced@1',
+          removedIn: '3.2.0',
+        },
+      ],
+      [
+        'a removedIn that is no semantic version',
+        { event: 'orders-service:OrderPlaced@1', removedIn: 'gone' },
+      ],
+    ])('a Subscription with %s is malformed in the Subscription', (_, subscription) => {
+      const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+      expect(elementOf(result)).toEqual(['subscriptions', 'notifyOnPlaced']);
+    });
+
+    describe('a Subscription is read as declared or as a tombstone by its Group, so the key that breaks it is named', () => {
+      const event = 'orders-service:OrderPlaced@1';
+      const declared = { group: 'orders', description: 'Receives it', event };
+      const removed = { event, removedIn: '3.2.0' };
+      const at = (key: string) => ['subscriptions', 'notifyOnPlaced', key];
+
+      test.each([
+        {
+          name: 'a declared Subscription’s event that is no string',
+          subscription: { ...declared, event: 42 },
+          key: 'event',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a declared Subscription’s description that is no string',
+          subscription: { ...declared, description: 42 },
+          key: 'description',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a removed Subscription’s event that is no string',
+          subscription: { ...removed, event: 42 },
+          key: 'event',
+          reason: 'is not a string',
+        },
+        {
+          name: 'a removed Subscription’s removedIn that is no semantic version',
+          subscription: { ...removed, removedIn: 'nope' },
+          key: 'removedIn',
+          reason: 'is not a semantic version',
+        },
+        {
+          name: 'a declared Subscription with no event',
+          subscription: { group: 'orders', description: 'Receives it' },
+          key: 'event',
+          reason: 'is missing',
+        },
+        {
+          name: 'a removed Subscription with no event',
+          subscription: { removedIn: '3.2.0' },
+          key: 'event',
+          reason: 'is missing',
+        },
+        {
+          name: 'a removed Subscription with no removedIn',
+          subscription: { event },
+          key: 'removedIn',
+          reason: 'is missing',
+        },
+        {
+          name: 'a declared Subscription with a removedIn',
+          subscription: { ...declared, removedIn: '3.2.0' },
+          key: 'removedIn',
+          reason: 'is a key its format does not define',
+        },
+        {
+          name: 'a removed Subscription with a key of its own',
+          subscription: { ...removed, extra: 1 },
+          key: 'extra',
+          reason: 'is a key its format does not define',
+        },
+      ])('$name is malformed at that key', ({ subscription, key, reason }) => {
+        const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+        expect(result).toEqual(malformedAt(at(key), reason));
+      });
+
+      test('a declared Subscription without its Group is read as a tombstone, as the format defines', () => {
+        const { group: _group, ...tombstoneLike } = declared;
+
+        const result = serviceWith({ subscriptions: { notifyOnPlaced: tombstoneLike } });
+
+        expect(result).toEqual(malformedAt(at('removedIn'), 'is missing'));
+      });
+
+      test.for([null, 42, 'notifyOnPlaced', []])(
+        'a Subscription that is no object is malformed at the Subscription: %j',
+        (subscription) => {
+          const result = serviceWith({ subscriptions: { notifyOnPlaced: subscription } });
+
+          expect(result).toEqual(
+            malformedAt(['subscriptions', 'notifyOnPlaced'], 'is not an object'),
+          );
+        },
+      );
+
+      test.each([
+        ['declared', declared],
+        ['removed', removed],
+      ])(
+        'a %s Subscription holding a __proto__ key is malformed at that key, never dropped',
+        (_, subscription) => {
+          const holding = { ...subscription, ...protoKeyed(1) };
+
+          const result = serviceWith({ subscriptions: { notifyOnPlaced: holding } });
+
+          expect(result).toEqual(
+            malformedAt(at('__proto__'), 'is a key its format does not define'),
+          );
+        },
+      );
     });
 
     test.each([
@@ -934,7 +1663,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
     });
 
-    test('a deprecatedAt that is not a stamp is malformed in the Endpoint', () => {
+    test('a deprecatedAt that is not a UTC instant to the second is malformed in the Endpoint', () => {
       const endpoint = { ...anEndpoint, lifecycle: 'deprecated', deprecatedAt: 'yesterday' };
 
       const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
@@ -945,6 +1674,7 @@ describe('decodeSnapshot', () => {
     test.each([
       ['no method', 'GET'],
       ['a method the format does not define', 'FETCH /orders'],
+      ['HEAD, which no Endpoint declares', 'HEAD /orders'],
       ['a path that does not start with a slash', 'GET orders'],
       ['an empty segment', 'GET /orders//{}'],
       ['a trailing slash', 'GET /orders/'],
@@ -965,6 +1695,7 @@ describe('decodeSnapshot', () => {
       'OrderPlaced@1.5',
       'OrderPlaced@v1',
       'OrderPlaced@01',
+      'OrderPlaced@9007199254740992',
     ])(
       'a Message identity that is not a name and a version from 1 is malformed at its key: %s',
       (identity) => {
@@ -979,32 +1710,35 @@ describe('decodeSnapshot', () => {
     test.each(['OrderPlaced@1', 'orders-service:OrderPlaced', ':OrderPlaced@1', 'orders-service:'])(
       'a Subscription’s Event that is no service and identity is malformed at the Event: %s',
       (event) => {
-        const result = serviceWith({ subscriptions: { 'notify-on-placed': { event } } });
+        const result = serviceWith({
+          subscriptions: { notifyOnPlaced: { group: 'orders', description: 'Receives it', event } },
+        });
 
-        expect(result).toEqual(malformedAt(['subscriptions', 'notify-on-placed', 'event']));
+        expect(result).toEqual(malformedAt(['subscriptions', 'notifyOnPlaced', 'event']));
       },
     );
 
-    test.each([
-      {
-        what: 'an Endpoint id',
-        endpoints: [{ id: 'FETCH /x', name: 'x' }],
-        events: [],
-        inside: ['endpoints', 0, 'id'],
-      },
-      { what: 'an Event', endpoints: [], events: ['PaymentSettled'], inside: ['events', 0] },
-    ])(
-      'a Dependency’s $what that is not an identity is malformed',
-      ({ endpoints, events, inside }) => {
-        const dependencies = { 'payments-service': { against: '5.1.0', endpoints, events } };
+    test('a Dependency’s Endpoint id that is not an identity is malformed', () => {
+      const endpoints = [{ id: 'FETCH /x', name: 'x' }];
+      const dependencies = { 'payments-service': { against: '5.1.0', endpoints } };
 
-        const service = serviceWith({ dependencies });
-        const application = decodedFrom({ ...anApplication(), dependencies });
+      const service = serviceWith({ dependencies });
+      const application = decodedFrom({ ...anApplication(), dependencies });
 
-        const at = ['dependencies', 'payments-service', ...inside];
-        expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
-      },
-    );
+      const at = ['dependencies', 'payments-service', 'endpoints', 0, 'id'];
+      expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
+    });
+
+    test('a Dependency holding events is malformed: a Service’s Subscriptions hold its Events', () => {
+      const dependency = { against: '5.1.0', endpoints: [], events: ['PaymentSettled@1'] };
+      const dependencies = { 'payments-service': dependency };
+
+      const service = serviceWith({ dependencies });
+      const application = decodedFrom({ ...anApplication(), dependencies });
+
+      const at = ['dependencies', 'payments-service', 'events'];
+      expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
+    });
 
     test('a ref to a def the Snapshot does not hold is malformed at the ref', () => {
       const defs = { tree: { type: 'array', items: aRef('missing') } };
@@ -1015,13 +1749,39 @@ describe('decodeSnapshot', () => {
     });
 
     test.each([
+      ['a tuple item', { type: 'tuple', items: [aRef('missing')] }, ['defs', 'tree', 'items', 0]],
+      [
+        'a union option',
+        { type: 'union', options: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'options', 0],
+      ],
+      [
+        'an intersection’s item',
+        { type: 'allOf', items: [aRef('missing'), stringNode] },
+        ['defs', 'tree', 'items', 0],
+      ],
+    ])('a ref in %s to a def the Snapshot does not hold is malformed at the ref', (_, tree, at) => {
+      const result = serviceWith({ defs: { tree } });
+
+      expect(result).toEqual(malformedAt(at));
+    });
+
+    test.each([
       [
         'an Endpoint’s body',
         aService({
           endpoints: {
             'GET /orders/{}': {
               ...anEndpoint,
-              input: { params: null, query: null, headers: null, body: aRef('missing') },
+              input: {
+                params: {
+                  type: 'object',
+                  fields: { orderId: { required: true, schema: { type: 'string' } } },
+                },
+                query: emptyPart,
+                headers: emptyPart,
+                body: aRef('missing'),
+              },
             },
           },
         }),
@@ -1038,14 +1798,19 @@ describe('decodeSnapshot', () => {
         ['codes', 'GONE', 'body'],
       ],
       [
+        'a code’s headers',
+        aService({ codes: { [gone]: { ...aCode, headers: anObjectOf(aRef('missing')) } } }),
+        ['codes', 'GONE', 'headers', 'fields', 'name'],
+      ],
+      [
         'a Guard’s context',
         aService({ guards: { apiKey: { ...aGuard, context: aRef('missing') } } }),
         ['guards', 'apiKey', 'context'],
       ],
       [
         'a Definitions Package’s shared schema',
-        aDefinitions({ schemas: { money: aRef('missing') } }),
-        ['schemas', 'money'],
+        aDefinitions({ exports: schemaExports({ money: aRef('missing') }) }),
+        ['exports', 'money', 'schema'],
       ],
       [
         'a Guard’s qualifier',
@@ -1058,7 +1823,7 @@ describe('decodeSnapshot', () => {
           guards: {
             apiKey: {
               ...aGuard,
-              demands: { headers: anObjectOf(aRef('missing')), query: null },
+              demands: { headers: anObjectOf(aRef('missing')), query: emptyPart },
             },
           },
         }),
@@ -1077,14 +1842,14 @@ describe('decodeSnapshot', () => {
         ['endpoints', 'GET /orders/{}', 'success', 'headers', 'fields', 'name'],
       ],
       [
-        'a Standard Rejection’s body',
+        'the invalid-input code’s body',
         aService({
-          standardRejections: {
-            ...standardRejections,
-            invalidInput: { ...standardRejections.invalidInput, body: aRef('missing') },
+          codes: {
+            ...standardCodes,
+            [invalidInputCode]: { ...standardCodes[invalidInputCode], body: aRef('missing') },
           },
         }),
-        ['standardRejections', 'invalidInput', 'body'],
+        ['codes', 'INVALID_INPUT', 'body'],
       ],
       [
         'a Command’s body',
@@ -1136,6 +1901,79 @@ describe('decodeSnapshot', () => {
       expect(definitionsGuard).toEqual(malformedAt(['guards', 'apiKey', 'rejections', 0]));
     });
 
+    test.each(['invalidInput', 'notFound', 'notImplemented'])(
+      'a Standard Rejection naming a code the Snapshot does not hold is malformed at its name: %s',
+      (name) => {
+        const named = { ...standardRejections, [name]: 'NOPE' };
+
+        const service = serviceWith({ standardRejections: named });
+        const definitions = decodedFrom({ ...aDefinitions(), standardRejections: named });
+
+        const malformed = malformedAt(
+          ['standardRejections', name],
+          'names a code the Snapshot does not hold: NOPE',
+        );
+        expect([service, definitions]).toEqual([malformed, malformed]);
+      },
+    );
+
+    test.each([
+      { name: 'an Endpoint', section: 'endpoints', key: 'GET /orders/{}', declared: anEndpoint },
+      { name: 'an Event', section: 'events', key: 'OrderPlaced@1', declared: anEvent },
+      { name: 'a Command', section: 'commands', key: 'ChargeCard@1', declared: aCommand },
+      {
+        name: 'a Subscription',
+        section: 'subscriptions',
+        key: 'notifyOnPlaced',
+        declared: {
+          group: 'orders',
+          description: 'Receives it',
+          event: 'orders-service:OrderPlaced@1',
+        },
+      },
+    ])('$name whose Group the Snapshot does not hold is malformed at its group', (element) => {
+      const { section, key, declared } = element;
+
+      const result = serviceWith({ [section]: { [key]: { ...declared, group: 'payments' } } });
+
+      const reason = 'names a Group the Snapshot does not hold: payments';
+      expect(result).toEqual(malformedAt([section, key, 'group'], reason));
+    });
+
+    test('a Snapshot whose Elements are all tombstones holds no Group and decodes', () => {
+      const tombstones = {
+        groups: {},
+        endpoints: { 'GET /orders/{}': endpointTombstone },
+        events: { 'OrderPlaced@1': messageTombstone },
+        commands: { 'ChargeCard@1': messageTombstone },
+        subscriptions: {
+          legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' },
+        },
+      };
+
+      const result = serviceWith(tombstones);
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each([
+      ['no description', { orders: {} }],
+      ['a description that is no text', { orders: { description: 1 } }],
+      ['a key it does not define', { orders: { description: 'Orders', tags: [] } }],
+    ])('a Group with %s is malformed at the Group', (_name, groups) => {
+      const result = serviceWith({ groups });
+
+      expect(elementOf(result)).toEqual(['groups', 'orders']);
+    });
+
+    test('a Service without groups is malformed at groups: it is missing', () => {
+      const { groups: _groups, ...withoutGroups } = aService();
+
+      const result = decodedFrom(withoutGroups);
+
+      expect(result).toEqual(malformedAt(['groups'], 'is missing'));
+    });
+
     test('a Guard an Endpoint attaches, or a Guard lists, that guards does not hold is malformed', () => {
       const attaching = { ...anEndpoint, guards: [{ guard: 'apiKey', qualifier: null }] };
 
@@ -1151,17 +1989,12 @@ describe('decodeSnapshot', () => {
 
       test.each([
         ['a ref', aRef('node')],
-        ['a nullable ref', { ...aRef('node'), nullable: true }],
         ['a union with a ref to itself', { type: 'union', options: [aRef('node'), stringNode] }],
         [
           'a union with a nullable ref to itself',
           { type: 'union', options: [{ ...aRef('node'), nullable: true }, stringNode] },
         ],
         ['an allOf with itself', { type: 'allOf', items: [anObjectOf(stringNode), aRef('node')] }],
-        [
-          'a nullable union of itself',
-          { type: 'union', options: [aRef('node'), stringNode], nullable: true },
-        ],
         [
           'a union with itself in a nested union',
           { type: 'union', options: [{ type: 'union', options: [aRef('node'), stringNode] }] },
@@ -1203,6 +2036,847 @@ describe('decodeSnapshot', () => {
         const result = serviceWith({ defs: { a: aRef('a'), b: aRef('missing') } });
 
         expect(result).toEqual(malformedAt(['defs', 'b']));
+      });
+    });
+
+    describe('a removed code’s refs name the defs it holds, never the Snapshot’s', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0' };
+      const withCode = (code: object, fields: object = {}) =>
+        serviceWith({ codes: { ...standardCodes, [gone]: code }, ...fields });
+
+      test('a removed code whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode({ ...removed, defs: {} }, { defs: { tree: treeDef } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code’s def whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode(
+          { ...removed, defs: { tree: anObjectOf(aRef('other')) } },
+          { defs: { other: anObjectOf(stringNode) } },
+        );
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree', 'fields', 'name'],
+            'names a def the Snapshot does not hold: other',
+          ),
+        );
+      });
+
+      test('a Snapshot node whose ref names a def only a removed code holds is malformed at the ref', () => {
+        const kept = { ...aCode, body };
+
+        const result = serviceWith({
+          codes: {
+            ...standardCodes,
+            [gone]: { ...removed, defs: { tree: treeDef } },
+            [orderLocked]: kept,
+          },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', orderLocked, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code without defs is malformed at defs: it is missing', () => {
+        const result = withCode(removed);
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs'], 'is missing'));
+      });
+
+      test('a declared code with defs is malformed at defs: its format does not define it', () => {
+        const result = withCode({ ...aCode, defs: {} });
+
+        expect(result).toEqual(
+          malformedAt(['codes', gone, 'defs'], 'is a key its format does not define'),
+        );
+      });
+
+      test('a removed code’s def that leads back to itself with no node between is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: aRef('tree') } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree'],
+            'leads back to itself through refs, unions and allOfs alone',
+          ),
+        );
+      });
+
+      test('a removed code’s def that is nullable is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: { ...treeDef, nullable: true } } });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs', 'tree']));
+      });
+    });
+
+    describe('a former Input names an Endpoint the Snapshot declares, and its refs the defs it holds', () => {
+      const orders = 'POST /orders';
+      const aFormerInput = (fields: object = {}) => ({
+        endpoint: orders,
+        removedIn: '3.2.0',
+        input: { query: emptyPart, body: anObjectOf(stringNode) },
+        defs: {},
+        ...fields,
+      });
+      const withFormerInputs = (formerInputs: readonly object[], fields: object = {}) =>
+        serviceWith({ endpoints: { [orders]: withoutParams }, formerInputs, ...fields });
+
+      test('a former Input decodes with the defs its query and body reached, though the Snapshot holds none', () => {
+        const body = anObjectOf(stringNode);
+        const former: ObjectNode = {
+          type: 'object',
+          fields: { ...body.fields, kid: { required: false, schema: aRef('tree') } },
+        };
+        const published = aService({
+          endpoints: { [orders]: { ...withoutParams, input: { ...withoutParams.input, body } } },
+          formerInputs: [
+            {
+              endpoint: orders,
+              removedIn: '3.2.0',
+              input: { query: emptyPart, body: former },
+              defs: { tree: treeDef },
+            },
+          ],
+        });
+
+        const result = roundTrip(published);
+
+        expect(result).toEqual({ kind: 'decoded', snapshot: published });
+      });
+
+      test.each([
+        ['does not hold', {}],
+        ['holds as a tombstone', { [orders]: endpointTombstone }],
+        [
+          'holds Retired',
+          { [orders]: { ...withoutParams, lifecycle: 'retired', retiredIn: '3.0.0' } },
+        ],
+      ])(
+        'a former Input naming an Endpoint the Snapshot %s is malformed at the endpoint',
+        (_name, endpoints) => {
+          const result = serviceWith({ endpoints, formerInputs: [aFormerInput()] });
+
+          expect(result).toEqual(
+            malformedAt(
+              ['formerInputs', 0, 'endpoint'],
+              `names an Endpoint the Snapshot does not declare, or holds Retired: ${orders}`,
+            ),
+          );
+        },
+      );
+
+      test('a former Input whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const body = anObjectOf(aRef('tree'));
+
+        const result = withFormerInputs([aFormerInput({ input: { query: emptyPart, body } })], {
+          defs: { tree: treeDef },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'input', 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a former Input’s def that leads back to itself with no node between is malformed at the def', () => {
+        const result = withFormerInputs([aFormerInput({ defs: { tree: aRef('tree') } })]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'defs', 'tree'],
+            'leads back to itself through refs, unions and allOfs alone',
+          ),
+        );
+      });
+
+      test('former Inputs out of Endpoint order are malformed at formerInputs', () => {
+        const other = 'GET /orders';
+        const endpoints = { [orders]: withoutParams, [other]: withoutParams };
+
+        const result = serviceWith({
+          endpoints,
+          formerInputs: [aFormerInput(), aFormerInput({ endpoint: other })],
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs'],
+            'is not by Endpoint in code point order, each Endpoint’s removedIn once',
+          ),
+        );
+      });
+
+      test('one Endpoint’s former Inputs with a removedIn twice are malformed at formerInputs', () => {
+        const result = withFormerInputs([
+          aFormerInput(),
+          aFormerInput({ removedIn: '3.3.0' }),
+          aFormerInput(),
+        ]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs'],
+            'is not by Endpoint in code point order, each Endpoint’s removedIn once',
+          ),
+        );
+      });
+
+      test('a published Service Snapshot without formerInputs is malformed at formerInputs: it is missing', () => {
+        const { formerInputs: _formerInputs, ...published } = aService();
+
+        const result = decodedFrom(published);
+
+        expect(result).toEqual(malformedAt(['formerInputs'], 'is missing'));
+      });
+
+      test('a former Input carrying headers is malformed at headers: its format does not define it', () => {
+        const input = { query: emptyPart, headers: emptyPart, body: null };
+
+        const result = withFormerInputs([aFormerInput({ input })]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'input', 'headers'],
+            'is a key its format does not define',
+          ),
+        );
+      });
+
+      test('formerInputs on a Definitions Package or an Application is malformed: its format does not define it', () => {
+        const snapshots = [aDefinitions(), anApplication()];
+
+        const results = snapshots.map((snapshot) => decodedFrom({ ...snapshot, formerInputs: [] }));
+
+        expect(results).toEqual([
+          malformedAt(['formerInputs'], 'is a key its format does not define'),
+          malformedAt(['formerInputs'], 'is a key its format does not define'),
+        ]);
+      });
+    });
+
+    test.each<[string, SchemaNode]>([
+      ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
+      ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
+      ['a number whose min passes its max', { type: 'number', min: 5, max: 3 }],
+      ['a number bounded exclusively at one value', { type: 'number', exclusiveMin: 5, max: 5 }],
+      ['a multipleOf of 0', { type: 'number', multipleOf: 0 }],
+      ['a negative string length', { type: 'string', min: -1 }],
+      ['a fractional array length', { type: 'array', items: stringNode, max: 1.5 }],
+    ])('%s is malformed at the node', (_name, node) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a']));
+    });
+
+    test('a record key whose min passes its max is malformed at the key', () => {
+      const node = { type: 'record', key: { type: 'string', min: 5, max: 3 }, value: stringNode };
+
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', 'key']));
+    });
+
+    test('a node bounded at one value decodes', () => {
+      const result = serviceUsing({ a: { type: 'number', min: 5, max: 5 } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each<[string, object, string]>([
+      ['an enum without values', { type: 'enum', values: [], open: false }, 'values'],
+      ['a union without options', { type: 'union', options: [] }, 'options'],
+      [
+        'a tagged node without variants',
+        { type: 'tagged', discriminator: 'k', variants: {} },
+        'variants',
+      ],
+    ])('%s is malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('a Dependency’s against that is not a semantic version is malformed', () => {
+      const dependencies = { 'payments-service': { against: 'not-a-version', endpoints: [] } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'against']));
+    });
+
+    test('a Dependency without an against is malformed at the against: it is missing', () => {
+      const dependencies = { 'payments-service': { endpoints: [] } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(
+        malformedAt(['dependencies', 'payments-service', 'against'], 'is missing'),
+      );
+    });
+
+    test('a deprecatedAt on an Active Endpoint is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, deprecatedAt: '2026-10-17T09:30:00Z' };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test.each([
+      ['out of order', [orderLocked, gone]],
+      ['with a code twice', [gone, gone]],
+    ])('an Endpoint’s rejections %s are malformed in the Endpoint', (_name, rejections) => {
+      const endpoint = { ...anEndpoint, rejections };
+      const codes = { ...standardCodes, [orderLocked]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint }, codes });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Guard’s rejections out of order are malformed at its rejections', () => {
+      const guard = { ...aGuard, rejections: [unauthenticated, gone] };
+      const codes = { ...standardCodes, [unauthenticated]: aCode, [gone]: aCode };
+
+      const result = serviceWith({ guards: { apiKey: guard }, codes });
+
+      expect(result).toEqual(malformedAt(['guards', 'apiKey', 'rejections']));
+    });
+
+    test('a Dependency’s endpoints out of id order are malformed at its endpoints', () => {
+      const endpoints = [
+        { id: 'POST /payments', name: 'charge' },
+        { id: 'GET /payments/{}', name: 'getPayment' },
+      ];
+      const dependencies = { 'payments-service': { against: '5.1.0', endpoints } };
+
+      const result = serviceWith({ dependencies });
+
+      expect(result).toEqual(malformedAt(['dependencies', 'payments-service', 'endpoints']));
+    });
+
+    test.each<[string, object, string]>([
+      ['enum values', { type: 'enum', values: ['b', 'a'], open: false }, 'values'],
+      ['enum values with one twice', { type: 'enum', values: ['a', 'a'], open: false }, 'values'],
+      ['allOf items', { type: 'allOf', items: [{ type: 'string' }, { type: 'json' }] }, 'items'],
+    ])('%s out of canonical order are malformed', (_name, node, key) => {
+      const result = serviceWith({ defs: { a: node } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('a union’s options in any order decode', () => {
+      const node = { type: 'union', options: [{ type: 'string' }, { type: 'boolean' }] };
+      const reversed = { type: 'union', options: [{ type: 'boolean' }, { type: 'string' }] };
+
+      const results = [serviceUsing({ a: node }), serviceUsing({ a: reversed })];
+
+      expect(results.map(({ kind }) => kind)).toEqual(['decoded', 'decoded']);
+    });
+
+    test.each<[string, object]>([
+      ['a precision that is no integer', { format: 'datetime', formatOptions: { precision: 'x' } }],
+      ['an offset that is no boolean', { format: 'datetime', formatOptions: { offset: 1 } }],
+      ['a version that is no string', { format: 'uuid', formatOptions: { version: 4 } }],
+      ['a protocol that is no regex', { format: 'url', formatOptions: { protocol: 'https' } }],
+    ])('a string format option of the wrong type is malformed: %s', (_name, options) => {
+      const result = serviceWith({ defs: { a: { type: 'string', ...options } } });
+
+      expect(result.kind).toBe('malformed');
+    });
+
+    test('a string format option of its type decodes', () => {
+      const protocol = { source: '^https$', flags: '' };
+      const node = { type: 'string', format: 'url', formatOptions: { protocol } };
+
+      expect(serviceUsing({ a: node }).kind).toBe('decoded');
+    });
+
+    test.each([4.5, 399, 500, 200])('a code status of %s is malformed at its status', (status) => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a code that is neither the not-implemented one nor removed is malformed', () => {
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, status: 501 } };
+
+      const result = serviceWith({ codes });
+
+      expect(result).toEqual(malformedAt(['codes', orderLocked, 'status']));
+    });
+
+    test('501 on a removed code, as publish carries a former not-implemented code, decodes', () => {
+      const { version: _version, ...declared } = aService();
+      const proposed: ServiceSnapshot = {
+        ...declared,
+        endpoints: { 'GET /orders/{}': anEndpoint },
+        events: {},
+        commands: {},
+        subscriptions: {},
+        standardRejections: { ...standardRejections, notImplemented: gone },
+        codes: {
+          [invalidInputCode]: standardCodes[invalidInputCode],
+          [notFoundCode]: standardCodes[notFoundCode],
+          [gone]: standardCodes[notImplementedCode],
+        },
+      };
+      const published = publishedSnapshotOf(aService(), proposed, publishedAt('3.5.0'));
+
+      const result = roundTrip(published);
+
+      expect(published.codes[notImplementedCode]).toMatchObject({
+        status: 501,
+        removedIn: '3.5.0',
+      });
+      expect(result.kind).toBe('decoded');
+    });
+
+    test.each(['3', '3.2', 'v3.2.0', 'soon', 3, null])(
+      'a code whose removedIn is %j is malformed at removedIn',
+      (removedIn) => {
+        const codes = { ...standardCodes, [gone]: { ...aCode, status: 410, removedIn } };
+
+        const result = serviceWith({ codes });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'removedIn']));
+      },
+    );
+
+    test('a Success status no Endpoint may declare is malformed in the Endpoint', () => {
+      const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, status: 299 } };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
+    });
+
+    test('a Snapshot nested past 256 levels is malformed at its deepest path, before its structure is read', () => {
+      const depth = 300;
+      const nested =
+        '{"type":"array","items":'.repeat(depth) + '{"type":"nothing"}' + '}'.repeat(depth);
+      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+
+      const result = decodeSnapshot(text);
+
+      const at = ['defs', 'a', ...Array<string>(254).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+    });
+
+    test('a Snapshot nested to 256 levels is read', () => {
+      const endpoint = {
+        ...anEndpoint,
+        success: { ...anEndpoint.success, body: nestedArrays(251) },
+      };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a Deprecated Endpoint without its deprecatedAt is malformed at deprecatedAt: it is missing', () => {
+      const endpoint = { ...anEndpoint, lifecycle: 'deprecated' };
+
+      const result = serviceWith({ endpoints: { 'GET /orders/{}': endpoint } });
+
+      expect(result).toEqual(
+        malformedAt(['endpoints', 'GET /orders/{}', 'deprecatedAt'], 'is missing'),
+      );
+    });
+
+    describe('everything a Snapshot holds is used, and a code it uses is held live', () => {
+      const getOrder = 'GET /orders/{}';
+      const unusedGuard =
+        'is a Guard no Endpoint attaches and no export names, directly or through the Guards they list';
+      const removedCode = { ...aCode, status: 410, removedIn: '3.2.0', defs: {} };
+      const attaching = (guard: string) => ({
+        ...anEndpoint,
+        guards: [{ guard, qualifier: null }],
+      });
+
+      test('a Group no declared Element or Subscription names is malformed at the Group', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          groups: { orders: { description: 'Orders' }, spare: { description: 'Spare' } },
+        });
+
+        expect(result).toEqual(
+          malformedAt(['groups', 'spare'], 'is a Group no declared Element or Subscription names'),
+        );
+      });
+
+      test('a Group only a Retired Endpoint names, still declared, decodes', () => {
+        const result = serviceWith({ endpoints: { [getOrder]: retiredEndpoint } });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test.each([
+        ['names nothing', anObjectOf(stringNode)],
+        ['only names itself', treeDef],
+      ])('a def no ref reaches, that %s, is malformed at the def', (_name, def) => {
+        const result = serviceWith({ endpoints: { [getOrder]: anEndpoint }, defs: { tree: def } });
+
+        expect(result).toEqual(
+          malformedAt(['defs', 'tree'], 'is a def no ref reaches from outside the defs'),
+        );
+      });
+
+      test('a def reached only through another def decodes', () => {
+        const endpoint = { ...anEndpoint, success: { ...anEndpoint.success, body: aRef('kin') } };
+
+        const result = serviceWith({
+          endpoints: { [getOrder]: endpoint },
+          defs: { kin: anObjectOf(aRef('tree')), tree: treeDef },
+        });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a removed code’s def its headers and body do not reach is malformed at the def', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          codes: { ...standardCodes, [gone]: { ...removedCode, defs: { tree: treeDef } } },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree'],
+            'is a def no ref reaches from outside the defs',
+          ),
+        );
+      });
+
+      test('a former Input’s def its query and body do not reach is malformed at the def', () => {
+        const formerInput = {
+          endpoint: 'POST /orders',
+          removedIn: '3.2.0',
+          input: { query: emptyPart, body: anObjectOf(stringNode) },
+          defs: { tree: treeDef },
+        };
+
+        const result = serviceWith({
+          endpoints: { 'POST /orders': withoutParams },
+          formerInputs: [formerInput],
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'defs', 'tree'],
+            'is a def no ref reaches from outside the defs',
+          ),
+        );
+      });
+
+      test('a Service’s Guard no Endpoint attaches and no attached Guard lists is malformed at the Guard', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          guards: { apiKey: aGuard },
+        });
+
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
+      });
+
+      test('a Service’s Guard only an attached Guard lists decodes', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: attaching('admin') },
+          guards: { admin: { ...aGuard, guards: ['apiKey'] }, apiKey: aGuard },
+        });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a Service’s chain of 20,000 Guards, each listing the next and the first attached, decodes', () => {
+        const nameOf = (index: number) => `g${index}`;
+        const length = 20_000;
+        const guards = Object.fromEntries(
+          Array.from({ length }, (_, index) => [
+            nameOf(index),
+            { ...aGuard, guards: index + 1 < length ? [nameOf(index + 1)] : [] },
+          ]),
+        );
+
+        const result = serviceWith({ endpoints: { [getOrder]: attaching(nameOf(0)) }, guards });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test.each([
+        [
+          'listed only by an unused Guard',
+          { apiKey: aGuard, zeta: { ...aGuard, guards: ['apiKey'] } },
+        ],
+        [
+          'that lists, and is listed by, only an unused Guard',
+          { apiKey: { ...aGuard, guards: ['zeta'] }, zeta: { ...aGuard, guards: ['apiKey'] } },
+        ],
+      ])('a Service’s Guard %s is malformed at the Guard', (_name, guards) => {
+        const result = serviceWith({ endpoints: { [getOrder]: anEndpoint }, guards });
+
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
+      });
+
+      test('a Definitions Package’s Guard no export names and no exported Guard lists is malformed at the Guard', () => {
+        const result = decodedFrom(aDefinitions({ guards: { apiKey: aGuard } }));
+
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
+      });
+
+      test('a Definitions Package’s Guard only an exported Guard lists decodes', () => {
+        const result = decodedFrom(
+          aDefinitions({
+            exports: { admin: { kind: 'guard', guard: 'admin' } },
+            guards: { admin: { ...aGuard, guards: ['apiKey'] }, apiKey: aGuard },
+          }),
+        );
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a code no Endpoint, Guard, Standard Rejection or export names, held without removedIn, is malformed at the code', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          codes: { ...standardCodes, [orderLocked]: aCode },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', orderLocked],
+            'is a code nothing answers or names, held without removedIn',
+          ),
+        );
+      });
+
+      test('a removed code no one lists decodes', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          codes: { ...standardCodes, [gone]: removedCode },
+        });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a code an Endpoint lists, held removed, is malformed where it is listed', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: { ...anEndpoint, rejections: [gone] } },
+          codes: { ...standardCodes, [gone]: removedCode },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', getOrder, 'rejections', 0],
+            `lists a code the Snapshot holds removed: ${gone}`,
+          ),
+        );
+      });
+
+      test('a code an attached Guard lists, held removed, is malformed where it is listed', () => {
+        const result = serviceWith({
+          endpoints: { [getOrder]: attaching('apiKey') },
+          guards: { apiKey: { ...aGuard, rejections: [gone] } },
+          codes: { ...standardCodes, [gone]: removedCode },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['guards', 'apiKey', 'rejections', 0],
+            `lists a code the Snapshot holds removed: ${gone}`,
+          ),
+        );
+      });
+
+      test('a code a Standard Rejection names, held removed, is malformed at the Standard Rejection', () => {
+        const notFound = { ...standardCodes[notFoundCode], removedIn: '3.2.0', defs: {} };
+
+        const result = serviceWith({
+          endpoints: { [getOrder]: anEndpoint },
+          codes: { ...standardCodes, [notFoundCode]: notFound },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['standardRejections', 'notFound'],
+            `names a code the Snapshot holds removed: ${notFoundCode}`,
+          ),
+        );
+      });
+    });
+
+    describe('each former Input is its own graft onto its Endpoint’s query and body', () => {
+      const orders = 'POST /orders';
+      const named = (name: string): ObjectNode => ({
+        type: 'object',
+        fields: { children: { required: true, schema: { type: 'array', items: aRef(name) } } },
+      });
+      const labelled = (name: string): ObjectNode => ({
+        ...named(name),
+        fields: { ...named(name).fields, label: { required: false, schema: stringNode } },
+      });
+      const optional = (schema: SchemaNode) => ({ required: false, schema });
+      const formerOf = (body: ObjectNode, defs: object = {}) => ({
+        endpoint: orders,
+        removedIn: '3.2.0',
+        input: { query: emptyPart, body },
+        defs,
+      });
+      const withBody = (body: ObjectNode, formerInputs: readonly object[], defs: object = {}) =>
+        serviceWith({
+          endpoints: { [orders]: { ...withoutParams, input: { ...withoutParams.input, body } } },
+          formerInputs,
+          defs,
+        });
+
+      test('a former Input that grafts no field onto its Endpoint’s query and body is malformed at the former Input', () => {
+        const body = anObjectOf(stringNode);
+
+        const result = withBody(body, [formerOf(body)]);
+
+        expect(result).toEqual(
+          malformedAt(['formerInputs', 0], 'grafts no field onto its Endpoint’s query and body'),
+        );
+      });
+
+      test('a former Input that holds its Endpoint’s own field with another shape is malformed at the former Input', () => {
+        const former: ObjectNode = {
+          type: 'object',
+          fields: {
+            name: { required: true, schema: { type: 'number' } },
+            note: optional(stringNode),
+          },
+        };
+
+        const result = withBody(anObjectOf(stringNode), [formerOf(former)]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0],
+            'is not its own graft onto its Endpoint’s query and body',
+          ),
+        );
+      });
+
+      test.each([
+        ['tree~1', 'decoded'],
+        ['tree', 'malformed'],
+      ])(
+        'a former Input whose grafted def is named %s, where grafting names it tree~1 beside the Snapshot’s tree, is %s',
+        (name, kind) => {
+          const endpoint = {
+            ...withoutParams,
+            input: { ...withoutParams.input, body: anObjectOf(stringNode) },
+            success: { ...withoutParams.success, body: aRef('tree') },
+          };
+          const former: ObjectNode = {
+            type: 'object',
+            fields: { name: { required: true, schema: stringNode }, kept: optional(aRef(name)) },
+          };
+
+          const result = serviceWith({
+            endpoints: { [orders]: endpoint },
+            defs: { tree: named('tree') },
+            formerInputs: [formerOf(former, { [name]: labelled(name) })],
+          });
+
+          expect(result.kind).toBe(kind);
+        },
+      );
+
+      test('a former Input whose ref names a def nothing holds is malformed at the ref, never thrown', () => {
+        const former: ObjectNode = {
+          type: 'object',
+          fields: { name: { required: true, schema: stringNode }, note: optional(aRef('gone')) },
+        };
+
+        const result = withBody(anObjectOf(stringNode), [formerOf(former)]);
+
+        expect(result).toEqual(
+          malformedAt(
+            ['formerInputs', 0, 'input', 'body', 'fields', 'note'],
+            'names a def the Snapshot does not hold: gone',
+          ),
+        );
+      });
+    });
+
+    describe('a schema nests at most 252 levels, its root the first', () => {
+      const itemsDown = (levels: number) => Array<string>(levels).fill('items');
+      const tooDeep = 'a schema nests deeper than 252 levels';
+
+      test.each([
+        {
+          where: 'a def',
+          nest: (body: SchemaNode) => ({
+            defs: { a: body },
+            endpoints: { 'GET /orders/{}': reaching('a') },
+          }),
+        },
+        {
+          where: 'a code’s body',
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+            endpoints: { 'GET /orders/{}': { ...anEndpoint, rejections: [orderLocked] } },
+          }),
+        },
+      ])('$where of 252 levels is read', ({ nest }) => {
+        const result = serviceWith(nest(nestedArrays(251)));
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test.each([
+        { where: 'a def', at: ['defs', 'a'], nest: (body: SchemaNode) => ({ defs: { a: body } }) },
+        {
+          where: 'a code’s body',
+          at: ['codes', orderLocked, 'body'],
+          nest: (body: SchemaNode) => ({
+            codes: { ...standardCodes, [orderLocked]: { ...aCode, body } },
+          }),
+        },
+      ])('$where of 253 levels is malformed at its deepest path', ({ at, nest }) => {
+        const result = serviceWith(nest(nestedArrays(252)));
+
+        expect(result).toEqual(malformedAt([...at, ...itemsDown(252)], tooDeep));
+      });
+
+      test('a removed code’s def of 252 levels is read', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(251) } } };
+
+        const result = serviceWith({ codes });
+
+        expect(result.kind).toBe('decoded');
+      });
+
+      test('a removed code’s def of 253 levels is malformed at its deepest path', () => {
+        const removed = { ...aCode, status: 410, removedIn: '3.2.0', body: aRef('a') };
+        const codes = { ...standardCodes, [gone]: { ...removed, defs: { a: nestedArrays(252) } } };
+
+        const result = serviceWith({ codes });
+
+        const at = ['codes', gone, 'defs', 'a', ...itemsDown(252)];
+        expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
+      });
+
+      test('a schema of 253 levels is judged after the structure, so a structure that breaks is reported first', () => {
+        const result = serviceWith({ version: 'latest', defs: { a: nestedArrays(252) } });
+
+        expect(result).toEqual(malformedAt(['version']));
       });
     });
 
@@ -1260,59 +2934,84 @@ function declaredSnapshot() {
     description: 'Charges the card',
     body: z.object({ amount: z.int() }),
   });
-  const payments = {
-    name: 'payments-service',
-    version: '5.1.0',
-    endpoints: {},
-    events: {},
-    standardRejections: {
-      invalidInput: { code: 'INVALID_INPUT', status: 400, message: 'Invalid input' },
-      notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-      notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },
-    },
-    exportedSnapshot: { format: 1, defs: {}, endpoints: {}, events: {}, guards: {}, codes: {} },
-  } as const satisfies ContractPackage;
+  const paymentSettledV1 = providedEvent('payments-service', {
+    name: 'PaymentSettled',
+    version: 1,
+    visibility: 'internal',
+    description: 'A payment was settled',
+    body: z.object({ id: z.uuid() }),
+  });
   const group = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });
-  const root = defineContract({
+  const root = defineService({
     name: 'orders-service',
-    groups: [group],
-    events: [orderPlaced],
-    commands: [chargeCard],
-    subscriptions: [defineSubscription({ name: 'notify-on-placed', event: orderPlaced })],
-    dependencies: [defineDependencies(payments, { endpoints: [], events: [] })],
+    groups: [
+      group,
+      defineGroup({
+        name: 'messages',
+        description: 'Messages',
+        events: [orderPlaced],
+        commands: [chargeCard],
+        subscriptions: [
+          defineSubscription({
+            name: 'notifyOnPlaced',
+            description: 'Receives it',
+            event: orderPlaced,
+          }),
+          defineSubscription({
+            name: 'notifyOnSettled',
+            description: 'Receives it',
+            event: paymentSettledV1,
+          }),
+        ],
+      }),
+    ],
   });
-  const validated = validateContract(root, {
-    packageName: 'orders-service',
-    originOf: schemaOriginsOf([]),
-    exportsOf: () => [],
-  });
+  const validated = validateRoot(root, aRootPackage(root, { packageName: 'orders-service' }));
   if (validated.kind !== 'valid') {
     throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
   }
-  return snapshotOf(validated, { generator: 'test', packages: [], committed: undefined, now: 0 });
+  return snapshotOf(validated);
 }
 
 const formatOneFixture = `{
   "codes": {
-    "GONE": { "body": null, "message": "Gone", "origin": "local", "removed": true, "status": 410 },
+    "GONE": {
+      "body": null,
+      "defs": {},
+      "headers": { "fields": {}, "type": "object" },
+      "message": "Gone",
+      "origin": "local",
+      "removedIn": "3.2.0",
+      "status": 410
+    },
     "INVALID_INPUT": {
-      "body": { "fields": {}, "mode": "strict", "type": "object" },
+      "body": { "fields": {}, "type": "object" },
+      "headers": { "fields": {}, "type": "object" },
       "message": "Invalid",
       "origin": "standard",
-      "removed": false,
       "status": 400
     },
-    "NOT_FOUND": { "body": null, "message": "Not found", "origin": "standard", "removed": false, "status": 404 },
-    "NOT_IMPLEMENTED": { "body": null, "message": "No", "origin": "standard", "removed": false, "status": 501 }
+    "NOT_FOUND": {
+      "body": null,
+      "headers": { "fields": {}, "type": "object" },
+      "message": "Not found",
+      "origin": "standard",
+      "status": 404
+    },
+    "NOT_IMPLEMENTED": {
+      "body": null,
+      "headers": { "fields": {}, "type": "object" },
+      "message": "No",
+      "origin": "standard",
+      "status": 501
+    }
   },
   "commands": { "PurgeOrders@1": { "lifecycle": "retired", "retiredIn": "3.1.0" } },
-  "definitions": { "@org/definitions": "4.2.0" },
   "defs": {},
   "dependencies": {
     "payments-service": {
       "against": "5.1.0",
-      "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }],
-      "events": ["PaymentSettled@1"]
+      "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }]
     }
   },
   "endpoints": {
@@ -1324,32 +3023,53 @@ const formatOneFixture = `{
       "guards": [{ "guard": "apiKey", "qualifier": null }],
       "input": {
         "body": null,
-        "headers": { "fields": {}, "mode": "open", "type": "object" },
-        "params": { "fields": {}, "mode": "strict", "type": "object" },
-        "query": null
+        "headers": { "fields": {}, "type": "object" },
+        "params": {
+          "fields": { "orderId": { "required": true, "schema": { "type": "string" } } },
+          "type": "object"
+        },
+        "query": { "fields": {}, "type": "object" }
       },
       "lifecycle": "deprecated",
       "name": "getOrder",
       "params": ["orderId"],
       "rejections": ["INVALID_INPUT", "NOT_FOUND", "NOT_IMPLEMENTED"],
-      "success": { "body": null, "headers": null, "status": 200 },
+      "success": { "body": null, "headers": { "fields": {}, "type": "object" }, "status": 200 },
       "visibility": "public"
     }
   },
   "events": {
     "OrderPlaced@1": {
-      "body": { "fields": {}, "mode": "open", "type": "object" },
+      "body": { "fields": {}, "type": "object" },
       "description": "An order was placed",
+      "group": "orders",
       "lifecycle": "active",
       "visibility": "internal"
     }
   },
   "format": 1,
+  "formerInputs": [
+    {
+      "defs": {
+        "note": { "fields": { "text": { "required": true, "schema": { "type": "string" } } }, "type": "object" }
+      },
+      "endpoint": "GET /orders/{}",
+      "input": {
+        "body": null,
+        "query": {
+          "fields": { "note": { "required": false, "schema": { "name": "note", "type": "ref" } } },
+          "type": "object"
+        }
+      },
+      "removedIn": "3.3.0"
+    }
+  ],
   "generator": "@cf-loom/cli@2.1.0",
+  "groups": { "orders": { "description": "Order lifecycle" } },
   "guards": {
     "apiKey": {
       "context": null,
-      "demands": { "headers": { "fields": {}, "mode": "open", "type": "object" }, "query": null },
+      "demands": { "headers": { "fields": {}, "type": "object" }, "query": { "fields": {}, "type": "object" } },
       "description": "An API key",
       "guards": [],
       "origin": "local",
@@ -1360,20 +3080,297 @@ const formatOneFixture = `{
   "kind": "service",
   "name": "orders-service",
   "standardRejections": {
-    "invalidInput": {
-      "body": { "fields": {}, "mode": "strict", "type": "object" },
-      "code": "INVALID_INPUT",
-      "message": "Invalid",
-      "origin": "standard",
-      "status": 400
-    },
-    "notFound": { "code": "NOT_FOUND", "message": "Not found", "origin": "standard", "status": 404 },
-    "notImplemented": { "code": "NOT_IMPLEMENTED", "message": "No", "origin": "standard", "status": 501 }
+    "invalidInput": "INVALID_INPUT",
+    "notFound": "NOT_FOUND",
+    "notImplemented": "NOT_IMPLEMENTED"
   },
   "subscriptions": {
-    "legacy-sync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },
-    "notify-on-placed": { "event": "payments-service:PaymentSettled@1" }
+    "legacySync": { "event": "orders-service:OrderPlaced@1", "removedIn": "3.2.0" },
+    "notifyOnPlaced": {
+      "description": "Receives it",
+      "event": "payments-service:PaymentSettled@1",
+      "group": "orders"
+    }
   },
   "version": "3.4.0"
 }
 `;
+
+/** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
+function aPlace(name: string) {
+  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
+describe('walkSchemas and decodeSnapshot agree on bounds', () => {
+  type Drawn = { readonly schema: z.ZodType; readonly node: SchemaNode; readonly empty: boolean };
+
+  test('a node is refused by both exactly when its bounds admit no value', () => {
+    const next = seededNext(222);
+    for (let draw = 0; draw < 500; draw += 1) {
+      const { schema, node, empty } = aBoundedDraw(next);
+
+      const [walked] = walkSchemas([{ at: aPlace('body'), schema }], () => undefined).located;
+      const decoded = serviceUsing({ a: node });
+
+      const label = `draw ${draw}: ${JSON.stringify(node)}`;
+      expect(walked?.walked.kind, label).toBe(empty ? 'not-allowed' : 'walked');
+      expect(decoded.kind, label).toBe(empty ? 'malformed' : 'decoded');
+    }
+  });
+
+  function pick<Value>(next: () => number, values: readonly Value[]): Value {
+    return values[Math.floor(next() * values.length)] as Value;
+  }
+
+  function aBoundedDraw(next: () => number): Drawn {
+    const kind = pick(next, ['number', 'string', 'array'] as const);
+    return kind === 'number' ? aNumberDraw(next) : aLengthDraw(next, kind);
+  }
+
+  /** A number's drawn bounds: each side inclusive, exclusive or absent, and a step or none. */
+  type NumberBounds = {
+    readonly lower: { readonly key: 'min' | 'exclusiveMin'; readonly value: number } | undefined;
+    readonly upper: { readonly key: 'max' | 'exclusiveMax'; readonly value: number } | undefined;
+    readonly step: number | undefined;
+  };
+
+  function aNumberDraw(next: () => number): Drawn {
+    const values = [-2, 0, 0.5, 3, 5, 5.5];
+    const lowerKey = pick(next, [undefined, 'min', 'exclusiveMin'] as const);
+    const upperKey = pick(next, [undefined, 'max', 'exclusiveMax'] as const);
+    const lowerValue = pick(next, values);
+    const upperValue = pick(next, values);
+    const bounds: NumberBounds = {
+      lower: lowerKey === undefined ? undefined : { key: lowerKey, value: lowerValue },
+      upper: upperKey === undefined ? undefined : { key: upperKey, value: upperValue },
+      step: pick(next, [undefined, -2, 0, 0.5, 3]),
+    };
+    return {
+      schema: numberSchemaOf(bounds),
+      node: numberNodeOf(bounds),
+      empty: admitsNone(bounds),
+    };
+  }
+
+  function numberSchemaOf({ lower, upper, step }: NumberBounds): z.ZodType {
+    let schema = z.number();
+    if (lower !== undefined) {
+      schema = lower.key === 'min' ? schema.gte(lower.value) : schema.gt(lower.value);
+    }
+    if (upper !== undefined) {
+      schema = upper.key === 'max' ? schema.lte(upper.value) : schema.lt(upper.value);
+    }
+    return step === undefined ? schema : schema.multipleOf(step);
+  }
+
+  function numberNodeOf({ lower, upper, step }: NumberBounds): SchemaNode {
+    return {
+      type: 'number',
+      ...(lower !== undefined && { [lower.key]: lower.value }),
+      ...(upper !== undefined && { [upper.key]: upper.value }),
+      ...(step !== undefined && { multipleOf: step }),
+    };
+  }
+
+  function admitsNone({ lower, upper, step }: NumberBounds): boolean {
+    if (step !== undefined && step <= 0) {
+      return true;
+    }
+    const low = lower && { value: lower.value, open: lower.key === 'exclusiveMin' };
+    const high = upper && { value: upper.value, open: upper.key === 'exclusiveMax' };
+    return !someNumberBetween(low, high);
+  }
+
+  /** Whether some number lies between two bounds, found by trying values around them. */
+  function someNumberBetween(
+    lower: { readonly value: number; readonly open: boolean } | undefined,
+    upper: { readonly value: number; readonly open: boolean } | undefined,
+  ): boolean {
+    const around = [lower?.value, upper?.value].filter((value) => value !== undefined);
+    const candidates = [0, ...around.flatMap((value) => [value - 0.1, value, value + 0.1])];
+    return candidates.some(
+      (candidate) =>
+        (lower === undefined ||
+          (lower.open ? candidate > lower.value : candidate >= lower.value)) &&
+        (upper === undefined || (upper.open ? candidate < upper.value : candidate <= upper.value)),
+    );
+  }
+
+  function aLengthDraw(next: () => number, kind: 'string' | 'array'): Drawn {
+    const lengths = [undefined, -1, 0, 1, 2.5, 3, 5];
+    const min = pick(next, lengths);
+    const max = pick(next, lengths);
+    let schema: z.ZodString | z.ZodArray<z.ZodString> =
+      kind === 'string' ? z.string() : z.array(z.string());
+    if (min !== undefined) {
+      schema = schema.min(min);
+    }
+    if (max !== undefined) {
+      schema = schema.max(max);
+    }
+    const node = {
+      ...(kind === 'string' ? { type: 'string' } : { type: 'array', items: stringNode }),
+      ...(min !== undefined && { min }),
+      ...(max !== undefined && { max }),
+    } as SchemaNode;
+    const declared = [min, max].filter((length) => length !== undefined);
+    const badLength = declared.some((length) => !Number.isInteger(length) || length < 0);
+    const lengthsBetween = Array.from({ length: 7 }, (_, length) => length).filter(
+      (length) => (min === undefined || length >= min) && (max === undefined || length <= max),
+    );
+    return { schema, node, empty: badLength || lengthsBetween.length === 0 };
+  }
+});
+
+describe('decodeSnapshot reads what publish writes, and nothing else in order', () => {
+  const examples = ['org-definitions', 'orders-service', 'billing-service'];
+  const examplesDirectory = new URL('../../../../examples/', import.meta.url);
+
+  /** Each example's committed Snapshot published at a version, and the format-1 fixture. */
+  function publishedSnapshots(): readonly (readonly [string, PublishedSnapshot])[] {
+    const published = examples.map((example) => {
+      const file = new URL(`${example}/contract.snapshot.json`, examplesDirectory);
+      const declared: Snapshot = JSON.parse(readFileSync(file, 'utf8'));
+      return [example, publishedSnapshotOf(undefined, declared, publishedAt('1.0.0'))] as const;
+    });
+    return [...published, ['the format-1 fixture', JSON.parse(formatOneFixture)]];
+  }
+
+  /** Where a Snapshot holds an array whose order means nothing, by what holds it. */
+  function orderFreeArraysOf(json: unknown, at: Path = []): readonly Path[] {
+    if (typeof json !== 'object' || json === null) {
+      return [];
+    }
+    const own = Array.isArray(json) ? [] : orderFreeKeysOf(json, at).map((key) => [...at, key]);
+    const entries = Object.entries(json);
+    const nested = entries.flatMap(([key, value]) => orderFreeArraysOf(value, [...at, key]));
+    return [...own, ...nested];
+  }
+
+  function orderFreeKeysOf(object: object, at: Path): readonly string[] {
+    const type = Reflect.get(object, 'type');
+    const section = at.length === 2 ? at[0] : undefined;
+    return [
+      ...(type === 'enum' ? ['values'] : []),
+      ...(type === 'allOf' ? ['items'] : []),
+      ...(section === 'endpoints' || section === 'guards' ? ['rejections'] : []),
+      ...(section === 'dependencies' ? ['endpoints'] : []),
+    ].filter((key) => Array.isArray(Reflect.get(object, key)));
+  }
+
+  /** A copy of a Snapshot's JSON with the array at a path replaced by what `change` makes of it. */
+  function withArrayAt(json: unknown, at: Path, change: (items: unknown[]) => unknown[]): unknown {
+    const copy: unknown = structuredClone(json);
+    let holder = copy;
+    for (const key of at.slice(0, -1)) {
+      holder = Reflect.get(holder as object, key);
+    }
+    const key = String(at.at(-1));
+    Reflect.set(holder as object, key, change([...(Reflect.get(holder as object, key) as [])]));
+    return copy;
+  }
+
+  function arrayAt(json: unknown, at: Path): readonly unknown[] {
+    let value = json;
+    for (const key of at) {
+      value = Reflect.get(value as object, key);
+    }
+    return value as readonly unknown[];
+  }
+
+  test('no schema node of an example’s Snapshot sits deeper than a node of the nesting limit leaves room for', () => {
+    const keys = snapshotNestingLimit - nodeNestingLimit;
+
+    const roots = publishedSnapshots().flatMap(([, snapshot]) =>
+      snapshot.kind === 'application'
+        ? []
+        : defScopesOf(snapshot).flatMap(({ nodes }) => nodes.map(({ at }) => at.length)),
+    );
+
+    expect(Math.max(...roots)).toBe(keys);
+  });
+
+  test('an intersection of a schema with itself, as generate writes it, decodes', () => {
+    const schema = z.intersection(z.string(), z.string());
+    const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
+    const node = located?.walked.kind === 'walked' ? located.walked.value : undefined;
+    const published = aServiceUsing({ a: node ?? { type: 'json' } });
+
+    const result = roundTrip(published);
+
+    expect(node?.type).toBe('allOf');
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  /** A Snapshot holding a walked schema as a def, published, or `undefined` when it does not walk or is nullable, which no def is. */
+  function publishedHolding(committed: ServiceSnapshot, schema: z.ZodType) {
+    const walk = walkSchemas([{ at: aPlace('probe'), schema }], () => undefined);
+    const [located] = walk.located;
+    if (located?.walked.kind !== 'walked' || located.walked.value.nullable === true) {
+      return undefined;
+    }
+    const defs = { ...committed.defs, ...walk.defs, probe: located.walked.value };
+    const probing = {
+      ...withoutParams,
+      name: 'probe',
+      success: { ...withoutParams.success, body: aRef('probe') },
+    };
+    const endpoints = { ...committed.endpoints, 'GET /probe': probing };
+    return publishedSnapshotOf(undefined, { ...committed, defs, endpoints }, publishedAt('1.0.0'));
+  }
+
+  /** What the decoder makes of each order-free array of the probe def reversed or holding an item twice. */
+  function reorderedKindsOf(published: PublishedSnapshot): readonly string[] {
+    const arrays = orderFreeArraysOf(published).filter(
+      (at) => at[0] === 'defs' && at[1] === 'probe' && arrayAt(published, at).length > 0,
+    );
+    const twice = arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]]));
+    const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+    const reversed = reversible.map((at) => withArrayAt(published, at, (list) => list.reverse()));
+    return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+  }
+
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', {
+    timeout: 30_000,
+  }, () => {
+    const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
+    const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
+    const { schemaOf } = randomSchemas(seededNext(2231));
+    const drawn = Array.from({ length: 2000 }, () => publishedHolding(committed, schemaOf(3)));
+    const published = drawn.filter((snapshot) => snapshot !== undefined).slice(0, 200);
+
+    const readBack = published.map((snapshot) => {
+      const decoded = decodeSnapshot(canonicalTextOf(snapshot));
+      return decoded.kind === 'decoded' ? canonicalTextOf(decoded.snapshot) : decoded;
+    });
+    const reordered = published.flatMap(reorderedKindsOf);
+
+    expect(published).toHaveLength(200);
+    expect(readBack).toEqual(published.map(canonicalTextOf));
+    expect(reordered.length).toBeGreaterThan(50);
+    expect(new Set(reordered)).toEqual(new Set(['malformed']));
+  });
+
+  test.each(publishedSnapshots())('%s decodes as it was published', (_name, published) => {
+    const result = decodeSnapshot(canonicalTextOf(published));
+
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  test.each(publishedSnapshots())(
+    '%s is malformed with any order-free array reversed or holding an item twice',
+    (_name, published) => {
+      const arrays = orderFreeArraysOf(published).filter((at) => arrayAt(published, at).length > 0);
+      const reversible = arrays.filter((at) => arrayAt(published, at).length > 1);
+      const changed = [
+        ...arrays.map((at) => withArrayAt(published, at, (list) => [...list, list[0]])),
+        ...reversible.map((at) => withArrayAt(published, at, (list) => list.reverse())),
+      ];
+
+      const kinds = changed.map((json) => decodeSnapshot(JSON.stringify(json)).kind);
+
+      expect(arrays.length).toBeGreaterThan(0);
+      expect(new Set(kinds)).toEqual(new Set(['malformed']));
+    },
+  );
+});
