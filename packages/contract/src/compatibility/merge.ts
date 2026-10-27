@@ -2,7 +2,9 @@ import {
   type ByKey,
   type CodeSnapshot,
   canonicalSnapshotOf,
+  codeNodesOf,
   type DefinitionsSnapshot,
+  isRemoved,
   isSubscriptionTombstone,
   type PublishedApplicationSnapshot,
   type PublishedCode,
@@ -10,11 +12,13 @@ import {
   type PublishedHeading,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  type RemovedCode,
   type ServiceSnapshot,
   type Snapshot,
   type SubscriptionSnapshot,
   type SubscriptionTombstone,
 } from '../snapshot/index.ts';
+import { defsReachedOf } from '../walker/index.ts';
 import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts';
 
 /**
@@ -91,7 +95,7 @@ function serviceMerged(
     endpoints: endpointsMerged(baseline?.endpoints, proposed.endpoints, version),
     events: messagesMerged(baseline?.events, proposed.events, version),
     commands: messagesMerged(baseline?.commands, proposed.commands, version),
-    codes: codesMerged(baseline?.codes, proposed.codes, version),
+    codes: codesMerged(baseline, proposed.codes, version),
     subscriptions: subscriptionsMerged(baseline?.subscriptions, proposed.subscriptions, version),
   };
 }
@@ -101,23 +105,29 @@ function definitionsMerged(
   proposed: DefinitionsSnapshot,
   heading: PublishedHeading,
 ): PublishedDefinitionsSnapshot {
-  const codes = codesMerged(baseline?.codes, proposed.codes, heading.version);
+  const codes = codesMerged(baseline, proposed.codes, heading.version);
   return { ...proposed, ...heading, codes };
 }
 
 /**
  * A code no Endpoint answers any more stays with what it last had, removed in the version that
- * first left it out, which a later publish keeps.
+ * first left it out, and with the defs its body reached in the Baseline, so a later
+ * version that changes a def of that name does not change what the code last had.
  */
 function codesMerged(
-  baseline: ByKey<PublishedCode> | undefined,
+  baseline:
+    | Pick<PublishedServiceSnapshot | PublishedDefinitionsSnapshot, 'codes' | 'defs'>
+    | undefined,
   proposed: ByKey<CodeSnapshot>,
   version: string,
 ): ByKey<PublishedCode> {
-  const removed = carriedForward(baseline, proposed, (code) => ({
-    ...code,
-    removedIn: code.removedIn ?? version,
-  }));
+  const removed = carriedForward(baseline?.codes, proposed, (code): RemovedCode => {
+    if (isRemoved(code)) {
+      return code;
+    }
+    const defs = defsReachedOf(codeNodesOf(code), baseline?.defs ?? {});
+    return { ...code, removedIn: version, defs };
+  });
   return { ...removed, ...proposed };
 }
 

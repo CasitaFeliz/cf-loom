@@ -1513,14 +1513,14 @@ function aRootNestedIn(arrays: number): Files {
 const nestedBeyondArrays = 8;
 
 describe('cf-loom generate: how deep a Snapshot nests', () => {
-  test('a Contract whose Snapshot would nest past 256 levels fails generate, naming the Endpoint it sits in', () => {
+  test('a Contract with a schema nested past 252 levels fails generate, naming the Endpoint it sits in', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(260) });
 
     const ran = cfLoom(project, 'generate');
 
     expect(ran.status).toBe(1);
     expect(ran.stderr).toMatch(
-      /^endpoints\.GET \/ping \(ping\) not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n$/,
+      /^endpoints\.GET \/ping \(ping\) not allowed: a schema nested deeper than the 252 levels a Snapshot holds\n$/,
     );
     expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
   });
@@ -4011,6 +4011,20 @@ function aRootAnswering(codes: readonly string[]): Files {
   return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
 }
 
+/** `aRoot` whose Endpoint answers a Rejection whose body is the recursive schema `tree`. */
+function aRootAnsweringRecursively(): Files {
+  const root = aRoot();
+  const tree =
+    "const tree = z.object({ label: z.string(), get children() { return z.array(tree); } }).meta({ id: 'tree' });";
+  const rejection =
+    "const treeConflict = defineRejection({ code: 'TREE_CONFLICT', status: 409, message: 'Conflict', body: tree });";
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '')
+    .replace('import { defineEndpoint }', 'import { defineEndpoint, defineRejection }')
+    .replace('export const ping', `${tree}\n${rejection}\nexport const ping`)
+    .replace('  success:', '  rejections: [treeConflict],\n  success:');
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
+}
+
 /** `aRoot` with the Endpoint's declaration edited, as a Visibility change is. */
 function aRootEdited(from: string, to: string): Files {
   const root = aRoot();
@@ -5487,6 +5501,23 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(published.endpoints).toEqual({
       'GET /ping': { lifecycle: 'retired', name: 'ping', retiredIn: '1.0.0' },
     });
+  });
+
+  test('publishing a version that removes a Rejection with a recursive body writes a snapshot.json the next check reads', async ({
+    lab,
+  }) => {
+    const answering = await aGeneratedProject(lab, aRootAnsweringRecursively());
+    const baseline = publishedAs(answering, '1.0.0');
+    const project = await aGeneratedProject(lab, aRoot());
+
+    const { ran, env } = await publishedAgainst(lab, {
+      project,
+      served: servedAs(ordersPackage, baseline),
+    });
+
+    expect(ran.status).toBe(0);
+    const checked = await cfLoomWith(project, env, 'check');
+    expect(checked).toMatchObject({ status: 0, stderr: '' });
   });
 
   test('the published snapshot.json names the CLI that runs publish, after the version in its heading', async ({
