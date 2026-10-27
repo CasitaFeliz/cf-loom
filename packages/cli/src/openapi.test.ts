@@ -910,7 +910,7 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
     });
   });
 
-  test('an Endpoint with no Input body has no requestBody', () => {
+  test('an Active Endpoint with no Input body has no requestBody and is not marked deprecated', () => {
     expect(keysOf(operationOf('/orders/{orderId}', 'get'))).toEqual([
       'operationId',
       'tags',
@@ -1250,18 +1250,6 @@ describe('cf-loom openapi: lifecycle', () => {
     expect(valueAt(operationOf('/orders/{orderId}', 'delete'), 'deprecated')).toBe(true);
   });
 
-  test('an Active Endpoint is not marked deprecated', () => {
-    expect(keysOf(operationOf('/orders/{orderId}', 'get'))).toEqual([
-      'operationId',
-      'tags',
-      'description',
-      'x-cf-loom-visibility',
-      'x-cf-loom-guards',
-      'parameters',
-      'responses',
-    ]);
-  });
-
   test('each response of a Deprecated Endpoint carries the Deprecation header of its deprecatedAt', () => {
     const committed = JSON.parse(readFileSync(join(fixture, 'contract.snapshot.json'), 'utf8'));
     const deprecatedAt = valueAt(committed, 'endpoints', 'DELETE /orders/{}', 'deprecatedAt');
@@ -1312,7 +1300,7 @@ describe('cf-loom openapi: lifecycle', () => {
     ]);
   });
 
-  test('a Retired Endpoint has no request body', () => {
+  test('a Retired Endpoint has no request body and no security', () => {
     expect(keysOf(operationOf('/orders/{orderId}', 'put'))).toEqual([
       'operationId',
       'tags',
@@ -1409,19 +1397,6 @@ describe('cf-loom openapi: the authorization header', () => {
       'description',
       'x-cf-loom-visibility',
       'x-cf-loom-guards',
-      'responses',
-    ]);
-  });
-
-  test('a Retired Endpoint has no security', () => {
-    expect(keysOf(operationOf('/orders/{orderId}', 'put'))).toEqual([
-      'operationId',
-      'tags',
-      'description',
-      'deprecated',
-      'x-cf-loom-visibility',
-      'x-cf-loom-guards',
-      'parameters',
       'responses',
     ]);
   });

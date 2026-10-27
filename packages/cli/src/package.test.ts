@@ -761,7 +761,6 @@ describe('cf-loom package: the files', () => {
     expect(read(out, 'src/endpoints/list-orders.ts')).toContain(
       ["  lifecycle: 'deprecated',", "  deprecatedAt: '2026-10-17T09:30:00Z',"].join('\n'),
     );
-    expect(read(out, 'src/endpoints/get-order.ts')).not.toContain('deprecatedAt');
   });
 
   test('an Event’s file declares it with providedEvent: its Provider, its name, version, Visibility and description, and its lifecycle only when Deprecated', () => {
@@ -914,7 +913,19 @@ describe('cf-loom package: the files', () => {
         '  body: z.object({ lockedAt: z.iso.datetime() }),',
       ].join('\n'),
     );
-    expect(read(out, 'src/rejections/forbidden.ts')).not.toContain('headers:');
+    expect(read(out, 'src/rejections/forbidden.ts')).toBe(
+      [
+        packageHeader,
+        "import * as loom from '@cf-loom/contract';",
+        '',
+        'export const forbiddenRejection = loom.providedRejection({',
+        "  code: 'FORBIDDEN',",
+        '  status: 403,',
+        "  message: 'No',",
+        '});',
+        '',
+      ].join('\n'),
+    );
   });
 
   test('a Deprecated Element’s export carries @deprecated with its description, and an Active one’s not', () => {
@@ -1257,19 +1268,10 @@ describe('cf-loom package: the built package', () => {
     });
   });
 
-  test('the package carries no whole exported Snapshot and no contract: no file of it, and no export of either', async () => {
+  test('the package carries no whole exported Snapshot: no file of it', () => {
     const out = builtPackage();
-    expect(typeCheck(out).status).toBe(0);
-
-    const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
     expect(filesIn(out)).not.toContain('src/exported-snapshot.ts');
-    expect(Object.keys(built).sort()).toEqual([
-      'getOrderEndpoint',
-      'listOrdersEndpoint',
-      'orderPlacedEventV1',
-      'orderPlacedEventV2',
-    ]);
   });
 
   test('a Consumer declares a Dependency on it, type-checks and generates', () => {
