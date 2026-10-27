@@ -3113,6 +3113,19 @@ async function aProjectPublishedTwice(lab: Lab, distTags?: Readonly<Record<strin
   return { project, served };
 }
 
+/** The versions a project's registry serves for its package. */
+function versionsOf({ served }: Checkable): readonly ServedVersion[] {
+  return served.packages?.[ordersPackage]?.versions ?? [];
+}
+
+/** The option of a version a person published by hand, which carries no cfLoom. */
+const noCfLoom = { cfLoom: null };
+
+/** Versions a person published by hand. */
+function handPublished(...versions: readonly string[]): readonly ServedVersion[] {
+  return versions.map((version) => aVersion(version, noCfLoom));
+}
+
 /** A project whose Baseline holds a copy of an entry of `section` under `key`, which the project lacks. */
 async function aBaselineWithExtraKey(lab: Lab, section: string, key: string) {
   const project = await aGeneratedProject(lab, aMessagingRoot());
@@ -3429,7 +3442,7 @@ describe.concurrent('cf-loom check', () => {
     });
   });
 
-  test('a package with only prereleases is checked against the highest one, and the line says there is no stable version', async ({
+  test('a package with only prereleases is checked against the highest one, and the line says cf-loom published no stable version', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
@@ -3444,7 +3457,7 @@ describe.concurrent('cf-loom check', () => {
     const checked = `${ordersPackage}@1.0.0-rc.2`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `Checked against ${checked} (no stable version: the first is 1.0.0)\nWould publish ${ordersPackage}@1.0.0 (promotes 1.0.0-rc.2)\n`,
+      stdout: `Checked against ${checked} (no stable version cf-loom published: the first is 1.0.0)\nWould publish ${ordersPackage}@1.0.0 (promotes 1.0.0-rc.2)\n`,
       stderr: '',
     });
   });
@@ -3459,7 +3472,7 @@ describe.concurrent('cf-loom check', () => {
     expect(ran).toEqual({
       status: 2,
       stdout: [
-        `Checked against ${ordersPackage}@1.0.0-1 (no stable version: the first is 1.0.0)`,
+        `Checked against ${ordersPackage}@1.0.0-1 (no stable version cf-loom published: the first is 1.0.0)`,
         'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
         `Would publish ${ordersPackage}@1.0.0 (major)`,
         '',
@@ -3484,17 +3497,15 @@ describe.concurrent('cf-loom check', () => {
     expect(ran.stderr).toBe(`${refusedLine}\n`);
   });
 
-  test('a prerelease above the highest stable version is the Baseline, and the line says which version it derives from', async ({
-    lab,
-  }) => {
+  test('a prerelease above the highest stable version is never the Baseline', async ({ lab }) => {
     const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
 
     const { ran } = await checkedAgainst(lab, changed);
 
-    const checked = `${ordersPackage}@1.1.0-0`;
+    const checked = `${ordersPackage}@1.0.0`;
     expect(ran).toEqual({
       status: 0,
-      stdout: `Checked against ${checked} (version from 1.0.0)\nWould publish ${ordersPackage}@1.1.0 (promotes 1.1.0-0)\n`,
+      stdout: `Checked against ${checked}\n${nothingToPublish(checked)}\n`,
       stderr: '',
     });
   });
@@ -3581,7 +3592,18 @@ describe.concurrent('cf-loom check', () => {
 
     const { ran } = await checkedAgainst(lab, changed, '--json');
 
-    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: '1.1.0-0', stable: '1.0.0' });
+    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: '1.0.0', stable: '1.0.0' });
+  });
+
+  test('check --json names the highest stable version listed beside a Baseline below it', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() });
+    const served = servedAs(ordersPackage, ...versionsOf(changed), aVersion('1.0.1', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { ...changed, served }, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ baseline: '1.0.0', stable: '1.0.1' });
   });
 
   test('check --json has no highest stable version when only prereleases are listed', async ({
@@ -4935,7 +4957,8 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
   test('an unchanged package whose Baseline is a prerelease closes with the promotion', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
+    const unchanged = { before: aRoot(), after: aRoot() };
+    const changed = await aChangedProjectListing(lab, unchanged, ['1.1.0-0']);
 
     const plain = await checkedAgainst(lab, changed);
     const prerelease = await checkedAgainst(lab, changed, '--prerelease');
@@ -4946,10 +4969,106 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
     );
   });
 
+  test('a stable version a person published above the Baseline is no Baseline, and the version is the major above it', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, reworded);
+    const served = servedAs(ordersPackage, ...versionsOf(changed), aVersion('1.0.1', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { ...changed, served });
+
+    const above = 'above 1.0.1, which cf-loom did not publish';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: [
+        checkedAgainstOrders,
+        neutralLine,
+        noApprovalNeeded,
+        wouldPublish('2.0.0', above),
+        '',
+      ].join('\n'),
+      stderr: '',
+    });
+  });
+
+  const noneReason = 'none of its versions was published by cf-loom, the highest 0.0.0';
+
+  test('a package none of whose versions cf-loom published has no Baseline, and its first version is 1.0.0', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${noneReason}\n${wouldPublish('1.0.0', 'first version')}\n`,
+      stderr: '',
+    });
+  });
+
+  test('check --json of a package none of whose versions cf-loom published has no Baseline, the highest version as stable, and the reason', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { project, served }, '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({
+      baseline: null,
+      stable: '0.0.0',
+      reason: noneReason,
+      version: '1.0.0',
+      tag: 'latest',
+    });
+  });
+
+  test('a prerelease Baseline below a version a person published is promoted to the major above that version', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const baseline = publishedAs(project, '1.0.0-0');
+    const served = servedAs(ordersPackage, baseline, ...handPublished('1.0.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version cf-loom published: the first is 2.0.0)`;
+    const above = 'above 1.0.0, which cf-loom did not publish';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checked}\n${wouldPublish('2.0.0', above)}\n`,
+      stderr: '',
+    });
+  });
+
+  test('a package none of whose versions cf-loom published takes the major above the highest of them', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, ...handPublished('1.0.0', '2.0.0', '3.2.0'));
+
+    const { ran } = await checkedAgainst(lab, { project, served });
+
+    expect(ran.stdout.split('\n')[1]).toBe(wouldPublish('4.0.0', 'first version'));
+  });
+
+  test('--prerelease over a version cf-loom did not publish takes the latest dist-tag, as the first prerelease', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
+
+    const { ran } = await checkedAgainst(lab, { project, served }, '--prerelease', '--json');
+
+    expect(JSON.parse(ran.stdout)).toMatchObject({ version: '1.0.0-0', tag: 'latest' });
+  });
+
   test('--prerelease over a hand-published prerelease the derived one would not be above exits 3, as publish does', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+    const changed = await aChangedProjectListing(lab, addedSuccessField, ['1.1.0-rc.1']);
 
     const { ran } = await checkedAgainst(lab, changed, '--prerelease');
 
@@ -4964,7 +5083,7 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
   test('check --json over a version that would not be above the Baseline keeps the Changes beside the error', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+    const changed = await aChangedProjectListing(lab, addedSuccessField, ['1.1.0-rc.1']);
 
     const { ran } = await checkedAgainst(lab, changed, '--json', '--prerelease');
 
@@ -4977,7 +5096,7 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
       errors: [line],
       package: ordersPackage,
       baseline: '1.1.0-rc.1',
-      stable: '1.0.0',
+      stable: null,
       changes: [expect.objectContaining({ class: 'additive', verdict: 'allowed' })],
       bump: 'minor',
       version: null,
@@ -4988,7 +5107,7 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
   test('a version that would not be above the Baseline still says that a Change needs a Breaking Change Approval, in lines and in --json', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, removedSuccessField, ['2.0.0-rc.1']);
+    const changed = await aChangedProjectListing(lab, removedSuccessField, ['2.0.0-rc.1']);
 
     const lines = await checkedAgainst(lab, changed, '--prerelease');
     const json = await checkedAgainst(lab, changed, '--json', '--prerelease');
@@ -5161,7 +5280,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(first.ran.status).toBe(0);
     expect(first.ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@1.0.0-0`);
-    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version: the first is 1.0.0)`;
+    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version cf-loom published: the first is 1.0.0)`;
     expect(second).toEqual({
       status: 0,
       stdout: [
@@ -5190,7 +5309,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(ran).toEqual({
       status: 0,
       stdout: [
-        `Checked against ${same} (no stable version: the first is 1.0.0)`,
+        `Checked against ${same} (no stable version cf-loom published: the first is 1.0.0)`,
         `Nothing to publish: the Snapshot and peer ranges are those of ${same}; --force publishes anyway`,
         '',
       ].join('\n'),
@@ -5217,7 +5336,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.0.0-2', distTags }]);
   });
 
-  test('an unchanged package whose highest version is a prerelease publishes that version’s numbers, promoting it', async ({
+  test('an unchanged package with a prerelease above its stable Baseline publishes nothing', async ({
     lab,
   }) => {
     const project = await aGeneratedProject(lab, aRoot());
@@ -5226,18 +5345,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
+    const same = `${ordersPackage}@1.0.0`;
     expect(ran).toEqual({
       status: 0,
-      stdout: [
-        `Checked against ${ordersPackage}@1.1.0-0 (version from 1.0.0)`,
-        `Published ${ordersPackage}@1.1.0`,
-        '',
-      ].join('\n'),
+      stdout: `${checkedAgainstOrders}\n${nothingToPublish(same)}; --force publishes anyway\n`,
       stderr: '',
     });
-    expect(putsOf(registry)).toEqual([
-      { name: ordersPackage, version: '1.1.0', distTags: { latest: '1.1.0' } },
-    ]);
+    expect(putRequestsOf(registry)).toEqual([]);
   });
 
   test('a package with only prereleases publishes 1.0.0, checked against the highest one', async ({
@@ -5248,7 +5362,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
-    const checked = `Checked against ${ordersPackage}@1.0.0-rc.1 (no stable version: the first is 1.0.0)`;
+    const checked = `Checked against ${ordersPackage}@1.0.0-rc.1 (no stable version cf-loom published: the first is 1.0.0)`;
     expect(ran).toEqual({
       status: 0,
       stdout: `${checked}\nPublished ${ordersPackage}@1.0.0\n`,
@@ -5368,7 +5482,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
-  test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check then compares with it', async ({
+  test('with a Baseline and --prerelease the bumped version’s prerelease is published with the next dist-tag, and check then still compares with the Baseline', async ({
     lab,
   }) => {
     const changed = await aChangedProject(lab, addedSuccessField);
@@ -5380,8 +5494,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const distTags = { next: '1.1.0-0' };
     expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '1.1.0-0', distTags }]);
     const checked = await cfLoomWith(changed.project, env, 'check');
-    const checkedAgainstPrerelease = `Checked against ${ordersPackage}@1.1.0-0 (version from 1.0.0)`;
-    expect(checked.stdout.split('\n')[0]).toBe(checkedAgainstPrerelease);
+    expect(checked.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      'endpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive',
+      'No Change needs a Breaking Change Approval',
+      `Would publish ${ordersPackage}@1.1.0 (minor)`,
+      '',
+    ]);
   });
 
   test('with --prerelease above a Baseline the counter is one above the highest prerelease listed of the version it derives', async ({
@@ -5401,13 +5520,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
   test('a prerelease that would not be above a hand-numbered prerelease Baseline fails publish with exit 3, and nothing is put', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+    const changed = await aChangedProjectListing(lab, addedSuccessField, ['1.1.0-rc.1']);
 
     const { ran, registry } = await publishedAgainst(lab, changed, '--prerelease');
 
     expect(ran).toEqual({
       status: 3,
-      stdout: `Checked against ${ordersPackage}@1.1.0-rc.1 (version from 1.0.0)\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
+      stdout: `Checked against ${ordersPackage}@1.1.0-rc.1 (no stable version cf-loom published: the first is 1.1.0)\nendpoints.GET /ping (ping) schema field-added at success.body.total required=true: Additive\n`,
       stderr: `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -5429,7 +5548,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     expect(ran).toEqual({
       status: 3,
-      stdout: `Checked against ${ordersPackage}@1.0.0-rc.2 (no stable version: the first is 1.0.0)\n`,
+      stdout: `Checked against ${ordersPackage}@1.0.0-rc.2 (no stable version cf-loom published: the first is 1.0.0)\n`,
       stderr: `${ordersPackage}@1.0.0-0 would not be above the Baseline 1.0.0-rc.2: publish a version above it by hand\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
@@ -5443,7 +5562,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
     const { ran, registry } = await publishedAgainst(lab, { project, served });
 
-    const checked = `Checked against ${ordersPackage}@2.0.0-rc.1 (no stable version: the first is 2.0.0)`;
+    const checked = `Checked against ${ordersPackage}@2.0.0-rc.1 (no stable version cf-loom published: the first is 2.0.0)`;
     expect(ran).toEqual({
       status: 0,
       stdout: `${checked}\nPublished ${ordersPackage}@2.0.0\n`,
@@ -5665,6 +5784,189 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       stderr: `${ordersPackage} lists 1.0.0, published while publish ran: rerun publish, which reads the registry again\n`,
     });
     expect(putRequestsOf(registry)).toEqual([]);
+  });
+
+  test('a Breaking Change published from a branch as a prerelease still needs an Approval when it merges', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField);
+
+    const { registry, env } = await publishedAgainst(lab, changed, '--prerelease');
+    const merged = await cfLoomWith(changed.project, env, 'check');
+
+    const distTags = { next: '2.0.0-0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '2.0.0-0', distTags }]);
+    expect(merged).toEqual({
+      status: 2,
+      stdout: [
+        checkedAgainstOrders,
+        'endpoints.GET /ping (ping) schema field-removed at success.body.total: Breaking, needs a Breaking Change Approval',
+        `Would publish ${ordersPackage}@2.0.0 (major)`,
+        '',
+      ].join('\n'),
+      stderr: `${approvalNeededLine}\n`,
+    });
+  });
+
+  test('a trial that is reverted costs nothing: check compares with the stable version and has nothing to publish', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, removedSuccessField.before);
+    const stable = publishedAs(project, '1.0.0');
+    write(project, removedSuccessField.after);
+    await generateIn(lab, project);
+    const trial = publishedAs(project, '2.0.0-0');
+    write(project, removedSuccessField.before);
+    await generateIn(lab, project);
+
+    const served = servedAs(ordersPackage, stable, trial);
+    const { ran } = await ranAgainst(lab, { project, served }, 'check');
+
+    const same = `${ordersPackage}@1.0.0`;
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${checkedAgainstOrders}\n${nothingToPublish(same)}\n`,
+      stderr: '',
+    });
+  });
+
+  test('a stable publish merges the history of the Baseline, never that of a prerelease listed above it', async ({
+    lab,
+  }) => {
+    const retired = await aGeneratedProject(lab, aRoot({ lifecycle: 'retired' }));
+    const ping = JSON.parse(read(retired, 'contract.snapshot.json')).endpoints['GET /ping'];
+    const project = await aGeneratedProject(lab, aRootWithoutEndpoints);
+    const tombstone = { 'GET /ping': { ...ping, retiredIn: '2.0.0-0' } };
+    const above = publishedAs(project, '2.0.0-0', { endpoints: tombstone });
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'), above);
+
+    const { registry } = await publishedAgainst(lab, { project, served }, '--force');
+
+    const published = JSON.parse(publishedFilesOf(registry)['snapshot.json']!);
+    expect(published.version).toBe('1.0.1');
+    expect(published.endpoints).toEqual({});
+  });
+
+  test('a package none of whose versions cf-loom published has --prerelease publish 1.0.0-0, then 1.0.0-1, both tagged latest', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, addedSuccessField.before);
+    const served = servedAs(ordersPackage, aVersion('0.0.0', noCfLoom));
+    const first = await publishedAgainst(lab, { project, served }, '--prerelease');
+    write(project, addedSuccessField.after);
+    await generateIn(lab, project);
+
+    const second = await cfLoomWith(project, first.env, 'publish', '--prerelease');
+
+    const reason = 'none of its versions was published by cf-loom, the highest 0.0.0';
+    expect(first.ran.stdout).toBe(
+      `${ordersPackage} has no Baseline: ${reason}\nPublished ${ordersPackage}@1.0.0-0\n`,
+    );
+    const checked = `Checked against ${ordersPackage}@1.0.0-0 (no stable version cf-loom published: the first is 1.0.0)`;
+    expect(second.stdout.split('\n')[0]).toBe(checked);
+    expect(putsOf(first.registry)).toEqual([
+      { name: ordersPackage, version: '1.0.0-0', distTags: { latest: '1.0.0-0' } },
+      { name: ordersPackage, version: '1.0.0-1', distTags: { latest: '1.0.0-1' } },
+    ]);
+  });
+
+  test('a package none of whose versions cf-loom published publishes the major above the highest of them', async ({
+    lab,
+  }) => {
+    const project = await aGeneratedProject(lab, aRoot());
+    const served = servedAs(ordersPackage, ...handPublished('1.0.0', '2.0.0', '3.2.0'));
+
+    const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+    const reason = 'none of its versions was published by cf-loom, the highest 3.2.0';
+    expect(ran).toEqual({
+      status: 0,
+      stdout: `${ordersPackage} has no Baseline: ${reason}\nPublished ${ordersPackage}@4.0.0\n`,
+      stderr: '',
+    });
+    const distTags = { latest: '4.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '4.0.0', distTags }]);
+  });
+
+  test('a Change over a Baseline with a version cf-loom did not publish above it publishes the major above that version', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aRoot(),
+      after: aRoot({ description: 'Reads' }),
+    });
+    const served = servedAs(ordersPackage, ...versionsOf(changed), ...handPublished('1.0.1'));
+
+    const { ran, registry } = await publishedAgainst(lab, { ...changed, served });
+
+    expect(ran.stdout.split('\n').at(-2)).toBe(`Published ${ordersPackage}@2.0.0`);
+    const distTags = { latest: '2.0.0' };
+    expect(putsOf(registry)).toEqual([{ name: ordersPackage, version: '2.0.0', distTags }]);
+  });
+
+  describe.for([
+    {
+      name: 'a version published meanwhile below a prerelease listed above the Baseline',
+      listed: ['1.0.0', '2.0.0-0'],
+      meanwhile: ['1.0.0', '1.1.0', '2.0.0-0'],
+      byHand: [] as readonly string[],
+      appears: '1.1.0',
+    },
+    {
+      name: 'a version a person published meanwhile below a prerelease above the Baseline',
+      listed: ['1.0.0', '2.0.0-0'],
+      meanwhile: ['1.0.0', '1.0.2', '2.0.0-0'],
+      byHand: ['1.0.2'],
+      appears: '1.0.2',
+    },
+    {
+      name: 'two versions published meanwhile, of which the line names the higher',
+      listed: ['1.0.0'],
+      meanwhile: ['1.0.0', '1.0.2', '1.1.0'],
+      byHand: ['1.0.2'],
+      appears: '1.1.0',
+    },
+    {
+      name: 'a prerelease published meanwhile above a stable Baseline',
+      listed: ['1.0.0'],
+      meanwhile: ['1.0.0', '1.1.0-0'],
+      byHand: [],
+      appears: '1.1.0-0',
+    },
+    {
+      name: 'the first version cf-loom publishes meanwhile over a package none of whose versions it published',
+      listed: ['0.0.0'],
+      meanwhile: ['0.0.0', '1.0.0-0'],
+      byHand: ['0.0.0'],
+      appears: '1.0.0-0',
+    },
+  ])('a version published after the versions were first listed', (row) => {
+    test(`${row.name} fails publish with exit 3, and nothing is put`, async ({ lab }) => {
+      const roots = { before: aRoot(), after: aRoot({ description: 'Reads' }) };
+      const project = await aGeneratedProject(lab, roots.before);
+      const versionsOf = (versions: readonly string[]) =>
+        versions.map((version) =>
+          row.byHand.includes(version)
+            ? aVersion(version, noCfLoom)
+            : publishedAs(project, version),
+        );
+      const packument = `/${ordersPackage.replace('/', '%2f')}`;
+      const packages = servedAs(ordersPackage, ...versionsOf(row.meanwhile)).packages ?? {};
+      const served = {
+        ...servedAs(ordersPackage, ...versionsOf(row.listed)),
+        later: { afterRequestFor: packument, packages },
+      };
+      write(project, roots.after);
+      await generateIn(lab, project);
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served });
+
+      expect(ran.status).toBe(3);
+      expect(ran.stderr).toBe(
+        `${ordersPackage} lists ${row.appears}, published while publish ran: rerun publish, which reads the registry again\n`,
+      );
+      expect(putRequestsOf(registry)).toEqual([]);
+    });
   });
 
   test('the published package.json carries the version, the CLI’s peers and cfLoom with the hash of the published Snapshot', async ({
@@ -6374,7 +6676,7 @@ describe.concurrent('cf-loom publish --dry-run', { timeout: publishTimeout }, ()
     lab,
   }) => {
     const roots = { before: aRoot(), after: aRoot() };
-    const changed = await aChangedProject(lab, roots, ['1.1.0-0']);
+    const changed = await aChangedProjectListing(lab, roots, ['1.1.0-0']);
 
     const args = ['--dry-run', '--force', '--prerelease'];
     const { ran } = await publishedAgainst(lab, changed, ...args);
@@ -6499,7 +6801,7 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
   test('a version that would not be above the Baseline is status 3 with the Changes check --json prints', async ({
     lab,
   }) => {
-    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+    const changed = await aChangedProjectListing(lab, addedSuccessField, ['1.1.0-rc.1']);
 
     const published = await publishedAgainst(lab, changed, '--json', '--prerelease');
     const checked = await checkedAgainst(lab, changed, '--json', '--prerelease');
@@ -6609,11 +6911,11 @@ describe.concurrent('cf-loom check and publish derive one version', {
     {
       name: 'a Neutral Change',
       roots: { before: aRoot(), after: aRoot({ description: 'Reads' }) },
-      listed: [] as readonly string[],
+      listed: ['1.0.0'] as readonly string[],
       flags: [] as readonly string[],
     },
-    { name: 'an Additive Change', roots: addedSuccessField, listed: [], flags: [] },
-    { name: 'a Breaking Change', roots: removedSuccessField, listed: [], flags: [] },
+    { name: 'an Additive Change', roots: addedSuccessField, listed: ['1.0.0'], flags: [] },
+    { name: 'a Breaking Change', roots: removedSuccessField, listed: ['1.0.0'], flags: [] },
     {
       name: 'a prerelease Baseline promoted',
       roots: unchangedRoots,
@@ -6627,15 +6929,21 @@ describe.concurrent('cf-loom check and publish derive one version', {
       flags: ['--prerelease'],
     },
     {
+      name: 'a Change with a prerelease listed above the stable Baseline',
+      roots: addedSuccessField,
+      listed: ['1.0.0', '2.0.0-0'],
+      flags: [],
+    },
+    {
       name: 'a Change with --prerelease',
       roots: addedSuccessField,
-      listed: [],
+      listed: ['1.0.0'],
       flags: ['--prerelease'],
     },
   ] as const;
 
   test.for(rows)('over $name', async (row, { lab }) => {
-    const changed = await aChangedProject(lab, row.roots, row.listed);
+    const changed = await aChangedProjectListing(lab, row.roots, row.listed);
 
     const checked = await checkedAgainst(lab, changed, '--json', ...row.flags);
     const published = await publishedAgainst(lab, changed, '--json', ...row.flags);

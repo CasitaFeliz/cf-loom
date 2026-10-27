@@ -1,17 +1,16 @@
 import { isSemanticVersion, ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
+import { baselineCandidatesOf } from '../versioning/index.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
-import type { Versions } from './versions.ts';
+import type { Listing } from './versions.ts';
 
-/** The version the Check compares with, and whether the highest was taken or `--against` named it. */
-export type ChosenVersion = {
-  readonly kind: 'chosen';
-  readonly version: string;
-  readonly chosen: 'highest' | 'against';
-};
-
-/** The package and what `check --against` was given for it, if anything. */
-export type AgainstQuery = { readonly packageName: string; readonly against: string | undefined };
+/**
+ * What the Check reads metadata of: the versions the Baseline is chosen among, in the order they
+ * are tried, or the one version `--against` names.
+ */
+export type Choice =
+  | { readonly kind: 'baseline'; readonly candidates: readonly string[] }
+  | { readonly kind: 'against'; readonly version: string };
 
 /** What `--against` names among a package's listed versions. */
 type Named =
@@ -30,21 +29,22 @@ export function unlistedAgainstOf(packageName: string, against: string): Failed 
 }
 
 /**
- * The version the Check compares with: the highest listed, or the one `--against` names, itself
- * or the version a dist-tag points at; a name the package lists neither way is a failure.
+ * What the Check reads: the versions the Baseline is chosen among, or the one `--against` names,
+ * itself or the version a dist-tag points at; a name the package lists neither way is a failure.
  */
-export async function chosenVersionOf(
+export async function choiceOf(
   npm: NpmPlace,
-  listed: Versions,
-  { packageName, against }: AgainstQuery,
-): Promise<ChosenVersion | Failed> {
+  listing: Listing,
+  against: string | undefined,
+): Promise<Choice | Failed> {
   if (against === undefined) {
-    return { kind: 'chosen', version: listed.highest, chosen: 'highest' };
+    return { kind: 'baseline', candidates: baselineCandidatesOf(listing.versions) };
   }
-  const named = await namedVersionOf(npm, listed, { packageName, against });
+  const { packageName } = listing;
+  const named = await namedVersionOf(npm, listing, against);
   switch (named.kind) {
     case 'named':
-      return { kind: 'chosen', version: named.version, chosen: 'against' };
+      return { kind: 'against', version: named.version };
     case 'unlisted':
       return unlistedAgainstOf(packageName, against);
     case 'failed':
@@ -54,8 +54,8 @@ export async function chosenVersionOf(
 
 async function namedVersionOf(
   npm: NpmPlace,
-  { versions }: Versions,
-  { packageName, against }: { readonly packageName: string; readonly against: string },
+  { packageName, versions }: Listing,
+  against: string,
 ): Promise<Named> {
   if (versions.includes(against)) {
     return { kind: 'named', version: against };
