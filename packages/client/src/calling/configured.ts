@@ -38,8 +38,7 @@ async function headerValueOf(
   if (signal === undefined) {
     return await header(call);
   }
-  signal.throwIfAborted();
-  return await abortableOf(Promise.resolve(header(call)), signal);
+  return await abortableOf(() => header(call), signal);
 }
 
 function isHeaderFunction(value: unknown): value is (call: CallOptions) => unknown {

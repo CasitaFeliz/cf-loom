@@ -58,13 +58,11 @@ export function fakingOf(faked: FakedProvider): Faking {
  * already aborted is refused before anything is read, recorded or taken.
  */
 export function fakeFetchOf(faking: Faking): Http {
-  return async (request) => {
-    request.signal.throwIfAborted();
-    return await abortableOf(
-      withMistakesRecorded(faking, fakeResponseOf(faking, request)),
+  return (request) =>
+    abortableOf(
+      () => withMistakesRecorded(faking, fakeResponseOf(faking, request)),
       request.signal,
     );
-  };
 }
 
 /**
@@ -134,7 +132,7 @@ async function takenOf(faking: Faking, matched: ListedMatch, request: Request): 
   const scripted = faking.scriptedByNameOf(listed.name);
   const turn = scripted.turn();
   try {
-    const reading = await abortableOf(readingOfRequest(matched, request), signal);
+    const reading = await abortableOf(() => readingOfRequest(matched, request), signal);
     if (reading.kind === 'stopped') {
       return reading.answer;
     }

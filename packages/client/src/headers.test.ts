@@ -450,6 +450,27 @@ describe('a header function', () => {
     expect(sent).toEqual([]);
   });
 
+  test('that aborts its own call and returns a promise that never settles is not waited for', async () => {
+    const controller = new AbortController();
+    const { sent, fetch } = recorded();
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: {
+        'x-api-key': 'key-1',
+        authorization: () => {
+          controller.abort();
+          return new Promise<string>(() => undefined);
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(sent).toEqual([]);
+  });
+
   test('is not called once the signal was aborted in a microtask after the one before returned', async () => {
     const controller = new AbortController();
     const { sent, fetch } = recorded();

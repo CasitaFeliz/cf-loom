@@ -45,7 +45,7 @@ Input that breaks its schema, one nested too deeply to read included (see [Over 
 
 Headers an Endpoint or its Guards demand are typed, with lower-case names. Those given to `client()` need not be passed again; any still missing is a required `headers` field on each call that needs it. Query params, a Guard's included, are always passed per call.
 
-- A header given to `client()` is a value, or a function called per request with the call's options, `{ signal? }`, which may be async, to refresh a token and cancel it with the call (`signal` is absent when the call has none, so pass `call` on as it is, not `{ signal: call.signal }`). Its type is the Input's type for that name, across every listed Endpoint that declares it.
+- A header given to `client()` is a value, or a function called per request with the call's options as given (`{}` when the call has none), `{ signal? }`, which may be async, to refresh a token and cancel it with the call (pass `call` on as it is, not `{ signal: call.signal }`). Its type is the Input's type for that name, across every listed Endpoint that declares it.
 - Its name must be one some listed Endpoint's Input declares. It is sent only to an Endpoint whose Input declares it.
 - A header the call passes wins, and the function is then not called. The call stops waiting for a function when its signal is aborted, calls no other, and returns its Fault (see [What a call sends](#what-a-call-sends)); what the function throws or rejects with after that is dropped. Otherwise what a function throws reaches the calling code unchanged.
 
