@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import type { IssueCode } from '../declarations/index.ts';
+import { withinStack } from '../walker/index.ts';
 import { isAbsentAt } from '../written/index.ts';
 
 /** One way a value broke its schema, inside the value: never the received value itself. */
@@ -46,7 +47,7 @@ export function encodedValueOf(schema: core.$ZodType, value: unknown): Parsed {
 }
 
 function parsedOf<Value>(run: () => z.ZodSafeParseResult<Value>, value: unknown): Parsed<Value> {
-  const result = settledOf(run);
+  const result = withinStack(run);
   if (result === undefined) {
     return { kind: 'issues', issues: [nestedTooDeeply] };
   }
@@ -55,20 +56,6 @@ function parsedOf<Value>(run: () => z.ZodSafeParseResult<Value>, value: unknown)
   }
   const issues = result.error.issues.flatMap((issue) => schemaIssuesOf(issue, value));
   return { kind: 'issues', issues };
-}
-
-/** What zod's run returned, or nothing when it overflowed the stack; any other throw is rethrown. */
-function settledOf<Value>(
-  run: () => z.ZodSafeParseResult<Value>,
-): z.ZodSafeParseResult<Value> | undefined {
-  try {
-    return run();
-  } catch (e) {
-    if (e instanceof RangeError) {
-      return undefined;
-    }
-    throw e;
-  }
 }
 
 function schemaIssuesOf(issue: core.$ZodIssue, value: unknown): readonly SchemaIssue[] {

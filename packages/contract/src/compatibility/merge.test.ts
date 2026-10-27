@@ -478,9 +478,12 @@ describe('publishedSnapshotOf', () => {
     );
   });
 
-  test.each(['active', 'retired'] as const)(
-    'an Endpoint brought back to %s carries no deprecatedAt from the Baseline',
-    (lifecycle) => {
+  test.each([
+    ['active', anEndpoint()],
+    ['retired', aRetired(anEndpoint(), '3.5.0')],
+  ] as const)(
+    'an Endpoint brought back to %s is its proposed self, with no deprecatedAt from the Baseline',
+    (lifecycle, expected) => {
       const baseline = aBaseline({
         endpoints: {
           'GET /orders/{}': aLive(
@@ -495,7 +498,7 @@ describe('publishedSnapshotOf', () => {
 
       const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
-      expect(published.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
+      expect(published.endpoints['GET /orders/{}']).toStrictEqual(expected);
     },
   );
 

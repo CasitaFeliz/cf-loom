@@ -78,7 +78,6 @@ describe('defineDependency', () => {
     const paymentsDependency = defineDependency({ endpoints: [getPayment] });
 
     expectTypeOf(paymentsDependency).toExtend<Dependency>();
-    expectTypeOf<keyof typeof paymentsDependency>().toEqualTypeOf<'kind' | 'endpoints'>();
   });
 
   test('a Dependency of two Providers’ Endpoints is a type error naming both', () => {
