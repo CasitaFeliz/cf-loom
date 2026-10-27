@@ -13,7 +13,7 @@ export function checkedDocumentOf(checked: Checked): Document {
   return {
     package: packageName,
     baseline: against.kind === 'baseline' ? against.version : null,
-    stable: against.kind === 'baseline' ? (against.stable ?? null) : null,
+    stable: against.stable ?? null,
     reason: against.kind === 'none' ? reasonOf(against.why) : null,
     changes,
     peers: derived?.peers ?? [],

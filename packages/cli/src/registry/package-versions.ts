@@ -1,13 +1,12 @@
 import { type Failed, failed } from '../child-process/index.ts';
-import { compareSemanticVersions } from '../versioning/index.ts';
 import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
 import { type Versions, versionsFrom } from './versions.ts';
 
 /** npm's 404 for a package, before anything is known of why the registry lacks it. */
 export type NotFound = { readonly kind: 'not-found' };
 
-/** What a package listed when `publish` first read it: its highest version, or none when npm could not find it. */
-export type FirstListing = { readonly packageName: string; readonly highest: string | undefined };
+/** What a package listed when `publish` first read it: every version, lowest first, none when npm could not find it. */
+export type FirstListing = { readonly packageName: string; readonly versions: readonly string[] };
 
 /** Reads, through the organization's own npm, every version a package lists. */
 export async function versionsOf(
@@ -27,12 +26,12 @@ export async function versionsOf(
 }
 
 /**
- * Reads a package's versions again right before `publish` puts a version, and fails when one
- * higher than the first listing's was published meanwhile, since the Compatibility Check never judged against it.
+ * Reads a package's versions again right before `publish` puts a version, and fails when the
+ * list holds one the first listing did not, since the Compatibility Check never judged against it.
  */
 export async function unchangedSince(
   npm: NpmPlace,
-  { packageName, highest }: FirstListing,
+  { packageName, versions }: FirstListing,
 ): Promise<{ readonly kind: 'unchanged' } | Failed> {
   const listed = await versionsOf(npm, packageName);
   switch (listed.kind) {
@@ -40,15 +39,14 @@ export async function unchangedSince(
       return listed;
     case 'not-found':
       return { kind: 'unchanged' };
-    case 'versions':
-      return isHigher(listed.highest, highest)
-        ? failed(publishedMeanwhile(packageName, listed.highest))
-        : { kind: 'unchanged' };
+    case 'versions': {
+      const meanwhile = listed.versions.filter((version) => !versions.includes(version));
+      const highest = meanwhile.at(-1);
+      return highest === undefined
+        ? { kind: 'unchanged' }
+        : failed(publishedMeanwhile(packageName, highest));
+    }
   }
-}
-
-function isHigher(listed: string, highest: string | undefined): boolean {
-  return highest === undefined || compareSemanticVersions(listed, highest) > 0;
 }
 
 function publishedMeanwhile(packageName: string, version: string): string {

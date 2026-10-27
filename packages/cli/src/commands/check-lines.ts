@@ -1,5 +1,11 @@
 import { type PeerRangeMove, siteTextOf, tokenOf } from '@cf-loom/contract/internal';
-import { type Derived, type DerivedVersion, firstStableOf, type Why } from '../versioning/index.ts';
+import {
+  type Derived,
+  type DerivedVersion,
+  firstStableOf,
+  isPrerelease,
+  type Why,
+} from '../versioning/index.ts';
 import { type Checked, reasonOf } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
 import type { Ending } from './run.ts';
@@ -98,17 +104,16 @@ function peerLineOf({ name, from, to, bump }: PeerRangeMove): string {
     : `Peer ${name} moves from ${from} to ${to}: ${bump}`;
 }
 
-/** What the opening line says of the Baseline beyond its version: that `--against` named it, or where a version derives from. */
+/** What the opening line says of the Baseline beyond its version: that `--against` named it, or that cf-loom published no stable version and what the first is. */
 function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }>): string {
   if (against.chosen === 'against') {
     return ' (--against)';
   }
-  if (against.stable === against.version) {
+  if (!isPrerelease(against.version)) {
     return '';
   }
-  return against.stable === undefined
-    ? ` (no stable version: the first is ${firstStableOf(against.version)})`
-    : ` (version from ${against.stable})`;
+  const first = firstStableOf(against.version, against.stable);
+  return ` (no stable version cf-loom published: the first is ${first})`;
 }
 
 /** How `check` closes: that no Change needs an Approval, then the version `publish` would take. */
@@ -145,6 +150,8 @@ function whyTextOf(why: Why): string {
       return `promotes ${why.baseline}`;
     case 'forced':
       return 'forced';
+    case 'above-unchecked':
+      return `above ${why.version}, which cf-loom did not publish`;
   }
 }
 

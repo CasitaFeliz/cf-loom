@@ -1,17 +1,21 @@
-import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
+import type { Candidates, NoBaseline } from '../registry/index.ts';
 import type { CheckedChange } from './checked-change.ts';
 import type { Derivation } from './derivation.ts';
 import type { Ending } from './run.ts';
 
-/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
+/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named) and how it was chosen, or the reason it has none; and the highest stable version the package lists. */
 type Against =
   | {
       readonly kind: 'baseline';
       readonly version: string;
       readonly stable: string | undefined;
-      readonly chosen: ChosenVersion['chosen'];
+      readonly chosen: Candidates['chosen'];
     }
-  | { readonly kind: 'none'; readonly why: NoBaseline };
+  | {
+      readonly kind: 'none';
+      readonly why: NoBaseline;
+      readonly stable: string | undefined;
+    };
 
 /** What `check` found before any version is derived: the package, what it was compared with and every Change. */
 export type Compared = {
@@ -43,5 +47,7 @@ export function reasonOf(why: NoBaseline): string {
   switch (why.kind) {
     case 'unknown-package':
       return `it is not in ${why.registry} for the npm user ${why.username}: never published, or that login cannot read it`;
+    case 'none-published':
+      return `none of its versions was published by cf-loom, the highest ${why.highest}`;
   }
 }

@@ -32,8 +32,8 @@ export type PublishMode = 'publish' | 'dry-run';
 
 /**
  * What a publish puts out: the package's Snapshot as published with its text, the declared
- * Snapshot it was published from, the peer ranges it declares, its dist-tag, the highest
- * version the package listed when the Baseline was read, and whether it is put out at all.
+ * Snapshot it was published from, the peer ranges it declares, its dist-tag, the versions the
+ * package listed when the Baseline was read, and whether it is put out at all.
  */
 export type ToPublish = {
   readonly mode: PublishMode;
@@ -43,7 +43,7 @@ export type ToPublish = {
   readonly text: string;
   readonly peerRanges: PeerRanges;
   readonly tag: DistTag;
-  readonly highest: string | undefined;
+  readonly versions: readonly string[];
 };
 
 /** How a publish ends: the version put, or built and left unput on a dry run, or why not, and the lines naming a staging folder it could not remove. */
@@ -112,12 +112,12 @@ export async function publishedPackageOf(
 
 function stagedPackageOf(
   staged: InstalledPackage,
-  { mode, project, declared, published, tag, highest }: ToPublish,
+  { mode, project, declared, published, tag, versions }: ToPublish,
 ): StagedPackage {
   const { packageName, folder } = staged;
   const { version } = published;
   const publishing = { folder, packageName, version, tag };
-  const listing = { packageName, highest };
+  const listing = { packageName, versions };
   switch (published.kind) {
     case 'service': {
       const rootPath = join(project.directory, project.rootFile);

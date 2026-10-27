@@ -7,6 +7,7 @@ import {
 import { publishedNameOf } from '../loading/index.ts';
 import { type BuiltProject, builtOf } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
+import { listedVersionsOf } from '../versioning/index.ts';
 import type { Compared } from './checked.ts';
 import { checkedChangeOf } from './checked-change.ts';
 import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
@@ -28,6 +29,7 @@ export type Comparison =
       readonly built: BuiltProject;
       readonly packageName: string;
       readonly why: NoBaseline;
+      readonly versions: readonly string[];
       readonly changes: readonly Change[];
     };
 
@@ -44,7 +46,7 @@ export async function committedBuiltOf(run: Run): Promise<BuiltProject | Stopped
   return stop === undefined ? built : { kind: 'stopped', exit: stop };
 }
 
-/** Reads the package's Baseline, the highest version or the one `against` names, and runs the Compatibility Check of the Snapshot against it, or alone when it has none. */
+/** Reads the package's Baseline, or the version `against` names, and runs the Compatibility Check of the Snapshot against it, or alone when it has none. */
 export async function comparisonOf(
   built: BuiltProject,
   run: Run,
@@ -58,14 +60,9 @@ export async function comparisonOf(
     case 'failed':
       return { kind: 'stopped', exit: toolingError(read.message) };
     case 'no-baseline': {
-      const { packageName, why } = read;
-      return {
-        kind: 'no-baseline',
-        built,
-        packageName,
-        why,
-        changes: firstPublishChangesOf(snapshot),
-      };
+      const { packageName, why, versions } = read;
+      const changes = firstPublishChangesOf(snapshot);
+      return { kind: 'no-baseline', built, packageName, why, versions, changes };
     }
     case 'baseline':
       return {
@@ -82,8 +79,9 @@ export function comparedFrom(comparison: Comparison): Compared {
   switch (comparison.kind) {
     case 'no-baseline': {
       const { packageName, why } = comparison;
+      const { stable } = listedVersionsOf(comparison.versions);
       const changes = comparison.changes.map(checkedChangeOf);
-      return { kind: 'checked', packageName, against: { kind: 'none', why }, changes };
+      return { kind: 'checked', packageName, against: { kind: 'none', why, stable }, changes };
     }
     case 'baseline': {
       const { packageName, snapshot, stable, chosen } = comparison.read;
@@ -92,4 +90,9 @@ export function comparedFrom(comparison: Comparison): Compared {
       return { kind: 'checked', packageName, against, changes };
     }
   }
+}
+
+/** Every version the package lists, lowest first: none when npm does not know it. */
+export function listedIn(comparison: Comparison): readonly string[] {
+  return comparison.kind === 'baseline' ? comparison.read.versions : comparison.versions;
 }

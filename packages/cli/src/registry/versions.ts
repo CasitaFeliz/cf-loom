@@ -24,6 +24,9 @@ export type VersionMetadata = {
   readonly digests: readonly string[];
 };
 
+/** A version whose package.json carries no `cfLoom`: it was not published by cf-loom, so it is no Baseline. */
+export type NotPublishedByCfLoom = { readonly kind: 'not-cf-loom' };
+
 /** The version of a package a Baseline is read from, and the declared Snapshot it must be the Baseline of. */
 export type BaselineSource = {
   readonly spec: string;
@@ -60,18 +63,26 @@ function keysPrintedIn(printed: unknown): readonly unknown[] {
 }
 
 /**
- * The metadata `npm view <package>@<version>` printed for the version a Baseline is read from:
- * published by cf-loom as the declared kind, with peer ranges that are a map of texts and a
- * tarball with a sha512 digest to check it against.
+ * The metadata `npm view <package>@<version>` printed for a version that may be the Baseline:
+ * none of cf-loom's when its package.json has no `cfLoom`; else, published as the declared kind,
+ * with peer ranges that are a map of texts and a tarball with a sha512 digest to check it
+ * against. A `cfLoom` with no kind is malformed, never passed over.
  */
-export function metadataFrom(source: BaselineSource, printed: unknown): VersionMetadata | Failed {
+export function metadataFrom(
+  source: BaselineSource,
+  printed: unknown,
+): VersionMetadata | NotPublishedByCfLoom | Failed {
   const { spec, version, declared } = source;
   if (ownOf(printed, 'version') !== version) {
     return failed(`npm view ${spec} printed no metadata`);
   }
-  const kind = ownOf(ownOf(printed, 'cfLoom'), 'kind');
+  const cfLoom = ownOf(printed, 'cfLoom');
+  if (cfLoom === undefined) {
+    return { kind: 'not-cf-loom' };
+  }
+  const kind = ownOf(cfLoom, 'kind');
   if (typeof kind !== 'string') {
-    return failed(`${spec} has no cfLoom: it was not published by cf-loom publish`);
+    return failed(`${spec} has a malformed cfLoom: its kind is no text`);
   }
   if (kind !== declared.kind) {
     return failed(`${spec} is the package of kind ${kind}, not ${declared.kind}`);

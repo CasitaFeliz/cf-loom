@@ -7,7 +7,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Derived, type DeriveOptions, derivedVersionOf } from '../versioning/index.ts';
 import type { Checked, Compared } from './checked.ts';
-import { type Comparison, comparedFrom } from './comparison.ts';
+import { type Comparison, comparedFrom, listedIn } from './comparison.ts';
 import type { Prepared } from './prepared.ts';
 
 /**
@@ -41,7 +41,8 @@ function derivationOf(
     return { kind: 'refused' };
   }
   if (comparison.kind === 'no-baseline') {
-    const derived = derivedVersionOf({ baseline: undefined, versions: [], ...options });
+    const versions = listedIn(comparison);
+    const derived = derivedVersionOf({ baseline: undefined, versions, ...options });
     return { kind: 'derived', peers: [], bump: null, derived };
   }
   return comparison.read.chosen === 'against'
@@ -56,7 +57,7 @@ function derivedAgainst(
 ): Derivation {
   const moves = { baseline: read.peers, proposed };
   const bump = versionBumpOf(report, moves);
-  const baseline = { version: read.snapshot.version, stable: read.stable, bump };
+  const baseline = { version: read.snapshot.version, bump };
   const derived = derivedVersionOf({ baseline, versions: read.versions, ...options });
   const peers = peerMovesOf(moves);
   return { kind: 'derived', peers, bump: bump === 'unchanged' ? null : bump, derived };
