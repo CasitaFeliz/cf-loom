@@ -61,16 +61,15 @@ const unionIsRefused =
 
 /**
  * How much longer a shape may take at eight times the size: three times the growth of the size.
- * Linear code measures 3 to 20 times longer, and 30 or more now and then on a loaded host, which
- * `growthOf` measures again; the quadratic code these tests were written for measures 48 times or
- * more, every time.
+ * Linear code measures 5 to 15 times longer, in whole runs of this file and of the project on busy
+ * cores; the quadratic code these tests were written for measures 48 times or more.
  */
 const linearGrowth = 24;
 
 /**
  * The bound of the hub test, which is higher: the walker copies the failures of a failing def on
- * every use of it, so the hub measures 13 to 27 times longer at eight times the size, and 60 or
- * more now and then on a loaded host, against 65 for the code before #316.
+ * every use of it, so the hub measures 18 to 30 times longer at eight times the size, against 62
+ * for the code before #316.
  */
 const hubGrowth = 32;
 
