@@ -73,6 +73,32 @@ export function faultResponseOf({
   return response;
 }
 
+/** What a Fault is given to say when to retry: only a retryable one, in whole seconds from 0. */
+export type RetryAfterGiven =
+  | { readonly retryable: true; readonly retryAfter?: number }
+  | { readonly retryable: false; readonly retryAfter?: never };
+
+/**
+ * Why a Fault's `retryAfter` cannot be sent as `Retry-After`, or none: it is a whole number of
+ * seconds from 0, on a retryable Fault only.
+ */
+export function retryAfterProblemOf({
+  retryable,
+  retryAfter,
+}: {
+  readonly retryable: boolean;
+  readonly retryAfter?: unknown;
+}): string | undefined {
+  if (retryAfter === undefined) {
+    return undefined;
+  }
+  if (typeof retryAfter !== 'number' || !Number.isSafeInteger(retryAfter) || retryAfter < 0) {
+    const named = typeof retryAfter === 'string' ? JSON.stringify(retryAfter) : String(retryAfter);
+    return `retryAfter is no whole number of seconds from 0: got ${named}`;
+  }
+  return retryable ? undefined : 'retryAfter is given only to a retryable Fault';
+}
+
 /** The status a Fault the Service produced travels with: 503 when retryable, else 500. */
 export function faultStatusOf({ retryable }: Pick<SentFault, 'retryable'>): number {
   return retryable ? 503 : 500;

@@ -2,18 +2,18 @@ import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   parsedPartOf,
   parsedShapeOf,
+  retryAfterProblemOf,
   schemaOf,
   shapeFieldsOf,
   successShapeOf,
 } from '@cf-loom/contract/internal';
-import {
-  type AnyAdmission,
-  type AnyOutcome,
-  type BuiltSuccess,
-  type CheckedAdmission,
-  type CheckedOutcome,
-  type Fault,
-  retryAfterProblemOf,
+import type {
+  AnyAdmission,
+  AnyOutcome,
+  BuiltSuccess,
+  CheckedAdmission,
+  CheckedOutcome,
+  Fault,
 } from '../outcomes/index.ts';
 import { type Checked, mapValue } from './checked.ts';
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
