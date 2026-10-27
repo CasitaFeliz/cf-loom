@@ -125,8 +125,11 @@ describe('the records a Service reads off a Handler', () => {
     expectTypeOf<keyof NoResources>().toBeNever();
   });
 
-  test('InvalidCallError and InvalidOutcomeError hold the Issues, beside an Error’s own', () => {
+  test('an InvalidCallError holds the Issues, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof InvalidCallError, keyof Error>>().toEqualTypeOf<'issues'>();
+  });
+
+  test('an InvalidOutcomeError holds the Issues, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof InvalidOutcomeError, keyof Error>>().toEqualTypeOf<'issues'>();
   });
 });

@@ -493,7 +493,7 @@ describe('the records a test reads and writes', () => {
     >();
   });
 
-  test('FakeProviderError holds nothing beside an Error’s own', () => {
+  test('a FakeProviderError holds nothing beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof FakeProviderError, keyof Error>>().toBeNever();
   });
 });

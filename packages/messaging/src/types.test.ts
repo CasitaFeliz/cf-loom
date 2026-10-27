@@ -734,11 +734,23 @@ describe('the records messaging takes and returns', () => {
     >();
   });
 
-  test('the errors messaging throws hold what each says went wrong, beside an Error’s own', () => {
+  test('a DeadlineError holds the wait it ran past, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof DeadlineError, keyof Error>>().toEqualTypeOf<'waitMs'>();
+  });
+
+  test('a MessagingClosedError holds nothing beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof MessagingClosedError, keyof Error>>().toBeNever();
+  });
+
+  test('a CloseAbortedError holds the Messages it handed back, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof CloseAbortedError, keyof Error>>().toEqualTypeOf<'handedBack'>();
+  });
+
+  test('an InvalidMessageError holds the parts it refused, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof InvalidMessageError, keyof Error>>().toEqualTypeOf<'invalid'>();
+  });
+
+  test('a MessageNotSentError holds the Fact id and the versions already sent, beside an Error’s own', () => {
     expectTypeOf<Exclude<keyof MessageNotSentError, keyof Error>>().toEqualTypeOf<
       'factId' | 'sent'
     >();
