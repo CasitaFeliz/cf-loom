@@ -7,7 +7,7 @@ export function isMessageVersion(version: unknown): boolean {
 export type CodeNameOf<Message extends { readonly name: string; readonly version: number }> =
   `${Uncapitalize<Message['name']>}V${Message['version']}`;
 
-/** A Message Version's name in code, `orderCreatedV2`, which a Contract Package keys it by. */
+/** A Message Version's name in code, `orderCreatedV2`, which the Handler map's `commands` and the `readers` table key it by. */
 export function codeNameOf(message: { readonly name: string; readonly version: number }): string {
   return `${message.name.charAt(0).toLowerCase()}${message.name.slice(1)}V${message.version}`;
 }

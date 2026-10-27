@@ -42,7 +42,7 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 // generated entry point of @org/contract-payments-service: each Element by its binding, nothing else
 export { createPaymentEndpoint } from './endpoints/create-payment.ts';   // <name>Endpoint
 export { getPaymentEndpoint } from './endpoints/get-payment.ts';
-export { paymentSettledEventV1 } from './events/payment-settled.v1.ts'; // <name>EventV<version>
+export { paymentSettledEventV1 } from './events/payment-settled.v1.ts'; // <name, first letter lower-cased>EventV<version>
 export { paymentSettledEventV2 } from './events/payment-settled.v2.ts';
 ```
 
