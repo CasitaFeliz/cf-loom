@@ -16,7 +16,7 @@ import { isNothingAt, type PlacedService } from './handler-files.ts';
 export type PathLine = { readonly path: string; readonly line: string };
 
 /** A recorded Handler `generate` moves to where the layout now places its declaration. */
-export type Move = { readonly from: string; readonly to: string; readonly declaration: string };
+export type Move = { readonly from: string; readonly to: string; readonly label: string };
 
 /**
  * What the recorded Handlers come to once every move is made and every line followed: the moves,
@@ -34,8 +34,8 @@ export type Placement = {
 type Moving = { readonly handler: RecordedHandler; readonly placed: HandlerPath };
 
 /** The line `verify` prints for a Handler `generate` would move. */
-export function pendingLineOf({ from, to, declaration }: Move): string {
-  return `${from} is the Handler of ${declaration}, which is now ${to}: run cf-loom generate`;
+export function pendingLineOf({ from, to, label }: Move): string {
+  return `${from} is the Handler of ${label}, which is now ${to}: run cf-loom generate`;
 }
 
 /**
@@ -74,7 +74,7 @@ export function placementOf(
 }
 
 /**
- * The files that keep a Handler once every move is made, and the Handlers that lack one: an
+ * The files that keep a Handler once every move is made, and the Handlers that lack one: a
  * declaration lacks a Handler when its file neither keeps one nor receives one.
  */
 function pictureOf(
@@ -136,7 +136,7 @@ function movingOf(
 }
 
 function moveOf({ handler, placed }: Moving): Move {
-  return { from: handler.path, to: placed.path, declaration: handledLabelOf(placed.handled) };
+  return { from: handler.path, to: placed.path, label: handledLabelOf(placed.handled) };
 }
 
 function byFrom(left: Move, right: Move): number {

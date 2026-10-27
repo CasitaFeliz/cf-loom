@@ -650,7 +650,7 @@ describe('the Broker seam', () => {
     expectTypeOf<keyof ServiceStream>().toEqualTypeOf<'stream' | 'subjects'>();
   });
 
-  test('a DurableConsumer offers an adapter only its Durable consumer, stream, subject and receive', () => {
+  test('a DurableConsumer offers an adapter only its `durable`, stream, subject and receive', () => {
     expectTypeOf<keyof DurableConsumer>().toEqualTypeOf<
       'durable' | 'stream' | 'subject' | 'receive'
     >();

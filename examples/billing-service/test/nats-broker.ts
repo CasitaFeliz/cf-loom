@@ -62,7 +62,7 @@ export async function lastMessageOn(
 }
 
 /** What a Durable consumer has settled and still holds. */
-export type DurableState = {
+export type DurableConsumerState = {
   /** The stream sequence up to which every delivery is settled. */
   readonly ackFloor: number;
   /** Messages the Durable consumer has not delivered yet. */
@@ -74,20 +74,20 @@ export type DurableState = {
 };
 
 /** What NATS holds about a Durable consumer's progress. */
-export async function durableStateOf(
+export async function durableConsumerStateOf(
   url: string,
   stream: string,
   durable: string,
-): Promise<DurableState> {
+): Promise<DurableConsumerState> {
   const connection = await connect({ servers: url });
   try {
     const manager = await jetstreamManager(connection);
-    const consumer = await manager.consumers.info(stream, durable);
+    const consumerInfo = await manager.consumers.info(stream, durable);
     return {
-      ackFloor: consumer.ack_floor.stream_seq,
-      ackPending: consumer.num_ack_pending,
-      pending: consumer.num_pending,
-      redelivered: consumer.num_redelivered,
+      ackFloor: consumerInfo.ack_floor.stream_seq,
+      ackPending: consumerInfo.num_ack_pending,
+      pending: consumerInfo.num_pending,
+      redelivered: consumerInfo.num_redelivered,
     };
   } finally {
     await connection.close();

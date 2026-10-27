@@ -5,7 +5,7 @@ import { connect } from '@nats-io/transport-node';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
 import { droppedUnder, stopServerUnder, withMethods } from '../../test/connections.ts';
-import { arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
+import { arrangeDurableConsumersOf, durableConsumerInfoOf } from '../../test/durables.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, planOf } from '../../test/streams.ts';
@@ -68,7 +68,7 @@ type Settings = {
 /** A messaging over `jetstream()` on a server of the test’s own, with the one connection the Service’s connect opened; it never closes the messaging, since the test closes it. */
 async function aMessaging(server: NatsServer, settings: Settings = {}) {
   await arrangePlanOf(server.url, contract, prefix);
-  await arrangeDurablesOf(server.url, planOf(contract, prefix));
+  await arrangeDurableConsumersOf(server.url, planOf(contract, prefix));
   const opened: NatsConnection[] = [];
   const connectService = async (): Promise<NatsConnection> => {
     const connection = await connect({
@@ -96,7 +96,7 @@ async function aMessaging(server: NatsServer, settings: Settings = {}) {
     );
     await vi.waitFor(async () => {
       const durable = `${prefix}_orders-service_notify-on-created`;
-      const info = await durableInfoOf(server.url, `${prefix}_orders-service`, durable);
+      const info = await durableConsumerInfoOf(server.url, `${prefix}_orders-service`, durable);
       expect(info?.num_waiting).toBe(1);
     });
   }

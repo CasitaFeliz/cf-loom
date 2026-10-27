@@ -4,7 +4,7 @@ import type { Layout } from './config.ts';
 /** A field of the layout: a kind of Handler path, or a generated file's. */
 export type LayoutField = keyof Layout;
 
-/** The variables a Handler path may hold, each filled from the Element's names. */
+/** The variables a Handler path may hold, each filled from the declaration's names. */
 const variables = ['group', 'name', 'version'] as const;
 
 type Variable = (typeof variables)[number];
@@ -78,7 +78,7 @@ const variablePattern = /\{([^{}]*)\}/g;
 /** The characters a path's text may hold outside its variables. */
 const portableText = /^[a-z0-9._-]*$/;
 
-/** A path template with its variables filled in from an Element's names. */
+/** A path template with its variables filled in from a declaration's names. */
 export function filledPathOf(template: string, values: VariableValues): string {
   return template.replace(variablePattern, (_, name: string) => {
     const value = isVariable(name) ? values[name] : undefined;

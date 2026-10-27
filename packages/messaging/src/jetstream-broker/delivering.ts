@@ -1,6 +1,6 @@
 import { receivedHeadersOf } from '@cf-loom/contract/internal';
 import type { Settlement } from '../broker/index.ts';
-import type { FoundDurable } from './finding.ts';
+import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
 import { waitOf } from './waits.ts';
 
@@ -8,7 +8,7 @@ import { waitOf } from './waits.ts';
  * Hands one Message to its Handler with the wait NATS gives that delivery, and applies the
  * Settlement it comes back with; one without cf-loom's ids is ended, since cf-loom never published it.
  */
-export async function deliver(message: PulledMessage, durable: FoundDurable): Promise<void> {
+export async function deliver(message: PulledMessage, found: FoundDurableConsumer): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
   if (read.kind === 'missing') {
     message.term(read.names.map((name) => `no ${name} header`).join(', '));
@@ -16,11 +16,11 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   }
   const { messageId, factId, headers } = read;
   const { deliveryCount } = message;
-  const lastAttempt = isLastDelivery(durable.maxDeliver, deliveryCount);
-  const waitMs = waitOf(durable.waits, deliveryCount);
+  const lastAttempt = isLastDelivery(found.maxDeliver, deliveryCount);
+  const waitMs = waitOf(found.waits, deliveryCount);
   const delivered = { messageId, factId, deliveryCount, lastAttempt, waitMs };
   const delivery = { ...delivered, headers, body: message.data };
-  applySettlement(message, await durable.durableConsumer.receive(delivery));
+  applySettlement(message, await found.durableConsumer.receive(delivery));
 }
 
 /** Whether NATS delivers no more after this delivery: a limit set, and reached. */

@@ -47,7 +47,7 @@ export type Difference =
   | { readonly kind: 'version-gap'; readonly missing: string }
   /** A Message Version added under a name the Baseline holds as the other kind, a tombstone included: a name keeps one kind. */
   | { readonly kind: 'name-kind-changed'; readonly from: 'event' | 'command' }
-  /** A Subscription's Event changed, as the Snapshot spells it: the Releases side by side share its durable consumer. */
+  /** A Subscription's Event changed, as the Snapshot spells it: the Releases side by side share its Durable consumer. */
   | { readonly kind: 'event-changed'; readonly from: string; readonly to: string }
   /** A Definitions Package's export now names another Guard or Rejection, or another kind: a Service importing it gets something else. */
   | { readonly kind: 'export-changed'; readonly from: string; readonly to: string }

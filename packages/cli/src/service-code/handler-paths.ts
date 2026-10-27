@@ -90,11 +90,11 @@ function collidingLineOf(paths: readonly HandlerPath[], directory: string): stri
 
 /** Two declarations at one Handler file: at one path, or at two paths a link makes one file. */
 function bothLineOf(earlier: HandlerPath, later: HandlerPath): string {
-  const elements = `${handledLabelOf(earlier.handled)} and ${handledLabelOf(later.handled)}`;
+  const both = `${handledLabelOf(earlier.handled)} and ${handledLabelOf(later.handled)}`;
   if (earlier.path === later.path) {
-    return `${elements} are both ${later.path}`;
+    return `${both} are both ${later.path}`;
   }
-  return `${elements} are both the same file, ${earlier.path} and ${later.path}`;
+  return `${both} are both the same file, ${earlier.path} and ${later.path}`;
 }
 
 /** A declaration as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */

@@ -6,7 +6,7 @@ import {
 import type { JetStreamManager } from '@nats-io/jetstream';
 import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
-import { applyDurable } from './durable-applying.ts';
+import { applyDurableConsumer } from './durable-applying.ts';
 import type { JetStreamConnecting } from './jetstream.ts';
 import type { BrokerLimits } from './limits.ts';
 import { type ResolvedPlan, settingsOf } from './settings.ts';
@@ -70,8 +70,8 @@ async function applyAll(manager: JetStreamManager, settings: ResolvedPlan): Prom
       return applied;
     }
   }
-  for (const durable of settings.durables) {
-    const applied = await applyDurable(manager, durable);
+  for (const planned of settings.durableConsumers) {
+    const applied = await applyDurableConsumer(manager, planned);
     if (applied.kind === 'refused') {
       return applied;
     }

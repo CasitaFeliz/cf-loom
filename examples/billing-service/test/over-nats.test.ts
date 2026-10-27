@@ -2,7 +2,12 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { billingEnvironment, brokerPrefix, ordersEnvironment } from './environments.ts';
-import { applyPlanOf, type DurableState, durableStateOf, lastMessageOn } from './nats-broker.ts';
+import {
+  applyPlanOf,
+  type DurableConsumerState,
+  durableConsumerStateOf,
+  lastMessageOn,
+} from './nats-broker.ts';
 import { aServiceProcess, type ServiceProcess } from './service-process.ts';
 
 const ordersDir = join(import.meta.dirname, '../../orders-service');
@@ -64,9 +69,9 @@ function sequenceOf(subject: string, factId: string): Promise<number> {
 }
 
 /** What a Durable consumer holds once it has settled every Message up to a stream sequence. */
-function stateOnceSettled(durable: string, sequence: number): Promise<DurableState> {
+function stateOnceSettled(durable: string, sequence: number): Promise<DurableConsumerState> {
   return vi.waitFor(async () => {
-    const state = await durableStateOf(nats!.url, stream, durable);
+    const state = await durableConsumerStateOf(nats!.url, stream, durable);
     if (state.ackFloor < sequence) {
       const settled = `${durable} settled up to ${state.ackFloor}, not ${sequence}`;
       throw new Error(`${settled}\n${stderrOfServices()}`);

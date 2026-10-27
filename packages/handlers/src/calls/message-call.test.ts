@@ -396,7 +396,7 @@ describe("what a Message Handler's direct call answers", () => {
   test('a Message Handler may return a retryable Fault, but not one with retryAfter', () => {
     const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
     const retryable = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
-    // @ts-expect-error the durable consumer's configuration decides when the Message comes again
+    // @ts-expect-error the Durable consumer's configuration decides when the Message comes again
     const timed = handle(chargeCard, () => later);
 
     expect([typeof retryable, typeof timed]).toEqual(['function', 'function']);

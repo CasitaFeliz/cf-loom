@@ -17,10 +17,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test,
 import { z } from 'zod';
 import { withMethods } from '../../test/connections.ts';
 import {
-  arrangeDurable,
-  arrangeDurablesOf,
-  dropDurable,
-  durableInfoOf,
+  arrangeDurableConsumer,
+  arrangeDurableConsumersOf,
+  dropDurableConsumer,
+  durableConsumerInfoOf,
 } from '../../test/durables.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
@@ -194,7 +194,7 @@ async function arrangeOrders(
   settings: Partial<ConsumerConfig> = {},
 ): Promise<void> {
   await arrangePlanOf(server.url, contract, prefix);
-  await arrangeDurablesOf(server.url, planOf(contract, prefix), settings);
+  await arrangeDurableConsumersOf(server.url, planOf(contract, prefix), settings);
 }
 
 /** The plan with only the Durable consumers named kept, to arrange some of Orders’ Durable consumers and not others. */
@@ -251,7 +251,7 @@ async function terminationsOf(): Promise<string[]> {
 async function waitUntilSettled(stream: string, durable: string, delivered: number): Promise<void> {
   await vi.waitFor(
     async () => {
-      const info = await durableInfoOf(server.url, stream, durable);
+      const info = await durableConsumerInfoOf(server.url, stream, durable);
       expect(info).toMatchObject({
         num_pending: 0,
         num_ack_pending: 0,
@@ -298,8 +298,8 @@ async function aConsumingWithFailingPulls(
     ...(onBrokerTrouble === undefined ? {} : { onBrokerTrouble }),
   });
   await orders.consume(handlersOf([]), {});
-  await dropDurable(server.url, names.stream, names.notifyDurable);
-  await dropDurable(server.url, names.stream, names.chargeDurable);
+  await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
+  await dropDurableConsumer(server.url, names.stream, names.chargeDurable);
   const pulledBefore = pulls.length;
   await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(pulledBefore + 2), {
     timeout: 4_000,
@@ -356,7 +356,7 @@ function aGate() {
 /** Waits until the Durable consumer has a pull open on the Broker, so a Message published now is delivered at once. */
 async function waitUntilPulling(stream: string, durable: string): Promise<void> {
   await vi.waitFor(async () => {
-    const info = await durableInfoOf(server.url, stream, durable);
+    const info = await durableConsumerInfoOf(server.url, stream, durable);
     expect(info?.num_waiting).toBe(1);
   });
 }
@@ -430,7 +430,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -445,7 +445,7 @@ describe('consuming over jetstream()', () => {
       `The Durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
     );
     await aWhile();
-    const info = await durableInfoOf(server.url, orders.stream, orders.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, orders.stream, orders.notifyDurable);
     expect(received).toEqual([]);
     expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
   });
@@ -471,7 +471,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -481,7 +481,7 @@ describe('consuming over jetstream()', () => {
     );
     await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-77' });
     await messagingOfOrders.consume(handlersOf(received), {}).catch(() => undefined);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
 
     await messagingOfOrders.consume(handlersOf(received), {});
 
@@ -570,8 +570,8 @@ describe('consuming over jetstream()', () => {
       const orders = anOrders(prefix);
       await arrangePlanOf(server.url, contract, prefix);
       const plan = planOf(contract, prefix);
-      await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
-      await arrangeDurable(server.url, orders.stream, {
+      await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+      await arrangeDurableConsumer(server.url, orders.stream, {
         ...config(orders),
         durable_name: orders.notifyDurable,
       });
@@ -602,8 +602,8 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
-    await arrangeDurable(server.url, orders.stream, {
+    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumer(server.url, orders.stream, {
       ack_policy: 'explicit',
       filter_subjects: [orders.created],
       durable_name: orders.notifyDurable,
@@ -621,7 +621,7 @@ describe('consuming over jetstream()', () => {
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     const handlers = {
@@ -654,7 +654,7 @@ describe('consuming over jetstream()', () => {
       ],
     });
     await arrangePlanOf(server.url, unprefixed, null);
-    await arrangeDurablesOf(server.url, planOf(unprefixed, null));
+    await arrangeDurableConsumersOf(server.url, planOf(unprefixed, null));
     const received: Received[] = [];
     const opened = await messaging(unprefixed, jetstream({ connect: aConnect().connect }));
     onTestFinished(() => opened.close());
@@ -663,7 +663,7 @@ describe('consuming over jetstream()', () => {
     await opened.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-79' });
 
     await vi.waitFor(() => expect(received).toHaveLength(1));
-    const info = await durableInfoOf(
+    const info = await durableConsumerInfoOf(
       server.url,
       'unprefixed-service',
       'unprefixed-service_notify-on-created',
@@ -850,7 +850,7 @@ describe('consuming over jetstream()', () => {
       await publishRaw(names.created, { orderId: 'o-1' }, ids);
 
       await vi.waitFor(async () => {
-        const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+        const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
         expect(info).toMatchObject({
           num_pending: 0,
           num_ack_pending: 0,
@@ -874,7 +874,7 @@ describe('consuming over jetstream()', () => {
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-85' });
 
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(info?.ack_floor.consumer_seq).toBe(1);
     expect(received).toHaveLength(1);
   });
@@ -1094,7 +1094,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
     await aWhile();
-    const whileHeld = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const whileHeld = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     firstGate.open();
 
     expect(received).toHaveLength(1);
@@ -1132,7 +1132,7 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
 
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
 
     await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
     await sleep(2_500);
@@ -1162,9 +1162,9 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf(received), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-99' });
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
     await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
-    await arrangeDurable(server.url, names.stream, {
+    await arrangeDurableConsumer(server.url, names.stream, {
       durable_name: names.notifyDurable,
       ack_policy: 'explicit',
       filter_subject: names.created,
@@ -1186,7 +1186,7 @@ describe('consuming over jetstream()', () => {
     onTestFinished(() => own.stop());
     const prefix = aPrefix();
     await arrangePlanOf(own.url, contract, prefix);
-    await arrangeDurablesOf(own.url, planOf(contract, prefix));
+    await arrangeDurableConsumersOf(own.url, planOf(contract, prefix));
     const troubles: BrokerTrouble[] = [];
     const connectOnce = async () => {
       const connection = await connect({ servers: own.url, reconnect: false });
@@ -1200,8 +1200,8 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf([]), {});
     const names = anOrders(prefix);
     await vi.waitFor(async () => {
-      const notify = await durableInfoOf(own.url, names.stream, names.notifyDurable);
-      const charge = await durableInfoOf(own.url, names.stream, names.chargeDurable);
+      const notify = await durableConsumerInfoOf(own.url, names.stream, names.notifyDurable);
+      const charge = await durableConsumerInfoOf(own.url, names.stream, names.chargeDurable);
       expect([notify?.num_waiting, charge?.num_waiting]).toEqual([1, 1]);
     });
 
@@ -1343,7 +1343,7 @@ describe('closing while consuming over jetstream()', () => {
 
     await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-106' });
     await aWhile();
-    const whileClosing = await durableInfoOf(server.url, names.stream, names.chargeDurable);
+    const whileClosing = await durableConsumerInfoOf(server.url, names.stream, names.chargeDurable);
     gate.open();
     await closing;
 
@@ -1379,7 +1379,7 @@ describe('closing while consuming over jetstream()', () => {
 
     expect(drainedWhileRunning).toEqual([false]);
     expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(info).toMatchObject({ num_ack_pending: 0, ack_floor: { consumer_seq: 1 } });
   });
 
@@ -1399,7 +1399,7 @@ describe('closing while consuming over jetstream()', () => {
       ['Cf-Loom-Fact-Id', 'o-1'],
     ]);
     await vi.waitFor(async () => {
-      const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+      const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
       expect(info?.delivered.consumer_seq).toBe(1);
     });
 
@@ -1466,8 +1466,8 @@ describe('closing while consuming over jetstream()', () => {
     expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
     const infos = [
-      await durableInfoOf(server.url, names.stream, names.notifyDurable),
-      await durableInfoOf(server.url, names.stream, names.chargeDurable),
+      await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable),
+      await durableConsumerInfoOf(server.url, names.stream, names.chargeDurable),
     ];
     expect(infos.map((info) => info?.num_waiting)).toEqual([0, 0]);
   });
@@ -1496,7 +1496,7 @@ describe('closing while consuming over jetstream()', () => {
     search.open();
     await Promise.all([consuming, closing]);
 
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(received).toEqual([]);
     expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
   });
@@ -1679,7 +1679,7 @@ describe('pulling over jetstream()', () => {
     const pulledBefore = pulls.length;
 
     const deletedAt = Date.now();
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
 
     const nextOf = () =>
       pulls.slice(pulledBefore).find(({ subject }) => subject.endsWith(names.notifyDurable));

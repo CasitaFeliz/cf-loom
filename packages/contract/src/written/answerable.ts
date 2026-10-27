@@ -24,13 +24,15 @@ const addedByName = { invalidInput, notImplemented };
 const standardByName = { ...addedByName, notFound };
 
 /** Every Rejection an Endpoint or a Guard may answer, each once (see `RejectionsOf`). */
-export function answerableRejectionsOf(element: Endpoint | Guard): readonly AnswerableRejection[] {
-  if (!isEndpoint(element)) {
-    return distinct([...listOf(element.rejections), notImplemented]);
+export function answerableRejectionsOf(
+  declaration: Endpoint | Guard,
+): readonly AnswerableRejection[] {
+  if (!isEndpoint(declaration)) {
+    return distinct([...listOf(declaration.rejections), notImplemented]);
   }
-  const ofGuards = attachedGuardsOf(element).flatMap((guard) => listOf(guard.rejections));
+  const ofGuards = attachedGuardsOf(declaration).flatMap((guard) => listOf(guard.rejections));
   const added = addedStandardRejectionNames.map((name) => addedByName[name]);
-  return distinct([...listOf(element.rejections), ...ofGuards, ...added]);
+  return distinct([...listOf(declaration.rejections), ...ofGuards, ...added]);
 }
 
 /** Whether two Rejections are one: a Standard Rejection by its name, from any copy of this package. */

@@ -8,10 +8,10 @@ import { planRemedy } from './stream-check.ts';
 import { type Waits, waitsOf } from './waits.ts';
 
 /**
- * A Durable consumer of the Service with the pull request for its Durable consumer on the Broker,
- * the waits NATS gives its deliveries, and its `max_deliver` as NATS reports it, `-1` for none.
+ * The `DurableConsumer` handed to `consume`, with its pull request on the Broker, the waits NATS
+ * gives its deliveries, and its `max_deliver` as NATS reports it, `-1` for none.
  */
-export type FoundDurable = {
+export type FoundDurableConsumer = {
   readonly durableConsumer: DurableConsumer;
   readonly request: PullRequest;
   readonly waits: Waits;
@@ -20,14 +20,14 @@ export type FoundDurable = {
 
 /** Every Durable consumer found on the Broker, or a line for each Durable consumer or stream that is missing or not in the shape cf-loom pulls from, naming it. */
 export type Found =
-  | { readonly kind: 'found'; readonly durables: readonly FoundDurable[] }
+  | { readonly kind: 'found'; readonly durableConsumers: readonly FoundDurableConsumer[] }
   | { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 type Pullable =
-  | { readonly kind: 'pullable'; readonly durable: FoundDurable }
+  | { readonly kind: 'pullable'; readonly found: FoundDurableConsumer }
   | { readonly kind: 'refused'; readonly line: string };
 
-type DurableLookup =
+type DurableConsumerLookup =
   | { readonly kind: 'found'; readonly consumerInfo: ConsumerInfo }
   | { readonly kind: 'missing'; readonly line: string };
 
@@ -40,28 +40,30 @@ export type Search = {
 };
 
 /** Asks NATS for each Durable consumer under its prefixed name, every one before any is pulled from. */
-export async function durablesFoundOf(
+export async function durableConsumersFoundOf(
   search: Search,
   durableConsumers: readonly DurableConsumer[],
 ): Promise<Found> {
-  const durables: FoundDurable[] = [];
+  const foundDurableConsumers: FoundDurableConsumer[] = [];
   const lines: string[] = [];
   for (const durableConsumer of durableConsumers) {
     const pullable = await pullableOf(search, durableConsumer);
     if (pullable.kind === 'pullable') {
-      durables.push(pullable.durable);
+      foundDurableConsumers.push(pullable.found);
     } else {
       lines.push(pullable.line);
     }
   }
-  return lines.length > 0 ? { kind: 'refused', lines } : { kind: 'found', durables };
+  return lines.length > 0
+    ? { kind: 'refused', lines }
+    : { kind: 'found', durableConsumers: foundDurableConsumers };
 }
 
 async function pullableOf(search: Search, durableConsumer: DurableConsumer): Promise<Pullable> {
   const { manager, prefix, apiPrefix, inboxPrefix } = search;
   const stream = prefixedNameOf(prefix, durableConsumer.stream);
   const durableName = prefixedNameOf(prefix, durableConsumer.durable);
-  const lookup = await durableLookupOf(manager, stream, durableName);
+  const lookup = await durableConsumerLookupOf(manager, stream, durableName);
   if (lookup.kind === 'missing') {
     return { kind: 'refused', line: lookup.line };
   }
@@ -75,15 +77,15 @@ async function pullableOf(search: Search, durableConsumer: DurableConsumer): Pro
   const request = pullRequestOf(consumerInfo, apiPrefix, inboxPrefix);
   const waits = waitsOf(consumerInfo.config);
   const maxDeliver = consumerInfo.config.max_deliver ?? -1;
-  return { kind: 'pullable', durable: { durableConsumer, request, waits, maxDeliver } };
+  return { kind: 'pullable', found: { durableConsumer, request, waits, maxDeliver } };
 }
 
 /** What NATS holds about the Durable consumer, or the line for the stream or Durable consumer it says does not exist; any other error is thrown. */
-async function durableLookupOf(
+async function durableConsumerLookupOf(
   manager: JetStreamManager,
   stream: string,
   durableName: string,
-): Promise<DurableLookup> {
+): Promise<DurableConsumerLookup> {
   try {
     return { kind: 'found', consumerInfo: await manager.consumers.info(stream, durableName) };
   } catch (error) {

@@ -1,7 +1,7 @@
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { ConsumeRun, DurableConsumer } from '../broker/index.ts';
 import { deliver } from './delivering.ts';
-import type { FoundDurable } from './finding.ts';
+import type { FoundDurableConsumer } from './finding.ts';
 import { type Pull, pullOnce } from './pull-once.ts';
 import type { PulledMessage } from './pulled-message.ts';
 
@@ -16,20 +16,20 @@ export type PullRun = Pick<ConsumeRun, 'troubled'> & { readonly stopping: AbortS
  * when the core starts closing or the connection closes; a pull that fails is tried again after a pause.
  */
 export async function pullFrom(
-  durable: FoundDurable,
+  found: FoundDurableConsumer,
   natsConnection: NatsConnection,
   run: PullRun,
 ): Promise<void> {
   const { stopping } = run;
-  const reporting = troubleReportingOf(durable.durableConsumer, run);
+  const reporting = troubleReportingOf(found.durableConsumer, run);
   while (isPulling(natsConnection, stopping)) {
-    const pull = await pullOnce(durable.request, natsConnection, stopping);
+    const pull = await pullOnce(found.request, natsConnection, stopping);
     if (isPulling(natsConnection, stopping)) {
       reporting.pulled(pull);
     }
     switch (pull.kind) {
       case 'message':
-        await deliveredOrHandedBack(pull.message, durable, stopping);
+        await deliveredOrHandedBack(pull.message, found, stopping);
         break;
       case 'none':
         break;
@@ -76,14 +76,14 @@ function isPulling(natsConnection: NatsConnection, stopping: AbortSignal): boole
 /** A Message that was already on its way when pulling stopped goes back to NATS for another process, not to a Handler. */
 async function deliveredOrHandedBack(
   message: PulledMessage,
-  durable: FoundDurable,
+  found: FoundDurableConsumer,
   stopping: AbortSignal,
 ): Promise<void> {
   if (stopping.aborted) {
     message.nak();
     return;
   }
-  await deliver(message, durable);
+  await deliver(message, found);
 }
 
 /** Waits the retry pause, or less when `stopping` aborts; its timer and listener never outlive it. */

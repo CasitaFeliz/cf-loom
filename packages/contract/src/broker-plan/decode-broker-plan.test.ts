@@ -125,11 +125,6 @@ describe('reading a broker plan', () => {
       { prefix: null, streams: {} },
       'durableConsumers is missing',
     ],
-    [
-      'a plan that lists its Durable consumers under consumers, as cf-loom printed it before',
-      { prefix: null, streams: {}, consumers: {} },
-      'durableConsumers is missing',
-    ],
     ['a plan whose prefix is no text', aPlan({ prefix: 1 }), 'prefix is not a text or null'],
     ['a plan whose streams are a list', aPlan({ streams: [] }), 'streams is not an object'],
     [

@@ -166,13 +166,13 @@ function movedLine(from: string, to: string): string {
 }
 
 /** What `verify` prints for a Handler `generate` would move. */
-function pendingLine(from: string, declaration: string, to: string): string {
-  return `${from} is the Handler of ${declaration}, which is now ${to}: run cf-loom generate`;
+function pendingLine(from: string, label: string, to: string): string {
+  return `${from} is the Handler of ${label}, which is now ${to}: run cf-loom generate`;
 }
 
-/** What `generate` and `verify` print for a Handler whose Element's new path holds a file. */
-function conflictLine(from: string, declaration: string, to: string): string {
-  return `${from} is the Handler of ${declaration}, which is now ${to}, where a file already is: delete the one that is not its Handler`;
+/** What `generate` and `verify` print for a Handler whose declaration's new path holds a file. */
+function conflictLine(from: string, label: string, to: string): string {
+  return `${from} is the Handler of ${label}, which is now ${to}, where a file already is: delete the one that is not its Handler`;
 }
 
 /** Writes a Handler as its author would, over the stub, and returns its text. */
@@ -1093,7 +1093,7 @@ describe('cf-loom generate: readers.generated.ts', () => {
 });
 
 describe('cf-loom generate: stubs', () => {
-  test('a stub is written for each missing Handler, importing its Element from where it is exported', () => {
+  test('a stub is written for each missing Handler, importing its declaration from where it is exported', () => {
     const project = aProject(aService());
 
     cfLoom(project, 'generate');
@@ -1122,7 +1122,7 @@ describe('cf-loom generate: stubs', () => {
     );
   });
 
-  test('an Element exported by several files is imported from the first by code point', () => {
+  test('a declaration exported by several files is imported from the first by code point', () => {
     const project = aProject({
       ...aService(),
       'src/contract/endpoints/orders/index.ts':
@@ -1671,7 +1671,7 @@ describe('cf-loom generate: a configured layout', () => {
     expect(verified).toMatchObject({ status: 0, stderr: '' });
   });
 
-  test('two Elements whose Handler paths are one file through a link fail the collision check', () => {
+  test('two declarations whose Handler paths are one file through a link fail the collision check', () => {
     const project = aProject(anEndpointWithItsGuard());
     cfLoom(project, 'generate');
     implement(project, 'src/endpoints/orders/a.handler.ts', 'endpoint a');
@@ -1689,7 +1689,7 @@ describe('cf-loom generate: a configured layout', () => {
     expect(read(project, 'src/guards/a.handler.ts')).toBe(guard);
   });
 
-  test('two Elements whose Handler paths are one file once a dangling link’s target exists fail the collision check', () => {
+  test('two declarations whose Handler paths are one file once a dangling link’s target exists fail the collision check', () => {
     const layout =
       "{ endpoint: 'src/missing/{name}.handler.ts', guard: 'src/zlink/{name}.handler.ts' }";
     const project = aProject(withLayout(anEndpointWithItsGuard(), layout));
@@ -3897,7 +3897,7 @@ describe('cf-loom verify: a configured layout', () => {
     });
   });
 
-  test('verify exits 3 on two Elements at one Handler path', () => {
+  test('verify exits 3 on two declarations at one Handler path', () => {
     const project = aProject(aMessagingService());
     cfLoom(project, 'generate');
     write(project, withLayout({}, "{ command: 'src/commands/{name}.handler.ts' }"));
@@ -4973,7 +4973,7 @@ const everyChange = (['keep', 'rename', 'retire', 'delete'] as const).flatMap((e
   ),
 );
 
-describe('cf-loom generate: the Handlers it moves, whatever happens to the Elements', () => {
+describe('cf-loom generate: the Handlers it moves, whatever happens to the declarations', () => {
   test.each(everyChange)(
     'Endpoint a $endpoint, Guard a $guard, layout $layout.text: following the lines ends with every implementation imported',
     ({ endpoint, guard, layout }) => {

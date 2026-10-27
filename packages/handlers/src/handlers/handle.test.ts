@@ -116,6 +116,20 @@ describe('handle', () => {
     expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
+  test('a Handler carries its declaration and no element, whatever it is written for', () => {
+    const handlers = [
+      handle(getOrder, () => success({ id: ORDER_ID })),
+      handle(apiKey, () => admit({ callerId: 'c-1' })),
+      handle(chargeCard, () => undefined),
+      handle(notifyOnPaid, () => undefined),
+    ];
+
+    for (const handler of handlers) {
+      expect(handler).toHaveProperty('declaration');
+      expect(handler).not.toHaveProperty('element');
+    }
+  });
+
   test('handle() given something that is no Endpoint, Guard or paired Command or Subscription throws', () => {
     const copiedEndpoint = { ...getOrder };
 
