@@ -372,8 +372,49 @@ const headerPositions = {
 } as const;
 
 const positions = Object.keys(headerPositions) as (keyof typeof headerPositions)[];
+const requestPositions = ['input', 'demands'] as const;
+const responsePositions = ['success', 'rejection'] as const;
 
-const reservedHeaderNames = [
+/** The names the Fetch standard forbids in a request by name alone, copied from its source as an oracle. */
+const fetchForbiddenRequestNames = [
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+];
+
+/** Names under the two prefixes the Fetch standard keeps, `proxy-` and `sec-`. */
+const fetchForbiddenRequestPrefixed = [
+  'sec-fetch-site',
+  'sec-fetch-mode',
+  'sec-x',
+  'proxy-authorization',
+  'proxy-connection',
+];
+
+/** Names that merely contain a reserved prefix's letters. */
+const nearPrefixNames = ['secret', 'x-sec-id', 'proxy', 'x-proxy-id'];
+
+const bodyAndCfLoomNames = ['content-type', 'content-encoding', 'content-range', 'deprecation'];
+
+const hostOwnedResponseNames = [
   'content-length',
   'transfer-encoding',
   'connection',
@@ -383,27 +424,118 @@ const reservedHeaderNames = [
   'te',
   'trailer',
   'host',
-  'content-type',
-  'content-encoding',
-  'content-range',
-  'deprecation',
+  ...bodyAndCfLoomNames,
+];
+
+const browserHiddenResponseNames = ['set-cookie', 'set-cookie2'];
+
+/** Reserved in a request and free in a response. */
+const requestOnlyNames = [
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'origin',
+  'referer',
+  'via',
+  'sec-fetch-site',
+  'sec-x',
+  'proxy-authorization',
 ];
 
 const notTokens = ['x y', 'héader', 'a:b', '', 'x"y', 'x/y'];
 
-describe('validateRoot: header names are lower-case RFC 9110 tokens no host owns', () => {
-  test.each(
-    positions.flatMap((position) => reservedHeaderNames.map((name) => [position, name] as const)),
-  )('a %s header named %s, which the host or cf-loom owns, fails', (position, name) => {
-    const validated = validateEndpoint(headerPositions[position](name));
+const requestReserved = (name: string) => ({
+  rule: 'header-names',
+  message: `A request header the Fetch standard keeps for the user agent, or cf-loom owns, is reserved: ${name}`,
+});
 
-    expect(validated).toMatchObject({
-      kind: 'invalid',
-      failures: [
-        { rule: 'header-names', message: `A header the host or cf-loom owns is reserved: ${name}` },
-      ],
-    });
-  });
+const responseReserved = (name: string) => ({
+  rule: 'header-names',
+  message: `A response header the host or cf-loom owns, or a browser hides, is reserved: ${name}`,
+});
+
+function crossed<Side extends string>(sides: readonly Side[], names: readonly string[]) {
+  return sides.flatMap((side) => names.map((name) => [side, name] as const));
+}
+
+describe('validateRoot: header names are lower-case RFC 9110 tokens no other party owns', () => {
+  test.each(crossed(requestPositions, fetchForbiddenRequestNames))(
+    'a %s header named %s, which the Fetch standard keeps for the user agent, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(requestPositions, fetchForbiddenRequestPrefixed))(
+    'a %s header named %s, under a prefix the Fetch standard keeps, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(requestPositions, nearPrefixNames))(
+    'a %s header named %s, which only looks like a kept prefix, validates',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
+
+  test.each(crossed(requestPositions, bodyAndCfLoomNames))(
+    'a %s header named %s, which the body or cf-loom owns, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [requestReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, hostOwnedResponseNames))(
+    'a %s header named %s, which the host or cf-loom owns, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [responseReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, browserHiddenResponseNames))(
+    'a %s header named %s, which a browser hides, fails',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated).toMatchObject({ kind: 'invalid', failures: [responseReserved(name)] });
+    },
+  );
+
+  test.each(crossed(responsePositions, requestOnlyNames))(
+    'a %s header named %s, reserved only in requests, validates',
+    (position, name) => {
+      const validated = validateEndpoint(headerPositions[position](name));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
+
+  test.each(requestPositions)(
+    'a %s header named set-cookie2, reserved only in responses, validates',
+    (position) => {
+      const validated = validateEndpoint(headerPositions[position]('set-cookie2'));
+
+      expect(validated.kind).toBe('valid');
+    },
+  );
 
   test.each(positions.flatMap((position) => notTokens.map((name) => [position, name] as const)))(
     'a %s header named %j, which is no token, fails',
@@ -418,12 +550,6 @@ describe('validateRoot: header names are lower-case RFC 9110 tokens no host owns
       });
     },
   );
-
-  test.each(positions)('a %s header named cookie validates', (position) => {
-    const validated = validateEndpoint(headerPositions[position]('cookie'));
-
-    expect(validated.kind).toBe('valid');
-  });
 
   test.each(positions)('a %s header named content-location validates', (position) => {
     const validated = validateEndpoint(headerPositions[position]('content-location'));

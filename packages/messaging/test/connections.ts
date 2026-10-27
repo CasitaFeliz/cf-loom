@@ -22,6 +22,14 @@ export async function stopServerUnder(
   connection: NatsConnection,
   server: NatsServer,
 ): Promise<void> {
+  await droppedUnder(connection, () => server.stop());
+}
+
+/** Drops the connection with `drop`, and resolves once its NATS client noticed. */
+export async function droppedUnder(
+  connection: NatsConnection,
+  drop: () => Promise<void> | void,
+): Promise<void> {
   const statuses = connection.status();
   const noticed = (async () => {
     for await (const status of statuses) {
@@ -30,6 +38,6 @@ export async function stopServerUnder(
       }
     }
   })();
-  await server.stop();
+  await drop();
   await noticed;
 }
