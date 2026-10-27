@@ -24,7 +24,7 @@ import {
   receivedBodyOf,
   receivedEnvelopeOf,
   rejectionResponseOf,
-  reservedFaults,
+  reservedCodeFaults,
   reservedResponseOf,
   type SchemaNode,
   segmentOf,
@@ -302,7 +302,7 @@ describe('the Envelopes as they travel', () => {
     );
   });
 
-  test('a reserved Fault carries its code, a Handler’s Fault none', async () => {
+  test('a Fault with a Reserved code carries it, a Handler’s Fault none', async () => {
     const reserved = reservedResponseOf('RETIRED');
     const returned = faultResponseOf({ committed: 'yes', retryable: true, message: 'Lost' });
 
@@ -375,7 +375,7 @@ describe('allowedMethodsOf', () => {
 
 describe('the reserved codes and statuses', () => {
   test('each reserved code has the status and committed Over HTTP lists', () => {
-    expect(Object.entries(reservedFaults)).toEqual([
+    expect(Object.entries(reservedCodeFaults)).toEqual([
       ['RETIRED', { status: 410, committed: 'no', message: 'The Endpoint is retired' }],
       [
         'NO_SUCH_ENDPOINT',
@@ -400,7 +400,7 @@ describe('the reserved codes and statuses', () => {
   });
 
   test('every reserved code a declaration may not take has its row', () => {
-    expectTypeOf<keyof typeof reservedFaults>().toEqualTypeOf<ReservedCode>();
+    expectTypeOf<keyof typeof reservedCodeFaults>().toEqualTypeOf<ReservedCode>();
   });
 
   test('a Fault travels with its reserved code’s status, else 503 when retryable and 500 otherwise', () => {

@@ -652,7 +652,7 @@ describe('serve: what the hooks receive beside the record', () => {
     ['METHOD_NOT_ALLOWED', new Request('http://test/orders', { method: 'DELETE' })],
     ['BODY_TOO_LARGE', tooLarge()],
     ['INVALID_OUTCOME', get('/orders/leaky')],
-  ])('the reserved Fault %s is recorded with its code', async (code, request) => {
+  ])('a Fault with the Reserved code %s is recorded with it', async (code, request) => {
     const { http, answered } = recording({ maxBodyBytes: 8, onServiceFault: () => undefined });
 
     await http(request);

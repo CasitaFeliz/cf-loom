@@ -281,7 +281,7 @@ export {
   receivedEnvelopeOf,
   receivedHeadersOf,
   rejectionResponseOf,
-  reservedFaults,
+  reservedCodeFaults,
   reservedResponseOf,
   segmentOf,
   sendableRetryAfterOf,
