@@ -1,5 +1,4 @@
-import type { BrokerConsumer } from '../broker/index.ts';
-import { consumerDetailsOf } from '../consuming/index.ts';
+import type { CoreConsumer } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { jsonBodyOf } from './bodies.ts';
 import type { PendingMessage } from './types.ts';
@@ -13,11 +12,11 @@ export class PendingList {
     this.#attempts.set(keyOf(attempt.consumer, attempt.delivery.messageId), attempt);
   }
 
-  leave(consumer: BrokerConsumer, messageId: string): void {
+  leave(consumer: CoreConsumer, messageId: string): void {
     this.#attempts.delete(keyOf(consumer, messageId));
   }
 
-  attemptFor(consumer: BrokerConsumer, messageId: string): Attempt | undefined {
+  attemptFor(consumer: CoreConsumer, messageId: string): Attempt | undefined {
     return this.#attempts.get(keyOf(consumer, messageId));
   }
 
@@ -30,14 +29,13 @@ export class PendingList {
   }
 }
 
-function keyOf(consumer: BrokerConsumer, messageId: string): string {
+function keyOf(consumer: CoreConsumer, messageId: string): string {
   return JSON.stringify([consumer.durable, messageId]);
 }
 
 function pendingMessageOf({ consumer, delivery }: Attempt): PendingMessage {
   const { messageId, factId, deliveryCount, headers, body } = delivery;
-  const { element, identity } = consumerDetailsOf(consumer);
-  const { subject } = consumer;
+  const { element, identity, subject } = consumer;
   const wire = jsonBodyOf(body);
   return { element, identity, subject, messageId, factId, deliveryCount, headers, body: wire };
 }

@@ -5,8 +5,8 @@ import {
   type HandlerFaultBase,
   hookFailureOf,
 } from '@cf-loom/handlers/internal';
-import type { BrokerConsumer, ConsumerTrouble } from '../broker/index.ts';
-import { consumerDetailsOf } from './details.ts';
+import type { ConsumerTrouble } from '../broker/index.ts';
+import type { CoreConsumer } from './details.ts';
 
 /**
  * What `onBrokerTrouble` receives: the Subscription or the Command's Message Version whose durable
@@ -34,7 +34,7 @@ export function troubleTellOf(onBrokerTrouble: BrokerTroubleHook | undefined): T
  * Service without waiting; once `closing` aborted, it tells nothing.
  */
 export function troubledOf(
-  consumers: readonly BrokerConsumer[],
+  consumers: readonly CoreConsumer[],
   closing: AbortSignal,
   tell: TroubleTell,
 ): (trouble: ConsumerTrouble) => void {
@@ -44,8 +44,7 @@ export function troubledOf(
     if (handed === undefined) {
       throw new Error(`${consumer.durable} is no Durable consumer messaging handed this Broker`);
     }
-    const { element, identity } = consumerDetailsOf(handed);
-    const { durable, stream } = handed;
+    const { element, identity, durable, stream } = handed;
     if (!closing.aborted) {
       void tell({ element, identity, durable, stream, ...change });
     }

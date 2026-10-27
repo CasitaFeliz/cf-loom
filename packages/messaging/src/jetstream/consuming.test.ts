@@ -762,7 +762,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(overJetstream));
     const overMemory: Received[] = [];
-    const inMemory = await messaging(contract, memory());
+    const inMemory = await memory(contract);
     onTestFinished(() => inMemory.close());
     await inMemory.consume(handlersOf(overMemory));
 
@@ -786,7 +786,7 @@ describe('consuming over jetstream()', () => {
     const orders = await aMessaging(prefix);
     await orders.consume(handlersOf(overJetstream));
     const overMemory: Received[] = [];
-    const inMemory = await messaging(contract, memory());
+    const inMemory = await memory(contract);
     onTestFinished(() => inMemory.close());
     await inMemory.consume(handlersOf(overMemory));
 

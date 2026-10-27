@@ -1,30 +1,31 @@
-import type { Command, Event, Subscription } from '@cf-loom/contract';
+import type { Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
 import type * as core from 'zod/v4/core';
-import type { Broker, Settlement } from '../broker/index.ts';
+import type { Settlement } from '../broker/index.ts';
+import type { Messaging } from '../messaging/index.ts';
 import type { GivenHeaders } from '../sending/index.ts';
 
 /** The body a Message Version's writer writes, what `publish` or `send` takes for it; a Provided Event's is its Reader's. */
 type WrittenBodyOf<M extends Event | Command> = core.output<M['body']>;
 
 /**
- * What `memory()` returns: a `Broker` that keeps everything in memory, serves one connection and
- * delivers one Message at a time, which a test drives and watches.
+ * What `memory()` resolves to: one `Messaging` that keeps everything in memory and delivers one
+ * Message at a time, and what a test drives and watches it with.
  */
-export type MemoryBroker = Broker & {
+export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
   /**
    * Waits until nothing is in flight, Messages Handlers publish or send meanwhile included; rejects
    * when a Handler threw or returned a Fault, a Message was ended, an `onServiceFault` threw or deliveries were cut
    * since the last `settled()`.
    */
   readonly settled: () => Promise<void>;
-  /** Every Message the Service published or sent, in the order the Broker took it, duplicates dropped. */
+  /** Every Message the Service published or sent, in the order it was taken, duplicates dropped. */
   readonly messages: readonly RecordedMessage[];
   /**
    * The Messages of one Message Version among `messages`, in the same order, each body typed by it:
-   * none before the Service connects, and none yet for a version it has not published or sent.
-   * Throws, once connected, for a declaration that is no live version of the Service's own Events
-   * nor the Active version of one of its own Commands: a Retired version, a Deprecated Command
-   * version, a Provided Event, or a declaration outside the Contract.
+   * none yet for a version the Service has not published or sent. Throws for a declaration that is
+   * no live version of the Service's own Events nor the Active version of one of its own
+   * Commands: a Retired version, a Deprecated Command version, a Provided Event, or a declaration
+   * outside the Contract.
    */
   readonly messagesOf: <const M extends Event | Command>(
     message: M,
@@ -45,7 +46,7 @@ export type MemoryBroker = Broker & {
    * `deliveryCount + 1`.
    */
   readonly redeliver: () => Promise<void>;
-  /** The Messages a Handler left unacknowledged, which the Broker never delivers again on its own. */
+  /** The Messages a Handler left unacknowledged, which `memory()` never delivers again on its own. */
   readonly pending: readonly PendingMessage[];
 };
 

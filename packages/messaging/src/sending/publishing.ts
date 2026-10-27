@@ -5,8 +5,11 @@ import { MessageNotSentError } from './errors.ts';
 import { type Outgoing, outgoingOf } from './outgoing.ts';
 import type { MessageOptions, Published, Sent } from './types.ts';
 
-/** The broker connection publishing and sending go through, which throws once messaging is closed. */
-type ConnectionOf = () => BrokerConnection;
+/** What publishing and sending need of a connection. */
+type Publishing = Pick<BrokerConnection, 'publish'>;
+
+/** The connection publishing and sending go through, which throws once messaging is closed. */
+type ConnectionOf = () => Publishing;
 
 /** `publish`: every live version of the named Event, checked, then sent largest first, by broker header and body bytes, versions of the same size in version order. */
 export function publishOf(subjects: Subjects, connectionOf: ConnectionOf) {
@@ -36,7 +39,7 @@ export function sendOf(subjects: Subjects, connectionOf: ConnectionOf) {
  * of those the Broker dropped as duplicates.
  */
 async function sentInOrder(
-  connection: BrokerConnection,
+  connection: Publishing,
   name: string,
   outgoing: readonly Outgoing[],
 ): Promise<readonly string[]> {

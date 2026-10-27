@@ -1,5 +1,5 @@
-import type { BrokerConsumer, Delivery, Settlement } from '../broker/index.ts';
-import { consumedFaultLinesOf, consumerDetailsOf, type Settled } from '../consuming/index.ts';
+import type { Delivery, Settlement } from '../broker/index.ts';
+import { type CoreConsumer, consumedFaultLinesOf, type Settled } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
 import { DeliveryLine, isCut } from './line.ts';
@@ -66,14 +66,14 @@ export class Deliveries {
     await this.#attempt(consumer, next);
   }
 
-  async #attempt(consumer: BrokerConsumer, delivery: Delivery): Promise<Settlement> {
-    const settled = await consumerDetailsOf(consumer).settle(delivery);
+  async #attempt(consumer: CoreConsumer, delivery: Delivery): Promise<Settlement> {
+    const settled = await consumer.settle(delivery);
     this.#apply(consumer, delivery, settled);
     return settled.settlement;
   }
 
   /** What became of a delivery, kept in the list of pending Messages and the failures. */
-  #apply(consumer: BrokerConsumer, delivery: Delivery, settled: Settled): void {
+  #apply(consumer: CoreConsumer, delivery: Delivery, settled: Settled): void {
     switch (settled.settlement) {
       case 'acked':
         this.#pending.leave(consumer, delivery.messageId);

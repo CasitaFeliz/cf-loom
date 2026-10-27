@@ -1,5 +1,4 @@
-import { type Messaging, messaging } from '@cf-loom/messaging';
-import { type MemoryBroker, memory } from '@cf-loom/messaging/memory';
+import { type MemoryMessaging, memory } from '@cf-loom/messaging/memory';
 import { orderCreatedEventV1 } from '@org/contract-orders-service';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import draftInvoiceOnCreatedHandler from '../src/billing/draft-invoice-on-created.handler.ts';
@@ -19,13 +18,11 @@ function anOrderCreated(orderId: string) {
   return { orderId, customerId: CUSTOMER_ID, total };
 }
 
-describe('draftInvoiceOnCreated over the memory adapter', () => {
-  let broker: MemoryBroker;
-  let running: Messaging<typeof contract>;
+describe('draftInvoiceOnCreated over memory()', () => {
+  let running: MemoryMessaging<typeof contract>;
 
   beforeEach(async () => {
-    broker = memory();
-    running = await messaging(contract, broker);
+    running = await memory(contract);
     await running.consume(handlers);
   });
 
@@ -36,7 +33,7 @@ describe('draftInvoiceOnCreated over the memory adapter', () => {
   test('an OrderCreated delivered through memory() is acknowledged and drafts an invoice for the order’s total', async () => {
     const body = anOrderCreated(DELIVERED_ORDER_ID);
 
-    const settlement = await broker.deliver(orderCreated, body);
+    const settlement = await running.deliver(orderCreated, body);
 
     expect(settlement).toBe('acked');
     expect(draftsOf(DELIVERED_ORDER_ID)).toEqual([{ orderId: DELIVERED_ORDER_ID, total }]);
@@ -46,8 +43,8 @@ describe('draftInvoiceOnCreated over the memory adapter', () => {
     const body = anOrderCreated(REPEATED_ORDER_ID);
     const meta = { factId: `${REPEATED_ORDER_ID}:created` };
 
-    await broker.deliver(orderCreated, body, meta);
-    await broker.deliver(orderCreated, body, meta);
+    await running.deliver(orderCreated, body, meta);
+    await running.deliver(orderCreated, body, meta);
 
     expect(draftsOf(REPEATED_ORDER_ID)).toEqual([{ orderId: REPEATED_ORDER_ID, total }]);
   });

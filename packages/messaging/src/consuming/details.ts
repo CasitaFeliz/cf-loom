@@ -29,29 +29,28 @@ export const leftPending: Settled = {
 };
 
 /**
- * What the core's trouble report and the in-memory Broker read of a consumer beyond the Broker
- * seam: the Element it consumes, its identity, the Reader its Handler reads with, and `settle`,
- * `receive` with what it reported.
+ * A consumer as the core built it: the Durable consumer, Stream and subject it is pulled through,
+ * the Element it consumes, its identity, the Reader its Handler reads with, and `settle`; the
+ * core names a trouble report from it and `memory()` delivers through it, and a Broker is handed
+ * only the `BrokerConsumer` made of it.
  */
-export type ConsumerDetails = {
+export type CoreConsumer = {
+  readonly durable: string;
+  readonly stream: string;
+  readonly subject: string;
   readonly element: Subscription | Command;
   readonly identity: string;
   readonly reader: core.$ZodType;
   readonly settle: Settle;
 };
 
-const detailsByConsumer = new WeakMap<BrokerConsumer, ConsumerDetails>();
-
-/** Keeps the details of a consumer the core built, for the trouble report and the in-memory Broker to read. */
-export function registerConsumerDetails(consumer: BrokerConsumer, details: ConsumerDetails): void {
-  detailsByConsumer.set(consumer, details);
-}
-
-/** The details of a consumer the core built; one it did not build is a bug, and throws. */
-export function consumerDetailsOf(consumer: BrokerConsumer): ConsumerDetails {
-  const details = detailsByConsumer.get(consumer);
-  if (details === undefined) {
-    throw new Error('a BrokerConsumer the core did not build was reported to it');
-  }
-  return details;
+/** The consumer a Broker is handed: its names and `receive`, which answers the Settlement `settle` reports. */
+export function brokerConsumerOf({
+  durable,
+  stream,
+  subject,
+  settle,
+}: CoreConsumer): BrokerConsumer {
+  const receive = async (delivery: Delivery) => (await settle(delivery)).settlement;
+  return { durable, stream, subject, receive };
 }

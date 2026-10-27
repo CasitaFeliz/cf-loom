@@ -8,7 +8,6 @@ import {
 import { handle, readersOf } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Broker, messaging } from '../index.ts';
 import { memory } from './index.ts';
 
 const orderBody = z.object({ orderId: z.string() });
@@ -52,16 +51,12 @@ const readers = readersOf({
   subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
 });
 
-const oneConnection =
-  'memory() serves one connection: create another memory() for another messaging()';
-
 const charge = { orderId: 'o-1' };
 
-/** A memory() connected to the Contract and consuming, its ChargeCard Handler as given. */
+/** A memory() of the Contract and consuming, its ChargeCard Handler as given. */
 async function running(chargeCard: (orderId: string, deliveryCount: number) => Promise<void>) {
-  const broker = memory();
-  const started = await messaging(contract, broker, { onServiceFault: () => undefined });
-  await started.consume({
+  const inMemory = await memory(contract, { onServiceFault: () => undefined });
+  await inMemory.consume({
     commands: {
       chargeCardV1: handle(
         readers.commands.chargeCardV1,
@@ -75,7 +70,7 @@ async function running(chargeCard: (orderId: string, deliveryCount: number) => P
     },
     readers,
   });
-  return { broker, ...started };
+  return inMemory;
 }
 
 /** A promise a test settles itself, to hold a Handler while it runs. */
@@ -88,69 +83,47 @@ function aGate() {
 }
 
 describe('memory(): one connection', () => {
-  test('messaging() connects through memory() and closes', async () => {
-    const broker = memory();
-    const started = await messaging(contract, broker);
-    await started.publisher.publish('OrderCreated', { v1: charge }, { factId: 'f-18' });
+  test('memory(contract) resolves to a Messaging that publishes, consumes and closes', async () => {
+    const handled: string[] = [];
+    const inMemory = await running(async (orderId) => void handled.push(orderId));
+    await inMemory.sender.send('ChargeCard', charge, { factId: 'f-18' });
+    await inMemory.settled();
 
-    await started.close();
+    await inMemory.close();
 
-    expect(broker.messages).toHaveLength(1);
+    expect(handled).toEqual(['o-1']);
     await expect(
-      started.publisher.publish('OrderCreated', { v1: charge }, { factId: 'f-19' }),
+      inMemory.publisher.publish('OrderCreated', { v1: charge }, { factId: 'f-19' }),
     ).rejects.toThrow('messaging is closed');
-  });
-
-  test('a second messaging() through the same memory() rejects, even after the first was closed', async () => {
-    const broker = memory();
-    const first = await messaging(contract, broker);
-
-    const whileOpen = messaging(contract, broker);
-    await first.close();
-    const afterClose = messaging(contract, broker);
-
-    await expect(whileOpen).rejects.toThrow(oneConnection);
-    await expect(afterClose).rejects.toThrow(oneConnection);
-  });
-
-  test('a Broker that connects memory() with a copy of what messaging() told it rejects, since only messaging() tells memory() what the Service lists', async () => {
-    const broker = memory();
-    const copying: Broker = { connect: (service) => broker.connect({ ...service }) };
-
-    const connecting = messaging(contract, copying);
-
-    await expect(connecting).rejects.toThrow(
-      'a BrokerService the core did not build was passed to memory()',
-    );
   });
 
   test('Messages still lined up when messaging closes are left pending, their Handlers never run', async () => {
     const gate = aGate();
     const handled: string[] = [];
-    const { broker, sender, close } = await running(async (orderId) => {
+    const inMemory = await running(async (orderId) => {
       await gate.opened;
       handled.push(orderId);
     });
-    await sender.send('ChargeCard', { orderId: 'a' }, { factId: 'a' });
-    await sender.send('ChargeCard', { orderId: 'b' }, { factId: 'b' });
+    await inMemory.sender.send('ChargeCard', { orderId: 'a' }, { factId: 'a' });
+    await inMemory.sender.send('ChargeCard', { orderId: 'b' }, { factId: 'b' });
 
-    const closing = close();
+    const closing = inMemory.close();
     gate.open();
     await closing;
-    await broker.settled();
+    await inMemory.settled();
 
     expect(handled).toEqual(['a']);
-    expect(broker.pending).toMatchObject([
+    expect(inMemory.pending).toMatchObject([
       { messageId: 'command.ChargeCard.v1:b', deliveryCount: 1 },
     ]);
   });
 
   test('deliver and redeliver reject after close', async () => {
-    const { broker, close } = await running(async () => undefined);
-    await close();
+    const inMemory = await running(async () => undefined);
+    await inMemory.close();
 
-    const delivering = broker.deliver(chargeCardV1, charge);
-    const redelivering = broker.redeliver();
+    const delivering = inMemory.deliver(chargeCardV1, charge);
+    const redelivering = inMemory.redeliver();
 
     await expect(delivering).rejects.toThrow('memory connection is closed');
     await expect(redelivering).rejects.toThrow('memory connection is closed');
@@ -159,7 +132,7 @@ describe('memory(): one connection', () => {
   test('redeliver while closing raises deliveryCount without running the Handler', async () => {
     const gate = aGate();
     const handled: string[] = [];
-    const { broker, sender, close } = await running(async (orderId, deliveryCount) => {
+    const inMemory = await running(async (orderId, deliveryCount) => {
       handled.push(`${orderId}:${deliveryCount}`);
       if (orderId === 'hold') {
         await gate.opened;
@@ -167,17 +140,17 @@ describe('memory(): one connection', () => {
         throw new Error('gateway down');
       }
     });
-    await sender.send('ChargeCard', { orderId: 'x' }, { factId: 'x' });
-    await broker.settled().catch(() => undefined);
-    await sender.send('ChargeCard', { orderId: 'hold' }, { factId: 'hold' });
+    await inMemory.sender.send('ChargeCard', { orderId: 'x' }, { factId: 'x' });
+    await inMemory.settled().catch(() => undefined);
+    await inMemory.sender.send('ChargeCard', { orderId: 'hold' }, { factId: 'hold' });
 
-    const closing = close();
-    const redelivering = broker.redeliver();
+    const closing = inMemory.close();
+    const redelivering = inMemory.redeliver();
     gate.open();
     await Promise.all([closing, redelivering]);
 
     expect(handled).toEqual(['x:1', 'hold:1']);
-    expect(broker.pending).toMatchObject([
+    expect(inMemory.pending).toMatchObject([
       { messageId: 'command.ChargeCard.v1:x', deliveryCount: 2 },
     ]);
   });
