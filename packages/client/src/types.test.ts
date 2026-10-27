@@ -301,6 +301,63 @@ describe('the client’s types', () => {
   });
 });
 
+describe('the client’s options, typed by what they declare', () => {
+  test('an options variable holding baseUrl and a misspelled inferFault is a type error', () => {
+    const options = { baseUrl, inferFalt: () => undefined };
+
+    // @ts-expect-error inferFalt is not a declared field
+    const clientOf = () => client(ordersDependency, options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('an options variable holding headers and a misspelled fetch is a type error', () => {
+    const options = { baseUrl, headers: { 'x-api-key': 'k' }, fetc: () => undefined };
+
+    // @ts-expect-error fetc is not a declared field
+    const clientOf = () => client(ordersDependency, options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('an options variable holding only declared fields is accepted', () => {
+    const options = { baseUrl, inferFault: () => undefined, onDeprecation: () => undefined };
+    const typed: ClientOptions<typeof ordersDependency> = { baseUrl };
+
+    const clients = [client(ordersDependency, options), client(ordersDependency, typed)];
+
+    expect(clients).toHaveLength(2);
+  });
+
+  test('a header given to client() through a variable is no longer required on each call', () => {
+    const options = { baseUrl, headers: { 'x-api-key': 'k' } };
+    const orders = client(ordersDependency, options);
+    type Input = Parameters<typeof orders.getOrder>[0];
+
+    expectTypeOf<{
+      params: { orderId: string };
+      headers: { 'x-region': 'eu' };
+    }>().toExtend<Input>();
+    expectTypeOf<{ params: { orderId: string } }>().not.toExtend<Input>();
+    expect(orders).toBeDefined();
+  });
+
+  test('a function written inline in the options gets its parameter types', () => {
+    const orders = client(ordersDependency, {
+      baseUrl,
+      inferFault: (_happened, inferred) => {
+        expectTypeOf(inferred.retryable).toEqualTypeOf<boolean>();
+        return undefined;
+      },
+      onDeprecation: (notice) => {
+        expectTypeOf(notice).toEqualTypeOf<DeprecationNotice>();
+      },
+    });
+
+    expect(orders).toBeDefined();
+  });
+});
+
 describe('Http', () => {
   test('the global fetch is an Http, and a function of a URL and an init is not', () => {
     expectTypeOf<typeof globalThis.fetch>().toExtend<Http>();
