@@ -9,21 +9,23 @@ export type Entered = Map<SchemaNode, Set<SchemaNode>>;
 
 /**
  * A pair holding a `ref`, one hop on: each `ref` becomes the def it names in its Snapshot's defs,
- * itself a `ref` when that def is an alias def, and a side written inline stays. `undefined` when
- * the hop's pair was already entered within the root schema, since any difference in it was found
- * where it was first met; otherwise the hop's pair is recorded as entered.
+ * itself a `ref` when that def is an alias def, and a side written inline stays.
  */
-export function hopOf(pair: NodePair, defs: BothDefs, entered: Entered): NodePair | undefined {
-  const hop = {
+export function hopOf(pair: NodePair, defs: BothDefs): NodePair {
+  return {
     baseline: defOf(pair.baseline, defs.baseline),
     proposed: defOf(pair.proposed, defs.proposed),
   };
-  const proposedEntered = entered.get(hop.baseline) ?? new Set<SchemaNode>();
-  if (proposedEntered.has(hop.proposed)) {
-    return undefined;
+}
+
+/** Whether a pair is entered for the first time within its root schema, recording it as entered. */
+export function isFirstEntered(entered: Entered, { baseline, proposed }: NodePair): boolean {
+  const proposedEntered = entered.get(baseline) ?? new Set<SchemaNode>();
+  if (proposedEntered.has(proposed)) {
+    return false;
   }
-  entered.set(hop.baseline, proposedEntered.add(hop.proposed));
-  return hop;
+  entered.set(baseline, proposedEntered.add(proposed));
+  return true;
 }
 
 /**

@@ -537,7 +537,7 @@ function publishProblemsOf(
 }
 
 describe('compatibilityReportOf, every difference in a seeded def graph’s history is a Change', () => {
-  test('150 histories of 7 versions, with alias defs in every place a ref can sit', {
+  test('150 histories of 7 versions, with alias defs in fields, arrays, records, tagged variants, a plain union’s option and a tuple’s rest', {
     timeout: 30_000,
   }, () => {
     const graphs = seededGraphs(1);

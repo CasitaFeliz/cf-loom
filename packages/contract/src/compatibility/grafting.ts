@@ -5,7 +5,6 @@ import {
   type Defs,
   defsReachedOf,
   refNamed,
-  resolvedRefOf,
   type SchemaNode,
   type Step,
   withChild,
@@ -16,6 +15,7 @@ import type { BothDefs, Finding, NodePair } from './findings.ts';
 import {
   copyMet,
   followedPairOf,
+  followedRefOf,
   type GraftDefs,
   graftRecorded,
   namedDefs,
@@ -166,7 +166,7 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
 type Place = { readonly owner: number | undefined; readonly put: Put };
 
 /**
- * A pair as the compare follows it: built in place when the proposed side is written inline, else
+ * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place when the proposed side is written inline, else
  * a `ref` to its def, held as the Snapshot declares it or named apart, built once.
  */
 function placePair(walk: Walk, pair: NodePair, place: Place): void {
@@ -209,10 +209,7 @@ function placeCopy(walk: Walk, node: SchemaNode, put: Put): void {
     walk.frames.push({ kind: 'copy', children: childrenOf(node).values(), node, put });
     return;
   }
-  const resolved = resolvedRefOf(node, walk.defs.baseline);
-  if (resolved === undefined) {
-    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
-  }
+  const resolved = followedRefOf(node, walk.defs.baseline);
   const { name, isBuilt } = copyMet(walk.met, resolved.name);
   put(refNamed(node, name ?? resolved.name, resolved));
   if (isBuilt) {

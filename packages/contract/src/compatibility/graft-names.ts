@@ -1,4 +1,10 @@
-import { type Defs, resolvedRefOf, type SchemaNode } from '../walker/index.ts';
+import {
+  type Defs,
+  type RefNode,
+  type ResolvedRef,
+  resolvedRefOf,
+  type SchemaNode,
+} from '../walker/index.ts';
 import type { BothDefs, NodePair } from './findings.ts';
 
 /**
@@ -34,17 +40,25 @@ function resolvedSideOf(node: SchemaNode, defs: Defs): ResolvedSide {
   if (node.type !== 'ref') {
     return { node, key: node };
   }
-  const resolved = resolvedRefOf(node, defs);
-  if (resolved === undefined) {
-    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
-  }
-  const { name, def, nullable } = resolved;
+  const { name, def, nullable } = followedRefOf(node, defs);
   return { node: nullable ? { ...def, nullable: true } : def, key: name };
 }
 
 /**
+ * The def a `ref` stands for through alias defs, as the graft writes only destinations: a `ref`
+ * that reaches none is a bug.
+ */
+export function followedRefOf(ref: RefNode, defs: Defs): ResolvedRef {
+  const resolved = resolvedRefOf(ref, defs);
+  if (resolved === undefined) {
+    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
+  }
+  return resolved;
+}
+
+/**
  * A def a former Input's graft meets, in the order it meets them: a pair of a former node and a
- * proposed def, by the key the compare enters it by, with whether a field is grafted into its body
+ * proposed def, by its `PairKey`, with whether a field is grafted into its body
  * and the pairs its body reaches; or a def only the former Input reaches, copied as it was. `base`
  * is the name of the def it comes from.
  */

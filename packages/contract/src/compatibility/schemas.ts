@@ -12,7 +12,7 @@ import {
   type NodePairOf,
   typeChanged,
 } from './findings.ts';
-import { type Entered, hopOf } from './refs.ts';
+import { type Entered, hopOf, isFirstEntered } from './refs.ts';
 import type { Difference, EndpointPosition, Position } from './report.ts';
 import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
 
@@ -34,7 +34,7 @@ type EnteredPlace = SchemaPlace & { readonly entered: Entered };
 
 /**
  * A pair and how it is met: where a schema is used, or one hop on from a pair holding a `ref`, at
- * the same path, where only a def can be.
+ * the same path, each `ref` side the def it names and an inline side as it was.
  */
 type Met = { readonly kind: 'use' | 'hop'; readonly pair: NodePair };
 
@@ -61,19 +61,20 @@ export function schemaDifferencesOf(
       continue;
     }
     const finding = next.value;
-    const at = finding.kind === 'hop' ? level.place.at : [...level.place.at, ...finding.steps];
     switch (finding.kind) {
       case 'found':
         differences.push({
           kind: 'schema',
           position: level.place.position,
-          at,
+          at: [...level.place.at, ...finding.steps],
           shape: finding.shape,
         });
         break;
-      case 'inside':
+      case 'inside': {
+        const at = [...level.place.at, ...finding.steps];
         levels.push(levelOf({ kind: 'use', pair: finding.pair }, defs, { ...level.place, at }));
         break;
+      }
       case 'hop':
         levels.push(levelOf(finding, defs, level.place));
         break;
@@ -110,8 +111,8 @@ function findingsWithin(
   if (pair.baseline.type !== 'ref' && pair.proposed.type !== 'ref') {
     return [...own, ...typeFindingsOf(pair, defs)];
   }
-  const hop = hopOf(pair, defs, place.entered);
-  return hop === undefined ? own : [...own, { kind: 'hop', pair: hop }];
+  const hop = hopOf(pair, defs);
+  return isFirstEntered(place.entered, hop) ? [...own, { kind: 'hop', pair: hop }] : own;
 }
 
 /**
