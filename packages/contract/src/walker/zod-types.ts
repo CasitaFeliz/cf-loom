@@ -32,7 +32,7 @@ import {
 
 /** The node a schema's own def describes, with its own checks judged. */
 export function walkDefinition(schema: core.$ZodType, at: Reached, walker: Walker): Walked {
-  return withOwnChecks(schema, nodeOf(schema, at, walker), { at });
+  return withOwnChecks(schema, nodeOf(schema, at, walker), { at, kind: 'schema' });
 }
 
 /**

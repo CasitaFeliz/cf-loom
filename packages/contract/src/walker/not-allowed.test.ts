@@ -36,7 +36,7 @@ function failureAt(at: string, construct: string, instead?: string) {
   return { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
 }
 
-/** A check zod would also run on `null`, which the Snapshot's node holds for the other values. */
+/** A check written on a schema that admits `null`, which belongs to the schema inside. */
 function onNull(at: string, check: string) {
   return failureAt(
     at,
@@ -45,9 +45,13 @@ function onNull(at: string, check: string) {
   );
 }
 
-/** A check zod would also run on an absent field, which the Snapshot's field does not say. */
+/** A check written on a field's `.optional()`, which belongs to the schema inside it. */
 function onOptional(at: string, check: string) {
-  return failureAt(at, `${check} on .optional()`, 'the check on the schema inside');
+  return failureAt(
+    at,
+    `${check} on .optional()`,
+    'the check on the schema inside .optional() and any .nullable()',
+  );
 }
 
 function refusedAll(failures: readonly ReturnType<typeof failureAt>[]) {
@@ -111,6 +115,8 @@ describe('walkSchemas: the Not allowed list', () => {
     ['a zod/mini custom check', zm.string().check(zm.refine((value) => value !== '')), '.refine()'],
     ['z.custom()', z.custom<string>(), 'z.custom()'],
     ['z.int64()', z.int64(), 'z.bigint()'],
+    ['z.int() on a string', z.string().check(z.int() as never), 'z.int()'],
+    ['z.int() on a boolean', z.boolean().check(z.int() as never), 'z.int()'],
     ['z.codec()', z.codec(z.string(), z.number(), { decode: Number, encode: String }), 'z.codec()'],
     [
       'a zod/mini z.codec()',
@@ -903,7 +909,7 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
       inner: z.number(),
       check: z.multipleOf(2),
     },
-    { name: 'z.int()', construct: 'z.safeint()', inner: z.number(), check: z.int() },
+    { name: 'z.int()', construct: 'z.int()', inner: z.number(), check: z.int() },
     { name: 'z.minLength()', construct: 'z.minLength()', inner: z.string(), check: z.minLength(2) },
     { name: 'z.maxLength()', construct: 'z.maxLength()', inner: z.string(), check: z.maxLength(5) },
     { name: 'z.length()', construct: 'z.length()', inner: z.string(), check: z.length(3) },
@@ -998,6 +1004,8 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
     return schema.check(check as never);
   }
 
+  const inMiniField = (schema: zm.ZodMiniType) => zm.object({ a: schema });
+
   test.each<[string, zm.ZodMiniType, string]>([
     ['z.gt()', checkedMini(zm.nullable(zm.number()), zm.gt(3)), 'z.gt()'],
     ['z.multipleOf()', checkedMini(zm.nullable(zm.number()), zm.multipleOf(2)), 'z.multipleOf()'],
@@ -1005,6 +1013,15 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
     ['z.regex()', checkedMini(zm.nullable(zm.string()), zm.regex(/^a/)), 'z.regex()'],
   ])('%s on a zod/mini nullable fails the same way', (_name, schema, construct) => {
     expect(walkBody(schema)).toEqual(refusedAll([onNull('', construct)]));
+  });
+
+  test.each<[string, zm.ZodMiniType, string]>([
+    ['z.gt()', checkedMini(zm.optional(zm.number()), zm.gt(3)), 'z.gt()'],
+    ['z.multipleOf()', checkedMini(zm.optional(zm.number()), zm.multipleOf(2)), 'z.multipleOf()'],
+    ['z.minLength()', checkedMini(zm.optional(zm.string()), zm.minLength(2)), 'z.minLength()'],
+    ['z.regex()', checkedMini(zm.optional(zm.string()), zm.regex(/^a/)), 'z.regex()'],
+  ])("%s on a zod/mini field's .optional() fails the same way", (_name, schema, construct) => {
+    expect(walkBody(inMiniField(schema))).toEqual(refusedAll([onOptional('a', construct)]));
   });
 
   test('a check on a z.lazy() around a number is still a constraint', () => {
@@ -1052,13 +1069,27 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   });
 
   test("a check written inside a field's .optional() is still a constraint", () => {
-    const schema = z.object({ a: z.number().gt(3).optional() }).required();
+    const schema = z.object({ a: z.number().gt(3).optional() });
 
     expect(walkBody(schema).located[0]).toEqual({
       kind: 'walked',
       value: {
         type: 'object',
-        fields: { a: { required: true, schema: { type: 'number', exclusiveMin: 3 } } },
+        fields: { a: { required: false, schema: { type: 'number', exclusiveMin: 3 } } },
+      },
+    });
+  });
+
+  test("the check on the schema inside a field's .optional() and .nullable() is a constraint", () => {
+    const schema = z.object({ a: z.number().gt(3).nullable().optional() });
+
+    expect(walkBody(schema).located[0]).toEqual({
+      kind: 'walked',
+      value: {
+        type: 'object',
+        fields: {
+          a: { required: false, schema: { type: 'number', exclusiveMin: 3, nullable: true } },
+        },
       },
     });
   });
@@ -1088,14 +1119,21 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   });
 
   test.each(takenChecks)(
-    "$name written inside .nullable() or a field's .optional() walks, and zod accepts null and an absent field",
+    '$name written inside .nullable() walks, and zod accepts null',
     ({ inner, check }) => {
       const nullable = checked(inner, check).nullable();
-      const object = z.object({ a: checked(inner, check).optional() });
 
       expect(walkBody(nullable).located[0]?.kind).toBe('walked');
-      expect(walkBody(object).located[0]?.kind).toBe('walked');
       expect(nullable.safeParse(null).success).toBe(true);
+    },
+  );
+
+  test.each(takenChecks)(
+    "$name written inside a field's .optional() walks, and zod accepts an absent field",
+    ({ inner, check }) => {
+      const object = z.object({ a: checked(inner, check).optional() });
+
+      expect(walkBody(object).located[0]?.kind).toBe('walked');
       expect(object.safeParse({}).success).toBe(true);
     },
   );

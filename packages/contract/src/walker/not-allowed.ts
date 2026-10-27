@@ -153,7 +153,10 @@ export function refusedNullableDef(id: string): Refused {
   };
 }
 
-/** A check on a schema that admits `null`: zod runs it on `null` too, which no node says. */
+/**
+ * A check on a schema that admits `null`: a check belongs to the schema it constrains, and
+ * whether zod runs it on `null` depends on each check, which no node says.
+ */
 export function refusedCheckOnNullable(check: string): Refused {
   return {
     construct: `${check} on a schema that admits null`,
@@ -161,9 +164,15 @@ export function refusedCheckOnNullable(check: string): Refused {
   };
 }
 
-/** A check on a field's `.optional()`: zod runs it on an absent value too, which no field says. */
+/**
+ * A check on a field's `.optional()`: a check belongs to the schema it constrains, and whether
+ * zod runs it on an absent field depends on each check, which no field says.
+ */
 export function refusedCheckOnOptional(check: string): Refused {
-  return { construct: `${check} on .optional()`, instead: 'the check on the schema inside' };
+  return {
+    construct: `${check} on .optional()`,
+    instead: 'the check on the schema inside .optional() and any .nullable()',
+  };
 }
 
 /** A second schema named with an id another schema in the Snapshot already has. */
@@ -176,9 +185,14 @@ export function refusedExample(index: number): Refused {
   return { construct: `an example the schema refuses (examples[${index}])` };
 }
 
+/** A zod function by its name, as the Not allowed list writes it. */
+export function zodCall(name: string): string {
+  return `z.${name}()`;
+}
+
 /** A check, or a zod type, the walker has no node or constraint for, by its zod name. */
 export function refusedName(name: string): Refused {
-  return { construct: `z.${name}()` };
+  return { construct: zodCall(name) };
 }
 
 /** Two checks that set one constraint, which a node holds once. */

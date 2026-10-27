@@ -1,7 +1,7 @@
 import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
 import { type Constraint, type ConstraintOf, constraintOfType } from './check-constraints.ts';
-import { type DeclaredCheck, isConditional, refusedCheck } from './check-defs.ts';
+import { type DeclaredCheck, isConditional, nameOfCheck } from './check-defs.ts';
 import type { NotAllowed } from './nodes.ts';
 import {
   notAllowed,
@@ -13,8 +13,11 @@ import {
 } from './not-allowed.ts';
 import { failed, type Outline, outlineOf, type Reached, type Walked, walked } from './walked.ts';
 
-/** Where a schema's checks are judged, and whether the schema is a field's `.optional()`. */
-export type CheckedAt = { readonly at: Reached; readonly optional?: true };
+/** What a schema is whose checks are judged: any schema, or the wrapper of a field. */
+export type CheckedKind = 'schema' | 'optional' | 'nonoptional';
+
+/** Where a schema's checks are judged, and what the schema is. */
+export type CheckedAt = { readonly at: Reached; readonly kind: CheckedKind };
 
 /**
  * A walked schema with the constraint of each of its checks, by what its node's type takes; a
@@ -23,10 +26,10 @@ export type CheckedAt = { readonly at: Reached; readonly optional?: true };
 export function constrain(
   walkedSchema: Walked,
   checks: readonly DeclaredCheck[],
-  { at, optional }: CheckedAt,
+  { at, kind }: CheckedAt,
 ): Walked {
   const outline = outlineOf(walkedSchema);
-  const constraints = constraintsOf(constraintOfSchema(outline, optional), checks, at);
+  const constraints = constraintsOf(constraintOfSchema(outline, kind), checks, at);
   const constrainedOutline = constrained(outline, constraints);
   const failures = [
     ...failuresOfConstraints(constraints, Object.keys(outline), at),
@@ -48,18 +51,22 @@ function emptinessFailuresOf(outline: Outline, at: Reached): readonly NotAllowed
 }
 
 /**
- * The constraint a check sets by its node's type, refused where the schema admits a value besides
- * the node's, `null` or an absent field, since zod runs a check on it too.
+ * A check belongs to the schema it constrains, so where its schema admits more than its node
+ * does, `null` or an absent field, the constraint is refused.
  */
-function constraintOfSchema(outline: Outline, optional: true | undefined): ConstraintOf<object> {
+function constraintOfSchema(outline: Outline, kind: CheckedKind): ConstraintOf<object> {
   const taken = constraintOfType(outline.type);
-  if (optional) {
-    return refusedOnAbsent(taken, refusedCheckOnOptional);
+  switch (kind) {
+    case 'optional':
+      return refusedOnWiderSchema(taken, refusedCheckOnOptional);
+    case 'nonoptional':
+    case 'schema':
+      return outline.nullable ? refusedOnWiderSchema(taken, refusedCheckOnNullable) : taken;
   }
-  return outline.nullable ? refusedOnAbsent(taken, refusedCheckOnNullable) : taken;
 }
 
-function refusedOnAbsent<Node>(
+/** A constraint a check would set on the node, refused as written on a schema that admits more. */
+function refusedOnWiderSchema<Node>(
   constraintOf: ConstraintOf<Node>,
   refusal: (check: string) => Refused,
 ): ConstraintOf<Node> {
@@ -68,7 +75,7 @@ function refusedOnAbsent<Node>(
     if (constraint.kind === 'not-allowed') {
       return constraint;
     }
-    return notAllowed(at, refusal(refusedCheck(check.def).construct));
+    return notAllowed(at, refusal(nameOfCheck(check.def)));
   };
 }
 

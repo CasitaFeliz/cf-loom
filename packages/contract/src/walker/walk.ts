@@ -179,17 +179,12 @@ function wrapperOf(
 }
 
 /**
- * A field's wrapper says what any schema does: its checks and its own metadata apply, though an
- * `.optional()` takes no check, which zod runs on an absent field too. It names no cycle, so an
- * id on it is refused beside whatever the schema inside fails by.
+ * A field's wrapper says what any schema does: its checks and its own metadata apply. It names no
+ * cycle, so an id on it is refused beside whatever the schema inside fails by.
  */
 function throughWrapper(wrapper: Wrapper, inner: Walked): Walked {
   const { schema, at, kind, origin } = wrapper;
-  const checked = withOwnChecks(
-    schema,
-    inner,
-    kind === 'optional' ? { at, optional: true } : { at },
-  );
+  const checked = withOwnChecks(schema, inner, { at, kind });
   const joined = hasOwnId(schema)
     ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
     : checked;
