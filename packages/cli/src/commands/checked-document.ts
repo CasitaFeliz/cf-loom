@@ -1,5 +1,4 @@
 import type { Checked } from './checked.ts';
-import { reasonOf } from './checked.ts';
 import type { Document } from './exit.ts';
 
 /**
@@ -7,14 +6,14 @@ import type { Document } from './exit.ts';
  * every Change, the peer ranges that moved and the version `publish` would take, if it derives one.
  */
 export function checkedDocumentOf(checked: Checked): Document {
-  const { packageName, against, changes, derivation } = checked;
+  const { packageName, stable, against, changes, derivation } = checked;
   const derived = derivation.kind === 'derived' ? derivation : undefined;
   const published = derived?.derived.kind === 'version' ? derived.derived : null;
   return {
     package: packageName,
     baseline: against.kind === 'baseline' ? against.version : null,
-    stable: against.stable ?? null,
-    reason: against.kind === 'none' ? reasonOf(against.why) : null,
+    stable: stable ?? null,
+    reason: against.kind === 'none' ? against.reason : null,
     changes,
     peers: derived?.peers ?? [],
     bump: derived?.bump ?? null,

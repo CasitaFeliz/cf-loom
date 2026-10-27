@@ -19,7 +19,7 @@ export type Found = {
 export type NoneFound = { readonly kind: 'none-found' };
 
 /** The package and declared Snapshot a version's metadata is read for. */
-export type Expected = {
+type DeclaredPackage = {
   readonly packageName: string;
   readonly declared: BaselineSource['declared'];
 };
@@ -28,13 +28,13 @@ export type Expected = {
 export async function foundIn(
   npm: NpmPlace,
   choice: Choice,
-  expected: Expected,
+  declaring: DeclaredPackage,
 ): Promise<Found | NoneFound | Failed> {
   switch (choice.kind) {
     case 'against':
-      return await namedFoundIn(npm, choice.version, expected);
+      return await namedFoundIn(npm, choice.version, declaring);
     case 'baseline':
-      return await firstFoundIn(npm, choice.candidates, expected);
+      return await firstFoundIn(npm, choice.candidates, declaring);
   }
 }
 
@@ -42,9 +42,9 @@ export async function foundIn(
 async function namedFoundIn(
   npm: NpmPlace,
   version: string,
-  expected: Expected,
+  declaring: DeclaredPackage,
 ): Promise<Found | Failed> {
-  const source = sourceOf(version, expected);
+  const source = sourceOf(version, declaring);
   const found = await foundAt(npm, source);
   if (found.kind === 'not-cf-loom') {
     return failed(`${source.spec} has no cfLoom: it was not published by cf-loom publish`);
@@ -56,10 +56,10 @@ async function namedFoundIn(
 async function firstFoundIn(
   npm: NpmPlace,
   candidates: readonly string[],
-  expected: Expected,
+  declaring: DeclaredPackage,
 ): Promise<Found | NoneFound | Failed> {
   for (const version of candidates) {
-    const found = await foundAt(npm, sourceOf(version, expected));
+    const found = await foundAt(npm, sourceOf(version, declaring));
     if (found.kind !== 'not-cf-loom') {
       return found;
     }
@@ -67,7 +67,7 @@ async function firstFoundIn(
   return { kind: 'none-found' };
 }
 
-function sourceOf(version: string, { packageName, declared }: Expected): BaselineSource {
+function sourceOf(version: string, { packageName, declared }: DeclaredPackage): BaselineSource {
   return { spec: `${packageName}@${version}`, version, declared };
 }
 

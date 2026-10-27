@@ -1,12 +1,9 @@
 import { type Failed, failed } from '../child-process/index.ts';
 import { jsonFromNpm, type NpmPlace, type Refused } from './npm.ts';
-import { type Versions, versionsFrom } from './versions.ts';
+import { type Listing, type Versions, versionsFrom } from './versions.ts';
 
 /** npm's 404 for a package, before anything is known of why the registry lacks it. */
 export type NotFound = { readonly kind: 'not-found' };
-
-/** What a package listed when `publish` first read it: every version, lowest first, none when npm could not find it. */
-export type FirstListing = { readonly packageName: string; readonly versions: readonly string[] };
 
 /** Reads, through the organization's own npm, every version a package lists. */
 export async function versionsOf(
@@ -27,11 +24,12 @@ export async function versionsOf(
 
 /**
  * Reads a package's versions again right before `publish` puts a version, and fails when the
- * list holds one the first listing did not, since the Compatibility Check never judged against it.
+ * list holds one the listing `publish` first read did not, since the Compatibility Check never
+ * judged against it.
  */
 export async function unchangedSince(
   npm: NpmPlace,
-  { packageName, versions }: FirstListing,
+  { packageName, versions }: Listing,
 ): Promise<{ readonly kind: 'unchanged' } | Failed> {
   const listed = await versionsOf(npm, packageName);
   switch (listed.kind) {
@@ -40,7 +38,7 @@ export async function unchangedSince(
     case 'not-found':
       return { kind: 'unchanged' };
     case 'versions': {
-      const meanwhile = listed.versions.filter((version) => !versions.includes(version));
+      const meanwhile = listed.listing.versions.filter((version) => !versions.includes(version));
       const highest = meanwhile.at(-1);
       return highest === undefined
         ? { kind: 'unchanged' }

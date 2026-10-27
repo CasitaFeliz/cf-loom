@@ -5,7 +5,12 @@ import {
   type VersionBump,
   versionBumpOf,
 } from '@cf-loom/contract/internal';
-import { type Derived, type DeriveOptions, derivedVersionOf } from '../versioning/index.ts';
+import {
+  type Derived,
+  type DeriveOptions,
+  type Deriving,
+  derivedVersionOf,
+} from '../versioning/index.ts';
 import type { Checked, Compared } from './checked.ts';
 import { type Comparison, comparedFrom } from './comparison.ts';
 import type { Prepared } from './prepared.ts';
@@ -40,25 +45,26 @@ function derivationOf(
   if (changes.some(({ verdict }) => verdict === 'refused')) {
     return { kind: 'refused' };
   }
-  if (comparison.kind === 'no-baseline') {
-    const { versions } = comparison;
-    const derived = derivedVersionOf({ baseline: undefined, versions, ...options });
+  const { compared, listing } = comparison;
+  const deriving = { versions: listing.versions, ...options };
+  if (compared.kind === 'no-baseline') {
+    const derived = derivedVersionOf({ baseline: undefined, ...deriving });
     return { kind: 'derived', peers: [], bump: null, derived };
   }
-  return comparison.read.chosen === 'against'
+  return compared.baseline.chosen === 'against'
     ? { kind: 'against' }
-    : derivedAgainst(comparison, peerRanges, options);
+    : derivedAgainst(compared, peerRanges, deriving);
 }
 
 function derivedAgainst(
-  { read, report, versions }: Extract<Comparison, { kind: 'baseline' }>,
+  { baseline: read, report }: Extract<Comparison['compared'], { kind: 'baseline' }>,
   proposed: PeerRanges,
-  options: DeriveOptions,
+  deriving: Omit<Deriving, 'baseline'>,
 ): Derivation {
   const moves = { baseline: read.peers, proposed };
   const bump = versionBumpOf(report, moves);
   const baseline = { version: read.snapshot.version, bump };
-  const derived = derivedVersionOf({ baseline, versions, ...options });
+  const derived = derivedVersionOf({ baseline, ...deriving });
   const peers = peerMovesOf(moves);
   return { kind: 'derived', peers, bump: bump === 'unchanged' ? null : bump, derived };
 }

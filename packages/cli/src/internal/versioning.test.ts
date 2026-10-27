@@ -572,7 +572,7 @@ function brokenBy({ baseline, versions }: Draw, derived: Derived): readonly stri
 }
 
 describe('derivedVersionOf, for any listed versions and any Baseline among them', () => {
-  test('a derived version is not listed and is above every version that is not a prerelease, or nothing is published', () => {
+  test('a derived version is not listed and is above the Baseline and every version that is not a prerelease, or nothing is published', () => {
     const next = seededNext(325);
     const broken: string[] = [];
 

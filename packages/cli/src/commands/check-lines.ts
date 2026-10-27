@@ -6,7 +6,7 @@ import {
   isPrerelease,
   type Why,
 } from '../versioning/index.ts';
-import { type Checked, reasonOf } from './checked.ts';
+import type { Checked } from './checked.ts';
 import type { CheckedChange, DifferenceJson } from './checked-change.ts';
 import type { Ending } from './run.ts';
 
@@ -83,14 +83,15 @@ function classWordOf(changeClass: CheckedChange['class']): string {
 /** The lines a command opens with: the Baseline it compared with, or why there is none, every Change, then every peer range that moved. */
 export function comparedLinesOf({
   packageName,
+  stable,
   against,
   changes,
   derivation,
 }: Checked): readonly string[] {
   const opening =
     against.kind === 'none'
-      ? `${packageName} has no Baseline: ${reasonOf(against.why)}`
-      : `Checked against ${packageName}@${against.version}${versionNoteOf(against)}`;
+      ? `${packageName} has no Baseline: ${against.reason}`
+      : `Checked against ${packageName}@${against.version}${versionNoteOf(against, stable)}`;
   const peers = derivation.kind === 'derived' ? derivation.peers.map(peerLineOf) : [];
   return [opening, ...changes.map(changeLineOf), ...peers];
 }
@@ -105,14 +106,17 @@ function peerLineOf({ name, from, to, bump }: PeerRangeMove): string {
 }
 
 /** What the opening line says of the Baseline beyond its version: that `--against` named it, or that cf-loom published no stable version and what the first is. */
-function versionNoteOf(against: Extract<Checked['against'], { kind: 'baseline' }>): string {
+function versionNoteOf(
+  against: Extract<Checked['against'], { kind: 'baseline' }>,
+  stable: string | undefined,
+): string {
   if (against.chosen === 'against') {
     return ' (--against)';
   }
   if (!isPrerelease(against.version)) {
     return '';
   }
-  const first = firstStableOf(against.version, against.stable);
+  const first = firstStableOf(against.version, stable);
   return ` (no stable version cf-loom published: the first is ${first})`;
 }
 

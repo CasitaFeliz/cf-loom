@@ -5,16 +5,15 @@ import {
   type Snapshot,
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
-import { compareSemanticVersions, listedVersionsOf } from '../versioning/index.ts';
+import { compareSemanticVersions } from '../versioning/index.ts';
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
-/** The versions a package lists, lowest first, with the highest of them. */
-export type Versions = {
-  readonly kind: 'versions';
-  readonly versions: readonly string[];
-  readonly highest: string;
-};
+/** What the registry lists for a package: its name and its versions, lowest first, none when npm does not know it. */
+export type Listing = { readonly packageName: string; readonly versions: readonly string[] };
+
+/** The listing of a package that lists at least one version. */
+export type Versions = { readonly kind: 'versions'; readonly listing: Listing };
 
 /** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
 export type VersionMetadata = {
@@ -35,7 +34,7 @@ export type BaselineSource = {
 
 /**
  * The versions `npm view <package> versions` printed, lowest first; a package that lists none, or
- * a key that is no semantic version, is a failure, since the highest version cannot be proven.
+ * a key that is no semantic version, is a failure, since the Baseline cannot be chosen.
  */
 export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
   const items = keysPrintedIn(printed);
@@ -45,12 +44,11 @@ export function versionsFrom(packageName: string, printed: unknown): Versions | 
     return failed(`${packageName} lists ${key}, which is no semantic version`);
   }
   const versions = items.filter(isSemanticVersion).sort(compareSemanticVersions);
-  const { highest } = listedVersionsOf(versions);
-  if (highest === undefined) {
+  if (versions.length === 0) {
     const none = `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`;
     return failed(none);
   }
-  return { kind: 'versions', versions, highest };
+  return { kind: 'versions', listing: { packageName, versions } };
 }
 
 /** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */

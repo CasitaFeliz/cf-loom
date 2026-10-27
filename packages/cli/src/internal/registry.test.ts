@@ -100,10 +100,17 @@ function ordersWith(...versions: readonly ServedVersion[]): RegistryOptions {
 }
 
 function baselineIn(read: ReadBaseline) {
-  if (read.kind !== 'baseline') {
+  if (read.kind !== 'read' || read.baseline.kind !== 'baseline') {
     throw new Error(`not a baseline: ${JSON.stringify(read)}`);
   }
-  return read;
+  return read.baseline;
+}
+
+function listingIn(read: ReadBaseline) {
+  if (read.kind !== 'read') {
+    throw new Error(`not a listing: ${JSON.stringify(read)}`);
+  }
+  return read.listing;
 }
 
 function failureIn(read: ReadBaseline): string {
@@ -247,7 +254,7 @@ describe.concurrent('baselineOf', () => {
 
     const { read } = await readOrders(lab, served);
 
-    expect(baselineIn(read).versions).toEqual(ascending);
+    expect(listingIn(read).versions).toEqual(ascending);
   });
 
   test.for([
@@ -260,7 +267,7 @@ describe.concurrent('baselineOf', () => {
 
       const { read } = await readOrders(lab, served);
 
-      expect(baselineIn(read).versions).toEqual([lower, higher]);
+      expect(listingIn(read).versions).toEqual([lower, higher]);
     },
   );
 
@@ -355,7 +362,7 @@ describe.concurrent('baselineOf', () => {
 
     const { read } = await readOrders(lab, ordersWith(...versions.map((v) => aVersion(v))));
 
-    expect(baselineIn(read).versions).toEqual(['1.0.0', '1.1.0', '1.2.0-rc.1', '1.2.0', '1.10.0']);
+    expect(listingIn(read).versions).toEqual(['1.0.0', '1.1.0', '1.2.0-rc.1', '1.2.0', '1.10.0']);
   });
 
   test('the Baseline’s peer ranges are those of its own version', async ({ lab }) => {
@@ -435,10 +442,9 @@ describe.concurrent('baselineOf', () => {
     });
 
     expect(read).toEqual({
-      kind: 'no-baseline',
-      packageName: ordersPackage,
-      why: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
-      versions: [],
+      kind: 'read',
+      listing: { packageName: ordersPackage, versions: [] },
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
     });
     const whoami = registry.requests.find((request) => request.path === '/-/whoami');
     expect(whoami?.authorization).toBe(`Bearer ${token}`);
@@ -458,7 +464,7 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read.kind).toBe('no-baseline');
+    expect(read).toMatchObject({ baseline: { kind: 'unknown-package' } });
     expect(scoped.requests.map((request) => request.path)).toContain('/-/whoami');
     expect(standard.requests).toEqual([]);
   });
@@ -474,7 +480,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('whoami asks the scope’s registry although the default registry holds credentials', async ({
@@ -491,7 +499,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('a default registry that holds credentials, with none for the scope, fails without them', async ({
@@ -542,7 +552,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('a registry URL’s user is left out of a refusal too', async ({ lab }) => {
@@ -599,7 +611,8 @@ describe.concurrent('baselineOf', () => {
 
       const read = await baselineOf(npm, { packageName, declared, against: undefined });
 
-      expect(baselineIn(read)).toMatchObject({ packageName, snapshot: { kind, name } });
+      expect(baselineIn(read)).toMatchObject({ snapshot: { kind, name } });
+      expect(listingIn(read).packageName).toBe(packageName);
     },
   );
 
@@ -636,10 +649,9 @@ describe.concurrent('baselineOf', () => {
     const { read, registry } = await readOrders(lab, served);
 
     expect(read).toEqual({
-      kind: 'no-baseline',
-      packageName: ordersPackage,
-      why: { kind: 'none-published', highest: '0.0.0' },
-      versions: ['0.0.0'],
+      kind: 'read',
+      listing: { packageName: ordersPackage, versions: ['0.0.0'] },
+      baseline: { kind: 'none-published' },
     });
     expect(tarballsRequested(registry)).toEqual([]);
   });
@@ -1744,8 +1756,8 @@ describe.concurrent('baselineOf, among every list of up to four versions', () =>
       const { read, registry } = await readListing(lab, listing);
 
       const versions = listing.map(({ version }) => version);
-      const why = { kind: 'none-published', highest: versions.at(-1) };
-      expect(read).toEqual({ kind: 'no-baseline', packageName: ordersPackage, why, versions });
+      const listed = { packageName: ordersPackage, versions };
+      expect(read).toEqual({ kind: 'read', listing: listed, baseline: { kind: 'none-published' } });
       expect(tarballsRequested(registry)).toEqual([]);
     },
   );
@@ -1753,7 +1765,7 @@ describe.concurrent('baselineOf, among every list of up to four versions', () =>
 
 describe('baselineOf and its temporary folder', () => {
   test.for([
-    ['succeeds', ordersWith(aVersion('1.0.0')), 'baseline'],
+    ['succeeds', ordersWith(aVersion('1.0.0')), 'read'],
     ['fails', ordersWith(aVersion('1.0.0', { snapshotJson: '{' })), 'failed'],
   ] as const)(
     'the temporary folder is made under the system’s and removed whether a read %s',
@@ -1794,7 +1806,7 @@ describe('baselineOf and its temporary folder', () => {
       chmodSync(tmp, 0o755);
     });
 
-    expect(read.kind).toBe('baseline');
+    expect(read.kind).toBe('read');
   });
 
   test('a temporary folder that cannot be made fails rather than throws', async ({ lab }) => {

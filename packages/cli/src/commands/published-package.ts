@@ -12,10 +12,10 @@ import {
   type PackageFile,
   packagePaths,
 } from '../contract-package/index.ts';
-import { type InstalledPackage, publishedNameOf } from '../loading/index.ts';
+import type { InstalledPackage } from '../loading/index.ts';
 import type { BuiltProject, Project } from '../project/index.ts';
 import {
-  type FirstListing,
+  type Listing,
   type NpmPlace,
   type Publishing,
   packedPathsOf,
@@ -32,8 +32,8 @@ export type PublishMode = 'publish' | 'dry-run';
 
 /**
  * What a publish puts out: the package's Snapshot as published with its text, the declared
- * Snapshot it was published from, the peer ranges it declares, its dist-tag, the versions the
- * package listed when the Baseline was read, and whether it is put out at all.
+ * Snapshot it was published from, the peer ranges it declares, its dist-tag, what the registry
+ * listed for the package when the Baseline was read, and whether it is put out at all.
  */
 export type ToPublish = {
   readonly mode: PublishMode;
@@ -43,7 +43,7 @@ export type ToPublish = {
   readonly text: string;
   readonly peerRanges: PeerRanges;
   readonly tag: DistTag;
-  readonly versions: readonly string[];
+  readonly listing: Listing;
 };
 
 /** How a publish ends: the version put, or built and left unput on a dry run, or why not, and the lines naming a staging folder it could not remove. */
@@ -77,7 +77,7 @@ type StagedPackage = {
   readonly mode: PublishMode;
   readonly build: Build;
   readonly publishing: Publishing;
-  readonly listing: FirstListing;
+  readonly listing: Listing;
 };
 
 /**
@@ -91,7 +91,7 @@ export async function publishedPackageOf(
 ): Promise<PublishedPackage> {
   const { project } = toPublish;
   const npm = { directory: project.directory, env: run.env };
-  const name = publishedNameOf(project.packageName, toPublish.published.kind);
+  const name = toPublish.listing.packageName;
   const files = await stagedFilesOf(npm, name, toPublish);
   if (files.kind === 'failed') {
     return { put: files, left: [] };
@@ -112,12 +112,11 @@ export async function publishedPackageOf(
 
 function stagedPackageOf(
   staged: InstalledPackage,
-  { mode, project, declared, published, tag, versions }: ToPublish,
+  { mode, project, declared, published, tag, listing }: ToPublish,
 ): StagedPackage {
   const { packageName, folder } = staged;
   const { version } = published;
   const publishing = { folder, packageName, version, tag };
-  const listing = { packageName, versions };
   switch (published.kind) {
     case 'service': {
       const rootPath = join(project.directory, project.rootFile);
