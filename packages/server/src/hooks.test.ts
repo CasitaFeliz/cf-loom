@@ -665,8 +665,15 @@ describe('serve: what the hooks receive beside the record', () => {
 
     await http(get('/orders/down'));
 
-    expect(answered[0]).toMatchObject({ kind: 'fault', status: 503 });
-    expect(answered[0]).not.toHaveProperty('code');
+    expect(answered[0]).toStrictEqual({
+      kind: 'fault',
+      status: 503,
+      aborted: false,
+      durationMs: expect.any(Number),
+      method: 'GET',
+      endpoint: 'getOrder',
+      path: '/orders/:orderId',
+    });
   });
 
   test('a request whose signal was aborted before the answer is recorded as aborted', async () => {

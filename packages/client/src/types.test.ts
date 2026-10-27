@@ -160,7 +160,7 @@ describe('the client’s types', () => {
     const orders = client(ordersDependency, { baseUrl });
 
     expectTypeOf(orders).toHaveProperty('getOrder');
-    expectTypeOf(orders).not.toHaveProperty('ping');
+    expectTypeOf<keyof typeof orders>().toEqualTypeOf<'getOrder' | 'listOrders'>();
     expect(Object.keys(orders)).toEqual(['getOrder', 'listOrders']);
   });
 
@@ -248,7 +248,9 @@ describe('the client’s types', () => {
           return rejection.body.issues.length;
         case 'MISSING':
         case 'NOT_YET':
-          expectTypeOf(rejection).not.toHaveProperty('body');
+          expectTypeOf<keyof typeof rejection>().toEqualTypeOf<
+            'kind' | 'source' | 'code' | 'status' | 'message'
+          >();
           return undefined;
         default:
           return rejection satisfies never;

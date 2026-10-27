@@ -349,7 +349,12 @@ describe('cf-loom asyncapi: the channels', () => {
   });
 
   test('a Retired Message Version has no channel', () => {
-    expect(valueAt(document, 'channels')).not.toHaveProperty('OrderPurged@1');
+    expect(keysOf(valueAt(document, 'channels'))).toEqual([
+      'OrderCreated@1',
+      'OrderCreated@2',
+      'OrderNoted@1',
+      'TreeGrown@1',
+    ]);
   });
 
   test('a Command is not written', () => {
@@ -382,12 +387,13 @@ describe('cf-loom asyncapi: the operations', () => {
     expect(valueAt(operationOf('OrderNoted@1'), 'tags')).toEqual([{ name: 'notes' }]);
   });
 
-  test('a Retired Message Version has no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('OrderPurged@1');
-  });
-
-  test('a Subscription adds no operation', () => {
-    expect(valueAt(document, 'operations')).not.toHaveProperty('auditCreated');
+  test('a Retired Message Version has no operation, and a Subscription adds none', () => {
+    expect(keysOf(valueAt(document, 'operations'))).toEqual([
+      'OrderCreated@1',
+      'OrderCreated@2',
+      'OrderNoted@1',
+      'TreeGrown@1',
+    ]);
   });
 });
 
@@ -443,7 +449,11 @@ describe('cf-loom asyncapi: the payloads', () => {
   });
 
   test('an Active Message Version’s payload is not marked deprecated', () => {
-    expect(payloadOf('OrderCreated@2')).not.toHaveProperty('deprecated');
+    expect(payloadOf('OrderCreated@2')).toStrictEqual({
+      type: 'object',
+      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      required: ['orderId', 'total'],
+    });
   });
 
   test('a Deprecated Message Version whose body is a recursive def is deprecated', () => {
@@ -493,7 +503,10 @@ describe('cf-loom asyncapi: the payloads', () => {
   });
 
   test('a def only a Retired Message Version reaches is not a component', () => {
-    expect(valueAt(document, 'components', 'schemas')).not.toHaveProperty('PurgeNodeDef');
+    expect(keysOf(valueAt(document, 'components', 'schemas'))).toEqual([
+      'BrokerHeaders',
+      'TreeNodeDef',
+    ]);
   });
 
   test('every $ref of the document names a component, a channel or a message of a channel', () => {

@@ -426,13 +426,50 @@ describe('cf-loom generate', () => {
     const text = read(project, 'contract.snapshot.json');
     const snapshot = JSON.parse(text);
     expect(text).toBe(canonicalTextOf(snapshot));
-    expect(snapshot).toMatchObject({
+    expect(snapshot).toStrictEqual({
       format: 1,
       kind: 'service',
       name: 'orders-service',
-      endpoints: { 'GET /ping': { name: 'ping', group: 'health', lifecycle: 'active' } },
+      standardRejections: {
+        invalidInput: 'INVALID_INPUT',
+        notFound: 'NOT_FOUND',
+        notImplemented: 'NOT_IMPLEMENTED',
+      },
+      groups: { health: { description: 'Health' } },
+      defs: {},
+      endpoints: {
+        'GET /ping': {
+          name: 'ping',
+          group: 'health',
+          visibility: 'public',
+          lifecycle: 'active',
+          description: 'Answers',
+          params: [],
+          input: {
+            params: null,
+            query: { type: 'object', fields: {} },
+            headers: { type: 'object', fields: {} },
+            body: null,
+          },
+          success: {
+            status: 200,
+            headers: { type: 'object', fields: {} },
+            body: {
+              type: 'object',
+              fields: { ok: { required: true, schema: { type: 'boolean' } } },
+            },
+          },
+          guards: [],
+          rejections: ['INVALID_INPUT', 'NOT_IMPLEMENTED'],
+        },
+      },
+      events: {},
+      commands: {},
+      guards: {},
+      codes: expect.any(Object),
+      subscriptions: {},
+      dependencies: {},
     });
-    expect(snapshot).not.toHaveProperty('generator');
     expect(
       text.startsWith('{\n  "format": 1,\n  "kind": "service",\n  "name": "orders-service",\n'),
     ).toBe(true);
@@ -1690,7 +1727,6 @@ describe('cf-loom generate: a Definitions Package’s Root', () => {
     expect(Object.keys(snapshot.exports)).toEqual(['apiKey', 'gone', 'money']);
     expect(snapshot.exports.money.kind).toBe('schema');
     expect(Object.keys(snapshot.guards)).toEqual(['apiKey']);
-    expect(snapshot).not.toHaveProperty('schemas');
   });
 
   test('a list on defineDefinitions fails generate with the field rule', () => {
@@ -2110,7 +2146,6 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
       '@org/definitions@1.2.3',
       '@platform/definitions@1.2.3',
     ]);
-    expect(snapshot).not.toHaveProperty('definitions');
   });
 
   test('a Guard one package re-exports from another belongs to the other, and its stub imports it from the package the project imports', () => {
@@ -2366,7 +2401,6 @@ describe('cf-loom generate: the Definitions Packages the Contract imports', () =
     const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
     expect(snapshot.guards.apiKey.origin).toBe('@org/definitions@1.0.0');
     expect(snapshot.codes.MISSING_NEW.origin).toBe('@org/definitions@2.0.0');
-    expect(snapshot).not.toHaveProperty('definitions');
   });
 });
 
@@ -6133,7 +6167,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       name: 'web-admin',
       version: '1.0.0',
     });
-    expect(Object.keys(JSON.parse(files['package.json']!))).not.toContain('peerDependencies');
+    expect(Object.keys(JSON.parse(files['package.json']!)).sort()).toEqual([
+      'cfLoom',
+      'exports',
+      'files',
+      'name',
+      'version',
+    ]);
     expect(leftBehindIn(project)).toEqual([]);
   });
 
@@ -7341,8 +7381,20 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
     const errors = checked.ran.stderr.split('\n').filter(Boolean);
     expect(documentOf(checked.ran)).toMatchObject({ format: 1, status: 2, errors });
     expect(checked.ran.status).toBe(2);
-    expect(documentOf(dry.ran)).toMatchObject({ format: 1, status: 0, published: false });
-    expect(documentOf(dry.ran)).not.toHaveProperty('errors');
+    expect(documentOf(dry.ran)).toStrictEqual({
+      format: 1,
+      status: 0,
+      published: false,
+      package: '@org/contract-orders-service',
+      version: '2.0.0',
+      stable: '1.0.0',
+      baseline: '1.0.0',
+      bump: 'major',
+      tag: 'latest',
+      peers: [],
+      reason: null,
+      changes: [expect.objectContaining({ class: 'breaking', path: 'success.body.total' })],
+    });
   });
 
   test('check on success carries the versions the registry does not list as errors, exit 0', async ({

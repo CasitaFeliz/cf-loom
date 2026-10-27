@@ -1056,7 +1056,18 @@ describe('cf-loom package: the built package', () => {
       'orderPlacedEventV2',
     ]);
     expect(built.listOrdersEndpoint.lifecycle).toBe('deprecated');
-    expect(built.getOrderEndpoint.lifecycle).toBeUndefined();
+    expect(Object.keys(built.getOrderEndpoint).sort()).toEqual([
+      'description',
+      'guards',
+      'input',
+      'kind',
+      'method',
+      'name',
+      'path',
+      'rejections',
+      'success',
+      'visibility',
+    ]);
   });
 
   test('an exported Endpoint carries its Provider’s name and Standard Rejections, and an Event its Provider’s name', async () => {
@@ -1155,7 +1166,14 @@ describe('cf-loom package: the built package', () => {
       visibility: 'internal',
       description: 'An order was placed, with its total',
     });
-    expect(Object.keys(orderPlacedV2)).not.toContain('lifecycle');
+    expect(Object.keys(orderPlacedV2).sort()).toEqual([
+      'body',
+      'description',
+      'kind',
+      'name',
+      'version',
+      'visibility',
+    ]);
   });
 
   test('its declarations keep @deprecated on the Deprecated Elements’ exports', () => {
@@ -1246,8 +1264,12 @@ describe('cf-loom package: the built package', () => {
     const built = await import(pathToFileURL(join(out, 'dist/index.js')).href);
 
     expect(filesIn(out)).not.toContain('src/exported-snapshot.ts');
-    expect(built).not.toHaveProperty('exportedSnapshot');
-    expect(built).not.toHaveProperty('contract');
+    expect(Object.keys(built).sort()).toEqual([
+      'getOrderEndpoint',
+      'listOrdersEndpoint',
+      'orderPlacedEventV1',
+      'orderPlacedEventV2',
+    ]);
   });
 
   test('a Consumer declares a Dependency on it, type-checks and generates', () => {
