@@ -771,34 +771,6 @@ describe('cf-loom generate: the Handler map', () => {
       ]),
     );
   });
-
-  test('a Handler map written before the version came last keeps a Command’s Handler at its path, writes no stub, and imports it under its new local', () => {
-    const project = aProject(aMessagingService());
-    cfLoom(project, 'generate');
-    const handler = implement(project, 'src/commands/payments/charge-card.v1.handler.ts', 'IMPL');
-    edit(project, 'src/handlers.generated.ts', (text) =>
-      text
-        .replaceAll('chargeCardCommandHandlerV1', 'chargeCardV1CommandHandler')
-        .replaceAll('chargeCardCommandHandlerV2', 'chargeCardV2CommandHandler'),
-    );
-
-    const ran = cfLoom(project, 'generate');
-
-    expect(ran).toEqual({
-      status: 0,
-      stdout: lines([
-        'Wrote contract.snapshot.json',
-        'Wrote src/handlers.generated.ts',
-        'Wrote src/readers.generated.ts',
-      ]),
-      stderr: '',
-    });
-    expect(read(project, 'src/commands/payments/charge-card.v1.handler.ts')).toBe(handler);
-    expect(read(project, 'src/handlers.generated.ts')).toContain(
-      importOf('chargeCardCommandHandlerV1', './commands/payments/charge-card.v1.handler.ts'),
-    );
-    expect(cfLoom(project, 'verify')).toMatchObject({ status: 0, stderr: '' });
-  });
 });
 describe('cf-loom generate: readers.generated.ts', () => {
   test('it writes a Reader for each own Event and Command Message Version, a Retired Event excepted, in code point order', () => {

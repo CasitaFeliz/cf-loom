@@ -66,6 +66,7 @@ export {
   kebabCase,
   lifecycleOf,
   messageNameKinds,
+  messageOfCodeName,
   providerOf,
   reservedCodes,
   ruleOf,

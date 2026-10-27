@@ -18,6 +18,7 @@ import {
   type Failure,
   kebabCaseOf,
   messageNameKinds,
+  messageOfCodeName,
   type Root,
   type RootPackage,
   type Site,
@@ -125,24 +126,16 @@ const acceptedNames = [
 const versions = [1, 2, 10, 12];
 const messages = acceptedNames.flatMap((name) => versions.map((version) => ({ name, version })));
 
-function capitalized(name: string): string {
-  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
-}
-
-/** A key's name and version, read from the text alone: the digits after its last `V`. */
-function keyReadBack(key: string): { readonly name: string; readonly version: number } {
-  const [, name = '', version = ''] = /^(.+)V([0-9]+)$/.exec(key) ?? [];
-  return { name: capitalized(name), version: Number(version) };
-}
-
-/** A kinded name's name, kind and version, read from the text alone: the digits, then the longest kind word. */
-function kindedReadBack(written: string) {
-  const [, rest = '', version = ''] = /^(.+)V([0-9]+)$/.exec(written) ?? [];
-  const kind = [...messageNameKinds]
-    .sort((left, right) => right.length - left.length)
-    .find((word) => rest.endsWith(word));
-  const name = rest.slice(0, rest.length - (kind?.length ?? 0));
-  return { name: capitalized(name), version: Number(version), kind };
+/** Every kind word under which `text` reads back, with the Message Version it reads back to. */
+function readingsOf(text: string) {
+  const readings = [];
+  for (const kind of messageNameKinds) {
+    const message = messageOfCodeName(text, kind);
+    if (message !== undefined) {
+      readings.push({ kind, message });
+    }
+  }
+  return readings;
 }
 
 describe('validateRoot: names are words', () => {
@@ -189,7 +182,7 @@ describe('validateRoot: names are words', () => {
 
   test('every accepted Message name has a key at every version that is its own and reads back to its name and version', () => {
     const keys = messages.map((message) => codeNameOf(message));
-    const readBack = keys.map(keyReadBack);
+    const readBack = keys.map((key) => messageOfCodeName(key, ''));
 
     expect(new Set(keys).size).toBe(messages.length);
     expect(readBack).toEqual(messages);
@@ -197,12 +190,12 @@ describe('validateRoot: names are words', () => {
 
   test('every accepted Message name has a name at every version for each kind word that no name of another kind meets and that reads back to its name, kind and version', () => {
     const written = messageNameKinds.flatMap((kind) =>
-      messages.map((message) => ({ ...message, kind, text: codeNameOf(message, kind) })),
+      messages.map((message) => ({ kind, message, text: codeNameOf(message, kind) })),
     );
-    const readBack = written.map(({ text }) => kindedReadBack(text));
+    const readings = written.map(({ text }) => readingsOf(text));
 
     expect(new Set(written.map(({ text }) => text)).size).toBe(written.length);
-    expect(readBack).toEqual(written.map(({ name, version, kind }) => ({ name, version, kind })));
+    expect(readings).toEqual(written.map(({ kind, message }) => [{ kind, message }]));
   });
 });
 

@@ -63,7 +63,12 @@ export type {
 } from './inference.ts';
 export { instantTextOf, isInstantInRange, isUtcInstant } from './instants.ts';
 export type { CodeNameOf, MessageNameKind } from './message-version.ts';
-export { codeNameOf, isMessageVersion, messageNameKinds } from './message-version.ts';
+export {
+  codeNameOf,
+  isMessageVersion,
+  messageNameKinds,
+  messageOfCodeName,
+} from './message-version.ts';
 export {
   isCommand,
   isDefinitions,

@@ -1,4 +1,4 @@
-import { byCodePoint, codeNameOf } from '@cf-loom/contract/internal';
+import { byCodePoint, codeNameOf, messageOfCodeName } from '@cf-loom/contract/internal';
 import type { Handled, MessageHandled } from './handled.ts';
 
 /** A Message Version by its name and version. */
@@ -62,13 +62,11 @@ export function handlerLocalOf(handled: Handled): string {
 /** The kind and the name in code a Handler map's local name was made of. */
 export type LocalParts = { readonly kind: HandlerKind; readonly name: string };
 
-const commandLocal = /^(.+)CommandHandlerV([0-9]+)$/;
-
 /** What a local name was made of, or nothing when it is no Handler's; the inverse of `handlerLocalOf`. */
 export function localPartsOf(local: string): LocalParts | undefined {
-  const command = commandLocal.exec(local);
-  if (command !== null) {
-    return { kind: 'command', name: `${command[1]}V${command[2]}` };
+  const command = messageOfCodeName(local, 'CommandHandler');
+  if (command !== undefined) {
+    return { kind: 'command', name: codeNameOf(command) };
   }
   for (const kind of suffixedKinds) {
     const suffix = localSuffixes[kind];

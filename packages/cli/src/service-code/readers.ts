@@ -14,7 +14,7 @@ import {
   namedImportOf,
   relativeSpecifierOf,
 } from '../source-text/index.ts';
-import { byNameInCode, importAliasOf, pairingNameOf, readerNameOf } from './code-names.ts';
+import { importAliasOf, pairingNameOf, readerNameOf } from './code-names.ts';
 import type { MessageHandled } from './handled.ts';
 import { type Readable, readerSchemasOf } from './reader-schemas.ts';
 import type { StubTarget } from './service-files.ts';
@@ -94,7 +94,6 @@ export function readersTextOf(
   }
   const commands = schemas.readables
     .filter(isCommandReadable)
-    .sort((left, right) => byNameInCode(left.message, right.message))
     .map((readable) => commandPairingOf(readable, messages.atOf));
   const subscriptions = Object.entries(snapshot.subscriptions).map(([name, { event }]) =>
     subscriptionPairingOf(snapshot.name, { name, event }, messages.atOf),

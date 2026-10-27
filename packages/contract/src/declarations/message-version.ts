@@ -14,19 +14,27 @@ export type CodeNameOf<Message extends { readonly name: string; readonly version
   `${Uncapitalize<Message['name']>}V${Message['version']}`;
 
 /**
- * A Message Version's name in code: its name with the first letter lower-cased, then `kind`, the word
- * that says what the name holds, then `V` and its version, so the version always comes last.
- * Without a kind it is the key a map that already says the kind uses (`orderCreatedV2`, the Handler map's
- * `commands` and the `readers` table); with one, a binding that meets other kinds' names in its scope:
- * `orderCreatedEventV2` as a Contract Package exports an Event's, `orderCreatedReaderV2` as the readers
- * file declares its Reader.
- *
- * @param message - The Message Version, by name and version.
- * @param kind - The word naming what the name holds, or nothing for a key.
+ * A Message Version's name in code; a kind's word, when given, sits before `V` and its version, so
+ * the version always comes last.
  */
 export function codeNameOf(
   message: { readonly name: string; readonly version: number },
   kind: MessageNameKind = '',
 ): string {
   return `${message.name.charAt(0).toLowerCase()}${message.name.slice(1)}${kind}V${message.version}`;
+}
+
+/** The Message Version a name in code was made of with `kind`, or nothing when `codeNameOf` writes no such name. */
+export function messageOfCodeName(
+  text: string,
+  kind: MessageNameKind,
+): { readonly name: string; readonly version: number } | undefined {
+  const [, stem = '', digits = ''] = new RegExp(`^(.+)${kind}V([0-9]+)$`).exec(text) ?? [];
+  const message = {
+    name: `${stem.charAt(0).toUpperCase()}${stem.slice(1)}`,
+    version: Number(digits),
+  };
+  return isMessageVersion(message.version) && codeNameOf(message, kind) === text
+    ? message
+    : undefined;
 }

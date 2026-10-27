@@ -32,7 +32,7 @@ export function fileOf(declared: PackagedDeclaration): string {
 }
 
 /**
- * The name a declaration is exported under, suffixed by its kind as every generated name is,
+ * The name a declaration is exported under, with the word of its kind as every generated name has,
  * so names of different kinds never meet: `ORDER_LOCKED` is `orderLockedRejection`.
  */
 export function bindingOf(declared: PackagedDeclaration): string {
