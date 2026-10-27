@@ -85,16 +85,13 @@ export function messageBodyFailures(
   );
 }
 
-/** Whether a node is an object, a `ref` read through its def; a nullable one is not. */
+/** Whether a node is an object, a `ref` read through its def and any alias defs; a nullable one is not. */
 function isObjectOf(node: SchemaNode, defs: Nodes['defs']): boolean {
-  if (node.nullable === true) {
-    return false;
+  let current: SchemaNode | undefined = node;
+  while (current?.type === 'ref' && current.nullable !== true) {
+    current = defs[current.name];
   }
-  if (node.type !== 'ref') {
-    return node.type === 'object';
-  }
-  const def = defs[node.name];
-  return def !== undefined && isObjectOf(def, defs);
+  return current?.type === 'object' && current.nullable !== true;
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
