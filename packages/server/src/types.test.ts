@@ -5,6 +5,7 @@ import {
   type HandlerMapOf,
   handle,
   type NoResources,
+  type ResourcesOf,
   readersOf,
   success,
   type WithResources,
@@ -437,5 +438,49 @@ describe('serve: the options, typed by what they declare', () => {
     ];
 
     expect(serving).toBeTypeOf('function');
+  });
+});
+
+describe('serve: a wrapper over the Handler map', () => {
+  type Clock = { readonly now: () => number };
+  type Resources = { readonly clock: Clock };
+  const clock: Clock = { now: () => 0 };
+  const needsClock = handle(findOrder, (_input, _call, { resources }: WithResources<Resources>) => {
+    resources.clock.now();
+    return success();
+  });
+  const handlers: HandlerMapOf<typeof contract, Resources> = {
+    endpoints: { getOrder: getOrderHandler, findOrder: needsClock },
+    guards: { apiKey: apiKeyHandler },
+    commands: {},
+    subscriptions: {},
+    readers: readersOf({ commands: {}, subscriptions: {} }),
+  };
+
+  test('a wrapper whose parameter is the concrete options type is accepted', () => {
+    const wrapper = (
+      map: HandlerMapOf<typeof contract, Resources>,
+      options: ServeOptions<Resources>,
+    ) => serve(contract, map, options);
+
+    const served = wrapper(handlers, { resources: { clock } });
+
+    expect(served).toBeTypeOf('function');
+  });
+
+  test('a wrapper generic over the Handler map is a type error, whatever its options parameter says', () => {
+    type Served = Pick<HandlerMapOf<typeof contract, Resources>, 'endpoints' | 'guards'>;
+    const restating = <const H extends Served>(
+      map: H,
+      options: ServeOptions<ResourcesOf<Pick<H, 'endpoints' | 'guards'>>>,
+      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+    ) => serve(contract, map, options);
+    const naming = <const H extends Served>(
+      map: H,
+      options: ServeOptions<ResourcesOf<H>>,
+      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+    ) => serve(contract, map, options);
+
+    expect([restating, naming]).toHaveLength(2);
   });
 });

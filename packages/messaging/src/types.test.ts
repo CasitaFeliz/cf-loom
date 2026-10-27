@@ -12,6 +12,7 @@ import {
   type HandlerMapOf,
   handle,
   type NoResources,
+  type ResourcesOf,
   readersOf,
   type WithResources,
 } from '@cf-loom/handlers';
@@ -25,6 +26,7 @@ import {
   type BrokerTrouble,
   type CloseOptions,
   type ConsumedFault,
+  type ConsumeOptions,
   type ConsumeRun,
   type ConsumerTrouble,
   type Delivery,
@@ -610,6 +612,36 @@ describe('the options, typed by what they declare', () => {
     const consuming = () => consume(handlers, options);
 
     expect(consuming).toBeTypeOf('function');
+  });
+
+  test('a wrapper whose options parameter is the concrete options type is accepted over consume', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const wrapper = (
+      map: HandlerMapOf<typeof contract, Notifications>,
+      options: ConsumeOptions<Notifications>,
+    ) => consume(map, options);
+
+    expect(wrapper).toBeTypeOf('function');
+  });
+
+  test('a wrapper generic over the Handler map is a type error over consume, whatever its options parameter says', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    type Consumed = Pick<
+      HandlerMapOf<typeof contract, Notifications>,
+      'commands' | 'subscriptions' | 'readers'
+    >;
+    const restating = <const H extends Consumed>(
+      map: H,
+      options: ConsumeOptions<ResourcesOf<Pick<H, 'commands' | 'subscriptions'>>>,
+      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+    ) => consume(map, options);
+    const naming = <const H extends Consumed>(
+      map: H,
+      options: ConsumeOptions<ResourcesOf<H>>,
+      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+    ) => consume(map, options);
+
+    expect([restating, naming]).toHaveLength(2);
   });
 });
 
