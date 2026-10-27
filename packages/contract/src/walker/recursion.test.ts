@@ -1530,11 +1530,11 @@ describe('walkSchemas: recursion', () => {
   });
 
   test.for([
-    ['the inner def', 'first'],
-    ['the outer def', 'second'],
+    ['the inner def', 'first', [[writtenTooDeep], [writtenTooDeep]]],
+    ['the outer def', 'second', [[writtenTooDeep], [writtenTooDeep]]],
   ] as const)(
     'a def whose cycle through another closes past the limit, %s declared first, is refused for its depth alone',
-    ([, declaredFirst]) => {
+    ([, declaredFirst, expected]) => {
       const outer: z.ZodType = z
         .object({
           get inner() {
@@ -1560,11 +1560,45 @@ describe('walkSchemas: recursion', () => {
         () => undefined,
       );
 
-      const constructs = constructsOf(walked).flat();
-      expect(constructs.every((construct) => construct === writtenTooDeep)).toBe(true);
-      expect(constructs.length).toBeGreaterThan(0);
+      expect(constructsOf(walked)).toStrictEqual(expected);
     },
   );
+
+  test('a def holding another, neither on a cycle and the inner one failing, has each id and the failure told', () => {
+    const inner = z.object({ x: z.bigint() }).meta({ id: 'bee' });
+    const outer = z.object({ b: inner }).meta({ id: 'ay' });
+
+    const walked = walkBody(outer);
+
+    const offCycle = (id: string) => ({
+      construct: `.meta({ id: "${id}" }) on a schema that lies on no cycle`,
+      instead: '.meta({ id }) only on a recursive schema',
+    });
+    expect(walked.located[0]).toStrictEqual(
+      refused([
+        { at: '', ...offCycle('ay') },
+        { at: 'b', ...offCycle('bee') },
+        { at: 'b.x', construct: 'z.bigint()' },
+      ]),
+    );
+  });
+
+  test('a chain of 20,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
+    timeout: deepTimeout,
+  }, () => {
+    let schema = arraysAround(250, z.bigint());
+    for (let index = 0; index < 20_000; index++) {
+      schema = z.object({ next: schema }).meta({ id: `link${index}` });
+    }
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+
+    const constructs = constructsOf(walked).flat();
+    const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
+    expect(offCycle).toHaveLength(20_000);
+    expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
+    expect(constructs).toHaveLength(20_001);
+  });
 
   test('a failing def met by many paths is reported once and walked once', () => {
     const count = 26;

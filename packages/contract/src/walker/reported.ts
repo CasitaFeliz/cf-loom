@@ -3,7 +3,10 @@ import type { NotAllowed } from './nodes.ts';
 import { isUnnamedCycle, isWrittenTooDeep } from './not-allowed.ts';
 import { type Failed, type FailureTree, isFailureTree } from './walked.ts';
 
-/** The failing schemas a walk answers from memory, and for how long each is kept. */
+/**
+ * Two facts of a walk's failures: the failing schemas it answers from memory, each for as long as
+ * it is kept, and whether a failure holds a schema refused for its depth.
+ */
 export type Reported = {
   readonly report: (schema: core.$ZodType, failure: Failed) => void;
   readonly failureOf: (schema: core.$ZodType) => Failed | undefined;
