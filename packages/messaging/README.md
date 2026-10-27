@@ -264,10 +264,10 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 ## Types
 
 - `Messaging`, `{ publisher, sender, consume, close }`: one connection's messaging, what `messaging()` resolves to; `close` takes `CloseOptions`, `{ signal? }`.
-- `MessagingOptions`, `{ onServiceFault?, onBrokerTrouble? }`: what is operational about messaging and no part of the Contract.
-- `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes besides the Handler map, the Resources its Message Handlers take.
+- `MessagingOptions`, `{ onServiceFault?, onBrokerTrouble? }`: what is operational about messaging and no part of the Contract. A field it does not declare is a type error, given as a literal or through a variable (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes besides the Handler map, the Resources its Message Handlers take. A field it does not declare is a type error, given as a literal or through a variable (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - `EventPublisher` and `CommandSender`: `publish` and `send`, typed by the Contract's Events and Commands.
-- `MessageOptions`, `{ factId, headers? }`: what a `publish` or `send` call carries besides its bodies.
+- `MessageOptions`, `{ factId, headers? }`: what a `publish` or `send` call carries besides its bodies. A field it does not declare is a type error, given as a literal or through a variable (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - `Published`, `{ factId, duplicates }`, and `Sent`, `{ factId, duplicate }`: what `publish` and `send` resolve to.
 - `ConsumedFault`: what `onServiceFault` receives, with `element`, the Subscription or the Command's Message Version, `identity`, its name, and the Delivery's `deliveryCount` and `lastAttempt`: `invalid-body`, `returned` or `thrown`.
 - `BrokerTrouble`: what `onBrokerTrouble` receives, with `element`, `identity`, and the unprefixed `durable` and `stream`: `pull-failed` with its `cause`, or `recovered`.
@@ -286,7 +286,7 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 - `RecordedMessage<M>`, `{ subject, messageId, factId, headers, body }`: a Message as the in-memory Broker took it, its body parsed from its JSON and typed as the writer of the Message Version `M` writes it; `messages` lists `RecordedMessage` without `M`, its body `unknown`.
 - `DeliveryMeta`, `{ factId?, messageId?, headers? }`: what `deliver` may set.
 - `PendingMessage`, `{ element, identity, subject, messageId, factId, deliveryCount, headers, body }`: a Message a consumer left unacknowledged, its body the wire JSON.
-- `JetStreamConnecting`, `{ connect, jetstream? }`: how a NATS connection is opened, the Service's own function that opens it and the options of nats.js's JetStream client.
-- `JetStreamBrokerOptions`, `{ connect, prefix?, jetstream? }`: what `jetstream()` takes, a `JetStreamConnecting` and the Broker prefix, and what it returns is a `Broker`.
+- `JetStreamConnecting`, `{ connect, jetstream? }`: how a NATS connection is opened, the Service's own function that opens it and the options of nats.js's JetStream client; what `applyBrokerPlan` takes, with the same rule (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `JetStreamBrokerOptions`, `{ connect, prefix?, jetstream? }`: what `jetstream()` takes, a `JetStreamConnecting` and the Broker prefix, and what it returns is a `Broker`. A field it does not declare is a type error, given as a literal or through a variable (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - `BrokerPlan`, `{ prefix, streams, consumers }`, with `BrokerPlanStream`, `{ service, subjects }`, and `BrokerPlanConsumer`, `{ service, stream, subject }`: the `plan` of the document `cf-loom broker-plan --json` prints.
 - `BrokerLimits`, `{ streamDefaults?, consumerDefaults?, streams?, consumers? }`, with `StreamLimits`, `{ retention, maxAge, duplicateWindow, replicas, storage }`, `DurableConsumerLimits`, `{ deliverPolicy, ackWait, maxDeliver, maxAckPending }`, and `Duration`: what `applyBrokerPlan` takes besides the plan.
