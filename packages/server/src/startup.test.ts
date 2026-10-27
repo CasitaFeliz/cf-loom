@@ -178,7 +178,7 @@ describe('serve: what it checks before the first request', () => {
       'header-names',
     ],
     [
-      'an Input header a Caller’s fetch sets itself',
+      'an Input header the Fetch standard keeps for the user agent',
       { input: { headers: z.object({ cookie: z.string() }) } },
       'header-names',
     ],

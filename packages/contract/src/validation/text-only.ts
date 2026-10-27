@@ -60,11 +60,11 @@ export function conflictFailures(
 }
 
 function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
-  const { at, node, part: slotPart } = slot;
-  if (!isObjectPart(slotPart)) {
+  const { at, node, part } = slot;
+  if (!isObjectPart(part)) {
     return [];
   }
-  const part = partFieldOf(slotPart);
+  const textIn = partFieldOf(part);
   const name = placeNameOf(at);
   if (node.type !== 'object') {
     return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
@@ -73,8 +73,8 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
   }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
-    ...headerNameFailures(at, slotPart, field),
-    ...fieldFailures({ at, part }, field, schema),
+    ...headerNameFailures({ at, part, textIn }, field),
+    ...fieldFailures({ at, part: textIn }, field, schema),
   ]);
 }
 
@@ -82,11 +82,10 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
 const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 
 function headerNameFailures(
-  at: Place,
-  part: ObjectPart,
+  { at, part, textIn }: { readonly at: Place; readonly part: ObjectPart; readonly textIn: TextIn },
   name: string,
 ): readonly DeclarationFailure[] {
-  if (partFieldOf(part) !== 'headers') {
+  if (textIn !== 'headers') {
     return [];
   }
   const message = headerNameMessageOf(name, part);

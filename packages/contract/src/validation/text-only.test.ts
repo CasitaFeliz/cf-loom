@@ -466,7 +466,7 @@ function crossed<Side extends string>(sides: readonly Side[], names: readonly st
 
 describe('validateRoot: header names are lower-case RFC 9110 tokens no other party owns', () => {
   test.each(crossed(requestPositions, fetchForbiddenRequestNames))(
-    'a %s header named %s, which a Caller’s fetch sets itself, fails',
+    'a %s header named %s, which the Fetch standard keeps for the user agent, fails',
     (position, name) => {
       const validated = validateEndpoint(headerPositions[position](name));
 

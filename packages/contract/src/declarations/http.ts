@@ -21,12 +21,19 @@ export const successStatuses = [200, 201, 202, 203, 204] as const;
 /** The statuses a Success may declare: 205 and 206 carry semantics cf-loom does not implement. */
 export type SuccessStatus = (typeof successStatuses)[number];
 
+/** The header names no Contract declares in either direction: the body's, and the `deprecation` cf-loom sends. */
+const bodyAndCfLoomHeaderNames: readonly string[] = [
+  'content-type',
+  'content-encoding',
+  'content-range',
+  'deprecation',
+];
+
 /**
- * The request header names no Contract declares: the Fetch standard's forbidden request-header
- * names, which it keeps for the user agent
- * (https://fetch.spec.whatwg.org/#forbidden-request-header), the body's `content-type`,
- * `content-encoding` and `content-range`, and the `deprecation` cf-loom owns. A name starting with
- * one of `reservedRequestHeaderPrefixes` is reserved besides.
+ * The request header names no Contract declares besides `bodyAndCfLoomHeaderNames`: the Fetch
+ * standard's forbidden request-header names, which it keeps for the user agent
+ * (https://fetch.spec.whatwg.org/#forbidden-request-header). A name starting with one of
+ * `reservedRequestHeaderPrefixes` is reserved besides.
  */
 const reservedRequestHeaderNames: readonly string[] = [
   'accept-charset',
@@ -50,20 +57,17 @@ const reservedRequestHeaderNames: readonly string[] = [
   'transfer-encoding',
   'upgrade',
   'via',
-  'content-type',
-  'content-encoding',
-  'content-range',
-  'deprecation',
+  ...bodyAndCfLoomHeaderNames,
 ];
 
 /** The prefixes the Fetch standard keeps for the user agent: no request header a Contract declares starts with one. */
 const reservedRequestHeaderPrefixes: readonly string[] = ['proxy-', 'sec-'];
 
 /**
- * The response header names no Contract declares: the framing and connection headers the host
- * owns, `host`, the body's `content-type`, `content-encoding` and `content-range`, the
- * `deprecation` cf-loom sends, and the Fetch standard's forbidden response-header names, which a
- * browser never exposes to code (https://fetch.spec.whatwg.org/#forbidden-response-header-name).
+ * The response header names no Contract declares besides `bodyAndCfLoomHeaderNames`: the framing
+ * and connection headers the host owns, `host`, and the Fetch standard's forbidden response-header
+ * names, which a browser never exposes to code
+ * (https://fetch.spec.whatwg.org/#forbidden-response-header-name).
  */
 const reservedResponseHeaderNames: readonly string[] = [
   'content-length',
@@ -75,12 +79,9 @@ const reservedResponseHeaderNames: readonly string[] = [
   'te',
   'trailer',
   'host',
-  'content-type',
-  'content-encoding',
-  'content-range',
-  'deprecation',
   'set-cookie',
   'set-cookie2',
+  ...bodyAndCfLoomHeaderNames,
 ];
 
 /** Whether a lower-case header name is one the user agent or cf-loom owns, so no request part declares it. */
