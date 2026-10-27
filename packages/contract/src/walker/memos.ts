@@ -89,7 +89,7 @@ function earlyReachesOf(state: State, schema: core.$ZodType): Reach[] {
 }
 
 function logRaised(state: State, tree: FailureTree): void {
-  for (const refusal of refusalsIn([tree], state.logged)) {
+  for (const refusal of refusalsIn(tree, state.logged)) {
     state.raised.push(refusal);
   }
 }

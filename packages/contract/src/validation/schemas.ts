@@ -141,7 +141,7 @@ export function nodeLookupOf(nodes: Nodes): NodeLookup {
 
 /** Every refusal the walk made at the locations, each once, in the order it first meets them. */
 export function refusalsAt(locations: readonly WalkedLocation[]): readonly NotAllowed[] {
-  return refusalsIn([failuresOf(locations.map(({ walked }) => walked))]);
+  return refusalsIn(failuresOf(locations.map(({ walked }) => walked)));
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {

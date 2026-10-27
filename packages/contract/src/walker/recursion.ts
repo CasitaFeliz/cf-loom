@@ -14,7 +14,6 @@ import {
   type Composition,
   type Failed,
   failed,
-  failuresOf,
   type Memo,
   type ReachedSchema,
   refusedBeside,
@@ -90,7 +89,9 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
   const result = isOnCycle ? writeDef(state, ancestor, node) : offCycle(ancestor, node);
-  state.memos.raised(failuresOf([result]));
+  if (result.kind === 'not-allowed') {
+    state.memos.raised(result.tree);
+  }
   if (isRemembered(state, ancestor.schema)) {
     state.memos.close(ancestor, start);
   }

@@ -654,7 +654,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
     const constructsIn = (location: WalkedLocation | undefined) =>
       location?.walked.kind === 'not-allowed'
-        ? refusalsIn([location.walked.tree]).map((failure) => failure.construct)
+        ? refusalsIn(location.walked.tree).map((failure) => failure.construct)
         : [];
     const constructsAt = (walked: WalkedSchemas, at: Place) =>
       constructsIn(walked.located.find((candidate) => candidate.at === at));

@@ -92,15 +92,15 @@ export function failed(tree: FailureTree, outline?: Outline): Failed {
 }
 
 /**
- * Every refusal in the trees, each once, in the order a walk first meets it: a refusal or subtree
+ * Every refusal in the tree, each once, in the order a walk first meets it: a refusal or subtree
  * already in `seen` is skipped whole, and each one met joins it, so a walk-wide `seen` takes each once.
  */
 export function refusalsIn(
-  trees: readonly FailureTree[],
+  tree: FailureTree,
   seen: Set<NotAllowed | FailureTree> = new Set(),
 ): readonly NotAllowed[] {
   const refusals: NotAllowed[] = [];
-  const pending: (NotAllowed | FailureTree)[] = trees.toReversed();
+  const pending: (NotAllowed | FailureTree)[] = [tree];
   for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
     if (seen.has(item)) {
       continue;

@@ -58,7 +58,7 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
         ? walked
         : {
             kind: walked.kind,
-            failures: refusalsIn([walked.tree]).map(({ steps, construct, instead }) => ({
+            failures: refusalsIn(walked.tree).map(({ steps, construct, instead }) => ({
               kind: 'not-allowed',
               at: authorPathOf(steps) ?? '',
               construct,

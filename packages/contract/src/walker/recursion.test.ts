@@ -31,7 +31,7 @@ function refused(failures: readonly { readonly at: string; readonly construct: s
 /** The site each refusal of each walked schema sits at: a schema the walk remembers keeps the place it was first walked at. */
 function refusalSitesOf({ located }: ReturnType<typeof walkSchemas>) {
   return located.map(({ walked }) =>
-    walked.kind === 'walked' ? [] : refusalsIn([walked.tree]).map(({ site }) => siteTextOf(site)),
+    walked.kind === 'walked' ? [] : refusalsIn(walked.tree).map(({ site }) => siteTextOf(site)),
   );
 }
 
@@ -1260,7 +1260,7 @@ describe('walkSchemas: recursion', () => {
     const walked = walkSchemas([{ at: placeAt('body'), schema: schemas[0]! }], () => undefined);
 
     const [body] = walked.located;
-    const failures = body?.walked.kind === 'not-allowed' ? refusalsIn([body.walked.tree]) : [];
+    const failures = body?.walked.kind === 'not-allowed' ? refusalsIn(body.walked.tree) : [];
     expect(body?.walked.kind).toBe('not-allowed');
     expect(failures.length).toBeLessThanOrEqual(count);
   });
