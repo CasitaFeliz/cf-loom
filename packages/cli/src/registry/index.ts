@@ -1,4 +1,4 @@
-export type { Candidates } from './against.ts';
+export type { Choice } from './against.ts';
 export type { BaselineQuery, NoBaseline, NonePublished, ReadBaseline } from './baseline.ts';
 export { baselineOf } from './baseline.ts';
 export type { NpmPlace } from './npm.ts';

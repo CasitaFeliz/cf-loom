@@ -4,7 +4,6 @@ import type { Derived, DerivedVersion, DeriveOptions } from '../versioning/index
 import { comparedLinesOf, notAboveOf, nothingToPublishOf, wouldPublishOf } from './check-lines.ts';
 import { type Checked, endingOf } from './checked.ts';
 import { checkedDocumentOf } from './checked-document.ts';
-import { listedIn } from './comparison.ts';
 import { derivedCheckedOf } from './derivation.ts';
 import { checkFailed, done, type Exit, toolingError } from './exit.ts';
 import { type Prepared, preparedOf } from './prepared.ts';
@@ -110,7 +109,7 @@ function toPublishOf(
     version,
     generator: runningGeneratorOf(),
   });
-  const versions = listedIn(comparison);
+  const { versions } = comparison;
   const text = canonicalTextOf(published);
   const declared = comparison.built;
   return { mode, project, declared, published, text, peerRanges, tag, versions };

@@ -9,12 +9,11 @@ import { compareSemanticVersions, listedVersionsOf } from '../versioning/index.t
 
 const sha512 = /^sha512-([A-Za-z0-9+/]{86}==)(?:\?\S*)?$/;
 
-/** The versions a package lists, lowest first, with the highest of them and the highest that is not a prerelease. */
+/** The versions a package lists, lowest first, with the highest of them. */
 export type Versions = {
   readonly kind: 'versions';
   readonly versions: readonly string[];
   readonly highest: string;
-  readonly stable: string | undefined;
 };
 
 /** What a version's metadata says that a Baseline relies on: its peer ranges and the sha512 digests of its tarball. */
@@ -46,12 +45,12 @@ export function versionsFrom(packageName: string, printed: unknown): Versions | 
     return failed(`${packageName} lists ${key}, which is no semantic version`);
   }
   const versions = items.filter(isSemanticVersion).sort(compareSemanticVersions);
-  const { highest, stable } = listedVersionsOf(versions);
+  const { highest } = listedVersionsOf(versions);
   if (highest === undefined) {
     const none = `${packageName} lists no version, or has no latest dist-tag, which npm view needs to list them`;
     return failed(none);
   }
-  return { kind: 'versions', versions, highest, stable };
+  return { kind: 'versions', versions, highest };
 }
 
 /** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */
@@ -62,12 +61,7 @@ function keysPrintedIn(printed: unknown): readonly unknown[] {
   return Array.isArray(printed) ? printed : [printed];
 }
 
-/**
- * The metadata `npm view <package>@<version>` printed for a version that may be the Baseline:
- * none of cf-loom's when its package.json has no `cfLoom`; else, published as the declared kind,
- * with peer ranges that are a map of texts and a tarball with a sha512 digest to check it
- * against. A `cfLoom` with no kind is malformed, never passed over.
- */
+/** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
 export function metadataFrom(
   source: BaselineSource,
   printed: unknown,

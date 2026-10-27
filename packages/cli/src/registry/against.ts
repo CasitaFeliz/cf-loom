@@ -5,14 +5,12 @@ import { jsonFromNpm, type NpmPlace } from './npm.ts';
 import type { Versions } from './versions.ts';
 
 /**
- * The versions the Check reads metadata of, in the order it tries them: the Baseline among the
- * listed versions, or the one `--against` names.
+ * What the Check reads metadata of: the versions the Baseline is chosen among, in the order they
+ * are tried, or the one version `--against` names.
  */
-export type Candidates = {
-  readonly kind: 'candidates';
-  readonly versions: readonly string[];
-  readonly chosen: 'baseline' | 'against';
-};
+export type Choice =
+  | { readonly kind: 'baseline'; readonly candidates: readonly string[] }
+  | { readonly kind: 'against'; readonly version: string };
 
 /** The package and what `check --against` was given for it, if anything. */
 export type AgainstQuery = { readonly packageName: string; readonly against: string | undefined };
@@ -34,23 +32,21 @@ export function unlistedAgainstOf(packageName: string, against: string): Failed 
 }
 
 /**
- * The versions the Check tries: those the Baseline is chosen among, or the one `--against`
- * names, itself or the version a dist-tag points at; a name the package lists neither way is a
- * failure.
+ * What the Check reads: the versions the Baseline is chosen among, or the one `--against` names,
+ * itself or the version a dist-tag points at; a name the package lists neither way is a failure.
  */
-export async function candidatesOf(
+export async function choiceOf(
   npm: NpmPlace,
   listed: Versions,
   { packageName, against }: AgainstQuery,
-): Promise<Candidates | Failed> {
+): Promise<Choice | Failed> {
   if (against === undefined) {
-    const versions = baselineCandidatesOf(listed.versions);
-    return { kind: 'candidates', versions, chosen: 'baseline' };
+    return { kind: 'baseline', candidates: baselineCandidatesOf(listed.versions) };
   }
   const named = await namedVersionOf(npm, listed, { packageName, against });
   switch (named.kind) {
     case 'named':
-      return { kind: 'candidates', versions: [named.version], chosen: 'against' };
+      return { kind: 'against', version: named.version };
     case 'unlisted':
       return unlistedAgainstOf(packageName, against);
     case 'failed':

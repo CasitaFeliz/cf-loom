@@ -1,4 +1,4 @@
-import type { Candidates, NoBaseline } from '../registry/index.ts';
+import type { Choice, NoBaseline } from '../registry/index.ts';
 import type { CheckedChange } from './checked-change.ts';
 import type { Derivation } from './derivation.ts';
 import type { Ending } from './run.ts';
@@ -9,7 +9,7 @@ type Against =
       readonly kind: 'baseline';
       readonly version: string;
       readonly stable: string | undefined;
-      readonly chosen: Candidates['chosen'];
+      readonly chosen: Choice['kind'];
     }
   | {
       readonly kind: 'none';

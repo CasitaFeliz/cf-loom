@@ -57,12 +57,7 @@ export type Deriving = {
 
 const firstVersion = '1.0.0';
 
-/**
- * The version a publish takes, as the prerelease `<version>-<n>` when asked: the higher of what
- * the Baseline gives and the next major above the highest listed version that is not a prerelease
- * and is not the Baseline, which cf-loom did not publish; or the Baseline that already holds what
- * it would publish; or a version that would not be above the Baseline, which no publish may take.
- */
+/** The version a publish takes, so that it is above the Baseline and every listed version that is not a prerelease, or why no publish may take one. */
 export function derivedVersionOf({ baseline, versions, force, prerelease }: Deriving): Derived {
   if (baseline !== undefined && isNothingToPublish(baseline, { force, prerelease })) {
     return { kind: 'unchanged', baseline: baseline.version };
@@ -104,7 +99,7 @@ function whyOf(baseline: Moved | undefined, above: string | undefined, prereleas
  * when higher.
  */
 export function firstStableOf(prerelease: string, stable: string | undefined): string {
-  return numbersAfter({ version: prerelease, bump: 'unchanged' }, stable).numbers;
+  return raisedAbove(firstNumbersOf(prerelease), stable).numbers;
 }
 
 /** Whether the Baseline already holds what would be published: nothing changed, and no prerelease Baseline left to promote. */
@@ -122,11 +117,15 @@ function uncheckedOf(baseline: Moved | undefined, versions: readonly string[]): 
 }
 
 /** The numbers after the Baseline, and the unchecked version they had to rise above when it is higher than what the Baseline gives. */
-function numbersAfter(
-  baseline: Moved | undefined,
-  unchecked: string | undefined,
-): { readonly numbers: string; readonly above: string | undefined } {
-  const given = givenBy(baseline);
+function numbersAfter(baseline: Moved | undefined, unchecked: string | undefined): Raised {
+  return raisedAbove(givenBy(baseline), unchecked);
+}
+
+/** Numbers, and the version they had to rise above, when there is one. */
+type Raised = { readonly numbers: string; readonly above: string | undefined };
+
+/** The higher of the given numbers and the major above the unchecked version, which `above` names when it is the higher. */
+function raisedAbove(given: string, unchecked: string | undefined): Raised {
   if (unchecked === undefined) {
     return { numbers: given, above: undefined };
   }
@@ -136,15 +135,20 @@ function numbersAfter(
     : { numbers: given, above: undefined };
 }
 
-/** What the Baseline gives: 1.0.0 with none, the Baseline bumped when it is not a prerelease, else 1.0.0 or the prerelease's own numbers when higher. */
+/** What the Baseline gives: 1.0.0 with none, the Baseline bumped when it is not a prerelease, else the first numbers of the prerelease. */
 function givenBy(baseline: Moved | undefined): string {
   if (baseline === undefined) {
     return firstVersion;
   }
   if (isPrerelease(baseline.version)) {
-    return higherOf(firstVersion, numbersOf(baseline.version));
+    return firstNumbersOf(baseline.version);
   }
   return bumpedVersionOf(baseline.version, baseline.bump === 'unchanged' ? 'patch' : baseline.bump);
+}
+
+/** 1.0.0, or a prerelease's own numbers when they are higher. */
+function firstNumbersOf(prerelease: string): string {
+  return higherOf(firstVersion, numbersOf(prerelease));
 }
 
 function higherOf(left: string, right: string): string {
