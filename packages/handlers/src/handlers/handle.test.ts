@@ -122,6 +122,10 @@ describe('handle', () => {
     >().toEqualTypeOf<'declaration'>();
   });
 
+  test('a Pairing holds a declaration and its Reader, and nothing else', () => {
+    expectTypeOf<keyof Pairing>().toEqualTypeOf<'declaration' | 'reader'>();
+  });
+
   test('handle() given something that is no Endpoint, Guard or paired Command or Subscription throws', () => {
     const copiedEndpoint = { ...getOrder };
 
