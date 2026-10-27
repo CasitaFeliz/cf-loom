@@ -40,11 +40,10 @@ export function notSentFaultOf(signal: AbortSignal): ReceivedFault {
 /** A Fault with cf-loom's inference of what happened, or the organization's when it gives one. */
 function faultOf(happened: Happened, inferring: Inferring): ReceivedFault {
   const inferred = inferenceOf(happened);
+  const { inferFault } = inferring;
   const { committed, retryable } =
-    inferring.inferFault?.(happened, {
-      committed: inferred.committed,
-      retryable: inferred.retryable,
-    }) ?? inferred;
+    inferFault?.(happened, { committed: inferred.committed, retryable: inferred.retryable }) ??
+    inferred;
   return faultWith(happened, { committed, retryable, message: inferred.message });
 }
 

@@ -1,3 +1,4 @@
+import { abortableOf } from '@cf-loom/client/internal';
 import type { Http } from '@cf-loom/contract';
 import {
   invalidInputResponseOf,
@@ -57,13 +58,11 @@ export function fakingOf(faked: FakedProvider): Faking {
  * already aborted is refused before anything is read, recorded or taken.
  */
 export function fakeFetchOf(faking: Faking): Http {
-  return async (request) => {
-    request.signal.throwIfAborted();
-    return await abortableOf(
-      withMistakesRecorded(faking, fakeResponseOf(faking, request)),
+  return (request) =>
+    abortableOf(
+      () => withMistakesRecorded(faking, fakeResponseOf(faking, request)),
       request.signal,
     );
-  };
 }
 
 /**
@@ -133,7 +132,7 @@ async function takenOf(faking: Faking, matched: ListedMatch, request: Request): 
   const scripted = faking.scriptedByNameOf(listed.name);
   const turn = scripted.turn();
   try {
-    const reading = await abortableOf(readingOfRequest(matched, request), signal);
+    const reading = await abortableOf(() => readingOfRequest(matched, request), signal);
     if (reading.kind === 'stopped') {
       return reading.answer;
     }
@@ -188,16 +187,4 @@ async function stepAnswerOf(
     throw mistakeOf({ ...whoOf(listed), what: 'a step returned no answer built with its r' });
   }
   return returned as ScriptedAnswer;
-}
-
-/**
- * What a request waits for, or the signal's reason, as `fetch` rejects with it, once the signal
- * is aborted; it is never already aborted here, since `fetch` checked first.
- */
-function abortableOf<Value>(waited: Promise<Value>, signal: AbortSignal): Promise<Value> {
-  const aborted = Promise.withResolvers<never>();
-  const abort = () => aborted.reject(signal.reason);
-  signal.addEventListener('abort', abort, { once: true });
-  const settled = Promise.race([waited, aborted.promise]);
-  return settled.finally(() => signal.removeEventListener('abort', abort));
 }

@@ -21,10 +21,12 @@ import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
   type CallInput,
+  type CallOptions,
   type Client,
   type ClientOptions,
   type Committed,
   client,
+  type DeprecationNotice,
   type FaultSource,
   type Http,
   type Issue,
@@ -174,6 +176,19 @@ describe('the client’s types', () => {
     expectTypeOf<'eu'>().toExtend<Region>();
     expectTypeOf<'fr'>().not.toExtend<Region>();
     expectTypeOf<() => Promise<'us'>>().toExtend<Region>();
+    expect(client).toBeDefined();
+  });
+
+  test('a header function may take the call’s options or none, and an onDeprecation may be async', () => {
+    type Options = Parameters<typeof client<typeof ordersDependency, 'x-region'>>[1];
+    type Region = NonNullable<Options['headers']>['x-region'];
+
+    expectTypeOf<() => 'us'>().toExtend<Region>();
+    expectTypeOf<(call: CallOptions) => Promise<'us'>>().toExtend<Region>();
+    expectTypeOf<(forceRefresh?: boolean) => 'us'>().not.toExtend<Region>();
+    expectTypeOf<(notice: DeprecationNotice) => Promise<void>>().toExtend<
+      NonNullable<Options['onDeprecation']>
+    >();
     expect(client).toBeDefined();
   });
 
