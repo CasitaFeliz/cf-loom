@@ -4895,6 +4895,7 @@ describe.concurrent('cf-loom check, the version publish would take', {
 
     expect(ran.status).toBe(3);
     expect(ran.stdout).not.toContain('Would publish');
+    expect(ran.stdout).not.toContain('No Change needs a Breaking Change Approval');
     expect(ran.stderr).toBe(
       `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     );
