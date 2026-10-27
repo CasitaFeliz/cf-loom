@@ -73,23 +73,29 @@ function hasSameDef(name: string, defs: BothDefs): boolean {
 }
 
 function sideOf(node: SchemaNode, defs: Defs): Side {
-  return node.type === 'ref' ? followRef(node, defs, []) : { node, key: node };
+  return node.type === 'ref' ? followRef(node, defs) : { node, key: node };
 }
 
 /**
- * A `ref` followed through alias defs to the schema it stands for. A missing def, or an alias
- * that comes back to one already followed, is a bug, thrown so the walk never loops.
+ * A `ref` followed through alias defs to the schema it stands for, nullable when a `ref` on the
+ * way is. A missing def, or an alias that comes back to one already followed, is a bug, thrown so
+ * the walk never loops.
  */
-function followRef(ref: RefNode, defs: Defs, followed: readonly RefNode[]): Side {
-  const def = defs[ref.name];
-  if (def === undefined || followed.some((earlier) => earlier.name === ref.name)) {
-    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
+function followRef(ref: RefNode, defs: Defs): Side {
+  const followed = new Set<string>();
+  let nullable = false;
+  for (let current = ref; ; ) {
+    const def = defs[current.name];
+    if (def === undefined || followed.has(current.name)) {
+      throw new Error(`\`ref\` to ${current.name} reaches no schema: a bug.`);
+    }
+    followed.add(current.name);
+    nullable ||= current.nullable === true;
+    if (def.type !== 'ref') {
+      return { node: nullable ? { ...def, nullable: true } : def, key: current.name };
+    }
+    current = def;
   }
-  const reached: Side =
-    def.type === 'ref' ? followRef(def, defs, [...followed, ref]) : { node: def, key: ref.name };
-  return ref.nullable === true
-    ? { ...reached, node: { ...reached.node, nullable: true } }
-    : reached;
 }
 
 function hasEntered(entered: readonly EnteredKey[], key: EnteredKey): boolean {

@@ -35,60 +35,68 @@ type EnteredPlace = SchemaPlace & { readonly entered: EnteredKey[] };
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
  * its path, following `ref`s into both Snapshots' defs. A pair of schemas met again within this
  * schema compares no further, so a def used at several paths reports its differences at the first.
+ * The pairs being compared are an explicit stack, so no depth of defs grows the call stack.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
   defs: BothDefs,
   place: SchemaPlace,
 ): readonly Difference[] {
-  return differencesWithin(pair, defs, { ...place, entered: [] });
-}
-
-function differencesWithin(
-  pair: NodePair,
-  defs: BothDefs,
-  place: EnteredPlace,
-): readonly Difference[] {
-  const followed = followedOf(pair, defs, place.entered);
-  const own = annotationFindingsOf(pair);
-  switch (followed.kind) {
-    case 'settled':
-      return differencesOf([...own, ...nullabilityFindingsOf(followed.pair)], defs, place);
-    case 'inline':
-      return differencesOf([...own, ...findingsOf(followed.pair, defs)], defs, place);
-    case 'entered':
-      place.entered.push(followed.entered);
-      return differencesOf(
-        [
-          ...own,
-          ...renamedFindingsOf(pair),
-          ...annotationFindingsOf(followed.pair),
-          ...findingsOf(followed.pair, defs),
-        ],
-        defs,
-        place,
-      );
-  }
-}
-
-function differencesOf(
-  findings: readonly Finding[],
-  defs: BothDefs,
-  place: EnteredPlace,
-): readonly Difference[] {
   const differences: Difference[] = [];
-  for (const finding of findings) {
-    const at = [...place.at, ...finding.steps];
+  const levels = [levelOf(pair, defs, { ...place, entered: [] })];
+  for (let level = levels.at(-1); level !== undefined; level = levels.at(-1)) {
+    const next = level.findings.next();
+    if (next.done === true) {
+      levels.pop();
+      continue;
+    }
+    const finding = next.value;
+    const at = [...level.place.at, ...finding.steps];
     switch (finding.kind) {
       case 'found':
-        differences.push({ kind: 'schema', position: place.position, at, shape: finding.shape });
+        differences.push({
+          kind: 'schema',
+          position: level.place.position,
+          at,
+          shape: finding.shape,
+        });
         break;
       case 'inside':
-        differences.push(...differencesWithin(finding.pair, defs, { ...place, at }));
+        levels.push(levelOf(finding.pair, defs, { ...level.place, at }));
         break;
     }
   }
   return differences;
+}
+
+/**
+ * A pair being compared: its findings, read one at a time, so the pair of a finding inside it is
+ * followed only once the findings before it are compared, as the walk meets it.
+ */
+type Level = { readonly findings: Iterator<Finding>; readonly place: EnteredPlace };
+
+function levelOf(pair: NodePair, defs: BothDefs, place: EnteredPlace): Level {
+  return { findings: findingsWithin(pair, defs, place).values(), place };
+}
+
+/** What comparing a pair finds, its `ref`s followed; a pair entered joins the place's entered list. */
+function findingsWithin(pair: NodePair, defs: BothDefs, place: EnteredPlace): readonly Finding[] {
+  const followed = followedOf(pair, defs, place.entered);
+  const own = annotationFindingsOf(pair);
+  switch (followed.kind) {
+    case 'settled':
+      return [...own, ...nullabilityFindingsOf(followed.pair)];
+    case 'inline':
+      return [...own, ...findingsOf(followed.pair, defs)];
+    case 'entered':
+      place.entered.push(followed.entered);
+      return [
+        ...own,
+        ...renamedFindingsOf(pair),
+        ...annotationFindingsOf(followed.pair),
+        ...findingsOf(followed.pair, defs),
+      ];
+  }
 }
 
 /** The nullability of a node, then what its type compares: nullability is apart from the shape. */

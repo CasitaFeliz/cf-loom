@@ -2054,3 +2054,83 @@ describe('compatibilityReportOf, shared schemas', () => {
     expect(report.changes.map(({ class: changeClass }) => changeClass)).toEqual(['breaking']);
   });
 });
+
+describe('compatibilityReportOf, depth', () => {
+  /** A deep test compares thousands of defs, which takes seconds on a CI runner with shared cores. */
+  const deepTimeout = 60_000;
+
+  /** `count` defs, each an object holding the next by `next`, the innermost holding `innermost` by `v`. */
+  function aDefChainOf(count: number, innermost: SchemaNode): Defs {
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count - 1; index++) {
+      entries.push([`def${index}`, anObject({ next: required(aRef(`def${index + 1}`)) })]);
+    }
+    entries.push([`def${count - 1}`, anObject({ v: required(innermost) })]);
+    return Object.fromEntries(entries);
+  }
+
+  /** The steps to the innermost def's `v` from the outermost of `count`. */
+  function innermostPathOf(count: number): Path {
+    const steps: string[] = [];
+    for (let index = 0; index < count - 1; index++) {
+      steps.push('fields', 'next');
+    }
+    return [...steps, 'fields', 'v'];
+  }
+
+  test('an unchanged Snapshot of 5,000 nested defs has no Change', { timeout: deepTimeout }, () => {
+    const defs = aDefChainOf(5_000, aBoolean);
+
+    const report = reportOf(input, {
+      from: aRef('def0'),
+      to: aRef('def0'),
+      fromDefs: defs,
+      toDefs: defs,
+    });
+
+    expect(report).toEqual({ changes: [] });
+  });
+
+  test.for([1, 600, 5_000])(
+    'a field changed in the innermost of %i nested defs is one Change, at its path',
+    { timeout: deepTimeout },
+    (count) => {
+      const report = reportOf(input, {
+        from: aRef('def0'),
+        to: aRef('def0'),
+        fromDefs: aDefChainOf(count, aBoolean),
+        toDefs: aDefChainOf(count, aString),
+      });
+
+      const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(input, found(changed, breaksEverywhere, innermostPathOf(count))),
+      ]);
+    },
+  );
+
+  test('a ref through 20,000 alias defs is compared as the def it reaches', {
+    timeout: deepTimeout,
+  }, () => {
+    const count = 20_000;
+    const aliasesOf = (target: SchemaNode): Defs => {
+      const entries: [string, SchemaNode][] = [['target', target]];
+      for (let index = 0; index < count; index++) {
+        entries.push([`alias${index}`, aRef(index === count - 1 ? 'target' : `alias${index + 1}`)]);
+      }
+      return Object.fromEntries(entries);
+    };
+
+    const report = reportOf(input, {
+      from: aRef('alias0'),
+      to: aRef('alias0'),
+      fromDefs: aliasesOf(anObject({ v: required(aBoolean) })),
+      toDefs: aliasesOf(anObject({ v: required(aString) })),
+    });
+
+    const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
+    ]);
+  });
+});
