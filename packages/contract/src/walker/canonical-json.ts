@@ -18,7 +18,7 @@ export function isJsonValue(value: unknown): boolean {
   let member = value;
   for (;;) {
     if (!isJsonScalar(member)) {
-      if (!isPlainContainer(member) || onPath.has(member)) {
+      if (!isJsonContainer(member) || onPath.has(member)) {
         return false;
       }
       onPath.add(member);
@@ -48,7 +48,7 @@ function isJsonScalar(value: unknown): boolean {
   return value === null || isJsonPrimitive(value);
 }
 
-function isPlainContainer(value: unknown): value is object {
+function isJsonContainer(value: unknown): value is object {
   if (typeof value !== 'object' || value === null) {
     return false;
   }

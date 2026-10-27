@@ -136,8 +136,8 @@ function isGuardMember(member: Member): member is GuardMember {
 }
 
 /**
- * Places a Guard at its name, else at the list that holds it, then reads its own lists, each Guard
- * at the first place met, read with an explicit stack in the order a recursion would read them.
+ * Places a Guard at its name, else at the list that holds it, then reads its own lists: each Guard
+ * placed at the first list met, in the order the lists are written.
  */
 function visit(lists: Lists, guard: Guard, held: Place): void {
   const pending: HeldGuard[] = [{ guard, held }];

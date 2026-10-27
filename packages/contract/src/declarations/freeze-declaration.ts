@@ -9,7 +9,7 @@ export function freezeDeclaration<const Kind extends string, Fields extends obje
   fields: Fields,
   marks: Readonly<Record<symbol, unknown>> = {},
 ): Readonly<Fields> & { readonly kind: Kind } {
-  const declaration = { ...frozenFields(fields), kind };
+  const declaration = { ...frozenCopyFrom(fields), kind };
   Object.defineProperty(declaration, declarationBrand, { value: true });
   for (const mark of Object.getOwnPropertySymbols(marks)) {
     Object.defineProperty(declaration, mark, { value: marks[mark] });
@@ -20,11 +20,6 @@ export function freezeDeclaration<const Kind extends string, Fields extends obje
 /** Whether a value came out of a `define*` of this package, from any copy of it: it carries the brand. */
 export function isDeclaration(value: unknown): value is { readonly kind: unknown } {
   return typeof value === 'object' && value !== null && declarationBrand in value;
-}
-
-/** The fields of a declaration, each copied and frozen as `frozenCopyOf` does, sharing one copy per container. */
-function frozenFields(fields: object): object {
-  return frozenCopyFrom(fields);
 }
 
 /**
