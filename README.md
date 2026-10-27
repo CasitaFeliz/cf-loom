@@ -152,7 +152,7 @@ npx cf-loom verify
 npx cf-loom check
 ```
 
-Before cf-loom 1.0.0, `check` takes `--prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
+Before cf-loom 1.0.0, run `check --prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
 
 Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
 
