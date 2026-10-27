@@ -259,7 +259,7 @@ async function outcomesOfEndpointWith(method: Method) {
       ? reject(orderLocked, { lockedAt: '2026-10-18T10:00:00Z' })
       : fault({ committed: 'no', retryable: true }),
   );
-  const probeServer = nodeHttp(serve(service, { endpoints: { probe: answering }, guards: {} }));
+  const probeServer = nodeHttp(serve(service, { endpoints: { probe: answering }, guards: {} }, {}));
   await new Promise<void>((resolve) => probeServer.listen(0, '127.0.0.1', resolve));
   try {
     const probeUrl = `http://127.0.0.1:${(probeServer.address() as AddressInfo).port}/`;
@@ -526,7 +526,7 @@ describe('serve in the same process', () => {
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       headers: { 'x-api-key': 'caller-7' },
-      fetch: serve(provider, handlers),
+      fetch: serve(provider, handlers, {}),
     });
 
     const outcome = await orders.getOrder({ params: { orderId: 'o-1' } });

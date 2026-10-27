@@ -92,14 +92,19 @@ async function running(
   const inMemory = await memory(contract, options);
   const connection = { inMemory, ...inMemory };
   const { charge, notify } = handlers(connection);
-  await inMemory.consume({
-    commands: { chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)) },
-    subscriptions: {
-      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
-      onAudited: handle(readers.subscriptions.onAudited, () => undefined),
+  await inMemory.consume(
+    {
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, charge ?? (() => undefined)),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, notify ?? (() => undefined)),
+        onAudited: handle(readers.subscriptions.onAudited, () => undefined),
+      },
+      readers,
     },
-    readers,
-  });
+    {},
+  );
   return connection;
 }
 

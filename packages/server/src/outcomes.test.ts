@@ -277,10 +277,14 @@ describe('serve: a Success body that is JSON null', () => {
       name: 'notes-service',
       groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [findNote] })],
     });
-    const http = serve(withNote, {
-      endpoints: { findNote: handle(findNote, () => success(null)) },
-      guards: {},
-    });
+    const http = serve(
+      withNote,
+      {
+        endpoints: { findNote: handle(findNote, () => success(null)) },
+        guards: {},
+      },
+      {},
+    );
 
     const response = await http(new Request('http://test/note'));
 

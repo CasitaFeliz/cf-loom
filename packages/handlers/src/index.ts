@@ -14,6 +14,7 @@ export type {
   MessageFault,
   MessageHandler,
   MessageImplementation,
+  NoResources,
   Readers,
   ReceivedBodyOf,
   ResourcesNotAnnotated,

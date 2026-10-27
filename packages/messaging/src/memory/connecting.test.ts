@@ -56,20 +56,23 @@ const charge = { orderId: 'o-1' };
 /** A memory() of the Contract and consuming, its ChargeCard Handler as given. */
 async function running(chargeCard: (orderId: string, deliveryCount: number) => Promise<void>) {
   const inMemory = await memory(contract, { onServiceFault: () => undefined });
-  await inMemory.consume({
-    commands: {
-      chargeCardV1: handle(
-        readers.commands.chargeCardV1,
-        async ({ orderId }, { deliveryCount }) => {
-          await chargeCard(orderId, deliveryCount);
-        },
-      ),
+  await inMemory.consume(
+    {
+      commands: {
+        chargeCardV1: handle(
+          readers.commands.chargeCardV1,
+          async ({ orderId }, { deliveryCount }) => {
+            await chargeCard(orderId, deliveryCount);
+          },
+        ),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+      },
+      readers,
     },
-    subscriptions: {
-      notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
-    },
-    readers,
-  });
+    {},
+  );
   return inMemory;
 }
 

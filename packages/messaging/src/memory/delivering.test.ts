@@ -160,7 +160,7 @@ async function running(
   received: Received[] = [],
 ) {
   const { inMemory, faults } = await connected();
-  await inMemory.consume(handlersOf(received, replaced(inMemory)));
+  await inMemory.consume(handlersOf(received, replaced(inMemory)), {});
   return { inMemory, faults, received, ...inMemory };
 }
 
@@ -426,7 +426,7 @@ describe('memory(): what the Service publishes and sends', () => {
       { factId: 'f-35' },
     );
 
-    await inMemory.consume(handlersOf(received));
+    await inMemory.consume(handlersOf(received), {});
     await inMemory.settled();
 
     expect(inMemory.messages).toHaveLength(2);

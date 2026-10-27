@@ -338,7 +338,7 @@ describe('what a call sends', () => {
       name: 'orders-service',
       groups: [defineGroup({ name: 'prices', description: 'Prices', endpoints: [priceOrder] })],
     });
-    const http = serve(provider, handlers);
+    const http = serve(provider, handlers, {});
     const orders = client(ordersDependency, {
       baseUrl: 'http://orders.test',
       fetch: http,
@@ -818,10 +818,14 @@ describe('every header and query param the Provider reads reaches the request, w
         }),
       ],
     });
-    const http = serve(provider, {
-      endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
-      guards: { keyed: handle(keyedByHeader, () => admit()) },
-    });
+    const http = serve(
+      provider,
+      {
+        endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
+        guards: { keyed: handle(keyedByHeader, () => admit()) },
+      },
+      {},
+    );
     const keyed = keyedClient(headerOnlyGuardDemands, http);
 
     const outcome = await keyed.readKeyed({ headers: { 'x-key': 'k' } });
@@ -856,7 +860,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
       name: 'orders-service',
       groups: [defineGroup({ name: 'large', description: 'Large', endpoints: [echoLarge] })],
     });
-    const http = serve(provider, handlers);
+    const http = serve(provider, handlers, {});
     const echoes = client(echoingDependency, {
       baseUrl: 'http://orders.test',
       fetch: http,
