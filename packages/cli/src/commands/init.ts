@@ -16,9 +16,9 @@ import {
   rootFiles,
   rootPlaces,
 } from '../loading/index.ts';
-import type { Run } from '../project/index.ts';
 import { done, type Exit, toolingError } from './exit.ts';
 import { attributesToAppendOf, gitAttributesFile } from './git-attributes.ts';
+import type { Run } from './run.ts';
 import { rootTemplateOf } from './templates.ts';
 
 /** What `init` appends to `.gitattributes`, and the bytes the file held before, if it existed. */

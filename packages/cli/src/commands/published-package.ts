@@ -13,7 +13,7 @@ import {
   packagePaths,
 } from '../contract-package/index.ts';
 import { type InstalledPackage, publishedNameOf } from '../loading/index.ts';
-import type { BuiltProject, Project, Run } from '../project/index.ts';
+import type { BuiltProject, Project } from '../project/index.ts';
 import {
   type FirstListing,
   type NpmPlace,
@@ -25,6 +25,7 @@ import {
 import type { DistTag } from '../versioning/index.ts';
 import { type CopiedFile, removeStaged, stagedIn } from '../writing/index.ts';
 import { checkedEntryOf, type EntryToCheck } from './built-entry.ts';
+import type { Run } from './run.ts';
 
 /** What a publish does with the package it built: puts it out, or stops before `npm publish`. */
 export type PublishMode = 'publish' | 'dry-run';

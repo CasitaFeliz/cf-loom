@@ -1,8 +1,8 @@
 import { openApiDocumentOf } from '../openapi/index.ts';
-import type { Run } from '../project/index.ts';
 import { committedServiceOf, writtenDocumentExitOf } from './document.ts';
 import type { Exit } from './exit.ts';
 import { localVersion } from './package.ts';
+import type { Run } from './run.ts';
 
 /**
  * Prints the OpenAPI document of a Service's Endpoints from the committed Snapshot, which must be
