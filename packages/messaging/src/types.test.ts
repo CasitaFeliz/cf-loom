@@ -437,8 +437,8 @@ describe('publish and send types', () => {
       consume(typed, { resources }),
       // @ts-expect-error the Handlers take the Service's Resources
       consume(typed, {}),
-      // @ts-expect-error the Handlers take the Service's Resources
-      consume(typed, {}),
+      // @ts-expect-error the Handlers take the Service's Resources, notifications among them
+      consume(typed, { resources: {} }),
       // @ts-expect-error the annotation leaves the Resources unspecified
       consume(annotated, {}),
       // @ts-expect-error the annotation leaves the Resources unspecified
