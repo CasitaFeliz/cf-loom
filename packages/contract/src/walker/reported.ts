@@ -50,15 +50,38 @@ function forgetInDeclaration(state: State): readonly core.$ZodType[] {
   return forgotten;
 }
 
-/** Whether the tree holds a refusal of a cycle no id names, told once for each tree. */
+/**
+ * Whether the tree holds a refusal of a cycle no id names, told once for each tree. The subtrees
+ * being read are an explicit stack, so no depth of failures grows the call stack: a subtree read
+ * to its end holds none, and every subtree open when one is found holds it.
+ */
 function holdsUnnamedCycle(state: State, tree: FailureTree): boolean {
-  const known = state.holdsUnnamedCycleByTree.get(tree);
-  if (known !== undefined) {
-    return known;
+  const known = state.holdsUnnamedCycleByTree;
+  const answered = known.get(tree);
+  if (answered !== undefined) {
+    return answered;
   }
-  const holds = tree.some((part) =>
-    isFailureTree(part) ? holdsUnnamedCycle(state, part) : isUnnamedCycle(part),
-  );
-  state.holdsUnnamedCycleByTree.set(tree, holds);
-  return holds;
+  const open: OpenTree[] = [{ tree, next: 0 }];
+  for (let reading = open.at(-1); reading !== undefined; reading = open.at(-1)) {
+    const part = reading.tree[reading.next++];
+    if (part === undefined) {
+      known.set(reading.tree, false);
+      open.pop();
+      continue;
+    }
+    const holds = isFailureTree(part) ? known.get(part) : isUnnamedCycle(part);
+    if (holds === true) {
+      for (const holder of open) {
+        known.set(holder.tree, true);
+      }
+      return true;
+    }
+    if (holds === undefined && isFailureTree(part)) {
+      open.push({ tree: part, next: 0 });
+    }
+  }
+  return false;
 }
+
+/** A failure tree being read, and the index of its next part. */
+type OpenTree = { readonly tree: FailureTree; next: number };

@@ -1692,6 +1692,21 @@ describe('walkSchemas: depth', () => {
     },
   );
 
+  test('a def on a cycle holding 5,000 nested z.set() around a z.date() reports each refusal', {
+    timeout: deepTimeout,
+  }, () => {
+    const held = aNestOf(depth, (inner) => z.set(inner), z.date());
+    const def: z.ZodType = z
+      .object({ self: z.lazy(() => def).optional(), held })
+      .meta({ id: 'holder' });
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: def }], () => undefined);
+
+    const located = walked.located[0]?.walked;
+    const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
+    expect(refusals).toHaveLength(depth + 1);
+  });
+
   test('one cycle through 5,000 ids walks to 5,000 defs, each a ref to the next', {
     timeout: deepTimeout,
   }, () => {
