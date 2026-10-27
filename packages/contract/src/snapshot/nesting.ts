@@ -9,12 +9,11 @@ export const snapshotNestingLimit = 256;
 const removedCodeDefDepth = 5;
 
 /**
- * A Snapshot `generate` would write nested deeper than the decoder reads back, a def counted as the
- * removed code `publish` may hold it in would, refused at the Element the too-deep value sits in,
- * since the inner path is no author's term.
+ * A Snapshot `generate` would write nested deeper than the decoder reads back, refused at the
+ * Element the too-deep value sits in, since the inner path is no author's term.
  */
 export function nestingFailureOf(snapshot: unknown): NotAllowedFailure | undefined {
-  const at = tooDeepPathOf(snapshot) ?? tooDeepDefPathOf(snapshot);
+  const at = tooDeepPathOf(snapshot);
   if (at === undefined) {
     return undefined;
   }
@@ -58,18 +57,6 @@ function siteOfPath(snapshot: unknown, [section, key]: Path): Site {
   }
 }
 
-/** The path of the first def that nests deeper than a Snapshot may once a removed code holds it. */
-function tooDeepDefPathOf(snapshot: unknown): Path | undefined {
-  const defs = ownOf(snapshot, 'defs');
-  for (const [name, def] of isContainer(defs) ? Object.entries(defs) : []) {
-    const at = tooDeepPathOf(def, { at: ['defs', name], depth: removedCodeDefDepth });
-    if (at !== undefined) {
-      return at;
-    }
-  }
-  return undefined;
-}
-
 /** A JSON object or array, and where it sits, at its depth of nesting. */
 type Container = { readonly value: object; readonly at: Path; readonly depth: number };
 
@@ -77,11 +64,30 @@ type Container = { readonly value: object; readonly at: Path; readonly depth: nu
 type Root = { readonly at: Path; readonly depth: number };
 
 /**
- * The path of the first object or array nested deeper than a Snapshot may, the value read at the
- * root given (the Snapshot itself, by default), without recursion so no depth can overflow the
- * stack; `undefined` when none.
+ * The path of the first object or array nested deeper than a Snapshot may, the outermost value
+ * being level 1 and each def counted where a removed code holds it; `undefined` when none.
  */
-export function tooDeepPathOf(json: unknown, root: Root = { at: [], depth: 1 }): Path | undefined {
+export function tooDeepPathOf(json: unknown): Path | undefined {
+  return pathBeyondLimitFrom(json, { at: [], depth: 1 }) ?? defPathBeyondLimitIn(json);
+}
+
+/** The path of the first def that nests past the limit once a removed code holds it. */
+function defPathBeyondLimitIn(snapshot: unknown): Path | undefined {
+  const defs = ownOf(snapshot, 'defs');
+  for (const [name, def] of isContainer(defs) ? Object.entries(defs) : []) {
+    const at = pathBeyondLimitFrom(def, { at: ['defs', name], depth: removedCodeDefDepth });
+    if (at !== undefined) {
+      return at;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The first container past the limit below a value at `root`, read without recursion so no depth
+ * can overflow the stack.
+ */
+function pathBeyondLimitFrom(json: unknown, root: Root): Path | undefined {
   if (!isContainer(json)) {
     return undefined;
   }

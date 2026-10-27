@@ -194,6 +194,15 @@ function aRef(name: string): RefNode {
   return { type: 'ref', name };
 }
 
+/** An array of arrays, `levels` deep, of strings. */
+function nestedArrays(levels: number): SchemaNode {
+  let nested: SchemaNode = stringNode;
+  for (let level = 0; level < levels; level++) {
+    nested = { type: 'array', items: nested };
+  }
+  return nested;
+}
+
 function anObjectOf(schema: SchemaNode): ObjectNode {
   return { type: 'object', fields: { name: { required: true, schema } } };
 }
@@ -2301,12 +2310,25 @@ describe('decodeSnapshot', () => {
     });
 
     test('a Snapshot nested to 256 levels is read', () => {
-      const depth = 253;
-      const nested =
-        '{"type":"array","items":'.repeat(depth) + '{"type":"string"}' + '}'.repeat(depth);
-      const text = JSON.stringify(aService()).replace('"defs":{}', `"defs":{"a":${nested}}`);
+      const body = nestedArrays(252);
+      const codes = { ...standardCodes, [orderLocked]: { ...aCode, body } };
 
-      expect(decodeSnapshot(text).kind).toBe('decoded');
+      const result = serviceWith({ codes });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a def that fits 256 levels once a removed code holds it is read', () => {
+      const result = serviceWith({ defs: { a: nestedArrays(251) } });
+
+      expect(result.kind).toBe('decoded');
+    });
+
+    test('a def that nests past 256 levels once a removed code holds it is malformed at its deepest path', () => {
+      const result = serviceWith({ defs: { a: nestedArrays(252) } });
+
+      const at = ['defs', 'a', ...Array<string>(252).fill('items')];
+      expect(result).toEqual(malformedAt(at, 'nests deeper than 256 levels'));
     });
 
     test('only the first problem is reported, with its path', () => {
