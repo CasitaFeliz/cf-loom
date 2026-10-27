@@ -80,7 +80,7 @@ The examples in the package READMEs follow this layout and leave out imports of 
 A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
 
 - `"type": "module"`: every `cf-loom` command but `--help`, `help` and `--version` exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
-- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, which must be kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, and that name must be kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
 - `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
 
 `zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
@@ -114,7 +114,7 @@ Use TypeScript 7, the version cf-loom is built and tested with; 5.x does not typ
 }
 ```
 
-A Definitions Package is built, since `publish` needs it built first (see [Commands](packages/cli/README.md#commands) in the CLI README). It keeps this `tsconfig.json` to type-check, without `types` unless its tests use Node's API, when it installs `@types/node` too, and adds a `tsconfig.build.json` that emits `src/` with the declarations its Consumers' types come from, as [`org-definitions`](examples/org-definitions) has:
+A Definitions Package is built, since `publish` needs it built first (see [Commands](packages/cli/README.md#commands) in the CLI README). It keeps this `tsconfig.json` to type-check, without `"types": ["node"]` unless its tests use Node's API, when it installs `@types/node` too, and adds a `tsconfig.build.json` that emits only `src/`, with the declarations its Consumers' types come from, and no Node types, since Applications import it too. Build it with `tsc -p tsconfig.build.json`; [`org-definitions`](examples/org-definitions) has both files:
 
 ```json
 {
@@ -124,7 +124,8 @@ A Definitions Package is built, since `publish` needs it built first (see [Comma
     "declaration": true,
     "rewriteRelativeImportExtensions": true,
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": []
   },
   "include": ["src"]
 }
@@ -148,7 +149,7 @@ Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](p
 
 ### Apply the broker plan
 
-A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the plan in a deploy step, with a script such as this one or the organization's own tooling, a Provider's plan before its Subscribers' (the limits are the organization's: see [Applying the plan](packages/messaging/README.md#applying-the-plan) in the messaging README for them, for the prefix and for what applying never removes):
+A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's plan before its Subscribers' (the limits are the organization's: see [Applying the plan](packages/messaging/README.md#applying-the-plan) in the messaging README for them, for the prefix and for what applying never removes):
 
 ```ts
 // scripts/apply-broker-plan.ts
@@ -161,7 +162,8 @@ const limits: BrokerLimits = {
   durableConsumerDefaults: { deliverPolicy: 'all', ackWait: '30s', maxDeliver: 5, maxAckPending: 100 },
 };
 const { plan } = JSON.parse(execFileSync('npx', ['cf-loom', 'broker-plan', '--json'], { encoding: 'utf8' }));
-const servers = process.env['NATS_URL'] ?? 'nats://127.0.0.1:4222';
+const servers = process.env['NATS_URL'];
+if (servers === undefined) throw new Error('NATS_URL is not set');
 await applyBrokerPlan({ connect: () => connect({ servers }) }, plan, limits);
 ```
 
@@ -181,7 +183,7 @@ Until cf-loom 1.0.0, publish only prereleases: run `npx cf-loom check --prerelea
 
 #### Check in CI
 
-A CI job runs plain commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
+A CI job runs commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
 
 ```sh
 npx cf-loom verify
