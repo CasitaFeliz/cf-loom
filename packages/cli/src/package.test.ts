@@ -450,11 +450,7 @@ const killHook = lines([
   'syncBuiltinESMExports();',
 ]);
 
-/**
- * How long a kill test may run, past the project's timeout: two runs of `package`, each a fresh Node
- * process, per call it kills at, fourteen for `writeFileSync` and `mkdirSync`, which took 62 s on a
- * CI runner with shared cores.
- */
+/** Two runs of `package` for each call a kill test kills at, each a fresh Node process, take minutes on a CI runner with shared cores. */
 const killTestTimeout = 180_000;
 
 /** Runs `package`, killed at the `at`th call of a file-system function on the package folder. */

@@ -316,7 +316,6 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
     await proxy.stop();
 
     const error = await closing;
-
     expect(error).toMatchObject({ message: unanswered, cause: expect.any(Error) });
     expect(connection.isClosed()).toBe(true);
   });
