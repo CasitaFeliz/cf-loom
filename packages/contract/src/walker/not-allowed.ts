@@ -204,3 +204,11 @@ export function notAllowed(at: Reached, construct: Refused, outline?: Outline): 
 export function isUnnamedCycle({ construct }: NotAllowed): boolean {
   return construct === refused.unnamedCycle.construct;
 }
+
+/**
+ * Whether a refusal is of a schema nested too deep as written, the one refusal that hides what lies
+ * inside it: the walk does not enter it, so a cycle through it may close unseen.
+ */
+export function isWrittenTooDeep({ construct }: NotAllowed): boolean {
+  return construct === refused.writtenTooDeep.construct;
+}

@@ -378,7 +378,7 @@ export const category = z
 An id follows the grammar of the other names (see [The Root](#the-root)). It is read from the schema's own metadata, never looked up by name, and is unique in the Snapshot, so a Definitions Package's ids count too. `generate` fails on:
 
 - a cycle with no id on any schema of it, and a cycle through `z.lazy()`, unions, intersections, `.nullable()` and annotations alone, whatever the order of a union's options, since zod's parse never ends on a value no other option accepts (`const node = z.union([z.lazy(() => node), z.string()]).meta({ id: 'node' })`): a cycle passes through a node of another kind, such as an object;
-- an id that is no name of that grammar, an id on a schema that lies on no cycle, and one id on two schemas;
+- an id that is no name of that grammar, an id on a schema that lies on no cycle (not judged on a schema that holds one nested too deeply as written, whose cycle may close beyond it), and one id on two schemas;
 - an id on a field's `.optional()` or `.nonoptional()`, or on a schema that admits `null`, directly, through `z.lazy()` or as an intersection of nullable objects: put it on the schema inside, and `.nullable()` on each use.
 
 What is Not allowed inside a cycle is reported wherever the cycle is used.
