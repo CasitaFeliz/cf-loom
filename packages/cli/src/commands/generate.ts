@@ -70,22 +70,22 @@ async function generateService(run: Run, built: BuiltService): Promise<Exit> {
 /** What `generate` does besides writing: the Handlers it moves and the stale files it deletes. */
 type Changes = { readonly moves: readonly FileMove[]; readonly stale: readonly string[] };
 
-/** Writes the files, then deletes the stale ones, so no file is deleted before its replacement is written. */
+/**
+ * Reports the Handlers moved, writes the files, then deletes the stale ones, so no file is deleted
+ * before its replacement is written; each step is reported with what it did before it failed.
+ */
 function writtenExit(run: Run, { moves, stale }: Changes, files: readonly GeneratedFile[]): Exit {
+  run.found({ lines: movedLinesOf(moves), fields: { moved: movedOf(moves) } });
   const written = writeFiles(run.cwd, files);
+  const wrote = written.paths.map((path) => `Wrote ${path}`);
+  run.found({ lines: wrote, fields: { wrote: written.paths } });
   if (written.kind === 'failed') {
-    return stoppedAfterMoving(written.message, moves);
+    return toolingError(written.message);
   }
   const deleted = deleteFiles(run.cwd, stale);
-  if (deleted.kind === 'failed') {
-    return stoppedAfterMoving(deleted.message, moves);
-  }
-  const lines = [
-    ...movedLinesOf(moves),
-    ...written.paths.map((path) => `Wrote ${path}`),
-    ...deleted.paths.map((path) => `Deleted ${path}`),
-  ];
-  return done(lines, { moved: movedOf(moves), wrote: written.paths, deleted: deleted.paths });
+  const removed = deleted.paths.map((path) => `Deleted ${path}`);
+  run.found({ lines: removed, fields: { deleted: deleted.paths } });
+  return deleted.kind === 'failed' ? toolingError(deleted.message) : done([], {});
 }
 
 /** The moves as the document names them, by where each Handler was and is. */
@@ -95,10 +95,4 @@ function movedOf(moves: readonly FileMove[]): readonly FileMove[] {
 
 function movedLinesOf(moves: readonly FileMove[]): readonly string[] {
   return moves.map(({ from, to }) => `Moved ${from} to ${to}`);
-}
-
-/** A write or a deletion that failed after the Handlers had moved: the moves stay on stdout and in the document, beside the error. */
-function stoppedAfterMoving(message: string, moves: readonly FileMove[]): Exit {
-  const document = { moved: movedOf(moves) };
-  return { ...toolingError(message), stdout: movedLinesOf(moves), document };
 }

@@ -6631,7 +6631,7 @@ describe('cf-loom generate --json', () => {
   });
 
   test.skipIf(isRoot)(
-    'keeps the Handlers it moved beside the error when a write then fails',
+    'keeps the Handlers it moved and the files it wrote beside the error when a write then fails',
     () => {
       const project = aProjectWhoseHandlerMoves();
       chmodSync(project, 0o555);
@@ -6650,6 +6650,7 @@ describe('cf-loom generate --json', () => {
         status: 3,
         errors: [line],
         moved: [{ from: movedFrom, to: movedTo }],
+        wrote: [],
       });
     },
   );
