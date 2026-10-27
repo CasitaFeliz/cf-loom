@@ -1,7 +1,13 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
-import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
-import { contractFolder, insideContractOf, realPathOf } from '../loading/index.ts';
+import {
+  configFile,
+  filledPathOf,
+  type LayoutField,
+  pathRefusalOf,
+  type ServiceLayout,
+} from '../config/index.ts';
+import { ownedFolderOf, realPathOf } from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
 import type { LocalParts } from './code-names.ts';
 import {
@@ -18,14 +24,15 @@ export type HandlerPath = {
 };
 
 /**
- * Where every Handler lives, or the line saying why one cannot be placed: its
- * path lies under `src/contract/`, or two share a path.
+ * Where every Handler lives, or the line saying why one cannot be placed: a file of the layout
+ * breaks the layout's rules once its variables are filled or through a link, or two Handlers
+ * share a path.
  */
 export type HandlerPaths =
   | { readonly kind: 'placed'; readonly paths: readonly HandlerPath[] }
   | { readonly kind: 'unplaced'; readonly line: string };
 
-/** The Handler path of every declaration the Handler map holds, so two never share one. */
+/** The Handler path of every declaration the Handler map holds, each meeting the layout's rules and no two sharing one. */
 export function handlerPathsOf(
   snapshot: ServiceSnapshot,
   layout: ServiceLayout,
@@ -35,7 +42,7 @@ export function handlerPathsOf(
     handled,
     path: pathOf(handled, layout),
   }));
-  const line = contractLineOf(paths, directory) ?? collidingLineOf(paths, directory);
+  const line = unplacedLineOf(paths, layout, directory) ?? collidingLineOf(paths, directory);
   return line === undefined ? { kind: 'placed', paths } : { kind: 'unplaced', line };
 }
 
@@ -63,15 +70,57 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
   }
 }
 
-/** The line naming the first declaration, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
-function contractLineOf(paths: readonly HandlerPath[], directory: string): string | undefined {
-  const isInside = insideContractOf(directory);
-  const placed = paths.find(({ path }) => isInside(realPathOf(directory, path)));
-  if (placed === undefined) {
-    return undefined;
+/**
+ * Why a path cannot hold a file of a field, as the clause a line about it ends with, or none: the
+ * layout's rules for the field, then whether the path, links followed, lies where cf-loom places
+ * and records files. Placing and recording both ask it, so a path is one in neither or in both.
+ */
+export function placementRefusalOf(
+  directory: string,
+): (field: LayoutField, path: string) => string | undefined {
+  const isOwned = ownedFolderOf(directory);
+  return (field, path) => {
+    const broken = pathRefusalOf(field, path);
+    if (broken !== undefined) {
+      return broken;
+    }
+    return isOwned(realPathOf(directory, path)) ? undefined : linkRefusal;
+  };
+}
+
+const linkRefusal = 'a link leads out of src/ or into src/contract/';
+
+/** A file of the layout: the field that places it, what a line calls it, and its path once filled. */
+type PlacedFile = { readonly field: LayoutField; readonly subject: string; readonly path: string };
+
+/** The line naming the first file of the layout cf-loom could not place where it says: a Handler in the map's order, then the Handler map, then the readers. */
+function unplacedLineOf(
+  paths: readonly HandlerPath[],
+  layout: ServiceLayout,
+  directory: string,
+): string | undefined {
+  const refusalOf = placementRefusalOf(directory);
+  for (const { field, subject, path } of [...handlerFilesOf(paths), ...generatedFilesOf(layout)]) {
+    const clause = refusalOf(field, path);
+    if (clause !== undefined) {
+      const fix = `give it another path in the layout of ${configFile}`;
+      return `${subject} is ${path}, which ${clause}: ${fix}`;
+    }
   }
-  const under = `${handledLabelOf(placed.handled)} is ${placed.path}, under ${contractFolder}/, which holds only the Contract`;
-  return `${under}: give it another path in the layout of ${configFile}`;
+  return undefined;
+}
+
+function handlerFilesOf(paths: readonly HandlerPath[]): readonly PlacedFile[] {
+  return paths.map(({ handled, path }) => ({
+    field: handled.kind,
+    subject: handledLabelOf(handled),
+    path,
+  }));
+}
+
+function generatedFilesOf(layout: ServiceLayout): readonly PlacedFile[] {
+  const fields = ['handlerMap', 'readers'] as const;
+  return fields.map((field) => ({ field, subject: `layout.${field}`, path: layout[field] }));
 }
 
 /** The line naming the first two declarations, in the map's order, whose Handlers share a path. */

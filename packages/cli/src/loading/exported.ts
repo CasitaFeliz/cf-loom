@@ -1,11 +1,14 @@
-import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { byCodePoint, exportNamesOf } from '@cf-loom/contract/internal';
 import { filesUnder } from './files-under.ts';
 import { importedModuleOf } from './imported.ts';
+import { realPathOf } from './real-path.ts';
+
+/** The folder a Service's code and generated files sit in. */
+export const sourceFolder = 'src';
 
 /** Where the Contract's own files sit in a project. */
-export const contractFolder = 'src/contract';
+export const contractFolder = `${sourceFolder}/contract`;
 
 /** Whether a path the layout gives, from the project's directory, lies under the Contract's folder. */
 export function isUnderContract(path: string): boolean {
@@ -13,16 +16,17 @@ export function isUnderContract(path: string): boolean {
 }
 
 /**
- * Whether a folder, by its real path, is the project's Contract folder or inside it, whichever
- * link led to it, so a search of `src/` never reads what a link into the Contract reaches.
+ * Whether a real path lies where cf-loom places and records Handlers and generated files: under
+ * the project's real `src/` and outside its real `src/contract/`, whichever link led to it.
  */
-export function insideContractOf(directory: string): (realFolder: string) => boolean {
-  try {
-    const contract = realpathSync(join(directory, contractFolder));
-    return (realFolder) => realFolder === contract || realFolder.startsWith(`${contract}${sep}`);
-  } catch {
-    return () => false;
-  }
+export function ownedFolderOf(directory: string): (realPath: string) => boolean {
+  const owned = realPathOf(directory, sourceFolder);
+  const contract = realPathOf(directory, contractFolder);
+  return (realPath) => isWithin(realPath, owned) && !isWithin(realPath, contract);
+}
+
+function isWithin(path: string, folder: string): boolean {
+  return path === folder || path.startsWith(`${folder}${sep}`);
 }
 
 /**

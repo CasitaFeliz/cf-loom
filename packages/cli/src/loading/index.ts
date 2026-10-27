@@ -8,8 +8,9 @@ export type {
 export {
   contractExportsOf,
   contractFolder,
-  insideContractOf,
   isUnderContract,
+  ownedFolderOf,
+  sourceFolder,
 } from './exported.ts';
 export type { FileFilter, FilesUnder } from './files-under.ts';
 export { filesUnder } from './files-under.ts';
