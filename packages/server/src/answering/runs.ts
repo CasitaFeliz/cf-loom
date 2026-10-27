@@ -46,7 +46,7 @@ export function answeredOfFailedRun(
   standards: StandardRejections,
 ): Answered {
   switch (run.kind) {
-    case 'invalid-input':
+    case 'invalid-call':
       return answeredOfInvalidInput(run.issues, faultedBy, standards);
     case 'invalid-outcome':
       return invalidOutcomeOf(run.issues, faultedBy);

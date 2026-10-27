@@ -11,7 +11,7 @@ import {
 import {
   fault,
   handle,
-  InvalidInputError,
+  InvalidCallError,
   type MessageFault,
   type MessageMeta,
   readersOf,
@@ -494,13 +494,13 @@ describe('deliver()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
   });
 
-  test('a body that breaks the Reader rejects deliver with InvalidInputError at body, and no Handler runs, not even a first Subscription’s', async () => {
+  test('a body that breaks the Reader rejects deliver with InvalidCallError at body, and no Handler runs, not even a first Subscription’s', async () => {
     const { inMemory, received } = await running();
     const wrong = { orderId: 'not-a-uuid', status: 'paid' } as const;
 
     const rejection = await rejectionOf(inMemory.deliver(orderCreatedV2, wrong));
 
-    expect(rejection).toBeInstanceOf(InvalidInputError);
+    expect(rejection).toBeInstanceOf(InvalidCallError);
     expect(rejection).toMatchObject({
       message: expect.stringContaining('auditCreated'),
       issues: [{ part: 'body', path: ['orderId'], code: 'invalid_format' }],
@@ -516,7 +516,7 @@ describe('deliver()', () => {
       inMemory.deliver(chargeCardV1, wrong, { factId: 'o'.repeat(33_000) }),
     );
 
-    expect(rejection).not.toBeInstanceOf(InvalidInputError);
+    expect(rejection).not.toBeInstanceOf(InvalidCallError);
     expect(rejection).toMatchObject({
       message: expect.stringMatching(/^ChargeCard@1: The broker headers would take 66068 bytes/),
     });

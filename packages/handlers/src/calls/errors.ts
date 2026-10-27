@@ -7,8 +7,8 @@ import type { MessageRun } from './message-run.ts';
 import type { Run } from './run.ts';
 
 /** Thrown by a direct call given Input, demands, Context, a Qualifier or a Message body that breaks the Contract. */
-export class InvalidInputError extends Error {
-  override readonly name = 'InvalidInputError';
+export class InvalidCallError extends Error {
+  override readonly name = 'InvalidCallError';
   readonly issues: readonly Issue[];
 
   constructor(declaration: Handled, issues: readonly Issue[]) {
@@ -31,8 +31,8 @@ export class InvalidOutcomeError extends Error {
 /** What a direct call returns: the answer, or a throw when the call or the Handler broke the Contract. */
 export function answerOf<Answer>(declaration: Endpoint | Guard, run: Run<Answer>): Answer | Fault {
   switch (run.kind) {
-    case 'invalid-input':
-      throw new InvalidInputError(declaration, run.issues);
+    case 'invalid-call':
+      throw new InvalidCallError(declaration, run.issues);
     case 'invalid-outcome':
       throw new InvalidOutcomeError(declaration, run.issues);
     case 'thrown':
@@ -48,8 +48,8 @@ export function answerOf<Answer>(declaration: Endpoint | Guard, run: Run<Answer>
  */
 export function messageAnswerOf(declaration: MessageHandled, run: MessageRun): Fault | undefined {
   switch (run.kind) {
-    case 'invalid-input':
-      throw new InvalidInputError(declaration, run.issues);
+    case 'invalid-call':
+      throw new InvalidCallError(declaration, run.issues);
     case 'thrown':
       throw run.cause;
     case 'answered':

@@ -5,7 +5,7 @@ import {
   jsonBytesOf,
   messageIdentityOf,
 } from '@cf-loom/contract/internal';
-import { InvalidInputError } from '@cf-loom/handlers';
+import { InvalidCallError } from '@cf-loom/handlers';
 import { defaultedMetaOf, firstAttempt, writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
 import type { CoreDurableConsumer } from '../consuming/index.ts';
@@ -90,7 +90,7 @@ function consumes({ declaration }: CoreDurableConsumer, message: Event | Command
 function writtenBodyOf({ declaration, reader }: CoreDurableConsumer, body: unknown): unknown {
   const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
-    throw new InvalidInputError(declaration, written.issues);
+    throw new InvalidCallError(declaration, written.issues);
   }
   return written.value;
 }

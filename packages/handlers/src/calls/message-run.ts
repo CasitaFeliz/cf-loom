@@ -30,7 +30,7 @@ export type MessageGiven = {
 
 /** How one call of a Message Handler went: given a body that breaks its Reader, threw, or answered nothing or a Fault. */
 export type MessageRun =
-  | { readonly kind: 'invalid-input'; readonly issues: readonly Issue[] }
+  | { readonly kind: 'invalid-call'; readonly issues: readonly Issue[] }
   | { readonly kind: 'thrown'; readonly cause: unknown }
   | { readonly kind: 'answered'; readonly answer: Fault | undefined };
 
@@ -60,7 +60,7 @@ async function messageCallOf(
 ): Promise<MessageRun> {
   const checked = readBody(pairing.reader, body);
   if (checked.kind === 'issues') {
-    return { kind: 'invalid-input', issues: checked.issues };
+    return { kind: 'invalid-call', issues: checked.issues };
   }
   const run = () => implementation(checked.value, meta, { resources });
   const returned = await returnedOf(declaration, run, isAnswered);

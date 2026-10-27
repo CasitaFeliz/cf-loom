@@ -8,7 +8,7 @@ import {
   type GuardImplementation,
   type HandledRequest,
   handle,
-  InvalidInputError,
+  InvalidCallError,
   InvalidOutcomeError,
   type Issue,
   reject,
@@ -73,7 +73,7 @@ async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]>
   try {
     await call();
   } catch (e) {
-    if (e instanceof InvalidInputError || e instanceof InvalidOutcomeError) {
+    if (e instanceof InvalidCallError || e instanceof InvalidOutcomeError) {
       return e.issues;
     }
     throw e;
@@ -171,7 +171,7 @@ describe('a GuardHandler’s direct call', () => {
     expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
   });
 
-  test('demands that break a schema throw InvalidInputError', async () => {
+  test('demands that break a schema throw InvalidCallError', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     const issues = await issuesOf(() => apiKeyHandler({ headers: { 'x-api-key': 'k' } }, {}));
@@ -186,7 +186,7 @@ describe('a GuardHandler’s direct call', () => {
     ]);
   });
 
-  test('a Context of a listed Guard that breaks its schema throws InvalidInputError', async () => {
+  test('a Context of a listed Guard that breaks its schema throws InvalidCallError', async () => {
     const permissionHandler = handle(permission, () => admit());
 
     const issues = await issuesOf(() =>
@@ -203,7 +203,7 @@ describe('a GuardHandler’s direct call', () => {
     ]);
   });
 
-  test('a Qualifier that breaks its schema throws InvalidInputError', async () => {
+  test('a Qualifier that breaks its schema throws InvalidCallError', async () => {
     const permissionHandler = handle(permission, () => admit());
 
     const issues = await issuesOf(() =>
@@ -357,7 +357,7 @@ describe('a GuardHandler’s direct call', () => {
     expect(call).toBeDefined();
   });
 
-  test('a Guard stub given demands that break the Contract throws InvalidInputError', async () => {
+  test('a Guard stub given demands that break the Contract throws InvalidCallError', async () => {
     const stub = handle.stub(apiKey);
 
     const issues = await issuesOf(() => stub({ headers: {} } as never, {}));
@@ -386,7 +386,7 @@ describe('a GuardHandler’s direct call', () => {
     expect(received).toEqual([userContext, { region: 'emea' }]);
   });
 
-  test('a Qualifier given to a Guard that declares none throws InvalidInputError', async () => {
+  test('a Qualifier given to a Guard that declares none throws InvalidCallError', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
 
     const issues = await issuesOf(() =>

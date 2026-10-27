@@ -91,7 +91,7 @@ const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-  test('Input that breaks the Contract is invalid-input with its issues, never a throw', async () => {
+  test('Input that breaks the Contract is invalid-call with its issues, never a throw', async () => {
     const call = {
       input: { params: { orderId: 'nope' } },
       context: getContext,
@@ -102,7 +102,7 @@ describe('runEndpoint', () => {
     const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toEqual({
-      kind: 'invalid-input',
+      kind: 'invalid-call',
       issues: [
         {
           part: 'input.params',
@@ -148,7 +148,7 @@ describe('runEndpoint', () => {
 describe('runGuard', () => {
   const permissionHandler = handle(permission, () => admit());
 
-  test('demands, a Context and a Qualifier that break the Contract are invalid-input', async () => {
+  test('demands, a Context and a Qualifier that break the Contract are invalid-call', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const call = {
       demands: {},
@@ -164,9 +164,9 @@ describe('runGuard', () => {
     ];
 
     expect(runs).toMatchObject([
-      { kind: 'invalid-input', issues: [{ part: 'demands.headers', code: 'required' }] },
+      { kind: 'invalid-call', issues: [{ part: 'demands.headers', code: 'required' }] },
       {
-        kind: 'invalid-input',
+        kind: 'invalid-call',
         issues: [
           { part: 'context', path: ['apiKey', 'callerId'] },
           { part: 'qualifier', code: 'invalid_value' },
@@ -479,7 +479,7 @@ describe('a run given a value nested past the stack', () => {
     return body;
   }
 
-  test('runEndpoint is invalid-input at the root of the part, never thrown', async () => {
+  test('runEndpoint is invalid-call at the root of the part, never thrown', async () => {
     const nestHandler = handle(nest, () => success());
 
     const run = await runEndpoint(nestHandler, {
@@ -490,7 +490,7 @@ describe('a run given a value nested past the stack', () => {
     });
 
     expect(run).toEqual({
-      kind: 'invalid-input',
+      kind: 'invalid-call',
       issues: [
         {
           part: 'input.body',
@@ -525,7 +525,7 @@ describe('a run given a value nested past the stack', () => {
       ran.length = 0;
     }
 
-    expect(new Set(runs)).toEqual(new Set(['answered 1', 'invalid-input 0']));
+    expect(new Set(runs)).toEqual(new Set(['answered 1', 'invalid-call 0']));
   });
 });
 

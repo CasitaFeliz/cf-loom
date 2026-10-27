@@ -56,7 +56,7 @@ async function runOf(
 ): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
-    return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
+    return { kind: 'invalid-call', issues: [malformedBodyIssueOf('body', json.message)] };
   }
   const { messageId, factId, deliveryCount, lastAttempt, headers } = delivery;
   const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
@@ -66,7 +66,7 @@ async function runOf(
 /** A run as the Broker settles it: a body that breaks its Reader ends, a throw stays pending. */
 function ranOf(run: MessageRun, about: About): Ran {
   switch (run.kind) {
-    case 'invalid-input':
+    case 'invalid-call':
       return { settlement: 'ended', fault: { ...about, kind: 'invalid-body', issues: run.issues } };
     case 'thrown':
       return { settlement: 'pending', fault: { ...about, kind: 'thrown', cause: run.cause } };

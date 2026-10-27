@@ -36,7 +36,7 @@ export type Written<Answering extends Handled> = {
  * Outcome, or answered.
  */
 export type Run<Answer> =
-  | { readonly kind: 'invalid-input'; readonly issues: readonly Issue[] }
+  | { readonly kind: 'invalid-call'; readonly issues: readonly Issue[] }
   | { readonly kind: 'invalid-outcome'; readonly issues: readonly Issue[] }
   | { readonly kind: 'thrown'; readonly fault: Fault }
   | { readonly kind: 'answered'; readonly answer: Answer };
@@ -127,7 +127,7 @@ function checkedGiven<Value>(
   try {
     const checked = check();
     if (checked.kind === 'issues') {
-      return { kind: 'invalid-input', issues: checked.issues };
+      return { kind: 'invalid-call', issues: checked.issues };
     }
     return checked;
   } catch (e) {

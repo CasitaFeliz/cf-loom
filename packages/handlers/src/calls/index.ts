@@ -4,7 +4,7 @@ export {
   answerOf,
   faultLineOf,
   faultLogOf,
-  InvalidInputError,
+  InvalidCallError,
   InvalidOutcomeError,
   identityOf,
   logOf,
