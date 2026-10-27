@@ -19,6 +19,7 @@ import {
   failuresOf,
   type Outline,
   type Reached,
+  type ReachedSchema,
   type Walked,
   type Walker,
   type Walking,
@@ -75,7 +76,10 @@ export function* walkTagged(
     : [];
   const walkedVariants: Walked<[string, TaggedNode['variants'][string]]>[] = [];
   for (const [index, option] of def.options.entries()) {
-    walkedVariants.push(yield* walkVariant(option, index, { def, at, walker }));
+    const values = option._zod.propValues?.[def.discriminator];
+    const step = variantStepOf(def.discriminator, values, index);
+    const variant = { schema: option, at: walker.reach(option, inside(at, step)) };
+    walkedVariants.push(yield* walkVariant(variant, def.discriminator, walker));
   }
   const variants = allWalked(walkedVariants);
   if (variants.kind === 'not-allowed' || duplicate.length > 0) {
@@ -88,30 +92,18 @@ export function* walkTagged(
   });
 }
 
-/** The discriminated union a variant is walked in: its def, its place and the walker. */
-type VariantOf = {
-  readonly def: core.$ZodDiscriminatedUnionDef;
-  readonly at: Reached;
-  readonly walker: Walker;
-};
-
 /** A variant keyed by its discriminator value, or refused beside what it holds when it cannot be. */
 function* walkVariant(
-  option: core.$ZodType,
-  index: number,
-  { def, at, walker }: VariantOf,
+  { schema, at }: ReachedSchema,
+  discriminator: string,
+  walker: Walker,
 ): Walking<[string, TaggedNode['variants'][string]]> {
-  const values = option._zod.propValues?.[def.discriminator];
-  const variantAt = walker.reach(
-    option,
-    inside(at, variantStepOf(def.discriminator, values, index)),
-  );
-  const variant = yield* walker.schema(option, variantAt);
-  const refusal = variantRefusalOf(option, def.discriminator);
+  const variant = yield* walker.schema(schema, at);
+  const refusal = variantRefusalOf(schema, discriminator);
   if (refusal !== undefined) {
-    return failed(failuresOf([notAllowed(variantAt, refusal), variant]));
+    return failed(failuresOf([notAllowed(at, refusal), variant]));
   }
-  return taggedVariant(variant, values, variantAt);
+  return taggedVariant(variant, schema._zod.propValues?.[discriminator], at);
 }
 
 /**

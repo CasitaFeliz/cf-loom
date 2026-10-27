@@ -50,11 +50,7 @@ function forgetInDeclaration(state: State): readonly core.$ZodType[] {
   return forgotten;
 }
 
-/**
- * Whether the tree holds a refusal of a cycle no id names, told once for each tree. The subtrees
- * being read are an explicit stack, so no depth of failures grows the call stack: a subtree read
- * to its end holds none, and every subtree open when one is found holds it.
- */
+/** Whether the tree holds a refusal of a cycle no id names, told once for each tree. */
 function holdsUnnamedCycle(state: State, tree: FailureTree): boolean {
   const known = state.holdsUnnamedCycleByTree;
   const answered = known.get(tree);

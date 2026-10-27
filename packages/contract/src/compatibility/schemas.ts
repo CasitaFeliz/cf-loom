@@ -35,7 +35,6 @@ type EnteredPlace = SchemaPlace & { readonly entered: EnteredKey[] };
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
  * its path, following `ref`s into both Snapshots' defs. A pair of schemas met again within this
  * schema compares no further, so a def used at several paths reports its differences at the first.
- * The pairs being compared are an explicit stack, so no depth of defs grows the call stack.
  */
 export function schemaDifferencesOf(
   pair: NodePair,

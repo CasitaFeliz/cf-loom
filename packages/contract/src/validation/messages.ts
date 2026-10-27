@@ -5,7 +5,7 @@ import {
   messageBodyRefusal,
   messageVersionRefusal,
 } from '../declarations/index.ts';
-import { inFields, type SchemaNode } from '../walker/index.ts';
+import { inFields, resolvedRefOf, type SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -87,11 +87,16 @@ export function messageBodyFailures(
 
 /** Whether a node is an object, a `ref` read through its def and any alias defs; a nullable one is not. */
 function isObjectOf(node: SchemaNode, defs: Nodes['defs']): boolean {
-  let current: SchemaNode | undefined = node;
-  while (current?.type === 'ref' && current.nullable !== true) {
-    current = defs[current.name];
+  if (node.type !== 'ref') {
+    return node.type === 'object' && node.nullable !== true;
   }
-  return current?.type === 'object' && current.nullable !== true;
+  const resolved = resolvedRefOf(node, defs);
+  return (
+    resolved !== undefined &&
+    !resolved.nullable &&
+    resolved.def.type === 'object' &&
+    resolved.def.nullable !== true
+  );
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {

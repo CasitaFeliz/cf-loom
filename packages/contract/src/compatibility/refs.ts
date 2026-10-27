@@ -2,6 +2,7 @@ import {
   type Defs,
   type RefNode,
   reachedDefsOf,
+  resolvedRefOf,
   type SchemaNode,
   shapeKey,
 } from '../walker/index.ts';
@@ -76,26 +77,14 @@ function sideOf(node: SchemaNode, defs: Defs): Side {
   return node.type === 'ref' ? followRef(node, defs) : { node, key: node };
 }
 
-/**
- * A `ref` followed through alias defs to the schema it stands for, nullable when a `ref` on the
- * way is. A missing def, or an alias that comes back to one already followed, is a bug, thrown so
- * the walk never loops.
- */
+/** A `ref` followed through alias defs to the schema it stands for: one that reaches none is a bug. */
 function followRef(ref: RefNode, defs: Defs): Side {
-  const followed = new Set<string>();
-  let nullable = false;
-  for (let current = ref; ; ) {
-    const def = defs[current.name];
-    if (def === undefined || followed.has(current.name)) {
-      throw new Error(`\`ref\` to ${current.name} reaches no schema: a bug.`);
-    }
-    followed.add(current.name);
-    nullable ||= current.nullable === true;
-    if (def.type !== 'ref') {
-      return { node: nullable ? { ...def, nullable: true } : def, key: current.name };
-    }
-    current = def;
+  const resolved = resolvedRefOf(ref, defs);
+  if (resolved === undefined) {
+    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
   }
+  const { name, def, nullable } = resolved;
+  return { node: nullable ? { ...def, nullable: true } : def, key: name };
 }
 
 function hasEntered(entered: readonly EnteredKey[], key: EnteredKey): boolean {

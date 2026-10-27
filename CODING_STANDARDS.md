@@ -117,7 +117,7 @@ const businessCodes = resolved.filter(isBusinessRejection);
 
 **C29. A read whose depth the author controls uses an explicit stack, never recursion.** A walk of zod schemas,
 nested through defs, lazies or wrappers, of Snapshot nodes through `ref`s, of failure trees or of nested JSON keeps
-the parts it has still to read in an array and loops over it, as `nodesReachedFrom` and `refusalsIn` do; a walk that
+the parts it has still to read in an array and loops over it, as `leadsBackWithNoNode` and `refusalsIn` do; a walk that
 must return to a part after reading what it holds keeps one frame per part on that array, as the walker's driver
 does. *Why:* the call stack is a few thousand frames, set by Node rather than by any rule of the Contract, so a read
 that recurses fails a Contract the documents allow, at a depth that shifts with the shape and with the field order.

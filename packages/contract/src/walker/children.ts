@@ -33,32 +33,64 @@ export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonl
 export function nodesReachedFrom(nodes: readonly SchemaNode[], defs: Defs): readonly SchemaNode[] {
   const reached: SchemaNode[] = [];
   const entered = new Set<string>();
-  const pending: Pending[] = nodes.map((node) => ({ node })).toReversed();
+  const pending: Pending[] = nodes.map((node): Pending => ({ kind: 'node', node })).toReversed();
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if ('node' in next) {
-      const within = nodesWithin(next.node).map((inner) => inner.node);
-      for (const node of within) {
-        reached.push(node);
+    switch (next.kind) {
+      case 'node': {
+        const within = nodesWithin(next.node).map((inner) => inner.node);
+        for (const node of within) {
+          reached.push(node);
+        }
+        for (const ref of within.filter(isRef).toReversed()) {
+          pending.push({ kind: 'def', name: ref.name });
+        }
+        break;
       }
-      for (const ref of within.filter(isRef).toReversed()) {
-        pending.push({ name: ref.name });
+      case 'def': {
+        const def = defs[next.name];
+        if (def !== undefined && !entered.has(next.name)) {
+          entered.add(next.name);
+          pending.push({ kind: 'node', node: def });
+        }
+        break;
       }
-      continue;
-    }
-    const def = defs[next.name];
-    if (def !== undefined && !entered.has(next.name)) {
-      entered.add(next.name);
-      pending.push({ node: def });
     }
   }
   return reached;
 }
 
+/** A node whose nodes come before the defs they reach, or a def entered once. */
+type Pending =
+  | { readonly kind: 'node'; readonly node: SchemaNode }
+  | { readonly kind: 'def'; readonly name: string };
+
+/** The def a `ref` stands for through any alias defs, by name, nullable when a `ref` on the way is. */
+export type ResolvedRef = {
+  readonly name: string;
+  readonly def: SchemaNode;
+  readonly nullable: boolean;
+};
+
 /**
- * What `nodesReachedFrom` has still to read, last first: a node, whose nodes it adds before the
- * defs they reach, or the name of a def it enters once.
+ * The def a `ref` stands for through any alias defs, so every reader follows aliases alike; none
+ * when a name on the way has no def or the aliases come back to one already followed.
  */
-type Pending = { readonly node: SchemaNode } | { readonly name: string };
+export function resolvedRefOf(ref: RefNode, defs: Defs): ResolvedRef | undefined {
+  const followed = new Set<string>();
+  let nullable = false;
+  for (let current = ref; ; ) {
+    const def = defs[current.name];
+    if (def === undefined || followed.has(current.name)) {
+      return undefined;
+    }
+    followed.add(current.name);
+    nullable ||= current.nullable === true;
+    if (def.type !== 'ref') {
+      return { name: current.name, def, nullable };
+    }
+    current = def;
+  }
+}
 
 /**
  * The def names the nodes reference through `ref`s, directly or through the defs those name, each
