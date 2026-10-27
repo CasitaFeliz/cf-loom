@@ -36,8 +36,8 @@ export type EndpointLifecycle =
   | { readonly lifecycle: 'active' | 'retired'; readonly deprecatedAt?: never }
   | { readonly lifecycle: 'deprecated'; readonly deprecatedAt: string };
 
-/** An Endpoint by its identity, its Input merged with its Guards' demands and its codes resolved. */
-export type EndpointSnapshot = {
+/** What an Endpoint declares besides its lifecycle: its identity's parts, Input, Success and codes. */
+export type EndpointFields = {
   readonly name: string;
   readonly group: string;
   readonly visibility: Visibility;
@@ -47,7 +47,10 @@ export type EndpointSnapshot = {
   readonly input: InputSnapshot;
   readonly success: SuccessSnapshot;
   readonly rejections: readonly string[];
-} & EndpointLifecycle;
+};
+
+/** An Endpoint by its identity, its Input merged with its Guards' demands and its codes resolved. */
+export type EndpointSnapshot = EndpointFields & EndpointLifecycle;
 
 /** A Guard: what it demands, the Guards it reads, its Qualifier's schema and its codes. */
 export type GuardSnapshot = {

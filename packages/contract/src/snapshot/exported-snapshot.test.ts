@@ -13,6 +13,8 @@ import {
 } from '../index.ts';
 import {
   type CodeSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointPath,
   type EndpointSnapshot,
   type EventSnapshot,
@@ -22,7 +24,6 @@ import {
   type GuardSnapshot,
   matchOf,
   type ObjectNode,
-  type PublishedEndpoint,
   type PublishedServiceSnapshot,
   type ResolvedDefinitions,
   type SchemaNode,
@@ -54,12 +55,23 @@ function aServiceSnapshot(fields: Partial<ServiceSnapshot> = {}): ServiceSnapsho
   };
 }
 
-function anEndpointEntry(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+/** An Endpoint's lifecycle as the Snapshot writes it, a Deprecated one with its instant. */
+function endpointLifecycleOf(lifecycle: EndpointSnapshot['lifecycle']): EndpointLifecycle {
+  return lifecycle === 'deprecated'
+    ? { lifecycle, deprecatedAt: '2026-10-17T09:30:00Z' }
+    : { lifecycle };
+}
+
+function anEndpointEntry<
+  const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' },
+>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: [],
     guards: [],
@@ -72,7 +84,8 @@ function anEndpointEntry(fields: Partial<EndpointSnapshot> = {}): EndpointSnapsh
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  } as EndpointSnapshot;
+    ...(lifecycle ?? { lifecycle: 'active' }),
+  };
 }
 
 function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
@@ -121,7 +134,7 @@ function anObjectWith(node: SchemaNode): ObjectNode {
 const aString: SchemaNode = { type: 'string' };
 
 /** An Endpoint's entry that attaches the Guards named, each without a Qualifier. */
-function attaching(...guards: readonly string[]): EndpointSnapshot {
+function attaching(...guards: readonly string[]) {
   return anEndpointEntry({ guards: guards.map((guard) => ({ guard, qualifier: null })) });
 }
 
@@ -150,7 +163,9 @@ describe('exportedSnapshotOf', () => {
   ] as const)(
     'an Endpoint %s and %s is exported: %s, only when Public or Internal and not Retired',
     (visibility, lifecycle, exported) => {
-      const endpoints = { 'GET /orders': anEndpointEntry({ visibility, lifecycle }) };
+      const endpoints = {
+        'GET /orders': anEndpointEntry({ visibility }, endpointLifecycleOf(lifecycle)),
+      };
 
       const cut = exportedSnapshotOf(aServiceSnapshot({ endpoints }));
 
@@ -217,7 +232,7 @@ describe('exportedSnapshotOf', () => {
     const endpoints = {
       'GET /orders': attaching('apiKey'),
       'DELETE /orders': { ...attaching('admin'), visibility: 'private' as const },
-      'POST /orders': { ...attaching('legacyKey'), lifecycle: 'retired' } as EndpointSnapshot,
+      'POST /orders': { ...attaching('legacyKey'), lifecycle: 'retired' as const },
     };
     const guards = { admin: aGuardEntry(), apiKey: aGuardEntry(), legacyKey: aGuardEntry() };
 
@@ -525,12 +540,12 @@ describe('exportedSnapshotOf', () => {
       commands: {},
       subscriptions: {},
       endpoints: {
-        'GET /orders': anEndpointEntry() as PublishedEndpoint,
+        'GET /orders': anEndpointEntry(),
         'GET /legacy': {
           ...anEndpointEntry(),
           lifecycle: 'retired',
           retiredIn: '3.0.0',
-        } as PublishedEndpoint,
+        },
         'DELETE /orders': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'purgeOrders' },
       },
       events: {
@@ -607,7 +622,7 @@ describe('exportedCutOf', () => {
   ])('%s has no cut', (_, identity) => {
     const endpoints = {
       'GET /private': anEndpointEntry({ visibility: 'private' }),
-      'GET /retired': anEndpointEntry({ lifecycle: 'retired' }),
+      'GET /retired': anEndpointEntry({}, { lifecycle: 'retired' }),
     };
 
     const cutting = () => exportedCutOf(aServiceSnapshot({ endpoints }), identity);
@@ -659,7 +674,7 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
     ({ visibility, lifecycle }) => {
       const endpoints = {
         'GET /payments/{}': exportedParam,
-        'GET /payments/latest': anEndpointEntry({ visibility, lifecycle }),
+        'GET /payments/latest': anEndpointEntry({ visibility }, endpointLifecycleOf(lifecycle)),
       };
 
       const cut = exportedCutOf(aServiceSnapshot({ endpoints }), 'GET /payments/{}');
@@ -748,13 +763,13 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
       subscriptions: {},
       events: {},
       endpoints: {
-        'GET /payments/{}': exportedParam as PublishedEndpoint,
+        'GET /payments/{}': exportedParam,
         'GET /payments/latest': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getLatest' },
         'GET /payments/first': {
           ...anEndpointEntry(),
           lifecycle: 'retired',
           retiredIn: '3.1.0',
-        } as PublishedEndpoint,
+        },
       },
     };
 

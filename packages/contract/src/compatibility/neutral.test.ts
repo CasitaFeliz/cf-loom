@@ -8,6 +8,8 @@ import {
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Difference,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
@@ -41,12 +43,14 @@ const heading = {
 const anObject: SchemaNode = { type: 'object', fields: {} };
 const noFields = { type: 'object', fields: {} } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: ['orderId'],
     guards: [],
@@ -62,7 +66,8 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  } as EndpointSnapshot;
+    ...(lifecycle ?? { lifecycle: 'active' }),
+  };
 }
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
@@ -246,8 +251,8 @@ describe('compatibilityReportOf, an Endpoint’s Neutral Changes', () => {
   });
 
   test('moving the deprecatedAt of a Deprecated Endpoint gives one Neutral deprecation-moved with both instants', () => {
-    const from = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
-    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' });
+    const from = anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+    const to = anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' });
 
     const changes = endpointChangesOf(from, to);
 
@@ -260,10 +265,10 @@ describe('compatibilityReportOf, an Endpoint’s Neutral Changes', () => {
   });
 
   test('a Deprecated Endpoint left as it is gives no Change', () => {
-    const deprecated = anEndpoint({
-      lifecycle: 'deprecated',
-      deprecatedAt: '2026-01-01T00:00:00Z',
-    });
+    const deprecated = anEndpoint(
+      {},
+      { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' },
+    );
 
     const changes = endpointChangesOf(deprecated, deprecated);
 
@@ -271,7 +276,7 @@ describe('compatibilityReportOf, an Endpoint’s Neutral Changes', () => {
   });
 
   test('deprecating an Endpoint at an instant gives deprecated alone', () => {
-    const to = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
+    const to = anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' });
 
     const changes = endpointChangesOf(anEndpoint(), to);
 
@@ -370,7 +375,7 @@ describe('compatibilityReportOf, a Service’s Group', () => {
     },
     {
       name: 'Private when the Elements it lists are Retired',
-      held: { endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } },
+      held: { endpoints: { [identity]: anEndpoint({}, { lifecycle: 'retired' }) } },
       visibility: 'private',
     },
     {
@@ -707,8 +712,8 @@ describe('compatibilityReportOf, a code’s Neutral Changes', () => {
 });
 
 describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', () => {
-  const retired = (fields: Partial<EndpointSnapshot> = {}) =>
-    anEndpoint({ ...fields, lifecycle: 'retired' } as Partial<EndpointSnapshot>);
+  const retired = (fields: Partial<EndpointFields> = {}) =>
+    anEndpoint(fields, { lifecycle: 'retired' });
 
   test.each([
     { name: 'description', fields: { description: 'Reworded' } },
@@ -723,7 +728,7 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
     ({ fields }) => {
       const baseline = aBaseline({ endpoints: { [identity]: retired() } });
       const proposed = aProposed({
-        endpoints: { [identity]: anEndpoint({ ...fields, lifecycle: 'retired' }) },
+        endpoints: { [identity]: anEndpoint({ ...fields }, { lifecycle: 'retired' }) },
       });
 
       const { changes } = compatibilityReportOf(baseline, proposed);
@@ -763,7 +768,7 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
       defs: { tree: tree('A tree') },
     });
     const proposed = aProposed({
-      endpoints: { [identity]: anEndpoint({ lifecycle: 'retired', success }) },
+      endpoints: { [identity]: anEndpoint({ success }, { lifecycle: 'retired' }) },
       defs: { tree: tree('A leafy tree') },
     });
 
@@ -774,10 +779,15 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
 
   test('retiring an Element and changing it in the same change gives retired and retired-changed', () => {
     const baseline = aBaseline({
-      endpoints: { [identity]: anEndpoint({ lifecycle: 'deprecated' }) },
+      endpoints: {
+        [identity]: anEndpoint(
+          {},
+          { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' },
+        ),
+      },
     });
     const proposed = aProposed({
-      endpoints: { [identity]: anEndpoint({ lifecycle: 'retired', description: 'Reworded' }) },
+      endpoints: { [identity]: anEndpoint({ description: 'Reworded' }, { lifecycle: 'retired' }) },
     });
 
     const { changes } = compatibilityReportOf(baseline, proposed);
@@ -789,12 +799,14 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
   });
 
   test('retiring a Deprecated Endpoint, whose deprecatedAt goes with its lifecycle, gives retired alone', () => {
-    const deprecated = anEndpoint({
-      lifecycle: 'deprecated',
-      deprecatedAt: '2026-01-01T00:00:00Z',
-    });
+    const deprecated = anEndpoint(
+      {},
+      { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' },
+    );
     const baseline = aBaseline({ endpoints: { [identity]: deprecated } });
-    const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
+    const proposed = aProposed({
+      endpoints: { [identity]: anEndpoint({}, { lifecycle: 'retired' }) },
+    });
 
     const { changes } = compatibilityReportOf(baseline, proposed);
 
@@ -803,7 +815,9 @@ describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', (
 
   test('a Retired Endpoint left as it is gives no Change', () => {
     const baseline = aBaseline({ endpoints: { [identity]: retired() } });
-    const proposed = aProposed({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } });
+    const proposed = aProposed({
+      endpoints: { [identity]: anEndpoint({}, { lifecycle: 'retired' }) },
+    });
 
     const { changes } = compatibilityReportOf(baseline, proposed);
 
@@ -829,12 +843,18 @@ describe('compatibilityReportOf, every Neutral Change', () => {
       'a Deprecated Endpoint’s deprecatedAt',
       aBaseline({
         endpoints: {
-          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' }),
+          [identity]: anEndpoint(
+            {},
+            { lifecycle: 'deprecated', deprecatedAt: '2026-01-01T00:00:00Z' },
+          ),
         },
       }),
       aProposed({
         endpoints: {
-          [identity]: anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' }),
+          [identity]: anEndpoint(
+            {},
+            { lifecycle: 'deprecated', deprecatedAt: '2026-06-01T00:00:00Z' },
+          ),
         },
       }),
     ],
@@ -877,9 +897,11 @@ describe('compatibilityReportOf, every Neutral Change', () => {
     ],
     [
       'what a Retired Endpoint declares',
-      aBaseline({ endpoints: { [identity]: anEndpoint({ lifecycle: 'retired' }) } }),
+      aBaseline({ endpoints: { [identity]: anEndpoint({}, { lifecycle: 'retired' }) } }),
       aProposed({
-        endpoints: { [identity]: anEndpoint({ lifecycle: 'retired', description: 'Reworded' }) },
+        endpoints: {
+          [identity]: anEndpoint({ description: 'Reworded' }, { lifecycle: 'retired' }),
+        },
       }),
     ],
   ];

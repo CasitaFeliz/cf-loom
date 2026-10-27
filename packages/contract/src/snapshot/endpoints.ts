@@ -16,6 +16,7 @@ import type { SnapshotSources } from './context.ts';
 import { inputOf, textPartOf } from './input.ts';
 import type {
   AttachmentSnapshot,
+  EndpointFields,
   EndpointLifecycle,
   EndpointSnapshot,
   SuccessSnapshot,
@@ -45,11 +46,7 @@ function endpointLifecycleOf(endpoint: Endpoint): EndpointLifecycle {
   return { lifecycle: lifecycleOf(endpoint) };
 }
 
-function endpointOf(
-  endpoint: Endpoint,
-  group: string,
-  sources: SnapshotSources,
-): Omit<EndpointSnapshot, keyof EndpointLifecycle> {
+function endpointOf(endpoint: Endpoint, group: string, sources: SnapshotSources): EndpointFields {
   const guards = attachedGuardsOf(endpoint);
   return {
     name: endpoint.name,

@@ -6,6 +6,8 @@ import {
   type CodeSnapshot,
   compatibilityReportOf,
   type Difference,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type Field,
   type GuardSnapshot,
@@ -78,12 +80,14 @@ function aSuccess(fields: Partial<Success> = {}): Success {
   return { status: 200, headers: { type: 'object', fields: {} }, body: null, ...fields };
 }
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'updateOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Updates an order',
     params: ['orderId'],
     guards: [],
@@ -91,7 +95,8 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: aSuccess(),
     rejections: [],
     ...fields,
-  } as EndpointSnapshot;
+    ...(lifecycle ?? { lifecycle: 'active' }),
+  };
 }
 
 function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
@@ -108,13 +113,10 @@ function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
 }
 
 function aBaseline(
-  endpoint: EndpointSnapshot,
+  endpoint: EndpointFields,
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
-  const live = {
-    ...endpoint,
-    lifecycle: 'active',
-  } as PublishedServiceSnapshot['endpoints'][string];
+  const live = { ...endpoint, lifecycle: 'active' } as const;
   return {
     ...heading,
     version: '3.4.0',
@@ -697,10 +699,8 @@ describe('compatibilityReportOf, an Endpoint’s Rejections', () => {
   });
 });
 
-function endpointsOf(endpoint: EndpointSnapshot, other: string) {
-  const live = { ...endpoint, lifecycle: 'active' } as EndpointSnapshot & {
-    readonly lifecycle: 'active';
-  };
+function endpointsOf(endpoint: EndpointFields, other: string) {
+  const live = { ...endpoint, lifecycle: 'active' } as const;
   return { [identity]: live, [other]: { ...live, name: 'auditOrder' } };
 }
 
@@ -781,28 +781,29 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
   test('an Endpoint’s Changes come: lifecycle, Visibility, rename, params, query, headers, Input body, Success status, headers and body, Rejections', () => {
     const from = anEndpoint({
       visibility: 'internal',
-      lifecycle: 'active',
       input: anInput({ query: anOpenObject({}), headers: anOpenObject({}) }),
       success: aSuccess({ headers: anOpenObject({}), body: anOpenObject({}) }),
     });
-    const to = anEndpoint({
-      name: 'changeOrder',
-      visibility: 'public',
-      lifecycle: 'deprecated',
-      params: ['id'],
-      input: anInput({
-        params: theParams(['id', aString]),
-        query: anOpenObject({ page: optional(aNumber) }),
-        headers: anOpenObject({ 'x-trace': optional(aNumber) }),
-        body: anOpenObject({}),
-      }),
-      success: aSuccess({
-        status: 201,
-        headers: anOpenObject({ location: required(aString) }),
-        body: anOpenObject({ id: required(aString) }),
-      }),
-      rejections: ['ORDER_LOCKED'],
-    });
+    const to = anEndpoint(
+      {
+        name: 'changeOrder',
+        visibility: 'public',
+        params: ['id'],
+        input: anInput({
+          params: theParams(['id', aString]),
+          query: anOpenObject({ page: optional(aNumber) }),
+          headers: anOpenObject({ 'x-trace': optional(aNumber) }),
+          body: anOpenObject({}),
+        }),
+        success: aSuccess({
+          status: 201,
+          headers: anOpenObject({ location: required(aString) }),
+          body: anOpenObject({ id: required(aString) }),
+        }),
+        rejections: ['ORDER_LOCKED'],
+      },
+      { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' },
+    );
 
     const changes = changesOf(from, to);
 
@@ -847,7 +848,10 @@ function describedAs(difference: Difference): string {
 }
 
 describe('compatibilityReportOf, retiring an Endpoint compares nothing it declares', () => {
-  const deprecated = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' });
+  const deprecated = anEndpoint(
+    {},
+    { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' },
+  );
   const locked: CodeSnapshot = {
     origin: 'local',
     status: 409,
@@ -856,16 +860,16 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
     body: null,
   };
 
-  function retiringChangesOf(retired: EndpointSnapshot): readonly Change[] {
+  function retiringChangesOf(retired: Partial<EndpointFields>): readonly Change[] {
     const baseline: PublishedServiceSnapshot = {
       ...heading,
       version: '3.4.0',
       generator: publishedBy,
       formerInputs: [],
-      endpoints: { [identity]: deprecated as PublishedServiceSnapshot['endpoints'][string] },
+      endpoints: { [identity]: deprecated },
       codes: { [orderLocked]: locked },
     };
-    const proposed = aProposed({ ...retired, lifecycle: 'retired' } as EndpointSnapshot, {
+    const proposed = aProposed(anEndpoint(retired, { lifecycle: 'retired' }), {
       codes: baseline.codes,
     });
     return reportOf(baseline, proposed).changes;
@@ -873,7 +877,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
 
   const body = anOpenObject({ note: required(aString) });
   const header = anOpenObject({ 'x-trace': required(aString) });
-  test.each<[string, Partial<EndpointSnapshot>]>([
+  test.each<[string, Partial<EndpointFields>]>([
     ['a Success whose status changed', { success: aSuccess({ status: 201 }) }],
     ['a Success body added', { success: aSuccess({ body }) }],
     ['an Input body added', { input: anInput({ body }) }],
@@ -887,7 +891,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
   ])(
     'retiring a Deprecated Endpoint with %s compares nothing but reports retired-changed',
     (_name, change) => {
-      const changes = retiringChangesOf({ ...deprecated, ...change } as EndpointSnapshot);
+      const changes = retiringChangesOf(change);
 
       expect(changes.map(({ difference }) => difference.kind)).toEqual([
         'retired',
@@ -902,7 +906,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       version: '3.4.0',
       generator: publishedBy,
       formerInputs: [],
-      endpoints: { [identity]: deprecated as PublishedServiceSnapshot['endpoints'][string] },
+      endpoints: { [identity]: deprecated },
     };
     const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });
 

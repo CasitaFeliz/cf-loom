@@ -372,6 +372,25 @@ function thrownFor(baseline: Json, mutations: readonly Mutation[], declared: Sna
   }
 }
 
+/** What threw for 300 seeded mutations of two to four places each of a Baseline. */
+function seededThrownOf(baseline: Json, declared: Snapshot): readonly string[] {
+  const candidates = baselineMutationsOf(baseline);
+  const next = seededNext(341);
+  const thrown: string[] = [];
+  for (let round = 0; round < 300; round++) {
+    const count = 2 + Math.floor(next() * 3);
+    const chosen = Array.from(
+      { length: count },
+      () => candidates[Math.floor(next() * candidates.length)] as Mutation,
+    );
+    const line = thrownFor(baseline, chosen, declared);
+    if (line !== undefined) {
+      thrown.push(line);
+    }
+  }
+  return thrown;
+}
+
 describe('decodeSnapshot, a Baseline it decodes never makes the Check throw', () => {
   const published = (example: string) => {
     const declared = declaredSnapshotOf(example) as Snapshot;
@@ -398,19 +417,10 @@ describe('decodeSnapshot, a Baseline it decodes never makes the Check throw', ()
     { timeout: 30_000 },
     (example) => {
       const { baseline, declared } = published(example);
-      const candidates = baselineMutationsOf(baseline);
-      const next = seededNext(341);
 
-      const thrown = Array.from({ length: 300 }, () => {
-        const count = 2 + Math.floor(next() * 3);
-        const chosen = Array.from(
-          { length: count },
-          () => candidates[Math.floor(next() * candidates.length)] as Mutation,
-        );
-        return thrownFor(baseline, chosen, declared);
-      });
+      const thrown = seededThrownOf(baseline, declared);
 
-      expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+      expect(thrown).toEqual([]);
     },
   );
 
@@ -423,5 +433,13 @@ describe('decodeSnapshot, a Baseline it decodes never makes the Check throw', ()
 
     expect(baseline.kind === 'service' && baseline.formerInputs.length).toBeGreaterThan(0);
     expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+  });
+
+  test('seeded mutations of several places of a Baseline with former Inputs, a removed code and an alias def', () => {
+    const { baseline, declared } = aHistory();
+
+    const thrown = seededThrownOf(baseline, declared);
+
+    expect(thrown).toEqual([]);
   });
 });

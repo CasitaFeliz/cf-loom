@@ -2502,6 +2502,8 @@ describe('decodeSnapshot', () => {
 
     describe('everything a Snapshot holds is used, and a code it uses is held live', () => {
       const getOrder = 'GET /orders/{}';
+      const unusedGuard =
+        'is a Guard no Endpoint attaches and no export names, directly or through the Guards they list';
       const removedCode = { ...aCode, status: 410, removedIn: '3.2.0', defs: {} };
       const attaching = (guard: string) => ({
         ...anEndpoint,
@@ -2531,7 +2533,9 @@ describe('decodeSnapshot', () => {
       ])('a def no ref reaches, that %s, is malformed at the def', (_name, def) => {
         const result = serviceWith({ endpoints: { [getOrder]: anEndpoint }, defs: { tree: def } });
 
-        expect(result).toEqual(malformedAt(['defs', 'tree'], 'is a def no ref reaches'));
+        expect(result).toEqual(
+          malformedAt(['defs', 'tree'], 'is a def no ref reaches from outside the defs'),
+        );
       });
 
       test('a def reached only through another def decodes', () => {
@@ -2552,7 +2556,10 @@ describe('decodeSnapshot', () => {
         });
 
         expect(result).toEqual(
-          malformedAt(['codes', gone, 'defs', 'tree'], 'is a def no ref reaches'),
+          malformedAt(
+            ['codes', gone, 'defs', 'tree'],
+            'is a def no ref reaches from outside the defs',
+          ),
         );
       });
 
@@ -2570,7 +2577,10 @@ describe('decodeSnapshot', () => {
         });
 
         expect(result).toEqual(
-          malformedAt(['formerInputs', 0, 'defs', 'tree'], 'is a def no ref reaches'),
+          malformedAt(
+            ['formerInputs', 0, 'defs', 'tree'],
+            'is a def no ref reaches from outside the defs',
+          ),
         );
       });
 
@@ -2580,12 +2590,7 @@ describe('decodeSnapshot', () => {
           guards: { apiKey: aGuard },
         });
 
-        expect(result).toEqual(
-          malformedAt(
-            ['guards', 'apiKey'],
-            'is a Guard no Endpoint attaches, no export names and no Guard it holds lists',
-          ),
-        );
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
       });
 
       test('a Service’s Guard only an attached Guard lists decodes', () => {
@@ -2597,15 +2602,25 @@ describe('decodeSnapshot', () => {
         expect(result.kind).toBe('decoded');
       });
 
+      test.each([
+        [
+          'listed only by an unused Guard',
+          { apiKey: aGuard, zeta: { ...aGuard, guards: ['apiKey'] } },
+        ],
+        [
+          'that lists, and is listed by, only an unused Guard',
+          { apiKey: { ...aGuard, guards: ['zeta'] }, zeta: { ...aGuard, guards: ['apiKey'] } },
+        ],
+      ])('a Service’s Guard %s is malformed at the Guard', (_name, guards) => {
+        const result = serviceWith({ endpoints: { [getOrder]: anEndpoint }, guards });
+
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
+      });
+
       test('a Definitions Package’s Guard no export names and no exported Guard lists is malformed at the Guard', () => {
         const result = decodedFrom(aDefinitions({ guards: { apiKey: aGuard } }));
 
-        expect(result).toEqual(
-          malformedAt(
-            ['guards', 'apiKey'],
-            'is a Guard no Endpoint attaches, no export names and no Guard it holds lists',
-          ),
-        );
+        expect(result).toEqual(malformedAt(['guards', 'apiKey'], unusedGuard));
       });
 
       test('a Definitions Package’s Guard only an exported Guard lists decodes', () => {

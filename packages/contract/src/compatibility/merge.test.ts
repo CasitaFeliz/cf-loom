@@ -9,6 +9,8 @@ import {
   type DefinitionsSnapshot,
   decodeSnapshot,
   defScopesOf,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   hashedTextOf,
@@ -42,12 +44,14 @@ const keptCode = 'KEPT';
 const newCode = 'NEW_CODE';
 const emptyObject = { type: 'object', fields: {} } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: ['orderId'],
     guards: [],
@@ -63,7 +67,8 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  } as EndpointSnapshot;
+    ...(lifecycle ?? { lifecycle: 'active' }),
+  };
 }
 
 /** The Endpoint on a path with no params, as `POST /orders` has none. */
@@ -327,7 +332,7 @@ describe('publishedSnapshotOf', () => {
 
   test('with no Baseline, an Element declared Retired is stamped retiredIn the version', () => {
     const proposed = aProposed({
-      endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+      endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }) },
     });
 
     const published = publishedSnapshotOf(undefined, proposed, publishedAt('1.0.0'));
@@ -337,12 +342,17 @@ describe('publishedSnapshotOf', () => {
 
   test('an Element newly Retired is stamped retiredIn the version', () => {
     const baseline = aBaseline({
-      endpoints: { 'GET /orders/{}': aLive(anEndpoint(), 'deprecated') },
+      endpoints: {
+        'GET /orders/{}': aLive(
+          anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
+          'deprecated',
+        ),
+      },
       events: { 'OrderPlaced@1': aLive(anEvent(), 'deprecated') },
       commands: { 'ChargeCard@1': aLive(aCommand(), 'deprecated') },
     });
     const proposed = aProposed({
-      endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+      endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }) },
       events: { 'OrderPlaced@1': anEvent({ lifecycle: 'retired' }) },
       commands: { 'ChargeCard@1': aCommand({ lifecycle: 'retired' }) },
     });
@@ -365,7 +375,7 @@ describe('publishedSnapshotOf', () => {
       endpoints: { 'GET /orders/{}': aRetired(anEndpoint(), '3.0.0') },
     });
     const proposed = aProposed({
-      endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+      endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }) },
     });
 
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
@@ -428,22 +438,25 @@ describe('publishedSnapshotOf', () => {
   test('a Deprecated Endpoint is published with the deprecatedAt its declaration states, not the Baseline’s', () => {
     const baseline = aBaseline({
       endpoints: {
-        'GET /orders/{}': aLive(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' }), 'deprecated'),
+        'GET /orders/{}': aLive(
+          anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
+          'deprecated',
+        ),
       },
     });
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({
-          lifecycle: 'deprecated',
-          deprecatedAt: '2026-10-20T10:00:00Z',
-        }),
+        'GET /orders/{}': anEndpoint(
+          {},
+          { lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' },
+        ),
       },
     });
 
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(
-      anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
+      anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
     );
   });
 
@@ -451,17 +464,17 @@ describe('publishedSnapshotOf', () => {
     const baseline = aBaseline({ endpoints: { 'GET /orders/{}': aLive(anEndpoint()) } });
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({
-          lifecycle: 'deprecated',
-          deprecatedAt: '2026-10-20T10:00:00Z',
-        }),
+        'GET /orders/{}': anEndpoint(
+          {},
+          { lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' },
+        ),
       },
     });
 
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.endpoints['GET /orders/{}']).toEqual(
-      anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
+      anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-20T10:00:00Z' }),
     );
   });
 
@@ -471,12 +484,14 @@ describe('publishedSnapshotOf', () => {
       const baseline = aBaseline({
         endpoints: {
           'GET /orders/{}': aLive(
-            anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' }),
+            anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
             'deprecated',
           ),
         },
       });
-      const proposed = aProposed({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } });
+      const proposed = aProposed({
+        endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle }) },
+      });
 
       const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
@@ -794,7 +809,9 @@ describe('publishedSnapshotOf', () => {
 
   test('merging an unchanged Snapshot into its Baseline hashes like the Baseline, whatever the version', () => {
     const deprecated = aLive(
-      withoutParams(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' })),
+      withoutParams(
+        anEndpoint({}, { lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' }),
+      ),
       'deprecated',
     );
     const baseline = aBaseline({
@@ -814,7 +831,7 @@ describe('publishedSnapshotOf', () => {
     });
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }),
+        'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }),
         'POST /orders': deprecated,
       },
     });

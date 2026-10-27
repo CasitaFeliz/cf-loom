@@ -22,12 +22,7 @@ import { type Use, usesOf } from './uses.ts';
 /** A text a Snapshot holds, and where. */
 type Located = { readonly at: Path; readonly text: string };
 
-/**
- * The first identity a Snapshot holds that is none, an Endpoint's params that are not its
- * identity's, a name it uses and does not hold live, or holds and does not use, a Standard
- * Rejection's code with a body it does not have or with headers, a code's status no Rejection
- * has, or a def that leads back to itself with no node between; `undefined` when there is none.
- */
+/** The first name or identity a Snapshot holds or uses that `generate` never writes, judged across its places. */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
     ...identityProblemsOf(snapshot),

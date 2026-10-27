@@ -7,6 +7,8 @@ import {
   type CommandSnapshot,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   firstPublishChangesOf,
@@ -44,12 +46,14 @@ const heading = {
   dependencies: {},
 } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: ['orderId'],
     guards: [],
@@ -62,7 +66,8 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  } as EndpointSnapshot;
+    ...(lifecycle ?? { lifecycle: 'active' }),
+  };
 }
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
@@ -84,6 +89,13 @@ function aCommand(fields: Partial<CommandSnapshot> = {}): CommandSnapshot {
     body: emptyObject,
     ...fields,
   };
+}
+
+/** An Endpoint's lifecycle as the Snapshot writes it, a Deprecated one with its instant. */
+function endpointLifecycleOf(lifecycle: Lifecycle): EndpointLifecycle {
+  return lifecycle === 'deprecated'
+    ? { lifecycle, deprecatedAt: '2026-10-17T09:30:00Z' }
+    : { lifecycle };
 }
 
 function aLive<Element extends { readonly lifecycle: Lifecycle }>(
@@ -181,8 +193,14 @@ const endpoint: Element = {
   name: 'Endpoint',
   site: { kind: 'endpoint', identity: 'GET /orders/{}', name: 'getOrder', visibility: 'public' },
   retiring: 'approval-needed',
-  proposed: (lifecycle) => ({ endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle }) } }),
-  live: (lifecycle) => ({ endpoints: { 'GET /orders/{}': aLive(anEndpoint(), lifecycle) } }),
+  proposed: (lifecycle) => ({
+    endpoints: { 'GET /orders/{}': anEndpoint({}, endpointLifecycleOf(lifecycle)) },
+  }),
+  live: (lifecycle) => ({
+    endpoints: {
+      'GET /orders/{}': aLive(anEndpoint({}, endpointLifecycleOf(lifecycle)), lifecycle),
+    },
+  }),
   retired: () => ({ endpoints: { 'GET /orders/{}': aRetired(anEndpoint()) } }),
   tombstone: () => ({
     endpoints: { 'GET /orders/{}': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getOrder' } },
@@ -392,7 +410,7 @@ describe('compatibilityReportOf, presence', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }),
+        'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }),
         'GET /purchases/{}': anEndpoint({ params: ['purchaseId'] }),
       },
     });
@@ -533,10 +551,12 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
         endpoints: {
-          'GET /orders/{}': anEndpoint({
-            ...stillRetired,
-            success: { status: 200, headers: { type: 'object', fields: {} }, body: changedBody },
-          }),
+          'GET /orders/{}': anEndpoint(
+            {
+              success: { status: 200, headers: { type: 'object', fields: {} }, body: changedBody },
+            },
+            stillRetired,
+          ),
         },
       },
     },
@@ -544,14 +564,14 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
       name: 'an Endpoint’s name',
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
-        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, name: 'fetchOrder' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({ name: 'fetchOrder' }, stillRetired) },
       },
     },
     {
       name: 'an Endpoint’s Visibility',
       baseline: { endpoints: { 'GET /orders/{}': retiredEndpoint } },
       proposed: {
-        endpoints: { 'GET /orders/{}': anEndpoint({ ...stillRetired, visibility: 'internal' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({ visibility: 'internal' }, stillRetired) },
       },
     },
     {
@@ -596,10 +616,10 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
     const baseline = aBaseline(endpoint.live('deprecated'));
     const proposed = aProposed({
       endpoints: {
-        'GET /orders/{}': anEndpoint({
-          lifecycle: 'retired',
-          success: { status: 201, headers: { type: 'object', fields: {} }, body: null },
-        }),
+        'GET /orders/{}': anEndpoint(
+          { success: { status: 201, headers: { type: 'object', fields: {} }, body: null } },
+          { lifecycle: 'retired' },
+        ),
       },
     });
 
@@ -613,8 +633,8 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
 });
 
 describe('compatibilityReportOf, Visibility', () => {
-  function endpointVisible(visibility: Visibility, fields: Partial<EndpointSnapshot> = {}) {
-    return { endpoints: { 'GET /orders/{}': anEndpoint({ visibility, ...fields }) } };
+  function endpointVisible(visibility: Visibility, lifecycle?: EndpointLifecycle) {
+    return { endpoints: { 'GET /orders/{}': anEndpoint({ visibility }, lifecycle) } };
   }
 
   function publishedVisible(visibility: Visibility) {
@@ -693,7 +713,7 @@ describe('compatibilityReportOf, Visibility', () => {
 
   test('each difference on one Element is its own Change: Deprecated and narrowed together give two', () => {
     const baseline = aBaseline(publishedVisible('public'));
-    const proposed = aProposed(endpointVisible('internal', { lifecycle: 'deprecated' }));
+    const proposed = aProposed(endpointVisible('internal', endpointLifecycleOf('deprecated')));
 
     const changes = changesOf(baseline, proposed);
 
@@ -875,7 +895,7 @@ describe('compatibilityReportOf, the report', () => {
         },
       });
       const proposed = aProposed({
-        endpoints: { 'GET /orders/{}': anEndpoint({ lifecycle: 'retired' }) },
+        endpoints: { 'GET /orders/{}': anEndpoint({}, { lifecycle: 'retired' }) },
       });
 
       const report = compatibilityReportOf(baseline, proposed);
