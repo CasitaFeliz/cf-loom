@@ -1,6 +1,6 @@
 import { defineProject } from 'vitest/config';
 
-/** Each test spawns cf-loom, which takes seconds on a CI runner with shared cores. */
+/** Its tests that run cf-loom take seconds on a CI runner with shared cores. */
 const spawningTimeout = 60_000;
 
 export default defineProject({
