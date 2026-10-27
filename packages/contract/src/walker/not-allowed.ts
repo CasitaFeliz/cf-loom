@@ -1,5 +1,6 @@
 import type { NotAllowed } from './nodes.ts';
 import { type Failed, failed, type Outline, type Reached } from './walked.ts';
+import { writtenNestingLimit } from './written-depth.ts';
 
 /** A construct as the Not allowed list writes it, and what the documents name instead. */
 export type Refused = { readonly construct: string; readonly instead?: string };
@@ -87,6 +88,9 @@ export const refused = {
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
   nodelessCycle: {
     construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+  },
+  writtenTooDeep: {
+    construct: `a schema nested deeper than ${writtenNestingLimit} schemas as written`,
   },
   bigint: { construct: 'z.bigint()' },
   symbol: { construct: 'z.symbol()' },

@@ -1565,7 +1565,7 @@ const nestedBeyondArrays = 8;
 
 describe('cf-loom generate: how deep a Snapshot nests', () => {
   test('a Contract with a schema nested past 252 levels fails generate, naming the Endpoint it sits in', () => {
-    const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(260) });
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRootNestedIn(252) });
 
     const ran = cfLoom(project, 'generate');
 
@@ -1611,6 +1611,113 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
     const heading = { version: '1.0.0', generator: `@cf-loom/cli@${cliVersion}` };
     return JSON.stringify({ ...JSON.parse(snapshotJson), ...heading, formerInputs: [] });
   }
+});
+
+/**
+ * The source of `count` schemas, each `wrap` around the one before it, held in `inner`, the first
+ * around `innermost`: built by a loop, since Node cannot load the nest written out.
+ */
+function nestSource(count: number, wrap: string, innermost = 'z.boolean()'): string {
+  return [
+    '(() => {',
+    `  let inner: z.ZodType = ${innermost};`,
+    `  for (let index = 0; index < ${count}; index++) {`,
+    `    inner = ${wrap};`,
+    '  }',
+    '  return inner;',
+    '})()',
+  ].join('\n');
+}
+
+const writtenTooDeep = 'not allowed: a schema nested deeper than 256 schemas as written';
+
+describe('cf-loom generate: how deep a schema nests as written', () => {
+  test('a body field nested in 5,000 arrays fails generate at its 257th schema, never on the stack', () => {
+    const nested = nestSource(5_000, 'z.array(inner)');
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ body: `z.object({ a: ${nested} })` }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = `src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.a${'[]'.repeat(255)}`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${at} ${writtenTooDeep}\n` });
+  });
+
+  test('an intersection of two objects whose shared field nests 5,000 arrays fails generate on the depth', () => {
+    const nested = nestSource(5_000, 'z.array(inner)');
+    const body = `z.intersection(z.object({ a: ${nested} }), z.object({ a: ${nested} }))`;
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = (item: number) =>
+      `src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body[${item}].a${'[]'.repeat(254)}`;
+    const stderr = `${at(0)} ${writtenTooDeep}\n${at(1)} ${writtenTooDeep}\n`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
+  });
+
+  test('a body field wrapped in 10,000 .nullable() fails generate on the depth', () => {
+    const nested = nestSource(10_000, 'inner.nullable()', 'z.number()');
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ body: `z.object({ a: ${nested} })` }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.a';
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${at} ${writtenTooDeep}\n` });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+
+  test('a body field wrapped in 10,000 .nullable() with an example fails generate on the depth, never on the stack', () => {
+    const nested = nestSource(10_000, 'inner.nullable()', 'z.number()');
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot({ body: `z.object({ a: ${nested}.meta({ examples: [1] }) })` }),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body.a';
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: `${at} ${writtenTooDeep}\n` });
+  });
+
+  test('a Guard whose qualifier is 10,000 .nullable() fails generate on the depth at its qualifier', () => {
+    const qualifier = nestSource(10_000, 'inner.nullable()', 'z.number()');
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'src/contract/perm.guard.ts': [
+        "import { defineGuard } from '@cf-loom/contract';",
+        "import { z } from 'zod';",
+        '',
+        `export const perm = defineGuard({ name: 'perm', description: 'A permission', qualifier: ${qualifier} });`,
+        '',
+      ].join('\n'),
+    });
+    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
+      text
+        .replace(
+          "import { z } from 'zod';",
+          "import { z } from 'zod';\nimport { perm } from './perm.guard.ts';",
+        )
+        .replace(
+          "  visibility: 'public',",
+          "  visibility: 'public',\n  guards: [{ guard: perm, qualifier: 1 }],",
+        ),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 1,
+      stdout: '',
+      stderr: `src/contract/perm.guard.ts: guards.perm qualifier ${writtenTooDeep}\n`,
+    });
+  });
 });
 
 describe('cf-loom generate: a Definitions Package installed as built JavaScript', () => {

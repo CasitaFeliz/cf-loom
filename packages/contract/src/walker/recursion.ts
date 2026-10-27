@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: what the walk makes of each schema it enters (a ref, a failure kept, a refusal for its depth, or a def of its cycle) over one shared state; split, that state crosses files both ways
 import type * as core from 'zod/v4/core';
 import { leadsBackWithNoNode } from './children.ts';
 import { type Memos, startMemos } from './memos.ts';
@@ -21,6 +22,7 @@ import {
   type Walking,
   walked,
 } from './walked.ts';
+import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
 
 /** A schema the walk enters, where it sits and the id its own metadata gives it. */
 export type Entering = ReachedSchema & { readonly id: string | undefined };
@@ -81,11 +83,12 @@ function* within(state: State, entering: Entering, walk: () => Walking): Walking
   if (known !== undefined) {
     return known;
   }
+  const isTooDeep = writtenDepthOf(state.ancestors, entering.id) > writtenNestingLimit;
   const index = state.count++;
   const ancestor: Ancestor = { ...entering, index, low: index, reached: false };
   state.ancestors.push(ancestor);
   const start = state.memos.start();
-  const node = yield* walk();
+  const node = isTooDeep ? notAllowed(entering.at, refused.writtenTooDeep) : yield* walk();
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;
