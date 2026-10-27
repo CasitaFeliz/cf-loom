@@ -102,8 +102,8 @@ describe('the messaging README', () => {
 
     expect(duplicates).toEqual([]);
     expect(published.map((message) => message.messageId)).toEqual([
-      'event.OrderCreated.v1:o-1:created',
       'event.OrderCreated.v2:o-1:created',
+      'event.OrderCreated.v1:o-1:created',
       'command.ChargeCard.v1:o-1:created:charge',
     ]);
     expect(published[2]?.headers).toEqual({ traceparent });

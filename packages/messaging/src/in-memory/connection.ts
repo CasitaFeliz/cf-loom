@@ -1,19 +1,16 @@
-import type {
-  BrokerAck,
-  BrokerConnection,
-  BrokerConsumer,
-  OutgoingMessage,
-} from '../broker/index.ts';
+import type { BrokerAck, ConsumeRun, OutgoingMessage } from '../broker/index.ts';
+import { type CoreConsumer, whenAborted } from '../consuming/index.ts';
+import type { CoreConnection } from '../messaging/index.ts';
 import { type Attempt, firstDeliveryOf } from './attempts.ts';
 import type { Deliveries } from './deliveries.ts';
 import { Recorded } from './recorded.ts';
 import type { RecordedMessage } from './types.ts';
 
-/** The one connection of a `memory()`: records what the Service publishes and sends, and lines it up for the consumers of its subject. */
-export class MemoryConnection implements BrokerConnection {
+/** The connection of a `memory()`: records what the Service publishes and sends, and lines it up for the consumers of its subject. */
+export class MemoryConnection implements CoreConnection {
   readonly #deliveries: Deliveries;
   readonly #recorded = new Recorded();
-  #consumers: readonly BrokerConsumer[] = [];
+  #consumers: readonly CoreConsumer[] = [];
   #closed = false;
 
   constructor(deliveries: Deliveries) {
@@ -32,15 +29,16 @@ export class MemoryConnection implements BrokerConnection {
     return { duplicate: false };
   };
 
-  readonly consume = async (consumers: readonly BrokerConsumer[]): Promise<void> => {
+  readonly consume = async (consumers: readonly CoreConsumer[], run: ConsumeRun): Promise<void> => {
     this.#consumers = consumers;
+    whenAborted(run.closing, () => this.#deliveries.leaveLined());
   };
 
   readonly close = async (): Promise<void> => {
     this.#closed = true;
   };
 
-  consumers(): readonly BrokerConsumer[] {
+  consumers(): readonly CoreConsumer[] {
     return this.#consumers;
   }
 

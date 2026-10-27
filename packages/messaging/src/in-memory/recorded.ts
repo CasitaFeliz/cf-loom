@@ -5,7 +5,7 @@ import type { ServiceVersion } from '../subjects/index.ts';
 import { jsonBodyOf } from './bodies.ts';
 import type { RecordedMessage } from './types.ts';
 
-/** The Messages the Broker took, each broker message id once for the Broker's whole life. */
+/** The Messages `memory()` took, each broker message id once for its whole life. */
 export class Recorded {
   readonly #messages: RecordedMessage[] = [];
   readonly #messageIds = new Set<string>();

@@ -9,7 +9,7 @@ import {
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type CommandSender, type EventPublisher, messaging } from '../index.ts';
+import type { CommandSender, EventPublisher } from '../index.ts';
 import { memory } from './index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
@@ -131,16 +131,15 @@ async function createOrderHandler(
 
 describe('the In memory section of the messaging README', () => {
   test('the example runs: a Handler publishes and sends, settled() waits for the chain, messages and messagesOf list them, and deliver resolves acked', async () => {
-    const broker = memory();
-    const running = await messaging(contract, broker);
+    const running = await memory(contract);
     const resources = { publisher: running.publisher, sender: running.sender };
     await running.consume(handlers, { resources });
 
     await createOrderHandler({ body: { total: 12 } }, { resources });
-    await broker.settled();
-    const messages = broker.messages.map(({ subject }) => subject);
-    const created = broker.messagesOf(orderCreatedV1).map(({ subject }) => subject);
-    const settlement = await broker.deliver(
+    await running.settled();
+    const messages = running.messages.map(({ subject }) => subject);
+    const created = running.messagesOf(orderCreatedV1).map(({ subject }) => subject);
+    const settlement = await running.deliver(
       paymentSettledV1,
       { paymentId: PAYMENT_ID },
       { factId: 'pay-1' },
@@ -148,8 +147,8 @@ describe('the In memory section of the messaging README', () => {
     await running.close();
 
     expect(messages).toEqual([
-      'orders-service.event.OrderCreated.v1',
       'orders-service.event.OrderCreated.v2',
+      'orders-service.event.OrderCreated.v1',
       'orders-service.command.ChargeCard.v1',
     ]);
     expect(created).toEqual(['orders-service.event.OrderCreated.v1']);

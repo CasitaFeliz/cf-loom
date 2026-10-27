@@ -1,9 +1,8 @@
 import type { HandlerMap } from '@cf-loom/handlers';
 import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
-import type { BrokerConsumer } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
 import type { DeliveryEnds } from './deadline.ts';
-import { type Received, registerConsumerDetails } from './details.ts';
+import type { CoreConsumer, Received } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
@@ -31,7 +30,7 @@ export function consumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
   { report, resources, received, ends }: ConsumersRun,
-): readonly BrokerConsumer[] {
+): readonly CoreConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
     ...mappedMessageHandlerOf(handlers, consumed.at, consumed.element),
@@ -50,13 +49,6 @@ export function consumersOf(
         (delivery) => settlementOf({ consumed, handler, resources }, delivery, { report, ends }),
         { identity, subject },
       );
-      const consumer: BrokerConsumer = {
-        durable,
-        stream,
-        subject,
-        receive: async (delivery) => (await settle(delivery)).settlement,
-      };
-      registerConsumerDetails(consumer, { element, identity, reader, settle });
-      return consumer;
+      return { durable, stream, subject, element, identity, reader, settle };
     });
 }

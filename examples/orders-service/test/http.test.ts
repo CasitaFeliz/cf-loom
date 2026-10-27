@@ -1,10 +1,5 @@
 import { admit, handle } from '@cf-loom/handlers';
-import {
-  type ConsumedFault,
-  type Messaging,
-  type MessagingOptions,
-  messaging,
-} from '@cf-loom/messaging';
+import type { ConsumedFault, Messaging, MessagingOptions } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { type Http, type ServedFault, serve } from '@cf-loom/server';
 import { apiKey } from '@org/definitions';
@@ -21,7 +16,7 @@ let resources: Resources;
 let http: Http;
 
 beforeAll(async () => {
-  running = await messaging(contract, memory());
+  running = await memory(contract);
   resources = { publisher: running.publisher, sender: running.sender };
   http = serve(contract, handlers, { resources, onServiceFault: () => undefined });
 });
