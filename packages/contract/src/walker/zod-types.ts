@@ -4,6 +4,7 @@ import { type CheckedAt, constrain } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import {
+  bigintRefusalKeyOf,
   type Def,
   defTypes,
   isKnownDefType,
@@ -141,6 +142,8 @@ function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
       return refusedAround({ refusal, inside: [def.valueType] }, at, walker);
     case 'function':
       return refusedAround({ refusal, inside: [def.input, def.output] }, at, walker);
+    case 'bigint':
+      return notAllowed(at, refused[bigintRefusalKeyOf('format' in def ? def.format : undefined)]);
     case 'transform':
     case 'custom':
     case 'date':
@@ -148,7 +151,6 @@ function refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walked {
     case 'undefined':
     case 'any':
     case 'unknown':
-    case 'bigint':
     case 'symbol':
     case 'void':
     case 'never':

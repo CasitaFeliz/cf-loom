@@ -8,15 +8,22 @@ type FormatOptions = Readonly<Record<string, unknown>>;
 /** zod's options of a format, as its constructor reads them. */
 type ZodOptions = Readonly<Record<string, unknown>>;
 
-/** How zod builds a format: the call that writes it, and the schema that call builds. */
-type FormatBuilder<Build> = { readonly call: string; readonly schema: Build };
+/**
+ * How zod builds a format: the call generated code writes, any other call that builds the same
+ * format, and the schema those calls build.
+ */
+type FormatBuilder<Build> = {
+  readonly call: string;
+  readonly alsoBuiltBy?: readonly string[];
+  readonly schema: Build;
+};
 
 /** How zod builds each format it builds from options, by the name SNAPSHOT.md gives it. */
 const builtFormats = {
   guid: { call: 'z.guid', schema: (options) => z.guid(options) },
   uuid: { call: 'z.uuid', schema: (options) => z.uuid(options) },
   email: { call: 'z.email', schema: (options) => z.email(options) },
-  url: { call: 'z.url', schema: (options) => z.url(options) },
+  url: { call: 'z.url', alsoBuiltBy: ['z.httpUrl'], schema: (options) => z.url(options) },
   emoji: { call: 'z.emoji', schema: (options) => z.emoji(options) },
   nanoid: { call: 'z.nanoid', schema: (options) => z.nanoid(options) },
   cuid: { call: 'z.cuid', schema: (options) => z.cuid(options) },
@@ -72,9 +79,24 @@ export function isStringFormat(value: unknown): value is StringFormat {
   return typeof value === 'string' && knownFormats.has(value);
 }
 
-/** The zod function that builds a format by its name, as code writes it: a hash's aside. */
-export function formatConstructorOf(format: Exclude<StringFormat, HashFormat>): string {
-  return isBuiltFormat(format) ? builtFormats[format].call : regexFormats[format].call;
+/** A format zod builds by a function of its name. */
+type ConstructedFormat = Exclude<StringFormat, HashFormat>;
+
+/** The zod function that builds a format by its name, as generated code calls it. */
+export function formatConstructorOf(format: ConstructedFormat): string {
+  return constructedFormatOf(format).call;
+}
+
+/** Every zod function that builds a format by its name, the one generated code calls first. */
+export function formatConstructorsOf(format: ConstructedFormat): readonly string[] {
+  const constructed = constructedFormatOf(format);
+  return 'alsoBuiltBy' in constructed
+    ? [constructed.call, ...constructed.alsoBuiltBy]
+    : [constructed.call];
+}
+
+function constructedFormatOf(format: ConstructedFormat) {
+  return isBuiltFormat(format) ? builtFormats[format] : regexFormats[format];
 }
 
 /** Whether a format is one zod builds from a regex alone, a hash's aside. */

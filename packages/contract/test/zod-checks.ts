@@ -15,12 +15,14 @@ export type Flavor = {
 /** A check zod builds, by the spelling that builds it. */
 export type NamedCheck = { readonly name: string; readonly check: core.$ZodCheck };
 
-/** What a sweep of zod's exports or a schema's methods found. */
+/** What a sweep of zod's exports found: the checks it built, and the exports that threw. */
 export type Swept = {
   readonly checks: readonly NamedCheck[];
-  readonly called: readonly string[];
   readonly thrown: readonly string[];
 };
+
+/** What a sweep of a schema's methods found, and the methods it called. */
+export type SweptMethods = Swept & { readonly called: readonly string[] };
 
 export const zodFlavor: Flavor = {
   name: 'zod',
@@ -128,23 +130,20 @@ function settled(result: unknown): unknown {
 export function sweepExports({ api }: Flavor): Swept {
   const swept = sweepIn(api, '');
   const iso = Reflect.get(api, 'iso');
-  const inIso = isRecord(iso) ? sweepIn(iso, 'iso.') : { checks: [], called: [], thrown: [] };
+  const inIso = isRecord(iso) ? sweepIn(iso, 'iso.') : { checks: [], thrown: [] };
   return {
     checks: [...swept.checks, ...inIso.checks],
-    called: [...swept.called, ...inIso.called],
-    thrown: [...swept.thrown, ...inIso.thrown.map((name) => `iso.${name}`)],
+    thrown: [...swept.thrown, ...inIso.thrown],
   };
 }
 
 function sweepIn(exports: Readonly<Record<string, unknown>>, prefix: string): Swept {
   const checks: NamedCheck[] = [];
-  const called: string[] = [];
   const thrown: string[] = [];
   for (const [name, value] of Object.entries(exports)) {
     if (!isCalled(name, value)) {
       continue;
     }
-    called.push(`${prefix}${name}`);
     const args = namedArgs[name] ?? (boundedExports.has(name) ? [1] : []);
     try {
       const result = settled(value(...args));
@@ -152,10 +151,10 @@ function sweepIn(exports: Readonly<Record<string, unknown>>, prefix: string): Sw
         checks.push({ name: `${prefix}${name}`, check: result });
       }
     } catch {
-      thrown.push(name);
+      thrown.push(`${prefix}${name}`);
     }
   }
-  return { checks, called, thrown };
+  return { checks, thrown };
 }
 
 /** The schemas whose methods are swept, by the node type they are. */
@@ -191,7 +190,7 @@ function namesOfMethods(home: object): readonly string[] {
 }
 
 /** Every method of a classic schema that adds a check, by the check it adds. */
-export function sweepMethods(): Swept {
+export function sweepMethods(): SweptMethods {
   const checks: NamedCheck[] = [];
   const called = new Set<string>();
   const thrown = new Set<string>();

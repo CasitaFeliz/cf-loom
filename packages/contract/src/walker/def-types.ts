@@ -167,3 +167,24 @@ export function catchallRefusalKeyOf(type: string): RefusalKey {
 function isCatchallWorded(type: string): type is keyof typeof catchalls {
   return Object.hasOwn(catchalls, type);
 }
+
+/**
+ * How a bigint zod builds by a call of its own is refused, by its format: as that call, not as
+ * `z.bigint()`, which the author did not write.
+ */
+export const bigintFormats = {
+  int64: 'int64',
+  uint64: 'uint64',
+} as const satisfies Record<core.$ZodBigIntFormats, RefusalKey>;
+
+/** The table's type, for a rule or a test that enumerates its rows. */
+export type BigintFormats = typeof bigintFormats;
+
+/** The Not allowed entry a bigint of this format is refused as. */
+export function bigintRefusalKeyOf(format: unknown): RefusalKey {
+  return isBigintFormatWorded(format) ? bigintFormats[format] : defTypes.bigint.refuses;
+}
+
+function isBigintFormatWorded(format: unknown): format is keyof typeof bigintFormats {
+  return typeof format === 'string' && Object.hasOwn(bigintFormats, format);
+}

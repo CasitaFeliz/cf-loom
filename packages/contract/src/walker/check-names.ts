@@ -1,14 +1,40 @@
 // biome-ignore-all lint/style/useNamingConvention: the keys are zod's ids of its check kinds and formats
+import type * as core from 'zod/v4/core';
 import type { CheckDef } from './check-defs.ts';
-import { formatConstructorOf, isStringFormat } from './format-schemas.ts';
+import { formatConstructorsOf, isStringFormat } from './format-schemas.ts';
 import { isHashFormat } from './hash-formats.ts';
-import { type Refused, refusedStringFormat } from './not-allowed.ts';
+import { type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 
 /** A check kind this walker was written for: every kind zod declares but those that set metadata. */
 export type CheckKind = Exclude<CheckDef['check'], 'describe' | 'meta'>;
 
-/** One name for a kind, or names keyed by `inclusive`, the format or a custom check's `type`. */
-type CheckNameRow = string | Readonly<Record<string, string>>;
+/** The names of a kind, by the variants its def tells apart. */
+type Variants<Variant extends string> = Readonly<Record<Variant, string>>;
+
+/** The string formats zod writes as methods, which no function of its name builds. */
+type MethodFormat = (
+  | core.$ZodCheckRegex
+  | core.$ZodCheckStartsWith
+  | core.$ZodCheckEndsWith
+  | core.$ZodCheckIncludes
+  | core.$ZodCheckLowerCase
+  | core.$ZodCheckUpperCase
+)['_zod']['def']['format'];
+
+/** The kinds named by variant, and what tells their variants apart. */
+type VariantRows = {
+  readonly greater_than: Variants<'inclusive' | 'exclusive'>;
+  readonly less_than: Variants<'inclusive' | 'exclusive'>;
+  readonly number_format: Variants<core.$ZodNumberFormats>;
+  readonly bigint_format: Variants<core.$ZodBigIntFormats>;
+  readonly string_format: Variants<MethodFormat>;
+  readonly custom: Variants<'refine' | 'check'>;
+};
+
+/** One name for a kind, or the names of its variants. */
+type CheckNameRow<Kind extends CheckKind> = Kind extends keyof VariantRows
+  ? VariantRows[Kind]
+  : string;
 
 /**
  * How the walk names each zod check it refuses, written once: every spelling that builds the check's
@@ -31,7 +57,7 @@ export const checkNames = {
     float32: 'z.float32()',
     float64: 'z.float64()',
   },
-  bigint_format: { int64: 'z.int64()', uint64: 'z.uint64()' },
+  bigint_format: { int64: refused.int64.construct, uint64: refused.uint64.construct },
   max_size: '.max() or z.maxSize()',
   min_size: '.min(), .nonempty() or z.minSize()',
   size_equals: '.size()',
@@ -45,17 +71,16 @@ export const checkNames = {
     includes: '.includes()',
     lowercase: '.lowercase()',
     uppercase: '.uppercase()',
-    url: 'z.url() or z.httpUrl()',
   },
   property: 'z.property()',
   properties: 'z.properties()',
   mime_type: '.mime()',
   overwrite: '.trim(), .toLowerCase(), .toUpperCase(), .normalize(), .slugify() or .overwrite()',
   custom: {
-    refine: '.refine(), z.custom() or z.instanceof()',
+    refine: refused.custom.construct,
     check: '.superRefine(), .check() or .with()',
   },
-} as const satisfies { readonly [Kind in CheckKind]: CheckNameRow };
+} as const satisfies { readonly [Kind in CheckKind]: CheckNameRow<Kind> };
 
 /** The uuid versions zod has a function for, which that function and the option both build. */
 const uuidNames: Readonly<Record<string, string>> = {
@@ -81,22 +106,35 @@ function nameOf(check: CheckDef): string {
   if (!isKnownCheckKind(check.check)) {
     return zodCheckNamed(check.check);
   }
-  const row: CheckNameRow = checkNames[check.check];
+  const row: CheckNameRow<CheckKind> = checkNames[check.check];
   if (typeof row === 'string') {
     return row;
   }
-  return nameIn(row, variantOf(check)) ?? unlistedName(check);
+  const variant = check.check === 'string_format' ? check.format : variantOf(check);
+  return nameIn(row, variant) ?? unlistedName(check);
 }
 
-/** What tells a check apart within its kind: `inclusive`, a custom check's `type`, or its format. */
-function variantOf(check: CheckDef): string | undefined {
-  if ('inclusive' in check) {
+/** What tells a check apart within its kind, but a string format, which its format alone does. */
+type Variant =
+  | 'inclusive'
+  | 'exclusive'
+  | core.$ZodNumberFormats
+  | core.$ZodBigIntFormats
+  | 'refine'
+  | 'check';
+
+function variantOf(check: CheckDef): Variant | undefined {
+  if (check.check === 'greater_than' || check.check === 'less_than') {
     return check.inclusive ? 'inclusive' : 'exclusive';
   }
-  if (check.check === 'custom') {
-    return check.type === 'custom' ? 'refine' : 'check';
+  if (check.check === 'number_format' || check.check === 'bigint_format') {
+    return check.format;
   }
-  return 'format' in check ? check.format : undefined;
+  return check.check === 'custom' ? customVariantOf(check) : undefined;
+}
+
+function customVariantOf(check: Extract<CheckDef, { readonly check: 'custom' }>): Variant {
+  return check.type === 'custom' ? 'refine' : 'check';
 }
 
 /** The name a kind's row gives a variant, none when it lists no such variant. */
@@ -125,7 +163,17 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
   if (format === 'uuid' && version !== undefined) {
     return nameIn(uuidNames, version) ?? `z.uuid({ version: ${JSON.stringify(version)} })`;
   }
-  return isHashFormat(format) ? 'z.hash()' : `${formatConstructorOf(format)}()`;
+  return isHashFormat(format) ? 'z.hash()' : orJoined(formatConstructorsOf(format).map(callOf));
+}
+
+function callOf(call: string): string {
+  return `${call}()`;
+}
+
+/** Names as a sentence lists them: `a`, `a or b`, `a, b or c`. */
+function orJoined(names: readonly string[]): string {
+  const last = names.slice(-1).join('');
+  return names.length < 2 ? last : `${names.slice(0, -1).join(', ')} or ${last}`;
 }
 
 function zodCheckNamed(kind: string): string {

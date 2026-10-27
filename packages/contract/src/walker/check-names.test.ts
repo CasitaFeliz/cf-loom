@@ -292,6 +292,11 @@ describe('a refused zod check', () => {
       z.stringFormat('future', /x/),
       'z.stringFormat("future")',
     ],
+    [
+      'z.stringFormat() of a name every object has',
+      z.stringFormat('constructor', () => true),
+      'z.stringFormat("constructor")',
+    ],
   ])('%s reads the same on a boolean as on a string', (_name, check, construct) => {
     expect(constructsOf(onBoolean(check))).toEqual([construct]);
     expect(constructsOf(checked(z.string(), check))).toEqual([construct]);
@@ -344,6 +349,29 @@ describe('a refused zod check', () => {
       ]);
     },
   );
+
+  test.each([
+    ['z.custom()', z.custom<string>()],
+    ['z.instanceof()', z.instanceof(Date)],
+  ])('%s as a schema reads the spellings of the check it is', (_name, schema) => {
+    const spellings = '.refine(), z.custom() or z.instanceof()';
+
+    expect(constructsOf(z.object({ field: schema }))).toEqual([spellings]);
+    expect(constructsOf(onBoolean(schema))).toEqual([spellings]);
+  });
+
+  test.each([
+    ['z.int64()', z.int64()],
+    ['z.uint64()', z.uint64()],
+  ])('%s as a schema is named by its own call, not as z.bigint()', (name, schema) => {
+    expect(constructsOf(z.object({ field: schema }))).toEqual([name]);
+    expect(constructsOf(onBoolean(schema))).toEqual([name]);
+  });
+
+  test('z.url() reads every call that builds a url', () => {
+    expect(constructsOf(onBoolean(z.url()))).toEqual(['z.url() or z.httpUrl()']);
+    expect(constructsOf(onBoolean(z.httpUrl()))).toEqual(['z.url() or z.httpUrl()']);
+  });
 
   test('a zod type zod adds later is refused by its type, not as a call', () => {
     const schema = z.string();

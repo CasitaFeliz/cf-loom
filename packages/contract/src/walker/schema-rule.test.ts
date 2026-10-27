@@ -18,6 +18,7 @@ import {
   type ServiceContract,
 } from '../index.ts';
 import {
+  type BigintFormats,
   type Catchalls,
   type DefTypes,
   type PipeRefusals,
@@ -358,7 +359,16 @@ const refusedRows = {
   nonoptional: [
     { name: '.nonoptional()', schema: z.object({ f: z.array(z.string().nonoptional()) }) },
   ],
-  custom: [{ name: 'z.custom()', schema: z.object({ f: z.custom<string>() }) }],
+  custom: [
+    {
+      name: '.refine(), z.custom() or z.instanceof()',
+      schema: z.object({ f: z.custom<string>() }),
+    },
+    {
+      name: '.refine(), z.custom() or z.instanceof()',
+      schema: z.object({ f: z.instanceof(Date) }),
+    },
+  ],
   date: [
     { name: 'z.date()', schema: z.object({ f: z.date() }) },
     { name: 'z.date()', schema: z.object({ f: z.coerce.date() }) },
@@ -419,6 +429,12 @@ const catchallRows = {
     { name: '.catchall()', schema: z.object({ f: zm.catchall(zm.object({}), zm.string()) }) },
   ],
 } as const satisfies Record<Exclude<keyof Catchalls, 'unknown'> | 'other', readonly RefusedRow[]>;
+
+/** Each bigint format the table words has rows: its own call, not `z.bigint()`. */
+const bigintFormatRows = {
+  int64: [{ name: 'z.int64()', schema: z.object({ f: z.int64() }) }],
+  uint64: [{ name: 'z.uint64()', schema: z.object({ f: z.uint64() }) }],
+} as const satisfies Record<keyof BigintFormats, readonly RefusedRow[]>;
 
 /** Coercion, refused beside the node its type still builds. */
 const coerceRows = [
@@ -492,6 +508,7 @@ type RefusedRows =
   | RowsOf<typeof refusedRows>
   | RowsOf<typeof pipeRows>
   | RowsOf<typeof catchallRows>
+  | RowsOf<typeof bigintFormatRows>
   | (typeof coerceRows)[number]
   | RowsOf<typeof refusedInsideRows>;
 
@@ -499,6 +516,7 @@ const everyRefusedRow: readonly RefusedRow[] = [
   ...Object.values(refusedRows).flat(),
   ...Object.values(pipeRows).flat(),
   ...Object.values(catchallRows).flat(),
+  ...Object.values(bigintFormatRows).flat(),
   ...coerceRows,
   ...Object.values(refusedInsideRows).flat(),
 ];

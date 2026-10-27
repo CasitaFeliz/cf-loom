@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { IsOneLiteral, JoinedNames, Refusal } from '../declarations/index.ts';
 import type {
+  bigintFormats,
   catchalls,
   DefOfType,
   DefType,
@@ -117,13 +118,22 @@ type BesideRefusalKey<Schema, Type extends DefType> = Type extends CoercibleDefT
     ? CatchallKey<Schema>
     : never;
 
-/** The Not allowed entry a schema is refused as, by `defTypes`: a pipe by its shape. */
+/** What `bigintFormats` refuses a bigint as, by its format, else as a `defTypes` row refuses it. */
+type BigintKey<Def> = Def extends {
+  readonly format: infer Format extends keyof typeof bigintFormats;
+}
+  ? (typeof bigintFormats)[Format]
+  : Treatments['bigint']['refuses'];
+
+/** The Not allowed entry a schema is refused as, by `defTypes`: a pipe by its shape, a bigint by its format. */
 type OwnRefusalKey<Schema, Type extends DefType> = Treatments[Type] extends {
   readonly refuses: infer Key;
 }
   ? Type extends 'pipe'
     ? PipeRefusalKey<DefOf<Schema>>
-    : Key
+    : Type extends 'bigint'
+      ? BigintKey<DefOf<Schema>>
+      : Key
   : BesideRefusalKey<Schema, Type>;
 
 /** The schemas under a def's key: one, a list of them or a getter of one. */
