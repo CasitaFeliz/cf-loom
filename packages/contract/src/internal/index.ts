@@ -65,6 +65,7 @@ export {
   kebabCase,
   lifecycleOf,
   providerOf,
+  reservedCodes,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';
@@ -328,4 +329,5 @@ export {
   subscriptionsOf,
   successParts,
   successShapeOf,
+  writtenTextOf,
 } from '../written/index.ts';

@@ -115,7 +115,7 @@ test('the README’s fakeProvider example runs: a Handler called directly with t
     .on('getPayment')
     .once((r) => r.reject('NOT_FOUND'))
     .once((r) => r.unknownRejection('CARD_EXPIRED'))
-    .once((r) => r.fault({ committed: 'no', retryable: true }))
+    .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
     .once((r) => r.noConnection())
     .once((r) => r.reset())
     .once((r) => r.status(502))
@@ -142,6 +142,7 @@ test('the README’s fakeProvider example runs: a Handler called directly with t
       committed: 'no',
       retryable: true,
       message: 'Internal error',
+      retryAfter: '30',
     },
     {
       kind: 'fault',

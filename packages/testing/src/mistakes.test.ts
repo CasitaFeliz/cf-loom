@@ -109,26 +109,55 @@ const body = { id: 'pay-1', amount: 5, stage: 'pending' } as const;
 const committedGiven = ['no', 'yes', 'unknown', 'maybe', undefined];
 const retryableGiven = [true, false, 'yes'];
 const messageGiven = ['A message', 1, undefined];
+const retryAfterGiven = [undefined, 0, 30, -1, 1.5, '30', Number.NaN, 2 ** 53];
 
-/** Every Fault a test may script, a field the Caller reads or not; a message left out is the default. */
-const scriptedFaults = committedGiven.flatMap((committed) =>
-  retryableGiven.flatMap((retryable) =>
-    messageGiven.map((message) => ({
-      committed,
-      retryable,
-      ...(message === undefined ? {} : { message }),
-    })),
+/** What a test may give `r.fault`, each field one a Caller reads or not, or left out. */
+type ScriptedFaultCase = {
+  readonly committed?: unknown;
+  readonly retryable?: unknown;
+  readonly message?: unknown;
+  readonly retryAfter?: unknown;
+  readonly code?: unknown;
+};
+
+/**
+ * Every Fault a test may script, a field the Caller reads or not; a message left out is the default,
+ * and a Reserved code is the old way to script one.
+ */
+const scriptedFaults: readonly ScriptedFaultCase[] = [
+  ...committedGiven.flatMap((committed) =>
+    retryableGiven.flatMap((retryable) =>
+      messageGiven.flatMap((message) =>
+        retryAfterGiven.map((retryAfter) => ({
+          committed,
+          retryable,
+          ...(message === undefined ? {} : { message }),
+          ...(retryAfter === undefined ? {} : { retryAfter }),
+        })),
+      ),
+    ),
   ),
-);
+  { code: 'RETIRED' },
+];
 
 /** Whether a Caller reads a scripted Fault as a Fault Envelope. */
-function isReadableFault(fault: (typeof scriptedFaults)[number]): boolean {
+function isReadableFault(fault: ScriptedFaultCase): boolean {
   const message: unknown = 'message' in fault ? fault.message : 'Internal error';
   return (
     ['no', 'yes', 'unknown'].includes(String(fault.committed)) &&
     typeof fault.retryable === 'boolean' &&
     typeof message === 'string'
   );
+}
+
+/** Whether a Fault's retryAfter, if it has one, travels as Retry-After: whole seconds from 0, on a retryable Fault. */
+function hasSendableRetryAfter(fault: ScriptedFaultCase): boolean {
+  if (!('retryAfter' in fault)) {
+    return true;
+  }
+  const seconds = fault.retryAfter;
+  const isWhole = typeof seconds === 'number' && Number.isSafeInteger(seconds) && seconds >= 0;
+  return isWhole && fault.retryable === true;
 }
 
 describe('fakeProvider: a test’s mistakes', () => {
@@ -178,20 +207,106 @@ describe('fakeProvider: a test’s mistakes', () => {
     },
   );
 
-  test.each(scriptedFaults.filter(isReadableFault))(
-    'r.fault(%j) answers a Fault the Caller reads',
+  test.each(
+    scriptedFaults.filter((fault) => isReadableFault(fault) && !hasSendableRetryAfter(fault)),
+  )(
+    'r.fault(%j) is a mistake naming the retryAfter rule, since no Retry-After could carry it',
     async (scripted) => {
       const payments = fakeProvider(paymentsDependency);
       payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
 
-      const outcome = await payments.client().getPayment({ params });
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
 
-      expect(outcome).toMatchObject({
-        kind: 'fault',
-        source: 'provider',
-        committed: scripted.committed,
-        retryable: scripted.retryable,
-      });
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toMatch(
+        /^payments-service: getPayment: r\.fault: retryAfter (is no whole number of seconds from 0: got |is given only to a retryable Fault)/,
+      );
+    },
+  );
+
+  test.each([
+    [-1, 'retryAfter is no whole number of seconds from 0: got -1'],
+    [1.5, 'retryAfter is no whole number of seconds from 0: got 1.5'],
+    ['30', 'retryAfter is no whole number of seconds from 0: got "30"'],
+    [Number.NaN, 'retryAfter is no whole number of seconds from 0: got NaN'],
+    [2 ** 53, 'retryAfter is no whole number of seconds from 0: got 9007199254740992'],
+  ])(
+    'r.fault with retryAfter %j is a mistake naming the retryAfter rule',
+    async (retryAfter, rule) => {
+      const payments = fakeProvider(paymentsDependency);
+      const scripted = { committed: 'no', retryable: true, retryAfter };
+      payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(`payments-service: getPayment: r.fault: ${rule}`);
+    },
+  );
+
+  test('r.fault with retryAfter on a Fault that is not retryable is a mistake, never a dropped Retry-After', async () => {
+    const payments = fakeProvider(paymentsDependency);
+    const scripted = { committed: 'no', retryable: false, retryAfter: 30 };
+    payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+    const error = await payments
+      .client()
+      .getPayment({ params })
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(FakeProviderError);
+    expect(firstLineOf(error)).toBe(
+      'payments-service: getPayment: r.fault: retryAfter is given only to a retryable Fault',
+    );
+  });
+
+  test.each(
+    scriptedFaults.filter((fault) => isReadableFault(fault) && hasSendableRetryAfter(fault)),
+  )('r.fault(%j) answers a Fault the Caller reads', async (scripted) => {
+    const payments = fakeProvider(paymentsDependency);
+    payments.on('getPayment').otherwise((r) => r.fault(scripted as never));
+
+    const outcome = await payments.client().getPayment({ params });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'provider',
+      committed: scripted.committed,
+      retryable: scripted.retryable,
+    });
+    const sent = outcome.kind === 'fault' ? outcome.retryAfter : undefined;
+    expect(sent).toBe(scripted.retryAfter === undefined ? undefined : String(scripted.retryAfter));
+  });
+
+  test.each([
+    { label: '"BOGUS"', given: 'BOGUS', named: '"BOGUS"' },
+    { label: '"retired"', given: 'retired', named: '"retired"' },
+    { label: 'undefined', given: undefined, named: 'undefined' },
+    { label: 'null', given: null, named: 'null' },
+    { label: '1', given: 1, named: '1' },
+    { label: '1n', given: 1n, named: '1' },
+    { label: 'Symbol("x")', given: Symbol('x'), named: 'Symbol(x)' },
+  ])(
+    'r.reserved($label) is a mistake naming the Reserved codes, never a TypeError',
+    async ({ given, named }) => {
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.reserved(given as never));
+
+      const error = await payments
+        .client()
+        .getPayment({ params })
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FakeProviderError);
+      expect(firstLineOf(error)).toBe(
+        `payments-service: getPayment: r.reserved takes a Reserved code, RETIRED, NO_SUCH_ENDPOINT, METHOD_NOT_ALLOWED, BODY_TOO_LARGE or INVALID_OUTCOME, not ${named}`,
+      );
     },
   );
 
@@ -281,7 +396,7 @@ describe('fakeProvider: a test’s mistakes', () => {
       'INVALID_INPUT',
       "INVALID_INPUT is a code the Endpoint answers: r.reject('INVALID_INPUT') answers it",
     ],
-    ['a reserved code', 'RETIRED', 'RETIRED is a reserved code, which r.fault({ code }) answers'],
+    ['a Reserved code', 'RETIRED', 'RETIRED is a Reserved code, which r.reserved answers'],
     [
       'a code that is no UPPER_SNAKE_CASE',
       'card-expired',
@@ -337,7 +452,6 @@ describe('fakeProvider: a test’s mistakes', () => {
       'a getter that throws in a Rejection body',
       (r: Builder) => r.reject('INVALID_INPUT', throwingGetter() as never),
     ],
-    ['a reserved code that is none', (r: Builder) => r.fault({ code: 'BOGUS' } as never)],
   ])('%s is a mistake, never what was thrown', async (_name, step) => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise(step);
@@ -372,17 +486,17 @@ describe('fakeProvider: a test’s mistakes', () => {
 
   test('what fails while a scripted answer is sent is kept as the mistake’s cause', async () => {
     const payments = fakeProvider(paymentsDependency);
-    payments.on('getPayment').otherwise((r) => r.fault({ code: 'BOGUS' } as never));
+    payments
+      .on('getPayment')
+      .otherwise((r) => r.success({ headers, body: throwingGetter() as typeof body }));
 
     const error = await payments
       .client()
       .getPayment({ params })
       .catch((e: unknown) => e);
 
-    expect(firstLineOf(error)).toBe(
-      'payments-service: getPayment: the scripted answer cannot be sent',
-    );
-    expect(error).toMatchObject({ cause: expect.any(TypeError) });
+    expect(firstLineOf(error)).toMatch(/^payments-service: getPayment: the scripted /);
+    expect(error).toMatchObject({ cause: expect.objectContaining({ message: 'Unreadable' }) });
   });
 
   test('a step returning what cannot be checked for an answer is a mistake', async () => {

@@ -1,6 +1,12 @@
-import type { ReceivedFault, ReceivedRejection } from '@cf-loom/client';
+import type { ReceivedRejection } from '@cf-loom/client';
 import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/internal';
-import { type GivenShapeOf, internalError, type SuccessValueOf } from '@cf-loom/contract/internal';
+import type { Committed, ReservedCode } from '@cf-loom/contract';
+import {
+  type GivenShapeOf,
+  internalError,
+  type RetryAfterGiven,
+  type SuccessValueOf,
+} from '@cf-loom/contract/internal';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
 
 /**
@@ -42,14 +48,15 @@ type UnknownRejectionOptions = {
   readonly body?: unknown;
 };
 
-/** What `r.fault` takes: a Fault as the Provider sends it, or a reserved code alone. */
-export type ScriptedFault =
-  | {
-      readonly committed: ReceivedFault['committed'];
-      readonly retryable: boolean;
-      readonly message?: string;
-    }
-  | { readonly code: NonNullable<ReceivedFault['code']> };
+/**
+ * What `r.fault` takes: a Fault as a Handler's `fault()` takes it, so as the Provider sends it; a
+ * retryable one may say, in whole seconds from 0, when to retry, and one that is not takes no
+ * `retryAfter`.
+ */
+export type ScriptedFault = RetryAfterGiven & {
+  readonly committed: Committed;
+  readonly message?: string | undefined;
+};
 
 /**
  * What a step builds its answer with, typed by what a Caller of the Endpoint `Name` receives
@@ -62,7 +69,13 @@ export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
   reject(...rejection: RejectionArguments<D, Name>): ScriptedAnswer;
   /** A code the Endpoint does not answer, as a later Provider might send it. */
   unknownRejection(code: string, options?: UnknownRejectionOptions): ScriptedAnswer;
+  /**
+   * A Fault the Provider sends: 503 when retryable, else 500, `Internal error` unless given a
+   * message, and `Retry-After` when given `retryAfter`.
+   */
   fault(fault: ScriptedFault): ScriptedAnswer;
+  /** A Reserved code, as cf-loom's runtime answers it, with its status, `committed` and message. */
+  reserved(code: ReservedCode): ScriptedAnswer;
   noConnection(): ScriptedAnswer;
   reset(): ScriptedAnswer;
   status(status: number, headers?: Readonly<Record<string, string>>): ScriptedAnswer;
@@ -74,13 +87,9 @@ export const stepBuilder = {
   reject: (code: string, given?: unknown) => scriptedAnswerOf({ kind: 'rejection', code, given }),
   unknownRejection: (code: string, options: UnknownRejectionOptions = {}) =>
     scriptedAnswerOf({ ...options, kind: 'unknown-rejection', code }),
-  fault: (fault: ScriptedFault) => {
-    if ('code' in fault) {
-      return scriptedAnswerOf({ kind: 'reserved', code: fault.code });
-    }
-    const { committed, retryable, message = internalError } = fault;
-    return scriptedAnswerOf({ kind: 'fault', committed, retryable, message });
-  },
+  fault: ({ committed, retryable, message = internalError, retryAfter }: ScriptedFault) =>
+    scriptedAnswerOf({ kind: 'fault', committed, retryable, message, retryAfter }),
+  reserved: (code: ReservedCode) => scriptedAnswerOf({ kind: 'reserved', code }),
   noConnection: () => scriptedAnswerOf({ kind: 'no-connection' }),
   reset: () => scriptedAnswerOf({ kind: 'reset' }),
   status: (status: number, headers: Readonly<Record<string, string>> = {}) =>

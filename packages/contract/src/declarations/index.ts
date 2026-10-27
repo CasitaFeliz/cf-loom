@@ -88,7 +88,7 @@ export {
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
-export { isReservedCode } from './reserved-codes.ts';
+export { isReservedCode, reservedCodes } from './reserved-codes.ts';
 export { prototypeNames } from './reserved-names.ts';
 export type {
   ApplicationContract,
