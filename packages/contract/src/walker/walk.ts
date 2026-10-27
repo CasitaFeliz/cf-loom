@@ -179,12 +179,13 @@ function wrapperOf(
 }
 
 /**
- * A field's wrapper says what any schema does: its checks and its own metadata apply. It names no
- * cycle, so an id on it is refused beside whatever the schema inside fails by.
+ * A field's wrapper says what any schema does: its own metadata applies, and its checks are judged
+ * as any schema's are. It names no cycle, so an id on it is refused beside whatever the schema
+ * inside fails by.
  */
 function throughWrapper(wrapper: Wrapper, inner: Walked): Walked {
   const { schema, at, kind, origin } = wrapper;
-  const checked = withOwnChecks(schema, inner, at);
+  const checked = withOwnChecks(schema, inner, { at, kind });
   const joined = hasOwnId(schema)
     ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
     : checked;

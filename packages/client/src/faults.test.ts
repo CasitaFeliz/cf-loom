@@ -635,6 +635,22 @@ describe('inferFault', () => {
     ]);
   });
 
+  test('is called as a plain function, with no this of its own', async () => {
+    const seen: unknown[] = [];
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch: answering(502),
+      inferFault: function (this: unknown) {
+        seen.push(this);
+        return undefined;
+      },
+    });
+
+    await orders.getOrder(input);
+
+    expect(seen).toEqual([undefined]);
+  });
+
   test('is given cf-loom’s own inference as its second argument', async () => {
     const inferred: InferredFault[] = [];
     const orders = client(ordersDependency, {

@@ -146,6 +146,20 @@ function recording(response: () => Response, baseUrl: string | URL = 'http://ord
 const counted = () => Response.json({ count: 1 });
 
 describe('what a call sends', () => {
+  test('a fetch that refuses a this of its own, as a browser’s does, is called and answers', async () => {
+    const browserFetch = function (this: unknown): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve(Response.json({ count: 1 }));
+    };
+    const orders = client(ordersDependency, { baseUrl: 'http://orders.test', fetch: browserFetch });
+
+    const outcome = await orders.searchOrders({ params: { shopId: 's-1' }, query: { ids: ['1'] } });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { count: 1 } });
+  });
+
   test('the Request fetch receives never follows a redirect', async () => {
     const { orders, sent } = recording(counted);
 
@@ -357,6 +371,44 @@ describe('Input that cannot be sent', () => {
     });
     return { orders, calls: () => calls };
   }
+
+  test('a signal aborted while the Input is read gets the not-sent Fault, not the invalid-input Rejection', async () => {
+    const controller = new AbortController();
+    const { orders, calls } = unsent();
+    const input = {
+      params: {
+        get shopId() {
+          controller.abort();
+          return 1;
+        },
+      },
+      query: { ids: ['1'] },
+    } as never;
+
+    const outcome = await orders.searchOrders(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(calls()).toBe(0);
+  });
+
+  test('what the Input throws while it is read gets the not-sent Fault once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const { orders, calls } = unsent();
+    const input = {
+      params: {
+        get shopId(): string {
+          controller.abort();
+          throw new Error('the Input could not be read');
+        },
+      },
+      query: { ids: ['1'] },
+    } as never;
+
+    const outcome = await orders.searchOrders(input, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(calls()).toBe(0);
+  });
 
   test('a broken constraint is the Provider’s invalid-input Rejection, marked source client, and nothing is sent', async () => {
     const { orders, calls } = unsent();

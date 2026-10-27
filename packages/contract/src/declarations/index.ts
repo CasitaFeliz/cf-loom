@@ -19,7 +19,7 @@ export { defineEndpoint } from './endpoint.ts';
 export type { Event } from './event.ts';
 export { defineEvent } from './event.ts';
 export { frozenCopyOf, isDeclaration } from './freeze-declaration.ts';
-export type { Grammar } from './grammars.ts';
+export type { CappedGrammar, Grammar } from './grammars.ts';
 export {
   camelCase,
   elementName,
@@ -27,6 +27,7 @@ export {
   isReserved,
   kebabCase,
   pascalCase,
+  ruleOf,
   upperSnakeCase,
   wordsOf,
 } from './grammars.ts';
@@ -88,7 +89,7 @@ export {
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
-export { isReservedCode } from './reserved-codes.ts';
+export { isReservedCode, reservedCodes } from './reserved-codes.ts';
 export { prototypeNames } from './reserved-names.ts';
 export type {
   ApplicationContract,

@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
-import { isBrokerPrefix, isPrefixedName, isPrefixedSubject } from '../wire/index.ts';
+import {
+  brokerPrefixRule,
+  isBrokerPrefix,
+  isPrefixedName,
+  isPrefixedSubject,
+} from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
 
 /** A value read as a broker plan: the plan, or the first place it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
@@ -18,7 +23,7 @@ const consumer = z.strictObject({ service: text, stream: text, subject: text });
 const plan = z.strictObject({
   prefix: z
     .string('is not a text or null')
-    .refine(isBrokerPrefix, 'is not kebab-case, such as staging')
+    .refine(isBrokerPrefix, `is not ${brokerPrefixRule}`)
     .nullable(),
   streams: z.record(z.string(), stream),
   consumers: z.record(z.string(), consumer),

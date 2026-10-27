@@ -14,6 +14,7 @@ export {
   brokerHeadersOf,
   brokerMessageIdHeader,
   brokerMessageIdOf,
+  brokerPrefixRule,
   durableNameOf,
   factIdHeader,
   isBrokerPrefix,
@@ -61,13 +62,19 @@ export {
   sharedUrlOf,
   unmatchedText,
 } from './match.ts';
-export type { SentRejection, SentSuccess } from './responses.ts';
+export type {
+  RetryAfterGiven,
+  SendableRetryAfter,
+  SentRejection,
+  SentSuccess,
+} from './responses.ts';
 export {
   faultResponseOf,
   faultStatusOf,
   methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
+  sendableRetryAfterOf,
   successResponseOf,
 } from './responses.ts';
 export { isTextValue, textOfValue } from './text.ts';

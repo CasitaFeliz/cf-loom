@@ -1,16 +1,23 @@
 import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
-import { type DeclaredCheck, isConditional, refusedCheck } from './check-defs.ts';
-import type { NotAllowed, NumberNode, Regex, SchemaNode, StringNode } from './nodes.ts';
-import { notAllowed, refused, refusedName, refusedRepeatedCheck } from './not-allowed.ts';
-import { formatOf } from './string-formats.ts';
+import { type Constraint, type ConstraintOf, constraintOfType } from './check-constraints.ts';
+import { type DeclaredCheck, isConditional, nameOfCheck } from './check-defs.ts';
+import type { NotAllowed } from './nodes.ts';
+import {
+  notAllowed,
+  type Refused,
+  refused,
+  refusedCheckOnNullable,
+  refusedCheckOnOptional,
+  refusedRepeatedCheck,
+} from './not-allowed.ts';
 import { failed, type Outline, outlineOf, type Reached, type Walked, walked } from './walked.ts';
 
-type Constraint<Node> = Walked<Partial<Node>>;
+/** What a schema is whose checks are judged: any schema, or the wrapper of a field. */
+export type CheckedKind = 'schema' | 'optional' | 'nonoptional';
 
-type ConstraintOf<Node> = (check: DeclaredCheck, at: Reached) => Constraint<Node>;
-
-type Bounds = { readonly min?: number; readonly max?: number };
+/** Where a schema's checks are judged, and what the schema is. */
+export type CheckedAt = { readonly at: Reached; readonly kind: CheckedKind };
 
 /**
  * A walked schema with the constraint of each of its checks, by what its node's type takes; a
@@ -19,10 +26,10 @@ type Bounds = { readonly min?: number; readonly max?: number };
 export function constrain(
   walkedSchema: Walked,
   checks: readonly DeclaredCheck[],
-  at: Reached,
+  { at, kind }: CheckedAt,
 ): Walked {
   const outline = outlineOf(walkedSchema);
-  const constraints = constraintsOf(constraintOfType(outline.type), checks, at);
+  const constraints = constraintsOf(constraintOfSchema(outline, kind), checks, at);
   const constrainedOutline = constrained(outline, constraints);
   const failures = [
     ...failuresOfConstraints(constraints, Object.keys(outline), at),
@@ -43,28 +50,33 @@ function emptinessFailuresOf(outline: Outline, at: Reached): readonly NotAllowed
   return refusal === undefined ? [] : [{ kind: 'not-allowed', ...at, ...refusal }];
 }
 
-/** The constraint a check sets on a node of each type; one that takes no check refuses them all. */
-function constraintOfType(type: SchemaNode['type'] | undefined): ConstraintOf<object> {
-  switch (type) {
-    case 'string':
-      return stringConstraint;
-    case 'number':
-      return numberConstraint;
-    case 'array':
-      return lengthConstraint;
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'tuple':
-    case 'union':
-    case 'tagged':
-    case 'allOf':
-    case 'json':
-    case 'ref':
-    case undefined:
-      return refusedConstraint;
+/**
+ * A check belongs to the schema it constrains, so where its schema admits more than its node
+ * does, `null` or an absent field, the constraint is refused.
+ */
+function constraintOfSchema(outline: Outline, kind: CheckedKind): ConstraintOf<object> {
+  const taken = constraintOfType(outline.type);
+  switch (kind) {
+    case 'optional':
+      return refusedOnWiderSchema(taken, refusedCheckOnOptional);
+    case 'nonoptional':
+    case 'schema':
+      return outline.nullable ? refusedOnWiderSchema(taken, refusedCheckOnNullable) : taken;
   }
+}
+
+/** A constraint a check would set on the node, refused as written on a schema that admits more. */
+function refusedOnWiderSchema<Node>(
+  constraintOf: ConstraintOf<Node>,
+  refusal: (check: string) => Refused,
+): ConstraintOf<Node> {
+  return (check, at) => {
+    const constraint = constraintOf(check, at);
+    if (constraint.kind === 'not-allowed') {
+      return constraint;
+    }
+    return notAllowed(at, refusal(nameOfCheck(check.def)));
+  };
 }
 
 /** What each check sets, or why it is refused: a conditional check is refused on any type. */
@@ -120,82 +132,6 @@ function failuresOfConstraints(
   return failures;
 }
 
-function stringConstraint(check: DeclaredCheck, at: Reached): Constraint<StringNode> {
-  const { def } = check;
-  if (def.check !== 'string_format') {
-    return lengthConstraint(check, at);
-  }
-  if (def.format === 'regex' && def.pattern !== undefined) {
-    return walked({ regex: regexOf(def.pattern) });
-  }
-  return formatOf(check, at);
-}
-
-function lengthConstraint({ def: check }: DeclaredCheck, at: Reached): Constraint<Bounds> {
-  switch (check.check) {
-    case 'min_length':
-      return walked({ min: check.minimum });
-    case 'max_length':
-      return walked({ max: check.maximum });
-    case 'length_equals':
-      return walked({ min: check.length, max: check.length });
-    case 'less_than':
-    case 'greater_than':
-    case 'multiple_of':
-    case 'number_format':
-    case 'bigint_format':
-    case 'max_size':
-    case 'min_size':
-    case 'size_equals':
-    case 'string_format':
-    case 'property':
-    case 'mime_type':
-    case 'overwrite':
-    case 'custom':
-    case 'describe':
-    case 'meta':
-      return notAllowed(at, refusedCheck(check));
-  }
-}
-
-function numberConstraint({ def: check }: DeclaredCheck, at: Reached): Constraint<NumberNode> {
-  switch (check.check) {
-    case 'greater_than':
-      return walked(
-        check.inclusive ? { min: Number(check.value) } : { exclusiveMin: Number(check.value) },
-      );
-    case 'less_than':
-      return walked(
-        check.inclusive ? { max: Number(check.value) } : { exclusiveMax: Number(check.value) },
-      );
-    case 'multiple_of':
-      return walked({ multipleOf: Number(check.value) });
-    case 'number_format':
-      return check.format === 'safeint'
-        ? walked({ int: true })
-        : notAllowed(at, refusedName(check.format));
-    case 'bigint_format':
-    case 'max_size':
-    case 'min_size':
-    case 'size_equals':
-    case 'max_length':
-    case 'min_length':
-    case 'length_equals':
-    case 'string_format':
-    case 'property':
-    case 'mime_type':
-    case 'overwrite':
-    case 'custom':
-    case 'describe':
-    case 'meta':
-      return notAllowed(at, refusedCheck(check));
-  }
-}
-
-function refusedConstraint({ def }: DeclaredCheck, at: Reached): Constraint<never> {
-  return notAllowed(at, refusedCheck(def));
-}
-
 /** The constraint a key sets: an exclusive bound is the same lower or upper bound. */
 function slotOf(key: string): string {
   if (key === 'min' || key === 'exclusiveMin') {
@@ -206,8 +142,4 @@ function slotOf(key: string): string {
 
 function isNonFinite(value: unknown): boolean {
   return typeof value === 'number' && !isFiniteNumber(value);
-}
-
-function regexOf(pattern: RegExp): Regex {
-  return { source: pattern.source, flags: pattern.flags };
 }

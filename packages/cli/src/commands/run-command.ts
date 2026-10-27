@@ -1,7 +1,6 @@
 import { join } from 'node:path';
-import { isBrokerPrefix } from '@cf-loom/contract/internal';
+import { brokerPrefixRule, isBrokerPrefix } from '@cf-loom/contract/internal';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
-import type { Run } from '../project/index.ts';
 import { asyncApiCommand } from './asyncapi.ts';
 import { brokerPlanCommand } from './broker-plan.ts';
 import { check } from './check.ts';
@@ -12,6 +11,7 @@ import { openApiCommand } from './openapi.ts';
 import type { Output } from './output.ts';
 import { defaultPackageFolder, packageCommand } from './package.ts';
 import { publish } from './publish.ts';
+import type { Run } from './run.ts';
 import { helpExitOf, usageError, versionExit } from './usage.ts';
 import { verify } from './verify.ts';
 
@@ -143,7 +143,7 @@ async function asyncApiExitOf(
 /** The usage error of a prefix a Broker's names cannot carry, if it is one. */
 function invalidPrefixExitOf(prefix: string | undefined): Exit | undefined {
   return prefix !== undefined && !isBrokerPrefix(prefix)
-    ? usageError('--prefix takes a prefix in kebab-case, such as staging')
+    ? usageError(`--prefix takes a prefix in ${brokerPrefixRule}`)
     : undefined;
 }
 

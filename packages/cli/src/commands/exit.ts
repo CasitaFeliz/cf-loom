@@ -18,8 +18,8 @@ export type ExitStatus = 0 | 1 | 2 | 3;
 export type Document = Readonly<Record<string, unknown>>;
 
 /**
- * What a command ends with: its exit status, the lines it prints on each stream and, when it did
- * its work, the document `--json` prints instead of its stdout lines.
+ * What a command ends with: its exit status, the lines it prints on each stream and the fields its
+ * last step adds to the document `--json` prints instead of its stdout lines.
  */
 export type Exit = {
   readonly status: ExitStatus;
