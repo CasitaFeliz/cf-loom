@@ -624,24 +624,24 @@ describe('the options, typed by what they declare', () => {
     expect(wrapper).toBeTypeOf('function');
   });
 
-  test('a wrapper generic over the Handler map is a type error over consume, whatever its options parameter says', () => {
+  test('a wrapper whose options parameter is a type parameter constrained to the options type is a type error over consume', () => {
     type Notifications = { readonly notifications: { readonly send: () => void } };
     type Consumed = Pick<
       HandlerMapOf<typeof contract, Notifications>,
       'commands' | 'subscriptions' | 'readers'
     >;
-    const restating = <const H extends Consumed>(
+    const overOptions = <O extends ConsumeOptions<Notifications>>(
+      map: HandlerMapOf<typeof contract, Notifications>,
+      options: O,
+      // @ts-expect-error O may hold a field ConsumeOptions does not declare
+    ) => consume(map, options);
+    const overMap = <const H extends Consumed>(
       map: H,
       options: ConsumeOptions<ResourcesOf<Pick<H, 'commands' | 'subscriptions'>>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
-    ) => consume(map, options);
-    const naming = <const H extends Consumed>(
-      map: H,
-      options: ConsumeOptions<ResourcesOf<H>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+      // @ts-expect-error the options of a generic Handler map cannot be checked for undeclared fields
     ) => consume(map, options);
 
-    expect([restating, naming]).toHaveLength(2);
+    expect([overOptions, overMap]).toHaveLength(2);
   });
 });
 

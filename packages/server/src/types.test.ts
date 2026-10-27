@@ -468,19 +468,19 @@ describe('serve: a wrapper over the Handler map', () => {
     expect(served).toBeTypeOf('function');
   });
 
-  test('a wrapper generic over the Handler map is a type error, whatever its options parameter says', () => {
+  test('a wrapper whose options parameter is a type parameter constrained to the options type is a type error', () => {
     type Served = Pick<HandlerMapOf<typeof contract, Resources>, 'endpoints' | 'guards'>;
-    const restating = <const H extends Served>(
+    const overOptions = <O extends ServeOptions<Resources>>(
+      map: HandlerMapOf<typeof contract, Resources>,
+      options: O,
+      // @ts-expect-error O may hold a field ServeOptions does not declare
+    ) => serve(contract, map, options);
+    const overMap = <const H extends Served>(
       map: H,
       options: ServeOptions<ResourcesOf<Pick<H, 'endpoints' | 'guards'>>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
-    ) => serve(contract, map, options);
-    const naming = <const H extends Served>(
-      map: H,
-      options: ServeOptions<ResourcesOf<H>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked against its Resources
+      // @ts-expect-error the options of a generic Handler map cannot be checked for undeclared fields
     ) => serve(contract, map, options);
 
-    expect([restating, naming]).toHaveLength(2);
+    expect([overOptions, overMap]).toHaveLength(2);
   });
 });
