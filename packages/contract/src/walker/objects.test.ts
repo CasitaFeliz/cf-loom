@@ -107,7 +107,7 @@ describe('walkSchemas: objects', () => {
         .refine((note) => note !== ''),
     });
 
-    expect(walkBody(order)).toEqual(refusedAt('note', '.refine()'));
+    expect(walkBody(order)).toEqual(refusedAt('note', '.refine(), z.custom() or z.instanceof()'));
   });
 
   test('.required() makes an optional field required', () => {
@@ -162,7 +162,7 @@ describe('walkSchemas: records', () => {
           kind: 'not-allowed',
           failures: [
             { kind: 'not-allowed', at: '', construct: keyedRecord, instead: keyedRecordInstead },
-            { kind: 'not-allowed', at: '{}', construct: '.refine()' },
+            { kind: 'not-allowed', at: '{}', construct: '.refine(), z.custom() or z.instanceof()' },
           ],
         },
       ],

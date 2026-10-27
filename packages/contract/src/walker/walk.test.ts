@@ -55,7 +55,8 @@ describe('walkSchemas', () => {
             {
               kind: 'not-allowed',
               at: 'input.body.tags[]',
-              construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()',
+              construct:
+                '.trim(), .toLowerCase(), .toUpperCase(), .normalize(), .slugify() or .overwrite()',
             },
           ],
         },

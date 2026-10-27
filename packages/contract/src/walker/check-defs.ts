@@ -1,9 +1,8 @@
 import type * as core from 'zod/v4/core';
-import { type Refused, refused, zodCall } from './not-allowed.ts';
 
 /** A check as zod's def writes it; `describe` and `meta` are how `zod/mini` sets metadata. */
 export type CheckDef =
-  | (core.$ZodChecks | core.$ZodStringFormatChecks)['_zod']['def']
+  | (core.$ZodChecks | core.$ZodStringFormatChecks | core.$ZodCheckProperties)['_zod']['def']
   | { readonly check: 'custom'; readonly type?: 'custom' }
   | { readonly check: 'describe' | 'meta' };
 
@@ -48,53 +47,6 @@ export function isConditional(check: DeclaredCheck): boolean {
   }
   const { when: _declared, ...unconditional } = check.def as BuiltDef;
   return check.rebuilt(unconditional)?.when !== when;
-}
-
-/** The name a check is refused by, on a node that does not take it. */
-export function refusedCheck(check: CheckDef): Refused {
-  return { construct: nameOfCheck(check) };
-}
-
-/** A check as the Not allowed list names it: the zod function that writes it. */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the name of each check zod has
-export function nameOfCheck(check: CheckDef): string {
-  switch (check.check) {
-    case 'custom':
-      return (check.type === 'custom' ? refused.refine : refused.customCheck).construct;
-    case 'overwrite':
-      return refused.mutating.construct;
-    case 'string_format':
-      return zodCall(check.format);
-    case 'less_than':
-      return zodCall('lt');
-    case 'greater_than':
-      return zodCall('gt');
-    case 'multiple_of':
-      return zodCall('multipleOf');
-    case 'number_format':
-      return zodCall(check.format === 'safeint' ? 'int' : check.format);
-    case 'bigint_format':
-      return zodCall(check.format);
-    case 'max_size':
-      return zodCall('maxSize');
-    case 'min_size':
-      return zodCall('minSize');
-    case 'size_equals':
-      return zodCall('size');
-    case 'max_length':
-      return zodCall('maxLength');
-    case 'min_length':
-      return zodCall('minLength');
-    case 'length_equals':
-      return zodCall('length');
-    case 'property':
-      return zodCall('property');
-    case 'mime_type':
-      return zodCall('mime');
-    case 'describe':
-    case 'meta':
-      return zodCall(check.check);
-  }
 }
 
 function declaredCheckOf(instance: CheckInstance): DeclaredCheck {

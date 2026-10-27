@@ -1,4 +1,5 @@
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
+import { refusedCheck } from './check-names.ts';
 import { formatOptionsOf } from './format-options.ts';
 import {
   isRegexFormat,
@@ -8,7 +9,7 @@ import {
 } from './format-schemas.ts';
 import { isHashFormat } from './hash-formats.ts';
 import type { StringNode } from './nodes.ts';
-import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
+import { notAllowed, refused, refusedStringFormat } from './not-allowed.ts';
 import { type Reached, type Walked, walked } from './walked.ts';
 
 /** What the walker reads of a string format check, from zod and `zod/mini` alike. */
@@ -27,40 +28,22 @@ function isKnownFormat(def: FormatDef): def is KnownFormatDef {
   return isStringFormat(def.format);
 }
 
-/** The string checks zod writes as formats, which the Not allowed list names. */
-const refusedByFormat: ReadonlyMap<string, Refused> = new Map<string, Refused>([
-  ['starts_with', refused.startsWith],
-  ['ends_with', refused.endsWith],
-  ['includes', refused.includes],
-  ['lowercase', refused.lowercase],
-  ['uppercase', refused.uppercase],
-]);
-
 /**
  * The `format` and `formatOptions` a string format check declares: only a format zod builds
  * itself, checked as zod checks it, with the options that differ from zod's default.
  */
 export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<StringNode>> {
   const def = check.def as unknown as FormatDef;
-  const refusal = namedRefusalOf(def);
-  if (refusal !== undefined) {
-    return notAllowed(at, refusal);
+  if (def.normalize === true) {
+    return notAllowed(at, refused.urlNormalize);
   }
   if (!isKnownFormat(def)) {
-    return notAllowed(at, refusedStringFormat(def.format));
+    return notAllowed(at, refusedCheck(check.def));
   }
   if (isRegexFormat(def.format) || isHashFormat(def.format)) {
     return regexFormatOf(def, at);
   }
   return builtFormatOf(check, def, at);
-}
-
-function namedRefusalOf(def: FormatDef): Refused | undefined {
-  const named = refusedByFormat.get(def.format);
-  if (named !== undefined) {
-    return named;
-  }
-  return def.normalize === true ? refused.urlNormalize : undefined;
 }
 
 /** A format zod builds from its options: the pattern must be the one zod builds for them. */

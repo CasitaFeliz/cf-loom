@@ -15,7 +15,7 @@ import {
 import { innerOfOneLazy } from './lazy.ts';
 import { inside } from './location.ts';
 import { annotated } from './metadata.ts';
-import { notAllowed, type Refused, refused, refusedName } from './not-allowed.ts';
+import { notAllowed, type Refused, refused, refusedZodType } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
 import { keyStep, valueStep } from './steps.ts';
@@ -70,7 +70,7 @@ function nodeOfType(schema: core.$ZodType, at: Reached, walker: Walker): Walked 
   const def = schema._zod.def as Def;
   const type: string = def.type;
   if (!isKnownDefType(type)) {
-    return notAllowed(at, refusedName(type));
+    return notAllowed(at, refusedZodType(type));
   }
   return isWalkedDef(def)
     ? walkedNodeOf({ schema, at }, def, walker)
