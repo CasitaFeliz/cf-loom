@@ -5,11 +5,12 @@ import {
   firstPublishChangesOf,
 } from '@cf-loom/contract/internal';
 import { publishedNameOf } from '../loading/index.ts';
-import { type BuiltProject, builtOf, type Run } from '../project/index.ts';
+import { type BuiltProject, builtOf } from '../project/index.ts';
 import { baselineOf, type NoBaseline, type ReadBaseline } from '../registry/index.ts';
 import type { Compared } from './checked.ts';
 import { checkedChangeOf } from './checked-change.ts';
 import { committedStopOf, failureExitOf, type Stopped, toolingError } from './exit.ts';
+import type { Run } from './run.ts';
 
 /** A package's Baseline as the registry holds it. */
 type BaselineRead = Extract<ReadBaseline, { readonly kind: 'baseline' }>;
@@ -35,7 +36,7 @@ export type Comparison =
  * command that reads the registry acts on the file that was reviewed.
  */
 export async function committedBuiltOf(run: Run): Promise<BuiltProject | Stopped> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return { kind: 'stopped', exit: failureExitOf(built) };
   }

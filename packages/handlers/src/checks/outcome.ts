@@ -3,17 +3,17 @@ import {
   parsedPartOf,
   parsedShapeOf,
   schemaOf,
+  sendableRetryAfterOf,
   shapeFieldsOf,
   successShapeOf,
 } from '@cf-loom/contract/internal';
-import {
-  type AnyAdmission,
-  type AnyOutcome,
-  type BuiltSuccess,
-  type CheckedAdmission,
-  type CheckedOutcome,
-  type Fault,
-  retryAfterProblemOf,
+import type {
+  AnyAdmission,
+  AnyOutcome,
+  BuiltSuccess,
+  CheckedAdmission,
+  CheckedOutcome,
+  Fault,
 } from '../outcomes/index.ts';
 import { type Checked, mapValue } from './checked.ts';
 import { checkedEndpointRejection, checkedGuardRejection } from './rejection.ts';
@@ -59,12 +59,21 @@ export function checkedAdmission(
 
 /** A Fault a Handler built, sendable: its `retryAfter`, if any, one `Retry-After` can carry. */
 function checkedFault(built: Fault): Checked<Fault> {
-  const message = retryAfterProblemOf(built);
-  if (message === undefined) {
-    return { kind: 'value', value: built };
+  const sendable = sendableRetryAfterOf(built);
+  switch (sendable.kind) {
+    case 'sendable':
+      return { kind: 'value', value: built };
+    case 'refused': {
+      const { message } = sendable;
+      const issue = {
+        part: 'fault',
+        path: ['retryAfter'],
+        code: 'invalid_value',
+        message,
+      } as const;
+      return { kind: 'issues', issues: [issue] };
+    }
   }
-  const issue = { part: 'fault', path: ['retryAfter'], code: 'invalid_value', message } as const;
-  return { kind: 'issues', issues: [issue] };
 }
 
 /** The Success member of what a direct call returns. */

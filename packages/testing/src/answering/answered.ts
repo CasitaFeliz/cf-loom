@@ -1,5 +1,4 @@
 import { networkFailureOf } from '@cf-loom/client/internal';
-import type { ReservedCode } from '@cf-loom/contract';
 import {
   envelopeOf,
   faultResponseOf,
@@ -7,11 +6,15 @@ import {
   isJsonValue,
   isReservedCode,
   methodNotAllowedResponseOf,
+  oneOf,
   rejectionResponseOf,
+  reservedCodes,
   reservedResponseOf,
   ruleOf,
+  sendableRetryAfterOf,
   travelingFaultOf,
   upperSnakeCase,
+  writtenTextOf,
 } from '@cf-loom/contract/internal';
 import { FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import { type ListedEndpoint, type ListedMatch, whoOf } from '../provided/index.ts';
@@ -43,7 +46,7 @@ export function responseOf(answer: Answer, { listed, otherMethods }: ListedMatch
     case 'fault':
       return builtOf(listed, unsendable, () => faultResponseOf(readableFaultOf(answer, listed)));
     case 'reserved':
-      return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, otherMethods));
+      return builtOf(listed, unsendable, () => reservedAnswerOf(answer.code, listed, otherMethods));
     case 'no-connection':
       throw networkFailureOf('no-connection');
     case 'reset':
@@ -55,7 +58,10 @@ export function responseOf(answer: Answer, { listed, otherMethods }: ListedMatch
 
 type ScriptedFault = Extract<Answer, { readonly kind: 'fault' }>;
 
-/** The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a Fault. */
+/**
+ * The Fault a scripted one travels as, or the test's mistake when no Caller would read it as a
+ * Fault or its `retryAfter` cannot travel as `Retry-After`.
+ */
 function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
   const fault = travelingFaultOf(answer);
   if (fault === undefined) {
@@ -63,11 +69,26 @@ function readableFaultOf(answer: ScriptedFault, listed: ListedEndpoint) {
       "r.fault takes committed 'no', 'yes' or 'unknown', retryable a boolean and message a string";
     throw mistakeOf({ ...whoOf(listed), what });
   }
-  return fault;
+  const sendable = sendableRetryAfterOf(answer);
+  if (sendable.kind === 'refused') {
+    throw mistakeOf({ ...whoOf(listed), what: `r.fault: ${sendable.message}` });
+  }
+  return { ...fault, retryAfter: sendable.retryAfter };
 }
 
-/** A reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path takes. */
-function reservedAnswerOf(code: ReservedCode, otherMethods: readonly string[]): Response {
+/**
+ * A Reserved code as `serve` sends it: `METHOD_NOT_ALLOWED` with `Allow`, the methods the path
+ * takes; the test's mistake when it is none.
+ */
+function reservedAnswerOf(
+  code: unknown,
+  listed: ListedEndpoint,
+  otherMethods: readonly string[],
+): Response {
+  if (!isReservedCode(code)) {
+    const what = `r.reserved takes a Reserved code, ${oneOf(reservedCodes)}, not ${writtenTextOf(code)}`;
+    throw mistakeOf({ ...whoOf(listed), what });
+  }
   return code === 'METHOD_NOT_ALLOWED'
     ? methodNotAllowedResponseOf(otherMethods)
     : reservedResponseOf(code);
@@ -77,7 +98,7 @@ type UnknownRejection = Extract<Answer, { readonly kind: 'unknown-rejection' }>;
 
 /**
  * A code the Endpoint does not answer, as a later Provider might send it: one another listed
- * Endpoint declares as it declares it, any other with 422; never a reserved code or one no
+ * Endpoint declares as it declares it, any other with 422; never a Reserved code or one no
  * Contract could declare.
  */
 function unknownRejectionResponseOf(answer: UnknownRejection, listed: ListedEndpoint): Response {
@@ -121,7 +142,7 @@ function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | un
     return `${code} is a code the Endpoint answers: r.reject('${code}') answers it`;
   }
   if (isReservedCode(code)) {
-    return `${code} is a reserved code, which r.fault({ code }) answers`;
+    return `${code} is a Reserved code, which r.reserved answers`;
   }
   if (!follows(upperSnakeCase, code)) {
     return `${code} is no ${ruleOf(upperSnakeCase)}, so no Contract can declare it`;

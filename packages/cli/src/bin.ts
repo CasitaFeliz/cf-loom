@@ -4,9 +4,11 @@ import {
   type Called,
   crashedExitOf,
   type Exit,
+  type Finding,
   type Output,
   printedExitOf,
   printerTo,
+  reportedExitOf,
   runCommand,
   statusAfterPrinting,
   usageError,
@@ -108,25 +110,29 @@ function isLackingItsValue(token: ParsedArgs['tokens'][number]): boolean {
   return value === undefined || value === '' || (inlineValue === false && value.startsWith('-'));
 }
 
-/** What `--json` leaves of the lines a command prints while it runs: none, since its document holds them. */
-function silent(): void {}
-
 /** Runs the command the arguments name; a throw is a bug, and ends as a tooling error. */
 async function exitOf(
   args: readonly string[],
-  progress: (lines: readonly string[]) => void,
+  print: (lines: readonly string[]) => void,
 ): Promise<Exit> {
   const read = calledOf(args);
   if (read.kind === 'usage') {
     return printedExitOf(read.exit, read.output);
   }
   const { called } = read;
+  const findings: Finding[] = [];
+  const report = (finding: Finding) => {
+    findings.push(finding);
+    if (called.output === 'lines') {
+      print(finding.lines ?? []);
+    }
+  };
+  const printedOf = (exit: Exit) => printedExitOf(reportedExitOf(findings, exit), called.output);
   try {
-    const printing = called.output === 'json' ? silent : progress;
-    const run = { cwd: process.cwd(), env: process.env, progress: printing };
-    return printedExitOf(await runCommand(called, run), called.output);
+    const run = { cwd: process.cwd(), env: process.env, report };
+    return printedOf(await runCommand(called, run));
   } catch (e) {
-    return printedExitOf(crashedExitOf(e), called.output);
+    return printedOf(crashedExitOf(e));
   }
 }
 
