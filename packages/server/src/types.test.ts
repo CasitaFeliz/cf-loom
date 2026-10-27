@@ -1,5 +1,12 @@
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
-import { admit, handle, success, type WithResources } from '@cf-loom/handlers';
+import {
+  admit,
+  type HandlerMapOf,
+  handle,
+  readersOf,
+  success,
+  type WithResources,
+} from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { serve } from './index.ts';
 
@@ -60,6 +67,21 @@ describe('serve: the Handler map, typed by the Contract', () => {
         endpoints: { getOrder: getOrderHandler },
         guards: { apiKey: apiKeyHandler },
       });
+
+    expect(serving).toBeTypeOf('function');
+  });
+
+  test('a map that lacks an Endpoint’s Handler is a type error at its key when resources are passed too', () => {
+    const serving = () =>
+      serve(
+        contract,
+        {
+          // @ts-expect-error findOrder has no Handler
+          endpoints: { getOrder: getOrderHandler },
+          guards: { apiKey: apiKeyHandler },
+        },
+        { resources: {} },
+      );
 
     expect(serving).toBeTypeOf('function');
   });
@@ -139,6 +161,75 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(contract, handlers),
       // @ts-expect-error the Resources of findOrder are any
       serve(contract, handlers, { resources: { orders: {} } }),
+    ];
+
+    expect(serving).toBeTypeOf('function');
+  });
+});
+
+describe('serve: a Handler map typed with the Service’s Resources', () => {
+  type Orders = { readonly find: () => string };
+  type Resources = { readonly orders: Orders };
+  type Alien = { readonly db: number };
+  const resources: Resources = { orders: { find: () => 'o-1' } };
+  const readers = readersOf({ commands: {}, subscriptions: {} });
+  const ordersHandler = handle(
+    findOrder,
+    (_input, _call, { resources: taken }: WithResources<Resources>) => {
+      taken.orders.find();
+      return success();
+    },
+  );
+  const typed: HandlerMapOf<typeof contract, Resources> = {
+    endpoints: { getOrder: getOrderHandler, findOrder: ordersHandler },
+    guards: { apiKey: apiKeyHandler },
+    commands: {},
+    subscriptions: {},
+    readers,
+  };
+
+  test('a map annotated HandlerMapOf of the Contract and the Resources is served with them, and refused without', () => {
+    const start = (map: HandlerMapOf<typeof contract, Resources>) =>
+      serve(contract, map, { resources });
+
+    const served = [start(typed), serve(contract, typed, { resources })];
+    const serving = () => [
+      // @ts-expect-error the Handlers take the Service's Resources
+      serve(contract, typed),
+      // @ts-expect-error the Handlers take the Service's Resources, orders among them
+      serve(contract, typed, { resources: {} }),
+    ];
+
+    expect(served).toHaveLength(2);
+    expect(serving).toBeTypeOf('function');
+  });
+
+  test('a Handler that takes a Resource the Service lacks is a type error in a map annotated with them', () => {
+    const alien = handle(findOrder, (_input, _call, { resources: taken }: WithResources<Alien>) => {
+      taken.db.toFixed();
+      return success();
+    });
+
+    const annotated = (): HandlerMapOf<typeof contract, Resources> => ({
+      ...typed,
+      endpoints: {
+        getOrder: getOrderHandler,
+        // @ts-expect-error the Service has no db
+        findOrder: alien,
+      },
+    });
+
+    expect(annotated).toBeTypeOf('function');
+  });
+
+  test('a map annotated HandlerMapOf of the Contract alone makes serve name the cause, with or without resources', () => {
+    const annotated: HandlerMapOf<typeof contract> = typed;
+
+    const serving = () => [
+      // @ts-expect-error the annotation hides what the Handlers take
+      serve(contract, annotated),
+      // @ts-expect-error the annotation hides what the Handlers take
+      serve(contract, annotated, { resources }),
     ];
 
     expect(serving).toBeTypeOf('function');

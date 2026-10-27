@@ -259,7 +259,8 @@ describe('serve: what it checks before the first request', () => {
   });
 
   test('a Handler the map only inherits is no Handler', () => {
-    const inherited = { ...handlers, endpoints: Object.create(handlers.endpoints) };
+    const inheriting: typeof handlers.endpoints = Object.create(handlers.endpoints);
+    const inherited = { ...handlers, endpoints: inheriting };
 
     const serving = () => serve(contract, inherited);
 

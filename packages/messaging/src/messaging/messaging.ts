@@ -31,7 +31,7 @@ export type Messaging<C extends ServiceContract> = {
   readonly publisher: EventPublisher<C>;
   readonly sender: CommandSender<C>;
   readonly consume: <
-    const Handlers extends Pick<HandlerMapOf<C>, 'commands' | 'subscriptions' | 'readers'>,
+    const Handlers extends Pick<HandlerMapOf<C, never>, 'commands' | 'subscriptions' | 'readers'>,
   >(
     handlers: Handlers,
     ...options: CallArgument<

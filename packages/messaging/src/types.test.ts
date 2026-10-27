@@ -5,7 +5,7 @@ import {
   defineService,
   defineSubscription,
 } from '@cf-loom/contract';
-import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
+import { type HandlerMapOf, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -372,6 +372,37 @@ describe('publish and send types', () => {
       consume(handlers),
       // @ts-expect-error the Handler takes notifications
       consume(handlers, { resources: {} }),
+    ];
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume takes a map annotated HandlerMapOf with the Resources, and refuses one annotated without them', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      readers.subscriptions.notifyOnCreated,
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const typed: HandlerMapOf<typeof contract, Notifications> = {
+      endpoints: {},
+      guards: {},
+      commands,
+      subscriptions: { notifyOnCreated: notifying },
+      readers,
+    };
+    const annotated: HandlerMapOf<typeof contract> = typed;
+    const resources: Notifications = { notifications: { send: () => undefined } };
+
+    const consuming = () => [
+      consume(typed, { resources }),
+      // @ts-expect-error the Handlers take the Service's Resources
+      consume(typed),
+      // @ts-expect-error the annotation hides what the Handlers take
+      consume(annotated),
+      // @ts-expect-error the annotation hides what the Handlers take
+      consume(annotated, { resources }),
     ];
 
     expect(consuming).toBeTypeOf('function');

@@ -6,6 +6,7 @@ import {
   defineSubscription,
   notFound,
   openEnumReader,
+  type ServiceContract,
 } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
@@ -16,7 +17,9 @@ import {
   type Fault,
   fault,
   type GuardHandler,
+  type HandledBy,
   type HandlerMap,
+  type HandlerMapOf,
   handle,
   type MessageHandler,
   type MessageImplementation,
@@ -563,7 +566,13 @@ describe('ResourcesOf', () => {
   type Orders = { readonly find: (orderId: string) => string | undefined };
   type Callers = { readonly byKey: (key: string) => string };
   type Resources = { readonly orders: Orders; readonly callers: Callers };
+  type Alien = { readonly db: number };
   type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
+  const unreadable =
+    "A Handler's Resources are unreadable: typed any, or in a map annotated HandlerMapOf<typeof contract> without the Service's Resources; type them, as Needs<…> does, or annotate HandlerMapOf<typeof contract, Resources>";
+  const keyless =
+    'The last parameter takes Resources with no key: name what it reads, as Needs<…> does, or leave it out';
+  const plain = "HandlerMapOf takes the Contract's own type, typeof contract, not ServiceContract";
 
   test('a Handler map holds every Resource any of its Handlers takes, and a stub takes none', () => {
     const handlers = {
@@ -668,9 +677,151 @@ describe('ResourcesOf', () => {
     );
     const handlers = { endpoints: { getOrder: loose } };
 
-    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(
-      'A Handler types its Resources as any: type them, as Needs<…> does',
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unreadable);
+  });
+
+  test('every Handler carries in its brand the Resources its direct call takes, every kind alike', () => {
+    const takers = {
+      endpoint: handle(getOrder, (_input, _call, { resources }: Needs<'orders'>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
+      ),
+      guard: handle(apiKey, (_demands, _call, { resources }: Needs<'callers'>) =>
+        admit({ callerId: resources.callers.byKey('k') }),
+      ),
+      command: handle(chargeCard, (_body, _meta, { resources }: Needs<'orders'>) => {
+        resources.orders.find(ORDER_ID);
+      }),
+      subscription: handle(notifyOnPaid, (_body, _meta, { resources }: Needs<'callers'>) => {
+        resources.callers.byKey('k');
+      }),
+    };
+
+    expectTypeOf(takers.endpoint).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers.guard).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers.command).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers.subscription).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers.endpoint).not.toExtend<HandledBy<typeof getOrder, Alien>>();
+    expectTypeOf(takers.guard).not.toExtend<HandledBy<typeof apiKey, Alien>>();
+    expectTypeOf(takers.command).not.toExtend<HandledBy<typeof chargeCardV1, Alien>>();
+    expectTypeOf(takers.subscription).not.toExtend<HandledBy<typeof notifyOnPaidV1, Alien>>();
+    expect(takers.endpoint.element).toBe(getOrder);
+  });
+
+  test('a Handler that takes none, left out, unannotated or a Stub, fits a map of any Resources, every kind alike', () => {
+    const takers = [
+      handle(getOrder, () => reject(notFound)),
+      handle(getOrder, (_input, _call, _last) => reject(notFound)),
+      handle.stub(getOrder),
+      handle(apiKey, () => admit({ callerId: 'c-1' })),
+      handle(apiKey, (_demands, _call, _last) => admit({ callerId: 'c-1' })),
+      handle.stub(apiKey),
+      handle(chargeCard, () => undefined),
+      handle(chargeCard, (_body, _meta, _last) => undefined),
+      handle.stub(chargeCard),
+      handle(notifyOnPaid, () => undefined),
+      handle(notifyOnPaid, (_body, _meta, _last) => undefined),
+      handle.stub(notifyOnPaid),
+    ] as const;
+
+    expectTypeOf(takers[0]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[1]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[2]).toExtend<HandledBy<typeof getOrder, Resources>>();
+    expectTypeOf(takers[3]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[4]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[5]).toExtend<HandledBy<typeof apiKey, Resources>>();
+    expectTypeOf(takers[6]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[7]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[8]).toExtend<HandledBy<typeof chargeCardV1, Resources>>();
+    expectTypeOf(takers[9]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers[10]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expectTypeOf(takers[11]).toExtend<HandledBy<typeof notifyOnPaidV1, Resources>>();
+    expect(takers.map(({ element }) => element)).toHaveLength(12);
+  });
+
+  test('a Handler typed by its brand alone makes ResourcesOf name the cause', () => {
+    const bare: HandledBy<typeof getOrder> = handle(
+      getOrder,
+      (_input, _call, { resources }: Needs<'orders'>) =>
+        resources.orders.find(ORDER_ID) === undefined
+          ? reject(notFound)
+          : success({ id: ORDER_ID }),
     );
+    const handlers = { endpoints: { getOrder: bare } };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toHaveProperty(unreadable);
+    expect(bare.element).toBe(getOrder);
+  });
+
+  test('a Handler or a table typed any makes ResourcesOf name the cause', () => {
+    /* biome-ignore-start lint/suspicious/noExplicitAny: the any this test is about */
+    const copied: any = Object.create(handle.stub(getOrder));
+
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: any } }>>().toHaveProperty(unreadable);
+    expectTypeOf<ResourcesOf<{ endpoints: any }>>().toHaveProperty(unreadable);
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof copied } }>>().toHaveProperty(
+      unreadable,
+    );
+    /* biome-ignore-end lint/suspicious/noExplicitAny: the any this test is about */
+    expect(copied.element).toBe(getOrder);
+  });
+
+  test('a Handler map that holds its readers counts only its Handlers', () => {
+    const handlers = {
+      endpoints: { getOrder: handle.stub(getOrder) },
+      guards: {},
+      commands: {
+        chargeCardV1: handle(chargeCard, (_body, _meta, { resources }: Needs<'orders'>) => {
+          resources.orders.find(ORDER_ID);
+        }),
+      },
+      subscriptions: { notifyOnPaid: handle.stub(notifyOnPaid) },
+      readers,
+    };
+
+    expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<{ readonly orders: Orders }>();
+    expect(handlers.readers).toBe(readers);
+  });
+
+  test('a last parameter whose Resources hold no key makes a direct call and ResourcesOf name the cause', () => {
+    const input = { params: { orderId: ORDER_ID } };
+    const noKeys = {
+      // biome-ignore lint/complexity/noBannedTypes: the {} this test is about
+      empty: handle(getOrder, (_input, _call, _last: WithResources<{}>) => reject(notFound)),
+      object: handle(getOrder, (_input, _call, _last: WithResources<object>) => reject(notFound)),
+      nothing: handle(getOrder, (_input, _call, _last: Needs<never>) => reject(notFound)),
+    };
+
+    const calls = () => [
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.empty(input, {}),
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.object(input, {}, { resources: {} }),
+      // @ts-expect-error the last parameter takes Resources with no key
+      noKeys.nothing(input, {}),
+    ];
+
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.empty } }>>().toHaveProperty(
+      keyless,
+    );
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.object } }>>().toHaveProperty(
+      keyless,
+    );
+    expectTypeOf<ResourcesOf<{ endpoints: { getOrder: typeof noKeys.nothing } }>>().toHaveProperty(
+      keyless,
+    );
+    expect(calls).toBeDefined();
+  });
+
+  test('a Handler map of a Contract typed plain ServiceContract names the cause in every table', () => {
+    type Plain = HandlerMapOf<ServiceContract>;
+
+    expectTypeOf<Plain['endpoints']>().toHaveProperty(plain);
+    expectTypeOf<Plain['guards']>().toHaveProperty(plain);
+    expectTypeOf<Plain['commands']>().toHaveProperty(plain);
+    expectTypeOf<Plain['subscriptions']>().toHaveProperty(plain);
+    expect(plain).toBeTypeOf('string');
   });
 
   test('a Handler map none of whose Handlers takes Resources holds none', () => {

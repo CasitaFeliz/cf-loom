@@ -45,7 +45,7 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
  */
 export function serve<
   const C extends ServiceContract,
-  const Handlers extends Pick<HandlerMapOf<C>, 'endpoints' | 'guards'>,
+  const Handlers extends Pick<HandlerMapOf<C, never>, 'endpoints' | 'guards'>,
 >(
   contract: C,
   handlers: Handlers,

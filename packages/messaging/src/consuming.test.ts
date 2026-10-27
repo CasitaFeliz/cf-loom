@@ -412,7 +412,7 @@ describe('consume', () => {
   );
 
   test('a Handler the map only inherits throws, as if it had none', async () => {
-    const inherited = Object.create(handlers.subscriptions);
+    const inherited: typeof handlers.subscriptions = Object.create(handlers.subscriptions);
     const { consume } = await messaging(contract, aBroker().broker);
 
     const inheriting = consume({ ...handlers, subscriptions: inherited });

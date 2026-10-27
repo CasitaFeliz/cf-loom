@@ -7,7 +7,8 @@ import {
   defineService,
   notFound,
 } from '@cf-loom/contract';
-import { admit, fault, handle, reject, success } from '@cf-loom/handlers';
+import { admit, fault, type HandlerMapOf, handle, reject, success } from '@cf-loom/handlers';
+import type { NoResources } from '@cf-loom/handlers/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { type AnsweredRequest, type ServedFault, type ServeOptions, serve } from './index.ts';
@@ -129,7 +130,7 @@ function sent(status: number, kind: AnsweredRequest['kind']) {
 /** Serves the map with an `onAnswered` that keeps every record, and the records it kept. */
 function recording(
   options: Omit<ServeOptions, 'onAnswered'> = {},
-  served: Parameters<typeof serve>[1] = handlers,
+  served: Pick<HandlerMapOf<typeof contract, NoResources>, 'endpoints' | 'guards'> = handlers,
 ) {
   const answered: AnsweredRequest[] = [];
   const requests: Request[] = [];
