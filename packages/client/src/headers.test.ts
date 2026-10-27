@@ -1,3 +1,5 @@
+import { getEventListeners } from 'node:events';
+import { setImmediate as nextMacrotask } from 'node:timers/promises';
 import {
   defineDependency,
   defineEndpoint,
@@ -13,7 +15,7 @@ import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
-import { client } from './index.ts';
+import { type CallOptions, client } from './index.ts';
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -282,6 +284,229 @@ describe('headers given to client()', () => {
     const called = orders.getOrder(params);
 
     await expect(called).rejects.toBe(error);
+  });
+});
+
+/** A client whose `authorization` is `refresh`, and whose `fetch` records what it is sent. */
+function refreshing(refresh: (call: CallOptions) => string | Promise<string>) {
+  const { sent, fetch } = recorded();
+  const orders = client(ordersDependency, {
+    baseUrl: 'http://orders.test',
+    fetch,
+    headers: { 'x-api-key': 'key-1', authorization: refresh },
+  });
+  return { orders, sent };
+}
+
+describe('a header function', () => {
+  test('receives the call’s signal', async () => {
+    const controller = new AbortController();
+    const received: CallOptions[] = [];
+    const { orders } = refreshing((call) => {
+      received.push(call);
+      return 'Bearer t';
+    });
+
+    await orders.getOrder(params, { signal: controller.signal });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.signal).toBe(controller.signal);
+  });
+
+  test('receives the options the call was given, as they are', async () => {
+    const options: CallOptions = { signal: new AbortController().signal };
+    const received: CallOptions[] = [];
+    const { orders } = refreshing((call) => {
+      received.push(call);
+      return 'Bearer t';
+    });
+
+    await orders.getOrder(params, options);
+
+    expect(received[0]).toBe(options);
+  });
+
+  test('of a call with no signal receives none', async () => {
+    const received: CallOptions[] = [];
+    const { orders } = refreshing((call) => {
+      received.push(call);
+      return 'Bearer t';
+    });
+
+    await orders.getOrder(params);
+
+    expect(received).toStrictEqual([{}]);
+  });
+
+  test('whose call is aborted while it runs gets the not-sent Fault at once, and nothing is sent', async () => {
+    const controller = new AbortController();
+    const refreshed = Promise.withResolvers<string>();
+    const { orders, sent } = refreshing(() => refreshed.promise);
+
+    const calling = orders.getOrder(params, { signal: controller.signal });
+    controller.abort();
+    const outcome = await calling;
+    refreshed.resolve('Bearer late');
+    await nextMacrotask();
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'aborted',
+      committed: 'no',
+      retryable: false,
+    });
+    expect(sent).toEqual([]);
+  });
+
+  test('that never settles gets a retryable timeout Fault when the call’s signal times out', async () => {
+    const { orders, sent } = refreshing(() => new Promise<string>(() => undefined));
+
+    const outcome = await orders.getOrder(params, { signal: AbortSignal.timeout(20) });
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'timeout',
+      committed: 'no',
+      retryable: true,
+    });
+    expect(sent).toEqual([]);
+  });
+
+  test('that rejects after its call was aborted raises no unhandled rejection', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    const controller = new AbortController();
+    const refreshed = Promise.withResolvers<string>();
+    const { orders } = refreshing(() => refreshed.promise);
+
+    try {
+      const calling = orders.getOrder(params, { signal: controller.signal });
+      controller.abort();
+      await calling;
+      refreshed.reject(new Error('the refresh failed late'));
+      await nextMacrotask();
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+
+    expect(unhandled).toEqual([]);
+  });
+
+  test('that rejects with an AbortError of its own once the signal is aborted gets the not-sent Fault, not its error', async () => {
+    const controller = new AbortController();
+    const { orders, sent } = refreshing(
+      ({ signal }) =>
+        new Promise<string>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('The refresh stopped', 'AbortError'));
+          });
+        }),
+    );
+
+    const calling = orders.getOrder(params, { signal: controller.signal });
+    controller.abort();
+    const outcome = await calling;
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(sent).toEqual([]);
+  });
+
+  test('that rejects while the signal is not aborted reaches the caller unchanged', async () => {
+    const error = new Error('no token');
+    const { orders, sent } = refreshing(() => Promise.reject(error));
+
+    const called = orders.getOrder(params, { signal: new AbortController().signal });
+
+    await expect(called).rejects.toBe(error);
+    expect(sent).toEqual([]);
+  });
+
+  test('that aborts its own call and returns is answered with the not-sent Fault, and the next one is not called', async () => {
+    const controller = new AbortController();
+    const { sent, fetch } = recorded();
+    let called = 0;
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: {
+        'x-api-key': () => {
+          controller.abort();
+          return 'key-1';
+        },
+        authorization: () => {
+          called += 1;
+          return new Promise<string>(() => undefined);
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(called).toBe(0);
+    expect(sent).toEqual([]);
+  });
+
+  test('that aborts its own call and returns a promise that never settles is not waited for', async () => {
+    const controller = new AbortController();
+    const { sent, fetch } = recorded();
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: {
+        'x-api-key': 'key-1',
+        authorization: () => {
+          controller.abort();
+          return new Promise<string>(() => undefined);
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(sent).toEqual([]);
+  });
+
+  test('is not called once the signal was aborted in a microtask after the one before returned', async () => {
+    const controller = new AbortController();
+    const { sent, fetch } = recorded();
+    let called = 0;
+    const orders = client(ordersDependency, {
+      baseUrl: 'http://orders.test',
+      fetch,
+      headers: {
+        'x-api-key': () => {
+          queueMicrotask(() => controller.abort());
+          return 'key-1';
+        },
+        authorization: () => {
+          called += 1;
+          return 'Bearer t';
+        },
+      },
+    });
+
+    const outcome = await orders.getOrder(params, { signal: controller.signal });
+
+    expect(outcome).toMatchObject({ kind: 'fault', source: 'aborted', committed: 'no' });
+    expect(called).toBe(0);
+    expect(sent).toEqual([]);
+  });
+
+  test('of a call refused for its Input leaves no abort listener on a long-lived signal', async () => {
+    const controller = new AbortController();
+    const { orders } = refreshing(async () => 'Bearer t');
+    const refused = { params: { orderId: 1 } } as never;
+
+    for (let call = 0; call < 20; call += 1) {
+      await orders.getOrder(refused, { signal: controller.signal });
+    }
+
+    expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
   });
 });
 
