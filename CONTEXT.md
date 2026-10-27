@@ -149,7 +149,7 @@ What the Broker stores Messages in: each Service that publishes or sends Message
 _Avoid_: topic, queue, log
 
 **Durable consumer**:
-The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
+The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer. Its name, `<service>_<subscription in kebab-case>` or `<service>_command_<Name>_v<n>`, is its `durable` in the API, as a Stream's name is its `stream`.
 _Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:

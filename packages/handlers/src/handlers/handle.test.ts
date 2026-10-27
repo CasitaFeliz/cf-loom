@@ -116,16 +116,6 @@ describe('handle', () => {
     expect(getOrderHandler.declaration).toBe(getOrder);
   });
 
-  test('a HandledBy brand holds a declaration and nothing else a Service can name', () => {
-    expectTypeOf<
-      Exclude<keyof HandledBy<typeof getOrder>, symbol>
-    >().toEqualTypeOf<'declaration'>();
-  });
-
-  test('a Pairing holds a declaration and its Reader, and nothing else', () => {
-    expectTypeOf<keyof Pairing>().toEqualTypeOf<'declaration' | 'reader'>();
-  });
-
   test('handle() given something that is no Endpoint, Guard or paired Command or Subscription throws', () => {
     const copiedEndpoint = { ...getOrder };
 

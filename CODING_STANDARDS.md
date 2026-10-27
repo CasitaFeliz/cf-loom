@@ -278,8 +278,9 @@ expected, in that order, without scrolling.
 
 **C26. Test the compatibility we have, never one we do not.** Snapshots of every released format, the Wire protocol
 and the public APIs are compatibility we have: their fixtures and tests stay. No test of a shim (C5), no "still
-accepts the old shape" for a shape nothing released, no test that a private helper returns a value. *Why:* such a test
-pins the thing the next change must delete.
+accepts the old shape" for a shape nothing released, no test that a private helper returns a value. A public record's
+key set is pinned by one type test in its package's `types.test.ts`; a test never asserts the absence of one field.
+*Why:* such a test pins the thing the next change must delete.
 
 ## Reviewing
 
