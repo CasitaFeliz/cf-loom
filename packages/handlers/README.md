@@ -37,6 +37,7 @@ export default handle(getOrder, async ({ params }, { context }, { resources: { o
 ```ts
 // src/guards/api-key.handler.ts
 import { admit, handle, reject } from '@cf-loom/handlers';
+import { apiKey, unauthenticated } from '@org/definitions';
 
 export default handle(apiKey, async ({ headers }, _call, { resources: { callers } }: Needs<'callers'>) => {
   const caller = await callers.byKey(headers['x-api-key']);
@@ -52,6 +53,7 @@ A Guard that lists other Guards, or declares a `qualifier` (see [Guards](https:/
 ```ts
 // src/guards/permission.handler.ts
 import { admit, handle, reject } from '@cf-loom/handlers';
+import { forbidden, permission } from '@org/definitions';
 
 export default handle(permission, async (_demands, { context: { userToken }, qualifier }, { resources: { permissions } }: Needs<'permissions'>) => {
   const held = await permissions.of(userToken.userId);
@@ -154,6 +156,7 @@ The Handler map is plain data (see [Stubs and the Handler map](#stubs-and-the-ha
 ```ts
 import { admit, handle } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
+import { apiKey } from '@org/definitions';
 import handlers from '../src/handlers.generated.ts';
 
 const http = serve(

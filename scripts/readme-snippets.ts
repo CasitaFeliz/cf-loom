@@ -2,9 +2,8 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, posix } from 'node:path';
-
-/** A README: the path reports name it by, and its text. */
-export type Readme = { readonly path: string; readonly markdown: string };
+import { type Block, blocksOf, type Readme } from './readme-blocks.ts';
+import { declaredNames, exportedNames, mentionedNames } from './readme-names.ts';
 
 /**
  * What no README block shows of the Service the READMEs describe, by path: the files of the
@@ -12,133 +11,162 @@ export type Readme = { readonly path: string; readonly markdown: string };
  */
 export type Scope = Readonly<Record<string, string>>;
 
-type Snippet = {
-  readonly readme: string;
-  readonly line: number;
-  readonly path: string;
-  readonly source: string;
+/** A file of the project the blocks are checked in: a block, or a file of the scope. */
+type ProjectFile = { readonly source: string; readonly block?: Block };
+type Project = ReadonlyMap<string, ProjectFile>;
+
+/** What a block may leave out: zod's `z`, the exports of `@cf-loom/contract` and its package's files. */
+type Providers = {
+  readonly contract: ReadonlySet<string>;
+  readonly siblings: ReadonlyMap<string, ReadonlyMap<string, string>>;
 };
 
-type Provider = { readonly package: string } | { readonly file: string };
+type Compiled = { readonly failed: boolean; readonly lines: string[] };
 
 const root = join(import.meta.dirname, '..');
-/** The example Service whose installed packages every snippet resolves its imports from. */
+/** The example Service whose installed packages every block resolves its imports from. */
 const installedIn = join(root, 'examples', 'billing-service');
 const packagesAt = 'scope-packages';
-const pathComment = /^\/\/\s+((?:[\w.-]+\/)+[\w.-]+\.ts)\b/;
-const declaredName =
-  /^export\s+(?:declare\s+)?(?:default\s+)?(?:async\s+)?(?:const|let|function|class|type|interface)\s+(\w+)/gm;
-const exportList = /^export\s+(?:type\s+)?\{([^}]*)\}/gm;
-const missingName =
-  /^(.+?)\(\d+,\d+\): error TS(?:2304|2552|2503|18004): (?:Cannot find (?:name|namespace)|No value exists in scope for the shorthand property) '(\w+)'/;
 const diagnostic = /^(.+?)\((\d+),\d+\): (error TS\d+: .*)$/;
 
 /**
  * Why the TypeScript blocks of the READMEs do not compile, as `README:line: error TS…`, empty when
- * they do. A block leaves out the imports of zod, `@cf-loom/contract` and the names another block
- * or the scope declares; the check adds them, then type-checks each block as the file its path
- * comment names.
+ * they do. A block leaves out the imports of zod, `@cf-loom/contract` and the files of its own
+ * package; the check adds them, then type-checks each block as the file its path comment names.
  */
 export function snippetProblems(readmes: readonly Readme[], scope: Scope): string[] {
-  const snippets = readmes.flatMap(snippetsOf);
-  const files = filesOf(snippets, scope);
-  const directory = mkdtempSync(join(tmpdir(), 'readme-snippets-'));
-  try {
-    symlinkSync(join(installedIn, 'node_modules'), join(directory, 'node_modules'));
-    writeProject(directory, files, scope);
-    const missing = missingNamesOf(compile(directory));
-    writeProject(directory, withImports(files, missing, providersOf(files)), scope);
-    return problemsOf(compile(directory), snippets);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
+  const parsed = readmes.map(blocksOf);
+  const blocks = parsed.flatMap((one) => one.blocks);
+  const project = projectOf(blocks, scope);
+  const unreadable = parsed.flatMap((one) => one.problems);
+  return [...unreadable, ...declaredTwice(project), ...checked(project)];
+}
+
+function projectOf(blocks: readonly Block[], scope: Scope): Map<string, ProjectFile> {
+  const project = new Map<string, ProjectFile>();
+  for (const [path, source] of Object.entries(scope)) {
+    project.set(path.startsWith('@') ? `${packagesAt}/${path}.ts` : path, { source });
   }
-}
-
-function snippetsOf(readme: Readme): Snippet[] {
-  const snippets: Snippet[] = [];
-  const lines = readme.markdown.split('\n');
-  for (let at = 0; at < lines.length; at++) {
-    if (lines[at] !== '```ts') {
-      continue;
-    }
-    const end = lines.indexOf('```', at + 1);
-    const source = lines.slice(at + 1, end).join('\n');
-    snippets.push({
-      readme: readme.path,
-      line: at + 2,
-      path: pathOf(source, readme.path, at),
-      source,
-    });
-    at = end;
+  for (const block of blocks) {
+    const slug = block.readme.replaceAll(/\W+/g, '-');
+    const taken = project.has(block.path);
+    const file = taken ? block.path.replace(/\.ts$/, `.${slug}-${block.line}.ts`) : block.path;
+    project.set(file, { source: block.source, block });
   }
-  return snippets;
+  return project;
 }
 
-/** The path a block's first line names, or one beside the other blocks of its README. */
-function pathOf(source: string, readme: string, fenceAt: number): string {
-  const named = pathComment.exec(source)?.[1];
-  const slug = readme.replaceAll(/\W+/g, '-');
-  return named ?? `snippets/${slug}-${fenceAt + 2}.ts`;
-}
-
-/** Every file of the project by path: the scope, and each block, a repeated path told apart. */
-function filesOf(snippets: readonly Snippet[], scope: Scope): Map<string, string> {
-  const files = new Map<string, string>(Object.entries(scope).map(inProject));
-  for (const snippet of snippets) {
-    const taken = files.has(snippet.path);
-    const path = taken ? snippet.path.replace(/\.ts$/, `.${snippet.line}.ts`) : snippet.path;
-    files.set(path, `${snippet.source}\nexport {};\n`);
+/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service. */
+function packageOf(path: string): string {
+  const [folder = '', second] = path.split('/');
+  if (folder === packagesAt) {
+    return path;
   }
-  return files;
+  return second === 'src' ? folder : '';
 }
 
-/** A scope entry as a file of the project: a package's entry sits under `scope-packages/`. */
-function inProject([path, source]: readonly [string, string]): [string, string] {
-  return [path.startsWith('@') ? `${packagesAt}/${path}.ts` : path, source];
-}
-
-/** The package or the file that declares each name a block may leave out, the first one winning. */
-function providersOf(files: ReadonlyMap<string, string>): Map<string, Provider> {
-  const providers = new Map<string, Provider>([['z', { package: 'zod' }]]);
-  for (const name of contractNames()) {
-    providers.set(name, { package: '@cf-loom/contract' });
-  }
-  for (const [path, source] of files) {
-    for (const match of source.matchAll(declaredName)) {
-      const name = match[1] ?? '';
-      providers.set(name, providers.get(name) ?? { file: path });
+/** A name a block and a scope file of one package both export: the scope holds what no block shows. */
+function declaredTwice(project: Project): string[] {
+  const exporters = new Map<string, { name: string; blocks: Block[]; scoped: string[] }>();
+  for (const [path, file] of project) {
+    for (const name of path.endsWith('.ts') ? exportedNames(file.source) : []) {
+      const key = `${packageOf(path)} ${name}`;
+      const entry = exporters.get(key) ?? { name, blocks: [], scoped: [] };
+      if (file.block === undefined) {
+        entry.scoped.push(path);
+      } else {
+        entry.blocks.push(file.block);
+      }
+      exporters.set(key, entry);
     }
   }
-  return providers;
+  const problems: string[] = [];
+  for (const { name, blocks, scoped } of exporters.values()) {
+    const [block] = blocks;
+    const [file] = scoped;
+    if (block !== undefined && file !== undefined) {
+      const declared = `${name} is declared by the block and by the scope file ${file}`;
+      problems.push(`${block.readme}:${block.line}: ${declared}`);
+    }
+  }
+  return problems;
+}
+
+function providersOf(project: Project): Providers {
+  const siblings = new Map<string, Map<string, string>>();
+  for (const [path, file] of project) {
+    const own = siblings.get(packageOf(path)) ?? new Map<string, string>();
+    for (const name of path.endsWith('.ts') ? exportedNames(file.source) : []) {
+      own.set(name, own.get(name) ?? path);
+    }
+    siblings.set(packageOf(path), own);
+  }
+  return { contract: new Set(contractNames()), siblings };
 }
 
 /** The names `@cf-loom/contract` exports, types included, as its declarations list them. */
 function contractNames(): string[] {
   const declarations = join(installedIn, 'node_modules/@cf-loom/contract/dist/index.d.ts');
   const source = readFileSync(declarations, 'utf8');
-  const listed = [...source.matchAll(exportList)].flatMap((match) =>
-    (match[1] ?? '').split(',').map((entry) => entry.trim().split(/\s+/).at(-1) ?? ''),
-  );
-  return listed.filter((name) => /^\w+$/.test(name));
+  const lists = [...source.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}/gm)];
+  const entries = lists.flatMap((list) => (list[1] ?? '').split(','));
+  const names = entries.map((entry) => entry.trim().split(/\s+/).at(-1) ?? '');
+  return names.filter((name) => /^\w+$/.test(name));
 }
 
-function writeProject(directory: string, files: ReadonlyMap<string, string>, scope: Scope): void {
-  const manifest = { type: 'module' };
-  writeFileSync(join(directory, 'package.json'), JSON.stringify(manifest));
-  writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfigOf(scope)));
-  for (const [path, source] of files) {
-    mkdirSync(dirname(join(directory, path)), { recursive: true });
-    writeFileSync(join(directory, path), source);
+/** The file with an import of each name it mentions and does not declare, after its code so lines stay. */
+function completed(path: string, source: string, providers: Providers): string {
+  if (!path.endsWith('.ts')) {
+    return source;
+  }
+  const own = declaredNames(source);
+  const lines: string[] = [];
+  for (const name of mentionedNames(source)) {
+    const specifier = own.has(name) ? undefined : specifierOf(name, path, providers);
+    if (specifier !== undefined) {
+      lines.push(`import { ${name} } from '${specifier}';`);
+    }
+  }
+  return `${source}\n${lines.join('\n')}\nexport {};\n`;
+}
+
+function specifierOf(name: string, from: string, providers: Providers): string | undefined {
+  const file = providers.siblings.get(packageOf(from))?.get(name);
+  if (file !== undefined && file !== from) {
+    const relative = posix.relative(posix.dirname(from), file);
+    return relative.startsWith('.') ? relative : `./${relative}`;
+  }
+  if (name === 'z') {
+    return 'zod';
+  }
+  return providers.contract.has(name) ? '@cf-loom/contract' : undefined;
+}
+
+function checked(project: Project): string[] {
+  if (![...project.keys()].some((path) => path.endsWith('.ts'))) {
+    return [];
+  }
+  const providers = providersOf(project);
+  const directory = mkdtempSync(join(tmpdir(), 'readme-snippets-'));
+  try {
+    symlinkSync(join(installedIn, 'node_modules'), join(directory, 'node_modules'));
+    writeFileSync(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
+    writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfigOf(project)));
+    for (const [path, file] of project) {
+      mkdirSync(dirname(join(directory, path)), { recursive: true });
+      writeFileSync(join(directory, path), completed(path, file.source, providers));
+    }
+    return problemsOf(compile(directory), project);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 }
 
 /** The compiler options the root README recommends, with the scope's packages found where they sit. */
-function tsconfigOf(scope: Scope) {
-  const paths = Object.fromEntries(
-    Object.keys(scope)
-      .filter((path) => path.startsWith('@'))
-      .map((name) => [name, [`./${packagesAt}/${name}.ts`]]),
-  );
+function tsconfigOf(project: Project) {
+  const entries = [...project.keys()]
+    .filter((path) => path.startsWith(`${packagesAt}/`))
+    .map((path) => [path.slice(packagesAt.length + 1).replace(/\.ts$/, ''), [`./${path}`]]);
   return {
     compilerOptions: {
       allowImportingTsExtensions: true,
@@ -146,7 +174,7 @@ function tsconfigOf(scope: Scope) {
       lib: ['ES2024'],
       module: 'nodenext',
       noEmit: true,
-      paths,
+      paths: Object.fromEntries(entries),
       skipLibCheck: true,
       strict: true,
       target: 'ES2024',
@@ -156,8 +184,8 @@ function tsconfigOf(scope: Scope) {
   };
 }
 
-/** The output of `tsc` over the project, one diagnostic per line. */
-function compile(directory: string): string[] {
+/** What `tsc` printed over the project, and whether it ended in failure. */
+function compile(directory: string): Compiled {
   const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
   const ran = spawnSync(process.execPath, [tsc, '-p', '.', '--pretty', 'false'], {
     cwd: directory,
@@ -166,66 +194,28 @@ function compile(directory: string): string[] {
   if (ran.error) {
     throw ran.error;
   }
-  const output = ran.stdout.split('\n').filter((line) => line !== '');
-  if (ran.status !== 0 && output.length === 0) {
-    throw new Error(`tsc ended with status ${ran.status}: ${ran.stderr}`);
-  }
-  return output;
+  const lines = ran.stdout.split('\n').filter((line) => line !== '');
+  return { failed: ran.status !== 0, lines: lines.length > 0 ? lines : [ran.stderr] };
 }
 
-function missingNamesOf(output: readonly string[]): Map<string, Set<string>> {
-  const missing = new Map<string, Set<string>>();
-  for (const line of output) {
-    const [, path, name] = missingName.exec(line) ?? [];
-    if (path !== undefined && name !== undefined) {
-      missing.set(path, (missing.get(path) ?? new Set()).add(name));
-    }
-  }
-  return missing;
-}
-
-/** The files, each with the imports of the names it leaves out that something provides. */
-function withImports(
-  files: ReadonlyMap<string, string>,
-  missing: ReadonlyMap<string, ReadonlySet<string>>,
-  providers: ReadonlyMap<string, Provider>,
-): Map<string, string> {
-  const completed = new Map(files);
-  for (const [path, names] of missing) {
-    const lines = [...names].flatMap((name) => importOf(path, name, providers));
-    completed.set(path, `${completed.get(path) ?? ''}${lines.join('\n')}\n`);
-  }
-  return completed;
-}
-
-function importOf(path: string, name: string, providers: ReadonlyMap<string, Provider>): string[] {
-  const provider = providers.get(name);
-  if (provider === undefined || ('file' in provider && provider.file === path)) {
-    return [];
-  }
-  const specifier = 'package' in provider ? provider.package : relativeTo(path, provider.file);
-  return [`import { ${name} } from '${specifier}';`];
-}
-
-function relativeTo(from: string, file: string): string {
-  const relative = posix.relative(posix.dirname(from), file);
-  return relative.startsWith('.') ? relative : `./${relative}`;
-}
-
-function problemsOf(output: readonly string[], snippets: readonly Snippet[]): string[] {
+function problemsOf(compiled: Compiled, project: Project): string[] {
   const problems: string[] = [];
-  for (const line of output) {
+  for (const line of compiled.lines) {
     const [, path, row, message] = diagnostic.exec(line) ?? [];
-    if (path === undefined || row === undefined || message === undefined) {
-      continue;
+    if (path !== undefined && row !== undefined && message !== undefined) {
+      problems.push(`${locationOf(path, Number(row), project)}: ${message}`);
+    } else if (/^error TS\d+:/.test(line)) {
+      problems.push(`tsc: ${line}`);
     }
-    problems.push(`${locationOf(path, Number(row), snippets)}: ${message}`);
+  }
+  if (compiled.failed && problems.length === 0) {
+    throw new Error(`tsc failed with no diagnostic: ${compiled.lines.join('\n')}`);
   }
   return problems;
 }
 
 /** The README line a diagnostic in a block's file is, or the file and line of one in the scope. */
-function locationOf(path: string, row: number, snippets: readonly Snippet[]): string {
-  const snippet = snippets.find((one) => path === one.path || path.endsWith(`.${one.line}.ts`));
-  return snippet === undefined ? `${path}:${row}` : `${snippet.readme}:${snippet.line + row - 1}`;
+function locationOf(path: string, row: number, project: Project): string {
+  const block = project.get(path)?.block;
+  return block === undefined ? `${path}:${row}` : `${block.readme}:${block.line + row - 1}`;
 }

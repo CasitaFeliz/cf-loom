@@ -220,6 +220,8 @@ export const permission = defineGuard({
 
 ```ts
 // src/contract/endpoints/orders/edit-order.endpoint.ts
+import { permission, userToken } from '@org/definitions';
+
 export const editOrder = defineEndpoint({
   name: 'editOrder',
   method: 'PUT',
