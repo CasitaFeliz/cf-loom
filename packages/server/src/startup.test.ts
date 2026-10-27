@@ -177,6 +177,22 @@ describe('serve: what it checks before the first request', () => {
       },
       'header-names',
     ],
+    [
+      'an Input header a Caller’s fetch sets itself',
+      { input: { headers: z.object({ cookie: z.string() }) } },
+      'header-names',
+    ],
+    [
+      'a Success header a browser hides',
+      {
+        success: {
+          status: 200,
+          headers: z.object({ 'set-cookie': z.string() }),
+          body: z.object({}),
+        },
+      },
+      'header-names',
+    ],
   ])('an Endpoint with %s throws, as generate words it', (_case, written, rule) => {
     const odd = defineEndpoint({
       name: 'odd',

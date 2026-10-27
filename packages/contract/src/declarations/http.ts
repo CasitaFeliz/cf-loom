@@ -22,11 +22,50 @@ export const successStatuses = [200, 201, 202, 203, 204] as const;
 export type SuccessStatus = (typeof successStatuses)[number];
 
 /**
- * The header names the host or cf-loom owns, which no Contract declares: the framing and
- * connection headers, `host`, the body's `content-type`, `content-encoding` and `content-range`,
- * and the `deprecation` cf-loom sends itself.
+ * The request header names no Contract declares: the Fetch standard's forbidden request-header
+ * names, which it keeps for the user agent
+ * (https://fetch.spec.whatwg.org/#forbidden-request-header), the body's `content-type`,
+ * `content-encoding` and `content-range`, and the `deprecation` cf-loom owns. A name starting with
+ * one of `reservedRequestHeaderPrefixes` is reserved besides.
  */
-export const reservedHeaderNames: readonly string[] = [
+const reservedRequestHeaderNames: readonly string[] = [
+  'accept-charset',
+  'accept-encoding',
+  'access-control-request-headers',
+  'access-control-request-method',
+  'connection',
+  'content-length',
+  'cookie',
+  'cookie2',
+  'date',
+  'dnt',
+  'expect',
+  'host',
+  'keep-alive',
+  'origin',
+  'referer',
+  'set-cookie',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+  'via',
+  'content-type',
+  'content-encoding',
+  'content-range',
+  'deprecation',
+];
+
+/** The prefixes the Fetch standard keeps for the user agent: no request header a Contract declares starts with one. */
+const reservedRequestHeaderPrefixes: readonly string[] = ['proxy-', 'sec-'];
+
+/**
+ * The response header names no Contract declares: the framing and connection headers the host
+ * owns, `host`, the body's `content-type`, `content-encoding` and `content-range`, the
+ * `deprecation` cf-loom sends, and the Fetch standard's forbidden response-header names, which a
+ * browser never exposes to code (https://fetch.spec.whatwg.org/#forbidden-response-header-name).
+ */
+const reservedResponseHeaderNames: readonly string[] = [
   'content-length',
   'transfer-encoding',
   'connection',
@@ -40,7 +79,22 @@ export const reservedHeaderNames: readonly string[] = [
   'content-encoding',
   'content-range',
   'deprecation',
+  'set-cookie',
+  'set-cookie2',
 ];
+
+/** Whether a lower-case header name is one the user agent or cf-loom owns, so no request part declares it. */
+export function isReservedRequestHeaderName(name: string): boolean {
+  return (
+    reservedRequestHeaderNames.includes(name) ||
+    reservedRequestHeaderPrefixes.some((prefix) => name.startsWith(prefix))
+  );
+}
+
+/** Whether a lower-case header name is one the host or cf-loom owns, or a browser hides, so no response part declares it. */
+export function isReservedResponseHeaderName(name: string): boolean {
+  return reservedResponseHeaderNames.includes(name);
+}
 
 type Digit = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 

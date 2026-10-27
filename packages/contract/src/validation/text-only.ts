@@ -1,4 +1,7 @@
-import { reservedHeaderNames } from '../declarations/index.ts';
+import {
+  isReservedRequestHeaderName,
+  isReservedResponseHeaderName,
+} from '../declarations/index.ts';
 import {
   inFields,
   type ObjectNode,
@@ -9,9 +12,10 @@ import {
 } from '../walker/index.ts';
 import {
   attachedGuardsOf,
+  isInputPart,
   isObjectPart,
   type LocatedEndpoint,
-  type Part,
+  type ObjectPart,
   partFieldOf,
   slotAt,
   type TextIn,
@@ -22,11 +26,6 @@ import type { Nodes, WalkedSlot } from './schemas.ts';
 
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
-
-/** The text part a slot's fields travel in, by the field its part names; none for the rest. */
-function textPartOf(part: Part): TextIn | undefined {
-  return isObjectPart(part) ? partFieldOf(part) : undefined;
-}
 
 const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
 
@@ -61,11 +60,11 @@ export function conflictFailures(
 }
 
 function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
-  const part = textPartOf(slot.part);
-  if (part === undefined) {
+  const { at, node, part: slotPart } = slot;
+  if (!isObjectPart(slotPart)) {
     return [];
   }
-  const { at, node } = slot;
+  const part = partFieldOf(slotPart);
   const name = placeNameOf(at);
   if (node.type !== 'object') {
     return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
@@ -74,7 +73,7 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
   }
   return Object.entries(node.fields).flatMap(([field, { schema }]) => [
-    ...headerNameFailures(at, part, field),
+    ...headerNameFailures(at, slotPart, field),
     ...fieldFailures({ at, part }, field, schema),
   ]);
 }
@@ -82,26 +81,38 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
 /** A lower-case RFC 9110 token: the only header names a Contract declares. */
 const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
 
-function headerNameFailures(at: Place, part: TextIn, name: string): readonly DeclarationFailure[] {
-  if (part !== 'headers') {
+function headerNameFailures(
+  at: Place,
+  part: ObjectPart,
+  name: string,
+): readonly DeclarationFailure[] {
+  if (partFieldOf(part) !== 'headers') {
     return [];
   }
-  const message = headerNameMessageOf(name);
+  const message = headerNameMessageOf(name, part);
   return message === undefined ? [] : [failure(inFields(at, name), 'header-names', message)];
 }
 
-/** What is wrong with a header name: its case, its characters, or a name the host owns. */
-function headerNameMessageOf(name: string): string | undefined {
+/** What is wrong with a header name: its case, its characters, or a name another party owns in its direction. */
+function headerNameMessageOf(name: string, part: ObjectPart): string | undefined {
   if (name !== name.toLowerCase()) {
     return `Header names are lower-case: ${name}`;
   }
   if (!lowerCaseToken.test(name)) {
     return `A header name is an RFC 9110 token: ${name}`;
   }
-  if (reservedHeaderNames.includes(name)) {
-    return `A header the host or cf-loom owns is reserved: ${name}`;
+  return reservedHeaderMessageOf(name, part);
+}
+
+function reservedHeaderMessageOf(name: string, part: ObjectPart): string | undefined {
+  if (isInputPart(part)) {
+    return isReservedRequestHeaderName(name)
+      ? `A request header the Fetch standard keeps for the user agent, or cf-loom owns, is reserved: ${name}`
+      : undefined;
   }
-  return undefined;
+  return isReservedResponseHeaderName(name)
+    ? `A response header the host or cf-loom owns, or a browser hides, is reserved: ${name}`
+    : undefined;
 }
 
 function fieldFailures(
