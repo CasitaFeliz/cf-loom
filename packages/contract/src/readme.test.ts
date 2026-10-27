@@ -23,7 +23,8 @@ const money = z.object({ amount: z.int(), currency: z.string() });
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
-  message: 'Unauthenticated',
+  message: 'The API key is missing or unknown',
+  headers: z.object({ 'www-authenticate': z.string() }),
 });
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
 const userToken = defineGuard({
@@ -134,8 +135,6 @@ const paymentSettledEventV1 = providedEvent('payments-service', {
 
 const paymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint] });
 
-const getOrderEndpoint = providedEndpoint(aProvider('orders-service'), getOrder, undefined);
-
 const orderCreatedV2 = defineEvent({
   name: 'OrderCreated',
   version: 2,
@@ -189,15 +188,14 @@ describe('the README’s declaration examples', () => {
   });
 
   test('an Application depends on the Public Endpoints of each Provider', () => {
-    const adminOrdersDependency = defineDependency({ endpoints: [getOrderEndpoint] });
     const adminPaymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint] });
 
     const application = defineApplication({
       name: 'web-admin',
-      dependencies: [adminOrdersDependency, adminPaymentsDependency],
+      dependencies: [adminPaymentsDependency],
     });
 
-    expect(application.dependencies[1].endpoints).toEqual([getPaymentEndpoint]);
+    expect(application.dependencies[0].endpoints).toEqual([getPaymentEndpoint]);
   });
 });
 

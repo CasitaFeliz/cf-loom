@@ -67,6 +67,10 @@ The Faults `serve` answers with a Reserved code and no Handler (see [Reserved co
 `serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onAnswered` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, and any `Set-Cookie`, which no Contract declares since a browser never exposes it; the Service adds both by wrapping the handler `serve` returns.
 
 ```ts
+// src/main.ts
+import { serve } from '@cf-loom/server';
+import handlers from './handlers.generated.ts';
+
 const notOurs = new Response(null, { status: 404 });
 const http = serve(contract, handlers, {
   resources,

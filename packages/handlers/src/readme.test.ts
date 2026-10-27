@@ -36,7 +36,8 @@ const money = z.object({ amount: z.int(), currency: z.string() });
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
-  message: 'Unauthenticated',
+  message: 'The API key is missing or unknown',
+  headers: z.object({ 'www-authenticate': z.string() }),
 });
 
 const forbidden = defineRejection({ code: 'FORBIDDEN', status: 403, message: 'Forbidden' });
@@ -142,7 +143,9 @@ const apiKeyHandler = handle(
   apiKey,
   async ({ headers }, _call, { resources: { callers } }: Needs<'callers'>) => {
     const caller = await callers.byKey(headers['x-api-key']);
-    if (!caller) return reject(unauthenticated);
+    if (!caller) {
+      return reject(unauthenticated, { headers: { 'www-authenticate': 'ApiKey realm="orders"' } });
+    }
     return admit({ callerId: caller.id });
   },
 );
@@ -302,6 +305,15 @@ describe('the handlers README', () => {
     const admission = await apiKeyHandler({ headers: {} }, {}, { resources });
 
     expect(admission).toMatchObject({ kind: 'rejection', rejection: unauthenticated });
+  });
+
+  test('the GuardHandler example answers unauthenticated with its www-authenticate header', async () => {
+    const admission = await apiKeyHandler({ headers: {} }, {}, { resources });
+
+    expect(admission).toMatchObject({
+      kind: 'rejection',
+      headers: { 'www-authenticate': 'ApiKey realm="orders"' },
+    });
   });
 
   test('the permission example reads the Context of the Guards it lists and its Qualifier', async () => {
