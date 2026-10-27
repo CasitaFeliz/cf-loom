@@ -22,10 +22,10 @@ export type GeneratedFile = {
   readonly written: 'always' | 'once';
 };
 
-/** The files written, by path, or the file a write stopped at, in one line. */
+/** The files written, by path, or the file a write stopped at, in one line, with the files written before it. */
 export type Written =
   | { readonly kind: 'written'; readonly paths: readonly string[] }
-  | { readonly kind: 'failed'; readonly message: string };
+  | { readonly kind: 'failed'; readonly message: string; readonly paths: readonly string[] };
 
 /** What became of one file: written, kept since its Handler exists, or why it failed. */
 type FileWrite =
@@ -43,7 +43,8 @@ export function writeFiles(directory: string, files: readonly GeneratedFile[]): 
   for (const file of files) {
     const written = writeFile(directory, file);
     if (written.kind === 'failed') {
-      return { kind: 'failed', message: `${file.path} cannot be written: ${written.reason}` };
+      const message = `${file.path} cannot be written: ${written.reason}`;
+      return { kind: 'failed', message, paths };
     }
     if (written.kind === 'written') {
       paths.push(file.path);

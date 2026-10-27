@@ -1,10 +1,11 @@
 import { canonicalTextOf } from '@cf-loom/contract/internal';
 import { contractPackageFilesOf } from '../contract-package/index.ts';
 import { publishedNameOf } from '../loading/index.ts';
-import { builtOf, type Run, runningGeneratorOf } from '../project/index.ts';
+import { builtOf, runningGeneratorOf } from '../project/index.ts';
 import { writeContractPackageTo } from '../writing/index.ts';
 import { committedStopOf, done, type Exit, failureExitOf, toolingError } from './exit.ts';
 import { publishedRangesOf } from './peers.ts';
+import type { Run } from './run.ts';
 
 /** Where `package` writes when no `--out` is given, next to package.json, in the folder that holds only cf-loom's output. */
 export const defaultPackageFolder = '.cf-loom/contract-package';
@@ -19,7 +20,7 @@ export const localVersion = '0.0.0';
  * Package is its own source and has none.
  */
 export async function packageCommand(run: Run, out: string): Promise<Exit> {
-  const built = await builtOf(run);
+  const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
     return failureExitOf(built);
   }

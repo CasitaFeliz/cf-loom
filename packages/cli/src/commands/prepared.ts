@@ -1,9 +1,10 @@
 import { originPackagesOf, type PeerRanges } from '@cf-loom/contract/internal';
-import type { BuiltProject, Run } from '../project/index.ts';
+import type { BuiltProject } from '../project/index.ts';
 import { type UsedVersions, unlistedVersionLinesOf } from '../registry/index.ts';
 import { type Comparison, committedBuiltOf, comparisonOf } from './comparison.ts';
 import { type Stopped, toolingError } from './exit.ts';
 import { publishedRangesOf } from './peers.ts';
+import type { Run } from './run.ts';
 
 /**
  * What `check` and `publish` go on with once the Snapshot is compared: the comparison, the peer

@@ -1,8 +1,8 @@
 import { asyncApiDocumentOf } from '../asyncapi/index.ts';
-import type { Run } from '../project/index.ts';
 import { committedServiceOf, writtenDocumentExitOf } from './document.ts';
 import type { Exit } from './exit.ts';
 import { localVersion } from './package.ts';
+import type { Run } from './run.ts';
 
 /**
  * Prints the AsyncAPI document of the Events a Service publishes from the committed Snapshot, which

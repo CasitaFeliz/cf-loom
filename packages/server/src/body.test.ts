@@ -255,6 +255,22 @@ describe('serve: maxBodyBytes', () => {
     );
   });
 
+  test.each([
+    { label: '{}', given: {}, named: 'an object' },
+    { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
+    { label: '[1]', given: [1], named: 'a list' },
+    { label: '1n', given: 1n, named: '1' },
+  ])(
+    'serve refuses a maxBodyBytes of $label at startup, naming it as a written value',
+    ({ given, named }) => {
+      const starting = () => serve(contract, handlers, { maxBodyBytes: given as number });
+
+      expect(starting).toThrow(
+        `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${named}`,
+      );
+    },
+  );
+
   test('a maxBodyBytes of unlimited reads a body of 2 MB', async () => {
     const unlimited = serve(contract, handlers, { maxBodyBytes: 'unlimited' });
 

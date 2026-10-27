@@ -94,18 +94,22 @@ function cfLoomInRemovedFolder(...args: string[]) {
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
 }
 
-/** Runs the CLI with a working directory that throws `message`, so the command ends as a throw of cf-loom does. */
-function cfLoomThrowing(message: string, ...args: string[]) {
-  const project = aProject({
-    'throwing-cwd.mjs': `process.cwd = () => { throw new Error(${JSON.stringify(message)}); };\n`,
-  });
-  const preload = pathToFileURL(join(project, 'throwing-cwd.mjs')).href;
+/** Runs the CLI in a project with a module preloaded, so a call it replaces ends as a throw of cf-loom does. */
+function cfLoomPreloading(project: string, preload: string, ...args: string[]) {
+  write(project, { 'preload.mjs': preload });
+  const url = pathToFileURL(join(project, 'preload.mjs')).href;
   const env = Object.fromEntries([
     ...Object.entries(process.env),
-    ['NODE_OPTIONS', `--import ${preload}`],
+    ['NODE_OPTIONS', `--import ${url}`],
   ]);
   const ran = spawnSync(process.execPath, [bin, ...args], { cwd: project, env, encoding: 'utf8' });
   return { status: ran.status, stdout: ran.stdout, stderr: ran.stderr };
+}
+
+/** Runs the CLI with a working directory that throws `message`, so the command ends as a throw of cf-loom does. */
+function cfLoomThrowing(message: string, ...args: string[]) {
+  const preload = `process.cwd = () => { throw new Error(${JSON.stringify(message)}); };\n`;
+  return cfLoomPreloading(aProject(), preload, ...args);
 }
 
 /** The one line `--json` prints on stdout for a command that stopped with a message. */
@@ -4886,9 +4890,53 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
 
     expect(ran.status).toBe(3);
     expect(ran.stdout).not.toContain('Would publish');
+    expect(ran.stdout).not.toContain('No Change needs a Breaking Change Approval');
     expect(ran.stderr).toBe(
       `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand\n`,
     );
+  });
+
+  test('check --json over a version that would not be above the Baseline keeps the Changes beside the error', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const { ran } = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const line = `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand`;
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(`${line}\n`);
+    expect(documentOf(ran)).toMatchObject({
+      format: 1,
+      status: 3,
+      errors: [line],
+      package: ordersPackage,
+      baseline: '1.1.0-rc.1',
+      stable: '1.0.0',
+      changes: [expect.objectContaining({ class: 'additive', verdict: 'allowed' })],
+      bump: 'minor',
+      version: null,
+      tag: null,
+    });
+  });
+
+  test('a version that would not be above the Baseline still says that a Change needs a Breaking Change Approval, in lines and in --json', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField, ['2.0.0-rc.1']);
+
+    const lines = await checkedAgainst(lab, changed, '--prerelease');
+    const json = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const notAbove = `${ordersPackage}@2.0.0-0 would not be above the Baseline 2.0.0-rc.1: publish a version above it by hand`;
+    const errors = [notAbove, approvalNeededLine];
+    expect(lines.ran).toMatchObject({ status: 3, stderr: `${errors.join('\n')}\n` });
+    expect(json.ran.status).toBe(3);
+    expect(documentOf(json.ran)).toMatchObject({
+      status: 3,
+      errors,
+      changes: [expect.objectContaining({ verdict: 'approval-needed' })],
+    });
   });
 });
 
@@ -4950,7 +4998,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
-  test('versions the registry does not list exit 3 although a Change is refused', async ({
+  test('versions the registry does not list exit 3 although a Change is refused, and stderr still says the Change is refused', async ({
     lab,
   }) => {
     const before = aSubscribingRoot();
@@ -4960,7 +5008,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     const { ran, registry } = await publishedAgainst(lab, changed);
 
     expect(ran.stdout).toContain('retired-before-deprecated: Breaking, refused');
-    expect(ran).toMatchObject({ status: 3, stderr: `${paymentsUnlisted('5.1.0')}\n` });
+    expect(ran).toMatchObject({
+      status: 3,
+      stderr: `${paymentsUnlisted('5.1.0')}\n${refusedLine}\n`,
+    });
     expect(putRequestsOf(registry)).toEqual([]);
   });
 
@@ -6363,17 +6414,91 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
     expect(putRequestsOf(published.registry)).toEqual([]);
   });
 
-  test('a tooling failure is the errors document, with its line on stderr', async ({ lab }) => {
+  test('a version that would not be above the Baseline is status 3 with the Changes check --json prints', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, addedSuccessField, ['1.1.0-rc.1']);
+
+    const published = await publishedAgainst(lab, changed, '--json', '--prerelease');
+    const checked = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const line = `${ordersPackage}@1.1.0-0 would not be above the Baseline 1.1.0-rc.1: publish a version above it by hand`;
+    expect(published.ran).toMatchObject({ status: 3, stderr: `${line}\n` });
+    expect(documentOf(published.ran)).toMatchObject({
+      status: 3,
+      errors: [line],
+      version: null,
+      tag: null,
+      published: false,
+    });
+    const { changes } = documentOf(published.ran);
+    const { changes: checkedChanges } = documentOf(checked.ran);
+    expect(changes).toEqual(checkedChanges);
+    expect(putRequestsOf(published.registry)).toEqual([]);
+  });
+
+  test('a version the registry does not list is status 3 with the Changes check --json prints', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, {
+      before: aSubscribingRoot(),
+      after: aSubscribingRoot({ body: 'z.object({ ok: z.boolean(), total: z.number() })' }),
+    });
+
+    const published = await publishedAgainst(lab, changed, '--json');
+    const checked = await checkedAgainst(lab, changed, '--json');
+
+    expect(published.ran.status).toBe(3);
+    expect(documentOf(published.ran)).toMatchObject({
+      status: 3,
+      errors: [paymentsUnlisted('5.1.0')],
+      published: false,
+    });
+    const { changes } = documentOf(published.ran);
+    const { changes: checkedChanges } = documentOf(checked.ran);
+    expect(changes).toEqual(checkedChanges);
+    expect(changes).toHaveLength(1);
+    expect(putRequestsOf(published.registry)).toEqual([]);
+  });
+
+  test('a version the registry does not list and a refused Change are both errors, beside the refused Change', async ({
+    lab,
+  }) => {
+    const before = aSubscribingRoot();
+    const after = aSubscribingRoot({ lifecycle: 'retired' });
+    const changed = await aChangedProject(lab, { before, after });
+
+    const { ran } = await publishedAgainst(lab, changed, '--json');
+
+    expect(ran.status).toBe(3);
+    expect(documentOf(ran)).toMatchObject({
+      status: 3,
+      errors: [paymentsUnlisted('5.1.0'), refusedLine],
+      changes: [expect.objectContaining({ verdict: 'refused' })],
+      version: null,
+      published: false,
+    });
+  });
+
+  test('a tooling failure while it puts keeps the Changes and the version beside the error', async ({
+    lab,
+  }) => {
     const project = await aGeneratedProject(lab, aRoot());
     withTsc(project, "console.error('tsc crashed'); process.exit(1);");
 
     const { ran } = await publishedAgainst(lab, { project, served: {} }, '--json');
 
     const line = `tsc on the Contract Package of ${ordersPackage}@1.0.0 failed: tsc crashed`;
-    expect(ran).toEqual({
+    expect(ran.status).toBe(3);
+    expect(ran.stderr).toBe(`${line}\n`);
+    expect(documentOf(ran)).toMatchObject({
       status: 3,
-      stdout: `${JSON.stringify({ format: 1, status: 3, errors: [line] })}\n`,
-      stderr: `${line}\n`,
+      errors: [line],
+      package: ordersPackage,
+      changes: [],
+      version: '1.0.0',
+      tag: 'latest',
+      published: false,
     });
   });
 
@@ -6505,8 +6630,40 @@ describe('cf-loom generate --json', () => {
     });
   });
 
+  test('keeps the files it wrote beside the error when cf-loom itself throws after writing', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aRoot(),
+      'src/old.generated.ts': '// Generated by cf-loom generate. Do not edit.\nexport {};\n',
+    });
+    const failingUnlink = [
+      "import fs from 'node:fs';",
+      "import { syncBuiltinESMExports } from 'node:module';",
+      'fs.unlinkSync = () => {',
+      "  const failure = new Error('unlink');",
+      "  Object.defineProperty(failure, 'message', { get() { throw new Error('crashed'); } });",
+      '  throw failure;',
+      '};',
+      'syncBuiltinESMExports();',
+      '',
+    ].join('\n');
+
+    const ran = cfLoomPreloading(project, failingUnlink, 'generate', '--json');
+
+    const [line] = ran.stderr.split('\n');
+    expect(ran.status).toBe(3);
+    expect(line).toMatch(/^cf-loom failed: .*crashed$/);
+    expect(documentOf(ran)).toEqual({
+      format: 1,
+      status: 3,
+      errors: [line],
+      moved: [],
+      wrote: expect.arrayContaining(['contract.snapshot.json']),
+    });
+  });
+
   test.skipIf(isRoot)(
-    'keeps the Handlers it moved beside the error when a write then fails',
+    'keeps the Handlers it moved and the files it wrote beside the error when a write then fails',
     () => {
       const project = aProjectWhoseHandlerMoves();
       chmodSync(project, 0o555);
@@ -6525,6 +6682,7 @@ describe('cf-loom generate --json', () => {
         status: 3,
         errors: [line],
         moved: [{ from: movedFrom, to: movedTo }],
+        wrote: [],
       });
     },
   );
