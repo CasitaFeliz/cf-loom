@@ -2798,7 +2798,6 @@ describe('cf-loom verify', () => {
 
 type Files = Readonly<Record<string, string>>;
 
-const checkTimeout = 60_000;
 const checkedAgainstOrders = `Checked against ${ordersPackage}@1.0.0`;
 const staleSnapshot = 'contract.snapshot.json is missing or out of date: run cf-loom generate';
 const nothingToPublish = (packageVersion: string) =>
@@ -3103,7 +3102,7 @@ const changedInEveryWay = {
   }),
 };
 
-describe.concurrent('cf-loom check', { timeout: checkTimeout }, () => {
+describe.concurrent('cf-loom check', () => {
   test('check fails when contract.snapshot.json is missing, before it reads the registry', async ({
     lab,
   }) => {
@@ -4077,9 +4076,7 @@ function printedPathOf(line: string): string | null {
   return / at (\S+?)(?::| |$)/.exec(line)?.[1] ?? null;
 }
 
-describe.concurrent('cf-loom check, a Change in the author’s terms', {
-  timeout: checkTimeout,
-}, () => {
+describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
   test('a difference in a variant inside nested arrays is at a path in the author’s terms', async ({
     lab,
   }) => {
@@ -4572,9 +4569,7 @@ function publishedWithOtherPeer(project: string, range: string): ServedVersion {
   return { ...baseline, manifest: { ...baseline.manifest, peerDependencies } };
 }
 
-describe.concurrent('cf-loom check, the version publish would take', {
-  timeout: checkTimeout,
-}, () => {
+describe.concurrent('cf-loom check, the version publish would take', () => {
   const wouldPublish = (version: string, why: string) =>
     `Would publish ${ordersPackage}@${version} (${why})`;
   const neutralLine = 'endpoints.GET /ping (ping) description-changed: Neutral';
