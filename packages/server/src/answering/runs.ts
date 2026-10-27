@@ -18,7 +18,7 @@ import type { AnsweredRequest, FaultedBy, ServedFault } from './hooks.ts';
 
 /**
  * How one request was answered, with the code sent: a Rejection's as its Root resolves it, or a
- * reserved Fault's; only a Fault may be the Service's, for `onServiceFault`.
+ * Reserved code; only a Fault may be the Service's, for `onServiceFault`.
  */
 export type Answered =
   | { readonly kind: 'success'; readonly response: Response }
@@ -46,7 +46,7 @@ export function answeredOfFailedRun(
   standards: StandardRejections,
 ): Answered {
   switch (run.kind) {
-    case 'invalid-input':
+    case 'invalid-call':
       return answeredOfInvalidInput(run.issues, faultedBy, standards);
     case 'invalid-outcome':
       return invalidOutcomeOf(run.issues, faultedBy);
@@ -124,7 +124,7 @@ function invalidOutcomeOf(issues: readonly Issue[], faultedBy: FaultedBy): Answe
   return { ...reservedAnsweredOf('INVALID_OUTCOME'), servedFault };
 }
 
-/** A reserved Fault answered: its response, by default the one its code alone gives, and its code. */
+/** A Fault with a Reserved code answered: its response, by default the one its code alone gives, and its code. */
 export function reservedAnsweredOf(
   code: ReservedCode,
   response: Response = reservedResponseOf(code),

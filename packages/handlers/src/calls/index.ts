@@ -1,17 +1,17 @@
 export type { DirectMeta } from './direct-meta.ts';
 export { defaultedMetaOf, firstAttempt } from './direct-meta.ts';
-export type { HandledElement, MessageElement } from './elements.ts';
-export { isMessageElement } from './elements.ts';
 export {
   answerOf,
-  elementNameOf,
   faultLineOf,
   faultLogOf,
-  InvalidInputError,
+  InvalidCallError,
   InvalidOutcomeError,
   logOf,
   messageAnswerOf,
+  nameOf,
 } from './errors.ts';
+export type { Handled, MessageHandled } from './handled.ts';
+export { isMessageHandled } from './handled.ts';
 export type { HandlerFailure, HandlerFaultBase, HookName } from './hooks.ts';
 export {
   failureCauseOf,

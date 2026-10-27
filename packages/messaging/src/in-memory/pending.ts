@@ -1,23 +1,23 @@
-import type { CoreConsumer } from '../consuming/index.ts';
+import type { CoreDurableConsumer } from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { jsonBodyOf } from './bodies.ts';
 import type { PendingMessage } from './types.ts';
 
-/** The Messages left unacknowledged, by consumer and broker message id, as each consumer last received them, in the order each first failed. */
+/** The Messages left unacknowledged, by Durable consumer and broker message id, as each Durable consumer last received them, in the order each first failed. */
 export class PendingList {
   readonly #attempts = new Map<string, Attempt>();
 
-  /** Lists a Message, or replaces the one of the same consumer and id where it stands. */
+  /** Lists a Message, or replaces the one of the same Durable consumer and id where it stands. */
   put(attempt: Attempt): void {
-    this.#attempts.set(keyOf(attempt.consumer, attempt.delivery.messageId), attempt);
+    this.#attempts.set(keyOf(attempt.durableConsumer, attempt.delivery.messageId), attempt);
   }
 
-  leave(consumer: CoreConsumer, messageId: string): void {
-    this.#attempts.delete(keyOf(consumer, messageId));
+  leave(durableConsumer: CoreDurableConsumer, messageId: string): void {
+    this.#attempts.delete(keyOf(durableConsumer, messageId));
   }
 
-  attemptFor(consumer: CoreConsumer, messageId: string): Attempt | undefined {
-    return this.#attempts.get(keyOf(consumer, messageId));
+  attemptFor(durableConsumer: CoreDurableConsumer, messageId: string): Attempt | undefined {
+    return this.#attempts.get(keyOf(durableConsumer, messageId));
   }
 
   attempts(): readonly Attempt[] {
@@ -29,13 +29,13 @@ export class PendingList {
   }
 }
 
-function keyOf(consumer: CoreConsumer, messageId: string): string {
-  return JSON.stringify([consumer.durable, messageId]);
+function keyOf(durableConsumer: CoreDurableConsumer, messageId: string): string {
+  return JSON.stringify([durableConsumer.durable, messageId]);
 }
 
-function pendingMessageOf({ consumer, delivery }: Attempt): PendingMessage {
+function pendingMessageOf({ durableConsumer, delivery }: Attempt): PendingMessage {
   const { messageId, factId, deliveryCount, headers, body } = delivery;
-  const { element, identity, subject } = consumer;
+  const { declaration, name, subject } = durableConsumer;
   const wire = jsonBodyOf(body);
-  return { element, identity, subject, messageId, factId, deliveryCount, headers, body: wire };
+  return { declaration, name, subject, messageId, factId, deliveryCount, headers, body: wire };
 }

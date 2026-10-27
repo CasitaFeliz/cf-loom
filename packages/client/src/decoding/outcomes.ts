@@ -9,7 +9,7 @@ import type {
 import {
   headerValuesOf,
   type ReceivedShapeOf,
-  reservedFaults,
+  reservedCodeFaults,
   type ShapeFields,
 } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
@@ -139,7 +139,7 @@ export type BrokenOutcome = {
 
 /** The client's own `INVALID_OUTCOME`: never retryable, with the Issues, never the value. */
 export function invalidOutcomeOf({ status, committed, issues }: BrokenOutcome): ReceivedFault {
-  const { message } = reservedFaults.INVALID_OUTCOME;
+  const { message } = reservedCodeFaults.INVALID_OUTCOME;
   return {
     kind: 'fault',
     source: 'invalid-outcome',

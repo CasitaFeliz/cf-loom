@@ -13,7 +13,7 @@ import {
   type Fault,
   fault,
   handle,
-  InvalidInputError,
+  InvalidCallError,
   type MessageFault,
   readersOf,
   success,
@@ -64,10 +64,10 @@ const notifyOnSettled = defineSubscription({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: readBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: readBody } },
   subscriptions: {
-    notifyOnPaid: { element: notifyOnPaid, reader: readBody },
-    notifyOnSettled: { element: notifyOnSettled, reader: notifyOnSettled.event.body },
+    notifyOnPaid: { declaration: notifyOnPaid, reader: readBody },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: notifyOnSettled.event.body },
   },
 });
 
@@ -89,7 +89,7 @@ const nestV1 = defineCommand({
 });
 
 const nesting = readersOf({
-  commands: { nestV1: { element: nestV1, reader: tree } },
+  commands: { nestV1: { declaration: nestV1, reader: tree } },
   subscriptions: {},
 }).commands.nestV1;
 
@@ -110,7 +110,7 @@ async function issuesOf(call: Promise<unknown>): Promise<unknown> {
     () => undefined,
     (e: unknown) => e,
   );
-  return error instanceof InvalidInputError ? error.issues : error;
+  return error instanceof InvalidCallError ? error.issues : error;
 }
 
 describe("a Message Handler's Resources", () => {
@@ -168,7 +168,7 @@ describe("a Message Handler's body", () => {
     expect(received[0]).toEqual(written);
   });
 
-  test('a bare value an Open Enum does not declare throws InvalidInputError, as its reader refuses it', async () => {
+  test('a bare value an Open Enum does not declare throws InvalidCallError, as its reader refuses it', async () => {
     const { chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: ORDER_ID, status: 'refunded' } as never, meta);
@@ -176,7 +176,7 @@ describe("a Message Handler's body", () => {
     await expect(issuesOf(call)).resolves.toMatchObject([{ part: 'body', path: ['status'] }]);
   });
 
-  test('an Unknown case holding a declared value throws InvalidInputError', async () => {
+  test('an Unknown case holding a declared value throws InvalidCallError', async () => {
     const { chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: ORDER_ID, status: { unknown: 'paid' } }, meta);
@@ -184,7 +184,7 @@ describe("a Message Handler's body", () => {
     await expect(issuesOf(call)).resolves.toMatchObject([{ part: 'body', path: ['status'] }]);
   });
 
-  test('a body that breaks a constraint throws InvalidInputError at part body, one Issue per failure', async () => {
+  test('a body that breaks a constraint throws InvalidCallError at part body, one Issue per failure', async () => {
     const { received, chargeCardHandler } = receiving();
 
     const call = chargeCardHandler({ orderId: 'nope', status: 7 } as never, meta);
@@ -236,7 +236,7 @@ describe("a Message Handler's body", () => {
     expect(received).toEqual([{ orderId: ORDER_ID, status: { unknown: 'refunded' } }]);
   });
 
-  test('a body nested past the stack throws InvalidInputError at body, and the implementation never runs', async () => {
+  test('a body nested past the stack throws InvalidCallError at body, and the implementation never runs', async () => {
     let deep: object = {};
     for (let depth = 0; depth < 5000; depth += 1) {
       deep = { next: deep };
@@ -396,7 +396,7 @@ describe("what a Message Handler's direct call answers", () => {
   test('a Message Handler may return a retryable Fault, but not one with retryAfter', () => {
     const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
     const retryable = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
-    // @ts-expect-error the durable consumer's configuration decides when the Message comes again
+    // @ts-expect-error the Durable consumer's configuration decides when the Message comes again
     const timed = handle(chargeCard, () => later);
 
     expect([typeof retryable, typeof timed]).toEqual(['function', 'function']);
@@ -499,11 +499,11 @@ describe('a Message Handler stub', () => {
     );
   });
 
-  test('a stub given a body that breaks the Contract throws InvalidInputError first', async () => {
+  test('a stub given a body that breaks the Contract throws InvalidCallError first', async () => {
     const stub = handle.stub(chargeCard);
 
     const call = stub({ orderId: 'nope', status: 'paid' }, meta);
 
-    await expect(call).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(call).rejects.toBeInstanceOf(InvalidCallError);
   });
 });

@@ -16,8 +16,8 @@ export type BrokerPlanStream = {
   readonly subjects: readonly string[];
 };
 
-/** A durable consumer of the plan: the Service it belongs to, the stream it reads and the subject it filters on. */
-export type BrokerPlanConsumer = {
+/** A Durable consumer of the plan: the Service it belongs to, the stream it reads and the subject it filters on. */
+export type BrokerPlanDurableConsumer = {
   readonly service: string;
   readonly stream: string;
   readonly subject: string;
@@ -27,7 +27,7 @@ export type BrokerPlanConsumer = {
 export type BrokerPlan = {
   readonly prefix: string | null;
   readonly streams: Readonly<Record<string, BrokerPlanStream>>;
-  readonly consumers: Readonly<Record<string, BrokerPlanConsumer>>;
+  readonly durableConsumers: Readonly<Record<string, BrokerPlanDurableConsumer>>;
 };
 
 type LiveMessage<Kind extends 'event' | 'command'> = {
@@ -36,21 +36,21 @@ type LiveMessage<Kind extends 'event' | 'command'> = {
   readonly version: number;
 };
 
-type NamedConsumer = readonly [name: string, consumer: BrokerPlanConsumer];
+type NamedDurableConsumer = readonly [name: string, durableConsumer: BrokerPlanDurableConsumer];
 
 /**
  * The broker plan of a Service's Snapshot under a prefix `isBrokerPrefix` accepts: its stream when a
- * Message Version of its own is not Retired, and the durable consumer of each Subscription and live Command Version.
+ * Message Version of its own is not Retired, and the Durable consumer of each Subscription and live Command Version.
  */
 export function brokerPlanOf(snapshot: ServiceSnapshot, prefix: string | null): BrokerPlan {
-  const consumers = [
-    ...commandConsumersOf(snapshot, prefix),
-    ...subscriptionConsumersOf(snapshot, prefix),
+  const durableConsumers = [
+    ...commandDurableConsumersOf(snapshot, prefix),
+    ...subscriptionDurableConsumersOf(snapshot, prefix),
   ].toSorted(([left], [right]) => byCodePoint(left, right));
   return {
     prefix,
     streams: streamsOf(snapshot, prefix),
-    consumers: Object.fromEntries(consumers),
+    durableConsumers: Object.fromEntries(durableConsumers),
   };
 }
 
@@ -83,7 +83,10 @@ function liveMessagesOf<Kind extends 'event' | 'command'>(
     .map(([identity]) => ({ kind, ...nameAndVersionOf(identity) }));
 }
 
-function commandConsumersOf(snapshot: ServiceSnapshot, prefix: string | null): NamedConsumer[] {
+function commandDurableConsumersOf(
+  snapshot: ServiceSnapshot,
+  prefix: string | null,
+): NamedDurableConsumer[] {
   const service = snapshot.name;
   const stream = prefixedNameOf(prefix, streamNameOf(service));
   return liveMessagesOf('command', snapshot.commands).map((command) => [
@@ -92,10 +95,10 @@ function commandConsumersOf(snapshot: ServiceSnapshot, prefix: string | null): N
   ]);
 }
 
-function subscriptionConsumersOf(
+function subscriptionDurableConsumersOf(
   snapshot: ServiceSnapshot,
   prefix: string | null,
-): NamedConsumer[] {
+): NamedDurableConsumer[] {
   const service = snapshot.name;
   return Object.entries(snapshot.subscriptions).map(([name, { event }]) => {
     const reference = readEventReference(event);

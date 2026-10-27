@@ -42,7 +42,7 @@ export {
   envelopeOf,
   internalError,
   receivedEnvelopeOf,
-  reservedFaults,
+  reservedCodeFaults,
   travelingFaultOf,
 } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';

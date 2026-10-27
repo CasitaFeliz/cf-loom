@@ -171,8 +171,8 @@ describe('serve: a Success', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        element: getOrder,
-        identity: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         issues: [
           {
             part: 'success.headers',
@@ -238,7 +238,7 @@ describe('a direct call and serve agree', () => {
 
       expect(response.status).toBe(500);
       expect(faults).toEqual([
-        { kind: 'invalid-outcome', element: getOrder, identity: 'getOrder', issues: thrown },
+        { kind: 'invalid-outcome', declaration: getOrder, name: 'getOrder', issues: thrown },
       ]);
     },
   );
@@ -391,8 +391,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'returned',
-        element: getOrder,
-        identity: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         fault: { kind: 'fault', committed: 'no', retryable: true, message: 'Try again', cause },
       },
     ]);
@@ -440,7 +440,7 @@ describe('serve: a Fault', () => {
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
     expect(faults).toMatchObject([
-      { kind: 'thrown', element: getOrder, identity: 'getOrder', cause: broken },
+      { kind: 'thrown', declaration: getOrder, name: 'getOrder', cause: broken },
     ]);
   });
 
@@ -472,8 +472,8 @@ describe('serve: a Fault', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        element: getOrder,
-        identity: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         issues: [
           { part: 'success.body', path: ['total'], code: 'too_small', message: expect.any(String) },
         ],

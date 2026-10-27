@@ -53,10 +53,10 @@ export function handlerMapTextOf(
     .sort((left, right) => byCodePoint(left.specifier, right.specifier))
     .map(({ line }) => line);
   const handled = mapped.map(({ handled }) => handled);
-  const endpoints = handled.filter((element) => element.kind === 'endpoint');
-  const guards = handled.filter((element) => element.kind === 'guard');
-  const commands = handled.filter((element) => element.kind === 'command');
-  const subscriptions = handled.filter((element) => element.kind === 'subscription');
+  const endpoints = handled.filter((declaration) => declaration.kind === 'endpoint');
+  const guards = handled.filter((declaration) => declaration.kind === 'guard');
+  const commands = handled.filter((declaration) => declaration.kind === 'command');
+  const subscriptions = handled.filter((declaration) => declaration.kind === 'subscription');
   const body = [
     'export default {',
     ...mapLinesOf('endpoints', endpoints),
@@ -113,7 +113,7 @@ function mapLinesOf(key: string, handled: readonly Handled[]): readonly string[]
     return [`  ${key}: {},`];
   }
   const entries = handled.map(
-    (element) => `    ${keyOf(nameInCodeOf(element))}: ${handlerLocalOf(element)},`,
+    (declaration) => `    ${keyOf(nameInCodeOf(declaration))}: ${handlerLocalOf(declaration)},`,
   );
   return [`  ${key}: {`, ...entries, '  },'];
 }

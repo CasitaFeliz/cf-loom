@@ -25,7 +25,7 @@ export type Handled = DeclarationHandled | PlacedMessage;
 type Wanted = (element: { readonly lifecycle?: string | undefined }) => boolean;
 
 /**
- * Every Element the Handler map holds a Handler for, kind by kind, each kind in its map's order:
+ * Every declaration the Handler map holds a Handler for, kind by kind, each kind in its map's order:
  * the Endpoints and Commands' Message Versions that are not Retired, every Guard and every
  * Subscription.
  */

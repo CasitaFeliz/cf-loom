@@ -19,9 +19,9 @@ export type PublishedVersion = { readonly message: Event; readonly subject: stri
 /** The Active version of one of the Service's own Commands and the subject it is sent on. */
 export type SentVersion = { readonly message: Command; readonly subject: string };
 
-/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its durable consumer. */
+/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its Durable consumer. */
 export type Consumed = {
-  readonly element: Subscription | Command;
+  readonly declaration: Subscription | Command;
   readonly at: { readonly map: 'commands' | 'subscriptions'; readonly key: string };
   readonly subject: string;
   readonly stream: string;
@@ -92,7 +92,7 @@ function byVersion(left: Event, right: Event): number {
 
 function consumedCommandOf(service: string, command: Command): Consumed {
   return {
-    element: command,
+    declaration: command,
     at: { map: 'commands', key: codeNameOf(command) },
     subject: subjectOf(service, command),
     stream: streamNameOf(service),
@@ -107,7 +107,7 @@ function consumedSubscriptionOf(contract: ServiceContract, subscription: Subscri
     throw new Error(message);
   }
   return {
-    element: subscription,
+    declaration: subscription,
     at: { map: 'subscriptions', key: subscription.name },
     subject: subjectOf(provider, subscription.event),
     stream: streamNameOf(provider),

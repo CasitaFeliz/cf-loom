@@ -2,7 +2,7 @@ import { byCodePoint } from '@cf-loom/contract/internal';
 import type { ExportsOf, FileExport } from '../loading/index.ts';
 import type { BuiltService } from '../project/index.ts';
 import {
-  elementLabelOf,
+  handledLabelOf,
   type MessageExports,
   type MessageHandled,
   pairingNameOf,
@@ -38,7 +38,7 @@ export function messageExportsOf(
     return { kind: 'refused', lines };
   }
   const atByLabel = new Map(
-    located.filter(isExported).map(({ handled, at }) => [elementLabelOf(handled), at]),
+    located.filter(isExported).map(({ handled, at }) => [handledLabelOf(handled), at]),
   );
   return { kind: 'located', atOf: (message) => atOf(atByLabel, message) };
 }
@@ -48,13 +48,13 @@ function locatedMessageOf(
   declaration: unknown,
   exportsOf: ExportsOf,
 ): LocatedMessage {
-  const label = elementLabelOf(handled);
+  const label = handledLabelOf(handled);
   const located = exportedAtOf(label, exportsOf(declaration));
   return { ...located, handled };
 }
 
 function atOf(atByLabel: ReadonlyMap<string, FileExport>, message: MessageHandled): FileExport {
-  const label = elementLabelOf(message);
+  const label = handledLabelOf(message);
   const at = atByLabel.get(label);
   if (at === undefined) {
     throw new Error(`The Root declares no ${label}, which its Snapshot holds: a bug.`);

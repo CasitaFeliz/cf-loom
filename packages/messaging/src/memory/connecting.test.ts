@@ -47,8 +47,8 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
 
 const charge = { orderId: 'o-1' };

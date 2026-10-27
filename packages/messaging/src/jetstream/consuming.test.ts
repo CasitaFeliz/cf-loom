@@ -17,11 +17,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test,
 import { z } from 'zod';
 import { withMethods } from '../../test/connections.ts';
 import {
-  arrangeDurable,
-  arrangeDurablesOf,
-  dropDurable,
-  durableInfoOf,
-} from '../../test/durables.ts';
+  arrangeDurableConsumer,
+  arrangeDurableConsumersOf,
+  dropDurableConsumer,
+  durableConsumerInfoOf,
+} from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
@@ -74,8 +74,8 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
 
 let server: NatsServer;
@@ -110,7 +110,7 @@ function aConnect(replacing?: Replacing, servers: string = server.url, inboxPref
   return { connect: connectService, opened };
 }
 
-/** Orders’ names under a prefix: its stream, its subjects and its two durable consumers. */
+/** Orders’ names under a prefix: its stream, its subjects and its two Durable consumers. */
 function anOrders(prefix: string) {
   return {
     stream: `${prefix}_orders-service`,
@@ -188,19 +188,19 @@ function unlessHandedBack(error: unknown): void {
   }
 }
 
-/** Orders’ streams and durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
+/** Orders’ streams and Durable consumers on the test server, as the organization’s tooling would arrange them, with `settings` over theirs. */
 async function arrangeOrders(
   prefix: string,
   settings: Partial<ConsumerConfig> = {},
 ): Promise<void> {
   await arrangePlanOf(server.url, contract, prefix);
-  await arrangeDurablesOf(server.url, planOf(contract, prefix), settings);
+  await arrangeDurableConsumersOf(server.url, planOf(contract, prefix), settings);
 }
 
-/** The plan with only the durable consumers named kept, to arrange some of Orders’ durable consumers and not others. */
-function onlyDurablesOf(plan: BrokerPlan, ...names: readonly string[]): BrokerPlan {
-  const kept = Object.entries(plan.consumers).filter(([name]) => names.includes(name));
-  return { ...plan, consumers: Object.fromEntries(kept) };
+/** The plan with only the Durable consumers named kept, to arrange some of Orders’ Durable consumers and not others. */
+function onlyDurableConsumersOf(plan: BrokerPlan, ...names: readonly string[]): BrokerPlan {
+  const kept = Object.entries(plan.durableConsumers).filter(([name]) => names.includes(name));
+  return { ...plan, durableConsumers: Object.fromEntries(kept) };
 }
 
 /** Waits for what a test expects not to happen: the window in which it would have. */
@@ -247,11 +247,11 @@ async function terminationsOf(): Promise<string[]> {
   return reasons;
 }
 
-/** Waits for the durable consumer to hold nothing pending and nothing awaiting acknowledgement after `delivered` deliveries. */
+/** Waits for the Durable consumer to hold nothing pending and nothing awaiting acknowledgement after `delivered` deliveries. */
 async function waitUntilSettled(stream: string, durable: string, delivered: number): Promise<void> {
   await vi.waitFor(
     async () => {
-      const info = await durableInfoOf(server.url, stream, durable);
+      const info = await durableConsumerInfoOf(server.url, stream, durable);
       expect(info).toMatchObject({
         num_pending: 0,
         num_ack_pending: 0,
@@ -264,10 +264,10 @@ async function waitUntilSettled(stream: string, durable: string, delivered: numb
 
 const oneSecond = 1_000_000_000;
 
-/** A request for a Message a durable consumer is pulled with: its subject, how long it waits in nanoseconds, and when it was sent. */
+/** A request for a Message a Durable consumer is pulled with: its subject, how long it waits in nanoseconds, and when it was sent. */
 type RecordedPull = { readonly subject: string; readonly expires: number; readonly at: number };
 
-/** The methods of a NATS connection that record each request for a Message a durable consumer is pulled with. */
+/** The methods of a NATS connection that record each request for a Message a Durable consumer is pulled with. */
 function recordingPulls(pulls: RecordedPull[]): Replacing {
   return (connection) => ({
     publish: (subject, data, options) => {
@@ -285,7 +285,7 @@ function activeTimers(): number {
   return process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length;
 }
 
-/** A consuming messaging whose durable consumers were deleted, with its pulls failing and each loop waiting out its retry pause. */
+/** A consuming messaging whose Durable consumers were deleted, with its pulls failing and each loop waiting out its retry pause. */
 async function aConsumingWithFailingPulls(
   prefix: string,
   onBrokerTrouble?: (trouble: BrokerTrouble) => void,
@@ -298,8 +298,8 @@ async function aConsumingWithFailingPulls(
     ...(onBrokerTrouble === undefined ? {} : { onBrokerTrouble }),
   });
   await orders.consume(handlersOf([]), {});
-  await dropDurable(server.url, names.stream, names.notifyDurable);
-  await dropDurable(server.url, names.stream, names.chargeDurable);
+  await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
+  await dropDurableConsumer(server.url, names.stream, names.chargeDurable);
   const pulledBefore = pulls.length;
   await vi.waitFor(() => expect(pulls.length).toBeGreaterThanOrEqual(pulledBefore + 2), {
     timeout: 4_000,
@@ -353,10 +353,10 @@ function aGate() {
   return { opened: gate.promise, open };
 }
 
-/** Waits until the durable consumer has a pull open on the Broker, so a Message published now is delivered at once. */
+/** Waits until the Durable consumer has a pull open on the Broker, so a Message published now is delivered at once. */
 async function waitUntilPulling(stream: string, durable: string): Promise<void> {
   await vi.waitFor(async () => {
-    const info = await durableInfoOf(server.url, stream, durable);
+    const info = await durableConsumerInfoOf(server.url, stream, durable);
     expect(info?.num_waiting).toBe(1);
   });
 }
@@ -369,7 +369,7 @@ function spiesOnConsole() {
 }
 
 describe('consuming over jetstream()', () => {
-  test('consume finds the prefixed durable consumer of each Subscription and Command Version, and a Message published before or after it reaches its Handler', async () => {
+  test('consume finds the prefixed Durable consumer of each Subscription and Command Version, and a Message published before or after it reaches its Handler', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
     const received: Received[] = [];
@@ -388,19 +388,19 @@ describe('consuming over jetstream()', () => {
     );
   });
 
-  test('a Broker wrapping jetstream()’s consumers, each { ...consumer, receive }, delivers every Message to its Handler and closes, with no unhandled rejection', async () => {
+  test('a Broker wrapping jetstream()’s Durable consumers, each { ...durableConsumer, receive }, delivers every Message to its Handler and closes, with no unhandled rejection', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
     const inner = jetstream({ connect: aConnect().connect, prefix });
     const wrapped: Broker = {
-      connect: async (service) => {
-        const connection = await inner.connect(service);
+      connect: async (serviceStream) => {
+        const connection = await inner.connect(serviceStream);
         return {
           publish: (message) => connection.publish(message),
-          consume: (consumers, run) => {
-            const traced = consumers.map((consumer) => ({
-              ...consumer,
-              receive: (delivery: Delivery) => consumer.receive(delivery),
+          consume: (durableConsumers, run) => {
+            const traced = durableConsumers.map((durableConsumer) => ({
+              ...durableConsumer,
+              receive: (delivery: Delivery) => durableConsumer.receive(delivery),
             }));
             return connection.consume(traced, run);
           },
@@ -425,12 +425,12 @@ describe('consuming over jetstream()', () => {
     expect(unhandled).toEqual([]);
   });
 
-  test('consume rejects naming each durable consumer that does not exist and the stream it reads, and pulls from none', async () => {
+  test('consume rejects naming each Durable consumer that does not exist and the stream it reads, and pulls from none', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -442,15 +442,15 @@ describe('consuming over jetstream()', () => {
     const consuming = messagingOfOrders.consume(handlersOf(received), {});
 
     await expect(consuming).rejects.toThrow(
-      `The durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+      `The Durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
     );
     await aWhile();
-    const info = await durableInfoOf(server.url, orders.stream, orders.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, orders.stream, orders.notifyDurable);
     expect(received).toEqual([]);
     expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
   });
 
-  test('consume rejects naming every durable consumer that does not exist', async () => {
+  test('consume rejects naming every Durable consumer that does not exist', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
@@ -461,17 +461,17 @@ describe('consuming over jetstream()', () => {
     const error = await consuming.catch((rejected: unknown) => rejected);
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message.split('\n').sort()).toEqual([
-      `The durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
-      `The durable consumer ${orders.notifyDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+      `The Durable consumer ${orders.chargeDurable} does not exist on the stream ${orders.stream}: ${apply}`,
+      `The Durable consumer ${orders.notifyDurable} does not exist on the stream ${orders.stream}: ${apply}`,
     ]);
   });
 
-  test('consume called again once the missing durable consumer exists starts consuming', async () => {
+  test('consume called again once the missing Durable consumer exists starts consuming', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     await messagingOfOrders.publisher.publish(
@@ -481,7 +481,7 @@ describe('consuming over jetstream()', () => {
     );
     await messagingOfOrders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-77' });
     await messagingOfOrders.consume(handlersOf(received), {}).catch(() => undefined);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.chargeDurable));
 
     await messagingOfOrders.consume(handlersOf(received), {});
 
@@ -492,7 +492,7 @@ describe('consuming over jetstream()', () => {
     ]);
   });
 
-  test('consume rejects naming the stream when the stream a durable consumer reads does not exist', async () => {
+  test('consume rejects naming the stream when the stream a Durable consumer reads does not exist', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -502,7 +502,7 @@ describe('consuming over jetstream()', () => {
     const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
     await expect(consuming).rejects.toThrow(
-      `The stream ${orders.stream}, which the durable consumer ${orders.notifyDurable} reads, does not exist: ${apply}`,
+      `The stream ${orders.stream}, which the Durable consumer ${orders.notifyDurable} reads, does not exist: ${apply}`,
     );
   });
 
@@ -564,14 +564,17 @@ describe('consuming over jetstream()', () => {
       () => 'has the priority groups g, h with the policy overflow, which a pull must name',
     ],
   ])(
-    'consume refuses %s, naming the durable consumer and what differs',
+    'consume refuses %s, naming the Durable consumer and what differs',
     async (_name, config, difference) => {
       const prefix = aPrefix();
       const orders = anOrders(prefix);
       await arrangePlanOf(server.url, contract, prefix);
       const plan = planOf(contract, prefix);
-      await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
-      await arrangeDurable(server.url, orders.stream, {
+      await arrangeDurableConsumersOf(
+        server.url,
+        onlyDurableConsumersOf(plan, orders.chargeDurable),
+      );
+      await arrangeDurableConsumer(server.url, orders.stream, {
         ...config(orders),
         durable_name: orders.notifyDurable,
       });
@@ -580,7 +583,7 @@ describe('consuming over jetstream()', () => {
       const consuming = messagingOfOrders.consume(handlersOf([]), {});
 
       await expect(consuming).rejects.toThrow(
-        `The durable consumer ${orders.notifyDurable} ${difference(orders)}: ${apply}`,
+        `The Durable consumer ${orders.notifyDurable} ${difference(orders)}: ${apply}`,
       );
     },
   );
@@ -597,13 +600,13 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
   });
 
-  test('consume accepts a durable consumer that filters on its subject through filter_subjects', async () => {
+  test('consume accepts a Durable consumer that filters on its subject through filter_subjects', async () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.chargeDurable));
-    await arrangeDurable(server.url, orders.stream, {
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.chargeDurable));
+    await arrangeDurableConsumer(server.url, orders.stream, {
       ack_policy: 'explicit',
       filter_subjects: [orders.created],
       durable_name: orders.notifyDurable,
@@ -615,13 +618,13 @@ describe('consuming over jetstream()', () => {
     await expect(consuming).resolves.toBeUndefined();
   });
 
-  test('a stub’s durable consumer is not needed: consume looks only for the durable consumers of the Handlers it pulls', async () => {
+  test('a stub’s Durable consumer is not needed: consume looks only for the Durable consumers of the Handlers it pulls', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     await arrangePlanOf(server.url, contract, prefix);
     const plan = planOf(contract, prefix);
-    await arrangeDurablesOf(server.url, onlyDurablesOf(plan, orders.notifyDurable));
+    await arrangeDurableConsumersOf(server.url, onlyDurableConsumersOf(plan, orders.notifyDurable));
     const received: Received[] = [];
     const messagingOfOrders = await aMessaging(prefix);
     const handlers = {
@@ -641,7 +644,7 @@ describe('consuming over jetstream()', () => {
     );
   });
 
-  test('without a prefix, consume looks for the unprefixed durable consumer names', async () => {
+  test('without a prefix, consume looks for the unprefixed Durable consumer names', async () => {
     const unprefixed = defineService({
       name: 'unprefixed-service',
       groups: [
@@ -654,7 +657,7 @@ describe('consuming over jetstream()', () => {
       ],
     });
     await arrangePlanOf(server.url, unprefixed, null);
-    await arrangeDurablesOf(server.url, planOf(unprefixed, null));
+    await arrangeDurableConsumersOf(server.url, planOf(unprefixed, null));
     const received: Received[] = [];
     const opened = await messaging(unprefixed, jetstream({ connect: aConnect().connect }));
     onTestFinished(() => opened.close());
@@ -663,7 +666,7 @@ describe('consuming over jetstream()', () => {
     await opened.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-79' });
 
     await vi.waitFor(() => expect(received).toHaveLength(1));
-    const info = await durableInfoOf(
+    const info = await durableConsumerInfoOf(
       server.url,
       'unprefixed-service',
       'unprefixed-service_notify-on-created',
@@ -704,7 +707,7 @@ describe('consuming over jetstream()', () => {
     const billingReaders = readersOf({
       commands: {},
       subscriptions: {
-        notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+        notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
       },
     });
     const handlers = {
@@ -850,7 +853,7 @@ describe('consuming over jetstream()', () => {
       await publishRaw(names.created, { orderId: 'o-1' }, ids);
 
       await vi.waitFor(async () => {
-        const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+        const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
         expect(info).toMatchObject({
           num_pending: 0,
           num_ack_pending: 0,
@@ -874,7 +877,7 @@ describe('consuming over jetstream()', () => {
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-85' });
 
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(info?.ack_floor.consumer_seq).toBe(1);
     expect(received).toHaveLength(1);
   });
@@ -935,7 +938,7 @@ describe('consuming over jetstream()', () => {
     ]);
   }, 10_000);
 
-  test('only the third delivery is the last attempt of a durable consumer with max_deliver 3', async () => {
+  test('only the third delivery is the last attempt of a Durable consumer with max_deliver 3', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: 3 });
     const received: Received[] = [];
@@ -953,7 +956,7 @@ describe('consuming over jetstream()', () => {
     expect(received.map(({ meta }) => meta.lastAttempt)).toEqual([false, false, true]);
   }, 10_000);
 
-  test('a durable consumer without a delivery limit never marks the last attempt', async () => {
+  test('a Durable consumer without a delivery limit never marks the last attempt', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond, max_deliver: -1 });
     const faults: ConsumedFault[] = [];
@@ -1040,7 +1043,7 @@ describe('consuming over jetstream()', () => {
     expect(cause).toHaveProperty('message', "The Handler ran past its delivery's wait of 1000 ms");
   }, 10_000);
 
-  test('past the wait the durable consumer pulls its next Message while the first Handler still runs', async () => {
+  test('past the wait the Durable consumer pulls its next Message while the first Handler still runs', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: oneSecond });
     const received: Received[] = [];
@@ -1078,7 +1081,7 @@ describe('consuming over jetstream()', () => {
     expect(waited).toEqual([500, 2_000, 2_000]);
   }, 15_000);
 
-  test('each durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
+  test('each Durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1094,7 +1097,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(1));
 
     await aWhile();
-    const whileHeld = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const whileHeld = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     firstGate.open();
 
     expect(received).toHaveLength(1);
@@ -1103,7 +1106,7 @@ describe('consuming over jetstream()', () => {
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
   });
 
-  test('the Handlers of two durable consumers run at the same time', async () => {
+  test('the Handlers of two Durable consumers run at the same time', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
     const received: Received[] = [];
@@ -1121,7 +1124,7 @@ describe('consuming over jetstream()', () => {
     gate.open();
   });
 
-  test('a durable consumer deleted while consuming reaches onBrokerTrouble once as pull-failed, with NATS’s answer as cause', async () => {
+  test('a Durable consumer deleted while consuming reaches onBrokerTrouble once as pull-failed, with NATS’s answer as cause', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1132,14 +1135,14 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
 
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
 
     await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
     await sleep(2_500);
     expect(troubles).toEqual([
       {
-        element: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        declaration: notifyOnCreated,
+        name: 'notifyOnCreated',
         durable: 'orders-service_notify-on-created',
         stream: 'orders-service',
         kind: 'pull-failed',
@@ -1150,7 +1153,7 @@ describe('consuming over jetstream()', () => {
     ]);
   }, 10_000);
 
-  test('the same durable consumer created again reaches onBrokerTrouble once as recovered, and its Messages reach their Handler', async () => {
+  test('the same Durable consumer created again reaches onBrokerTrouble once as recovered, and its Messages reach their Handler', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1162,9 +1165,9 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf(received), {});
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-99' });
     await waitUntilSettled(names.stream, names.notifyDurable, 1);
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
     await vi.waitFor(() => expect(troubles).toHaveLength(1), { timeout: 4_000 });
-    await arrangeDurable(server.url, names.stream, {
+    await arrangeDurableConsumer(server.url, names.stream, {
       durable_name: names.notifyDurable,
       ack_policy: 'explicit',
       filter_subject: names.created,
@@ -1175,18 +1178,18 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
-    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual([
+    expect(troubles.map(({ name, kind }) => [name, kind])).toEqual([
       ['notifyOnCreated', 'pull-failed'],
       ['notifyOnCreated', 'recovered'],
     ]);
   }, 10_000);
 
-  test('a connection that closes for good while consuming reaches onBrokerTrouble once per durable consumer as pull-failed, and nothing after', async () => {
+  test('a connection that closes for good while consuming reaches onBrokerTrouble once per Durable consumer as pull-failed, and nothing after', async () => {
     const own = await aNatsServer();
     onTestFinished(() => own.stop());
     const prefix = aPrefix();
     await arrangePlanOf(own.url, contract, prefix);
-    await arrangeDurablesOf(own.url, planOf(contract, prefix));
+    await arrangeDurableConsumersOf(own.url, planOf(contract, prefix));
     const troubles: BrokerTrouble[] = [];
     const connectOnce = async () => {
       const connection = await connect({ servers: own.url, reconnect: false });
@@ -1200,8 +1203,8 @@ describe('consuming over jetstream()', () => {
     await orders.consume(handlersOf([]), {});
     const names = anOrders(prefix);
     await vi.waitFor(async () => {
-      const notify = await durableInfoOf(own.url, names.stream, names.notifyDurable);
-      const charge = await durableInfoOf(own.url, names.stream, names.chargeDurable);
+      const notify = await durableConsumerInfoOf(own.url, names.stream, names.notifyDurable);
+      const charge = await durableConsumerInfoOf(own.url, names.stream, names.chargeDurable);
       expect([notify?.num_waiting, charge?.num_waiting]).toEqual([1, 1]);
     });
 
@@ -1209,7 +1212,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2), { timeout: 4_000 });
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       [
         'ChargeCard@1',
@@ -1224,7 +1227,7 @@ describe('consuming over jetstream()', () => {
     ]);
   }, 10_000);
 
-  test('the Service closing its own connection while consuming reaches onBrokerTrouble once per durable consumer as pull-failed, the connection closed', async () => {
+  test('the Service closing its own connection while consuming reaches onBrokerTrouble once per Durable consumer as pull-failed, the connection closed', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1239,14 +1242,14 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
       ['notifyOnCreated', 'pull-failed', 'The NATS connection closed'],
     ]);
   });
 
-  test('a connection that closes while a durable consumer’s pulls fail reports nothing more for it, and no recovered', async () => {
+  test('a connection that closes while a Durable consumer’s pulls fail reports nothing more for it, and no recovered', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
@@ -1272,7 +1275,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
       [
@@ -1312,7 +1315,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(pulled).toBeGreaterThan(steps.length + 1), { timeout: 20_000 });
     expect(troubles.map(({ kind }) => kind)).toEqual(changesOf([...steps, 'answered']));
   }, 30_000);
-  test('two fresh Messages on one durable consumer reach the Handler with delivery count 1 each', async () => {
+  test('two fresh Messages on one Durable consumer reach the Handler with delivery count 1 each', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
     const received: Received[] = [];
@@ -1328,7 +1331,7 @@ describe('consuming over jetstream()', () => {
 });
 
 describe('closing while consuming over jetstream()', () => {
-  test('close stops pulling at once: a Message published while a Handler runs is not delivered, and stays pending for the next consumer', async () => {
+  test('close stops pulling at once: a Message published while a Handler runs is not delivered, and stays pending for the next process', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1343,7 +1346,7 @@ describe('closing while consuming over jetstream()', () => {
 
     await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-106' });
     await aWhile();
-    const whileClosing = await durableInfoOf(server.url, names.stream, names.chargeDurable);
+    const whileClosing = await durableConsumerInfoOf(server.url, names.stream, names.chargeDurable);
     gate.open();
     await closing;
 
@@ -1379,11 +1382,11 @@ describe('closing while consuming over jetstream()', () => {
 
     expect(drainedWhileRunning).toEqual([false]);
     expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(info).toMatchObject({ num_ack_pending: 0, ack_floor: { consumer_seq: 1 } });
   });
 
-  test('a Message the Broker had already sent when close starts is handed back, so the next consumer gets it at once', async () => {
+  test('a Message the Broker had already sent when close starts is handed back, so the next process gets it at once', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1399,7 +1402,7 @@ describe('closing while consuming over jetstream()', () => {
       ['Cf-Loom-Fact-Id', 'o-1'],
     ]);
     await vi.waitFor(async () => {
-      const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+      const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
       expect(info?.delivered.consumer_seq).toBe(1);
     });
 
@@ -1414,7 +1417,7 @@ describe('closing while consuming over jetstream()', () => {
     expect(received[0]?.meta.deliveryCount).toBe(2);
   }, 10_000);
 
-  test('close({ signal }) with a Handler that never settles hands its Message back, so the next consumer gets it at once with delivery count 2', async () => {
+  test('close({ signal }) with a Handler that never settles hands its Message back, so the next process gets it at once with delivery count 2', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { ack_wait: 30 * oneSecond });
     const received: Received[] = [];
@@ -1451,7 +1454,7 @@ describe('closing while consuming over jetstream()', () => {
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
   }, 10_000);
 
-  test('close with pulls open leaves no timer or pull behind: the connection is closed and no durable consumer has a pull open', async () => {
+  test('close with pulls open leaves no timer or pull behind: the connection is closed and no Durable consumer has a pull open', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1466,13 +1469,13 @@ describe('closing while consuming over jetstream()', () => {
     expect(orders.connections.map((connection) => connection.isClosed())).toEqual([true]);
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
     const infos = [
-      await durableInfoOf(server.url, names.stream, names.notifyDurable),
-      await durableInfoOf(server.url, names.stream, names.chargeDurable),
+      await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable),
+      await durableConsumerInfoOf(server.url, names.stream, names.chargeDurable),
     ];
     expect(infos.map((info) => info?.num_waiting)).toEqual([0, 0]);
   });
 
-  test('close while consume is still finding the durable consumers means no pull at all', async () => {
+  test('close while consume is still finding the Durable consumers means no pull at all', async () => {
     const prefix = aPrefix();
     const names = anOrders(prefix);
     await arrangeOrders(prefix);
@@ -1496,7 +1499,7 @@ describe('closing while consuming over jetstream()', () => {
     search.open();
     await Promise.all([consuming, closing]);
 
-    const info = await durableInfoOf(server.url, names.stream, names.notifyDurable);
+    const info = await durableConsumerInfoOf(server.url, names.stream, names.notifyDurable);
     expect(received).toEqual([]);
     expect(info).toMatchObject({ num_pending: 1, num_waiting: 0, delivered: { consumer_seq: 0 } });
   });
@@ -1524,7 +1527,7 @@ describe('closing while consuming over jetstream()', () => {
 });
 
 describe('pulling over jetstream()', () => {
-  test('a durable consumer with a max_expires of 500 milliseconds delivers', async () => {
+  test('a Durable consumer with a max_expires of 500 milliseconds delivers', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
     const received: Received[] = [];
@@ -1562,7 +1565,7 @@ describe('pulling over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 6_000 });
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
-    expect(troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)])).toEqual([
+    expect(troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)])).toEqual([
       [
         'notifyOnCreated',
         'pull-failed',
@@ -1679,7 +1682,7 @@ describe('pulling over jetstream()', () => {
     const pulledBefore = pulls.length;
 
     const deletedAt = Date.now();
-    await dropDurable(server.url, names.stream, names.notifyDurable);
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
 
     const nextOf = () =>
       pulls.slice(pulledBefore).find(({ subject }) => subject.endsWith(names.notifyDurable));
@@ -1693,7 +1696,7 @@ describe('pulling over jetstream()', () => {
     ['a max_expires of 40 seconds', { max_expires: 40 * oneSecond }, 30],
     ['a max_expires of half a second', { max_expires: oneSecond / 2 }, 0.5],
   ])(
-    'a pull for a durable consumer with %s expires within what it allows, 30 seconds at most',
+    'a pull for a Durable consumer with %s expires within what it allows, 30 seconds at most',
     async (_name, settings, seconds) => {
       const prefix = aPrefix();
       await arrangeOrders(prefix, settings);
@@ -1707,7 +1710,7 @@ describe('pulling over jetstream()', () => {
     },
   );
 
-  test('close while the pulls of a durable consumer fail leaves no retry pause running', async () => {
+  test('close while the pulls of a Durable consumer fail leaves no retry pause running', async () => {
     const timersBefore = activeTimers();
     const orders = await aConsumingWithFailingPulls(aPrefix());
 
@@ -1721,12 +1724,12 @@ describe('pulling over jetstream()', () => {
     const orders = await aConsumingWithFailingPulls(aPrefix(), (trouble) => {
       troubles.push(trouble);
     });
-    const reportedBefore = troubles.map(({ identity, kind }) => [identity, kind]);
+    const reportedBefore = troubles.map(({ name, kind }) => [name, kind]);
 
     await orders.close();
     await aWhile();
 
-    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual(reportedBefore);
+    expect(troubles.map(({ name, kind }) => [name, kind])).toEqual(reportedBefore);
     expect(reportedBefore).toHaveLength(2);
   }, 10_000);
 

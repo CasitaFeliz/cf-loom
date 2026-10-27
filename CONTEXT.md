@@ -149,8 +149,8 @@ What the Broker stores Messages in: each Service that publishes or sends Message
 _Avoid_: topic, queue, log
 
 **Durable consumer**:
-The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
-_Avoid_: subscriber, queue group, cursor
+The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer. Its name (see [Over the Broker](ARCHITECTURE.md#over-the-broker) for its format) is its `durable` in the API, as a Stream's name is its `stream`.
+_Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:
 An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the plan; it is no part of a Contract or a Snapshot.

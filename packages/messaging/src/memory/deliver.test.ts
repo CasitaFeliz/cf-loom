@@ -11,7 +11,7 @@ import {
 import {
   fault,
   handle,
-  InvalidInputError,
+  InvalidCallError,
   type MessageFault,
   type MessageMeta,
   readersOf,
@@ -103,14 +103,14 @@ const contract = defineService({
 const readerV2 = z.object({ orderId: z.string(), status: openEnumReader(statuses) });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: {
-    notifyOnCreated: { element: notifyOnCreated, reader: readerV2 },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: readerV2 },
     auditCreated: {
-      element: auditCreated,
+      declaration: auditCreated,
       reader: z.object({ orderId: z.uuid(), status: readerV2.shape.status }),
     },
-    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
   },
 });
 
@@ -494,13 +494,13 @@ describe('deliver()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
   });
 
-  test('a body that breaks the Reader rejects deliver with InvalidInputError at body, and no Handler runs, not even a first Subscription’s', async () => {
+  test('a body that breaks the Reader rejects deliver with InvalidCallError at body, and no Handler runs, not even a first Subscription’s', async () => {
     const { inMemory, received } = await running();
     const wrong = { orderId: 'not-a-uuid', status: 'paid' } as const;
 
     const rejection = await rejectionOf(inMemory.deliver(orderCreatedV2, wrong));
 
-    expect(rejection).toBeInstanceOf(InvalidInputError);
+    expect(rejection).toBeInstanceOf(InvalidCallError);
     expect(rejection).toMatchObject({
       message: expect.stringContaining('auditCreated'),
       issues: [{ part: 'body', path: ['orderId'], code: 'invalid_format' }],
@@ -516,7 +516,7 @@ describe('deliver()', () => {
       inMemory.deliver(chargeCardV1, wrong, { factId: 'o'.repeat(33_000) }),
     );
 
-    expect(rejection).not.toBeInstanceOf(InvalidInputError);
+    expect(rejection).not.toBeInstanceOf(InvalidCallError);
     expect(rejection).toMatchObject({
       message: expect.stringMatching(/^ChargeCard@1: The broker headers would take 66068 bytes/),
     });
@@ -526,13 +526,13 @@ describe('deliver()', () => {
   test.each([
     [
       'a stub’s Subscription',
-      { element: paymentSettledV1, body: settledPayment },
+      { declaration: paymentSettledV1, body: settledPayment },
       'PaymentSettled@1',
     ],
-    ['a Retired Command', { element: refundV1, body: charge }, 'Refund@1'],
+    ['a Retired Command', { declaration: refundV1, body: charge }, 'Refund@1'],
   ])(
     'deliver to an Element nothing consumes rejects, naming it: %s',
-    async (_which, { element, body }, named) => {
+    async (_which, { declaration, body }, named) => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const inMemory = await memory(contract);
       await inMemory.consume(
@@ -548,9 +548,9 @@ describe('deliver()', () => {
         {},
       );
 
-      const delivering = inMemory.deliver(element, body);
+      const delivering = inMemory.deliver(declaration, body);
 
-      await expect(delivering).rejects.toThrow(`${named} has no consumer`);
+      await expect(delivering).rejects.toThrow(`${named} has no Durable consumer`);
     },
   );
 
@@ -559,7 +559,7 @@ describe('deliver()', () => {
 
     const delivering = inMemory.deliver(chargeCardV1, charge);
 
-    await expect(delivering).rejects.toThrow('ChargeCard@1 has no consumer');
+    await expect(delivering).rejects.toThrow('ChargeCard@1 has no Durable consumer');
   });
 
   test('deliver stops once its own Messages have settled: what their Handlers send stays lined up, and close() lists it as pending', async () => {
@@ -618,7 +618,7 @@ describe('pending and redeliver()', () => {
     ['threw', throwing],
     ['returned a retryable Fault', () => fault({ committed: 'no', retryable: true })],
   ])(
-    'a Message whose Handler %s is listed with its declaration, its identity, its ids, its attempt and its headers',
+    'a Message whose Handler %s is listed with its declaration, its name, its ids, its attempt and its headers',
     async (_how, answer) => {
       const headers = { traceparent: '00-abc-def-01' };
       const { inMemory } = await running(() => ({ notify: answer }));
@@ -627,8 +627,8 @@ describe('pending and redeliver()', () => {
 
       expect(inMemory.pending).toEqual([
         {
-          element: notifyOnCreated,
-          identity: 'notifyOnCreated',
+          declaration: notifyOnCreated,
+          name: 'notifyOnCreated',
           subject: 'orders-service.event.OrderCreated.v2',
           messageId: 'event.OrderCreated.v2:o-1',
           factId: 'o-1',
@@ -640,12 +640,12 @@ describe('pending and redeliver()', () => {
     },
   );
 
-  test('a pending Message’s element is the same declaration its fault names', async () => {
+  test('a pending Message’s declaration is the one its fault names', async () => {
     const { inMemory, faults } = await running(() => ({ notify: throwing }));
 
     await inMemory.deliver(orderCreatedV2, created, { factId: 'o-1' });
 
-    const named = { element: notifyOnCreated, identity: 'notifyOnCreated' };
+    const named = { declaration: notifyOnCreated, name: 'notifyOnCreated' };
     expect(inMemory.pending).toMatchObject([named]);
     expect(faults).toMatchObject([named]);
   });
@@ -779,8 +779,8 @@ describe('pending and redeliver()', () => {
 
     expect(inMemory.pending).toMatchObject([
       {
-        element: chargeCardV1,
-        identity: 'ChargeCard@1',
+        declaration: chargeCardV1,
+        name: 'ChargeCard@1',
         subject: 'orders-service.command.ChargeCard.v1',
         body: charge,
       },

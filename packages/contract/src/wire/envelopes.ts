@@ -11,8 +11,8 @@ export type Committed = (typeof committedValues)[number];
 /** The one text a Fault says by default, so no internal detail reaches a Caller. */
 export const internalError = 'Internal error';
 
-/** How a reserved code travels: its status, whether the change was committed, and its fixed text. */
-type ReservedFault = {
+/** How a Fault with a Reserved code travels: its status, whether the change was committed, and its fixed text. */
+type ReservedCodeFault = {
   readonly status: number;
   readonly committed: Committed;
   readonly message: string;
@@ -23,7 +23,7 @@ type ReservedFault = {
  * received. `INVALID_OUTCOME`'s `committed` is `serve`'s: the Outcome may have been committed
  * before it broke the Contract, while the client's depends on what failed.
  */
-export const reservedFaults = {
+export const reservedCodeFaults = {
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
   RETIRED: { status: 410, committed: 'no', message: 'The Endpoint is retired' },
   // biome-ignore lint/style/useNamingConvention: a reserved code, as it travels
@@ -46,7 +46,7 @@ export const reservedFaults = {
     committed: 'unknown',
     message: 'The Outcome broke the Contract',
   },
-} as const satisfies Readonly<Record<ReservedCode, ReservedFault>>;
+} as const satisfies Readonly<Record<ReservedCode, ReservedCodeFault>>;
 
 /** A Rejection's Envelope, as it travels over HTTP. */
 export type RejectionEnvelope = {

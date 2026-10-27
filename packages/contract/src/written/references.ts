@@ -42,8 +42,10 @@ function qualifierOf(endpoint: Endpoint, guard: Guard): unknown {
  * The Guards whose Context a Handler receives, each once, in order: an Endpoint's attached ones,
  * or the ones a Guard lists, that provide a Context.
  */
-export function contextProvidersOf(element: Endpoint | Guard): readonly Guard[] {
-  const guards = isEndpoint(element) ? attachedGuardsOf(element) : listOf(element.guards);
+export function contextProvidersOf(declaration: Endpoint | Guard): readonly Guard[] {
+  const guards = isEndpoint(declaration)
+    ? attachedGuardsOf(declaration)
+    : listOf(declaration.guards);
   return [...new Set(guards.filter(isGuard))].filter((guard) => guard.context !== undefined);
 }
 

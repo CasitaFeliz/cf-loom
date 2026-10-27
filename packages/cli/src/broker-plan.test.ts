@@ -332,7 +332,7 @@ describe('cf-loom broker-plan', () => {
     );
   });
 
-  test('a Retired Event or Command Version has no subject in the stream, and a Retired Command Version has no durable consumer', () => {
+  test('a Retired Event or Command Version has no subject in the stream, and a Retired Command Version has no Durable consumer', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -342,7 +342,7 @@ describe('cf-loom broker-plan', () => {
     expect(ran.stdout).not.toContain('RefundCard');
   });
 
-  test('a Deprecated Command Version keeps its subject and its durable consumer, <service>_command_<Name>_v<n>', () => {
+  test('a Deprecated Command Version keeps its subject and its Durable consumer, <service>_command_<Name>_v<n>', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -353,7 +353,7 @@ describe('cf-loom broker-plan', () => {
     expect(printedLines(ran.stdout)[0]).toContain(' orders-service.command.ChargeCard.v1 ');
   });
 
-  test('a Subscription’s durable consumer, <service>_<name>, reads its Provider’s stream on its Event’s subject, and one to the Service’s own Event reads its own stream', () => {
+  test('a Subscription’s Durable consumer, <service>_<name>, reads its Provider’s stream on its Event’s subject, and one to the Service’s own Event reads its own stream', () => {
     const project = aGeneratedProject(aMessagingService());
 
     const ran = cfLoom(project, 'broker-plan');
@@ -366,7 +366,7 @@ describe('cf-loom broker-plan', () => {
     );
   });
 
-  test('a Service that publishes and sends nothing has no stream, only the durable consumers of its Subscriptions', () => {
+  test('a Service that publishes and sends nothing has no stream, only the Durable consumers of its Subscriptions', () => {
     const project = aGeneratedProject(
       aMessagingService({ events: '[]', commands: '[]', subscriptions: [notifyOnSettled] }),
     );
@@ -381,14 +381,14 @@ describe('cf-loom broker-plan', () => {
     });
   });
 
-  test('a Service with no Messages says it needs no stream and no durable consumer', () => {
+  test('a Service with no Messages says it needs no stream and no Durable consumer', () => {
     const project = aGeneratedProject(aServiceWithoutMessages());
 
     const ran = cfLoom(project, 'broker-plan');
 
     expect(ran).toEqual({
       status: 0,
-      stdout: 'orders-service needs no stream and no durable consumer\n',
+      stdout: 'orders-service needs no stream and no Durable consumer\n',
       stderr: '',
     });
   });
@@ -401,7 +401,7 @@ describe('cf-loom broker-plan', () => {
     expect(ran).toEqual({ status: 0, stdout: `${planDocument()}\n`, stderr: '' });
   });
 
-  test('--prefix puts the prefix in front of every subject, stream and durable consumer name', () => {
+  test('--prefix puts the prefix in front of every subject, stream and Durable consumer name', () => {
     const project = aGeneratedProject(theReadmeService());
 
     const ran = cfLoom(project, 'broker-plan', '--prefix', 'staging');
@@ -435,7 +435,7 @@ describe('cf-loom broker-plan', () => {
           ],
         },
       },
-      consumers: {
+      durableConsumers: {
         'staging_orders-service_command_ChargeCard_v1': {
           service: 'orders-service',
           stream: 'staging_orders-service',

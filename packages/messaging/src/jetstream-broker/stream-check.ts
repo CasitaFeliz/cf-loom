@@ -1,7 +1,7 @@
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type JetStreamManager, type JetStreamOptions, jetstreamManager } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
-import type { BrokerService } from '../broker/index.ts';
+import type { ServiceStream } from '../broker/index.ts';
 
 /** What a refusal tells whoever reads it to do, when the Broker lacks what the Service's plan lists or holds it differently. */
 export const planRemedy = "apply the Service's broker plan";
@@ -10,10 +10,13 @@ export const planRemedy = "apply the Service's broker plan";
 export type PrefixedStream = { readonly name: string; readonly subjects: readonly string[] };
 
 /** The Service's stream as the Broker names it, with the prefix in front of the names `connect` was told. */
-export function prefixedStreamOf(service: BrokerService, prefix: string | null): PrefixedStream {
+export function prefixedStreamOf(
+  serviceStream: ServiceStream,
+  prefix: string | null,
+): PrefixedStream {
   return {
-    name: prefixedNameOf(prefix, service.stream),
-    subjects: service.subjects.map((subject) => prefixedSubjectOf(prefix, subject)),
+    name: prefixedNameOf(prefix, serviceStream.stream),
+    subjects: serviceStream.subjects.map((subject) => prefixedSubjectOf(prefix, subject)),
   };
 }
 

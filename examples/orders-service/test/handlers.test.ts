@@ -1,5 +1,5 @@
 import { notFound } from '@cf-loom/contract';
-import { InvalidInputError, isRejectionOf } from '@cf-loom/handlers';
+import { InvalidCallError, isRejectionOf } from '@cf-loom/handlers';
 import type { Messaging } from '@cf-loom/messaging';
 import { memory } from '@cf-loom/messaging/memory';
 import { unauthenticated } from '@org/definitions';
@@ -65,12 +65,12 @@ describe('getOrder', () => {
     });
   });
 
-  test('an order id that is no UUID throws InvalidInputError', async () => {
+  test('an order id that is no UUID throws InvalidCallError', async () => {
     const input = { params: { orderId: 'o-1' } };
 
     const called = getOrderHandler(input, { context });
 
-    await expect(called).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(called).rejects.toBeInstanceOf(InvalidCallError);
   });
 });
 

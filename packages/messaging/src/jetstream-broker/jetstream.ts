@@ -38,9 +38,9 @@ export function jetstream<const Given = unknown>(
 ): Broker {
   const prefix = checkedPrefixOf(options.prefix);
   return {
-    connect: async (service) => {
+    connect: async (serviceStream) => {
       const natsConnection = await options.connect();
-      const stream = prefixedStreamOf(service, prefix);
+      const stream = prefixedStreamOf(serviceStream, prefix);
       await checkStreamOrDrain(natsConnection, stream, options.jetstream);
       return jetStreamConnectionOf(natsConnection, prefix, options.jetstream);
     },

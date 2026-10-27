@@ -1,8 +1,8 @@
 import type { HandlerMap } from '@cf-loom/handlers';
-import { elementNameOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
+import { isStub, mappedMessageHandlerOf, nameOf } from '@cf-loom/handlers/internal';
 import type { Consumed } from '../subjects/index.ts';
 import type { DeliveryEnds } from './deadline.ts';
-import type { CoreConsumer, Received } from './details.ts';
+import type { CoreDurableConsumer, Received } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
@@ -11,9 +11,9 @@ export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | '
 
 /**
  * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
- * `received`, which wraps each consumer's run as the messaging's life allows it, and what ends a delivery early.
+ * `received`, which wraps each Durable consumer's run as the messaging's life allows it, and what ends a delivery early.
  */
-type ConsumersRun = {
+type DurableConsumersRun = {
   readonly report: Report;
   readonly resources: unknown;
   readonly received: Received;
@@ -21,34 +21,34 @@ type ConsumersRun = {
 };
 
 /**
- * The consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
+ * The Durable consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
  * be written for the very pairing the map's `readers` hold, which gives the Reader its Messages
  * are read with; a Stub left out with a warning, since `consume` does not pull from it; the rest
  * run with `consume`'s Resources.
  */
-export function consumersOf(
+export function durableConsumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { report, resources, received, ends }: ConsumersRun,
-): readonly CoreConsumer[] {
+  { report, resources, received, ends }: DurableConsumersRun,
+): readonly CoreDurableConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
-    ...mappedMessageHandlerOf(handlers, consumed.at, consumed.element),
+    ...mappedMessageHandlerOf(handlers, consumed.at, consumed.declaration),
   }));
   for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
     console.warn(
-      `${elementNameOf(consumed.element)}'s Handler is a Stub: consume does not pull its Messages`,
+      `${nameOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`,
     );
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))
     .map(({ consumed, handler, reader }) => {
-      const { durable, stream, subject, element } = consumed;
-      const identity = elementNameOf(element);
+      const { durable, stream, subject, declaration } = consumed;
+      const name = nameOf(declaration);
       const settle = received(
         (delivery) => settlementOf({ consumed, handler, resources }, delivery, { report, ends }),
-        { identity, subject },
+        { name, subject },
       );
-      return { durable, stream, subject, element, identity, reader, settle };
+      return { durable, stream, subject, declaration, name, reader, settle };
     });
 }

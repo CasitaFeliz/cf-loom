@@ -84,7 +84,8 @@ plan comment on the issue:
 - the public API: signatures with their TSDoc;
 - every file, with its one responsibility;
 - the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by a
-  randomized or exhaustive test;
+  randomized or exhaustive test, and the key set of each public record it adds or renames by a type test
+  ([C26](CODING_STANDARDS.md#tests));
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
 - the new terms it adds to [CONTEXT.md](CONTEXT.md);

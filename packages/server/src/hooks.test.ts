@@ -230,7 +230,7 @@ describe('serve: onServiceFault', () => {
     })(get('/orders/thrown'));
 
     expect(faults).toStrictEqual([
-      { element: getOrder, identity: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
+      { declaration: getOrder, name: 'getOrder', kind: 'thrown', cause: new Error('a bug') },
     ]);
   });
 
@@ -249,8 +249,8 @@ describe('serve: onServiceFault', () => {
 
     expect(faults).toStrictEqual([
       {
-        element: getOrder,
-        identity: 'getOrder',
+        declaration: getOrder,
+        name: 'getOrder',
         guard: apiKey,
         kind: 'thrown',
         cause: new Error('the Guard broke'),
@@ -652,7 +652,7 @@ describe('serve: what the hooks receive beside the record', () => {
     ['METHOD_NOT_ALLOWED', new Request('http://test/orders', { method: 'DELETE' })],
     ['BODY_TOO_LARGE', tooLarge()],
     ['INVALID_OUTCOME', get('/orders/leaky')],
-  ])('the reserved Fault %s is recorded with its code', async (code, request) => {
+  ])('a Fault with the Reserved code %s is recorded with it', async (code, request) => {
     const { http, answered } = recording({ maxBodyBytes: 8, onServiceFault: () => undefined });
 
     await http(request);

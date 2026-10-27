@@ -13,10 +13,10 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
-  type BrokerConsumer,
   type ConsumedFault,
   DeadlineError,
   type Delivery,
+  type DurableConsumer,
   MessagingClosedError,
   type MessagingOptions,
   messaging,
@@ -98,12 +98,12 @@ const contract = defineService({
 
 const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardV1, reader: orderReader },
-    chargeCardV2: { element: chargeCardV2, reader: orderReader },
+    chargeCardV1: { declaration: chargeCardV1, reader: orderReader },
+    chargeCardV2: { declaration: chargeCardV2, reader: orderReader },
   },
   subscriptions: {
-    notifyOnCreated: { element: notifyOnCreated, reader: orderReader },
-    notifyOnSettled: { element: notifyOnSettled, reader: paymentSettledV1.body },
+    notifyOnCreated: { declaration: notifyOnCreated, reader: orderReader },
+    notifyOnSettled: { declaration: notifyOnSettled, reader: paymentSettledV1.body },
   },
 });
 
@@ -125,14 +125,14 @@ const chargeCard = 'orders-service.command.ChargeCard.v2';
 
 const body = { orderId: ORDER_ID, status: 'paid' };
 
-/** A broker that records the consumers messaging gives it and delivers to them. */
+/** A broker that records the Durable consumers messaging gives it and delivers to them. */
 function aBroker() {
-  const consumers: BrokerConsumer[] = [];
+  const durableConsumers: DurableConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
       publish: async () => ({ duplicate: false }),
       consume: async (given) => {
-        consumers.push(...given);
+        durableConsumers.push(...given);
       },
       close: async () => undefined,
     }),
@@ -142,8 +142,8 @@ function aBroker() {
     delivered: unknown,
     delivery: Partial<Delivery> = {},
   ): Promise<Settlement> => {
-    const consumer = consumers.find((candidate) => candidate.subject === subject);
-    if (consumer === undefined) {
+    const durableConsumer = durableConsumers.find((candidate) => candidate.subject === subject);
+    if (durableConsumer === undefined) {
       throw new Error(`Nothing consumes ${subject}`);
     }
     const bytes =
@@ -158,9 +158,9 @@ function aBroker() {
       waitMs: undefined,
       headers: {},
     };
-    return consumer.receive({ ...meta, body: bytes, ...delivery });
+    return durableConsumer.receive({ ...meta, body: bytes, ...delivery });
   };
-  return { broker, consumers, deliver };
+  return { broker, durableConsumers, deliver };
 }
 
 /** A messaging connected and consuming, its Handlers replaced by those given and its faults kept. */
@@ -257,10 +257,14 @@ describe('consume', () => {
     expect(taken[1]).toBe(resources);
   });
 
-  test('consume gives the broker one consumer per Subscription and per Command Version not Retired, with its subject, stream and durable consumer name', async () => {
-    const { consumers } = await consuming();
+  test('consume gives the broker one Durable consumer per Subscription and per Command Version not Retired, with its subject, stream and Durable consumer name', async () => {
+    const { durableConsumers } = await consuming();
 
-    const routes = consumers.map(({ subject, stream, durable }) => ({ subject, stream, durable }));
+    const routes = durableConsumers.map(({ subject, stream, durable }) => ({
+      subject,
+      stream,
+      durable,
+    }));
 
     expect(routes).toEqual([
       {
@@ -287,10 +291,10 @@ describe('consume', () => {
   });
 
   test('a Subscription to a Provider’s Event consumes from that Provider’s stream and subject, with no Dependency', async () => {
-    const { consumers } = await consuming();
+    const { durableConsumers } = await consuming();
 
-    const settled = consumers.find(
-      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    const settled = durableConsumers.find(
+      (durableConsumer) => durableConsumer.durable === 'orders-service_notify-on-settled',
     );
 
     expect(settled).toMatchObject({
@@ -316,8 +320,8 @@ describe('consume', () => {
 
     await consume({ ...handlers, readers }, {});
 
-    const settled = recording.consumers.find(
-      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    const settled = recording.durableConsumers.find(
+      (durableConsumer) => durableConsumer.durable === 'orders-service_notify-on-settled',
     );
     expect(settled).toMatchObject({
       stream: 'payments-service',
@@ -326,9 +330,9 @@ describe('consume', () => {
   });
 
   test('a Deprecated Command’s Version is consumed; a Retired one needs no Handler and is not', async () => {
-    const { consumers } = await consuming();
+    const { durableConsumers } = await consuming();
 
-    const durables = consumers.map((consumer) => consumer.durable);
+    const durables = durableConsumers.map((durableConsumer) => durableConsumer.durable);
 
     expect(durables).toContain('orders-service_command_ChargeCard_v1');
     expect(durables).not.toContain('orders-service_command_Refund_v1');
@@ -337,12 +341,12 @@ describe('consume', () => {
   test('a stub is not given to the broker, and consume warns naming it', async () => {
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    const { consumers } = await consuming({
+    const { durableConsumers } = await consuming({
       commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
       subscriptions: { notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated) },
     });
 
-    expect(consumers.map((consumer) => consumer.durable)).toEqual([
+    expect(durableConsumers.map((durableConsumer) => durableConsumer.durable)).toEqual([
       'orders-service_command_ChargeCard_v2',
       'orders-service_notify-on-settled',
     ]);
@@ -384,7 +388,7 @@ describe('consume', () => {
 
   test('a Handler written for another pairing than the Handler map’s throws, naming its key', async () => {
     const looseReader = z.looseObject({});
-    const written = handle({ element: notifyOnCreated, reader: looseReader }, () => undefined);
+    const written = handle({ declaration: notifyOnCreated, reader: looseReader }, () => undefined);
     const { consume } = await messaging(contract, aBroker().broker);
 
     const consumingWritten = consume(
@@ -492,8 +496,8 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('pending');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        declaration: notifyOnCreated,
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -571,8 +575,8 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('ended');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        declaration: notifyOnCreated,
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -597,8 +601,8 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('pending');
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        declaration: notifyOnCreated,
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -630,8 +634,8 @@ describe('a Message delivered', () => {
     expect(received).toEqual([]);
     expect(faults).toEqual([
       {
-        element: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        declaration: notifyOnCreated,
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -662,13 +666,13 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('onServiceFault receives the declaration as element, and names a Subscription by name and a Command by its identity', async () => {
+  test('onServiceFault receives the Subscription or Command as its declaration, and names a Subscription by its name and a Command as ChargeCard@1', async () => {
     const { deliver, faults } = await consuming();
 
     await deliver(created, {});
     await deliver(chargeCard, {});
 
-    expect(faults.map(({ element, identity }) => [element, identity])).toEqual([
+    expect(faults.map(({ declaration, name }) => [declaration, name])).toEqual([
       [notifyOnCreated, 'notifyOnCreated'],
       [chargeCardV2, 'ChargeCard@2'],
     ]);
@@ -777,7 +781,7 @@ describe('a Message whose body is nested past the stack', () => {
     groups: [defineGroup({ name: 'nesting', description: 'Nesting', commands: [nestV1] })],
   });
   const nestReaders = readersOf({
-    commands: { nestV1: { element: nestV1, reader: tree } },
+    commands: { nestV1: { declaration: nestV1, reader: tree } },
     subscriptions: {},
   });
 
@@ -814,7 +818,7 @@ describe('a Message whose body is nested past the stack', () => {
     expect(faults).toMatchObject([
       {
         kind: 'invalid-body',
-        identity: 'Nest@1',
+        name: 'Nest@1',
         issues: [
           {
             part: 'body',
@@ -853,7 +857,7 @@ describe('a Handler’s signal and its delivery’s wait', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     await expect(delivered).resolves.toBe('pending');
-    expect(faults).toMatchObject([{ kind: 'thrown', identity: 'notifyOnCreated' }]);
+    expect(faults).toMatchObject([{ kind: 'thrown', name: 'notifyOnCreated' }]);
     const cause = (faults[0] as { cause: unknown }).cause;
     expect(cause).toBeInstanceOf(DeadlineError);
     expect(cause).toMatchObject({

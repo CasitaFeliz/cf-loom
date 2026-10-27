@@ -16,7 +16,7 @@ import type {
  */
 export type ReceivedBodyOf<Target extends Pairing> = core.output<Target['reader']>;
 
-/** The Fault a Message Handler returns: a `Fault` with no `retryAfter`, since the durable consumer's configuration decides redelivery. */
+/** The Fault a Message Handler returns: a `Fault` with no `retryAfter`, since the Durable consumer's configuration decides redelivery. */
 export type MessageFault = Fault & { readonly retryAfter?: never };
 
 /** What a Message Handler's implementation answers: nothing, which acknowledges the Message, or a MessageFault. */
@@ -34,4 +34,4 @@ export type MessageHandler<Target extends Pairing, Resources extends object = No
   meta?: DirectMeta,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &
-  HandledBy<Target['element'], Resources>;
+  HandledBy<Target['declaration'], Resources>;
