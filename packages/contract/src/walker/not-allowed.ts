@@ -153,6 +153,19 @@ export function refusedNullableDef(id: string): Refused {
   };
 }
 
+/** A check on a schema that admits `null`: zod runs it on `null` too, which no node says. */
+export function refusedCheckOnNullable(check: string): Refused {
+  return {
+    construct: `${check} on a schema that admits null`,
+    instead: 'the check on the schema inside .nullable()',
+  };
+}
+
+/** A check on a field's `.optional()`: zod runs it on an absent value too, which no field says. */
+export function refusedCheckOnOptional(check: string): Refused {
+  return { construct: `${check} on .optional()`, instead: 'the check on the schema inside' };
+}
+
 /** A second schema named with an id another schema in the Snapshot already has. */
 export function refusedDuplicateId(id: string): Refused {
   return { construct: `two schemas with .meta({ id: ${JSON.stringify(id)} })` };

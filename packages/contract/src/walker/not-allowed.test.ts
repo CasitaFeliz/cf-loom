@@ -36,6 +36,15 @@ function failureAt(at: string, construct: string, instead?: string) {
   return { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
 }
 
+/** A check zod would also run on `null`, which the Snapshot's node holds for the other values. */
+function onNull(at: string, check: string) {
+  return failureAt(
+    at,
+    `${check} on a schema that admits null`,
+    'the check on the schema inside .nullable()',
+  );
+}
+
 function refusedAll(failures: readonly ReturnType<typeof failureAt>[]) {
   return { located: [{ kind: 'not-allowed', failures }], defs: {} };
 }
@@ -265,13 +274,20 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
     expect(walkBody(schema)).toEqual(refusedAll([items, refine]));
   });
 
-  test.each<[string, z.ZodType]>([
-    ['z.lazy()', z.lazy(() => z.array(z.date()))],
-    ['.nullable()', z.array(z.date()).nullable()],
-  ])('a length check under %s is judged by the array inside', (_name, schema) => {
+  test('a length check under z.lazy() is judged by the array inside', () => {
+    const schema = z.lazy(() => z.array(z.date()));
+
     const checked = schema.check(z.minLength(1)).refine(isFilled);
 
     expect(walkBody(checked)).toEqual(refusedAll([items, refine]));
+  });
+
+  test('a length check under .nullable() is judged by the array inside, and refused as on null', () => {
+    const schema: z.ZodType = z.array(z.date()).nullable();
+
+    const checked = schema.check(z.minLength(1)).refine(isFilled);
+
+    expect(walkBody(checked)).toEqual(refusedAll([items, onNull('', 'z.minLength()'), refine]));
   });
 
   test('a length check on a refused .default() of an array is not reported', () => {
@@ -310,6 +326,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
   type Failure = ReturnType<typeof failureAt>;
 
   const asIs: Decorate = (schema) => schema;
+  const noFailure = (): Failure[] => [];
   const body = '';
   const field = 'a';
   const cycle = (at: string) => [failureAt(at, 'a cycle without .meta({ id })', '.meta({ id })')];
@@ -369,22 +386,28 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'a .refine()',
       apply: (schema: z.ZodType) => schema.refine(isFilled),
-      refusals: () => ['.refine()'],
+      refusals: (at: string, _taken: Failure[] | undefined) => [failureAt(at, '.refine()')],
     },
     {
       name: 'a length check',
       apply: (schema: z.ZodType) => schema.check(z.minLength(1)),
-      refusals: (takesLength: boolean) => (takesLength ? [] : ['z.minLength()']),
+      refusals: (at: string, taken: Failure[] | undefined) =>
+        taken ?? [failureAt(at, 'z.minLength()')],
     },
     {
       name: 'a conditional check',
       apply: (schema: z.ZodType) => schema.check(z.minLength(1, whenAlways)),
-      refusals: () => ['a conditional check'],
+      refusals: (at: string, _taken: Failure[] | undefined) => [
+        failureAt(at, 'a conditional check'),
+      ],
     },
     {
       name: 'a .refine() and a conditional check',
       apply: (schema: z.ZodType) => schema.refine(isFilled).check(z.minLength(1, whenAlways)),
-      refusals: () => ['.refine()', 'a conditional check'],
+      refusals: (at: string, _taken: Failure[] | undefined) => [
+        failureAt(at, '.refine()'),
+        failureAt(at, 'a conditional check'),
+      ],
     },
   ];
 
@@ -395,6 +418,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: body,
       onItself: true,
       surrounding: [] as Failure[],
+      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => inner.make(apply),
     },
     {
@@ -402,6 +426,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: field,
       onItself: false,
       surrounding: [] as Failure[],
+      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => z.object({ a: apply(inner.make(asIs).optional()) }),
     },
     {
@@ -409,6 +434,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: field,
       onItself: false,
       surrounding: [] as Failure[],
+      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) =>
         z.object({ a: apply(inner.make(asIs).nonoptional()) }),
     },
@@ -417,6 +443,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: body,
       onItself: false,
       surrounding: [] as Failure[],
+      lengthTaken: (at: string) => [onNull(at, 'z.minLength()')],
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).nullable()),
     },
     {
@@ -424,6 +451,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: body,
       onItself: false,
       surrounding: [] as Failure[],
+      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => {
         const schema = inner.make(asIs);
         return apply(z.lazy(() => schema));
@@ -434,6 +462,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: body,
       onItself: false,
       surrounding: [failureAt(body, '.default()')],
+      lengthTaken: noFailure,
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).default(undefined as never)),
     },
   ];
@@ -453,9 +482,10 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
         failures: [
           ...place.surrounding,
           ...inner.refusals(place.at),
-          ...checks
-            .refusals(takesLength(inner, place))
-            .map((construct) => failureAt(place.at, construct)),
+          ...checks.refusals(
+            place.at,
+            takesLength(inner, place) ? place.lengthTaken(place.at) : undefined,
+          ),
         ],
       })),
     ),
@@ -498,31 +528,38 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     expect(walkBody(schema.check(z.minLength(1)))).toEqual(refused(name));
   });
 
-  test('a length check through .nullable() on an array whose metadata fails is not reported', () => {
-    const annotated: z.ZodType = z.array(z.string()).meta({ unit: 'items' }).nullable();
+  test('a length check through z.lazy() on an array whose metadata fails is not reported', () => {
+    const annotated: z.ZodType = z.lazy(() => z.array(z.string()).meta({ unit: 'items' }));
 
     expect(walkBody(annotated.check(z.minLength(1)))).toEqual(refused('.meta({ unit })'));
   });
 
-  test('a bound set again through .nullable() is refused', () => {
-    const nullable: z.ZodType = z.string().min(1).nullable();
+  test('a length check on .nullable() around an array whose metadata fails is refused as on null', () => {
+    const annotated: z.ZodType = z.array(z.string()).meta({ unit: 'items' }).nullable();
 
-    expect(walkBody(nullable.check(z.minLength(2)))).toEqual(refusedAll([repeated]));
+    expect(walkBody(annotated.check(z.minLength(1)))).toEqual(
+      refusedAll([failureAt('', '.meta({ unit })'), onNull('', 'z.minLength()')]),
+    );
+  });
+
+  test('a bound set again through z.lazy() is refused', () => {
+    const lazy: z.ZodType = z.lazy(() => z.string().min(1));
+
+    expect(walkBody(lazy.check(z.minLength(2)))).toEqual(refusedAll([repeated]));
   });
 
   test('a bound set again on a schema a .refine() already failed is refused', () => {
-    const nullable: z.ZodType = z.string().refine(isFilled).min(1).nullable();
+    const lazy: z.ZodType = z.lazy(() => z.string().refine(isFilled).min(1));
 
-    expect(walkBody(nullable.check(z.minLength(2)))).toEqual(
+    expect(walkBody(lazy.check(z.minLength(2)))).toEqual(
       refusedAll([failureAt('', '.refine()'), repeated]),
     );
   });
 
-  test.each<[string, z.ZodType]>([
-    ['.nullable()', z.array(z.date()).min(1).nullable()],
-    ['z.lazy()', z.lazy(() => z.array(z.date()).min(1))],
-  ])('a bound set again through %s on an array whose items fail is refused', (_name, schema) => {
-    expect(walkBody(schema.check(z.minLength(2)))).toEqual(refusedAll([items, repeated]));
+  test('a bound set again through z.lazy() on an array whose items fail is refused', () => {
+    const lazy: z.ZodType = z.lazy(() => z.array(z.date()).min(1));
+
+    expect(walkBody(lazy.check(z.minLength(2)))).toEqual(refusedAll([items, repeated]));
   });
 
   describe('a schema with an id on a cycle is a ref wherever it is used, so a use takes no check', () => {
@@ -745,7 +782,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       ({ locate }) => {
         const children: z.ZodType = z.lazy(() => loop).meta({ id: 'children' });
         const loop: z.ZodType = z.array(z.union([children, z.date()]));
-        const use = loop.nullable().check(z.minLength(1));
+        const use = z.lazy(() => loop).check(z.minLength(1));
 
         const walked = walkSchemas(locate(loop, use), () => undefined);
 
@@ -817,8 +854,8 @@ describe('walkSchemas: constraints that admit no value', () => {
     expect(walkBody(schema)).toEqual(refused(lengthBound));
   });
 
-  test('bounds set across a .nullable() are judged together', () => {
-    const schema: z.ZodType = z.string().min(5).nullable();
+  test('bounds set across a z.lazy() are judged together', () => {
+    const schema: z.ZodType = z.lazy(() => z.string().min(5));
 
     expect(walkBody(schema.check(z.maxLength(3)))).toEqual(refused(noValue));
   });
@@ -840,6 +877,135 @@ describe('walkSchemas: constraints that admit no value', () => {
 
     expect(walkBody(schema)).toEqual(
       refusedAll([failureAt('', '.refine()'), failureAt('', noValue)]),
+    );
+  });
+});
+
+describe('walkSchemas: a check on a schema that admits null or undefined', () => {
+  function checked(schema: z.ZodType, check: object): z.ZodType {
+    return schema.check(check as never);
+  }
+
+  /** Every check the walker takes as a constraint, on the schema its type takes it on. */
+  const takenChecks = [
+    { name: 'z.gt()', construct: 'z.gt()', inner: z.number(), check: z.gt(3) },
+    { name: 'z.gte()', construct: 'z.gt()', inner: z.number(), check: z.gte(3) },
+    { name: 'z.lt()', construct: 'z.lt()', inner: z.number(), check: z.lt(3) },
+    { name: 'z.lte()', construct: 'z.lt()', inner: z.number(), check: z.lte(3) },
+    {
+      name: 'z.multipleOf()',
+      construct: 'z.multipleOf()',
+      inner: z.number(),
+      check: z.multipleOf(2),
+    },
+    { name: 'z.int()', construct: 'z.safeint()', inner: z.number(), check: z.int() },
+    { name: 'z.minLength()', construct: 'z.minLength()', inner: z.string(), check: z.minLength(2) },
+    { name: 'z.maxLength()', construct: 'z.maxLength()', inner: z.string(), check: z.maxLength(5) },
+    { name: 'z.length()', construct: 'z.length()', inner: z.string(), check: z.length(3) },
+    { name: 'z.regex()', construct: 'z.regex()', inner: z.string(), check: z.regex(/^a/) },
+    { name: 'a format', construct: 'z.email()', inner: z.string(), check: z.email() },
+    {
+      name: 'z.minLength() on an array',
+      construct: 'z.minLength()',
+      inner: z.array(z.string()),
+      check: z.minLength(1),
+    },
+  ];
+
+  type Taken = (typeof takenChecks)[number];
+
+  const places = [
+    {
+      name: '.nullable()',
+      make: ({ inner, check }: Taken) => checked(inner.nullable(), check),
+    },
+    {
+      name: 'z.lazy() around .nullable()',
+      make: ({ inner, check }: Taken) =>
+        checked(
+          z.lazy(() => inner.nullable()),
+          check,
+        ),
+    },
+    {
+      name: '.nullable() around .nullable()',
+      make: ({ inner, check }: Taken) => checked(inner.nullable().nullable(), check),
+    },
+    {
+      name: '.nullable() inside .nullable()',
+      make: ({ inner, check }: Taken) => checked(inner.nullable(), check).nullable(),
+    },
+  ];
+
+  const cases = places.flatMap((place) =>
+    takenChecks.map((taken) => ({
+      name: `${taken.name} on ${place.name}`,
+      schema: place.make(taken),
+      failure: onNull('', taken.construct),
+    })),
+  );
+
+  test.each(cases)(
+    '$name fails, naming the check and the schema to put it on',
+    ({ schema, failure }) => {
+      expect(walkBody(schema)).toEqual(refusedAll([failure]));
+    },
+  );
+
+  function checkedMini(schema: zm.ZodMiniType, check: object): zm.ZodMiniType {
+    return schema.check(check as never);
+  }
+
+  test.each<[string, zm.ZodMiniType, string]>([
+    ['z.gt()', checkedMini(zm.nullable(zm.number()), zm.gt(3)), 'z.gt()'],
+    ['z.multipleOf()', checkedMini(zm.nullable(zm.number()), zm.multipleOf(2)), 'z.multipleOf()'],
+    ['z.minLength()', checkedMini(zm.nullable(zm.string()), zm.minLength(2)), 'z.minLength()'],
+    ['z.regex()', checkedMini(zm.nullable(zm.string()), zm.regex(/^a/)), 'z.regex()'],
+  ])('%s on a zod/mini nullable fails the same way', (_name, schema, construct) => {
+    expect(walkBody(schema)).toEqual(refusedAll([onNull('', construct)]));
+  });
+
+  test('a check on a z.lazy() around a number is still a constraint', () => {
+    const schema = z.lazy(() => z.number()).check(z.gt(3));
+
+    expect(walkBody(schema).located[0]).toEqual({
+      kind: 'walked',
+      value: { type: 'number', exclusiveMin: 3 },
+    });
+  });
+
+  test('a check written inside .nullable() is still a constraint', () => {
+    const schema = z.number().gt(3).nullable();
+
+    expect(walkBody(schema).located[0]).toEqual({
+      kind: 'walked',
+      value: { type: 'number', exclusiveMin: 3, nullable: true },
+    });
+  });
+
+  test('a check the type of a nullable schema does not take keeps its own refusal', () => {
+    const schema = checked(z.boolean().nullable(), z.gt(3));
+
+    expect(walkBody(schema)).toEqual(refused('z.gt()'));
+  });
+
+  test('a conditional check on .nullable() keeps its own refusal', () => {
+    const schema = checked(z.number().nullable(), z.gt(3, whenAlways));
+
+    expect(walkBody(schema)).toEqual(refused('a conditional check'));
+  });
+
+  test('a check on .nullable() with null among its examples fails without throwing', () => {
+    const schema = checked(z.number().nullable(), z.multipleOf(2)).meta({ examples: [null] });
+
+    expect(walkBody(schema)).toEqual(refusedAll([onNull('', 'z.multipleOf()')]));
+  });
+
+  test('a check on .nullable() is refused beside the failures of the schema inside', () => {
+    const schema = checked(z.string().refine(isFilled).min(1).nullable(), z.minLength(2));
+
+    expect(walkBody(schema)).toEqual(
+      refusedAll([failureAt('', '.refine()'), onNull('', 'z.minLength()')]),
     );
   });
 });
