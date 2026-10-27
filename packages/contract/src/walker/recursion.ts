@@ -18,6 +18,7 @@ import {
   type ReachedSchema,
   refusedBeside,
   type Walked,
+  type Walking,
   walked,
 } from './walked.ts';
 
@@ -30,7 +31,7 @@ export type Entering = ReachedSchema & { readonly id: string | undefined };
  * is used, whichever schema the walk enters the group at.
  */
 export type Recursion = {
-  readonly within: (entering: Entering, walk: () => Walked) => Walked;
+  readonly within: (entering: Entering, walk: () => Walking) => Walking;
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
   /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
   readonly forgetUnnamedCycles: () => void;
@@ -75,7 +76,7 @@ export function startRecursion(compositions: readonly Composition[]): Recursion 
   };
 }
 
-function within(state: State, entering: Entering, walk: () => Walked): Walked {
+function* within(state: State, entering: Entering, walk: () => Walking): Walking {
   const known = refOf(state, entering) ?? reportedOf(state, entering) ?? metAgain(state, entering);
   if (known !== undefined) {
     return known;
@@ -84,7 +85,7 @@ function within(state: State, entering: Entering, walk: () => Walked): Walked {
   const ancestor: Ancestor = { ...entering, index, low: index, reached: false };
   state.ancestors.push(ancestor);
   const start = state.memos.start();
-  const node = walk();
+  const node = yield* walk();
   state.ancestors.pop();
   reachBack(state, ancestor.low);
   const isOnCycle = ancestor.reached || ancestor.low < ancestor.index;

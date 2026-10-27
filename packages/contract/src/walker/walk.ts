@@ -1,5 +1,6 @@
 import type * as core from 'zod/v4/core';
 import type { Def } from './def-types.ts';
+import { walkedBy } from './drive.ts';
 import type { Place } from './location.ts';
 import {
   annotatedBy,
@@ -20,8 +21,10 @@ import {
   type ReachedSchema,
   refusedBeside,
   type Under,
+  type Visit,
   type Walked,
   type Walker,
+  type Walking,
   walked,
 } from './walked.ts';
 import { walkDefinition, withOwnChecks } from './zod-types.ts';
@@ -83,18 +86,21 @@ export function walkMeetingSchemas(
   const compositions: Composition[] = [];
   const recursion = startRecursion(compositions);
   const walker: Walker = {
-    schema: (schema, at) => walkSchema(schema, at, state),
+    schema: function* (schema, at) {
+      return yield { schema, at };
+    },
     field: (schema, at) => walkField(schema, at, state),
     reach: (schema, at) => reachedAt(schema, at, state),
   };
   const state: WalkState = { walker, recursion, originOf, met: new Map(), compositions };
+  const enter = (visit: Visit) => walkSchema(visit.schema, visit.at, state);
   let declaration: unknown;
   const walkedLocations = located.map(({ at, schema }) => {
     if (at.declaration !== declaration) {
       recursion.forgetUnnamedCycles();
       declaration = at.declaration;
     }
-    return { at, walked: walker.schema(schema, at) };
+    return { at, walked: walkedBy(walkSchema(schema, at, state), enter) };
   });
   return {
     located: walkedLocations,
@@ -114,7 +120,7 @@ function withOrigin(schema: core.$ZodType, at: Under, own: Origin | undefined): 
   return { ...at, schema, origin: own ?? at.origin };
 }
 
-function walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walked {
+function* walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walking {
   const own = state.originOf(schema);
   const at = withOrigin(schema, under, own);
   if (!state.met.has(schema)) {
@@ -122,8 +128,8 @@ function walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walk
   }
   const metadata = ownMetadata(schema, at, own);
   const id = metadata.kind === 'walked' ? metadata.value.id : undefined;
-  return state.recursion.within({ schema, at, id }, () => {
-    const annotatedNode = annotatedBy(walkDefinition(schema, at, state.walker), metadata);
+  return yield* state.recursion.within({ schema, at, id }, function* () {
+    const annotatedNode = annotatedBy(yield* walkDefinition(schema, at, state.walker), metadata);
     const node = withExamplesParsed(schema, annotatedNode, at);
     recordComposition(node, at, state);
     return node;
@@ -138,29 +144,29 @@ function recordComposition(node: Walked, at: Reached, { compositions }: WalkStat
 }
 
 /** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
-function walkField(schema: core.$ZodType, under: Under, state: WalkState): Walked<Field> {
+function* walkField(schema: core.$ZodType, under: Under, state: WalkState): Walking<Field> {
   const def = schema._zod.def as Def;
   if (def.type === 'optional') {
-    const inner = walkSchema(def.innerType, under, state);
+    const inner = yield* state.walker.schema(def.innerType, under);
     return optionalField(
       throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner),
     );
   }
   if (def.type === 'nonoptional') {
-    const inner = walkRequired(def.innerType, under, state);
+    const inner = yield* walkRequired(def.innerType, under, state);
     return requiredField(
       throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner),
     );
   }
-  return requiredField(walkSchema(schema, under, state));
+  return requiredField(yield* state.walker.schema(schema, under));
 }
 
-function walkRequired(schema: core.$ZodType, under: Under, state: WalkState): Walked {
+function* walkRequired(schema: core.$ZodType, under: Under, state: WalkState): Walking {
   const def = schema._zod.def as Def;
   if (def.type !== 'optional') {
-    return walkSchema(schema, under, state);
+    return yield* state.walker.schema(schema, under);
   }
-  const inner = walkSchema(def.innerType, under, state);
+  const inner = yield* state.walker.schema(def.innerType, under);
   return throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner);
 }
 

@@ -62,8 +62,13 @@ export type {
   SuccessValueOf,
 } from './inference.ts';
 export { instantTextOf, isInstantInRange, isUtcInstant } from './instants.ts';
-export type { CodeNameOf } from './message-version.ts';
-export { codeNameOf, isMessageVersion } from './message-version.ts';
+export type { CodeNameOf, MessageNameKind } from './message-version.ts';
+export {
+  codeNameOf,
+  isMessageVersion,
+  messageNameKinds,
+  messageOfCodeName,
+} from './message-version.ts';
 export {
   isCommand,
   isDefinitions,
@@ -101,7 +106,7 @@ export type {
   ServiceContract,
 } from './roots.ts';
 export { defineApplication, defineService } from './roots.ts';
-export type { IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
+export type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
 export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export type {
   IssueCode,

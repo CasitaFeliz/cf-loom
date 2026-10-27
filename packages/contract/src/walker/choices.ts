@@ -19,8 +19,10 @@ import {
   failuresOf,
   type Outline,
   type Reached,
+  type ReachedSchema,
   type Walked,
   type Walker,
+  type Walking,
   walked,
 } from './walked.ts';
 
@@ -39,14 +41,16 @@ export function walkEnum(schema: core.$ZodEnum, at: Reached): Walked {
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
-export function walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): Walked {
+export function* walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): Walking {
   const def = schema._zod.def;
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyUnion, { type: 'union' });
   }
-  const options = allWalked(
-    def.options.map((option, index) => walker.schema(option, inside(at, optionStep(index)))),
-  );
+  const walkedOptions: Walked[] = [];
+  for (const [index, option] of def.options.entries()) {
+    walkedOptions.push(yield* walker.schema(option, inside(at, optionStep(index))));
+  }
+  const options = allWalked(walkedOptions);
   if (def.inclusive === false) {
     return failed(failuresOf([notAllowed(at, refused.xor), options]), { type: 'union' });
   }
@@ -57,11 +61,11 @@ export function walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): 
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
-export function walkTagged(
+export function* walkTagged(
   schema: core.$ZodDiscriminatedUnion,
   at: Reached,
   walker: Walker,
-): Walked {
+): Walking {
   const def = schema._zod.def;
   const tagged: Outline = { type: 'tagged' };
   if (def.options.length === 0) {
@@ -70,21 +74,14 @@ export function walkTagged(
   const duplicate = hasDuplicateValue(def)
     ? [notAllowed(at, refused.duplicateDiscriminatorValue)]
     : [];
-  const variants = allWalked(
-    def.options.map((option, index) => {
-      const values = option._zod.propValues?.[def.discriminator];
-      const variantAt = walker.reach(
-        option,
-        inside(at, variantStepOf(def.discriminator, values, index)),
-      );
-      const variant = walker.schema(option, variantAt);
-      const refusal = variantRefusalOf(option, def.discriminator);
-      if (refusal !== undefined) {
-        return failed(failuresOf([notAllowed(variantAt, refusal), variant]));
-      }
-      return taggedVariant(variant, values, variantAt);
-    }),
-  );
+  const walkedVariants: Walked<[string, TaggedNode['variants'][string]]>[] = [];
+  for (const [index, option] of def.options.entries()) {
+    const values = option._zod.propValues?.[def.discriminator];
+    const step = variantStepOf(def.discriminator, values, index);
+    const variant = { schema: option, at: walker.reach(option, inside(at, step)), values };
+    walkedVariants.push(yield* walkVariant(variant, def.discriminator, walker));
+  }
+  const variants = allWalked(walkedVariants);
   if (variants.kind === 'not-allowed' || duplicate.length > 0) {
     return failed(failuresOf([...duplicate, variants]), tagged);
   }
@@ -93,6 +90,23 @@ export function walkTagged(
     discriminator: def.discriminator,
     variants: Object.fromEntries(variants.value),
   });
+}
+
+/** A variant of a discriminated union where it sits, and the discriminator values zod reads from it. */
+type Variant = ReachedSchema & { readonly values: ReadonlySet<unknown> | undefined };
+
+/** A variant keyed by its discriminator value, or refused beside what it holds when it cannot be. */
+function* walkVariant(
+  { schema, at, values }: Variant,
+  discriminator: string,
+  walker: Walker,
+): Walking<[string, TaggedNode['variants'][string]]> {
+  const variant = yield* walker.schema(schema, at);
+  const refusal = variantRefusalOf(schema, discriminator);
+  if (refusal !== undefined) {
+    return failed(failuresOf([notAllowed(at, refusal), variant]));
+  }
+  return taggedVariant(variant, values, at);
 }
 
 /**

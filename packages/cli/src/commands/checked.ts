@@ -1,22 +1,23 @@
-import type { ChosenVersion, NoBaseline } from '../registry/index.ts';
+import type { Choice, Listing, NoBaseline } from '../registry/index.ts';
+import { listedVersionsOf } from '../versioning/index.ts';
 import type { CheckedChange } from './checked-change.ts';
 import type { Derivation } from './derivation.ts';
 import type { Ending } from './run.ts';
 
-/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named), how it was chosen and the highest stable version, or the reason it has none. */
+/** What `check` compared a Snapshot with: the version it compared with (the Baseline, or the one `--against` named) and how it was chosen, or the reason it has none. */
 type Against =
   | {
       readonly kind: 'baseline';
       readonly version: string;
-      readonly stable: string | undefined;
-      readonly chosen: ChosenVersion['chosen'];
+      readonly chosen: Choice['kind'];
     }
-  | { readonly kind: 'none'; readonly why: NoBaseline };
+  | { readonly kind: 'none'; readonly reason: string };
 
-/** What `check` found before any version is derived: the package, what it was compared with and every Change. */
+/** What `check` found before any version is derived: the package with the highest stable version it lists, what it was compared with and every Change. */
 export type Compared = {
   readonly kind: 'checked';
   readonly packageName: string;
+  readonly stable: string | undefined;
   readonly against: Against;
   readonly changes: readonly CheckedChange[];
 };
@@ -38,10 +39,12 @@ export function endingOf(changes: readonly CheckedChange[]): Ending {
   return { status: 0, stderr: [] };
 }
 
-/** Why a package has no Baseline, naming the registry and the npm user when npm does not know it. */
-export function reasonOf(why: NoBaseline): string {
+/** Why a package has no Baseline, naming the registry and the npm user when npm does not know it, or the highest version it lists when cf-loom published none. */
+export function reasonOf(why: NoBaseline, { versions }: Listing): string {
   switch (why.kind) {
     case 'unknown-package':
       return `it is not in ${why.registry} for the npm user ${why.username}: never published, or that login cannot read it`;
+    case 'none-published':
+      return `none of its versions was published by cf-loom, the highest ${listedVersionsOf(versions).highest}`;
   }
 }

@@ -394,4 +394,57 @@ describe('fakeProvider: types', () => {
     expectTypeOf(bare).toEqualTypeOf<Client<typeof paymentsDependency>>();
     expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
   });
+
+  test('client() refuses an options variable holding headers and a fetch of its own', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, fetch: globalThis.fetch };
+
+    // @ts-expect-error fetch is not a declared field: the fake's own is the client's
+    const clientOf = () => payments.client(options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('client() refuses an options variable holding headers and a baseUrl', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, baseUrl: 'https://elsewhere.test' };
+
+    // @ts-expect-error baseUrl is not a declared field: the fake's is the client's
+    const clientOf = () => payments.client(options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('client() refuses an options variable holding headers and a misspelled inferFault', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, inferFalt: () => undefined };
+
+    // @ts-expect-error inferFalt is not a declared field
+    const clientOf = () => payments.client(options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('client() accepts an options variable holding only declared fields, headers configured', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { headers: { 'x-api-key': 'k' }, inferFault: () => undefined };
+
+    const configured = payments.client(options);
+
+    expectTypeOf(configured).toEqualTypeOf<Client<typeof paymentsDependency, 'x-api-key'>>();
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
+  });
+
+  test('client() gives a function written inline in its options its parameter types', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    const configured = payments.client({
+      inferFault: (_happened, inferred) => {
+        expectTypeOf(inferred.retryable).toEqualTypeOf<boolean>();
+        return undefined;
+      },
+    });
+
+    expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
+  });
 });

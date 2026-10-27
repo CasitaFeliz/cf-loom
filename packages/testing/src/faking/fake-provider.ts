@@ -6,6 +6,7 @@ import type {
   ListedName,
 } from '@cf-loom/client/internal';
 import type { Http, InputOf } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import { fakedProviderOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
@@ -27,8 +28,10 @@ export type FakeClientOptions<
  */
 export type FakeProvider<D extends AnyDependency> = {
   readonly fetch: Http;
-  client<Configured extends ConfiguredName<D> = never>(
-    options?: FakeClientOptions<D, Configured>,
+  client<Configured extends ConfiguredName<D> = never, const Given = unknown>(
+    options?: FakeClientOptions<D, Configured> &
+      Given &
+      NoInfer<DeclaredFieldsRule<Given, FakeClientOptions<D, Configured>>>,
   ): Client<D, Configured>;
   on<Name extends ListedName<D>>(name: Name): Script<D, Name>;
   /** The requests the Endpoint read as valid, in the order they reached `fetch`, each a frozen copy of its parsed Input. */

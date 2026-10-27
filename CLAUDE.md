@@ -10,7 +10,7 @@ Organization-agnostic tooling for service Contracts: HTTP Endpoints and messagin
 | `COMPATIBILITY.md` | How a Contract may change: the Compatibility Check and its rules |
 | `ARCHITECTURE.md` | How the pieces fit: packages, runtime, the Wire protocol, what cf-loom leaves to the organization |
 | `SNAPSHOT.md` | The Snapshot format the Compatibility Check compares |
-| `CODING_STANDARDS.md` | How the code is written and reviewed (C1–C28) |
+| `CODING_STANDARDS.md` | How the code is written and reviewed (C1–C29) |
 | `WORKFLOW.md` | How an issue becomes code on `main`: plan, Definition of Ready, implement, review, fix, Definition of Done, merge |
 | `README.md` | What cf-loom is, a first Service, and the packages table |
 | `packages/<pkg>/README.md` | How to use the package: its API, options, examples |

@@ -41,7 +41,7 @@ export async function unlistedVersionLinesOf(
         listed.set(packageName, new Set());
         break;
       case 'versions':
-        listed.set(packageName, new Set(found.versions));
+        listed.set(packageName, new Set(found.listing.versions));
         break;
     }
   }

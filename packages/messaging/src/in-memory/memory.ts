@@ -1,4 +1,5 @@
 import type { ServiceContract } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import { connectedMessaging, type MessagingOptions } from '../messaging/index.ts';
 import { serviceVersionsOf, subjectsOf } from '../subjects/index.ts';
 import { injectedAttemptsOf } from './attempts.ts';
@@ -13,16 +14,20 @@ import type { MemoryMessaging } from './types.ts';
  * last two through their own Messages, none of the organization's broker configuration modeled.
  * Resolves to its `Messaging` and what a test drives and watches it with.
  */
-export async function memory<const C extends ServiceContract>(
+export function memory<const C extends ServiceContract, const Given = unknown>(
   contract: C,
+  options?: MessagingOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessagingOptions>>,
+): Promise<MemoryMessaging<C>>;
+export async function memory(
+  contract: ServiceContract,
   options: MessagingOptions = {},
-): Promise<MemoryMessaging<C>> {
+): Promise<MemoryMessaging<ServiceContract>> {
   const subjects = subjectsOf(contract);
   const versions = serviceVersionsOf(subjects);
   const deliveries = new Deliveries();
   const connection = new MemoryConnection(deliveries);
   return {
-    ...connectedMessaging<C>(subjects, connection, options),
+    ...connectedMessaging(subjects, connection, options),
     settled: () => deliveries.settled(),
     get messages() {
       return connection.messages();

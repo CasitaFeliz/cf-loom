@@ -12,6 +12,7 @@ export {
   nodesReachedFrom,
   nodesWithin,
   reachedDefsOf,
+  resolvedRefOf,
 } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
