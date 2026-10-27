@@ -4,6 +4,9 @@ const limit = 1000;
 /** What a cut says, and what `settled()` rejects with when a chain of Messages is cut. */
 const cutMessage = `a chain of Messages was cut after ${limit.toLocaleString('en-US')} deliveries`;
 
+/** The real `setImmediate`, captured when the module loads so that fake timers installed later cannot stop the line. */
+const startsLater = setImmediate;
+
 /** The error a cut drops a delivery with, which `settled()` reports. */
 class Cut extends Error {}
 
@@ -20,7 +23,8 @@ type LinedUp = {
 
 /**
  * The one delivery line of a `memory()`: deliveries run one at a time in the order they were lined
- * up, on their own, and a chain that keeps lining up more is cut after 1,000 deliveries.
+ * up, on their own, starting on a later macrotask than the code that lined them up, and a chain
+ * that keeps lining up more is cut after 1,000 deliveries.
  */
 export class DeliveryLine {
   readonly #lined: LinedUp[] = [];
@@ -50,7 +54,7 @@ export class DeliveryLine {
       return;
     }
     this.#running = Promise.withResolvers();
-    queueMicrotask(() => void this.#drain());
+    startsLater(() => void this.#drain());
   }
 
   async #drain(): Promise<void> {

@@ -8,7 +8,7 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import { handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
 import type { ConsumedFault, Messaging } from '../index.ts';
 import { memory } from './index.ts';
@@ -175,7 +175,7 @@ function aGate() {
 
 /** Lets every Handler that can run, run. */
 function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 const v1Body = { orderId: 'o-1' };
@@ -292,6 +292,78 @@ describe('memory(): what the Service publishes and sends', () => {
     await inMemory.settled();
 
     expect(log).toEqual(['a starts', 'a ends', 'b starts', 'b ends', 'c starts', 'c ends']);
+  });
+
+  test('a single publish resolves before its Handler runs', async () => {
+    const log: string[] = [];
+    const { publisher, inMemory } = await running(() => ({
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => {
+          log.push('handler');
+        }),
+      },
+    }));
+
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-32' });
+    log.push('publish resolved');
+    await inMemory.settled();
+
+    expect(log).toEqual(['publish resolved', 'handler']);
+  });
+
+  test('a single send resolves before its Handler runs', async () => {
+    const log: string[] = [];
+    const { sender, inMemory } = await running(() => ({
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, () => {
+          log.push('handler');
+        }),
+      },
+    }));
+
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-32' });
+    log.push('send resolved');
+    await inMemory.settled();
+
+    expect(log).toEqual(['send resolved', 'handler']);
+  });
+
+  test('calls made in a row are recorded before any Handler publishes, whatever the Handler awaits first', async () => {
+    const sends: string[] = [];
+    const { publisher, sender, inMemory } = await running((started) => ({
+      subscriptions: {
+        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, async () => {
+          await Promise.resolve();
+          await started.sender.send('ChargeCard', { orderId: 'from-handler' }, { factId: 'h' });
+        }),
+      },
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, ({ orderId }) => {
+          sends.push(orderId);
+        }),
+      },
+    }));
+
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-1' });
+    await sender.send('ChargeCard', { orderId: 'top-level' }, { factId: 'f-2' });
+    await inMemory.settled();
+
+    expect(sends).toEqual(['top-level', 'from-handler']);
+  });
+
+  test('under Vitest fake timers, settled() still waits for the Handlers', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => void vi.useRealTimers());
+    const { publisher, inMemory, received } = await running();
+
+    await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-1' });
+    await inMemory.settled();
+
+    expect(received.map(({ handler }) => handler)).toEqual([
+      'notifyOnCreated',
+      'auditCreated',
+      'notifyOnV1',
+    ]);
   });
 
   test('publish resolves once the Message is recorded, without waiting for its Handlers', async () => {

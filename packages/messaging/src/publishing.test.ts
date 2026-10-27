@@ -248,6 +248,17 @@ describe('publisher.publish', () => {
     ]);
   });
 
+  test('two versions with equal bodies are sent longest broker message id first, since the headers count', async () => {
+    const { publisher, published } = await opened();
+
+    await publisher.publish('Grown', { v9: tree, v10: tree }, fact);
+
+    expect(published.map((message) => message.subject)).toEqual([
+      'orders-service.event.Grown.v10',
+      'orders-service.event.Grown.v9',
+    ]);
+  });
+
   test('a Broker that refuses each Message over a limit takes every version of a call or none, the largest first (seed 327)', async () => {
     const next = seededNext(327);
     for (let round = 0; round < 200; round += 1) {
@@ -795,7 +806,7 @@ describe('sender.send', () => {
 });
 
 describe('memory(): publish and send', () => {
-  test('an Event and a Command with one name and version, published and sent with one Fact id, both reach the Broker', async () => {
+  test('an Event and a Command with one name and version, published and sent with one Fact id, both reach memory()', async () => {
     const chargeEvent = defineEvent({
       name: 'Charge',
       version: 1,
@@ -844,7 +855,7 @@ function seededNext(seed: number): () => number {
 }
 
 describe('memory().messagesOf', () => {
-  test('lists the Messages of one Message Version among those the Service published and sent, in the order the Broker took them', async () => {
+  test('lists the Messages of one Message Version among those the Service published and sent, in the order memory() took them', async () => {
     const { inMemory, publisher, sender } = await overMemory();
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' });
     await sender.send('ChargeCard', charge, { factId: 'o-1' });
@@ -861,7 +872,7 @@ describe('memory().messagesOf', () => {
     ]);
   });
 
-  test('lists each Message with the body the Broker took', async () => {
+  test('lists each Message with the body memory() took', async () => {
     const { inMemory, publisher } = await overMemory();
     await publisher.publish('OrderCreated', { v2, v3 }, fact);
 
@@ -894,7 +905,7 @@ describe('memory().messagesOf', () => {
     expect(asked).toThrow(`${identity} is no Message Version the Service publishes or sends`);
   });
 
-  test('leaves out a duplicate the Broker dropped', async () => {
+  test('leaves out a duplicate memory() dropped', async () => {
     const { inMemory, publisher } = await overMemory();
     await publisher.publish('OrderCreated', { v2, v3 }, fact);
     await publisher.publish('OrderCreated', { v2, v3 }, fact);

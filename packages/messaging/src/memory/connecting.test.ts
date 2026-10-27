@@ -99,13 +99,16 @@ describe('memory(): one connection', () => {
 
   test('Messages still lined up when messaging closes are left pending, their Handlers never run', async () => {
     const gate = aGate();
+    const entered = Promise.withResolvers<void>();
     const handled: string[] = [];
     const inMemory = await running(async (orderId) => {
+      entered.resolve();
       await gate.opened;
       handled.push(orderId);
     });
     await inMemory.sender.send('ChargeCard', { orderId: 'a' }, { factId: 'a' });
     await inMemory.sender.send('ChargeCard', { orderId: 'b' }, { factId: 'b' });
+    await entered.promise;
 
     const closing = inMemory.close();
     gate.open();
@@ -131,10 +134,12 @@ describe('memory(): one connection', () => {
 
   test('redeliver while closing raises deliveryCount without running the Handler', async () => {
     const gate = aGate();
+    const holding = Promise.withResolvers<void>();
     const handled: string[] = [];
     const inMemory = await running(async (orderId, deliveryCount) => {
       handled.push(`${orderId}:${deliveryCount}`);
       if (orderId === 'hold') {
+        holding.resolve();
         await gate.opened;
       } else {
         throw new Error('gateway down');
@@ -143,6 +148,7 @@ describe('memory(): one connection', () => {
     await inMemory.sender.send('ChargeCard', { orderId: 'x' }, { factId: 'x' });
     await inMemory.settled().catch(() => undefined);
     await inMemory.sender.send('ChargeCard', { orderId: 'hold' }, { factId: 'hold' });
+    await holding.promise;
 
     const closing = inMemory.close();
     const redelivering = inMemory.redeliver();

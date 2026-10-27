@@ -197,7 +197,7 @@ function aGate() {
 
 /** Lets every Handler that can run, run. */
 function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 /** What a promise rejected with, or undefined when it resolved. */

@@ -50,7 +50,7 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
   readonly pending: readonly PendingMessage[];
 };
 
-/** A Message as the Broker took it: its subject, ids and transport headers, and its body parsed from its JSON, typed by its Message Version when it is known. */
+/** A Message as `memory()` took it: its subject, ids and transport headers, and its body parsed from its JSON, typed by its Message Version when it is known. */
 export type RecordedMessage<M extends Event | Command = Event | Command> = {
   readonly subject: string;
   readonly messageId: string;

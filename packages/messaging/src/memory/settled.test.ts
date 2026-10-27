@@ -328,9 +328,11 @@ describe('settled()', () => {
 
   test('a Message a Handler publishes while messaging is closing is left pending, its Handler never run, and settled() resolves', async () => {
     const gate = aGate();
+    const entered = Promise.withResolvers<void>();
     const charged: string[] = [];
     const { inMemory, publisher, sender, close } = await running(() => ({
       notify: async () => {
+        entered.resolve();
         await gate.opened;
         await sender.send('ChargeCard', created, { factId: 'o-1:charge' });
         return undefined;
@@ -341,6 +343,7 @@ describe('settled()', () => {
       },
     }));
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    await entered.promise;
 
     const closing = close();
     gate.open();
