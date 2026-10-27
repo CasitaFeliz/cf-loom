@@ -51,7 +51,7 @@ export class DeliveryLine {
     return this.#drive(Number.POSITIVE_INFINITY);
   }
 
-  /** Runs the deliveries lined up now and none lined up after them, so what they line up waits; resolves once they ran. */
+  /** Runs at least the deliveries lined up now, and none lined up after them, so what they line up waits; resolves when the line stops. */
   driveLined(): Promise<void> {
     return this.#drive(this.#lined.length);
   }
@@ -87,9 +87,7 @@ export class DeliveryLine {
       await this.#lined.shift()?.run();
     }
     this.#budget = 0;
-    if (this.#lined.length === 0) {
-      this.#started = 0;
-    }
+    this.#started = 0;
     this.#running = undefined;
     running.resolve();
   }

@@ -451,6 +451,31 @@ describe('settled(): a chain of Messages that keeps producing', () => {
     await expect(inMemory.settled()).resolves.toBeUndefined();
   });
 
+  test('600 delivers awaited one after the other, each Handler sending a Command, are not cut, and settled() then runs what is left', async () => {
+    const charged: string[] = [];
+    const { inMemory } = await running((connection) => ({
+      notify: async (_body, meta) => {
+        await connection.sender.send('ChargeCard', created, { factId: `charge-${meta.factId}` });
+        return undefined;
+      },
+      charge: (_body, meta) => {
+        charged.push(meta.factId);
+        return undefined;
+      },
+    }));
+    const settlements: string[] = [];
+
+    for (let delivered = 0; delivered < 600; delivered += 1) {
+      settlements.push(
+        await inMemory.deliver(orderCreatedV1, created, { factId: `o-${delivered}` }),
+      );
+    }
+
+    expect(settlements.filter((settlement) => settlement === 'acked')).toHaveLength(600);
+    await expect(inMemory.settled()).resolves.toBeUndefined();
+    expect(charged).toHaveLength(600);
+  });
+
   /** Two Handlers that trigger each other forever: the Subscription's Message Handler sends, the Command's publishes. */
   function chaining(connection: Running, count: { deliveries: number }) {
     return {
