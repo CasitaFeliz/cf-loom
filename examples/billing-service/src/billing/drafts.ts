@@ -1,7 +1,7 @@
-import type { orderCreatedEventV1 } from '@org/contract-orders-service';
-import type { z } from 'zod';
+import type { ReceivedBodyOf } from '@cf-loom/handlers';
+import type { readers } from '../generated/readers.generated.ts';
 
-type OrderCreated = z.infer<typeof orderCreatedEventV1.body>;
+type OrderCreated = ReceivedBodyOf<typeof readers.subscriptions.draftInvoiceOnCreated>;
 
 /** An invoice started for one order, for its total, not yet sent. */
 export type DraftInvoice = { readonly orderId: string; readonly total: OrderCreated['total'] };

@@ -18,7 +18,7 @@ export { decimalDigitsOf } from './decimal-digits.ts';
 export type { Catchalls, DefTypes, PipeRefusals } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
-export { formatSchemaOf, isStringFormat } from './format-schemas.ts';
+export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export type { HashFormat } from './hash-formats.ts';
 export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export type { ChangedSite, Place, Site } from './location.ts';

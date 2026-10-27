@@ -1,7 +1,8 @@
 import { emptyConstraintOf } from './bounds.ts';
 import { isFiniteNumber } from './canonical-json.ts';
 import { type Constraint, type ConstraintOf, constraintOfType } from './check-constraints.ts';
-import { type DeclaredCheck, isConditional, nameOfCheck } from './check-defs.ts';
+import { type DeclaredCheck, isConditional } from './check-defs.ts';
+import { isKnownCheckKind, refusedCheck } from './check-names.ts';
 import type { NotAllowed } from './nodes.ts';
 import {
   notAllowed,
@@ -83,19 +84,27 @@ function refusedOnWiderSchema<Node>(
     if (constraint.kind === 'not-allowed') {
       return constraint;
     }
-    return notAllowed(at, refusal(nameOfCheck(check.def)));
+    return notAllowed(at, refusal(refusedCheck(check.def).construct));
   };
 }
 
-/** What each check sets, or why it is refused: a conditional check is refused on any type. */
+/**
+ * What each check sets, or why it is refused: a check of a kind zod added after this walker was
+ * written, and a conditional check, are refused on any type.
+ */
 function constraintsOf<Node>(
   constraintOf: ConstraintOf<Node>,
   checks: readonly DeclaredCheck[],
   at: Reached,
 ): readonly Constraint<Node>[] {
-  return checks.map((check) =>
-    isConditional(check) ? notAllowed(at, refused.conditionalCheck) : constraintOf(check, at),
-  );
+  return checks.map((check) => {
+    if (!isKnownCheckKind(check.def.check)) {
+      return notAllowed(at, refusedCheck(check.def));
+    }
+    return isConditional(check)
+      ? notAllowed(at, refused.conditionalCheck)
+      : constraintOf(check, at);
+  });
 }
 
 /** The node with every constraint that was walked set on it. */

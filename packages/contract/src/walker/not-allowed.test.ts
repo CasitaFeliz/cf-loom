@@ -52,7 +52,18 @@ function refusedAll(failures: readonly ReturnType<typeof failureAt>[]) {
   return { located: [{ kind: 'not-allowed', failures }], defs: {} };
 }
 
-const mutating = '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()';
+const mutating =
+  '.trim(), .toLowerCase(), .toUpperCase(), .normalize(), .slugify() or .overwrite()';
+const refineName = '.refine(), z.custom() or z.instanceof()';
+const superRefineName = '.superRefine(), .check() or .with()';
+const minLengthName = '.min(), .nonempty() or z.minLength()';
+const gtName = '.gt() or .positive()';
+const gteName = '.min(), .gte(), .nonnegative() or z.minimum()';
+const ltName = '.lt() or .negative()';
+const lteName = '.max(), .lte(), .nonpositive() or z.maximum()';
+const multipleOfName = '.multipleOf() or .step()';
+const intName = '.int() or .safe()';
+const maxLengthName = '.max() or z.maxLength()';
 const dynamicValue = 'z.record() or z.json()';
 const noValues = 'a z.enum() or z.literal() without values';
 const nonFinite = 'a number that is not finite (NaN or Infinity)';
@@ -103,14 +114,16 @@ describe('walkSchemas: the Not allowed list', () => {
     ['.transform()', z.string().transform((value) => value.length), '.transform()'],
     ['.preprocess()', z.preprocess((value) => value, z.string()), '.preprocess()'],
     ['.pipe()', z.string().pipe(z.string()), '.pipe()'],
-    ['.refine()', z.string().refine((value) => value !== ''), '.refine()'],
-    ['.superRefine()', z.string().superRefine(() => undefined), '.superRefine() or .check()'],
-    ['.check()', z.string().check(() => undefined), '.superRefine() or .check()'],
-    ['a zod/mini custom check', zm.string().check(zm.refine((value) => value !== '')), '.refine()'],
-    ['z.custom()', z.custom<string>(), 'z.custom()'],
-    ['z.int64()', z.int64(), 'z.bigint()'],
-    ['z.int() on a string', z.string().check(z.int() as never), 'z.int()'],
-    ['z.int() on a boolean', z.boolean().check(z.int() as never), 'z.int()'],
+    [refineName, z.string().refine((value) => value !== ''), refineName],
+    ['.superRefine()', z.string().superRefine(() => undefined), superRefineName],
+    ['.check()', z.string().check(() => undefined), superRefineName],
+    ['a zod/mini custom check', zm.string().check(zm.refine((value) => value !== '')), refineName],
+    ['z.custom()', z.custom<string>(), refineName],
+    ['z.instanceof()', z.instanceof(Date), refineName],
+    ['z.int64()', z.int64(), 'z.int64()'],
+    ['z.uint64()', z.uint64(), 'z.uint64()'],
+    ['z.int() on a string', z.string().check(z.int() as never), '.int() or .safe()'],
+    ['z.int() on a boolean', z.boolean().check(z.int() as never), '.int() or .safe()'],
     ['z.codec()', z.codec(z.string(), z.number(), { decode: Number, encode: String }), 'z.codec()'],
     [
       'a zod/mini z.codec()',
@@ -231,7 +244,7 @@ const whenAlways = { when: () => true } as object;
 
 describe('walkSchemas: the checks of a schema whose node fails', () => {
   const items = failureAt('[]', 'z.date()', 'z.iso.datetime()');
-  const refine = failureAt('', '.refine()');
+  const refine = failureAt('', refineName);
   const conditional = failureAt('', 'a conditional check');
 
   test('a .refine() on an array whose items fail is reported beside the items', () => {
@@ -255,7 +268,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
       const date = failureAt('a', 'z.date()', 'z.iso.datetime()');
 
       expect(walkBody(z.object({ a: field }))).toEqual(
-        refusedAll([date, failureAt('a', '.refine()')]),
+        refusedAll([date, failureAt('a', refineName)]),
       );
     },
   );
@@ -292,7 +305,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
 
     const checked = schema.check(z.minLength(1)).refine(isFilled);
 
-    expect(walkBody(checked)).toEqual(refusedAll([items, onNull('', 'z.minLength()'), refine]));
+    expect(walkBody(checked)).toEqual(refusedAll([items, onNull('', minLengthName), refine]));
   });
 
   test('a length check on a refused .default() of an array is not reported', () => {
@@ -304,7 +317,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
   test('a length check on a refused .default() of a number is reported', () => {
     const schema: z.ZodType = z.number().default(0);
 
-    const length = failureAt('', 'z.minLength()');
+    const length = failureAt('', minLengthName);
     expect(walkBody(schema.check(z.minLength(1)))).toEqual(
       refusedAll([failureAt('', '.default()'), length]),
     );
@@ -314,7 +327,7 @@ describe('walkSchemas: the checks of a schema whose node fails', () => {
     const looping: z.ZodType = z.lazy(() => looping.nullable()).check(z.minLength(1));
 
     const cycle = failureAt('', 'a cycle without .meta({ id })', '.meta({ id })');
-    const length = failureAt('', 'z.minLength()');
+    const length = failureAt('', minLengthName);
     expect(walkBody(looping)).toEqual(refusedAll([cycle, length]));
   });
 
@@ -391,13 +404,13 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
     {
       name: 'a .refine()',
       apply: (schema: z.ZodType) => schema.refine(isFilled),
-      refusals: (at: string, _taken: Failure[] | undefined) => [failureAt(at, '.refine()')],
+      refusals: (at: string, _taken: Failure[] | undefined) => [failureAt(at, refineName)],
     },
     {
       name: 'a length check',
       apply: (schema: z.ZodType) => schema.check(z.minLength(1)),
       refusals: (at: string, taken: Failure[] | undefined) =>
-        taken ?? [failureAt(at, 'z.minLength()')],
+        taken ?? [failureAt(at, minLengthName)],
     },
     {
       name: 'a conditional check',
@@ -410,7 +423,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       name: 'a .refine() and a conditional check',
       apply: (schema: z.ZodType) => schema.refine(isFilled).check(z.minLength(1, whenAlways)),
       refusals: (at: string, _taken: Failure[] | undefined) => [
-        failureAt(at, '.refine()'),
+        failureAt(at, refineName),
         failureAt(at, 'a conditional check'),
       ],
     },
@@ -431,7 +444,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: field,
       onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: (at: string) => [onOptional(at, 'z.minLength()')],
+      lengthTaken: (at: string) => [onOptional(at, minLengthName)],
       build: (inner: Inner, apply: Decorate) => z.object({ a: apply(inner.make(asIs).optional()) }),
     },
     {
@@ -448,7 +461,7 @@ describe('walkSchemas: every refused check is reported once wherever the node fa
       at: body,
       onItself: false,
       surrounding: [] as Failure[],
-      lengthTaken: (at: string) => [onNull(at, 'z.minLength()')],
+      lengthTaken: (at: string) => [onNull(at, minLengthName)],
       build: (inner: Inner, apply: Decorate) => apply(inner.make(asIs).nullable()),
     },
     {
@@ -543,7 +556,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     const annotated: z.ZodType = z.array(z.string()).meta({ unit: 'items' }).nullable();
 
     expect(walkBody(annotated.check(z.minLength(1)))).toEqual(
-      refusedAll([failureAt('', '.meta({ unit })'), onNull('', 'z.minLength()')]),
+      refusedAll([failureAt('', '.meta({ unit })'), onNull('', minLengthName)]),
     );
   });
 
@@ -557,7 +570,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
     const lazy: z.ZodType = z.lazy(() => z.string().refine(isFilled).min(1));
 
     expect(walkBody(lazy.check(z.minLength(2)))).toEqual(
-      refusedAll([failureAt('', '.refine()'), repeated]),
+      refusedAll([failureAt('', refineName), repeated]),
     );
   });
 
@@ -572,7 +585,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       const tree: z.ZodType = z.array(z.union([z.lazy(() => tree), leaf])).meta({ id: 'tree' });
       return tree;
     };
-    const length = (at: string) => failureAt(at, 'z.minLength()');
+    const length = (at: string) => failureAt(at, minLengthName);
     const leafFailure = (at: string) => failureAt(`${at}[]<|1>`, 'z.date()', 'z.iso.datetime()');
 
     const uses = [
@@ -630,7 +643,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
         .refine(isFilled)
         .meta({ id: 'tree' });
 
-      expect(walkBody(tree)).toEqual(refusedAll([leafFailure(''), failureAt('', '.refine()')]));
+      expect(walkBody(tree)).toEqual(refusedAll([leafFailure(''), failureAt('', refineName)]));
     });
   });
 
@@ -733,7 +746,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
         expect(constructsAt(walked, successAt)).toEqual([
           ...use.around,
           unnamedCycle,
-          'z.minLength()',
+          minLengthName,
         ]);
       });
     });
@@ -756,7 +769,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
             const loop = z.array(children);
             return { schema: children, other: loop };
           },
-          refused: ['z.minLength()'],
+          refused: [minLengthName],
         },
         {
           name: 'the .nullable() standing for it refuses its own length check',
@@ -766,7 +779,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
             const loop = nullable.check(z.minLength(1));
             return { schema: loop, other: children };
           },
-          refused: ['z.minLength()'],
+          refused: [minLengthName],
         },
       ];
       const cases = ownChecks.flatMap((own) =>
@@ -808,7 +821,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
         refusedAll([
           failureAt('', '.meta({ id: "Tree" })', 'a camelCase name'),
           failureAt('[]', unnamedCycle, '.meta({ id })'),
-          failureAt('', 'z.minLength()'),
+          failureAt('', minLengthName),
         ]),
       );
       expect(constructsOf(refusedId)).toEqual([
@@ -881,7 +894,7 @@ describe('walkSchemas: constraints that admit no value', () => {
       .refine((value) => value !== '');
 
     expect(walkBody(schema)).toEqual(
-      refusedAll([failureAt('', '.refine()'), failureAt('', noValue)]),
+      refusedAll([failureAt('', refineName), failureAt('', noValue)]),
     );
   });
 });
@@ -893,25 +906,25 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
 
   /** Every check the walker takes as a constraint, on the schema its type takes it on. */
   const takenChecks = [
-    { name: 'z.gt()', construct: 'z.gt()', inner: z.number(), check: z.gt(3) },
-    { name: 'z.gte()', construct: 'z.gt()', inner: z.number(), check: z.gte(3) },
-    { name: 'z.lt()', construct: 'z.lt()', inner: z.number(), check: z.lt(3) },
-    { name: 'z.lte()', construct: 'z.lt()', inner: z.number(), check: z.lte(3) },
+    { name: 'z.gt()', construct: gtName, inner: z.number(), check: z.gt(3) },
+    { name: 'z.gte()', construct: gteName, inner: z.number(), check: z.gte(3) },
+    { name: 'z.lt()', construct: ltName, inner: z.number(), check: z.lt(3) },
+    { name: 'z.lte()', construct: lteName, inner: z.number(), check: z.lte(3) },
     {
       name: 'z.multipleOf()',
-      construct: 'z.multipleOf()',
+      construct: multipleOfName,
       inner: z.number(),
       check: z.multipleOf(2),
     },
-    { name: 'z.int()', construct: 'z.int()', inner: z.number(), check: z.int() },
-    { name: 'z.minLength()', construct: 'z.minLength()', inner: z.string(), check: z.minLength(2) },
-    { name: 'z.maxLength()', construct: 'z.maxLength()', inner: z.string(), check: z.maxLength(5) },
-    { name: 'z.length()', construct: 'z.length()', inner: z.string(), check: z.length(3) },
-    { name: 'z.regex()', construct: 'z.regex()', inner: z.string(), check: z.regex(/^a/) },
+    { name: 'z.int()', construct: intName, inner: z.number(), check: z.int() },
+    { name: 'z.minLength()', construct: minLengthName, inner: z.string(), check: z.minLength(2) },
+    { name: 'z.maxLength()', construct: maxLengthName, inner: z.string(), check: z.maxLength(5) },
+    { name: 'z.length()', construct: '.length()', inner: z.string(), check: z.length(3) },
+    { name: 'z.regex()', construct: '.regex()', inner: z.string(), check: z.regex(/^a/) },
     { name: 'a format', construct: 'z.email()', inner: z.string(), check: z.email() },
     {
       name: 'z.minLength() on an array',
-      construct: 'z.minLength()',
+      construct: minLengthName,
       inner: z.array(z.string()),
       check: z.minLength(1),
     },
@@ -1013,19 +1026,19 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   const inMiniField = (schema: zm.ZodMiniType) => zm.object({ a: schema });
 
   test.each<[string, zm.ZodMiniType, string]>([
-    ['z.gt()', checkedMini(zm.nullable(zm.number()), zm.gt(3)), 'z.gt()'],
-    ['z.multipleOf()', checkedMini(zm.nullable(zm.number()), zm.multipleOf(2)), 'z.multipleOf()'],
-    ['z.minLength()', checkedMini(zm.nullable(zm.string()), zm.minLength(2)), 'z.minLength()'],
-    ['z.regex()', checkedMini(zm.nullable(zm.string()), zm.regex(/^a/)), 'z.regex()'],
+    ['z.gt()', checkedMini(zm.nullable(zm.number()), zm.gt(3)), gtName],
+    ['z.multipleOf()', checkedMini(zm.nullable(zm.number()), zm.multipleOf(2)), multipleOfName],
+    ['z.minLength()', checkedMini(zm.nullable(zm.string()), zm.minLength(2)), minLengthName],
+    ['z.regex()', checkedMini(zm.nullable(zm.string()), zm.regex(/^a/)), '.regex()'],
   ])('%s on a zod/mini nullable fails the same way', (_name, schema, construct) => {
     expect(walkBody(schema)).toEqual(refusedAll([onNull('', construct)]));
   });
 
   test.each<[string, zm.ZodMiniType, string]>([
-    ['z.gt()', checkedMini(zm.optional(zm.number()), zm.gt(3)), 'z.gt()'],
-    ['z.multipleOf()', checkedMini(zm.optional(zm.number()), zm.multipleOf(2)), 'z.multipleOf()'],
-    ['z.minLength()', checkedMini(zm.optional(zm.string()), zm.minLength(2)), 'z.minLength()'],
-    ['z.regex()', checkedMini(zm.optional(zm.string()), zm.regex(/^a/)), 'z.regex()'],
+    ['z.gt()', checkedMini(zm.optional(zm.number()), zm.gt(3)), gtName],
+    ['z.multipleOf()', checkedMini(zm.optional(zm.number()), zm.multipleOf(2)), multipleOfName],
+    ['z.minLength()', checkedMini(zm.optional(zm.string()), zm.minLength(2)), minLengthName],
+    ['z.regex()', checkedMini(zm.optional(zm.string()), zm.regex(/^a/)), '.regex()'],
   ])("%s on a zod/mini field's .optional() fails the same way", (_name, schema, construct) => {
     expect(walkBody(inMiniField(schema))).toEqual(refusedAll([onOptional('a', construct)]));
   });
@@ -1051,7 +1064,7 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   test('a check the type of a nullable schema does not take keeps its own refusal', () => {
     const schema = checked(z.boolean().nullable(), z.gt(3));
 
-    expect(walkBody(schema)).toEqual(refused('z.gt()'));
+    expect(walkBody(schema)).toEqual(refused(gtName));
   });
 
   test('a conditional check on .nullable() keeps its own refusal', () => {
@@ -1063,14 +1076,14 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   test('a check on .nullable() with null among its examples fails without throwing', () => {
     const schema = checked(z.number().nullable(), z.multipleOf(2)).meta({ examples: [null] });
 
-    expect(walkBody(schema)).toEqual(refusedAll([onNull('', 'z.multipleOf()')]));
+    expect(walkBody(schema)).toEqual(refusedAll([onNull('', multipleOfName)]));
   });
 
   test('a check on .nullable() is refused beside the failures of the schema inside', () => {
     const schema = checked(z.string().refine(isFilled).min(1).nullable(), z.minLength(2));
 
     expect(walkBody(schema)).toEqual(
-      refusedAll([failureAt('', '.refine()'), onNull('', 'z.minLength()')]),
+      refusedAll([failureAt('', refineName), onNull('', minLengthName)]),
     );
   });
 
@@ -1135,7 +1148,7 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
   test("a check the type of a field's .optional() does not take keeps its own refusal", () => {
     const schema = z.object({ a: checked(z.boolean().optional(), z.gt(3)) });
 
-    expect(walkBody(schema)).toEqual(refusedAt('a', 'z.gt()'));
+    expect(walkBody(schema)).toEqual(refusedAt('a', gtName));
   });
 
   test("a conditional check on a field's .optional() keeps its own refusal", () => {

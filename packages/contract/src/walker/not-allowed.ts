@@ -15,9 +15,7 @@ export const refused = {
   transform: { construct: '.transform()' },
   preprocess: { construct: '.preprocess()' },
   pipe: { construct: '.pipe()' },
-  refine: { construct: '.refine()' },
-  customCheck: { construct: '.superRefine() or .check()' },
-  custom: { construct: 'z.custom()' },
+  custom: { construct: '.refine(), z.custom() or z.instanceof()' },
   codec: { construct: 'z.codec()' },
   coerce: { construct: 'z.coerce.*' },
   date: { construct: 'z.date()', instead: 'z.iso.datetime()' },
@@ -39,12 +37,6 @@ export const refused = {
     instead: 'z.object() with the keys as fields',
   },
   recordKey: { construct: 'a z.record() key that is not a string' },
-  mutating: { construct: '.trim(), .toLowerCase(), .toUpperCase(), .normalize() or .overwrite()' },
-  startsWith: { construct: '.startsWith()' },
-  endsWith: { construct: '.endsWith()' },
-  includes: { construct: '.includes()' },
-  lowercase: { construct: '.lowercase()' },
-  uppercase: { construct: '.uppercase()' },
   conditionalCheck: { construct: 'a conditional check' },
   customPattern: { construct: 'a format with a custom pattern' },
   urlNormalize: { construct: 'z.url({ normalize })' },
@@ -181,14 +173,9 @@ export function refusedExample(index: number): Refused {
   return { construct: `an example the schema refuses (examples[${index}])` };
 }
 
-/** A zod function by its name, as the Not allowed list writes it. */
-export function zodCall(name: string): string {
-  return `z.${name}()`;
-}
-
-/** A check, or a zod type, the walker has no node or constraint for, by its zod name. */
-export function refusedName(name: string): Refused {
-  return { construct: zodCall(name) };
+/** A zod type the walker has no node for, by zod's id, since no call is known to build it. */
+export function refusedZodType(type: string): Refused {
+  return { construct: `a zod type ${JSON.stringify(type)}` };
 }
 
 /** Two checks that set one constraint, which a node holds once. */
