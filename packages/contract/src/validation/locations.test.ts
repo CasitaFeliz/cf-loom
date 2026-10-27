@@ -423,6 +423,18 @@ describe('failure lines: a declaration with no usable name', () => {
     },
   );
 
+  test('a Guard whose name is no string that two lists reach sits at the one met first, the deeper one', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const middle = defineGuard({ name: 'middle', description: 'Middle', guards: [nameless] });
+    const outer = defineGuard({ name: 'outer', description: 'Outer', guards: [middle, nameless] });
+    const root = defineDefinitions({});
+    const rootExports = { a: outer, b: middle, c: nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.middle guards[0].name not-a-string: name is a string',
+    ]);
+  });
+
   test('a Rejection whose code is no string sits at the Endpoint that lists it, before its Guard', () => {
     const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
     const locker = defineGuard({ name: 'locker', description: 'Locks', rejections: [nameless] });

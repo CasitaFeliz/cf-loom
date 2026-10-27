@@ -723,3 +723,97 @@ describe('validateRoot: a Qualifier holds the keys zod keeps when it parses it',
     expect(stripping).toBeGreaterThan(30);
   });
 });
+
+/** `count` Guards, each listing the one before it, the first listing none, in that order. */
+function aChainOf(count: number): readonly Guard[] {
+  const chain: Guard[] = [];
+  for (let index = 0; index < count; index++) {
+    const listed = chain.at(-1);
+    const guards = listed === undefined ? [] : [listed];
+    chain.push(defineGuard({ name: `g${index}`, description: 'A link', guards }));
+  }
+  return chain;
+}
+
+describe('validateRoot: Guards that list Guards, at any depth', () => {
+  test('a chain of 100,000 Guards attached in order validates', { timeout: 60_000 }, () => {
+    const chain = aChainOf(100_000);
+
+    expect(validateGuards(chain).kind).toBe('valid');
+  });
+
+  test('an Endpoint attaching only the last of 100,000 Guards in a chain fails guard-order', {
+    timeout: 60_000,
+  }, () => {
+    const chain = aChainOf(100_000);
+
+    expect(validateGuards(chain.slice(-1))).toEqual(
+      failed(`${guardsAt}[0]`, 'guard-order', 'g99999 requires g99998 earlier in guards'),
+    );
+  });
+
+  test.for([1, 2, 3])(
+    'Guards of a random graph, seed %i, validate attached each after those it lists, and fail out of that order',
+    (seed) => {
+      const next = seededNext(seed);
+      const guards: Guard[] = [];
+      for (let index = 0; index < 40; index++) {
+        const listed = guards.filter(() => next() < 0.15);
+        guards.push(defineGuard({ name: `g${index}`, description: 'A node', guards: listed }));
+      }
+      const listing = guards.findLast((guard) => (guard.guards ?? []).length > 0);
+      const misplaced = guards.filter((guard) => guard !== listing);
+
+      const inOrder = validateGuards(guards);
+      const outOfOrder = validateGuards(listing === undefined ? [] : [listing, ...misplaced]);
+
+      expect(inOrder.kind).toBe('valid');
+      expect(outOfOrder.kind).toBe('invalid');
+    },
+  );
+});
+
+describe('validateRoot: a deep Qualifier', () => {
+  /** A Qualifier schema of objects, each holding the next under `next`, as deep as a value goes. */
+  const linked: z.ZodType = z
+    .object({ next: z.lazy(() => linked).optional() })
+    .meta({ id: 'linked' });
+  const chained = defineGuard({ name: 'chained', description: 'A chain', qualifier: linked });
+
+  test('a Qualifier 100,000 objects deep that zod cannot parse within the call stack fails qualifier-value', () => {
+    let qualifier: object = {};
+    for (let level = 0; level < 100_000; level++) {
+      qualifier = { next: qualifier };
+    }
+
+    expect(validateGuards([{ guard: chained, qualifier }])).toEqual(
+      failed(
+        `${guardsAt}[0].qualifier`,
+        'qualifier-value',
+        'chained takes a Qualifier its schema accepts',
+      ),
+    );
+  });
+
+  test('a Qualifier that holds itself is read to its end and validates', () => {
+    const qualifier: { next?: object } = {};
+    qualifier.next = { next: qualifier };
+
+    expect(validateGuards([{ guard: chained, qualifier }]).kind).toBe('valid');
+  });
+
+  test('a key zod strips 200 objects deep, under the 256 levels a Snapshot holds, fails naming its dotted path', () => {
+    let qualifier: object = { extra: true };
+    for (let level = 0; level < 200; level++) {
+      qualifier = { next: qualifier };
+    }
+
+    expect(validateGuards([{ guard: chained, qualifier }])).toEqual(
+      failed(
+        `${guardsAt}[0].qualifier`,
+        'qualifier-keys',
+        `A Qualifier holds only the keys its schema keeps when zod parses it: ${'next.'.repeat(200)}extra`,
+      ),
+    );
+  });
+});

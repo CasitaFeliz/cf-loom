@@ -1687,28 +1687,11 @@ describe('cf-loom generate: how deep a schema nests as written', () => {
 
   test('a Guard whose qualifier is 10,000 .nullable() fails generate on the depth at its qualifier', () => {
     const qualifier = nestSource(10_000, 'inner.nullable()', 'z.number()');
+    const guards = `export const perm = defineGuard({ name: 'perm', description: 'A permission', qualifier: ${qualifier} });`;
     const project = aProject({
       'cf-loom.config.ts': config,
-      ...aRoot(),
-      'src/contract/perm.guard.ts': [
-        "import { defineGuard } from '@cf-loom/contract';",
-        "import { z } from 'zod';",
-        '',
-        `export const perm = defineGuard({ name: 'perm', description: 'A permission', qualifier: ${qualifier} });`,
-        '',
-      ].join('\n'),
+      ...aGuardedRoot(guards, '{ guard: perm, qualifier: 1 }'),
     });
-    edit(project, 'src/contract/ping.endpoint.ts', (text) =>
-      text
-        .replace(
-          "import { z } from 'zod';",
-          "import { z } from 'zod';\nimport { perm } from './perm.guard.ts';",
-        )
-        .replace(
-          "  visibility: 'public',",
-          "  visibility: 'public',\n  guards: [{ guard: perm, qualifier: 1 }],",
-        ),
-    );
 
     const ran = cfLoom(project, 'generate');
 
@@ -1717,6 +1700,51 @@ describe('cf-loom generate: how deep a schema nests as written', () => {
       stdout: '',
       stderr: `src/contract/perm.guard.ts: guards.perm qualifier ${writtenTooDeep}\n`,
     });
+  });
+});
+
+/**
+ * `aRoot()` whose Endpoint attaches `attachment`, from the Guards `guards` declares in
+ * `src/contract/perm.guard.ts`, the one `perm` among them.
+ */
+function aGuardedRoot(guards: string, attachment: string): Readonly<Record<string, string>> {
+  const root = aRoot();
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '')
+    .replace(
+      "import { z } from 'zod';",
+      "import { z } from 'zod';\nimport { perm } from './perm.guard.ts';",
+    )
+    .replace("  visibility: 'public',", `  visibility: 'public',\n  guards: [${attachment}],`);
+  const guardFile = [
+    "import { defineGuard } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    '',
+    guards,
+    '',
+  ];
+  return {
+    ...root,
+    'src/contract/ping.endpoint.ts': endpoint,
+    'src/contract/perm.guard.ts': guardFile.join('\n'),
+  };
+}
+
+describe('cf-loom generate: Guards that list Guards', () => {
+  test('an Endpoint attaching only the last of 5,000 Guards in a chain fails generate on guard-order', () => {
+    const guards = [
+      "const chain = [defineGuard({ name: 'g0', description: 'A link' })];",
+      'for (let index = 1; index < 5_000; index++) {',
+      "  chain.push(defineGuard({ name: 'g' + index, description: 'A link', guards: [chain[index - 1]!] }));",
+      '}',
+      'export const perm = chain[4_999]!;',
+    ].join('\n');
+    const project = aProject({ 'cf-loom.config.ts': config, ...aGuardedRoot(guards, 'perm') });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) guards[0]';
+    const stderr = `${at} guard-order: g4999 requires g4998 earlier in guards\n`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
   });
 });
 

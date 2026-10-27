@@ -135,20 +135,37 @@ function isGuardMember(member: Member): member is GuardMember {
   return member.kind === 'guard';
 }
 
-/** Places a Guard at its name, else at the list that holds it, then reads its own lists. */
+/**
+ * Places a Guard at its name, else at the list that holds it, then reads its own lists, each Guard
+ * at the first place met, read with an explicit stack in the order a recursion would read them.
+ */
 function visit(lists: Lists, guard: Guard, held: Place): void {
-  if (lists.places.has(guard)) {
-    return;
+  const pending: HeldGuard[] = [{ guard, held }];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (lists.places.has(next.guard)) {
+      continue;
+    }
+    const name = next.guard.name;
+    const site: Site | undefined = typeof name === 'string' ? { kind: 'guard', name } : undefined;
+    const at = placedBy(site, next.held, next.guard);
+    lists.places.set(next.guard, at);
+    lists.rejections.push(...listedIn(at, next.guard.rejections));
+    pending.push(...listedGuardsOf(next.guard, at).reverse());
   }
-  const name = guard.name;
-  const at = placedBy(typeof name === 'string' ? { kind: 'guard', name } : undefined, held, guard);
-  lists.places.set(guard, at);
-  lists.rejections.push(...listedIn(at, guard.rejections));
+}
+
+/** A Guard and the place of the list that holds it. */
+type HeldGuard = { readonly guard: Guard; readonly held: Place };
+
+/** The Guards a Guard placed at `at` lists, each with its place in that list. */
+function listedGuardsOf(guard: Guard, at: Place): HeldGuard[] {
+  const listed: HeldGuard[] = [];
   for (const [index, inner] of listOf<unknown>(guard.guards).entries()) {
     if (isGuard(inner)) {
-      visit(lists, inner, holdingAt(at, 'guards', index));
+      listed.push({ guard: inner, held: holdingAt(at, 'guards', index) });
     }
   }
+  return listed;
 }
 
 /** The place of an item of a list a declaration holds, by the field of the list and the position. */
