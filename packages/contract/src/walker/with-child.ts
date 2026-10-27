@@ -100,3 +100,20 @@ export function withField(node: SchemaNode, name: string, field: Field): SchemaN
   }
   return { ...node, fields: { ...node.fields, [name]: field } };
 }
+
+/** A `ref` renamed, with its own annotations, nullable when the chain of defs it followed is. */
+export function refNamed(
+  ref: SchemaNode,
+  name: string,
+  chain: { readonly nullable: boolean },
+): SchemaNode {
+  const { nullable: _nullable, ...annotations } = ref;
+  const named = { ...annotations, type: 'ref', name } as const;
+  return chain.nullable ? { ...named, nullable: true } : named;
+}
+
+/** A node as a def holds it: plain, since every `ref` to a def carries its own `nullable`. */
+export function withoutNullable(node: SchemaNode): SchemaNode {
+  const { nullable: _nullable, ...rest } = node;
+  return rest;
+}

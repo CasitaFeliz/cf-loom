@@ -1,4 +1,4 @@
-import type { Defs, SchemaNode } from '../walker/index.ts';
+import type { Defs } from '../walker/index.ts';
 import type { EnteredKey } from './refs.ts';
 
 /**
@@ -162,21 +162,4 @@ function freeNameOf(base: string, isTaken: (name: string) => boolean): string {
     suffix++;
   }
   return `${base}~${suffix}`;
-}
-
-/** A `ref` to a def of the former Input, with its annotations, nullable when the chain it followed is. */
-export function refNamed(
-  ref: SchemaNode,
-  name: string,
-  chain: { readonly nullable: boolean },
-): SchemaNode {
-  const { nullable: _nullable, ...annotations } = ref;
-  const named = { ...annotations, type: 'ref', name } as const;
-  return chain.nullable ? { ...named, nullable: true } : named;
-}
-
-/** A def's body as the former Input holds it: plain, as every def is, its `ref`s carrying `nullable`. */
-export function withoutNullable(node: SchemaNode): SchemaNode {
-  const { nullable: _nullable, ...rest } = node;
-  return rest;
 }

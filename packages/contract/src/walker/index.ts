@@ -74,4 +74,4 @@ export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from 
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema, Memo } from './walked.ts';
 export { failuresOf, refusalsIn } from './walked.ts';
-export { withChild, withField } from './with-child.ts';
+export { refNamed, withChild, withField, withoutNullable } from './with-child.ts';

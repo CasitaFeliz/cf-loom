@@ -4,11 +4,13 @@ import {
   childrenOf,
   type Defs,
   defsReachedOf,
+  refNamed,
   resolvedRefOf,
   type SchemaNode,
   type Step,
   withChild,
   withField,
+  withoutNullable,
 } from '../walker/index.ts';
 import type { BothDefs, Finding, NodePair } from './findings.ts';
 import {
@@ -18,8 +20,6 @@ import {
   namedDefs,
   pairMet,
   recordingDefs,
-  refNamed,
-  withoutNullable,
 } from './graft-names.ts';
 import { followedOf } from './refs.ts';
 import { findingsOf } from './schemas.ts';

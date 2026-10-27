@@ -19,6 +19,7 @@ import {
   publishedSnapshotOf,
   type SchemaNode,
   type ServiceSnapshot,
+  type ShapeDifference,
   type Step,
   versionBumpOf,
 } from '../internal/index.ts';
@@ -861,9 +862,10 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
   test('a field removed through a nullable alias def, declared again not nullable, is Breaking', () => {
     const target = anObject({ c: optional(aNumber) });
-    const alias: SchemaNode = { type: 'ref', name: 'n', nullable: true };
+    const alias = ref('n');
+    const nullableAlias: SchemaNode = { type: 'ref', name: 'alias', nullable: true };
     const published = publishedThrough(
-      aService({ body: { id, x: optional(ref('alias')) }, defs: { alias, n: target } }),
+      aService({ body: { id, x: optional(nullableAlias) }, defs: { alias, n: target } }),
       aService({ body: { id } }),
     );
 
@@ -1118,15 +1120,16 @@ function baselineDeclaring(
   };
 }
 
-/** Whether a former Input has a field the Endpoint now lacks and nothing Breaking against it. */
 /** Whether a former Input differs from its Endpoint's Input only by fields removed, one at least, and by the names of its defs. */
 function isWellFormed(former: FormerInput, { proposed, published }: Published): boolean {
-  const lines = linesOf(baselineDeclaring(published, former), proposed);
-  const isRemovalOrName = (line: string) =>
-    line.startsWith('additive field-removed') || line.startsWith('neutral annotation-changed');
-  return (
-    lines.some((line) => line.startsWith('additive field-removed')) && lines.every(isRemovalOrName)
+  const { changes } = compatibilityReportOf(baselineDeclaring(published, former), proposed);
+  const shapes = changes.map(({ difference }) =>
+    difference.kind === 'schema' ? difference.shape : undefined,
   );
+  const isRemoval = (shape: ShapeDifference | undefined) => shape?.kind === 'field-removed';
+  const isRemovalOrName = (shape: ShapeDifference | undefined) =>
+    isRemoval(shape) || (shape?.kind === 'annotation-changed' && shape.annotation === 'id');
+  return shapes.some(isRemoval) && shapes.every(isRemovalOrName);
 }
 
 function shapeKeyOf(change: Change): string | undefined {
