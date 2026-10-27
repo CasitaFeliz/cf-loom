@@ -535,7 +535,10 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedAt('1.2.0'),
     );
 
-    expect(published.formerInputs).toEqual(removed.formerInputs);
+    expect([published.formerInputs, removed.formerInputs.length]).toEqual([
+      removed.formerInputs,
+      1,
+    ]);
   });
 
   test('a former Input is forgotten once the Endpoint declares every field it had again', () => {
@@ -586,7 +589,10 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedAt('2.0.0'),
     );
 
-    expect(published.formerInputs).toEqual(removed.formerInputs);
+    expect([published.formerInputs, removed.formerInputs.length]).toEqual([
+      removed.formerInputs,
+      1,
+    ]);
   });
 
   test('a former Input is kept across a Breaking Change to a field it lacks', () => {
@@ -602,7 +608,10 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedAt('2.0.0'),
     );
 
-    expect(published.formerInputs).toEqual(removed.formerInputs);
+    expect([published.formerInputs, removed.formerInputs.length]).toEqual([
+      removed.formerInputs,
+      1,
+    ]);
   });
 
   test('a former Input is forgotten once its Endpoint is Retired', () => {
