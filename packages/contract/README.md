@@ -324,14 +324,14 @@ A string format is recognized as zod builds it: the schema is compared with the 
 
 ### Not allowed
 
-Each of these fails `generate`:
+Each of these fails `generate`. A refused check is named by every spelling that builds it (`.min(), .gte(), .nonnegative() or z.minimum()`), since zod keeps no record of which one was written:
 
 | Construct | Why | Use instead |
 | --- | --- | --- |
 | `.default()`, `.prefault()`, `.catch()` | A default is behavior | `.optional()` on a field; the Handler decides what a missing value means |
-| `.transform()`, `.preprocess()`, `.pipe()`, `z.codec()`, `z.coerce.*`, `z.stringbool()`, `.readonly()`, the mutating checks `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()` and `.overwrite()`, `z.url({ normalize })` | They change the value instead of describing it | Do it in the Handler |
+| `.transform()`, `.preprocess()`, `.pipe()`, `z.codec()`, `z.coerce.*`, `z.stringbool()`, `.readonly()`, the mutating checks `.trim()`, `.toLowerCase()`, `.toUpperCase()`, `.normalize()`, `.slugify()` and `.overwrite()`, `z.url({ normalize })` | They change the value instead of describing it | Do it in the Handler |
 | `.refine()`, `.superRefine()`, `.check()` and any custom check, `z.custom()`, a conditional check (`when`), a format with a custom `pattern`, a `z.stringFormat()` that is not a format zod builds itself (see the note under the first table) | A check beyond a declarative constraint cannot be written in the Snapshot or compared | A declarative constraint (`.min()`, `.regex()`, a format), and a Rejection from the Handler for the rest |
-| `.startsWith()`, `.endsWith()`, `.includes()`, `.lowercase()`, `.uppercase()`, `z.templateLiteral()`, `z.int32()`, `z.uint32()`, `z.float32()`, `z.float64()`, `z.xor()`, and any other check or zod type the first table has no row for (zod may add one later, and `generate` fails on it by its name) | The Snapshot has no node or constraint for it | `.regex()`, for a rule on text |
+| `.startsWith()`, `.endsWith()`, `.includes()`, `.lowercase()`, `.uppercase()`, `z.templateLiteral()`, `z.int32()`, `z.uint32()`, `z.float32()`, `z.float64()`, `z.xor()`, and any other check or zod type the first table has no row for (zod may add one later: `generate` names a check it does not know by zod's kind, `a zod check "<kind>"`, a string format by `z.stringFormat("<format>")`, and a type by `a zod type "<type>"`) | The Snapshot has no node or constraint for it | `.regex()`, for a rule on text |
 | `z.date()`, `z.bigint()` and a bigint `z.literal()`, `z.symbol()`, `z.void()`, `z.never()`, `z.nan()`, `z.map()`, `z.set()`, `z.file()`, `z.promise()`, `z.function()`, `z.success()` | Bodies are JSON, and the Snapshot has no node for it | `z.iso.datetime()` for `z.date()` |
 | `z.unknown()`, `z.any()` | They describe no shape | `z.record()` or `z.json()` |
 | `z.strictObject()`, `.strict()`, `z.looseObject()`, `.passthrough()`, `.catchall()` | Objects are open: a reader ignores a field it does not know | `z.object()`, and `z.record()` for dynamic keys |
