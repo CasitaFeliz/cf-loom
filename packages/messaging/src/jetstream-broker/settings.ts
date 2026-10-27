@@ -1,11 +1,11 @@
 import type { BrokerPlan } from '@cf-loom/contract/internal';
 import type { StreamConfig } from '@nats-io/jetstream';
-import type { DurableSettings } from './durable-shape.ts';
-import { durableConfigOf, streamConfigOf } from './nats-config.ts';
+import type { DurableConsumerSettings } from './durable-consumer-shape.ts';
+import { durableConsumerConfigOf, streamConfigOf } from './nats-config.ts';
 import {
-  durableSettingNames,
+  durableConsumerSettingNames,
   type NatsBrokerLimits,
-  type NatsDurableLimits,
+  type NatsDurableConsumerLimits,
   type NatsStreamLimits,
   readLimits,
   type SetLimits,
@@ -19,18 +19,18 @@ export type PlannedStream = {
   readonly settings: Partial<StreamConfig>;
 };
 
-/** A durable consumer of the plan with the NATS settings its limits resolve to. */
-export type PlannedDurable = {
+/** A Durable consumer of the plan with the NATS settings its limits resolve to. */
+export type PlannedDurableConsumer = {
   readonly name: string;
   readonly stream: string;
-  readonly settings: DurableSettings;
+  readonly settings: DurableConsumerSettings;
 };
 
-/** Every stream and durable consumer of a plan with its settings. */
+/** Every stream and Durable consumer of a plan with its settings. */
 export type ResolvedPlan = {
   readonly kind: 'resolved';
   readonly streams: readonly PlannedStream[];
-  readonly durables: readonly PlannedDurable[];
+  readonly durableConsumers: readonly PlannedDurableConsumer[];
 };
 
 /** A plan with its settings, or a line for each reason the plan and its limits cannot be applied. */
@@ -41,7 +41,7 @@ export type PlanSettings =
 type Resolved<Planned> = { readonly planned: Planned[]; readonly lines: string[] };
 
 /**
- * The settings of each stream and durable consumer of the plan, from its own limits over the
+ * The settings of each stream and Durable consumer of the plan, from its own limits over the
  * defaults, in NATS's units; limits that break their shape, name what the plan does not list or
  * leave a setting unset are refused whole.
  */
@@ -51,20 +51,30 @@ export function settingsOf(plan: BrokerPlan, limits: unknown): PlanSettings {
     return read;
   }
   const streams = streamsOf(plan, read.limits);
-  const durables = durablesOf(plan, read.limits);
-  const lines = [...unlistedLinesOf(plan, read.limits), ...streams.lines, ...durables.lines];
+  const durableConsumers = plannedDurableConsumersOf(plan, read.limits);
+  const lines = [
+    ...unlistedLinesOf(plan, read.limits),
+    ...streams.lines,
+    ...durableConsumers.lines,
+  ];
   if (lines.length > 0) {
     return { kind: 'refused', lines };
   }
-  return { kind: 'resolved', streams: streams.planned, durables: durables.planned };
+  return {
+    kind: 'resolved',
+    streams: streams.planned,
+    durableConsumers: durableConsumers.planned,
+  };
 }
 
 function unlistedLinesOf(plan: BrokerPlan, limits: NatsBrokerLimits): readonly string[] {
   const streams = unlistedNamesOf(plan.streams, limits.streams);
-  const consumers = unlistedNamesOf(plan.consumers, limits.consumers);
+  const durableConsumers = unlistedNamesOf(plan.durableConsumers, limits.durableConsumers);
   return [
     ...streams.map((name) => `limits.streams names ${name}, which the plan does not list`),
-    ...consumers.map((name) => `limits.consumers names ${name}, which the plan does not list`),
+    ...durableConsumers.map(
+      (name) => `limits.durableConsumers names ${name}, which the plan does not list`,
+    ),
   ];
 }
 
@@ -89,8 +99,10 @@ function isStreamSet(limits: NatsStreamLimits): limits is SetLimits<NatsStreamLi
   return unsetNamesOf(limits, streamSettingNames).length === 0;
 }
 
-function isDurableSet(limits: NatsDurableLimits): limits is SetLimits<NatsDurableLimits> {
-  return unsetNamesOf(limits, durableSettingNames).length === 0;
+function isDurableConsumerSet(
+  limits: NatsDurableConsumerLimits,
+): limits is SetLimits<NatsDurableConsumerLimits> {
+  return unsetNamesOf(limits, durableConsumerSettingNames).length === 0;
 }
 
 function streamsOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<PlannedStream> {
@@ -108,22 +120,30 @@ function streamsOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<Planned
   return { planned, lines };
 }
 
-function durablesOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<PlannedDurable> {
-  const planned: PlannedDurable[] = [];
+function plannedDurableConsumersOf(
+  plan: BrokerPlan,
+  limits: NatsBrokerLimits,
+): Resolved<PlannedDurableConsumer> {
+  const planned: PlannedDurableConsumer[] = [];
   const lines: string[] = [];
-  for (const [name, consumer] of Object.entries(plan.consumers)) {
-    const durableLimits = { ...limits.consumerDefaults, ...limits.consumers?.[name] };
-    if (isDurableSet(durableLimits)) {
-      const durable = { name, subject: consumer.subject };
+  for (const [name, durableConsumer] of Object.entries(plan.durableConsumers)) {
+    const durableConsumerLimits = {
+      ...limits.durableConsumerDefaults,
+      ...limits.durableConsumers?.[name],
+    };
+    if (isDurableConsumerSet(durableConsumerLimits)) {
       planned.push({
         name,
-        stream: consumer.stream,
-        settings: durableConfigOf(durable, durableLimits),
+        stream: durableConsumer.stream,
+        settings: durableConsumerConfigOf(
+          { name, subject: durableConsumer.subject },
+          durableConsumerLimits,
+        ),
       });
     } else {
-      const unset = unsetNamesOf(durableLimits, durableSettingNames).join(', ');
-      const where = 'limits.consumers or limits.consumerDefaults';
-      lines.push(`The durable consumer ${name} has no ${unset} in ${where}`);
+      const unset = unsetNamesOf(durableConsumerLimits, durableConsumerSettingNames).join(', ');
+      const where = 'limits.durableConsumers or limits.durableConsumerDefaults';
+      lines.push(`The Durable consumer ${name} has no ${unset} in ${where}`);
     }
   }
   return { planned, lines };

@@ -115,7 +115,7 @@ describe('serve: what it checks before the first request', () => {
   });
 
   test('a value handle() did not return throws, naming the Endpoint', () => {
-    const lookalike = Object.assign(() => undefined, { element: findOrder });
+    const lookalike = Object.assign(() => undefined, { declaration: findOrder });
     const forged = { ...handlers, endpoints: { ...handlers.endpoints, findOrder: lookalike } };
 
     // @ts-expect-error a wrapper is no Handler handle() returned

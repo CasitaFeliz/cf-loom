@@ -11,8 +11,9 @@ import {
 } from '@cf-loom/handlers/internal';
 
 /**
- * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint as `element`
- * with its name as `identity`, the Guard when its GuardHandler produced it, then how it failed.
+ * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint the request
+ * matched as `declaration`, with its `name`, also when a Guard's Handler produced it, which `guard`
+ * then names; then how it failed.
  */
 export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard } & (
     | HandlerFailure
@@ -21,7 +22,7 @@ export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard 
   );
 
 /** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-export type FaultedBy = Pick<ServedFault, 'element' | 'identity' | 'guard'>;
+export type FaultedBy = Pick<ServedFault, 'declaration' | 'name' | 'guard'>;
 
 /**
  * One request answered, for metrics and tracing: its method, and the Endpoint it matched with that
@@ -32,7 +33,7 @@ export type AnsweredRequest = {
   readonly status: number;
   /** Whether a Success, a Rejection or a Fault was sent. */
   readonly kind: 'success' | 'rejection' | 'fault';
-  /** The code sent: a Rejection's, as the Root resolved it, or a reserved Fault's; none for a Success or a Fault the Service produced. */
+  /** The code sent: a Rejection's, as the Root resolved it, or a Reserved code; none for a Success or a Fault the Service produced. */
   readonly code?: string;
   /** Whether the Caller went away before `serve` had its answer: the request's signal when the record is built. */
   readonly aborted: boolean;
@@ -129,6 +130,6 @@ function logServedFault(servedFault: ServedFault): void {
 }
 
 /** What names a Service's Fault in a line: the Endpoint's name, and the Guard's when it has one. */
-function sourceOf({ identity, guard }: FaultedBy): string {
-  return guard === undefined ? identity : `${identity} ${guard.name}`;
+function sourceOf({ name, guard }: FaultedBy): string {
+  return guard === undefined ? name : `${name} ${guard.name}`;
 }

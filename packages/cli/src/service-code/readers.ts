@@ -152,7 +152,7 @@ function memberLinesOf(key: TableKey, pairings: readonly Pairing[]): readonly st
     return [`  ${key}: {},`];
   }
   const entries = pairings.map(({ handled, local, reader }) => {
-    return `    ${tableMemberOf(handled).name}: { element: ${local}, reader: ${reader} },`;
+    return `    ${tableMemberOf(handled).name}: { declaration: ${local}, reader: ${reader} },`;
   });
   return [`  ${key}: {`, ...entries, '  },'];
 }

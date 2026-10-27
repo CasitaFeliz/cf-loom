@@ -30,7 +30,7 @@ export function pulledMessageOf(message: Msg): PulledMessage {
 
 /**
  * The delivery count in the subject a delivered Message is acknowledged on, which NATS writes as
- * `$JS.ACK.<stream>.<durable consumer>.<delivery count>.…`, or with a domain and an account hash after `ACK`.
+ * `$JS.ACK.<stream>.<durable>.<delivery count>.…`, or with a domain and an account hash after `ACK`.
  */
 function deliveryCountOf(reply: string): number {
   const tokens = reply.split('.');

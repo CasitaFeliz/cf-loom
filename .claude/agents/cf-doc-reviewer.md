@@ -13,7 +13,7 @@ plans.
 - Fidelity: the change does what the plans say, nothing missing or extra.
 - Consistency: each rule lives in one document and the others link to it; no document contradicts another or the
   code; the documents describe the current design only, never its history.
-- Terms: glossary terms are capitalized and no _Avoid_ word is used.
+- Terms: glossary terms are capitalized and no _Avoid_ word is used as a name for its entry's own thing.
 - Links and anchors resolve; code, commands and paths named exist.
 - Configuration and scripts work: run what the change adds.
 

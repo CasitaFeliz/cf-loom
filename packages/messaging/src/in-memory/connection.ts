@@ -1,16 +1,16 @@
 import type { BrokerAck, ConsumeRun, OutgoingMessage } from '../broker/index.ts';
-import { type CoreConsumer, whenAborted } from '../consuming/index.ts';
+import { type CoreDurableConsumer, whenAborted } from '../consuming/index.ts';
 import type { CoreConnection } from '../messaging/index.ts';
 import { type Attempt, firstDeliveryOf } from './attempts.ts';
 import type { Deliveries } from './deliveries.ts';
 import { Recorded } from './recorded.ts';
 import type { RecordedMessage } from './types.ts';
 
-/** The connection of a `memory()`: records what the Service publishes and sends, and lines it up for the consumers of its subject. */
+/** The connection of a `memory()`: records what the Service publishes and sends, and lines it up for the Durable consumers of its subject. */
 export class MemoryConnection implements CoreConnection {
   readonly #deliveries: Deliveries;
   readonly #recorded = new Recorded();
-  #consumers: readonly CoreConsumer[] = [];
+  #durableConsumers: readonly CoreDurableConsumer[] = [];
   #closed = false;
 
   constructor(deliveries: Deliveries) {
@@ -22,15 +22,18 @@ export class MemoryConnection implements CoreConnection {
       return { duplicate: true };
     }
     const delivery = firstDeliveryOf(message);
-    const attempts = this.#consumers
-      .filter((consumer) => consumer.subject === message.subject)
-      .map((consumer): Attempt => ({ consumer, delivery }));
+    const attempts = this.#durableConsumers
+      .filter((durableConsumer) => durableConsumer.subject === message.subject)
+      .map((durableConsumer): Attempt => ({ durableConsumer, delivery }));
     this.#deliveries.lineUp(attempts);
     return { duplicate: false };
   };
 
-  readonly consume = async (consumers: readonly CoreConsumer[], run: ConsumeRun): Promise<void> => {
-    this.#consumers = consumers;
+  readonly consume = async (
+    durableConsumers: readonly CoreDurableConsumer[],
+    run: ConsumeRun,
+  ): Promise<void> => {
+    this.#durableConsumers = durableConsumers;
     whenAborted(run.closing, () => this.#deliveries.leaveLined());
   };
 
@@ -38,8 +41,8 @@ export class MemoryConnection implements CoreConnection {
     this.#closed = true;
   };
 
-  consumers(): readonly CoreConsumer[] {
-    return this.#consumers;
+  durableConsumers(): readonly CoreDurableConsumer[] {
+    return this.#durableConsumers;
   }
 
   messages(): readonly RecordedMessage[] {

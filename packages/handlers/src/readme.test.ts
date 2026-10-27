@@ -177,7 +177,7 @@ const notifyOnSettledSubscription = defineSubscription({
 const readers = readersOf({
   commands: {},
   subscriptions: {
-    notifyOnSettled: { element: notifyOnSettledSubscription, reader: paymentSettledV1.body },
+    notifyOnSettled: { declaration: notifyOnSettledSubscription, reader: paymentSettledV1.body },
   },
 });
 
@@ -218,13 +218,13 @@ const chargeCardV1 = defineCommand({
 const ownReaders = readersOf({
   commands: {
     chargeCardV1: {
-      element: chargeCardV1,
+      declaration: chargeCardV1,
       reader: z.object({ orderId: z.string(), method: openEnumReader(['card', 'transfer']) }),
     },
   },
   subscriptions: {
     chargeOnCreated: {
-      element: chargeOnCreatedSubscription,
+      declaration: chargeOnCreatedSubscription,
       reader: z.object({ orderId: z.string(), status: openEnumReader(['pending', 'paid']) }),
     },
   },
@@ -328,7 +328,7 @@ describe('the handlers README', () => {
     expectTypeOf<ResourcesOf<typeof handlers>>().toEqualTypeOf<
       Pick<Resources, 'orders' | 'callers' | 'permissions' | 'notifications'>
     >();
-    expect(handlers.endpoints.getOrder.element).toBe(getOrder);
+    expect(handlers.endpoints.getOrder.declaration).toBe(getOrder);
   });
 
   test("ReceivedBodyOf of a Subscription's pairing has the Unknown case its own Event's writer type lacks", () => {
@@ -345,7 +345,7 @@ describe('the handlers README', () => {
     }>();
     expectTypeOf<Created>().not.toEqualTypeOf<BodyOf<typeof orderCreatedV2>>();
     expectTypeOf<BodyOf<typeof orderCreatedV2>>().toExtend<Created>();
-    expect(handler.element).toBe(chargeOnCreatedSubscription);
+    expect(handler.declaration).toBe(chargeOnCreatedSubscription);
   });
 
   test('a Message Handler’s implementation receives ReceivedBodyOf of its pairing, a Command’s and a Subscription’s', () => {

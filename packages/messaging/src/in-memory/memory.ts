@@ -35,7 +35,7 @@ export async function memory(
     messagesOf: (message) => recordedOf(connection.messages(), versions, message),
     deliver: async (message, body, meta = {}) => {
       connection.assertOpen();
-      const attempts = injectedAttemptsOf(connection.consumers(), { message, body, meta });
+      const attempts = injectedAttemptsOf(connection.durableConsumers(), { message, body, meta });
       return await deliveries.lineUpAndWait(attempts);
     },
     redeliver: async () => {

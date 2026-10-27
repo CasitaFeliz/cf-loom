@@ -16,7 +16,7 @@ import {
   type Fault,
   fault,
   handle,
-  InvalidInputError,
+  InvalidCallError,
   InvalidOutcomeError,
   type Issue,
   isRejectionOf,
@@ -179,7 +179,7 @@ async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]>
   try {
     await call();
   } catch (e) {
-    if (e instanceof InvalidInputError || e instanceof InvalidOutcomeError) {
+    if (e instanceof InvalidCallError || e instanceof InvalidOutcomeError) {
       return e.issues;
     }
     throw e;
@@ -305,7 +305,7 @@ describe('an EndpointHandler’s Input', () => {
     expect(received).toEqual([{ params: { orderId: ORDER_ID } }, getContext]);
   });
 
-  test('Input that breaks a schema throws InvalidInputError with one Issue per failure', async () => {
+  test('Input that breaks a schema throws InvalidCallError with one Issue per failure', async () => {
     const issues = await issuesOf(() =>
       created({ headers: { 'x-request-id': 'r-1' }, body: { ...validOrder, email: 'nope' } }, {}),
     );
@@ -347,7 +347,7 @@ describe('an EndpointHandler’s Input', () => {
     expect(issues.map((issue) => issue.code)).toEqual([code]);
   });
 
-  test('Input nested past the stack throws InvalidInputError, malformed at the root of its part', async () => {
+  test('Input nested past the stack throws InvalidCallError, malformed at the root of its part', async () => {
     let body: object = {};
     for (let depth = 0; depth < 5000; depth += 1) {
       body = { next: body };
@@ -1169,8 +1169,8 @@ describe('more of what a direct call answers', () => {
       (thrown: unknown) => thrown,
     );
 
-    expect(caught).toBeInstanceOf(InvalidInputError);
-    const error = caught as InvalidInputError;
+    expect(caught).toBeInstanceOf(InvalidCallError);
+    const error = caught as InvalidCallError;
     expect(error.issues.map(({ path }) => path)).toEqual([['email'], ['quantity']]);
     expect(error.message.split('\n')).toEqual([
       expect.stringMatching(/^createOrder: input\.body\.email invalid_format: /),
@@ -1214,7 +1214,7 @@ describe('an EndpointHandler stub', () => {
   test('a stub still throws on Input that breaks the Contract', async () => {
     const call = stub({ params: { orderId: 'nope' } }, { context: getContext });
 
-    await expect(call).rejects.toThrow(InvalidInputError);
+    await expect(call).rejects.toThrow(InvalidCallError);
   });
 
   test('a direct call’s Outcome includes the not-implemented Rejection', () => {

@@ -10,7 +10,7 @@ import { type About, aboutOf, type ConsumedFault, type Report } from './faults.t
 /** A pulled Subscription or Command Version, the Handler the map holds for it and the Resources it runs with. */
 export type Pulled = {
   readonly consumed: Consumed;
-  readonly handler: { readonly element: Consumed['element'] };
+  readonly handler: { readonly declaration: Consumed['declaration'] };
   readonly resources: unknown;
 };
 
@@ -56,7 +56,7 @@ async function runOf(
 ): Promise<MessageRun> {
   const json = jsonOfBytes(delivery.body);
   if (json.kind === 'malformed') {
-    return { kind: 'invalid-input', issues: [malformedBodyIssueOf('body', json.message)] };
+    return { kind: 'invalid-call', issues: [malformedBodyIssueOf('body', json.message)] };
   }
   const { messageId, factId, deliveryCount, lastAttempt, headers } = delivery;
   const meta = { messageId, factId, deliveryCount, lastAttempt, headers, signal };
@@ -66,7 +66,7 @@ async function runOf(
 /** A run as the Broker settles it: a body that breaks its Reader ends, a throw stays pending. */
 function ranOf(run: MessageRun, about: About): Ran {
   switch (run.kind) {
-    case 'invalid-input':
+    case 'invalid-call':
       return { settlement: 'ended', fault: { ...about, kind: 'invalid-body', issues: run.issues } };
     case 'thrown':
       return { settlement: 'pending', fault: { ...about, kind: 'thrown', cause: run.cause } };

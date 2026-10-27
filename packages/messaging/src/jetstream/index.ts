@@ -1,7 +1,7 @@
 export type {
   BrokerLimits,
   BrokerPlan,
-  BrokerPlanConsumer,
+  BrokerPlanDurableConsumer,
   BrokerPlanStream,
   DurableConsumerLimits,
   Duration,

@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { AckPolicy, type ConsumerConfig } from '@nats-io/jetstream';
 
-/** One setting of a pull consumer cf-loom pulls from: the value `applyBrokerPlan` writes, `undefined` to clear it, and how a durable consumer differs in it. */
+/** One setting of a pull consumer cf-loom pulls from: the value `applyBrokerPlan` writes, `undefined` to clear it, and how a Durable consumer differs in it. */
 type ShapeSetting = {
   readonly value: (subject: string) => unknown;
   readonly difference: (config: ConsumerConfig, subject: string) => string | undefined;
@@ -10,7 +10,7 @@ type ShapeSetting = {
 /** A setting `applyBrokerPlan` clears whose own value is no difference: another setting's difference reports it. */
 const cleared = { value: (): undefined => undefined, difference: (): undefined => undefined };
 
-/** Every setting that decides whether a durable consumer is one cf-loom pulls from, so what `applyBrokerPlan` writes and what `consume` refuses cannot drift apart. */
+/** Every setting that decides whether a Durable consumer is one cf-loom pulls from, so what `applyBrokerPlan` writes and what `consume` refuses cannot drift apart. */
 const shapeSettings = {
   deliver_subject: {
     ...cleared,
@@ -60,22 +60,23 @@ const shapeSettings = {
   priority_timeout: cleared,
 } satisfies Record<string, ShapeSetting>;
 
-type DurableShape = {
+type DurableConsumerShape = {
   readonly [Name in keyof typeof shapeSettings]: ReturnType<(typeof shapeSettings)[Name]['value']>;
 };
 
-/** A durable consumer's settings as `applyBrokerPlan` sends them: NATS's own, with every setting of the shape named, so those that make a durable consumer not one cf-loom pulls from are always cleared. */
-export type DurableSettings = Omit<Partial<ConsumerConfig>, keyof DurableShape> & DurableShape;
+/** A Durable consumer's settings as `applyBrokerPlan` sends them: NATS's own, with every setting of the shape named, so those that make a Durable consumer not one cf-loom pulls from are always cleared. */
+export type DurableConsumerSettings = Omit<Partial<ConsumerConfig>, keyof DurableConsumerShape> &
+  DurableConsumerShape;
 
-/** The settings that make a durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject, its Messages' bodies delivered, no deliver subject and no priority groups. */
-export function durableShapeOf(subject: string): DurableShape {
+/** The settings that make a Durable consumer one cf-loom pulls from, whoever creates it: explicit acknowledgements, filtered on its subject, its Messages' bodies delivered, no deliver subject and no priority groups. */
+export function durableConsumerShapeOf(subject: string): DurableConsumerShape {
   const entries = Object.entries(shapeSettings).map(([name, setting]) => {
     return [name, setting.value(subject)];
   });
-  return Object.fromEntries(entries) as DurableShape;
+  return Object.fromEntries(entries) as DurableConsumerShape;
 }
 
-/** How an existing durable consumer differs from a pull consumer of `durableShapeOf(subject)`; none when it is one. */
+/** How an existing Durable consumer differs from a pull consumer of `durableConsumerShapeOf(subject)`; none when it is one. */
 export function shapeDifferencesOf(config: ConsumerConfig, subject: string): readonly string[] {
   const differences = Object.values(shapeSettings).map((setting) => {
     return setting.difference(config, subject);

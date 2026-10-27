@@ -3,7 +3,7 @@ import { type JetStreamOptions, jetstream as jetStreamClientOf } from '@nats-io/
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import type { NatsConnectionImpl } from '@nats-io/nats-core/internal';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
-import { durablesFoundOf } from './finding.ts';
+import { durableConsumersFoundOf } from './finding.ts';
 import { pullFrom } from './pulling.ts';
 import { managerOf } from './stream-check.ts';
 
@@ -20,17 +20,17 @@ export function jetStreamConnectionOf(
       const ack = await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
       return { duplicate: ack.duplicate };
     },
-    consume: async (consumers, { closing, troubled }) => {
+    consume: async (durableConsumers, { closing, troubled }) => {
       const manager = await managerOf(natsConnection, options);
       const inboxPrefix = inboxPrefixOf(natsConnection);
       const search = { manager, prefix, apiPrefix: client.apiPrefix, inboxPrefix };
-      const found = await durablesFoundOf(search, consumers);
+      const found = await durableConsumersFoundOf(search, durableConsumers);
       if (found.kind === 'refused') {
         throw new Error(found.lines.join('\n'));
       }
       const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
-      for (const durable of found.durables) {
-        void pullFrom(durable, natsConnection, { stopping, troubled });
+      for (const foundDurableConsumer of found.durableConsumers) {
+        void pullFrom(foundDurableConsumer, natsConnection, { stopping, troubled });
       }
     },
     close: async () => {

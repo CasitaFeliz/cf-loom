@@ -81,8 +81,8 @@ const notifyOnPaidV1 = defineSubscription({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: orderBody } },
-  subscriptions: { notifyOnPaid: { element: notifyOnPaidV1, reader: orderBody } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
+  subscriptions: { notifyOnPaid: { declaration: notifyOnPaidV1, reader: orderBody } },
 });
 
 const chargeCard = readers.commands.chargeCardV1;
@@ -91,7 +91,7 @@ const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-  test('Input that breaks the Contract is invalid-input with its issues, never a throw', async () => {
+  test('Input that breaks the Contract is invalid-call with its issues, never a throw', async () => {
     const call = {
       input: { params: { orderId: 'nope' } },
       context: getContext,
@@ -102,7 +102,7 @@ describe('runEndpoint', () => {
     const run = await runEndpoint(getOrderHandler, call);
 
     expect(run).toEqual({
-      kind: 'invalid-input',
+      kind: 'invalid-call',
       issues: [
         {
           part: 'input.params',
@@ -148,7 +148,7 @@ describe('runEndpoint', () => {
 describe('runGuard', () => {
   const permissionHandler = handle(permission, () => admit());
 
-  test('demands, a Context and a Qualifier that break the Contract are invalid-input', async () => {
+  test('demands, a Context and a Qualifier that break the Contract are invalid-call', async () => {
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
     const call = {
       demands: {},
@@ -164,9 +164,9 @@ describe('runGuard', () => {
     ];
 
     expect(runs).toMatchObject([
-      { kind: 'invalid-input', issues: [{ part: 'demands.headers', code: 'required' }] },
+      { kind: 'invalid-call', issues: [{ part: 'demands.headers', code: 'required' }] },
       {
-        kind: 'invalid-input',
+        kind: 'invalid-call',
         issues: [
           { part: 'context', path: ['apiKey', 'callerId'] },
           { part: 'qualifier', code: 'invalid_value' },
@@ -352,11 +352,11 @@ describe('isStub', () => {
   });
 });
 
-describe('mappedHandlerOf, by the Element a Handler was written for', () => {
-  test('a Handler is found for its own Element, not another, and a plain function never', () => {
+describe('mappedHandlerOf, by the declaration a Handler was written for', () => {
+  test('a Handler is found for its own declaration, not another, and a plain function never', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
     const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
-    const lookalike = Object.assign(() => undefined, { element: getOrder });
+    const lookalike = Object.assign(() => undefined, { declaration: getOrder });
 
     const written = [
       isFoundFor(getOrderHandler, getOrder),
@@ -397,7 +397,7 @@ describe('runMessage', () => {
   const shipping = readersOf({
     commands: {
       shipV1: {
-        element: shippedV1,
+        declaration: shippedV1,
         reader: z.object({ orderId: z.uuid(), status: openEnumReader(statuses) }),
       },
     },
@@ -429,7 +429,7 @@ describe('runMessage', () => {
   });
 
   test('runMessage given a value handle() did not return throws', () => {
-    const lookalike = Object.assign(() => undefined, { element: chargeCardV1 });
+    const lookalike = Object.assign(() => undefined, { declaration: chargeCardV1 });
 
     const run = () => runMessage(lookalike, { body: {}, meta, resources: undefined });
 
@@ -450,7 +450,7 @@ describe('a run given a value nested past the stack', () => {
     body: tree,
   });
   const nesting = readersOf({
-    commands: { nestV1: { element: nestV1, reader: tree } },
+    commands: { nestV1: { declaration: nestV1, reader: tree } },
     subscriptions: {},
   }).commands.nestV1;
   const nest = defineEndpoint({
@@ -479,7 +479,7 @@ describe('a run given a value nested past the stack', () => {
     return body;
   }
 
-  test('runEndpoint is invalid-input at the root of the part, never thrown', async () => {
+  test('runEndpoint is invalid-call at the root of the part, never thrown', async () => {
     const nestHandler = handle(nest, () => success());
 
     const run = await runEndpoint(nestHandler, {
@@ -490,7 +490,7 @@ describe('a run given a value nested past the stack', () => {
     });
 
     expect(run).toEqual({
-      kind: 'invalid-input',
+      kind: 'invalid-call',
       issues: [
         {
           part: 'input.body',
@@ -525,12 +525,12 @@ describe('a run given a value nested past the stack', () => {
       ran.length = 0;
     }
 
-    expect(new Set(runs)).toEqual(new Set(['answered 1', 'invalid-input 0']));
+    expect(new Set(runs)).toEqual(new Set(['answered 1', 'invalid-call 0']));
   });
 });
 
 describe('mappedHandlerOf, by its key', () => {
-  test('mappedHandlerOf names the key of a missing Handler, or of one written for another Element', () => {
+  test('mappedHandlerOf names the key of a missing Handler, or of one written for another declaration', () => {
     const chargeCardHandler = handle(chargeCard, () => undefined);
     const at = { map: 'commands', key: 'chargeCardV1' } as const;
 
@@ -561,9 +561,9 @@ describe('mappedHandlerOf, by its key', () => {
   });
 });
 
-/** Whether `mappedHandlerOf` finds a Handler for an Element in a map that holds it. */
-function isFoundFor(handler: unknown, element: Parameters<typeof mappedHandlerOf>[2]): boolean {
-  return errorMessageOf(() => mappedHandlerOf({ handler }, anyKey, element)) === undefined;
+/** Whether `mappedHandlerOf` finds a Handler for a declaration in a map that holds it. */
+function isFoundFor(handler: unknown, declaration: Parameters<typeof mappedHandlerOf>[2]): boolean {
+  return errorMessageOf(() => mappedHandlerOf({ handler }, anyKey, declaration)) === undefined;
 }
 
 const anyKey = { map: 'endpoints', key: 'handler' } as const;

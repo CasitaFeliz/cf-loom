@@ -8,7 +8,7 @@ const longestExpiryMs = 30_000;
 /** How many expiries a pull waits for an answer before it is sent again. */
 const lateFactor = 2;
 
-/** What a pull of one Message asks of a durable consumer: which, where, which inbox prefix its reply comes back on, and how long it waits for a Message. */
+/** What a pull of one Message asks of a Durable consumer: which, where, which inbox prefix its reply comes back on, and how long it waits for a Message. */
 export type PullRequest = {
   readonly durable: string;
   readonly subject: string;
@@ -24,7 +24,7 @@ export type Pull =
 
 const none: Pull = { kind: 'none' };
 
-/** The request that pulls one Message from a durable consumer, which expires within its `max_expires` and after 30 seconds at most. */
+/** The request that pulls one Message from a Durable consumer, which expires within its `max_expires` and after 30 seconds at most. */
 export function pullRequestOf(
   consumerInfo: ConsumerInfo,
   apiPrefix: string,

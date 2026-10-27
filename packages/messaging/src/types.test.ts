@@ -21,20 +21,24 @@ import { z } from 'zod';
 import {
   type Broker,
   type BrokerConnection,
-  type BrokerConsumer,
-  type BrokerService,
   type BrokerTrouble,
+  type CloseAbortedError,
   type CloseOptions,
   type ConsumedFault,
   type ConsumeOptions,
   type ConsumeRun,
-  type ConsumerTrouble,
   type Delivery,
+  type DurableConsumer,
+  type DurableConsumerTrouble,
   type Messaging,
   type MessagingOptions,
   messaging,
+  type ServiceStream,
   type Settlement,
 } from './index.ts';
+
+/** Every key any member of a union of records holds. */
+type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
 
 const orderCreatedV1 = defineEvent({
   name: 'OrderCreated',
@@ -177,13 +181,13 @@ const contract = defineService({
 
 const readers = readersOf({
   commands: {
-    chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body },
-    chargeCardV2: { element: chargeCardV2, reader: chargeCardV2.body },
-    refundV1: { element: refundV1, reader: refundV1.body },
-    shipV1: { element: shipV1, reader: shipV1.body },
-    shipV2: { element: shipV2, reader: shipV2.body },
+    chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body },
+    chargeCardV2: { declaration: chargeCardV2, reader: chargeCardV2.body },
+    refundV1: { declaration: refundV1, reader: refundV1.body },
+    shipV1: { declaration: shipV1, reader: shipV1.body },
+    shipV2: { declaration: shipV2, reader: shipV2.body },
   },
-  subscriptions: { notifyOnCreated: { element: notifyOnCreated, reader: orderCreatedV3.body } },
+  subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderCreatedV3.body } },
 });
 
 /** A stub for every Command's Message Version the Contract declares, none Retired. */
@@ -361,8 +365,8 @@ describe('publish and send types', () => {
     expectTypeOf<BrokerTrouble['kind']>().toEqualTypeOf<'pull-failed' | 'recovered'>();
     expectTypeOf<Extract<BrokerTrouble, { kind: 'pull-failed' }>['cause']>().toBeUnknown();
     expectTypeOf<Omit<BrokerTrouble, 'kind' | 'cause'>>().toEqualTypeOf<{
-      readonly element: BrokerTrouble['element'];
-      readonly identity: string;
+      readonly declaration: BrokerTrouble['declaration'];
+      readonly name: string;
       readonly durable: string;
       readonly stream: string;
     }>();
@@ -462,8 +466,8 @@ describe('publish and send types', () => {
         resources.notifications.send();
       },
     );
-    const bare: HandledBy<typeof readers.subscriptions.notifyOnCreated.element> = notifying;
-    const bareNever: HandledBy<typeof readers.subscriptions.notifyOnCreated.element, never> =
+    const bare: HandledBy<typeof readers.subscriptions.notifyOnCreated.declaration> = notifying;
+    const bareNever: HandledBy<typeof readers.subscriptions.notifyOnCreated.declaration, never> =
       notifying;
     const inferred = { commands, subscriptions: { notifyOnCreated: bare }, readers };
     const inferredNever = { commands, subscriptions: { notifyOnCreated: bareNever }, readers };
@@ -645,27 +649,57 @@ describe('the options, typed by what they declare', () => {
   });
 });
 
-describe('the Broker seam', () => {
-  test('a Broker adapter implements connect with only the stream and subjects', () => {
-    expectTypeOf<keyof BrokerService>().toEqualTypeOf<'stream' | 'subjects'>();
+describe('the records a Service reads', () => {
+  test('a ConsumedFault holds the declaration, its name, the Message and how it failed, and no more', () => {
+    expectTypeOf<KeysOfEach<ConsumedFault>>().toEqualTypeOf<
+      | 'declaration'
+      | 'name'
+      | 'subject'
+      | 'messageId'
+      | 'factId'
+      | 'deliveryCount'
+      | 'lastAttempt'
+      | 'kind'
+      | 'issues'
+      | 'fault'
+      | 'cause'
+    >();
   });
 
-  test('a BrokerConsumer offers an adapter only its durable consumer, stream, subject and receive', () => {
-    expectTypeOf<keyof BrokerConsumer>().toEqualTypeOf<
+  test('a BrokerTrouble holds the declaration, its name, the Durable consumer’s name, its Stream and why, and no more', () => {
+    expectTypeOf<KeysOfEach<BrokerTrouble>>().toEqualTypeOf<
+      'declaration' | 'name' | 'durable' | 'stream' | 'kind' | 'cause'
+    >();
+  });
+
+  test('a Message CloseAbortedError hands back holds its name, subject and ids, and no more', () => {
+    expectTypeOf<keyof CloseAbortedError['handedBack'][number]>().toEqualTypeOf<
+      'name' | 'subject' | 'messageId' | 'factId'
+    >();
+  });
+});
+
+describe('the Broker seam', () => {
+  test('a Broker adapter implements connect with only the stream and subjects', () => {
+    expectTypeOf<keyof ServiceStream>().toEqualTypeOf<'stream' | 'subjects'>();
+  });
+
+  test('a DurableConsumer offers an adapter only its `durable`, stream, subject and receive', () => {
+    expectTypeOf<keyof DurableConsumer>().toEqualTypeOf<
       'durable' | 'stream' | 'subject' | 'receive'
     >();
   });
 
-  test('an adapter’s consume receives the consumers and a ConsumeRun of closing and troubled', () => {
+  test('an adapter’s consume receives the Durable consumers and a ConsumeRun of closing and troubled', () => {
     expectTypeOf<Parameters<BrokerConnection['consume']>>().toEqualTypeOf<
-      [consumers: readonly BrokerConsumer[], run: ConsumeRun]
+      [durableConsumers: readonly DurableConsumer[], run: ConsumeRun]
     >();
     expectTypeOf<ConsumeRun>().toEqualTypeOf<{
       readonly closing: AbortSignal;
-      readonly troubled: (trouble: ConsumerTrouble) => void;
+      readonly troubled: (trouble: DurableConsumerTrouble) => void;
     }>();
-    expectTypeOf<ConsumerTrouble>().toEqualTypeOf<
-      { readonly consumer: BrokerConsumer } & (
+    expectTypeOf<DurableConsumerTrouble>().toEqualTypeOf<
+      { readonly durableConsumer: DurableConsumer } & (
         | { readonly kind: 'pull-failed'; readonly cause: unknown }
         | { readonly kind: 'recovered' }
       )

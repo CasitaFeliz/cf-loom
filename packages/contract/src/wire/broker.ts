@@ -100,17 +100,17 @@ function joinedByName(entries: readonly (readonly [string, string])[]): Map<stri
   return valueByName;
 }
 
-/** The stream of a Service, named after it: its own Messages travel on it, and a consumer of its Events reads it. */
+/** The stream of a Service, named after it: its own Messages travel on it, and a Durable consumer of its Events reads it. */
 export function streamNameOf(service: string): string {
   return service;
 }
 
-/** What has a durable consumer: a Subscription by its name, or a Command's Message Version. */
+/** What has a Durable consumer: a Subscription by its name, or a Command's Message Version. */
 export type DurableConsumed =
   | { readonly kind: 'subscription'; readonly name: string }
   | { readonly kind: 'command'; readonly name: string; readonly version: number };
 
-/** The durable consumer of a Subscription, `<service>_<name in kebab-case>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
+/** The Durable consumer of a Subscription, `<service>_<name in kebab-case>`, or of a Command Version, `<service>_command_<Name>_v<n>`. */
 export function durableNameOf(service: string, consumed: DurableConsumed): string {
   switch (consumed.kind) {
     case 'subscription':
@@ -133,7 +133,7 @@ export function prefixedSubjectOf(prefix: string | null, subject: string): strin
   return prefix === null ? subject : `${prefix}.${subject}`;
 }
 
-/** A stream's or durable consumer's name with the prefix in front, `staging_orders-service`, or the name itself without one. */
+/** A stream's or Durable consumer's name with the prefix in front, `staging_orders-service`, or the name itself without one. */
 export function prefixedNameOf(prefix: string | null, name: string): string {
   return prefix === null ? name : `${prefix}_${name}`;
 }

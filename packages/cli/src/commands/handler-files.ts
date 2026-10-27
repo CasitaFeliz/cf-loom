@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { BuiltService, Tooling } from '../project/index.ts';
 import { type HandlerPath, handlerPathsOf } from '../service-code/index.ts';
 
-/** A Service with the Handler path of every Element it declares one for. */
+/** A Service with the Handler path of every declaration it declares one for. */
 export type PlacedService = BuiltService & { readonly handlerPaths: readonly HandlerPath[] };
 
 /** The Service with its Handler paths, or the line saying why one cannot be placed. */

@@ -24,10 +24,10 @@ import type {
 
 declare const handled: unique symbol;
 
-/** What only a Handler `handle()` returned for one Element carries: its Element, the Resources it takes, and a brand no hand-made value has; `Resources` left out is `never`, unspecified, which `ResourcesOf` refuses and no Handler that takes some fits. */
-export type HandledBy<Element, Resources = never> = {
-  readonly element: Element;
-  readonly [handled]: Element;
+/** What only a Handler `handle()` returned for one declaration carries: the declaration it was written for, the Resources it takes, and a brand no hand-made value has; `Resources` left out is `never`, unspecified, which `ResourcesOf` refuses and no Handler that takes some fits. */
+export type HandledBy<Declaration, Resources = never> = {
+  readonly declaration: Declaration;
+  readonly [handled]: Declaration;
 } & TakesResources<Resources>;
 
 /** What an EndpointHandler is given beside its Input: the Context its Guards provided, and the request. */
@@ -88,14 +88,14 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
 
 /**
  * The runtime shape of every Handler map, which the startup checks of `serve` and `consume` read,
- * whatever the map's type: each Handler known by the Element it was written for, and the
+ * whatever the map's type: each Handler known by the declaration it was written for, and the
  * `readers`; `HandlerMapOf` is what they take by type.
  */
 export type HandlerMap = {
-  readonly endpoints: Readonly<Record<string, { readonly element: Endpoint }>>;
-  readonly guards: Readonly<Record<string, { readonly element: Guard }>>;
-  readonly commands: Readonly<Record<string, { readonly element: Command }>>;
-  readonly subscriptions: Readonly<Record<string, { readonly element: Subscription }>>;
+  readonly endpoints: Readonly<Record<string, { readonly declaration: Endpoint }>>;
+  readonly guards: Readonly<Record<string, { readonly declaration: Guard }>>;
+  readonly commands: Readonly<Record<string, { readonly declaration: Command }>>;
+  readonly subscriptions: Readonly<Record<string, { readonly declaration: Subscription }>>;
   readonly readers: Readers;
 };
 

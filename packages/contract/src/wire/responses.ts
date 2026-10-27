@@ -4,7 +4,7 @@ import { jsonContentType } from './content-type.ts';
 import {
   faultEnvelopeOf,
   rejectionEnvelopeOf,
-  reservedFaults,
+  reservedCodeFaults,
   type TravelingFault,
 } from './envelopes.ts';
 import { headerTextsOf } from './header-text.ts';
@@ -117,7 +117,7 @@ export function faultStatusOf({ retryable }: Pick<SentFault, 'retryable'>): numb
  * `committed`, never retryable, its fixed text.
  */
 export function reservedResponseOf(code: ReservedCode): Response {
-  const { status, committed, message } = reservedFaults[code];
+  const { status, committed, message } = reservedCodeFaults[code];
   return jsonResponseOf(status, faultEnvelopeOf({ code, committed, retryable: false, message }));
 }
 

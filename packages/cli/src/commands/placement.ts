@@ -2,9 +2,9 @@ import { join } from 'node:path';
 import { byCodePoint, oneOf } from '@cf-loom/contract/internal';
 import { realPathOf } from '../loading/index.ts';
 import {
-  elementLabelOf,
   type Handled,
   type HandlerPath,
+  handledLabelOf,
   handlerLocalOf,
   type RecordedHandler,
   recordedLabelOf,
@@ -15,8 +15,8 @@ import { isNothingAt, type PlacedService } from './handler-files.ts';
 /** A line about the file at a path, to be printed where the paths sort. */
 export type PathLine = { readonly path: string; readonly line: string };
 
-/** A recorded Handler `generate` moves to where the layout now places its Element. */
-export type Move = { readonly from: string; readonly to: string; readonly element: string };
+/** A recorded Handler `generate` moves to where the layout now places its declaration. */
+export type Move = { readonly from: string; readonly to: string; readonly label: string };
 
 /**
  * What the recorded Handlers come to once every move is made and every line followed: the moves,
@@ -30,19 +30,19 @@ export type Placement = {
   readonly lacking: readonly HandlerPath[];
 };
 
-/** The recorded Handler of an Element that the layout places elsewhere, and where. */
+/** The recorded Handler of a declaration that the layout places elsewhere, and where. */
 type Moving = { readonly handler: RecordedHandler; readonly placed: HandlerPath };
 
 /** The line `verify` prints for a Handler `generate` would move. */
-export function pendingLineOf({ from, to, element }: Move): string {
-  return `${from} is the Handler of ${element}, which is now ${to}: run cf-loom generate`;
+export function pendingLineOf({ from, to, label }: Move): string {
+  return `${from} is the Handler of ${label}, which is now ${to}: run cf-loom generate`;
 }
 
 /**
  * Reads the recorded Handlers against the layout and the disk. A recorded Handler whose file is
- * still there leaves its path unless the layout places its Element there, and a Handler whose
- * Element the layout places elsewhere arrives there; a path keeps a file when one is there that no
- * Handler leaves; an Element lacks a Handler when its path neither keeps a file nor receives one.
+ * still there leaves its path unless the layout places its declaration there, and a Handler whose
+ * declaration the layout places elsewhere arrives there; a path keeps a file when one is there that no
+ * Handler leaves; a declaration lacks a Handler when its path neither keeps a file nor receives one.
  * Every line is read against that picture, so a path one Handler leaves counts as free.
  */
 export function placementOf(
@@ -74,8 +74,8 @@ export function placementOf(
 }
 
 /**
- * The files that keep a Handler once every move is made, and the Handlers that lack one: an
- * Element lacks a Handler when its file neither keeps one nor receives one.
+ * The files that keep a Handler once every move is made, and the Handlers that lack one: a
+ * declaration lacks a Handler when its file neither keeps one nor receives one.
  */
 function pictureOf(
   service: PlacedService,
@@ -100,7 +100,7 @@ function pictureOf(
 /** A path as the file it is, so two spellings of one file are one. */
 type Identity = (path: string) => string;
 
-/** Whether the layout places a recorded Handler's Element at the file it was imported from. */
+/** Whether the layout places a recorded Handler's declaration at the file it was imported from. */
 function isPlacedAt(
   handler: RecordedHandler,
   declared: ReadonlyMap<string, HandlerPath>,
@@ -136,21 +136,21 @@ function movingOf(
 }
 
 function moveOf({ handler, placed }: Moving): Move {
-  return { from: handler.path, to: placed.path, element: elementLabelOf(placed.handled) };
+  return { from: handler.path, to: placed.path, label: handledLabelOf(placed.handled) };
 }
 
 function byFrom(left: Move, right: Move): number {
   return byCodePoint(left.from, right.from);
 }
 
-/** The line for a Handler whose Element's new path holds a file `generate` cannot tell from its Handler. */
+/** The line for a Handler whose declaration's new path holds a file `generate` cannot tell from its Handler. */
 function conflictLineOf({ handler, placed }: Moving): PathLine {
-  const now = `is the Handler of ${elementLabelOf(placed.handled)}, which is now ${placed.path}`;
+  const now = `is the Handler of ${handledLabelOf(placed.handled)}, which is now ${placed.path}`;
   const line = `${handler.path} ${now}, where a file already is: delete the one that is not its Handler`;
   return { path: handler.path, line };
 }
 
-/** The line for a Handler whose Element is Retired or no longer declared, which only the author can settle. */
+/** The line for a Handler whose declaration is Retired or no longer declared, which only the author can settle. */
 function undecidedLineOf(
   service: PlacedService,
   handler: RecordedHandler,
@@ -165,17 +165,17 @@ function undecidedLineOf(
 }
 
 function retiredLineOf(handler: RecordedHandler, retired: Handled): string {
-  return `${handler.path} is the Handler of ${elementLabelOf(retired)}, which is Retired: delete it`;
+  return `${handler.path} is the Handler of ${handledLabelOf(retired)}, which is Retired: delete it`;
 }
 
-/** The line for a Handler whose Element is no longer declared, naming the Elements that may replace it. */
+/** The line for a Handler whose declaration is no longer declared, naming the declarations that may replace it. */
 function goneLineOf(handler: RecordedHandler, lacking: readonly HandlerPath[]): string {
   const replacements = lacking.filter(({ handled }) => handled.kind === handler.kind);
   const gone = `is the Handler of ${recordedLabelOf(handler)}, which is no longer declared`;
   return `${handler.path} ${gone}: ${adviceOf(replacements)}`;
 }
 
-/** What to do with a Handler whose Element is gone: delete it, or move it off its path to keep its code for the Element that replaces it. */
+/** What to do with a Handler whose declaration is gone: delete it, or move it off its path to keep its code for the declaration that replaces it. */
 function adviceOf(replacements: readonly HandlerPath[]): string {
   const keep = 'delete it, or move it off its path to keep its code';
   const [only, ...others] = replacements;
@@ -183,8 +183,8 @@ function adviceOf(replacements: readonly HandlerPath[]): string {
     return keep;
   }
   if (others.length === 0) {
-    return `${keep} for ${elementLabelOf(only.handled)}`;
+    return `${keep} for ${handledLabelOf(only.handled)}`;
   }
-  const candidates = replacements.map(({ handled }) => elementLabelOf(handled));
-  return `${keep} for the Element that replaces it, ${oneOf(candidates)}`;
+  const candidates = replacements.map(({ handled }) => handledLabelOf(handled));
+  return `${keep} for the declaration that replaces it, ${oneOf(candidates)}`;
 }

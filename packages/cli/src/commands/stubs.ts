@@ -2,10 +2,10 @@ import { byCodePoint, exportNamesOf, isLive } from '@cf-loom/contract/internal';
 import type { ExportsOf, ImportedPackage } from '../loading/index.ts';
 import {
   type DeclarationHandled,
-  elementLabelOf,
   exportedTargetOf,
   type Handled,
   type HandlerPath,
+  handledLabelOf,
   pairingTargetOf,
   type StubTarget,
   stubTextOf,
@@ -28,10 +28,10 @@ type StubLocated =
   | { readonly kind: 'exported'; readonly target: StubTarget }
   | { readonly kind: 'refused'; readonly line: string };
 
-/** A handled Element located, with the path its Handler is written at. */
+/** A declaration that has a Handler, located, with the path its Handler is written at. */
 type LocatedHandler = StubLocated & { readonly path: string };
 
-/** The Stub of every Handler that lacks a file, importing its Element under its name. */
+/** The Stub of every Handler that lacks a file, importing its declaration under its name. */
 export function stubsOf(
   service: PlacedService,
   exportsOf: ExportsOf,
@@ -83,7 +83,7 @@ function declarationLocatedOf(
     return packageExportOf(handled, packaged);
   }
   const declaration = declarationOf(service, handled);
-  const located = exportedAtOf(elementLabelOf(handled), exportsOf(declaration));
+  const located = exportedAtOf(handledLabelOf(handled), exportsOf(declaration));
   if (located.kind === 'refused') {
     return located;
   }
@@ -146,7 +146,7 @@ function isImportedByProject(module: ImportedPackage): module is ImportedModule 
   return module.specifier !== undefined;
 }
 
-/** The declaration a handled Element is, as the Root holds it: a Retired Endpoint is never one. */
+/** The declaration a handled one is, as the Root holds it: a Retired Endpoint is never one. */
 function declarationOf(service: PlacedService, handled: DeclarationHandled): unknown {
   const { declarations } = service.validated;
   switch (handled.kind) {

@@ -9,7 +9,6 @@ export type {
 } from '../calls/index.ts';
 export {
   defaultedMetaOf,
-  elementNameOf,
   failureCauseOf,
   failureLineOf,
   faultLineOf,
@@ -17,6 +16,7 @@ export {
   firstAttempt,
   hookFailureOf,
   logOf,
+  nameOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
 export { checkedMessageBody, writtenMessageBody } from '../checks/index.ts';

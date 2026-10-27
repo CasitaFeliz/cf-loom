@@ -11,7 +11,7 @@ import {
   type MessageHandled,
 } from './handled.ts';
 
-/** The Handler file of an Element the Handler map holds a Handler for. */
+/** The Handler file of a declaration the Handler map holds a Handler for. */
 export type HandlerPath = {
   readonly handled: Handled;
   readonly path: string;
@@ -25,7 +25,7 @@ export type HandlerPaths =
   | { readonly kind: 'placed'; readonly paths: readonly HandlerPath[] }
   | { readonly kind: 'unplaced'; readonly line: string };
 
-/** The Handler path of every Element the Handler map holds, so two never share one. */
+/** The Handler path of every declaration the Handler map holds, so two never share one. */
 export function handlerPathsOf(
   snapshot: ServiceSnapshot,
   layout: ServiceLayout,
@@ -39,7 +39,7 @@ export function handlerPathsOf(
   return line === undefined ? { kind: 'placed', paths } : { kind: 'unplaced', line };
 }
 
-/** Where a Handler lives, from its Element's names alone, as the layout places its kind. */
+/** Where a Handler lives, from its declaration's names alone, as the layout places its kind. */
 function pathOf(handled: Handled, layout: ServiceLayout): string {
   switch (handled.kind) {
     case 'endpoint':
@@ -63,18 +63,18 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
   }
 }
 
-/** The line naming the first Element, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
+/** The line naming the first declaration, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
 function contractLineOf(paths: readonly HandlerPath[], directory: string): string | undefined {
   const isInside = insideContractOf(directory);
   const placed = paths.find(({ path }) => isInside(realPathOf(directory, path)));
   if (placed === undefined) {
     return undefined;
   }
-  const under = `${elementLabelOf(placed.handled)} is ${placed.path}, under ${contractFolder}/, which holds only the Contract`;
+  const under = `${handledLabelOf(placed.handled)} is ${placed.path}, under ${contractFolder}/, which holds only the Contract`;
   return `${under}: give it another path in the layout of ${configFile}`;
 }
 
-/** The line naming the first two Elements, in the map's order, whose Handlers share a path. */
+/** The line naming the first two declarations, in the map's order, whose Handlers share a path. */
 function collidingLineOf(paths: readonly HandlerPath[], directory: string): string | undefined {
   const placedByFile = new Map<string, HandlerPath>();
   for (const placed of paths) {
@@ -88,17 +88,17 @@ function collidingLineOf(paths: readonly HandlerPath[], directory: string): stri
   return undefined;
 }
 
-/** Two Elements at one Handler file: at one path, or at two paths a link makes one file. */
+/** Two declarations at one Handler file: at one path, or at two paths a link makes one file. */
 function bothLineOf(earlier: HandlerPath, later: HandlerPath): string {
-  const elements = `${elementLabelOf(earlier.handled)} and ${elementLabelOf(later.handled)}`;
+  const both = `${handledLabelOf(earlier.handled)} and ${handledLabelOf(later.handled)}`;
   if (earlier.path === later.path) {
-    return `${elements} are both ${later.path}`;
+    return `${both} are both ${later.path}`;
   }
-  return `${elements} are both the same file, ${earlier.path} and ${later.path}`;
+  return `${both} are both the same file, ${earlier.path} and ${later.path}`;
 }
 
-/** An Element as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
-export function elementLabelOf(handled: DeclarationHandled | MessageHandled): string {
+/** A declaration as the lines name it: `endpoints.getOrder`, `commands.ChargeCard@1`. */
+export function handledLabelOf(handled: DeclarationHandled | MessageHandled): string {
   switch (handled.kind) {
     case 'endpoint':
     case 'guard':
@@ -109,7 +109,7 @@ export function elementLabelOf(handled: DeclarationHandled | MessageHandled): st
   }
 }
 
-/** An Element no longer declared, by its name in code: `endpoints.getOrder`, `commands.chargeCardV1`. */
+/** What a recorded Handler was written for, once it is no longer declared, by its name in code: `endpoints.getOrder`, `commands.chargeCardV1`. */
 export function recordedLabelOf({ kind, name }: LocalParts): string {
   return labelOf(kind, name);
 }

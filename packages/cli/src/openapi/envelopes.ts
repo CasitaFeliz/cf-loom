@@ -1,4 +1,4 @@
-import { byCodePoint, committedValues, reservedFaults } from '@cf-loom/contract/internal';
+import { byCodePoint, committedValues, reservedCodeFaults } from '@cf-loom/contract/internal';
 import { componentRefOf, definedOf, type JsonSchema, jsonSchemaOf } from '../json-schema/index.ts';
 import type { ServedRejection } from './served.ts';
 
@@ -44,7 +44,7 @@ const faultEnvelope: JsonSchema = {
       type: 'object',
       required: ['committed', 'retryable', 'message'],
       properties: {
-        code: { enum: Object.keys(reservedFaults).sort(byCodePoint) },
+        code: { enum: Object.keys(reservedCodeFaults).sort(byCodePoint) },
         committed: { enum: committedValues },
         retryable: { type: 'boolean' },
         message: { type: 'string' },

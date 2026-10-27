@@ -1,5 +1,5 @@
 export type { DirectMeta, MessageMeta, Pairing } from './calls/index.ts';
-export { InvalidInputError, InvalidOutcomeError } from './calls/index.ts';
+export { InvalidCallError, InvalidOutcomeError } from './calls/index.ts';
 export type { HandledRequest, Issue } from './checks/index.ts';
 export type {
   EndpointCall,

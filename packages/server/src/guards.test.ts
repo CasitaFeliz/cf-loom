@@ -464,8 +464,8 @@ describe('serve: Guards', () => {
     expect(faults).toEqual([
       {
         kind: 'invalid-outcome',
-        element: updateOrder,
-        identity: 'updateOrder',
+        declaration: updateOrder,
+        name: 'updateOrder',
         guard: userToken,
         issues: [
           { part: 'context', path: ['userId'], code: 'invalid_type', message: expect.any(String) },
@@ -493,8 +493,8 @@ describe('serve: Guards', () => {
     expect(faults).toMatchObject([
       {
         kind: 'runtime-bug',
-        element: misattached,
-        identity: 'misattached',
+        declaration: misattached,
+        name: 'misattached',
         guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },

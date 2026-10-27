@@ -1,6 +1,6 @@
 import type { BrokerConnection, ConsumeRun, Delivery } from '../broker/index.ts';
 import {
-  type CoreConsumer,
+  type CoreDurableConsumer,
   type DeliveryEnds,
   leftPending,
   type Named,
@@ -14,12 +14,15 @@ import {
 import { CloseAbortedError, type CloseOptions, MessagingClosedError } from './closed.ts';
 import { InFlight } from './in-flight.ts';
 
-/** The core's view of one connection: a Broker's, as `messaging()` runs it, or the memory's own, to which the core hands each consumer as it built it. */
+/** The core's view of one connection: a Broker's, as `messaging()` runs it, or the memory's own, to which the core hands each Durable consumer as it built it. */
 export type CoreConnection = Pick<BrokerConnection, 'publish' | 'close'> & {
-  readonly consume: (consumers: readonly CoreConsumer[], run: ConsumeRun) => Promise<void>;
+  readonly consume: (
+    durableConsumers: readonly CoreDurableConsumer[],
+    run: ConsumeRun,
+  ) => Promise<void>;
 };
 
-/** Whether a `consume` has handed the broker its consumers, or is handing them: taken until the broker rejects them. */
+/** Whether a `consume` has handed the broker its Durable consumers, or is handing them: taken until the broker rejects them. */
 type Consumption = 'none' | 'taken';
 
 /** How closing ended: with nothing left in flight, or with `close`'s signal aborted, and why. */
@@ -35,8 +38,8 @@ type State =
     }
   | { readonly kind: 'closed'; readonly closed: Promise<void> };
 
-/** What the consumers of one `consume` are built with: `received`, and what ends a delivery early. */
-export type ConsumerLife = { readonly received: Received; readonly ends: DeliveryEnds };
+/** What the Durable consumers of one `consume` are built with: `received`, and what ends a delivery early. */
+export type DurableConsumerLife = { readonly received: Received; readonly ends: DeliveryEnds };
 
 /**
  * The life of one messaging over its connection: publishing while open or closing, since a
@@ -72,12 +75,12 @@ export class MessagingLife {
   }
 
   /**
-   * Hands the broker its consumers, once, built with `received`, which runs a delivery only while
+   * Hands the broker its Durable consumers, once, built with `received`, which runs a delivery only while
    * open, and where it tells of their trouble, which once closing started it drops; a broker that
    * rejects them leaves `consume` to retry.
    */
   async consume(
-    consumersOf: (life: ConsumerLife) => readonly CoreConsumer[],
+    durableConsumersOf: (life: DurableConsumerLife) => readonly CoreDurableConsumer[],
     tellTrouble: TroubleTell,
   ): Promise<void> {
     const state = this.#state;
@@ -91,15 +94,15 @@ export class MessagingLife {
         }
     }
     const closing = this.#closing.signal;
-    const consumers = consumersOf({
+    const durableConsumers = durableConsumersOf({
       received: (settle, named) => (delivery) => this.#received(settle, named, delivery),
       ends: { closing, handingBack: this.#inFlight.handingBack },
     });
     this.#consumption('taken');
     const tracked: TroubleTell = (trouble) => this.tracked(tellTrouble(trouble));
-    const run: ConsumeRun = { closing, troubled: troubledOf(consumers, closing, tracked) };
+    const run: ConsumeRun = { closing, troubled: troubledOf(durableConsumers, closing, tracked) };
     try {
-      await this.tracked(this.#connection.consume(consumers, run));
+      await this.tracked(this.#connection.consume(durableConsumers, run));
     } catch (e) {
       this.#consumption('none');
       throw e;

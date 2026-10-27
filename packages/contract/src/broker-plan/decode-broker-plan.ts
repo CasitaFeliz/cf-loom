@@ -19,14 +19,14 @@ const stream = z.strictObject({
   service: text,
   subjects: z.array(text).min(1, 'holds no subject'),
 });
-const consumer = z.strictObject({ service: text, stream: text, subject: text });
+const durableConsumer = z.strictObject({ service: text, stream: text, subject: text });
 const plan = z.strictObject({
   prefix: z
     .string('is not a text or null')
     .refine(isBrokerPrefix, `is not ${brokerPrefixRule}`)
     .nullable(),
   streams: z.record(z.string(), stream),
-  consumers: z.record(z.string(), consumer),
+  durableConsumers: z.record(z.string(), durableConsumer),
 });
 
 /**
@@ -70,13 +70,16 @@ function carriersOf(brokerPlan: BrokerPlan, prefix: string): readonly Carrier[] 
       carriers.push({ at, isCarried: isPrefixedSubject(prefix, subject) });
     }
   }
-  for (const [name, consumer] of Object.entries(brokerPlan.consumers)) {
-    const at = ['consumers', name];
+  for (const [name, durableConsumer] of Object.entries(brokerPlan.durableConsumers)) {
+    const at = ['durableConsumers', name];
     carriers.push({ at, isCarried: isPrefixedName(prefix, name) });
-    carriers.push({ at: [...at, 'stream'], isCarried: isPrefixedName(prefix, consumer.stream) });
+    carriers.push({
+      at: [...at, 'stream'],
+      isCarried: isPrefixedName(prefix, durableConsumer.stream),
+    });
     carriers.push({
       at: [...at, 'subject'],
-      isCarried: isPrefixedSubject(prefix, consumer.subject),
+      isCarried: isPrefixedSubject(prefix, durableConsumer.subject),
     });
   }
   return carriers;

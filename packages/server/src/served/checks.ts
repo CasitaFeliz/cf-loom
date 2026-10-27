@@ -23,7 +23,7 @@ export function contractOf(root: unknown): ServiceContract {
 export function endpointHandlerOf(
   handlers: ServedHandlers,
   endpoint: Endpoint,
-): { readonly element: Endpoint } {
+): { readonly declaration: Endpoint } {
   return mappedHandlerOf(handlers.endpoints, { map: 'endpoints', key: endpoint.name }, endpoint);
 }
 
@@ -31,7 +31,7 @@ export function endpointHandlerOf(
 export function guardHandlerOf(
   handlers: ServedHandlers,
   guard: Guard,
-): { readonly element: Guard } {
+): { readonly declaration: Guard } {
   return mappedHandlerOf(handlers.guards, { map: 'guards', key: guard.name }, guard);
 }
 

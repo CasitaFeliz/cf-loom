@@ -98,7 +98,7 @@ describe('the READMEs', () => {
       resources,
       maxBodyBytes: 1_000_000,
       onServiceFault: (fault, request) => {
-        expectTypeOf(fault.identity).toEqualTypeOf<string>();
+        expectTypeOf(fault.name).toEqualTypeOf<string>();
         expectTypeOf(request).toEqualTypeOf<Request>();
       },
       onAnswered: async (answered, request) => {

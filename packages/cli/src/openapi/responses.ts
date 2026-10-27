@@ -3,7 +3,7 @@ import {
   deprecationHeaderOf,
   faultStatusOf,
   type ObjectNode,
-  reservedFaults,
+  reservedCodeFaults,
 } from '@cf-loom/contract/internal';
 import { componentRefOf, definedOf, type JsonSchema, jsonSchemaOf } from '../json-schema/index.ts';
 import { jsonContentOf } from './content.ts';
@@ -42,8 +42,8 @@ function livePartsOf({ success, rejections, input }: LiveServed): readonly Statu
 
 /** `RETIRED`, which a Retired Endpoint answers before any Guard. */
 const retiredPart: StatusPart = {
-  status: reservedFaults.RETIRED.status,
-  description: `RETIRED: ${reservedFaults.RETIRED.message}`,
+  status: reservedCodeFaults.RETIRED.status,
+  description: `RETIRED: ${reservedCodeFaults.RETIRED.message}`,
   schema: componentRefOf(faultEnvelopeName),
 };
 
@@ -82,7 +82,7 @@ const retryAfterObject: HeaderPart = {
 /** The Faults `serve` may answer any Endpoint: 500 and 503, and 413 when a body is read. */
 function faultPartsOf({ body }: LiveServed['input']): readonly StatusPart[] {
   const schema = componentRefOf(faultEnvelopeName);
-  const tooLarge = reservedFaults.BODY_TOO_LARGE;
+  const tooLarge = reservedCodeFaults.BODY_TOO_LARGE;
   const parts: StatusPart[] = [
     {
       status: faultStatusOf({ retryable: false }),

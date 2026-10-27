@@ -39,7 +39,7 @@ export async function verify(run: Run): Promise<Exit> {
 }
 
 /**
- * A Service's regenerated files compared with what `generate` would write, the Elements it could
+ * A Service's regenerated files compared with what `generate` would write, the declarations it could
  * not import as they are named, and its Handler files.
  */
 async function verifyService(

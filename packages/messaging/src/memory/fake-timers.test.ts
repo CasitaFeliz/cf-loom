@@ -25,7 +25,7 @@ const contract = defineService({
 });
 
 const readers = readersOf({
-  commands: { chargeCardV1: { element: chargeCardV1, reader: chargeCardV1.body } },
+  commands: { chargeCardV1: { declaration: chargeCardV1, reader: chargeCardV1.body } },
   subscriptions: {},
 });
 
@@ -75,7 +75,7 @@ describe('memory() under fake timers installed before it loads', () => {
 
     await inMemory.close();
 
-    expect(inMemory.pending).toMatchObject([{ identity: 'ChargeCard@1', deliveryCount: 1 }]);
+    expect(inMemory.pending).toMatchObject([{ name: 'ChargeCard@1', deliveryCount: 1 }]);
     expect(handled).toEqual([]);
   });
 });
