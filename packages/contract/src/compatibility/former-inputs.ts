@@ -34,21 +34,42 @@ export function formerInputDifferencesOf(
   if (compared === undefined) {
     return [];
   }
-  const site = endpointSiteOf(pair);
+  const endpoint = {
+    site: endpointSiteOf(pair),
+    proposed: compared.proposed,
+    defs: checked.proposed.defs,
+  };
+  const newestFirst = [...formerInputsOf(checked.baseline, pair.identity)].reverse();
+  const tagged = newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
   const seen = new Set(reported.filter(isSchemaDifference).map(placedShapeOf));
   const found: Difference[] = [];
-  const newestFirst = [...formerInputsOf(checked.baseline, pair.identity)].reverse();
-  for (const former of newestFirst) {
-    const differences = differencesAgainst(former, compared.proposed, checked.proposed.defs);
-    for (const difference of differences.filter(isSchemaDifference)) {
-      const placed = placedShapeOf(difference);
-      if (isBreakingAt(site, difference) && !seen.has(placed)) {
-        seen.add(placed);
-        found.push({ ...difference, removedIn: former.removedIn });
-      }
+  for (const difference of tagged) {
+    const placed = placedShapeOf(difference);
+    if (!seen.has(placed)) {
+      seen.add(placed);
+      found.push(difference);
     }
   }
   return found;
+}
+
+/** An Endpoint as the Check compares it with a former Input: its site, its declaration and the defs its `ref`s name. */
+type CheckedEndpoint = {
+  readonly site: ChangeSite;
+  readonly proposed: EndpointSnapshot;
+  readonly defs: Defs;
+};
+
+/** The Breaking schema Differences of an Endpoint against one former Input, each with its `removedIn`. */
+function taggedBreakingOf(
+  former: FormerInput,
+  endpoint: CheckedEndpoint,
+): readonly SchemaDifference[] {
+  const differences = differencesAgainst(former, endpoint.proposed, endpoint.defs);
+  const breaking = differences
+    .filter(isSchemaDifference)
+    .filter((difference) => isBreakingAt(endpoint.site, difference));
+  return breaking.map((difference) => ({ ...difference, removedIn: former.removedIn }));
 }
 
 /**

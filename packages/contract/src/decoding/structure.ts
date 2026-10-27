@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FormerInput, PublishedSnapshot } from '../snapshot/index.ts';
 import { byCodePoint, canonicalJson } from '../walker/index.ts';
-import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.ts';
+import { input, publishedCommand, publishedEndpoint, publishedEvent } from './elements.ts';
 import { byKey, inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText } from './texts.ts';
@@ -61,7 +61,7 @@ const subscription = declaredOrTombstone(
 const formerInput = z.strictObject({
   endpoint: text,
   removedIn: semanticVersionText,
-  input: z.strictObject({ query: objectNode, body: schemaNode.nullable() }),
+  input: input.pick({ query: true, body: true }),
   defs: byKey(def),
 });
 

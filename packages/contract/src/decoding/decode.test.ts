@@ -2147,7 +2147,7 @@ describe('decodeSnapshot', () => {
           expect(result).toEqual(
             malformedAt(
               ['formerInputs', 0, 'endpoint'],
-              `names an Endpoint the Snapshot does not hold declared and not Retired: ${orders}`,
+              `names an Endpoint the Snapshot does not declare, or holds Retired: ${orders}`,
             ),
           );
         },

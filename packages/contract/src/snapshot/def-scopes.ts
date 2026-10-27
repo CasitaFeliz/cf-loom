@@ -63,7 +63,7 @@ function exportedSchemasOf(
   return nodes;
 }
 
-/** Every schema node a Snapshot holds besides the removed codes', each where it sits. */
+/** Every schema node a Snapshot holds besides its history entries', each where it sits. */
 function declaredNodesOf(snapshot: SchemaHolder): readonly SnapshotNode[] {
   return [
     ...partsAt(['defs'], snapshot.defs),

@@ -4627,7 +4627,7 @@ describe.concurrent('cf-loom check, a former Input', () => {
     expect(ran.stdout.split('\n')).toEqual([
       `Checked against ${ordersPackage}@1.1.0`,
       'endpoints.POST /ping (ping) schema field-added at input.body.note required=false: Additive',
-      `endpoints.POST /ping (ping) schema type-changed at input.body.note removedIn="1.1.0" from=number to=string: ${needsApproval}`,
+      `endpoints.POST /ping (ping) schema type-changed at input.body.note from=number to=string removedIn="1.1.0": ${needsApproval}`,
       `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);

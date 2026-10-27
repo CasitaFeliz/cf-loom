@@ -38,7 +38,7 @@ function positionOf(difference: DifferenceJson): string[] {
 /** The fields of a difference and its shape that the line has no word for, as `name=value`. */
 function fieldsOf(difference: DifferenceJson): string[] {
   const shape = difference.kind === 'schema' ? difference.shape : {};
-  const named = [...Object.entries(difference), ...Object.entries(shape)];
+  const named = [...Object.entries(shape), ...Object.entries(difference)];
   const unworded = named.filter(([name]) => !wordedFields.has(name));
   return unworded.map(([name, value]) => `${name}=${valueTextOf(name, value)}`);
 }
