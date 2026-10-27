@@ -78,7 +78,7 @@ export function* walkTagged(
   for (const [index, option] of def.options.entries()) {
     const values = option._zod.propValues?.[def.discriminator];
     const step = variantStepOf(def.discriminator, values, index);
-    const variant = { schema: option, at: walker.reach(option, inside(at, step)) };
+    const variant = { schema: option, at: walker.reach(option, inside(at, step)), values };
     walkedVariants.push(yield* walkVariant(variant, def.discriminator, walker));
   }
   const variants = allWalked(walkedVariants);
@@ -92,9 +92,12 @@ export function* walkTagged(
   });
 }
 
+/** A variant of a discriminated union where it sits, and the discriminator values zod reads from it. */
+type Variant = ReachedSchema & { readonly values: ReadonlySet<unknown> | undefined };
+
 /** A variant keyed by its discriminator value, or refused beside what it holds when it cannot be. */
 function* walkVariant(
-  { schema, at }: ReachedSchema,
+  { schema, at, values }: Variant,
   discriminator: string,
   walker: Walker,
 ): Walking<[string, TaggedNode['variants'][string]]> {
@@ -103,7 +106,7 @@ function* walkVariant(
   if (refusal !== undefined) {
     return failed(failuresOf([notAllowed(at, refusal), variant]));
   }
-  return taggedVariant(variant, schema._zod.propValues?.[discriminator], at);
+  return taggedVariant(variant, values, at);
 }
 
 /**

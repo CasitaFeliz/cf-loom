@@ -1495,9 +1495,9 @@ describe('reachedDefsOf', () => {
       d: { type: 'string' },
     } as const;
 
-    const names = reachedDefsOf([both], defs);
+    const names = reachedDefsOf([both, ref('e')], { ...defs, e: { type: 'string' } });
 
-    expect(names).toEqual(['a', 'b', 'c', 'd']);
+    expect(names).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   test.each([

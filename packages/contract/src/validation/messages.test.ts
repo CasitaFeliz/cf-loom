@@ -470,6 +470,8 @@ const notObjects = {
   ]),
   'a nullable object': z.object({ orderId: z.uuid() }).nullable(),
   'a recursive array': recursiveArray,
+  'a nullable recursive object': lazyNode.nullable(),
+  'a nullable ref through alias defs': aliasedOuter.nullable(),
 };
 
 const objects = {
