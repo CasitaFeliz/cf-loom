@@ -42,7 +42,7 @@ Every package under `packages/` lays out its `src/` the same way; a Service or a
 // generated entry point of @org/contract-payments-service: each Element by its binding, nothing else
 export { createPaymentEndpoint } from './endpoints/create-payment.ts';   // <name>Endpoint
 export { getPaymentEndpoint } from './endpoints/get-payment.ts';
-export { paymentSettledEventV1 } from './events/payment-settled.v1.ts'; // <name>EventV<version>
+export { paymentSettledEventV1 } from './events/payment-settled.v1.ts'; // <name, first letter lower-cased>EventV<version>
 export { paymentSettledEventV2 } from './events/payment-settled.v2.ts';
 ```
 
@@ -139,7 +139,7 @@ A response with the declared Success status is decoded as the Success, unless it
 | `aborted` after it was sent (an `AbortError`, or a signal aborted with any other reason); `connection-failed`, any other `TypeError`; `status` of any other kind (500, 502, 504, a 3xx, 0, or the Success status with a body that is no JSON) | `committed: 'unknown'`, `retryable: false` |
 
 - The client never follows a redirect: it sends every request with `redirect: 'manual'`, so a 3xx is decoded as any status but the Success's, and one with no Envelope becomes an inferred Fault; a browser hides a redirect behind status 0, inferred the same way.
-- After `fetch` throws, or a body fails while it is read, a signal of the call that is aborted decides first: its reason named `TimeoutError` is a timeout, any other an abort, whatever was thrown. Errors are told by their `name`, never by their class, since each realm has its own.
+- After a header function or `fetch` throws, after the Input is read, or after a body fails while it is read, a signal of the call that is aborted decides first: its reason named `TimeoutError` is a timeout, any other an abort, whatever was thrown. Errors are told by their `name`, never by their class, since each realm has its own.
 - The `cause.code` values are Node's and undici's. Browsers and Deno report a refused connection or a DNS failure as a bare `TypeError`, which lands on the last row (see [In a browser](packages/client/README.md#in-a-browser-applications) in the client README); Bun's errors are not verified.
 - An inferred Fault says one of five fixed messages, which carry nothing received: "No connection to the Provider" (`no-connection`), "The request was aborted" (`aborted`), "The request timed out" (`timeout`), "The connection failed" (`connection-lost`, `connection-failed` and `unreadable-body`) and "The Provider answered <status>" (`status`).
 - Every Fault the client returns names its `source`: `provider` for an Envelope, `invalid-outcome` for the client's own `INVALID_OUTCOME`, else the kind of what happened above; and its `status` whenever a response arrived.

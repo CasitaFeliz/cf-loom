@@ -1,6 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { checksOf, type DeclaredCheck } from './check-defs.ts';
-import { constrain } from './checks.ts';
+import { type CheckedAt, constrain } from './checks.ts';
 import { walkEnum, walkTagged, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import {
@@ -32,16 +32,20 @@ import {
 
 /** The node a schema's own def describes, with its own checks judged. */
 export function walkDefinition(schema: core.$ZodType, at: Reached, walker: Walker): Walked {
-  return withOwnChecks(schema, nodeOf(schema, at, walker), at);
+  return withOwnChecks(schema, nodeOf(schema, at, walker), { at, kind: 'schema' });
 }
 
 /**
  * A schema's walk with its own checks judged, whether it built its node or failed. A format
  * schema's own check is part of its type, so a refused type's is not refused again.
  */
-export function withOwnChecks(schema: core.$ZodType, walkedSchema: Walked, at: Reached): Walked {
+export function withOwnChecks(
+  schema: core.$ZodType,
+  walkedSchema: Walked,
+  checked: CheckedAt,
+): Walked {
   const checks = walkedSchema.kind === 'walked' ? checksOf(schema) : checksBesideType(schema);
-  return constrain(walkedSchema, checks, at);
+  return constrain(walkedSchema, checks, checked);
 }
 
 function checksBesideType(schema: core.$ZodType): readonly DeclaredCheck[] {

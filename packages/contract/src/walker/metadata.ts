@@ -44,10 +44,13 @@ export function hasOwnId(schema: core.$ZodType): boolean {
   return ownMetaOf(schema)['id'] !== undefined;
 }
 
-/** A node with annotations laid over it, so the outer schema's say wins over the inner one's. */
+/**
+ * A node with annotations laid over it, so the outer schema's say wins over the inner one's; a
+ * failed walk keeps them on the node it was building, so `.nullable()` stays known.
+ */
 export function annotated(result: Walked, annotations: Annotations): Walked {
   if (result.kind === 'not-allowed') {
-    return result;
+    return failed(result.failures, { ...result.outline, ...annotations });
   }
   const node: SchemaNode = { ...result.value, ...annotations };
   return walked(node);

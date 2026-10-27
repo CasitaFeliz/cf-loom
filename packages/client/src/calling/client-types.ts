@@ -39,8 +39,11 @@ type HeaderSink<Listed, Name> = Listed extends Endpoint
 type ConfiguredValueOf<D extends AnyDependency, Name> =
   HeaderSink<EndpointOf<D>, Name> extends (value: infer Value) => void ? Value : never;
 
-/** A header given to `client()`: its value, or a function called per request, which may be async. */
-type ConfiguredHeader<Value> = Value | (() => Value | Promise<Value>);
+/**
+ * A header given to `client()`: its value, or a function called per request with the call's
+ * options, which may be async and is raced against the call's signal.
+ */
+type ConfiguredHeader<Value> = Value | ((call: CallOptions) => Value | Promise<Value>);
 
 /** What a Provider's Deprecation says, once per client per method. */
 export type DeprecationNotice = {
@@ -63,7 +66,10 @@ export type ClientOptions<D extends AnyDependency, Configured extends Configured
   readonly onDeprecation?: OnDeprecation;
 };
 
-/** Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console. */
+/**
+ * Where a Deprecation is told: the `onDeprecation` given to `client()`, or the console; it may be
+ * async and is not awaited.
+ */
 export type OnDeprecation = (notice: DeprecationNotice) => void;
 
 /** An Input's headers, those given to `client()` no longer required. */
