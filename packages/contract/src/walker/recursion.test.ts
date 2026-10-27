@@ -151,7 +151,13 @@ describe('walkSchemas: recursion', () => {
 
       const written = walkBody(z.object({ root: node.nullable(), other: node }));
 
-      expect(written.defs['tree']?.nullable).toBeUndefined();
+      expect(written.defs['tree']).toStrictEqual({
+        type: 'object',
+        fields: {
+          label: { required: true, schema: { type: 'string' } },
+          next: { required: true, schema: { type: 'ref', name: 'tree', nullable: true } },
+        },
+      });
       expect(written.located).toEqual([
         walkedTo({
           type: 'object',

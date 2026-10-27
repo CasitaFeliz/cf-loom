@@ -42,11 +42,16 @@ describe('walkedTextPartsOf', () => {
     const walked = walkedTextPartsOf(contractOf(getOrder));
 
     const nodes = walked.kind === 'valid' ? walked.nodes.get(getOrder) : undefined;
-    expect(nodes?.['input.query']).toEqual({
-      type: 'object',
-      fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
+    expect(nodes).toStrictEqual({
+      'input.params': {
+        type: 'object',
+        fields: { orderId: { required: true, schema: { type: 'string' } } },
+      },
+      'input.query': {
+        type: 'object',
+        fields: { ids: { required: false, schema: { type: 'array', items: { type: 'number' } } } },
+      },
     });
-    expect(nodes?.['input.headers']).toBeUndefined();
   });
 
   test('walks what a Guard demands, once for every Endpoint that attaches it', () => {

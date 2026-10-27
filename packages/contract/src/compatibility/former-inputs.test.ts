@@ -961,9 +961,20 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedSnapshotOf(undefined, application, publishedAt('1.0.0')),
     ];
 
-    expect(published.map((snapshot) => Object.hasOwn(snapshot, 'formerInputs'))).toEqual([
-      false,
-      false,
+    expect(published.map((snapshot) => Object.keys(snapshot).sort())).toEqual([
+      [
+        'codes',
+        'defs',
+        'exports',
+        'format',
+        'generator',
+        'guards',
+        'kind',
+        'name',
+        'standardRejections',
+        'version',
+      ],
+      ['dependencies', 'format', 'generator', 'kind', 'name', 'version'],
     ]);
   });
 });
