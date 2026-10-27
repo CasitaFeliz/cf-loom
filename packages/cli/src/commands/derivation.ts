@@ -57,14 +57,14 @@ function derivationOf(
 }
 
 function derivedAgainst(
-  { baseline: read, report }: Extract<Comparison['compared'], { kind: 'baseline' }>,
+  { baseline, report }: Extract<Comparison['compared'], { kind: 'baseline' }>,
   proposed: PeerRanges,
   deriving: Omit<Deriving, 'baseline'>,
 ): Derivation {
-  const moves = { baseline: read.peers, proposed };
+  const moves = { baseline: baseline.peers, proposed };
   const bump = versionBumpOf(report, moves);
-  const baseline = { version: read.snapshot.version, bump };
-  const derived = derivedVersionOf({ baseline, ...deriving });
+  const moved = { version: baseline.snapshot.version, bump };
+  const derived = derivedVersionOf({ baseline: moved, ...deriving });
   const peers = peerMovesOf(moves);
   return { kind: 'derived', peers, bump: bump === 'unchanged' ? null : bump, derived };
 }
