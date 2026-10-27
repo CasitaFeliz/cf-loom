@@ -6,7 +6,6 @@ import {
   defineService,
   defineSubscription,
 } from '@cf-loom/contract';
-import { elementName, kebabCase, pascalCase } from '@cf-loom/contract/internal';
 import { handle, readersOf } from '@cf-loom/handlers';
 import {
   type ConsumerConfig,
@@ -162,12 +161,11 @@ function chargeHandlers() {
   };
 }
 
-/** A Service whose names are the longest the grammars accept, its Command at the largest Message Version. */
+/** A Service whose names have 64 characters, a Subscription's with the most capitals, its Command at the largest Message Version. */
 function aServiceOfLongestNames() {
-  const kebab = 'a'.repeat(kebabCase.maxLength ?? 0);
-  const capitals = Math.floor(((elementName.maxLength ?? 0) - 1) / 2);
-  const subscribed = `${'a'.repeat((elementName.maxLength ?? 0) - 2 * capitals)}${'Bb'.repeat(capitals)}`;
-  const pascal = (initial: string) => `${initial}${'a'.repeat((pascalCase.maxLength ?? 0) - 1)}`;
+  const kebab = 'a'.repeat(64);
+  const subscribed = `aa${'Bb'.repeat(31)}`;
+  const pascal = (initial: string) => `${initial}${'a'.repeat(63)}`;
   const created = defineEvent({
     name: pascal('A'),
     version: 1,
@@ -195,7 +193,7 @@ function aServiceOfLongestNames() {
   });
   return {
     contract: defineService({ name: kebab, groups: [group] }),
-    prefix: 'p'.repeat(kebab.length),
+    prefix: 'p'.repeat(64),
   };
 }
 

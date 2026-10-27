@@ -12,6 +12,9 @@ export type Grammar = {
   readonly reserved?: ReadonlySet<string>;
 };
 
+/** A grammar that bounds its names, so a sentence about it can state how many characters. */
+export type CappedGrammar = Grammar & { readonly maxLength: number };
+
 /**
  * The most characters a name that reaches a broker name or a file name has, 64 of the 72 that keep
  * every Stream and Durable consumer name within the 255 characters NATS allows.
@@ -19,7 +22,7 @@ export type Grammar = {
 const nameLength = 64;
 
 /** The grammar of a Service, Application or Group name. */
-export const kebabCase: Grammar = {
+export const kebabCase: CappedGrammar = {
   name: 'kebab-case',
   pattern: /^[a-z0-9]+(-[a-z0-9]+)*$/,
   maxLength: nameLength,
@@ -32,7 +35,7 @@ export const camelCase: Grammar = { name: 'camelCase', pattern: /^[a-z][a-zA-Z0-
  * The grammar of an Endpoint, Guard or Subscription name: camelCase words, each capital starting
  * a word of lower-case letters and digits, and no reserved name.
  */
-export const elementName: Grammar = {
+export const elementName: CappedGrammar = {
   name: 'camelCase words',
   pattern: /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$/,
   maxLength: nameLength,
@@ -40,14 +43,14 @@ export const elementName: Grammar = {
 };
 
 /** The grammar of a Message name: PascalCase words, each capital starting a word. */
-export const pascalCase: Grammar = {
+export const pascalCase: CappedGrammar = {
   name: 'PascalCase words',
   pattern: /^[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)*$/,
   maxLength: nameLength,
 };
 
 /** The grammar of a Rejection code. */
-export const upperSnakeCase: Grammar = {
+export const upperSnakeCase: CappedGrammar = {
   name: 'UPPER_SNAKE_CASE',
   pattern: /^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$/,
   maxLength: nameLength,
@@ -63,8 +66,12 @@ export function follows(grammar: Grammar, value: unknown): value is string {
   );
 }
 
-/** Whether a name has more characters than the grammar allows. */
-export function isTooLong(grammar: Grammar, value: string): boolean {
+/** What a name of the grammar is, as a sentence says it: `kebab-case of at most 64 characters`. */
+export function ruleOf(grammar: CappedGrammar): string {
+  return `${grammar.name} of at most ${grammar.maxLength} characters`;
+}
+
+function isTooLong(grammar: Grammar, value: string): boolean {
   return grammar.maxLength !== undefined && value.length > grammar.maxLength;
 }
 

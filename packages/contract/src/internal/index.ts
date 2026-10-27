@@ -45,7 +45,6 @@ export type {
 export {
   carriedStandardRejectionsOf,
   codeNameOf,
-  elementName,
   follows,
   frozenCopyOf,
   isCommand,
@@ -65,8 +64,8 @@ export {
   isSubscription,
   kebabCase,
   lifecycleOf,
-  pascalCase,
   providerOf,
+  ruleOf,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';

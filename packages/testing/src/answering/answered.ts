@@ -9,6 +9,7 @@ import {
   methodNotAllowedResponseOf,
   rejectionResponseOf,
   reservedResponseOf,
+  ruleOf,
   travelingFaultOf,
   upperSnakeCase,
 } from '@cf-loom/contract/internal';
@@ -123,8 +124,7 @@ function refusedUnknownCodeOf(code: string, listed: ListedEndpoint): string | un
     return `${code} is a reserved code, which r.fault({ code }) answers`;
   }
   if (!follows(upperSnakeCase, code)) {
-    const rule = `${upperSnakeCase.name} of at most ${upperSnakeCase.maxLength} characters`;
-    return `${code} is no ${rule}, so no Contract can declare it`;
+    return `${code} is no ${ruleOf(upperSnakeCase)}, so no Contract can declare it`;
   }
   return undefined;
 }

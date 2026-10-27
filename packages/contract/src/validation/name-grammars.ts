@@ -1,9 +1,8 @@
 import {
+  type CappedGrammar,
   elementName,
   follows,
-  type Grammar,
   isReserved,
-  isTooLong,
   kebabCase,
   pascalCase,
   type RootKind,
@@ -67,40 +66,50 @@ function codes<Located extends { readonly at: Place }>(
   }));
 }
 
-function grammarFailures(named: readonly Named[], grammar: Grammar): readonly DeclarationFailure[] {
+function grammarFailures(
+  named: readonly Named[],
+  grammar: CappedGrammar,
+): readonly DeclarationFailure[] {
   const breaking = named.filter(
     ({ value }) => typeof value === 'string' && !follows(grammar, value),
   );
   return breaking.map(({ at, value, noun }) => {
-    const text = textOf(value);
-    const sentence = ruleSentenceOf(noun, grammar, text);
-    const echoed = `${writtenTextOf(value)}${noteFor(grammar, text)}`;
-    return failure(at, 'name-grammar', `${sentence}: ${echoed}`);
+    const { rule, note } = toldOf(grammar, textOf(value));
+    return failure(at, 'name-grammar', `${noun} is ${rule}: ${writtenTextOf(value)}${note}`);
   });
 }
 
-/** Whether the one thing wrong with a name is its length, so its pattern's sentence would not hold. */
-function isOnlyTooLong(grammar: Grammar, text: string): boolean {
-  return grammar.pattern.test(text) && isTooLong(grammar, text);
+/** The rule a name breaks, and what follows the name as written. */
+type Told = { readonly rule: string; readonly note: string };
+
+/** The part of its grammar a name breaks, its length when its pattern and words hold. */
+function brokenPartOf(grammar: CappedGrammar, text: string): 'pattern' | 'reserved' | 'length' {
+  if (isReserved(grammar, text)) {
+    return 'reserved';
+  }
+  return grammar.pattern.test(text) ? 'length' : 'pattern';
 }
 
 /**
- * What a name that breaks a grammar is told: `A Group name is kebab-case`, that and no reserved
- * word, or, when only its length is wrong, `A Group name is at most 64 characters`.
+ * What a name that does not follow its grammar is told, by the part it breaks: `kebab-case`, that
+ * and no reserved word, or `at most 64 characters`, with the name to write instead or its length.
  */
-function ruleSentenceOf(noun: string, grammar: Grammar, text: string): string {
-  if (isOnlyTooLong(grammar, text)) {
-    return `${noun} is at most ${grammar.maxLength} characters`;
+function toldOf(grammar: CappedGrammar, text: string): Told {
+  switch (brokenPartOf(grammar, text)) {
+    case 'pattern':
+      return { rule: grammar.name, note: hintFor(grammar, text) };
+    case 'reserved':
+      return { rule: `${grammar.name} and no reserved word`, note: hintFor(grammar, text) };
+    case 'length':
+      return {
+        rule: `at most ${grammar.maxLength} characters`,
+        note: ` (${text.length} characters)`,
+      };
   }
-  const rule = isReserved(grammar, text) ? `${grammar.name} and no reserved word` : grammar.name;
-  return `${noun} is ${rule}`;
 }
 
-/** What follows a name as written: its length when that is too long, else the name to write instead. */
-function noteFor(grammar: Grammar, text: string): string {
-  if (isOnlyTooLong(grammar, text)) {
-    return ` (${text.length} characters)`;
-  }
+/** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */
+function hintFor(grammar: CappedGrammar, text: string): string {
   const words = wordsOf(text);
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
@@ -126,8 +135,9 @@ export function rootNameProblemOf(kind: RootKind, name: string): string | undefi
       if (follows(rootNameGrammar, name)) {
         return undefined;
       }
-      const sentence = ruleSentenceOf(rootNouns[kind], rootNameGrammar, name);
-      return `${sentence.charAt(0).toLowerCase()}${sentence.slice(1)}`;
+      const { rule } = toldOf(rootNameGrammar, name);
+      const noun = rootNouns[kind];
+      return `${noun.charAt(0).toLowerCase()}${noun.slice(1)} is ${rule}`;
     }
     case 'definitions':
       return undefined;

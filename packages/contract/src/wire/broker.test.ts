@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { seededNext } from '../../test/random-schemas.ts';
+import { elementName, pascalCase } from '../declarations/index.ts';
 import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
 import {
   brokerHeaderBytesOf,
@@ -8,7 +9,6 @@ import {
   brokerMessageIdHeader,
   brokerMessageIdOf,
   durableNameOf,
-  elementName,
   factIdHeader,
   follows,
   isBrokerPrefix,
@@ -16,7 +16,6 @@ import {
   isPrefixedName,
   isPrefixedSubject,
   kebabCase,
-  pascalCase,
   prefixedNameOf,
   prefixedSubjectOf,
   receivedHeadersOf,
