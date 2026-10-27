@@ -153,15 +153,14 @@ export function refusedNullableDef(id: string): Refused {
   };
 }
 
+const checkInsideInstead = 'the check on the schema inside every .nullable() and .optional()';
+
 /**
  * A check on a schema that admits `null`: a check belongs to the schema it constrains, and
  * whether zod runs it on `null` depends on each check, which no node says.
  */
 export function refusedCheckOnNullable(check: string): Refused {
-  return {
-    construct: `${check} on a schema that admits null`,
-    instead: 'the check on the schema inside .nullable()',
-  };
+  return { construct: `${check} on a schema that admits null`, instead: checkInsideInstead };
 }
 
 /**
@@ -169,10 +168,7 @@ export function refusedCheckOnNullable(check: string): Refused {
  * zod runs it on an absent field depends on each check, which no field says.
  */
 export function refusedCheckOnOptional(check: string): Refused {
-  return {
-    construct: `${check} on .optional()`,
-    instead: 'the check on the schema inside .optional() and any .nullable()',
-  };
+  return { construct: `${check} on .optional()`, instead: checkInsideInstead };
 }
 
 /** A second schema named with an id another schema in the Snapshot already has. */

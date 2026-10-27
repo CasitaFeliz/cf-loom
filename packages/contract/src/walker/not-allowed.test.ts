@@ -36,22 +36,16 @@ function failureAt(at: string, construct: string, instead?: string) {
   return { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
 }
 
+const checkInside = 'the check on the schema inside every .nullable() and .optional()';
+
 /** A check written on a schema that admits `null`, which belongs to the schema inside. */
 function onNull(at: string, check: string) {
-  return failureAt(
-    at,
-    `${check} on a schema that admits null`,
-    'the check on the schema inside .nullable()',
-  );
+  return failureAt(at, `${check} on a schema that admits null`, checkInside);
 }
 
 /** A check written on a field's `.optional()`, which belongs to the schema inside it. */
 function onOptional(at: string, check: string) {
-  return failureAt(
-    at,
-    `${check} on .optional()`,
-    'the check on the schema inside .optional() and any .nullable()',
-  );
+  return failureAt(at, `${check} on .optional()`, checkInside);
 }
 
 function refusedAll(failures: readonly ReturnType<typeof failureAt>[]) {
@@ -972,6 +966,18 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
       failure: forOptional,
     },
     {
+      name: "a field's .optional() around .nullable() around .nullable()",
+      make: ({ inner, check }: Taken) =>
+        z.object({ a: checked(inner.nullable().nullable().optional(), check) }),
+      failure: forOptional,
+    },
+    {
+      name: "a field's .optional() around z.lazy() around .nullable()",
+      make: ({ inner, check }: Taken) =>
+        z.object({ a: checked(z.lazy(() => inner.nullable()).optional(), check) }),
+      failure: forOptional,
+    },
+    {
       name: "the .nullable() inside a field's .optional()",
       make: ({ inner, check }: Taken) =>
         z.object({ a: checked(inner.nullable(), check).optional() }),
@@ -1093,6 +1099,26 @@ describe('walkSchemas: a check on a schema that admits null or undefined', () =>
       },
     });
   });
+
+  test.each<[string, z.ZodType]>([
+    ['.nullable() around .nullable()', z.number().gt(3).nullable().nullable()],
+    ['z.lazy() around .nullable()', z.lazy(() => z.number().gt(3).nullable())],
+  ])(
+    "the check on the schema inside a field's .optional() and %s is a constraint",
+    (_name, inner) => {
+      const schema = z.object({ a: inner.optional() });
+
+      expect(walkBody(schema).located[0]).toEqual({
+        kind: 'walked',
+        value: {
+          type: 'object',
+          fields: {
+            a: { required: false, schema: { type: 'number', exclusiveMin: 3, nullable: true } },
+          },
+        },
+      });
+    },
+  );
 
   test("a check on a field's .nonoptional() is still a constraint", () => {
     const schema = z.object({ a: checked(z.number().optional().nonoptional(), z.gt(3)) });
