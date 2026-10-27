@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import { type Refused, refused, refusedName } from './not-allowed.ts';
+import { type Refused, refused, zodCall } from './not-allowed.ts';
 
 /** A check as zod's def writes it; `describe` and `meta` are how `zod/mini` sets metadata. */
 export type CheckDef =
@@ -51,43 +51,49 @@ export function isConditional(check: DeclaredCheck): boolean {
 }
 
 /** The name a check is refused by, on a node that does not take it. */
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the name of each check zod has
 export function refusedCheck(check: CheckDef): Refused {
+  return { construct: nameOfCheck(check) };
+}
+
+/** A check as the Not allowed list names it: the zod function that writes it. */
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the name of each check zod has
+export function nameOfCheck(check: CheckDef): string {
   switch (check.check) {
     case 'custom':
-      return check.type === 'custom' ? refused.refine : refused.customCheck;
+      return (check.type === 'custom' ? refused.refine : refused.customCheck).construct;
     case 'overwrite':
-      return refused.mutating;
+      return refused.mutating.construct;
     case 'string_format':
-      return refusedName(check.format);
+      return zodCall(check.format);
     case 'less_than':
-      return refusedName('lt');
+      return zodCall('lt');
     case 'greater_than':
-      return refusedName('gt');
+      return zodCall('gt');
     case 'multiple_of':
-      return refusedName('multipleOf');
+      return zodCall('multipleOf');
     case 'number_format':
+      return zodCall(check.format === 'safeint' ? 'int' : check.format);
     case 'bigint_format':
-      return refusedName(check.format);
+      return zodCall(check.format);
     case 'max_size':
-      return refusedName('maxSize');
+      return zodCall('maxSize');
     case 'min_size':
-      return refusedName('minSize');
+      return zodCall('minSize');
     case 'size_equals':
-      return refusedName('size');
+      return zodCall('size');
     case 'max_length':
-      return refusedName('maxLength');
+      return zodCall('maxLength');
     case 'min_length':
-      return refusedName('minLength');
+      return zodCall('minLength');
     case 'length_equals':
-      return refusedName('length');
+      return zodCall('length');
     case 'property':
-      return refusedName('property');
+      return zodCall('property');
     case 'mime_type':
-      return refusedName('mime');
+      return zodCall('mime');
     case 'describe':
     case 'meta':
-      return refusedName(check.check);
+      return zodCall(check.check);
   }
 }
 
