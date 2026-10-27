@@ -1,6 +1,7 @@
 export type {
   ApplicationContract,
   Attachment,
+  BodyOf,
   Command,
   ContextOf,
   Contract,

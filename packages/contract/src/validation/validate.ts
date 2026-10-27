@@ -17,12 +17,12 @@ import { paramsFailures, pathFailures } from './paths.ts';
 import { provenanceFailures, schemaOriginsOf } from './provenance.ts';
 import { rejectionFailures } from './rejections.ts';
 import {
-  failuresAt,
   locatedSchemasOf,
   type NodeLookup,
   type Nodes,
   nodeLookupOf,
   nodesOf,
+  refusalsAt,
   schemaSlotsOf,
 } from './schemas.ts';
 import { notAllowedFailuresOf } from './shared-failures.ts';
@@ -125,7 +125,7 @@ export function validateRoot(root: Root, rootPackage: RootPackage): ValidatedRoo
   const walked = walkMeetingSchemas(locatedSchemasOf(slots.slots), schemaOriginsOf(packages));
   const nodes = nodesOf(slots.slots, walked);
   const opened = openCompositionsOf(walked.compositions, walked.defs);
-  const refusals = [...opened, ...walked.located.flatMap(failuresAt)];
+  const refusals = [...opened, ...refusalsAt(walked.located)];
   const failures = [
     ...declarationFailures(declarations),
     ...packageNameFailures(root, rootPackage.packageName),

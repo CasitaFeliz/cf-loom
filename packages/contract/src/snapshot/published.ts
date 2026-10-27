@@ -1,4 +1,5 @@
 import type { Lifecycle } from '../declarations/index.ts';
+import type { SchemaNode } from '../walker/index.ts';
 import type {
   ApplicationSnapshot,
   ByKey,
@@ -45,8 +46,17 @@ export type PublishedHeading = { readonly version: string; readonly generator: s
 /** The Snapshot `package` writes: the declared one with the CLI that wrote it. */
 export type PackagedSnapshot = Snapshot & { readonly generator: string };
 
-/** A code in a published Snapshot: declared, or removed in the version that first left it out. */
-export type PublishedCode = CodeSnapshot & { readonly removedIn?: string };
+/**
+ * A code no Endpoint answers any more, kept with what it last had, removed in the version that
+ * first left it out, and with the defs its body reached then, which its `ref`s name.
+ */
+export type RemovedCode = CodeSnapshot & {
+  readonly removedIn: string;
+  readonly defs: ByKey<SchemaNode>;
+};
+
+/** A code in a published Snapshot: declared, or removed with its history. */
+export type PublishedCode = CodeSnapshot | RemovedCode;
 
 /** The published Snapshot of a Service: its declared Snapshot with its heading and the history only the Baseline knows. */
 export type PublishedServiceSnapshot = Omit<
@@ -88,8 +98,28 @@ export function isDeclared<Element extends DeclaredElement>(
 }
 
 /** Whether a published code is one no Endpoint answers any more, kept with what it last had. */
-export function isRemoved(code: PublishedCode): boolean {
-  return code.removedIn !== undefined;
+export function isRemoved(code: PublishedCode): code is RemovedCode {
+  return 'removedIn' in code;
+}
+
+/** The codes a published map still declares, by code. */
+export function declaredCodesOf(
+  codes: ByKey<PublishedCode>,
+): readonly (readonly [string, CodeSnapshot])[] {
+  return Object.entries(codes).filter(([, code]) => !isRemoved(code));
+}
+
+/** The codes a published map keeps as removed, by code. */
+export function removedCodesOf(
+  codes: ByKey<PublishedCode>,
+): readonly (readonly [string, RemovedCode])[] {
+  const removed: (readonly [string, RemovedCode])[] = [];
+  for (const [code, held] of Object.entries(codes)) {
+    if (isRemoved(held)) {
+      removed.push([code, held]);
+    }
+  }
+  return removed;
 }
 
 /** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */

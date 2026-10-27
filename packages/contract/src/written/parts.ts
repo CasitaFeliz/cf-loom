@@ -92,7 +92,7 @@ export type Issue = {
   readonly message: string;
 };
 
-/** Whether an Issue's part is one the Caller sent, so the runtime answers it as invalid input. */
+/** Whether a part is one the Caller sends: the Endpoint's Input or what a Guard demands. */
 export function isInputPart(part: IssuePart): part is InputPart {
   const sent: readonly string[] = [...inputParts, ...demandParts];
   return sent.includes(part);

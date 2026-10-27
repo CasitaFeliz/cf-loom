@@ -60,7 +60,7 @@ src/
 ├── commands/orders/charge-card.v1.handler.ts
 ├── subscriptions/orders/notify-on-settled.handler.ts
 ├── handlers.generated.ts                  the Handler map, carrying the `readers`; regenerated, never edited
-├── readers.generated.ts                   the readers: Reader schemas and types of the Service's own Events and Commands, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
+├── readers.generated.ts                   the readers: Reader schemas of the Service's own Events and Commands, with the type of each recursive def, and in `readers` each Command's Message Version and Subscription paired with its Reader; regenerated, never edited
 ├── resources.ts                           the Service's Resources type and `Needs`
 └── main.ts                                starts messaging, builds the Resources, serves HTTP and consumes
 .cf-loom/

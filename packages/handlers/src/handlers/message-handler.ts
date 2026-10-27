@@ -10,8 +10,11 @@ import type {
   ResourcesLast,
 } from './resources.ts';
 
-/** The body a Message Handler reads, as a Subscriber reads it: its Reader schema's output, Unknown cases included. */
-type ReadBodyOf<Target extends Pairing> = core.output<Target['reader']>;
+/**
+ * The body a Message Handler receives, as its pairing's Reader schema reads it: Unknown cases included,
+ * so a helper it calls is typed by what any later compatible version may send.
+ */
+export type ReceivedBodyOf<Target extends Pairing> = core.output<Target['reader']>;
 
 /** The Fault a Message Handler returns: a `Fault` with no `retryAfter`, since the durable consumer's configuration decides redelivery. */
 export type MessageFault = Fault & { readonly retryAfter?: never };
@@ -23,11 +26,11 @@ type Answered = undefined | MessageFault;
 export type MessageImplementation<
   Target extends Pairing,
   Last extends ResourcesLast<Last> = LastNotAnnotated,
-> = (body: ReadBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
+> = (body: ReceivedBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
 /** The Handler of a Command's Message Version or of a Subscription, written for its pairing in the readers file: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
 export type MessageHandler<Target extends Pairing, Resources extends object = NoResources> = ((
-  body: ReadBodyOf<Target>,
+  body: ReceivedBodyOf<Target>,
   meta?: DirectMeta,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &

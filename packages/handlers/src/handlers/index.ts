@@ -11,7 +11,12 @@ export type {
 } from './handler.ts';
 export type { HandlerMapOf } from './handler-map.ts';
 export { mappedHandlerOf, mappedMessageHandlerOf } from './mapped.ts';
-export type { MessageFault, MessageHandler, MessageImplementation } from './message-handler.ts';
+export type {
+  MessageFault,
+  MessageHandler,
+  MessageImplementation,
+  ReceivedBodyOf,
+} from './message-handler.ts';
 export type { Readers } from './reader.ts';
 export { readersOf } from './reader.ts';
 export type {

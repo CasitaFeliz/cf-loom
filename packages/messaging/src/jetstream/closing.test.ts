@@ -4,7 +4,7 @@ import type { ConnectionOptions, NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
-import { stopServerUnder, withMethods } from '../../test/connections.ts';
+import { droppedUnder, stopServerUnder, withMethods } from '../../test/connections.ts';
 import { arrangeDurablesOf, durableInfoOf } from '../../test/durables.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
@@ -297,16 +297,25 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
     expect(connection.isClosed()).toBe(true);
   });
 
-  test('close, when the Service’s connect gave up reconnecting before the drain, closes the connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause', async () => {
+  test('close, when the Service’s connect lost the server before the drain and gives up reconnecting during it, closes the connection and rejects saying NATS did not answer the drain, with nats.js’s error as its cause', async () => {
     const server = await anOwnServer();
+    const proxy = await aHoldingProxy(server.url);
+    onTestFinished(() => proxy.stop());
     const { close, connection } = await aMessaging(server, {
+      servers: proxy.url,
       nats: { maxReconnectAttempts: 1 },
       consuming: neverSettling,
     });
-    await stopServerUnder(connection, server);
+    await droppedUnder(connection, () => {
+      proxy.drop();
+      proxy.hold();
+    });
+    const closing = rejectionOf(close());
+    await vi.waitFor(() => expect(connection.isDraining()).toBe(true));
 
-    const error = await rejectionOf(close());
+    await proxy.stop();
 
+    const error = await closing;
     expect(error).toMatchObject({ message: unanswered, cause: expect.any(Error) });
     expect(connection.isClosed()).toBe(true);
   });

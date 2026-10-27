@@ -1,9 +1,11 @@
 import {
+  type BodyOf,
   defineCommand,
   defineEvent,
   defineGroup,
   defineService,
   defineSubscription,
+  openEnum,
 } from '@cf-loom/contract';
 import { type HandlerMapOf, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
@@ -58,6 +60,14 @@ const orderArchivedV1 = defineEvent({
   lifecycle: 'retired',
   description: 'An order was archived',
   body: z.object({ orderId: z.string() }),
+});
+
+const orderPaidV1 = defineEvent({
+  name: 'OrderPaid',
+  version: 1,
+  visibility: 'internal',
+  description: 'An order was paid',
+  body: z.object({ orderId: z.string(), method: openEnum(['card', 'transfer']) }),
 });
 
 const widenedVersion: number = 1;
@@ -144,6 +154,7 @@ const contract = defineService({
       description: 'Payments',
       events: [
         orderCreatedV3,
+        orderPaidV1,
         orderArchivedV1,
         barWithWidenedVersion,
         quxWithRetiredWidenedVersion,
@@ -258,6 +269,22 @@ describe('publish and send types', () => {
     const deprecatedBody = () => sender.send('ChargeCard', { orderId: 'o-1' }, fact);
 
     expect([sending, deprecatedBody]).toHaveLength(2);
+  });
+
+  test('publish takes BodyOf of each live version, an Open Enum’s Unknown case refused', () => {
+    type Bodies = Parameters<typeof publisher.publish<'OrderCreated'>>[1];
+    type Paid = Parameters<typeof publisher.publish<'OrderPaid'>>[1];
+
+    expectTypeOf<Bodies>().toHaveProperty('v2').toEqualTypeOf<BodyOf<typeof orderCreatedV2>>();
+    expectTypeOf<Bodies>().toHaveProperty('v3').toEqualTypeOf<BodyOf<typeof orderCreatedV3>>();
+    expectTypeOf<Paid>().toHaveProperty('v1').toEqualTypeOf<BodyOf<typeof orderPaidV1>>();
+    expectTypeOf<{ orderId: string; method: { unknown: string } }>().not.toExtend<Paid['v1']>();
+  });
+
+  test('send takes BodyOf of the Active version', () => {
+    type Body = Parameters<typeof sender.send<'ChargeCard'>>[1];
+
+    expectTypeOf<Body>().toEqualTypeOf<BodyOf<typeof chargeCardV2>>();
   });
 
   test('publish without a Fact id is a type error', () => {

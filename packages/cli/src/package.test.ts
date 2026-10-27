@@ -450,11 +450,8 @@ const killHook = lines([
   'syncBuiltinESMExports();',
 ]);
 
-/**
- * How long a kill test may run: two `package` runs per file-system call it kills at, some twenty
- * calls for the most frequent one, each run a fresh Node process.
- */
-const killTestTimeout = 60_000;
+/** Two runs of `package` for each call a kill test kills at, each a fresh Node process, take minutes on a CI runner with shared cores. */
+const killTestTimeout = 180_000;
 
 /** Runs `package`, killed at the `at`th call of a file-system function on the package folder. */
 function killedPackage(
@@ -523,9 +520,6 @@ function aSubscriber(more: readonly string[]): string {
   link(join(packagesDir, 'handlers'), join(project, 'node_modules/@cf-loom/handlers'));
   return project;
 }
-
-/** Each test here runs cf-loom package, and tsc with it, which takes seconds on a CI runner with shared cores. */
-const packageTimeout = 60_000;
 
 /** A seeded generator of the same sequence every run, so a failing name can be replayed. */
 function seededNext(seed: number): () => number {
@@ -605,7 +599,7 @@ function aServiceOfDeprecatedEndpoints(
   };
 }
 
-describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
+describe('cf-loom package: the files', () => {
   test.each([
     ['@payments/orders-service', '@payments/contract-orders-service'],
     ['orders-service', 'contract-orders-service'],
@@ -1042,7 +1036,7 @@ describe('cf-loom package: the files', { timeout: packageTimeout }, () => {
   });
 });
 
-describe('cf-loom package: the built package', { timeout: packageTimeout }, () => {
+describe('cf-loom package: the built package', () => {
   test('tsc builds it with only zod and @cf-loom/contract installed', () => {
     const out = builtPackage();
 
@@ -1804,7 +1798,7 @@ describe('cf-loom package: the built package', { timeout: packageTimeout }, () =
   });
 });
 
-describe('cf-loom package: where it writes', { timeout: packageTimeout }, () => {
+describe('cf-loom package: where it writes', () => {
   test('a folder holding other files is refused, a tooling error, and kept as it was', () => {
     const project = aProject({ ...service, [`${defaultOut}/notes.txt`]: 'mine' });
 

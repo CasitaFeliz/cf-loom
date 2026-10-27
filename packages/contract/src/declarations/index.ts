@@ -40,12 +40,14 @@ export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
 export {
   isMethod,
   isRejectionStatus,
+  isReservedRequestHeaderName,
+  isReservedResponseHeaderName,
   methods,
   notImplementedStatus,
-  reservedHeaderNames,
   successStatuses,
 } from './http.ts';
 export type {
+  BodyOf,
   ContextOf,
   DemandsOf,
   GivenShapeOf,

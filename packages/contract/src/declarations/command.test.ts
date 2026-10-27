@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { defineCommand } from '../index.ts';
+import { type BodyOf, defineCommand } from '../index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -64,5 +64,21 @@ describe('defineCommand', () => {
       });
 
     expect(declare).not.toThrow();
+  });
+});
+
+describe('BodyOf', () => {
+  test('BodyOf of a Command is its body schema’s output', () => {
+    const chargeCardV1 = defineCommand({
+      name: 'ChargeCard',
+      version: 1,
+      description: 'Charges the order’s card',
+      body: z.object({ orderId: z.uuid(), amount: z.int() }),
+    });
+
+    expectTypeOf<BodyOf<typeof chargeCardV1>>().toEqualTypeOf<{
+      orderId: string;
+      amount: number;
+    }>();
   });
 });
