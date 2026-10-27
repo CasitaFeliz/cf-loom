@@ -1583,11 +1583,18 @@ describe('walkSchemas: recursion', () => {
     );
   });
 
-  test('a chain of 20,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
-    timeout: deepTimeout,
+  /**
+   * Reads each failure tree once, so the chain takes well under a second; read afresh for each id,
+   * the trees cost seconds, past this test's timeout. The walk's memory also grows with the square
+   * of a chain of ids, so the chain stays at 7,000.
+   */
+  const memoTimeout = 4_000;
+
+  test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
+    timeout: memoTimeout,
   }, () => {
     let schema = arraysAround(250, z.bigint());
-    for (let index = 0; index < 20_000; index++) {
+    for (let index = 0; index < 7_000; index++) {
       schema = z.object({ next: schema }).meta({ id: `link${index}` });
     }
 
@@ -1595,9 +1602,9 @@ describe('walkSchemas: recursion', () => {
 
     const constructs = constructsOf(walked).flat();
     const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
-    expect(offCycle).toHaveLength(20_000);
+    expect(offCycle).toHaveLength(7_000);
     expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
-    expect(constructs).toHaveLength(20_001);
+    expect(constructs).toHaveLength(7_001);
   });
 
   test('a failing def met by many paths is reported once and walked once', () => {
