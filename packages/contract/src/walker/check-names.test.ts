@@ -13,7 +13,7 @@ import {
   sweepMethods,
   zodFlavor,
 } from '../../test/zod-checks.ts';
-import { walkSchemas } from '../internal/index.ts';
+import { refusalsIn, walkSchemas } from '../internal/index.ts';
 
 const bodyAt = {
   site: { kind: 'export', name: 'body' },
@@ -26,7 +26,7 @@ function constructsOf(schema: core.$ZodType): readonly string[] {
   const constructs: string[] = [];
   for (const { walked } of walkSchemas([{ at: bodyAt, schema }], () => undefined).located) {
     if (walked.kind === 'not-allowed') {
-      constructs.push(...walked.failures.map((failure) => failure.construct));
+      constructs.push(...refusalsIn(walked.tree).map((failure) => failure.construct));
     }
   }
   return constructs;

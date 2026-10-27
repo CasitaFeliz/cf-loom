@@ -13,7 +13,7 @@ import { allWalked, failed, type Reached, type Walked, walked } from './walked.t
 export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Reached): Walked {
   const values = allWalked(def.values.map((value) => jsonValueOf(value, at)));
   if (values.kind === 'not-allowed') {
-    return failed(values.failures, { type: 'enum' });
+    return failed(values.tree, { type: 'enum' });
   }
   return enumOf(values.value, at);
 }

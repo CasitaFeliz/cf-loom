@@ -4,7 +4,7 @@ import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
 import { refusalsOf } from '../../test/failures.ts';
 import { openEnum } from '../index.ts';
-import { walkSchemas } from '../internal/index.ts';
+import { refusalsIn, walkSchemas } from '../internal/index.ts';
 
 type Located = Parameters<typeof walkSchemas>[0];
 type Place = Located[number]['at'];
@@ -654,7 +654,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
 
     const constructsIn = (location: WalkedLocation | undefined) =>
       location?.walked.kind === 'not-allowed'
-        ? location.walked.failures.map((failure) => failure.construct)
+        ? refusalsIn(location.walked.tree).map((failure) => failure.construct)
         : [];
     const constructsAt = (walked: WalkedSchemas, at: Place) =>
       constructsIn(walked.located.find((candidate) => candidate.at === at));

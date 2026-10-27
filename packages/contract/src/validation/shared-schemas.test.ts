@@ -67,13 +67,6 @@ const unionIsRefused =
  */
 const linearGrowth = 24;
 
-/**
- * The bound of the hub test, which is higher: the walker copies the failures of a failing def on
- * every use of it, so the hub measures 21 to 29 times longer at eight times the size, against 62
- * for the code before #316.
- */
-const hubGrowth = 32;
-
 /** A growth test builds and times its shape up to three times over, which a loaded runner may stretch. */
 const growthTimeout = 60_000;
 
@@ -940,11 +933,56 @@ describe('failure lines: defs reached inside one another and from the body', () 
     expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.holder.f000000.at ${date}`]);
     expect(growth).toBeLessThan(linearGrowth);
   });
+
+  /** An Endpoint whose body has `count` dated defs as fields, each holding the one before it. */
+  function datedChainRoot(count: number): Root {
+    const fields: Record<string, z.ZodType> = {};
+    let before: z.ZodType | undefined;
+    for (let index = 0; index < count; index++) {
+      const previous = before;
+      const def: z.ZodType = z
+        .object({
+          at: z.date(),
+          ...(previous && { previous }),
+          get self() {
+            return z.array(def);
+          },
+        })
+        .meta({ id: `c${index}` });
+      fields[`c${String(index).padStart(6, '0')}`] = def;
+      before = def;
+    }
+    return serviceWith([anEndpoint('alpha', 'GET /a', fields)]);
+  }
+
+  test('3,000 dated defs, each holding the one before and a field of the body, told in time that grows as they do', {
+    timeout: growthTimeout,
+  }, () => {
+    const count = 3000;
+    const told = (size: number) => {
+      const root = datedChainRoot(size);
+      return () => linesOf(root);
+    };
+
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const lines = told(count)();
+
+    expect(lines).toHaveLength(count);
+    expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.c000000.at ${date}`);
+    expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.c002999.at ${date}`);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
 });
 
 describe('failure lines: many dated defs that one def holds, reached from many fields', () => {
-  /** An Endpoint whose body has `count` dated defs and a def holding them all, each as fields. */
-  function hubRoot(count: number): Root {
+  /** A way a field holds the def that holds the dated defs: `hub` as it is, or inside something. */
+  type Holding = (hub: z.ZodType, index: number) => z.ZodType;
+
+  /**
+   * An Endpoint whose body has `count` dated defs and a def holding them all, each as fields, and
+   * `count` more fields holding that def.
+   */
+  function hubRoot(count: number, holding: Holding = (hub) => hub): Root {
     const dated: z.ZodType[] = [];
     for (let index = 0; index < count; index++) {
       const def: z.ZodType = z
@@ -972,7 +1010,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
     const fields: Record<string, z.ZodType> = {};
     for (let index = 0; index < count; index++) {
       fields[`a${String(index).padStart(6, '0')}`] = dated[index] as z.ZodType;
-      fields[`z${String(index).padStart(6, '0')}`] = hub;
+      fields[`z${String(index).padStart(6, '0')}`] = holding(hub, index);
     }
     return serviceWith([anEndpoint('alpha', 'GET /a', fields)]);
   }
@@ -986,14 +1024,55 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, hubGrowth);
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
-    expect(growth).toBeLessThan(hubGrowth);
+    expect(growth).toBeLessThan(linearGrowth);
   });
+
+  const holdings: readonly (readonly [string, Holding])[] = [
+    ['in an array', (hub) => z.array(hub)],
+    ['as optional', (hub) => hub.optional()],
+    [
+      'through a def of their own',
+      (hub, index) => {
+        const own: z.ZodType = z
+          .object({
+            hub,
+            get self() {
+              return z.array(own);
+            },
+          })
+          .meta({ id: `w${index}` });
+        return own;
+      },
+    ],
+  ];
+
+  test.for(holdings)(
+    '3,000 dated defs, each a field of the body and of a def that 3,000 fields hold %s, told in time that grows as they do',
+    {
+      timeout: growthTimeout,
+    },
+    ([, holding]) => {
+      const count = 3000;
+      const told = (size: number) => {
+        const root = hubRoot(size, holding);
+        return () => linesOf(root);
+      };
+
+      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const lines = told(count)();
+
+      expect(lines).toHaveLength(count);
+      expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
+      expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
 
   /** `count` Endpoints, each with the same dated def as a field of its body. */
   function endpointsRoot(count: number): Root {
@@ -1030,6 +1109,44 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       ),
     );
     expect(lines[0]?.split('endpoints.')).toHaveLength(count + 1);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  /** An Endpoint whose body has `count` dated defs of their own, beside `count` Endpoints with none. */
+  function datedBesidePlainRoot(count: number): Root {
+    const dated: Record<string, z.ZodType> = {};
+    for (let index = 0; index < count; index++) {
+      const def: z.ZodType = z
+        .object({
+          at: z.date(),
+          get self() {
+            return z.array(def);
+          },
+        })
+        .meta({ id: `d${index}` });
+      dated[`d${String(index).padStart(6, '0')}`] = def;
+    }
+    const plain = Array.from({ length: count }, (_, index) =>
+      anEndpoint(`e${String(index + 1).padStart(6, '0')}`, `GET /e${index + 1}`, { s: z.string() }),
+    );
+    return serviceWith([anEndpoint('e000000', 'GET /e0', dated), ...plain]);
+  }
+
+  test('16,000 dated defs of one Endpoint, beside 16,000 Endpoints with none, are one line each, in time that grows as they do', {
+    timeout: growthTimeout,
+  }, () => {
+    const count = 16000;
+    const told = (size: number) => {
+      const root = datedBesidePlainRoot(size);
+      return () => linesOf(root);
+    };
+
+    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const lines = told(count)();
+
+    expect(lines).toHaveLength(count);
+    expect(lines[0]).toBe(`endpoints.GET /e0 (e000000) success.body.d000000.at ${date}`);
+    expect(lines.at(-1)).toBe(`endpoints.GET /e0 (e000000) success.body.d015999.at ${date}`);
     expect(growth).toBeLessThan(linearGrowth);
   });
 });
