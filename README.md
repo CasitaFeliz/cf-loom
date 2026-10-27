@@ -19,7 +19,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
 
-The packages are published to npmjs.com with access restricted to members of the @cf-loom npm organization: install them logged in with an npm account that is a member. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
+The packages are published to npmjs.com with access restricted to the @cf-loom npm organization: install them logged in with an npm account in that organization. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
 
 Each package's README lists what it exports. How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
