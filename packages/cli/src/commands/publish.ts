@@ -104,13 +104,13 @@ function toPublishOf(
   mode: PublishMode,
 ): ToPublish {
   const { project, snapshot } = comparison.built;
-  const baseline = comparison.kind === 'baseline' ? comparison.read.snapshot : undefined;
+  const { compared, listing } = comparison;
+  const baseline = compared.kind === 'baseline' ? compared.baseline.snapshot : undefined;
   const published = publishedSnapshotOf(baseline, snapshot, {
     version,
     generator: runningGeneratorOf(),
   });
-  const highest = baseline?.version;
   const text = canonicalTextOf(published);
   const declared = comparison.built;
-  return { mode, project, declared, published, text, peerRanges, tag, highest };
+  return { mode, project, declared, published, text, peerRanges, tag, listing };
 }
