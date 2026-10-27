@@ -3446,9 +3446,7 @@ describe.concurrent('cf-loom check', () => {
     expect(ran.stderr).toBe(`${refusedLine}\n`);
   });
 
-  test('a prerelease above the highest stable version is a preview, never the Baseline', async ({
-    lab,
-  }) => {
+  test('a prerelease above the highest stable version is never the Baseline', async ({ lab }) => {
     const changed = await aChangedProject(lab, { before: aRoot(), after: aRoot() }, ['1.1.0-0']);
 
     const { ran } = await checkedAgainst(lab, changed);
@@ -5781,15 +5779,15 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     });
   });
 
-  test('a stable publish merges the history of the Baseline, never that of a preview listed above it', async ({
+  test('a stable publish merges the history of the Baseline, never that of a prerelease listed above it', async ({
     lab,
   }) => {
     const retired = await aGeneratedProject(lab, aRoot({ lifecycle: 'retired' }));
     const ping = JSON.parse(read(retired, 'contract.snapshot.json')).endpoints['GET /ping'];
     const project = await aGeneratedProject(lab, aRootWithoutEndpoints);
     const tombstone = { 'GET /ping': { ...ping, retiredIn: '2.0.0-0' } };
-    const preview = publishedAs(project, '2.0.0-0', { endpoints: tombstone });
-    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'), preview);
+    const above = publishedAs(project, '2.0.0-0', { endpoints: tombstone });
+    const served = servedAs(ordersPackage, publishedAs(project, '1.0.0'), above);
 
     const { registry } = await publishedAgainst(lab, { project, served }, '--force');
 
@@ -5857,14 +5855,14 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
   describe.for([
     {
-      name: 'a version published meanwhile below a preview listed above the Baseline',
+      name: 'a version published meanwhile below a prerelease listed above the Baseline',
       listed: ['1.0.0', '2.0.0-0'],
       meanwhile: ['1.0.0', '1.1.0', '2.0.0-0'],
       byHand: [] as readonly string[],
       appears: '1.1.0',
     },
     {
-      name: 'a version a person published meanwhile below a preview',
+      name: 'a version a person published meanwhile below a prerelease above the Baseline',
       listed: ['1.0.0', '2.0.0-0'],
       meanwhile: ['1.0.0', '1.0.2', '2.0.0-0'],
       byHand: ['1.0.2'],
@@ -5878,14 +5876,14 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       appears: '1.1.0',
     },
     {
-      name: 'a preview published meanwhile above a stable Baseline',
+      name: 'a prerelease published meanwhile above a stable Baseline',
       listed: ['1.0.0'],
       meanwhile: ['1.0.0', '1.1.0-0'],
       byHand: [],
       appears: '1.1.0-0',
     },
     {
-      name: 'a preview published meanwhile over a package none of whose versions cf-loom published',
+      name: 'the first version cf-loom publishes meanwhile over a package none of whose versions it published',
       listed: ['0.0.0'],
       meanwhile: ['0.0.0', '1.0.0-0'],
       byHand: ['0.0.0'],
@@ -6880,7 +6878,7 @@ describe.concurrent('cf-loom check and publish derive one version', {
       flags: ['--prerelease'],
     },
     {
-      name: 'a Change with a preview listed above the Baseline',
+      name: 'a Change with a prerelease listed above the stable Baseline',
       roots: addedSuccessField,
       listed: ['1.0.0', '2.0.0-0'],
       flags: [],
