@@ -19,13 +19,14 @@ export {
   tooDeepNodePathOf,
   tooDeepPathOf,
 } from './nesting.ts';
-export { codeNodesOf } from './nodes.ts';
+export { codeNodesOf, inputNodesOf } from './nodes.ts';
 export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
 export type {
   DeclaredElement,
   EndpointTombstone,
+  FormerInput,
   MessageTombstone,
   PackagedSnapshot,
   PublishedApplicationSnapshot,
@@ -43,6 +44,8 @@ export type {
 } from './published.ts';
 export {
   declaredCodesOf,
+  formerInputsOf,
+  heldFormerInputsOf,
   isDeclared,
   isRemoved,
   isSubscriptionTombstone,
@@ -66,6 +69,7 @@ export type {
   ExportSnapshot,
   GroupSnapshot,
   GuardSnapshot,
+  InputSnapshot,
   ServiceSnapshot,
   ShadowingSnapshot,
   Snapshot,

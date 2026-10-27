@@ -92,6 +92,7 @@ function published({ endpoints, ...snapshot }: ServiceSnapshot): PublishedServic
     ...snapshot,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: Object.fromEntries(live),
     events: {},
     commands: {},

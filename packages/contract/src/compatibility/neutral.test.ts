@@ -117,6 +117,7 @@ function aBaseline(fields: Partial<ServiceSnapshot> = {}): PublishedServiceSnaps
     ...rest,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: stamped(endpoints),
     events: stamped(events),
     commands: stamped(commands),

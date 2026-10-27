@@ -1,4 +1,5 @@
 import {
+  declaredEndpointsOf,
   defScopesOf,
   type PublishedApplicationSnapshot,
   type PublishedSnapshot,
@@ -21,9 +22,10 @@ type Located = { readonly at: Path; readonly text: string };
 /**
  * The first identity a Snapshot holds that is none, an Endpoint's params that are not its
  * identity's, a name it uses and does not hold (a `ref`'s def, a code an Endpoint or Guard lists
- * or a Standard Rejection names, or a Guard), a Standard Rejection's code with a body it does not
- * have or with headers, a code's status no Rejection has, or a def that leads back to itself with
- * no node between; `undefined` when there is none.
+ * or a Standard Rejection names, a Guard, a Group, or the Endpoint a former Input was of), a
+ * Standard Rejection's code with a body it does not have or with headers, a code's status no
+ * Rejection has, or a def that leads back to itself with no node between; `undefined` when there
+ * is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
@@ -107,6 +109,7 @@ const unheld = {
   'standard-code': 'names a code the Snapshot does not hold',
   guard: 'names a Guard the Snapshot does not hold',
   group: 'names a Group the Snapshot does not hold',
+  endpoint: 'names an Endpoint the Snapshot does not declare, or holds Retired',
 } as const;
 
 function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
@@ -137,6 +140,9 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
     'standard-code': snapshot.codes,
     guard: snapshot.guards,
     group: snapshot.kind === 'service' ? snapshot.groups : {},
+    endpoint: Object.fromEntries(
+      declaredEndpointsOf(snapshot).filter(([, endpoint]) => endpoint.lifecycle !== 'retired'),
+    ),
   };
   const missing = usesOf(snapshot).filter((use) => !holds(use, held));
   return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));

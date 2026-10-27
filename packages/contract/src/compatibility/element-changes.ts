@@ -9,6 +9,7 @@ import { messageBodyDifferencesOf } from './bodies.ts';
 import { changesAt } from './changes.ts';
 import { endpointDifferencesOf, endpointSiteOf } from './endpoints.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
+import { type CheckedService, formerInputDifferencesOf } from './former-inputs.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { historyDifferencesOf, type MessageHistory, messageHistoryOf } from './message-history.ts';
 import { endpointNeutralOf, messageNeutralOf } from './neutral.ts';
@@ -27,26 +28,30 @@ export function endpointChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const defs = bothDefsOf(baseline, proposed);
+  const checked = { baseline, proposed };
   const paths = endpointPathsOf(baseline, proposed);
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    endpointPairChangesOf(pair, defs, paths),
+    endpointPairChangesOf(pair, checked, paths),
   );
 }
 
+/** An Endpoint's Changes against the Baseline, then those against its former Inputs. */
 function endpointPairChangesOf(
   pair: Pair<EndpointSnapshot>,
-  defs: BothDefs,
+  checked: CheckedService,
   paths: EndpointPaths,
 ): readonly Change[] {
+  const defs = bothDefsOf(checked.baseline, checked.proposed);
+  const differences = endpointDifferencesOf(pair, defs);
   return changesAt(endpointSiteOf(pair), [
     presenceDifferenceOf(pair),
     lifecycleDifferenceOf(pair),
     visibilityDifferenceOf(pair),
     renameDifferenceOf(pair),
     ...shadowingDifferencesOf(pair, paths),
-    ...endpointDifferencesOf(pair, defs),
+    ...differences,
     ...endpointNeutralOf(pair, defs),
+    ...formerInputDifferencesOf(pair, checked, differences),
   ]);
 }
 

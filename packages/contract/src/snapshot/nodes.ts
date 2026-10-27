@@ -1,5 +1,5 @@
 import type { SchemaNode } from '../walker/index.ts';
-import type { CodeSnapshot, EndpointSnapshot, GuardSnapshot } from './types.ts';
+import type { CodeSnapshot, EndpointSnapshot, GuardSnapshot, InputSnapshot } from './types.ts';
 
 /** The schema nodes of an Endpoint's Input and Success. */
 export function endpointNodesOf({ input, success }: EndpointSnapshot): readonly SchemaNode[] {
@@ -19,6 +19,14 @@ export function guardNodesOf({
 /** The schema nodes of a code: its headers and its body. */
 export function codeNodesOf({ headers, body }: CodeSnapshot): readonly SchemaNode[] {
   return [headers, body].filter(isNode);
+}
+
+/** The schema nodes of an Endpoint's query and body, as a former Input keeps them. */
+export function inputNodesOf({
+  query,
+  body,
+}: Pick<InputSnapshot, 'query' | 'body'>): readonly SchemaNode[] {
+  return [query, body].filter(isNode);
 }
 
 function isNode(node: SchemaNode | null): node is SchemaNode {

@@ -91,6 +91,7 @@ function aBaseline(fields: Partial<PublishedServiceSnapshot> = {}): PublishedSer
     ...heading,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: {},
     events: {},
     commands: {},

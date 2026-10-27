@@ -18,3 +18,10 @@ export const publishedBy = '@cf-loom/cli@2.1.0';
 export function publishedAt(version: string): PublishedHeading {
   return { version, generator: publishedBy };
 }
+
+/** What a first publish adds to a declared Service Snapshot: its heading, and no former Input yet. */
+export function publishedServiceAt(version: string): PublishedHeading & {
+  readonly formerInputs: readonly [];
+} {
+  return { ...publishedAt(version), formerInputs: [] };
+}

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { seededNext } from '../../test/random-schemas.ts';
-import { publishedAt } from '../../test/snapshots.ts';
+import { publishedAt, publishedServiceAt } from '../../test/snapshots.ts';
 import {
   compatibilityReportOf,
   decodeSnapshot,
@@ -182,7 +182,9 @@ function writableAfter(declared: Json, mutations: readonly Mutation[]): Snapshot
   for (const mutation of mutations) {
     mutated = mutation.change(mutated);
   }
-  const published = JSON.stringify({ ...(mutated as object), ...publishedAt('1.0.1') });
+  const kind = Reflect.get(mutated as object, 'kind');
+  const heading = kind === 'service' ? publishedServiceAt('1.0.1') : publishedAt('1.0.1');
+  const published = JSON.stringify({ ...(mutated as object), ...heading });
   return decodeSnapshot(published).kind === 'decoded' ? (mutated as Snapshot) : undefined;
 }
 

@@ -43,7 +43,7 @@ function aDependency(fields: Partial<DependencySnapshot> = {}): DependencySnapsh
 function aBaseline(
   dependencies: Readonly<Record<string, DependencySnapshot>> = {},
 ): PublishedServiceSnapshot {
-  return { ...heading, version: '3.4.0', generator: publishedBy, dependencies };
+  return { ...heading, version: '3.4.0', generator: publishedBy, formerInputs: [], dependencies };
 }
 
 function aProposed(

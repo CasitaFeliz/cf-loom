@@ -98,8 +98,11 @@ function findingsWithin(pair: NodePair, defs: BothDefs, place: EnteredPlace): re
   }
 }
 
-/** The nullability of a node, then what its type compares: nullability is apart from the shape. */
-function findingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
+/**
+ * The nullability of a node, then what its type compares: nullability is apart from the shape. A
+ * former Input is grafted by the same findings, so it pairs nodes as the compare does.
+ */
+export function findingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
   return [...nullabilityFindingsOf(pair), ...typeFindingsOf(pair, defs)];
 }
 

@@ -116,6 +116,7 @@ function aBaseline(
     ...heading,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: { [identity]: live },
     ...fields,
   };
@@ -855,6 +856,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       ...heading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
       codes: { [orderLocked]: locked },
     };
@@ -892,6 +894,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       ...heading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
     };
     const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });

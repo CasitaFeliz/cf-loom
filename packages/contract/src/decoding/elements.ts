@@ -44,7 +44,8 @@ function published<
 
 const messageTombstone = z.strictObject(retired);
 const attachment = z.strictObject({ guard: z.string(), qualifier: z.unknown() });
-const input = z.strictObject({
+/** Format 1's Endpoint Input, which a former Input picks its query and body from. */
+export const input = z.strictObject({
   params: objectNode.nullable(),
   query: objectNode,
   headers: objectNode,

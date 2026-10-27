@@ -1,4 +1,4 @@
-import type { EndpointSnapshot } from '../snapshot/index.ts';
+import type { EndpointSnapshot, InputSnapshot } from '../snapshot/index.ts';
 import { partsOf } from '../walker/index.ts';
 import { bodyDifferencesOf } from './bodies.ts';
 import { answeredDifferencesOf, statusDifferencesOf } from './codes.ts';
@@ -47,17 +47,33 @@ function inputDifferencesOf(
   proposed: EndpointSnapshot,
   defs: BothDefs,
 ): readonly Difference[] {
-  const before = baseline.input;
-  const after = proposed.input;
-  const query = { baseline: before.query, proposed: after.query };
-  const headers = { baseline: before.headers, proposed: after.headers };
-  const body = { baseline: before.body, proposed: after.body };
+  const headers = { baseline: baseline.input.headers, proposed: proposed.input.headers };
   return [
     ...paramDifferencesOf(baseline, proposed, defs),
-    ...textPartDifferencesOf(query, defs, { position: 'input', at: partsOf('input', 'query') }),
+    ...queryDifferencesOf(baseline.input, proposed.input, defs),
     ...inputHeaderDifferencesOf(headers, defs, partsOf('input', 'headers')),
-    ...bodyDifferencesOf(body, defs, { position: 'input', at: partsOf('input', 'body') }),
+    ...inputBodyDifferencesOf(baseline.input, proposed.input, defs),
   ];
+}
+
+/** The query a Caller sends, compared as Input: an Endpoint's, or a former Input's. */
+export function queryDifferencesOf(
+  before: Pick<InputSnapshot, 'query'>,
+  after: Pick<InputSnapshot, 'query'>,
+  defs: BothDefs,
+): readonly Difference[] {
+  const query = { baseline: before.query, proposed: after.query };
+  return textPartDifferencesOf(query, defs, { position: 'input', at: partsOf('input', 'query') });
+}
+
+/** The body a Caller sends, compared as Input: an Endpoint's, or a former Input's. */
+export function inputBodyDifferencesOf(
+  before: Pick<InputSnapshot, 'body'>,
+  after: Pick<InputSnapshot, 'body'>,
+  defs: BothDefs,
+): readonly Difference[] {
+  const body = { baseline: before.body, proposed: after.body };
+  return bodyDifferencesOf(body, defs, { position: 'input', at: partsOf('input', 'body') });
 }
 
 function successDifferencesOf(

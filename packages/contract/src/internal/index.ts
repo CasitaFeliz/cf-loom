@@ -102,6 +102,7 @@ export type {
   ExportedCut,
   ExportedSnapshot,
   ExportSnapshot,
+  FormerInput,
   GroupSnapshot,
   GuardSnapshot,
   ListedRejection,

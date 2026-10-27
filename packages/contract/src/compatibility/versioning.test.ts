@@ -158,6 +158,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
     ...serviceHeading,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
   };
   const proposed: ServiceSnapshot = {
@@ -198,6 +199,7 @@ function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): C
     ...serviceHeading,
     version: '3.4.0',
     generator: publishedBy,
+    formerInputs: [],
     endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
     codes: { [orderLocked]: aCode(409) },
   };
@@ -308,6 +310,7 @@ describe('versionBumpOf', () => {
       ...serviceHeading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: {},
     };
     const proposed: ServiceSnapshot = {
@@ -334,6 +337,7 @@ describe('versionBumpOf', () => {
       ...serviceHeading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: {},
       events: { 'OrderPlaced@1': event({}) },
     };
@@ -365,6 +369,7 @@ describe('versionBumpOf', () => {
       ...serviceHeading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: { [orderById]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
     };
     const proposed: ServiceSnapshot = {
@@ -471,6 +476,7 @@ describe('versionBumpOf', () => {
       ...serviceHeading,
       version: '3.4.0',
       generator: publishedBy,
+      formerInputs: [],
       endpoints: {},
       events: { 'OrderPlaced@1': { ...event, lifecycle: 'active' } },
     };
