@@ -1,23 +1,31 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
+import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
+  type CodeSnapshot,
   type CommandSnapshot,
   canonicalTextOf,
   type DefinitionsSnapshot,
   decodeSnapshot,
+  defScopesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   hashedTextOf,
+  isRemoved,
+  nodeNestingLimit,
   type PublishedApplicationSnapshot,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
   publishedSnapshotOf,
+  type RemovedCode,
+  type SchemaNode,
   type ServiceSnapshot,
   type Snapshot,
   type SubscriptionSnapshot,
+  snapshotNestingLimit,
 } from '../internal/index.ts';
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
@@ -111,6 +119,24 @@ function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
     body: null,
     ...fields,
   };
+}
+
+function aRemovedCode(fields: Partial<RemovedCode> = {}): RemovedCode {
+  return { ...aCode(), removedIn: '3.2.0', defs: {}, ...fields };
+}
+
+const ref = (name: string): SchemaNode => ({ type: 'ref', name });
+
+/** A body whose only field leads to the def `name`. */
+function reaching(name: string): SchemaNode {
+  return { type: 'object', fields: { [name]: { required: true, schema: ref(name) } } };
+}
+
+/** A recursive def, with a `label` field when it declares one. */
+function aTree(fields: { readonly label: boolean }): SchemaNode {
+  const label = { required: true, schema: { type: 'string' } } as const;
+  const children = { required: true, schema: { type: 'array', items: ref('tree') } } as const;
+  return { type: 'object', fields: fields.label ? { children, label } : { children } };
 }
 
 const standardCodes = {
@@ -219,6 +245,70 @@ const mismatches: readonly Mismatch[] = [
     baseline: { ...aDefinitions(), name: '@org/other', version: '1.0.0', generator: publishedBy },
   },
 ];
+
+const generatedCodes = ['ALPHA', 'BRAVO', 'CHARLIE'] as const;
+
+/** What a generated code may reach: nothing, `tree`, or `kin`, which leads on to `tree`. */
+const generatedReach = [
+  { body: null, defs: [] },
+  { body: reaching('tree'), defs: ['tree'] },
+  { body: reaching('kin'), defs: ['kin', 'tree'] },
+] as const;
+
+/** The defs a generated Snapshot may hold, each in a shape the draw picks. */
+function generatedDefs(next: () => number): Readonly<Record<string, SchemaNode>> {
+  const note = { required: true, schema: { type: 'string' } } as const;
+  const kin: SchemaNode = {
+    type: 'object',
+    fields: { tree: { required: true, schema: ref('tree') }, ...(next() < 0.5 ? { note } : {}) },
+  };
+  return { kin, tree: aTree({ label: next() < 0.5 }) };
+}
+
+/** A declared Service Snapshot drawn at random: each generated code declared or not, reaching what it draws. */
+function aGeneratedProposed(next: () => number): ServiceSnapshot {
+  const drawn = generatedDefs(next);
+  const codes: Record<string, CodeSnapshot> = { ...standardCodes };
+  const reached = new Set<string>();
+  for (const code of generatedCodes) {
+    const reach = generatedReach[Math.floor(next() * (generatedReach.length + 1))];
+    if (reach !== undefined) {
+      codes[code] = aCode({ body: reach.body });
+      for (const name of reach.defs) {
+        reached.add(name);
+      }
+    }
+  }
+  const defs = Object.entries(drawn).filter(([name]) => reached.has(name));
+  return aProposed({ defs: Object.fromEntries(defs), codes });
+}
+
+/** How many keys below the outermost object the root of each schema node of a Snapshot sits. */
+function rootDepthsOf(snapshot: ServiceSnapshot | PublishedServiceSnapshot): readonly number[] {
+  return defScopesOf(snapshot).flatMap(({ nodes }) => nodes.map(({ at }) => at.length));
+}
+
+type Step = {
+  readonly baseline: PublishedServiceSnapshot | undefined;
+  readonly proposed: ServiceSnapshot;
+  readonly published: PublishedServiceSnapshot;
+};
+
+/** Seeded publishes of generated Snapshots one after another, each against the one before. */
+function histories(): readonly (readonly [number, readonly Step[]])[] {
+  return Array.from({ length: 200 }, (_, seed) => {
+    const next = seededNext(seed + 1);
+    const steps: Step[] = [];
+    let baseline: PublishedServiceSnapshot | undefined;
+    for (let version = 0; version < 6; version++) {
+      const proposed = aGeneratedProposed(next);
+      const published = publishedSnapshotOf(baseline, proposed, publishedAt(`3.${version}.0`));
+      steps.push({ baseline, proposed, published });
+      baseline = published;
+    }
+    return [seed, steps] as const;
+  });
+}
 
 describe('publishedSnapshotOf', () => {
   test('the published Snapshot carries the version given', () => {
@@ -403,28 +493,138 @@ describe('publishedSnapshotOf', () => {
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes).toEqual({
-      [orderLocked]: { ...locked, removedIn: '3.5.0' },
+      [orderLocked]: { ...locked, removedIn: '3.5.0', defs: {} },
       [orderPaid]: aCode(),
     });
   });
 
   test('a code removed in the Baseline stays removed in the version that first left it out, whatever the later publishes', () => {
-    const baseline = aBaseline({ codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) } });
+    const baseline = aBaseline({ codes: { [orderLocked]: aRemovedCode({ removedIn: '3.2.0' }) } });
 
     const published = publishedSnapshotOf(baseline, aProposed(), publishedAt('3.5.0'));
 
-    expect(published.codes).toEqual({ [orderLocked]: aCode({ removedIn: '3.2.0' }) });
+    expect(published.codes).toEqual({ [orderLocked]: aRemovedCode({ removedIn: '3.2.0' }) });
   });
 
   test('a code removed in the Baseline and answered again is the proposed one, with no removedIn', () => {
     const baseline = aBaseline({
-      codes: { [orderLocked]: aCode({ status: 423, removedIn: '3.2.0' }) },
+      codes: { [orderLocked]: aRemovedCode({ status: 423, removedIn: '3.2.0' }) },
     });
     const proposed = aProposed({ codes: { [orderLocked]: aCode({ status: 423 }) } });
 
     const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
 
     expect(published.codes).toEqual({ [orderLocked]: aCode({ status: 423 }) });
+  });
+
+  test('a code removed now keeps the defs its body reaches, through other defs, as the Baseline held them', () => {
+    const leaf: SchemaNode = { type: 'object', fields: {} };
+    const tree: SchemaNode = {
+      type: 'object',
+      fields: {
+        leaf: { required: true, schema: ref('leaf') },
+        again: { required: true, schema: ref('tree') },
+      },
+    };
+    const baseline = aBaseline({
+      defs: { leaf, other: leaf, tree },
+      codes: { [orderLocked]: aCode({ body: reaching('tree') }), [orderPaid]: aCode() },
+    });
+    const proposed = aProposed({ defs: { other: leaf }, codes: { [orderPaid]: aCode() } });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+
+    expect(published.codes[orderLocked]).toEqual(
+      aRemovedCode({ body: reaching('tree'), removedIn: '3.5.0', defs: { leaf, tree } }),
+    );
+  });
+
+  test('a code removed now that reaches no def keeps empty defs', () => {
+    const baseline = aBaseline({
+      defs: { tree: aTree({ label: true }) },
+      codes: { [orderLocked]: aCode(), [orderPaid]: aCode({ body: reaching('tree') }) },
+    });
+    const proposed = aProposed({
+      defs: { tree: aTree({ label: true }) },
+      codes: { [orderPaid]: aCode({ body: reaching('tree') }) },
+    });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+
+    expect(published.codes[orderLocked]).toEqual(aRemovedCode({ removedIn: '3.5.0', defs: {} }));
+  });
+
+  test('a removed code keeps its own defs when the proposed Snapshot changes a def of the same name', () => {
+    const body = reaching('tree');
+    const baseline = aBaseline({
+      defs: { tree: aTree({ label: true }) },
+      codes: { [orderLocked]: aCode({ body }), [orderPaid]: aCode({ body }) },
+    });
+    const proposed = aProposed({
+      defs: { tree: aTree({ label: false }) },
+      codes: { [orderPaid]: aCode({ body }) },
+    });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+
+    expect(published.codes[orderLocked]).toEqual(
+      aRemovedCode({ body, removedIn: '3.5.0', defs: { tree: aTree({ label: true }) } }),
+    );
+  });
+
+  test('a removed code keeps its own defs when the proposed Snapshot drops that def', () => {
+    const body = reaching('tree');
+    const baseline = aBaseline({
+      defs: { tree: aTree({ label: true }) },
+      codes: { [orderLocked]: aCode({ body }), [orderPaid]: aCode() },
+    });
+    const proposed = aProposed({ codes: { [orderPaid]: aCode() } });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+
+    expect(published.codes[orderLocked]).toEqual(
+      aRemovedCode({ body, removedIn: '3.5.0', defs: { tree: aTree({ label: true }) } }),
+    );
+  });
+
+  test('the Snapshot’s defs are the proposed Snapshot’s, whatever its removed codes reach', () => {
+    const body = reaching('tree');
+    const baseline = aBaseline({
+      defs: { tree: aTree({ label: true }) },
+      codes: {
+        [orderLocked]: aCode({ body }),
+        [orderPaid]: aCode({ body }),
+        [oldCode]: aCode({ body }),
+      },
+    });
+    const proposed = aProposed({
+      defs: { tree: aTree({ label: false }) },
+      codes: { [orderPaid]: aCode({ body }) },
+    });
+    const dropping = aProposed({ codes: {} });
+
+    const changed = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+    const dropped = publishedSnapshotOf(baseline, dropping, publishedAt('3.5.0'));
+
+    expect(changed.defs).toEqual({ tree: aTree({ label: false }) });
+    expect(dropped.defs).toEqual({});
+  });
+
+  test('a removed code answered again is published as declared, with no removedIn or defs', () => {
+    const body = reaching('tree');
+    const baseline = aBaseline({
+      codes: {
+        [orderLocked]: aRemovedCode({ body, defs: { tree: aTree({ label: true }) } }),
+      },
+    });
+    const proposed = aProposed({
+      defs: { tree: aTree({ label: false }) },
+      codes: { [orderLocked]: aCode({ body }) },
+    });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('3.5.0'));
+
+    expect(published.codes[orderLocked]).toEqual(aCode({ body }));
   });
 
   test('a removed Subscription becomes a tombstone with its Event and removedIn the version, and no description or Group', () => {
@@ -469,8 +669,34 @@ describe('publishedSnapshotOf', () => {
       ...proposed,
       version: '4.3.0',
       generator: publishedBy,
-      codes: { [oldCode]: aCode({ removedIn: '4.3.0' }), [keptCode]: aCode(), [newCode]: aCode() },
+      codes: {
+        [oldCode]: aRemovedCode({ removedIn: '4.3.0' }),
+        [keptCode]: aCode(),
+        [newCode]: aCode(),
+      },
     });
+  });
+
+  test('a Definitions Package’s removed code keeps the defs it reached', () => {
+    const body = reaching('tree');
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...aDefinitions({
+        defs: { tree: aTree({ label: true }) },
+        codes: { [oldCode]: aCode({ body }), [keptCode]: aCode({ body }) },
+      }),
+      version: '4.2.0',
+      generator: publishedBy,
+    };
+    const proposed = aDefinitions({
+      defs: { tree: aTree({ label: false }) },
+      codes: { [keptCode]: aCode({ body }) },
+    });
+
+    const published = publishedSnapshotOf(baseline, proposed, publishedAt('4.3.0'));
+
+    expect(published.codes[oldCode]).toEqual(
+      aRemovedCode({ body, removedIn: '4.3.0', defs: { tree: aTree({ label: true }) } }),
+    );
   });
 
   test('an Application’s published Snapshot is its declared one at the version', () => {
@@ -519,6 +745,41 @@ describe('publishedSnapshotOf', () => {
     });
   });
 
+  test('what the merge writes decodes back to itself, for any history', () => {
+    for (const [seed, steps] of histories()) {
+      for (const { published } of steps) {
+        const decoded = decodeSnapshot(canonicalTextOf(published));
+
+        expect(decoded, `seed ${seed}`).toEqual({ kind: 'decoded', snapshot: published });
+      }
+    }
+  });
+
+  test('a removed code never changes after the publish that removed it, for any history', () => {
+    for (const [seed, steps] of histories()) {
+      for (const { baseline, proposed, published } of steps) {
+        const held = Object.entries(baseline?.codes ?? {}).filter(
+          ([code]) => !(code in proposed.codes),
+        );
+        for (const [code, was] of held.filter(([, removed]) => isRemoved(removed))) {
+          expect(published.codes[code], `seed ${seed}, ${code}`).toEqual(was);
+        }
+      }
+    }
+  });
+
+  test('no schema node of a Snapshot sits deeper than a node of the nesting limit leaves room for, for any history', () => {
+    const keys = snapshotNestingLimit - nodeNestingLimit;
+    for (const [seed, steps] of histories()) {
+      const depths = steps.flatMap(({ proposed, published }) => [
+        ...rootDepthsOf(proposed),
+        ...rootDepthsOf(published),
+      ]);
+
+      expect(Math.max(...depths), `seed ${seed}`).toBeLessThanOrEqual(keys);
+    }
+  });
+
   test('merging an unchanged Snapshot into its Baseline hashes like the Baseline, whatever the version', () => {
     const deprecated = aLive(
       withoutParams(anEndpoint({ deprecatedAt: '2026-10-17T09:30:00Z' })),
@@ -530,7 +791,13 @@ describe('publishedSnapshotOf', () => {
         'POST /orders': deprecated,
         'DELETE /orders/{}': { lifecycle: 'retired', retiredIn: '2.0.0', name: 'cancelOrder' },
       },
-      codes: { [orderLocked]: aCode({ removedIn: '3.2.0' }) },
+      codes: {
+        [orderLocked]: aRemovedCode({
+          removedIn: '3.2.0',
+          body: reaching('tree'),
+          defs: { tree: aTree({ label: true }) },
+        }),
+      },
       subscriptions: { legacySync: { event: 'orders-service:OrderPlaced@1', removedIn: '3.2.0' } },
     });
     const proposed = aProposed({

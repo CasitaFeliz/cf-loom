@@ -1,4 +1,8 @@
-import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
+import {
+  defScopesOf,
+  type PublishedApplicationSnapshot,
+  type PublishedSnapshot,
+} from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
 import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
@@ -9,7 +13,7 @@ import {
   standardHeaderProblemsOf,
 } from './standard-codes.ts';
 import { notEndpointIdentity } from './texts.ts';
-import { usesOf } from './uses.ts';
+import { type Use, usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
 type Located = { readonly at: Path; readonly text: string };
@@ -109,14 +113,16 @@ function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[
   if (snapshot.kind === 'application') {
     return [];
   }
-  const defs = new Map(Object.entries(snapshot.defs));
   const problems: Problem[] = [];
-  for (const [name, def] of defs) {
-    if (leadsBackWithNoNode(name, def, defs)) {
-      problems.push({
-        at: ['defs', name],
-        reason: 'leads back to itself through refs, unions and allOfs alone',
-      });
+  for (const scope of defScopesOf(snapshot)) {
+    const defs = new Map(Object.entries(scope.defs));
+    for (const [name, def] of defs) {
+      if (leadsBackWithNoNode(name, def, defs)) {
+        problems.push({
+          at: [...scope.at, name],
+          reason: 'leads back to itself through refs, unions and allOfs alone',
+        });
+      }
     }
   }
   return problems;
@@ -127,12 +133,17 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
     return [];
   }
   const held = {
-    def: snapshot.defs,
     code: snapshot.codes,
     'standard-code': snapshot.codes,
     guard: snapshot.guards,
     group: snapshot.kind === 'service' ? snapshot.groups : {},
   };
-  const missing = usesOf(snapshot).filter((use) => !Object.hasOwn(held[use.kind], use.name));
+  const missing = usesOf(snapshot).filter((use) => !holds(use, held));
   return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));
+}
+
+/** Whether the names a use resolves in hold it: a `ref`'s own defs, else the Snapshot's map of its kind. */
+function holds(use: Use, held: Record<Exclude<Use['kind'], 'def'>, object>): boolean {
+  const names = use.kind === 'def' ? use.defs : held[use.kind];
+  return Object.hasOwn(names, use.name);
 }

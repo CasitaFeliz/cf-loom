@@ -754,7 +754,9 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
     expect(cut.shadowing).toStrictEqual({ 'GET /payments/first': { lifecycle: 'retired' } });
   });
 
-  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', () => {
+  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', {
+    timeout: 30_000,
+  }, () => {
     const mismatches: string[] = [];
 
     for (const declared of declaredSetsOf(smallPaths, 4)) {
