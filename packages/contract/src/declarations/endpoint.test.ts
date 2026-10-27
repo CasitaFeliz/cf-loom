@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   defineEndpoint,
+  defineGuard,
   defineRejection,
   type InputOf,
   invalidInput,
@@ -432,6 +433,86 @@ describe('a declared Endpoint’s containers', () => {
     expect(Object.isFrozen(endpoint.success)).toBe(true);
     expect(Object.isFrozen(endpoint.rejections)).toBe(true);
     expect(Object.isFrozen(orderParams)).toBe(false);
+  });
+});
+
+/** A Guard whose Qualifier is any list, its type kept shallow for the type checker. */
+const anyList = defineGuard({
+  name: 'anyList',
+  description: 'Any list',
+  qualifier: z.array(z.json()) as z.ZodType<readonly unknown[]>,
+});
+
+/** The Qualifier a declared Endpoint holds for its one Attachment. */
+function qualifierOf(qualifier: unknown): unknown {
+  const endpoint = defineEndpoint({
+    ...listOrders,
+    guards: [{ guard: anyList, qualifier: qualifier as readonly unknown[] }],
+  });
+  const [attachment] = endpoint.guards ?? [];
+  return attachment !== undefined && 'qualifier' in attachment ? attachment.qualifier : undefined;
+}
+
+/** `depth` lists, each holding the next, the innermost empty. */
+function aNestOfLists(depth: number): unknown[] {
+  const outermost: unknown[] = [];
+  let list = outermost;
+  for (let level = 1; level < depth; level++) {
+    const held: unknown[] = [];
+    list.push(held);
+    list = held;
+  }
+  return outermost;
+}
+
+/** The first `count` lists of a nest, outermost first, each the first item of the one before. */
+function listsOf(nest: unknown, count: number): readonly unknown[] {
+  const lists: unknown[] = [];
+  for (let list = nest; Array.isArray(list) && lists.length < count; list = list[0]) {
+    lists.push(list);
+  }
+  return lists;
+}
+
+describe('a declared Endpoint’s Qualifiers', () => {
+  test('a Qualifier nested 100,000 lists deep is copied and frozen at every depth', () => {
+    const written = aNestOfLists(100_000);
+
+    const declared = qualifierOf(written);
+
+    const writtenLists = listsOf(written, 100_000);
+    const declaredLists = listsOf(declared, 100_000);
+    expect(declaredLists).toHaveLength(100_000);
+    expect(declaredLists.every((list) => Object.isFrozen(list))).toBe(true);
+    expect(declaredLists.some((list, depth) => list === writtenLists[depth])).toBe(false);
+  });
+
+  test.for([...Array.from({ length: 65 }, (_, depth) => depth), 10_000])(
+    'a Qualifier holding itself %i lists below it is a frozen copy that holds itself as deep',
+    (depth) => {
+      const written = aNestOfLists(depth + 1);
+      const innermost = listsOf(written, depth + 1).at(-1) as unknown[];
+      innermost.push(written);
+
+      const declared = qualifierOf(written);
+
+      const declaredLists = listsOf(declared, depth + 1);
+      const heldAtTheEnd = (declaredLists.at(-1) as unknown[]).at(-1);
+      expect(declared !== written).toBe(true);
+      expect(declaredLists.every((list) => Object.isFrozen(list))).toBe(true);
+      expect(heldAtTheEnd === declared).toBe(true);
+    },
+  );
+
+  test('an object a Qualifier holds twice is copied once, both places holding that copy', () => {
+    const shared = { scope: ['orders:read'] };
+
+    const declared = qualifierOf([{ read: shared, also: [shared] }]);
+
+    const [{ read, also }] = declared as [{ read: unknown; also: readonly unknown[] }];
+    expect(read).not.toBe(shared);
+    expect(also[0]).toBe(read);
+    expect(Object.isFrozen(read)).toBe(true);
   });
 });
 
