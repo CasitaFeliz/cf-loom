@@ -2602,6 +2602,21 @@ describe('decodeSnapshot', () => {
         expect(result.kind).toBe('decoded');
       });
 
+      test('a Service’s chain of 20,000 Guards, each listing the next and the first attached, decodes', () => {
+        const nameOf = (index: number) => `g${index}`;
+        const length = 20_000;
+        const guards = Object.fromEntries(
+          Array.from({ length }, (_, index) => [
+            nameOf(index),
+            { ...aGuard, guards: index + 1 < length ? [nameOf(index + 1)] : [] },
+          ]),
+        );
+
+        const result = serviceWith({ endpoints: { [getOrder]: attaching(nameOf(0)) }, guards });
+
+        expect(result.kind).toBe('decoded');
+      });
+
       test.each([
         [
           'listed only by an unused Guard',
