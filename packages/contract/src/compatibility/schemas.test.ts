@@ -1619,6 +1619,7 @@ function anAliasAnnotationRow(
 }
 
 const variantCard = anObject({ kind: required(aClosedEnum('a')) });
+const plainCard = anObject({ f: optional(aString) });
 const aliasVariant: SchemaNode = {
   type: 'tagged',
   discriminator: 'kind',
@@ -1706,6 +1707,30 @@ const aliasRows: readonly Row[] = [
     fromDefs: { card: variantCard, alias: aRef('card') },
     toDefs: { card: variantCard, alias: anAliasOf('card', { description: 'A card' }) },
     found: [found(annotationChanged('description'), neutralEverywhere, ['variants', '"a"'])],
+  },
+  {
+    change: 'writing a nullable ref’s def inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('card')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { card: plainCard },
+    toDefs: {},
+    found: [idChanged],
+  },
+  {
+    change: 'naming a nullable schema written inline as a def',
+    from: aBodyWith({ k: aNullable(plainCard) }),
+    to: aBodyWith({ k: aNullable(aRef('card')) }),
+    fromDefs: {},
+    toDefs: { card: plainCard },
+    found: [idChanged],
+  },
+  {
+    change: 'writing a nullable ref’s alias chain inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('alias')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { alias: aRef('card'), card: plainCard },
+    toDefs: {},
+    found: [idChanged, idChanged],
   },
   {
     change: 'making a ref nullable while its def gains a description',
