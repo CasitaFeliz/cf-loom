@@ -521,7 +521,7 @@ describe('validateRoot: a Qualifier against its schema', () => {
         {
           kind: 'not-allowed',
           location: 'guards.refined qualifier',
-          construct: '.refine()',
+          construct: '.refine(), z.custom() or z.instanceof()',
           alsoIn: [],
           origin: undefined,
         },

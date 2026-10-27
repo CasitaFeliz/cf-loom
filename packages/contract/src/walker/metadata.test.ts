@@ -186,7 +186,7 @@ describe('walkSchemas: examples', () => {
 
     const walked = walkBody(schema);
 
-    expect(walked).toEqual(refusedAt('', '.refine()'));
+    expect(walked).toEqual(refusedAt('', '.refine(), z.custom() or z.instanceof()'));
     expect(calls).toBe(0);
   });
 });

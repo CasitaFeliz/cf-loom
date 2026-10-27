@@ -358,7 +358,16 @@ const refusedRows = {
   nonoptional: [
     { name: '.nonoptional()', schema: z.object({ f: z.array(z.string().nonoptional()) }) },
   ],
-  custom: [{ name: 'z.custom()', schema: z.object({ f: z.custom<string>() }) }],
+  custom: [
+    {
+      name: '.refine(), z.custom() or z.instanceof()',
+      schema: z.object({ f: z.custom<string>() }),
+    },
+    {
+      name: '.refine(), z.custom() or z.instanceof()',
+      schema: z.object({ f: z.instanceof(Date) }),
+    },
+  ],
   date: [
     { name: 'z.date()', schema: z.object({ f: z.date() }) },
     { name: 'z.date()', schema: z.object({ f: z.coerce.date() }) },
@@ -373,6 +382,8 @@ const refusedRows = {
   bigint: [
     { name: 'z.bigint()', schema: z.object({ f: z.bigint() }) },
     { name: 'z.bigint()', schema: z.object({ f: z.coerce.bigint() }) },
+    { name: 'z.int64()', schema: z.object({ f: z.int64() }) },
+    { name: 'z.uint64()', schema: z.object({ f: z.uint64() }) },
   ],
   symbol: [{ name: 'z.symbol()', schema: z.object({ f: z.symbol() }) }],
   void: [{ name: 'z.void()', schema: z.object({ f: z.void() }) }],
@@ -535,6 +546,38 @@ type Misnamed<Row extends RefusedRow> = Row extends unknown
     ? never
     : Row['name']
   : never;
+
+describe('the refusals of one schema', () => {
+  test('a bigint format the types cannot tell apart is one refusal, named as its type', () => {
+    const format: z.ZodBigIntFormat = z.int64();
+    const schema = z.object({ f: format });
+
+    expectTypeOf<RefusalsOf<typeof schema>>().toEqualTypeOf<'not allowed: z.bigint()'>();
+  });
+
+  test("a bigint format of one literal that no row names is refused by zod's ids", () => {
+    type Int128 = z.ZodBigInt & {
+      readonly _zod: {
+        readonly def: { readonly check: 'bigint_format'; readonly format: 'int128' };
+      };
+    };
+    type Schema = z.ZodObject<{ f: Int128 }>;
+
+    expectTypeOf<
+      RefusalsOf<Schema>
+    >().toEqualTypeOf<'not allowed: a zod check "bigint_format" of format "int128"'>();
+  });
+
+  test('several refusals are joined by a semicolon, so a list-valued name reads as one item', () => {
+    const schema = z.object({ a: z.custom<string>(), b: z.date() });
+    const joined =
+      'not allowed: .refine(), z.custom() or z.instanceof(); z.date() (use z.iso.datetime())';
+    const reversed =
+      'not allowed: z.date() (use z.iso.datetime()); .refine(), z.custom() or z.instanceof()';
+
+    expectTypeOf<RefusalsOf<typeof schema>>().toExtend<typeof joined | typeof reversed>();
+  });
+});
 
 describe('every construct the types refuse', () => {
   test('each type error names the construct its row names, and no row is left without one', () => {
