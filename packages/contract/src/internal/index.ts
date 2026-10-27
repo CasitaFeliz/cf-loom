@@ -65,6 +65,7 @@ export {
   kebabCase,
   lifecycleOf,
   providerOf,
+  ruleOf,
   standardRejectionNames,
   upperSnakeCase,
 } from '../declarations/index.ts';
@@ -227,6 +228,7 @@ export {
   brokerHeadersOf,
   brokerMessageIdHeader,
   brokerMessageIdOf,
+  brokerPrefixRule,
   committedValues,
   deprecatedAtOfHeader,
   deprecationHeader,

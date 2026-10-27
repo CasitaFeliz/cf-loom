@@ -74,13 +74,13 @@ const absent = (stream: string) =>
   `The stream ${stream} does not exist: apply the Service's broker plan`;
 
 describe('jetstream()', () => {
-  test.each(['stag_ing', 'a.b', 'Staging', ''])(
-    'jetstream() refuses the prefix "%s", which is not kebab-case, naming it and saying to leave it undefined for none',
+  test.each(['stag_ing', 'a.b', 'Staging', '', 'a'.repeat(65)])(
+    'jetstream() refuses the prefix "%s", which is not a Broker prefix, naming it and saying to leave it undefined for none',
     (prefix) => {
       const broker = () => jetstream({ connect: aConnect().connect, prefix });
 
       expect(broker).toThrow(
-        `The broker prefix "${prefix}" is not kebab-case, such as staging: leave prefix undefined for none`,
+        `The broker prefix "${prefix}" is not kebab-case of at most 64 characters, such as staging: leave prefix undefined for none`,
       );
     },
   );

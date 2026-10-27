@@ -576,8 +576,9 @@ describe('cf-loom broker-plan: what it refuses', () => {
 
   test.for([
     ['a prefix with an underscore', ['--prefix', 'stag_ing']],
+    ['a prefix of 65 characters', ['--prefix', 'a'.repeat(65)]],
     ['no prefix after the option', ['--prefix']],
-  ] as const)('a prefix that is not kebab-case is a usage error: %s', ([_case, options]) => {
+  ] as const)('a prefix that is not a Broker prefix is a usage error: %s', ([_case, options]) => {
     const project = aProject({});
 
     const ran = cfLoom(project, 'broker-plan', ...options);
@@ -585,7 +586,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: `--prefix takes a prefix in kebab-case, such as staging. ${usage}\n`,
+      stderr: `--prefix takes a prefix in kebab-case of at most 64 characters, such as staging. ${usage}\n`,
     });
   });
 

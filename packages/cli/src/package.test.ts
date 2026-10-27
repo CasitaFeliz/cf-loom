@@ -544,15 +544,18 @@ function wordOf(next: () => number, length: number): string {
 
 /**
  * package.json names both a package.json and a Root name accept, scoped and not: the longest one
- * whose Contract Package's name npm still takes, then pseudo-random ones.
+ * whose Contract Package's name npm still takes, a Service name of 64 characters under the longest
+ * scope, then pseudo-random ones.
  */
 function projectNames(): readonly string[] {
   const next = seededNext(180);
+  const longestName = 'n'.repeat(64);
+  const longestScope = 's'.repeat(214 - '@/contract-'.length - longestName.length);
   const random = Array.from({ length: 6 }, (_, index) => {
     const name = `${wordOf(next, 1 + Math.floor(next() * 12))}-${wordOf(next, 3)}`;
     return index % 2 === 0 ? `@${wordOf(next, 1 + Math.floor(next() * 8))}/${name}` : name;
   });
-  return [`@s/${'n'.repeat(214 - '@s/contract-'.length)}`, ...random];
+  return [`@${longestScope}/${longestName}`, ...random];
 }
 
 /** A Service project named `packageName` whose Root declares nothing. */

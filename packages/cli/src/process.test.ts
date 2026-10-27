@@ -340,6 +340,17 @@ describe('cf-loom init: .gitattributes', () => {
     },
   );
 
+  test('init refuses a package whose name has 65 characters, writing nothing', () => {
+    const name = 'a'.repeat(65);
+    const project = aProject({ 'package.json': JSON.stringify({ name, type: 'module' }) });
+
+    const ran = cfLoom(project, 'init');
+
+    const message = `package.json names "${name}", but a Service name is at most 64 characters: rename the package`;
+    expect(ran).toEqual({ status: 3, stdout: '', stderr: `${message}\n` });
+    expect(existsSync(join(project, 'src'))).toBe(false);
+  });
+
   test('init definitions takes a package of any name', () => {
     const project = aProject({
       'package.json': JSON.stringify({ name: '@acme/orders_service', type: 'module' }),
@@ -412,7 +423,7 @@ describe('cf-loom: an option whose value is another option', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: `--prefix takes a prefix in kebab-case, such as staging. ${usage}\n`,
+      stderr: `--prefix takes a prefix in kebab-case of at most 64 characters, such as staging. ${usage}\n`,
     });
   });
 });

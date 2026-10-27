@@ -727,7 +727,7 @@ describe('cf-loom asyncapi: what it refuses', () => {
     expect(refused).toEqual({
       status: 3,
       stdout: '',
-      stderr: `--prefix takes a prefix in kebab-case, such as staging. ${usage}\n`,
+      stderr: `--prefix takes a prefix in kebab-case of at most 64 characters, such as staging. ${usage}\n`,
     });
   });
 
