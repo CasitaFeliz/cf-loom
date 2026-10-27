@@ -15,19 +15,9 @@ export function camelCaseOfCode(code: string): string {
   return [first, ...rest.map(laterWordOf)].join('');
 }
 
-/**
- * The camelCase of a name's alphanumeric words, as code names it: `order-locked` is
- * `orderLocked`, and `Tree Node` is `treeNode`.
- */
-export function camelCaseOf(name: string): string {
-  const words = name.split(/[^A-Za-z0-9]+/).filter((word) => word !== '');
-  const [first = '', ...rest] = words;
-  return [lowerFirst(first), ...rest.map(upperFirst)].join('');
-}
-
 /** A Message's name as files are named: `ChargeCard` is `charge-card`. */
 export function messageFileNameOf(name: string): string {
-  return kebabCaseOf(camelCaseOf(name));
+  return kebabCaseOf(lowerFirst(name));
 }
 
 /** A Message Version's file name stem, `order-created.v2`, as README's Layout names its files. */

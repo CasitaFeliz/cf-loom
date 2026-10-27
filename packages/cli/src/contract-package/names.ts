@@ -1,10 +1,5 @@
-import { kebabCaseOf } from '@cf-loom/contract/internal';
-import {
-  camelCaseOf,
-  camelCaseOfCode,
-  kebabCaseOfCode,
-  messageVersionStemOf,
-} from '../source-text/index.ts';
+import { codeNameOf, kebabCaseOf } from '@cf-loom/contract/internal';
+import { camelCaseOfCode, kebabCaseOfCode, messageVersionStemOf } from '../source-text/index.ts';
 import type { Sibling } from './modules.ts';
 import { declaredFolders, packagePaths } from './paths.ts';
 
@@ -37,7 +32,7 @@ export function fileOf(declared: PackagedDeclaration): string {
 }
 
 /**
- * The name a declaration is exported under, suffixed by its kind as every generated name is,
+ * The name a declaration is exported under, with the word of its kind as every generated name has,
  * so names of different kinds never meet: `ORDER_LOCKED` is `orderLockedRejection`.
  */
 export function bindingOf(declared: PackagedDeclaration): string {
@@ -49,7 +44,7 @@ export function bindingOf(declared: PackagedDeclaration): string {
     case 'rejection':
       return `${camelCaseOfCode(declared.code)}Rejection`;
     case 'event':
-      return `${camelCaseOf(declared.name)}EventV${declared.version}`;
+      return codeNameOf(declared, 'Event');
   }
 }
 
