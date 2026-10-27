@@ -31,22 +31,34 @@ export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonl
  * through other defs; a def is added once.
  */
 export function nodesReachedFrom(nodes: readonly SchemaNode[], defs: Defs): readonly SchemaNode[] {
+  const reached: SchemaNode[] = [];
   const entered = new Set<string>();
-  function enter(name: string): readonly SchemaNode[] {
-    const def = defs[name];
-    if (def === undefined || entered.has(name)) {
-      return [];
+  const pending: Pending[] = nodes.map((node) => ({ node })).toReversed();
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if ('node' in next) {
+      const within = nodesWithin(next.node).map((inner) => inner.node);
+      for (const node of within) {
+        reached.push(node);
+      }
+      for (const ref of within.filter(isRef).toReversed()) {
+        pending.push({ name: ref.name });
+      }
+      continue;
     }
-    entered.add(name);
-    return reachedFrom(def);
+    const def = defs[next.name];
+    if (def !== undefined && !entered.has(next.name)) {
+      entered.add(next.name);
+      pending.push({ node: def });
+    }
   }
-  function reachedFrom(node: SchemaNode): readonly SchemaNode[] {
-    const within = nodesWithin(node).map((inner) => inner.node);
-    const names = within.filter(isRef);
-    return [...within, ...names.flatMap((ref) => enter(ref.name))];
-  }
-  return nodes.flatMap(reachedFrom);
+  return reached;
 }
+
+/**
+ * What `nodesReachedFrom` has still to read, last first: a node, whose nodes it adds before the
+ * defs they reach, or the name of a def it enters once.
+ */
+type Pending = { readonly node: SchemaNode } | { readonly name: string };
 
 /**
  * The def names the nodes reference through `ref`s, directly or through the defs those name, each
