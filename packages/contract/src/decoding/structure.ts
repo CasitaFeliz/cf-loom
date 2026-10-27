@@ -5,7 +5,7 @@ import { publishedCommand, publishedEndpoint, publishedEvent } from './elements.
 import { byKey, inCanonicalOrder } from './maps.ts';
 import { objectNode, schemaNode } from './nodes.ts';
 import { semanticVersionText } from './texts.ts';
-import { declaredOrTombstone } from './tombstones.ts';
+import { declaredOrRemoved, declaredOrTombstone } from './tombstones.ts';
 
 const text = z.string();
 const codeList = inCanonicalOrder(text, byCodePoint);
@@ -32,15 +32,25 @@ export const def = schemaNode.refine((node) => node.nullable !== true, {
   message: 'is nullable: a def is written plain, and each ref to it carries nullable',
 });
 
-/** Format 1's code, in a published Snapshot and in an exported one. */
-export const code = z.strictObject({
+const codeFields = {
   origin: text,
   status: z.number(),
   message: text,
   headers: objectNode,
   body: schemaNode.nullable(),
-  removedIn: semanticVersionText.exactOptional(),
+};
+
+/** Format 1's declared code, in a published Snapshot and in an exported one. */
+export const code = z.strictObject(codeFields);
+
+/** Format 1's removed code: what it last had, with `removedIn` and the defs its `ref`s name. */
+const removedCode = z.strictObject({
+  ...codeFields,
+  removedIn: semanticVersionText,
+  defs: byKey(def),
 });
+
+const publishedCode = declaredOrRemoved(code, removedCode);
 
 const subscription = declaredOrTombstone(
   z.strictObject({ group: text, description: text, event: text }),
@@ -74,7 +84,7 @@ const service = z.strictObject({
   events: byKey(publishedEvent),
   commands: byKey(publishedCommand),
   guards: byKey(guard),
-  codes: byKey(code),
+  codes: byKey(publishedCode),
   subscriptions: byKey(subscription),
   dependencies,
 });
@@ -94,7 +104,7 @@ const definitions = z.strictObject({
   defs: byKey(def),
   exports: byKey(exported),
   guards: byKey(guard),
-  codes: byKey(code),
+  codes: byKey(publishedCode),
 });
 
 /** Format 1's structure of a published Snapshot by its kind: every key and value is closed. */

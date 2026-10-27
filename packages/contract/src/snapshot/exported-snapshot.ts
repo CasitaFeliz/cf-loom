@@ -1,5 +1,5 @@
 import { isLive } from '../declarations/index.ts';
-import { reachedDefsOf } from '../walker/index.ts';
+import { defsReachedOf } from '../walker/index.ts';
 import { type EndpointPath, endpointPathOf, matchedOf, sharedUrlOf } from '../wire/index.ts';
 import { reachedCodesOf } from '../written/index.ts';
 import { codeNodesOf, endpointNodesOf, guardNodesOf } from './nodes.ts';
@@ -78,7 +78,7 @@ function cutOf(
   const reachedCodes = reachedCodesOf(
     { endpoints: keptEndpoints, guards: Object.values(guards) },
     {
-      ownCodesOf: (endpoint) => declaredCodesOf(ownRejectionsOf(endpoint, snapshot)),
+      ownCodesOf: (endpoint) => listedCodesOf(ownRejectionsOf(endpoint, snapshot)),
       answeredBy: ({ rejections }) => rejections,
     },
   );
@@ -89,7 +89,7 @@ function cutOf(
     ...Object.values(guards).flatMap(guardNodesOf),
     ...Object.values(codes).flatMap(codeNodesOf),
   ];
-  const defs = keptOf(snapshot.defs, new Set(reachedDefsOf(nodes, snapshot.defs)));
+  const defs = defsReachedOf(nodes, snapshot.defs);
   return { format: snapshot.format, defs, endpoints, events, guards, codes };
 }
 
@@ -150,7 +150,7 @@ function isKeyedExported<Declared extends Exportable>(
 }
 
 /** The codes an Endpoint lists itself, the Standard not-found Rejection left out. */
-function declaredCodesOf(listed: readonly ListedRejection[]): readonly string[] {
+function listedCodesOf(listed: readonly ListedRejection[]): readonly string[] {
   return listed.filter(isDeclaredRejection).map(({ code }) => code);
 }
 
