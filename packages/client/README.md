@@ -24,7 +24,7 @@ switch (outcome.kind) {
   case 'unknown-rejection':
     throw new Error(`${outcome.code}: ${outcome.message}`);
   case 'fault':
-    if (outcome.committed === 'no' && outcome.retryable) return retry();
+    if (outcome.committed === 'no' && outcome.retryable) return null;   // retried as Retrying shows
     throw new Error(`payments-service failed: ${outcome.source}`);
 }
 ```
@@ -57,7 +57,72 @@ A Success whose JSON body or headers fail their Reader schemas, a body nested to
 
 A Rejection Outcome (`kind: 'rejection'`) carries `source`, `code`, `status`, `message`, and `headers` and `body` where its code declares them. `code` is one of the codes the Endpoint answers, a Standard one the Provider's, `status` is the one received, and `headers` and `body` have their declared types, absent for a code that declares none, whatever arrived. `source` is `'provider'`, or `'client'` for the invalid-input Rejection the client answered without sending. A `switch` on `code` narrows `headers` and `body` and is exhaustive. A code the Endpoint does not answer is its own kind, `unknown-rejection`, with `source: 'provider'`, the raw `code`, `status`, `message` and `body` unvalidated, present when one was sent; codes are open, so a Caller handles it. The invalid-input Rejection's body is read with the Reader of the Provider's Contract Package, the Rejection the client makes without sending included, with its `in` and `code` as Open Enums, so a part or issue code the Provider's cf-loom does not know arrives as `{ unknown }`.
 
-A Fault Outcome carries `source`, where it came from, `committed`, `retryable`, `message`, `status` whenever a response arrived, the reserved `code` when there is one, `retryAfter`, the `Retry-After` header as received, on a Fault the Provider sent or the client inferred from a response that carried one, `cause`, the error `fetch` threw, the stream failed with or the signal was aborted with, and `issues` on an `INVALID_OUTCOME` the client produced. `source` is `provider` for a Fault the Provider sent, `invalid-outcome` for an `INVALID_OUTCOME`, and else what the client met: `aborted`, `timeout`, `no-connection`, `connection-lost`, `connection-failed`, `status` or `unreadable-body` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). A Fault code that is not reserved is dropped. A Caller may retry on its own only when `committed === 'no' && retryable`: nothing happened, and the same request could succeed later (see [Fault](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md). cf-loom requires no idempotency; the pattern for it is a Guard in a Definitions Package that demands an `idempotency-key` header, whose Service stores each key with its Success and replays it. A Caller of such an Endpoint may retry whenever `committed !== 'yes' && retryable`, with the same key. A Caller's own abort is never retryable, so neither rule retries a cancelled call.
+A Fault Outcome carries `source`, where it came from, `committed`, `retryable`, `message`, `status` whenever a response arrived, the reserved `code` when there is one, `retryAfter`, the `Retry-After` header as received, on a Fault the Provider sent or the client inferred from a response that carried one, `cause`, the error `fetch` threw, the stream failed with or the signal was aborted with, and `issues` on an `INVALID_OUTCOME` the client produced. `source` is `provider` for a Fault the Provider sent, `invalid-outcome` for an `INVALID_OUTCOME`, and else what the client met: `aborted`, `timeout`, `no-connection`, `connection-lost`, `connection-failed`, `status` or `unreadable-body` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). A Fault code that is not reserved is dropped. Whether to send the call again is the Caller's to decide (see [Retrying](#retrying)).
+
+### Retrying
+
+Only a Fault is ever retried: a Success and a Rejection, an Unknown Rejection included, are answers. A Caller decides by two fields of the Fault (see [Fault](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md):
+
+- `committed === 'no' && retryable`: nothing happened, and the same request could succeed later.
+- `committed !== 'yes' && retryable`, for a call sent again with the same idempotency key: the first attempt may have happened, and the Provider replays its Success instead of doing it twice. cf-loom requires no idempotency; the pattern for it is a Guard in a Definitions Package that demands an `idempotency-key` header, whose Service stores each key with its Success and replays it.
+
+Without a key, a call that timed out after the request was sent is never retried: its Fault is `committed: 'unknown'`. A Caller's own abort is never retryable, so neither rule retries a cancelled call.
+
+The Faults the client infers from what it met are in the table in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http). In Node, a refused connection, a timeout before the request was sent and a 429 are `committed: 'no'`, `retryable: true`, so both rules retry them; a timeout after it was sent, a lost connection and a 503 are `committed: 'unknown'`, `retryable: true`, so only a call with a key retries them. In a browser every network failure is `connection-failed`, `committed: 'unknown'`, `retryable: false`, so neither rule retries one until `inferFault` relaxes it (see [In a browser](#in-a-browser-applications)). `retryAfter` is the `Retry-After` header as received, a string of whole seconds or an HTTP date.
+
+The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the examples leave out their imports and the Service's Resources type, as [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) says):
+
+```ts
+// definitions/src/definitions/guards/idempotency-key.guard.ts
+export const idempotencyKey = defineGuard({
+  name: 'idempotencyKey',
+  description: 'The key of one attempt to do a thing, sent again with each retry of it',
+  demands: { headers: z.object({ 'idempotency-key': z.string().min(1) }) },
+  context: z.object({ key: z.string() }),
+});
+
+// src/guards/idempotency-key.handler.ts
+export default handle(idempotencyKey, ({ headers }) => admit({ key: headers['idempotency-key'] }));
+
+// src/endpoints/payments/create-payment.handler.ts
+export default handle(
+  createPayment,
+  async ({ body }, { context }, { resources: { payments } }: Needs<'payments'>) => {
+    const { key } = context.idempotencyKey;
+    const done = await payments.byKey(key);
+    if (done) return success(done);   // the first attempt happened: the same Success again
+    const payment = await payments.create(key, body.amount);
+    return success(payment);
+  },
+);
+```
+
+The Caller makes one key per payment, sends it with every attempt, waits as long as `retryAfter` says and stops after three attempts:
+
+```ts
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Retry-After as received, whole seconds or an HTTP date, in milliseconds; a second without it
+function delayOf(retryAfter: string | undefined): number {
+  if (retryAfter === undefined) return 1000;
+  if (/^\d+$/.test(retryAfter)) return Number(retryAfter) * 1000;
+  return Math.max(0, Date.parse(retryAfter) - Date.now());
+}
+
+async function pay(amount: number) {
+  const key = crypto.randomUUID();   // the same on every attempt at this payment
+  for (let attempt = 1; ; attempt += 1) {
+    const outcome = await payments.createPayment({
+      headers: { 'idempotency-key': key },
+      body: { amount },
+    });
+    if (outcome.kind !== 'fault') return outcome;
+    const mayRetry = outcome.committed !== 'yes' && outcome.retryable;   // the key makes 'unknown' safe
+    if (!mayRetry || attempt === 3) return outcome;                      // at most three attempts
+    await pause(delayOf(outcome.retryAfter));
+  }
+}
+```
 
 ### fetch and inferFault
 
@@ -92,6 +157,7 @@ const orders = client(ordersDependency, {
 - **Cookies through `credentials`.** No Contract declares a header the browser owns, such as `cookie` or `origin`, or `set-cookie`, which a browser never exposes (see [Groups](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#groups) in the contract README). The browser sends and stores cookies itself, cross-origin when the `fetch` option asks for `credentials`, as above.
 - **Public Endpoints only.** An Application's Dependency lists Public Endpoints only, since an Application runs outside the internal network; any other is a type error (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README).
 - **CORS is the host's or the gateway's.** The client sets no CORS header and `serve` adds none to an Endpoint's own response; whatever wraps the handler `serve` returns, or the organization's gateway, does. A header such as `x-api-key` makes the browser send a preflight `OPTIONS` first, which `serve` answers `METHOD_NOT_ALLOWED`, or `NO_SUCH_ENDPOINT` on a path no Endpoint declares, unless the Service's `fallback`, the host or the gateway answers it (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README and [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md).
+- **The declared response headers are exposed.** A browser hides from the client every response header the CORS safelist leaves out, unless the response names it in `Access-Control-Expose-Headers`. A hidden header an Endpoint's Success or Rejection requires fails the Outcome as `INVALID_OUTCOME` (see [What a call receives](#what-a-call-receives)), and a hidden optional one reads as absent, with no error. `Deprecation` and `Retry-After` are hidden the same way, so a Deprecated Endpoint tells nobody and a Fault has no `retryAfter`. The host or the gateway exposes every header the listed Endpoints' Successes and Rejections declare, which `cf-loom openapi` lists under each response, and `Deprecation` and `Retry-After`; with `credentials` it names each of them, since `*` then exposes none.
 - **A network failure is not retryable.** A browser reports a refused connection, a DNS failure and a request blocked by CORS alike as a bare `TypeError`, which tells nothing about whether the request went out, so the client infers `connection-failed`: `committed: 'unknown'`, `retryable: false` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). An organization that knows its network relaxes that with `inferFault`.
 
 ## Types
