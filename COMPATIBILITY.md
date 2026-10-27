@@ -15,7 +15,7 @@ How a Contract or a Definitions Package may change. Terms are defined in [CONTEX
 
 ### The Baseline
 
-- The Baseline is the highest published version of the package, a prerelease (`2.0.0-rc.1`) included, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. Its history, the tombstones with their `retiredIn` and the removed codes and Subscriptions, is merged into every publish. `check --against <version|dist-tag>` compares with another version the package lists instead; `publish` takes no `--against`, since every publish goes on the newest major and merges the history of the highest version. There is no publishing on an older major. The version a publish takes is derived as [Versioning](#versioning) says.
+- The Baseline is the highest published version of the package, a prerelease (`2.0.0-rc.1`) included, read from the package's list of versions: never from the `latest` tag, and never from a file in the repository. Its history, the tombstones with their `retiredIn`, the removed codes and Subscriptions, and the former Inputs of its Endpoints, is merged into every publish. `check --against <version|dist-tag>` compares with another version the package lists instead; `publish` takes no `--against`, since every publish goes on the newest major and merges the history of the highest version. There is no publishing on an older major. The version a publish takes is derived as [Versioning](#versioning) says.
 
 ## Versioning
 
@@ -75,6 +75,8 @@ Readers of a Read shape (the headers and body of a Success or a Rejection, or a 
 | Change a type (object ↔ record and array ↔ tuple included) | Breaking | Breaking | Breaking |
 | Add nullability | Additive | Breaking | Breaking |
 | Remove nullability | Breaking | Additive | Breaking |
+
+Removing an Input field is Additive only because the Service ignores what Callers built before the removal still send, and the Baseline then no longer says what that is. So a publish that removes a field from an Endpoint's query or body keeps the Baseline's query and body as a former Input of the Endpoint, with the defs they reached (see [Former Inputs](SNAPSHOT.md#former-inputs) in SNAPSHOT.md). Every later check compares each former Input with the Endpoint's query and body as a kept Endpoint's are, read as Input, and reports what is Breaking against it, once, naming the version that removed the field: `note: number` removed in one version and declared again as `note: string` in a later one is Breaking, `note: number` again is only a field added. A former Input stays while the Endpoint still lacks a field of it and declares nothing Breaking against it: it is forgotten once the Endpoint declares every field it had again, since the Baseline then stands for its Callers, once a publish is Breaking against it, since that break was approved, or once the Endpoint is Retired. A former Input keeps both parts though only one lost a field, since its Callers send both. Input headers are not kept: an optional one added again follows the header rule (see [Headers, path and query](#headers-path-and-query)); a removed Input body declared again is Breaking already (see [Bodies, Success status and headers](#bodies-success-status-and-headers)).
 
 ### Enums, literals and unions
 

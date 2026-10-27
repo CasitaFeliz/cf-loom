@@ -242,6 +242,10 @@ _Avoid_: schema dump, manifest
 The Snapshot of the highest published version of a Contract Package or Definitions Package, a prerelease included, against which every proposed change is judged.
 _Avoid_: previous snapshot, reference
 
+**Former Input**:
+An Endpoint's query and body as a published version declared them, kept in the published Snapshot once a later version removed a field from them, with the defs they reached, because Callers built on that version still send them; the Compatibility Check compares what the Endpoint declares with each. Forgotten once the Endpoint declares every field it had again, once a publish is Breaking against it, or once the Endpoint is Retired.
+_Avoid_: previous Input, input history, old shape, removed Input (the body a Caller no longer sends is removed; a former Input is kept)
+
 **Reader schema**:
 A schema generated from a Snapshot for whoever reads the headers and body of a Success or a Rejection, or a Message body: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
