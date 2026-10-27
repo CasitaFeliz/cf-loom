@@ -271,11 +271,12 @@ function readmePay(fetch: (request: Request) => Promise<Response>) {
 
   const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  /** `Retry-After` as received, whole seconds or an HTTP date, in milliseconds; a second without it. */
+  /** `Retry-After` as received, whole seconds or an HTTP date, in milliseconds; a second without a usable one. */
   function delayOf(retryAfter: string | undefined): number {
     if (retryAfter === undefined) return 1000;
     if (/^\d+$/.test(retryAfter)) return Number(retryAfter) * 1000;
-    return Math.max(0, Date.parse(retryAfter) - Date.now());
+    const until = Date.parse(retryAfter) - Date.now();
+    return Number.isNaN(until) ? 1000 : Math.max(0, until);
   }
 
   async function pay(amount: number) {
@@ -392,6 +393,28 @@ describe('the README’s Retrying', () => {
 
     const paying = pay(120);
     await vi.advanceTimersByTimeAsync(9_999);
+    const sentBefore = sent;
+    await vi.advanceTimersByTimeAsync(1);
+    const outcome = await paying;
+
+    expect(sentBefore).toBe(1);
+    expect(outcome).toMatchObject({ kind: 'success', status: 201 });
+  });
+
+  test('a Caller waits a second when Retry-After is neither seconds nor a date', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const provider = providerOf();
+    let sent = 0;
+    const busyOnce = async (request: Request) => {
+      sent += 1;
+      if (sent > 1) return provider.http(request);
+      const busy = { fault: { committed: 'no', retryable: true, message: 'Busy' } };
+      return Response.json(busy, { status: 503, headers: { 'retry-after': 'soon' } });
+    };
+    const { pay } = readmePay(busyOnce);
+
+    const paying = pay(120);
+    await vi.advanceTimersByTimeAsync(999);
     const sentBefore = sent;
     await vi.advanceTimersByTimeAsync(1);
     const outcome = await paying;

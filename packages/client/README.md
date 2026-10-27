@@ -68,7 +68,7 @@ Only a Fault is ever retried: a Success and a Rejection, an Unknown Rejection in
 
 Without a key, a call that timed out after the request was sent is never retried: its Fault is `committed: 'unknown'`. A Caller's own abort is never retryable, so neither rule retries a cancelled call.
 
-The Faults the client infers from what it met are in the table in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http). In Node, a refused connection, a timeout before the request was sent and a 429 are `committed: 'no'`, `retryable: true`, so both rules retry them; a timeout after it was sent, a lost connection and a 503 are `committed: 'unknown'`, `retryable: true`, so only a call with a key retries them. In a browser every network failure is `connection-failed`, `committed: 'unknown'`, `retryable: false`, so neither rule retries one until `inferFault` relaxes it (see [In a browser](#in-a-browser-applications)). `retryAfter` is the `Retry-After` header as received, a string of whole seconds or an HTTP date.
+The Faults the client infers from what it met are in the table in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http), and hold wherever `fetch` runs. A 429 and a timeout before the request was sent are `committed: 'no'`, `retryable: true`, so both rules retry them; a 503 and a timeout after it was sent are `committed: 'unknown'`, `retryable: true`, so only a call with a key retries them. What differs is the `TypeError` `fetch` throws for a network failure. Node's carries a `cause.code`: a refused connection is `no-connection`, retried by both rules, and a lost one `connection-lost`, retried only with a key. A browser's is a bare `TypeError`, `connection-failed`: `committed: 'unknown'`, `retryable: false`, so neither rule retries it until `inferFault` relaxes it (see [In a browser](#in-a-browser-applications)). `retryAfter` is the `Retry-After` header as received, a string of whole seconds or an HTTP date.
 
 The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the examples leave out their imports and the Service's Resources type, as [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) says):
 
@@ -79,6 +79,18 @@ export const idempotencyKey = defineGuard({
   description: 'The key of one attempt to do a thing, sent again with each retry of it',
   demands: { headers: z.object({ 'idempotency-key': z.string().min(1) }) },
   context: z.object({ key: z.string() }),
+});
+
+// src/contract/endpoints/payments/create-payment.endpoint.ts
+export const createPayment = defineEndpoint({
+  name: 'createPayment',
+  method: 'POST',
+  path: '/payments',
+  visibility: 'public',
+  description: 'A new payment',
+  guards: [idempotencyKey],
+  input: { body: z.object({ amount: z.int() }) },
+  success: { status: 201, body: z.object({ id: z.string(), amount: z.int() }) },
 });
 
 // src/guards/idempotency-key.handler.ts
@@ -97,16 +109,17 @@ export default handle(
 );
 ```
 
-The Caller makes one key per payment, sends it with every attempt, waits as long as `retryAfter` says and stops after three attempts:
+The Caller's Dependency lists `createPaymentEndpoint` from the Provider's Contract Package beside `getPaymentEndpoint`, so its client has `createPayment`. It makes one key per payment, sends it with every attempt, waits as long as `retryAfter` says and stops after three attempts:
 
 ```ts
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Retry-After as received, whole seconds or an HTTP date, in milliseconds; a second without it
+// Retry-After as received, whole seconds or an HTTP date, in milliseconds; a second without a usable one
 function delayOf(retryAfter: string | undefined): number {
   if (retryAfter === undefined) return 1000;
   if (/^\d+$/.test(retryAfter)) return Number(retryAfter) * 1000;
-  return Math.max(0, Date.parse(retryAfter) - Date.now());
+  const until = Date.parse(retryAfter) - Date.now();
+  return Number.isNaN(until) ? 1000 : Math.max(0, until);
 }
 
 async function pay(amount: number) {
@@ -123,6 +136,8 @@ async function pay(amount: number) {
   }
 }
 ```
+
+`delayOf` takes `Retry-After` at its word. A Caller that cannot wait as long as a Provider asks bounds the wait itself, as in `Math.min(delayOf(outcome.retryAfter), limit)`, or stops retrying.
 
 ### fetch and inferFault
 
@@ -157,7 +172,7 @@ const orders = client(ordersDependency, {
 - **Cookies through `credentials`.** No Contract declares a header the browser owns, such as `cookie` or `origin`, or `set-cookie`, which a browser never exposes (see [Groups](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#groups) in the contract README). The browser sends and stores cookies itself, cross-origin when the `fetch` option asks for `credentials`, as above.
 - **Public Endpoints only.** An Application's Dependency lists Public Endpoints only, since an Application runs outside the internal network; any other is a type error (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README).
 - **CORS is the host's or the gateway's.** The client sets no CORS header and `serve` adds none to an Endpoint's own response; whatever wraps the handler `serve` returns, or the organization's gateway, does. A header such as `x-api-key` makes the browser send a preflight `OPTIONS` first, which `serve` answers `METHOD_NOT_ALLOWED`, or `NO_SUCH_ENDPOINT` on a path no Endpoint declares, unless the Service's `fallback`, the host or the gateway answers it (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README and [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md).
-- **The declared response headers are exposed.** A browser hides from the client every response header the CORS safelist leaves out, unless the response names it in `Access-Control-Expose-Headers`. A hidden header an Endpoint's Success or Rejection requires fails the Outcome as `INVALID_OUTCOME` (see [What a call receives](#what-a-call-receives)), and a hidden optional one reads as absent, with no error. `Deprecation` and `Retry-After` are hidden the same way, so a Deprecated Endpoint tells nobody and a Fault has no `retryAfter`. The host or the gateway exposes every header the listed Endpoints' Successes and Rejections declare, which `cf-loom openapi` lists under each response, and `Deprecation` and `Retry-After`; with `credentials` it names each of them, since `*` then exposes none.
+- **The declared response headers are exposed.** A cross-origin response hides from the client every header the CORS safelist leaves out, unless it names the header in `Access-Control-Expose-Headers`. A hidden header an Endpoint's Success or Rejection requires fails the Outcome as `INVALID_OUTCOME` (see [What a call receives](#what-a-call-receives)), and a hidden optional one reads as absent, with no error. `Deprecation` and `Retry-After` are hidden the same way, so a Deprecated Endpoint tells nobody and a Fault has no `retryAfter`. The host or the gateway exposes every header the listed Endpoints' Successes and Rejections declare, which `cf-loom openapi` lists under each response, and `Deprecation` and `Retry-After`; with `credentials` it names each of them, since `*` then exposes none.
 - **A network failure is not retryable.** A browser reports a refused connection, a DNS failure and a request blocked by CORS alike as a bare `TypeError`, which tells nothing about whether the request went out, so the client infers `connection-failed`: `committed: 'unknown'`, `retryable: false` (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http)). An organization that knows its network relaxes that with `inferFault`.
 
 ## Types
