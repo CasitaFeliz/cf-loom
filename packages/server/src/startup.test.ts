@@ -78,7 +78,7 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, other: handlers.endpoints.getOrder },
     };
 
-    const http = serve(contract, extra);
+    const http = serve(contract, extra, {});
 
     expect(typeof http).toBe('function');
   });
@@ -86,7 +86,7 @@ describe('serve: what it checks before the first request', () => {
   test('a Root that is no Service’s Contract throws', () => {
     const application = defineApplication({ name: 'web-admin', dependencies: [] });
 
-    const serving = () => serve(application as never, handlers);
+    const serving = () => serve(application as never, handlers, {});
 
     expect(serving).toThrow("serve() takes a Service's Contract declared with defineService");
   });
@@ -95,7 +95,7 @@ describe('serve: what it checks before the first request', () => {
     const missing = { ...handlers, endpoints: { getOrder: handlers.endpoints.getOrder } };
 
     // @ts-expect-error findOrder has no Handler
-    const serving = () => serve(contract, missing);
+    const serving = () => serve(contract, missing, {});
 
     expect(serving).toThrow(
       'endpoints.findOrder has no Handler in the Handler map: run cf-loom generate',
@@ -109,7 +109,7 @@ describe('serve: what it checks before the first request', () => {
     };
 
     // @ts-expect-error findOrder holds the Handler of getOrder
-    const serving = () => serve(contract, swapped);
+    const serving = () => serve(contract, swapped, {});
 
     expect(serving).toThrow('endpoints.findOrder holds the Handler written for getOrder');
   });
@@ -119,7 +119,7 @@ describe('serve: what it checks before the first request', () => {
     const forged = { ...handlers, endpoints: { ...handlers.endpoints, findOrder: lookalike } };
 
     // @ts-expect-error a wrapper is no Handler handle() returned
-    const serving = () => serve(contract, forged);
+    const serving = () => serve(contract, forged, {});
 
     expect(serving).toThrow(
       'endpoints.findOrder holds a value handle() did not return: wrap inside the implementation instead',
@@ -142,7 +142,7 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, findOrder: handle(copy, () => success()) },
     };
 
-    const serving = () => serve(contract, copied);
+    const serving = () => serve(contract, copied, {});
 
     expect(serving).toThrow(
       'endpoints.findOrder holds a Handler written for another copy of findOrder: is @cf-loom/contract or the Contract loaded twice?',
@@ -153,7 +153,7 @@ describe('serve: what it checks before the first request', () => {
     const missing = { ...handlers, guards: {} };
 
     // @ts-expect-error apiKey has no Handler
-    const serving = () => serve(contract, missing);
+    const serving = () => serve(contract, missing, {});
 
     expect(serving).toThrow(
       'guards.apiKey has no Handler in the Handler map: run cf-loom generate',
@@ -209,10 +209,14 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withOdd, {
-        endpoints: { odd: handle(odd, () => success()) },
-        guards: {},
-      });
+      serve(
+        withOdd,
+        {
+          endpoints: { odd: handle(odd, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
     expect(serving).toThrow(` ${rule}: `);
   });
@@ -239,7 +243,7 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} });
+      serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} }, {});
 
     expect(serving).toThrow(' header-names: ');
   });
@@ -266,18 +270,23 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withListed, {
-        endpoints: { listed: handle(listed, () => success()) },
-        guards: { tenant: handle(tenant, () => admit()) },
-      });
+      serve(
+        withListed,
+        {
+          endpoints: { listed: handle(listed, () => success()) },
+          guards: { tenant: handle(tenant, () => admit()) },
+        },
+        {},
+      );
 
     expect(serving).toThrow(' input-conflict: ');
   });
 
   test('a Handler the map only inherits is no Handler', () => {
-    const inherited = { ...handlers, endpoints: Object.create(handlers.endpoints) };
+    const inheriting: typeof handlers.endpoints = Object.create(handlers.endpoints);
+    const inherited = { ...handlers, endpoints: inheriting };
 
-    const serving = () => serve(contract, inherited);
+    const serving = () => serve(contract, inherited, {});
 
     expect(serving).toThrow(
       'endpoints.getOrder has no Handler in the Handler map: run cf-loom generate',
@@ -288,7 +297,7 @@ describe('serve: what it checks before the first request', () => {
     const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit()) } };
 
     // @ts-expect-error apiKey holds the Handler of legacyKey
-    const serving = () => serve(contract, swapped);
+    const serving = () => serve(contract, swapped, {});
 
     expect(serving).toThrow('guards.apiKey holds the Handler written for legacyKey');
   });
@@ -309,10 +318,14 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withLookup, {
-        endpoints: { lookup: handle(lookup, () => success()) },
-        guards: {},
-      });
+      serve(
+        withLookup,
+        {
+          endpoints: { lookup: handle(lookup, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
     expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-a-schema');
   });
@@ -333,10 +346,14 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withSince, {
-        endpoints: { since: handle(since, () => success()) },
-        guards: {},
-      });
+      serve(
+        withSince,
+        {
+          endpoints: { since: handle(since, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
     expect(serving).toThrow('endpoints.GET /since (since) input.query.at not allowed: z.date()');
   });
@@ -357,10 +374,14 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withLookup, {
-        endpoints: { lookup: handle(lookup, () => success()) },
-        guards: {},
-      });
+      serve(
+        withLookup,
+        {
+          endpoints: { lookup: handle(lookup, () => success()) },
+          guards: {},
+        },
+        {},
+      );
 
     expect(serving).toThrow('endpoints.GET /lookup (lookup) input.query not-an-object-schema');
   });

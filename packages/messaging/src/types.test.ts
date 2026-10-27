@@ -7,7 +7,14 @@ import {
   defineSubscription,
   openEnum,
 } from '@cf-loom/contract';
-import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
+import {
+  type HandledBy,
+  type HandlerMapOf,
+  handle,
+  type NoResources,
+  readersOf,
+  type WithResources,
+} from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -289,14 +296,14 @@ describe('publish and send types', () => {
 
   test('publish without a Fact id is a type error', () => {
     // @ts-expect-error: every call takes a Fact id
-    const publishing = () => publisher.publish('OrderCreated', { v2, v3 });
+    const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, {});
 
     expect(publishing).toBeTypeOf('function');
   });
 
   test('send without a Fact id is a type error', () => {
     // @ts-expect-error: every call takes a Fact id
-    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 });
+    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, {});
 
     expect(sending).toBeTypeOf('function');
   });
@@ -334,7 +341,7 @@ describe('publish and send types', () => {
   test('consume takes the Handler map; onServiceFault receives a ConsumedFault', () => {
     const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
     const consuming = () =>
-      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers });
+      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers }, {});
 
     expectTypeOf<
       Parameters<NonNullable<MessagingOptions['onServiceFault']>>[0]
@@ -372,11 +379,14 @@ describe('publish and send types', () => {
     const { shipV2: _shipV2, ...withoutShipV2 } = commands;
 
     const consuming = () => [
-      // @ts-expect-error shipV2 has no Handler
-      consume({ commands: withoutShipV2, subscriptions: { notifyOnCreated: notifying }, readers }),
+      consume(
+        // @ts-expect-error shipV2 has no Handler
+        { commands: withoutShipV2, subscriptions: { notifyOnCreated: notifying }, readers },
+        {},
+      ),
       // @ts-expect-error notifyOnCreated has no Handler
-      consume({ commands, subscriptions: {}, readers }),
-      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers }),
+      consume({ commands, subscriptions: {}, readers }, {}),
+      consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers }, {}),
     ];
 
     expect(consuming).toBeTypeOf('function');
@@ -396,7 +406,7 @@ describe('publish and send types', () => {
     const consuming = () => [
       consume(handlers, { resources }),
       // @ts-expect-error the Handler takes notifications
-      consume(handlers),
+      consume(handlers, {}),
       // @ts-expect-error the Handler takes notifications
       consume(handlers, { resources: {} }),
     ];
@@ -404,14 +414,103 @@ describe('publish and send types', () => {
     expect(consuming).toBeTypeOf('function');
   });
 
-  test('consume takes no options when no Message Handler takes Resources', () => {
+  test('consume takes a map annotated HandlerMapOf with the Resources, and refuses one annotated without them or with never', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      readers.subscriptions.notifyOnCreated,
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const typed: HandlerMapOf<typeof contract, Notifications> = {
+      endpoints: {},
+      guards: {},
+      commands,
+      subscriptions: { notifyOnCreated: notifying },
+      readers,
+    };
+    const annotated: HandlerMapOf<typeof contract> = typed;
+    const neverMap: HandlerMapOf<typeof contract, never> = typed;
+    const resources: Notifications = { notifications: { send: () => undefined } };
+
+    const consuming = () => [
+      consume(typed, { resources }),
+      // @ts-expect-error the Handlers take the Service's Resources
+      consume(typed, {}),
+      // @ts-expect-error the Handlers take the Service's Resources, notifications among them
+      consume(typed, { resources: {} }),
+      // @ts-expect-error the annotation leaves the Resources unspecified
+      consume(annotated, {}),
+      // @ts-expect-error the annotation leaves the Resources unspecified
+      consume(annotated, { resources }),
+      // @ts-expect-error the annotation leaves the Resources unspecified
+      consume(neverMap, {}),
+      // @ts-expect-error the annotation leaves the Resources unspecified
+      consume(neverMap, { resources }),
+    ];
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('a Subscription typed by its brand alone is refused, in a map annotated with the Resources or inferred', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      readers.subscriptions.notifyOnCreated,
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const bare: HandledBy<typeof readers.subscriptions.notifyOnCreated.element> = notifying;
+    const bareNever: HandledBy<typeof readers.subscriptions.notifyOnCreated.element, never> =
+      notifying;
+    const inferred = { commands, subscriptions: { notifyOnCreated: bare }, readers };
+    const inferredNever = { commands, subscriptions: { notifyOnCreated: bareNever }, readers };
+    const resources: Notifications = { notifications: { send: () => undefined } };
+
+    const annotated = (): HandlerMapOf<typeof contract, Notifications> => ({
+      endpoints: {},
+      guards: {},
+      commands,
+      // @ts-expect-error the brand alone hides what notifyOnCreated takes
+      subscriptions: { notifyOnCreated: bare },
+      readers,
+    });
+    const consuming = () => [
+      // @ts-expect-error the brand alone hides what notifyOnCreated takes
+      consume(inferred, { resources }),
+      // @ts-expect-error never hides what notifyOnCreated takes
+      consume(inferredNever, { resources }),
+    ];
+
+    expect(annotated).toBeTypeOf('function');
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('a Service with no Resources types its map HandlerMapOf of the Contract and NoResources', () => {
+    const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
+    const none: HandlerMapOf<typeof contract, NoResources> = {
+      endpoints: {},
+      guards: {},
+      commands,
+      subscriptions: { notifyOnCreated: notifying },
+      readers,
+    };
+
+    const consuming = () => [consume(none, {}), consume(none, { resources: {} })];
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume always takes its options, {} when no Message Handler takes Resources', () => {
     const notifying = handle(readers.subscriptions.notifyOnCreated, () => undefined);
     const stubbed = handle.stub(readers.subscriptions.notifyOnCreated);
     const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
 
     const consuming = () => [
+      consume(handlers, {}),
+      consume({ commands, subscriptions: { notifyOnCreated: stubbed }, readers }, {}),
+      // @ts-expect-error consume always takes its options
       consume(handlers),
-      consume({ commands, subscriptions: { notifyOnCreated: stubbed }, readers }),
     ];
 
     expect(consuming).toBeTypeOf('function');

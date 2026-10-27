@@ -20,7 +20,7 @@ export {
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
 export { checkedMessageBody, writtenMessageBody } from '../checks/index.ts';
-export type { CallArgument, NoResources, ResourcesField } from '../handlers/index.ts';
+export type { ResourcesField } from '../handlers/index.ts';
 export {
   isStub,
   mappedHandlerOf,

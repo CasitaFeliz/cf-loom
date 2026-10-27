@@ -35,15 +35,18 @@ const charge = { orderId: 'o-1' };
 async function running() {
   const handled: string[] = [];
   const inMemory = await memory(contract);
-  await inMemory.consume({
-    commands: {
-      chargeCardV1: handle(readers.commands.chargeCardV1, ({ orderId }) => {
-        handled.push(orderId);
-      }),
+  await inMemory.consume(
+    {
+      commands: {
+        chargeCardV1: handle(readers.commands.chargeCardV1, ({ orderId }) => {
+          handled.push(orderId);
+        }),
+      },
+      subscriptions: {},
+      readers,
     },
-    subscriptions: {},
-    readers,
-  });
+    {},
+  );
   return { inMemory, handled };
 }
 

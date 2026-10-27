@@ -709,13 +709,13 @@ describe('applyBrokerPlan on a durable consumer cf-loom cannot pull from', () =>
       const opened = await messaging(contract, jetstream({ connect: aConnect().connect, prefix }));
       onTestFinished(() => opened.close());
       const handlers = chargeHandlers();
-      await expect(opened.consume(handlers)).rejects.toThrow(
+      await expect(opened.consume(handlers, {})).rejects.toThrow(
         `The durable consumer ${orders.chargeDurable} `,
       );
 
       await applyBrokerPlan({ connect: aConnect().connect }, orders.plan, testLimits);
 
-      await expect(opened.consume(handlers)).resolves.toBeUndefined();
+      await expect(opened.consume(handlers, {})).resolves.toBeUndefined();
     },
   );
 
@@ -744,7 +744,7 @@ describe('applyBrokerPlan on a durable consumer cf-loom cannot pull from', () =>
       expect(error.message).toContain(
         `The durable consumer ${orders.chargeDurable} could not be applied: `,
       );
-      await expect(opened.consume(chargeHandlers())).rejects.toThrow(
+      await expect(opened.consume(chargeHandlers(), {})).rejects.toThrow(
         `The durable consumer ${orders.chargeDurable} ${difference}`,
       );
     },

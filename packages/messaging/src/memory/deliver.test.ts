@@ -160,29 +160,32 @@ async function running(
   });
   const connection = { inMemory, received, faults, ...inMemory };
   const answers = handlers(connection);
-  await inMemory.consume({
-    commands: {
-      chargeCardV1: handle(
-        readers.commands.chargeCardV1,
-        recording(received, 'ChargeCard@1', answers.charge),
-      ),
+  await inMemory.consume(
+    {
+      commands: {
+        chargeCardV1: handle(
+          readers.commands.chargeCardV1,
+          recording(received, 'ChargeCard@1', answers.charge),
+        ),
+      },
+      subscriptions: {
+        notifyOnCreated: handle(
+          readers.subscriptions.notifyOnCreated,
+          recording(received, 'notifyOnCreated', answers.notify),
+        ),
+        auditCreated: handle(
+          readers.subscriptions.auditCreated,
+          recording(received, 'auditCreated', answers.audit),
+        ),
+        notifyOnSettled: handle(
+          readers.subscriptions.notifyOnSettled,
+          recording(received, 'notifyOnSettled', answers.settled),
+        ),
+      },
+      readers,
     },
-    subscriptions: {
-      notifyOnCreated: handle(
-        readers.subscriptions.notifyOnCreated,
-        recording(received, 'notifyOnCreated', answers.notify),
-      ),
-      auditCreated: handle(
-        readers.subscriptions.auditCreated,
-        recording(received, 'auditCreated', answers.audit),
-      ),
-      notifyOnSettled: handle(
-        readers.subscriptions.notifyOnSettled,
-        recording(received, 'notifyOnSettled', answers.settled),
-      ),
-    },
-    readers,
-  });
+    {},
+  );
   return connection;
 }
 
@@ -532,15 +535,18 @@ describe('deliver()', () => {
     async (_which, { element, body }, named) => {
       vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const inMemory = await memory(contract);
-      await inMemory.consume({
-        commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
-        subscriptions: {
-          notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated),
-          auditCreated: handle.stub(readers.subscriptions.auditCreated),
-          notifyOnSettled: handle.stub(readers.subscriptions.notifyOnSettled),
+      await inMemory.consume(
+        {
+          commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
+          subscriptions: {
+            notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated),
+            auditCreated: handle.stub(readers.subscriptions.auditCreated),
+            notifyOnSettled: handle.stub(readers.subscriptions.notifyOnSettled),
+          },
+          readers,
         },
-        readers,
-      });
+        {},
+      );
 
       const delivering = inMemory.deliver(element, body);
 
@@ -682,15 +688,18 @@ describe('pending and redeliver()', () => {
   test('a delivery whose settling rejects rejects deliver with that error, lists nothing pending, and the next delivery runs', async () => {
     const broken = new Error('the console broke');
     const inMemory = await memory(contract);
-    await inMemory.consume({
-      commands: { chargeCardV1: handle(readers.commands.chargeCardV1, throwing) },
-      subscriptions: {
-        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
-        auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
-        notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+    await inMemory.consume(
+      {
+        commands: { chargeCardV1: handle(readers.commands.chargeCardV1, throwing) },
+        subscriptions: {
+          notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, () => undefined),
+          auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
+          notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+        },
+        readers,
       },
-      readers,
-    });
+      {},
+    );
     const logging = vi.spyOn(console, 'error').mockImplementation(() => {
       throw broken;
     });
@@ -723,19 +732,22 @@ describe('pending and redeliver()', () => {
     });
     const inMemory = await memory(contract);
     const { publisher } = inMemory;
-    await inMemory.consume({
-      commands: {
-        chargeCardV1: handle(readers.commands.chargeCardV1, async () => {
-          await publisher.publish('OrderCreated', { v1: charge, v2: created }, { factId: 'o-1' });
-        }),
+    await inMemory.consume(
+      {
+        commands: {
+          chargeCardV1: handle(readers.commands.chargeCardV1, async () => {
+            await publisher.publish('OrderCreated', { v1: charge, v2: created }, { factId: 'o-1' });
+          }),
+        },
+        subscriptions: {
+          notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, throwing),
+          auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
+          notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
+        },
+        readers,
       },
-      subscriptions: {
-        notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, throwing),
-        auditCreated: handle(readers.subscriptions.auditCreated, () => undefined),
-        notifyOnSettled: handle(readers.subscriptions.notifyOnSettled, () => undefined),
-      },
-      readers,
-    });
+      {},
+    );
     vi.spyOn(console, 'error').mockImplementation(() => {
       throw broken;
     });

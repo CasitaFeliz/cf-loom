@@ -101,7 +101,7 @@ const contract = contractOf([
   getRoot,
 ]);
 
-const http = serve(contract, handlers);
+const http = serve(contract, handlers, {});
 
 const noSuchEndpoint = {
   fault: {
@@ -202,8 +202,8 @@ describe('serve: matching a request to an Endpoint', () => {
   });
 
   test('a literal beats a param at the first segment where they differ, whichever is declared first', async () => {
-    const literalLast = serve(contractOf([getOrder, getSummary]), handlers);
-    const literalFirst = serve(contractOf([getSummary, getOrder]), handlers);
+    const literalLast = serve(contractOf([getOrder, getSummary]), handlers, {});
+    const literalFirst = serve(contractOf([getSummary, getOrder]), handlers, {});
 
     const answers = [
       await (await literalLast(new Request('http://test/orders/summary'))).json(),

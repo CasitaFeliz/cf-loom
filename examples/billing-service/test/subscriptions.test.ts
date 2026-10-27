@@ -23,7 +23,7 @@ describe('draftInvoiceOnCreated over memory()', () => {
 
   beforeEach(async () => {
     running = await memory(contract);
-    await running.consume(handlers);
+    await running.consume(handlers, {});
   });
 
   afterEach(async () => {

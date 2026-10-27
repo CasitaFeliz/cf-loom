@@ -93,7 +93,7 @@ afterEach(() => {
 });
 
 /** The Service listening on a free port, and the URL it answers at. */
-async function listening(server = nodeHttp(serve(contract, handlers))): Promise<string> {
+async function listening(server = nodeHttp(serve(contract, handlers, {}))): Promise<string> {
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
@@ -183,7 +183,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
     writeHead: () => outgoing,
   });
   const finished = new Promise((resolve) => written.on('finish', resolve));
-  nodeListener(serve(contract, handlers))(
+  nodeListener(serve(contract, handlers, {}))(
     incoming as unknown as IncomingMessage,
     outgoing as unknown as ServerResponse,
   );
@@ -301,7 +301,10 @@ describe('nodeHttp', () => {
   });
 
   test('a request without a Host header is answered 400', async () => {
-    const own = createServer({ requireHostHeader: false }, nodeListener(serve(contract, handlers)));
+    const own = createServer(
+      { requireHostHeader: false },
+      nodeListener(serve(contract, handlers, {})),
+    );
     const url = await listening(own);
 
     const answer = await raw(url, 'GET /orders/o-1 HTTP/1.1\r\nConnection: close\r\n\r\n');
@@ -579,7 +582,7 @@ describe('nodeHttp', () => {
   });
 
   test('nodeListener serves a node:http server the Service creates itself', async () => {
-    const url = await listening(createServer(nodeListener(serve(contract, handlers))));
+    const url = await listening(createServer(nodeListener(serve(contract, handlers, {}))));
 
     const response = await fetch(`${url}/customers`);
 
@@ -593,7 +596,7 @@ describe('nodeHttp', () => {
       return success({ id: params.orderId });
     });
     const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: watching } };
-    const url = await listening(nodeHttp(serve(contract, served)));
+    const url = await listening(nodeHttp(serve(contract, served, {})));
 
     const response = await fetch(`${url}/orders/o-1`);
     await response.text();
@@ -612,7 +615,7 @@ describe('nodeHttp', () => {
       return success({ id: params.orderId });
     });
     const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: waiting } };
-    const url = await listening(nodeHttp(serve(contract, served)));
+    const url = await listening(nodeHttp(serve(contract, served, {})));
     const socket = connect(Number(new URL(url).port), '127.0.0.1');
     socket.on('error', () => undefined);
 

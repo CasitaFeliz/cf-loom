@@ -19,12 +19,16 @@ import type {
   NoResources,
   ResourcesField,
   ResourcesLast,
+  TakesResources,
 } from './resources.ts';
 
 declare const handled: unique symbol;
 
-/** What only a Handler `handle()` returned for one Element carries: its Element, and a brand no hand-made value has. */
-export type HandledBy<Element> = { readonly element: Element; readonly [handled]: Element };
+/** What only a Handler `handle()` returned for one Element carries: its Element, the Resources it takes, and a brand no hand-made value has; `Resources` left out is `never`, unspecified, which `ResourcesOf` refuses and no Handler that takes some fits. */
+export type HandledBy<Element, Resources = never> = {
+  readonly element: Element;
+  readonly [handled]: Element;
+} & TakesResources<Resources>;
 
 /** What an EndpointHandler is given beside its Input: the Context its Guards provided, and the request. */
 export type EndpointCall<Target extends Endpoint> = {
@@ -80,7 +84,7 @@ export type EndpointHandler<Target extends Endpoint, Resources extends object = 
   call: ContextField<ContextOf<Target>> & DirectRequestField,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<CheckedOutcome<Target>>) &
-  HandledBy<Target>;
+  HandledBy<Target, Resources>;
 
 /**
  * The runtime shape of every Handler map, which the startup checks of `serve` and `consume` read,
@@ -101,4 +105,4 @@ export type GuardHandler<Target extends Guard, Resources extends object = NoReso
   call: ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField,
   ...last: CallArgument<ResourcesField<Resources>>
 ) => Promise<CheckedAdmission<Target>>) &
-  HandledBy<Target>;
+  HandledBy<Target, Resources>;
