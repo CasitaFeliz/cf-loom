@@ -1,49 +1,19 @@
 import { type BrokerPlan, brokerPlanOf } from '@cf-loom/contract/internal';
-import { builtOf } from '../project/index.ts';
-import {
-  committedStopOf,
-  done,
-  type Exit,
-  failureExitOf,
-  type Stopped,
-  toolingError,
-} from './exit.ts';
+import { committedServiceOf } from './document.ts';
+import { done, type Exit } from './exit.ts';
 import type { Run } from './run.ts';
-
-/** The broker plan of a Service, with its name for the line that says the plan is empty. */
-type Planned = { readonly kind: 'planned'; readonly service: string; readonly plan: BrokerPlan };
 
 /**
  * Prints the broker plan of a Service from the committed Snapshot, which must be what `generate`
  * would write; an Application or a Definitions Package has none.
  */
 export async function brokerPlanCommand(run: Run, prefix: string | null): Promise<Exit> {
-  const planned = await plannedOf(run, prefix);
-  if (planned.kind === 'stopped') {
-    return planned.exit;
+  const committed = await committedServiceOf(run, noPlanLine);
+  if (committed.kind === 'stopped') {
+    return committed.exit;
   }
-  return done(brokerPlanLinesOf(planned.plan, planned.service), { plan: planned.plan });
-}
-
-async function plannedOf(run: Run, prefix: string | null): Promise<Planned | Stopped> {
-  const built = await builtOf(run.cwd);
-  if (built.kind !== 'built') {
-    return { kind: 'stopped', exit: failureExitOf(built) };
-  }
-  const { snapshot } = built;
-  switch (snapshot.kind) {
-    case 'application':
-      return { kind: 'stopped', exit: toolingError(noPlanLine('An Application')) };
-    case 'definitions':
-      return { kind: 'stopped', exit: toolingError(noPlanLine('A Definitions Package')) };
-    case 'service': {
-      const stop = committedStopOf(built);
-      if (stop !== undefined) {
-        return { kind: 'stopped', exit: stop };
-      }
-      return { kind: 'planned', service: snapshot.name, plan: brokerPlanOf(snapshot, prefix) };
-    }
-  }
+  const plan = brokerPlanOf(committed.snapshot, prefix);
+  return done(brokerPlanLinesOf(plan, committed.snapshot.name), { plan });
 }
 
 function noPlanLine(root: string): string {
