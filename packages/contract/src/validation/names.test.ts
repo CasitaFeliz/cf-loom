@@ -499,8 +499,11 @@ describe('rootNameProblemOf', () => {
     ['service', 'orders_service', 'a Service name is kebab-case'],
     ['service', 'OrdersService', 'a Service name is kebab-case'],
     ['service', '', 'a Service name is kebab-case'],
+    ['service', 'a'.repeat(64), undefined],
+    ['service', 'a'.repeat(65), 'a Service name is at most 64 characters'],
     ['application', 'web-admin', undefined],
     ['application', 'web_admin', 'an Application name is kebab-case'],
+    ['application', 'a'.repeat(65), 'an Application name is at most 64 characters'],
     ['definitions', 'any_name', undefined],
     ['definitions', '', undefined],
   ] as const)('a %s named %j has the problem %j', ([kind, name, problem]) => {
