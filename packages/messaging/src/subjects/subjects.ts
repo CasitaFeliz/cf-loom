@@ -48,7 +48,9 @@ export function subjectsOf(root: unknown): Subjects {
   const service = contract.name;
   const events = eventsOf(contract).filter(isLive).toSorted(byVersion);
   const commands = commandsOf(contract);
-  const subscriptions = subscriptionsOf(contract).map((one) => routeOf(contract, one));
+  const subscriptions = subscriptionsOf(contract).map((subscription) =>
+    routeOf(contract, subscription),
+  );
   const { durableConsumers } = brokerNeedsOf(service, commands, subscriptions);
   const active = commands.filter((command) => lifecycleOf(command) === 'active');
   return {

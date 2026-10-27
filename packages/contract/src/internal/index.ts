@@ -221,7 +221,6 @@ export {
   walkSchemas,
 } from '../walker/index.ts';
 export type {
-  BrokerNeeds,
   DurableConsumed,
   EndpointPath,
   InputIssue,
@@ -232,7 +231,6 @@ export type {
   ReceivedHeaders,
   RejectionEnvelope,
   RetryAfterGiven,
-  RoutedMessage,
   RoutedSubscription,
   SendableRetryAfter,
   SentRejection,
