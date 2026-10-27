@@ -17,6 +17,7 @@ import {
   codeNameOf,
   type Failure,
   kebabCaseOf,
+  messageNameKinds,
   type Root,
   type RootPackage,
   type Site,
@@ -25,18 +26,18 @@ import {
 
 const alphabet = ['a', 'b', 'A', 'B', '1'];
 
-/** Every string over the alphabet from one letter to `length` letters. */
-function stringsUpTo(length: number): readonly string[] {
+/** Every string of one part to `length` parts, the parts taken from `parts` and written together. */
+function stringsUpTo(parts: readonly string[], length: number): readonly string[] {
   let current = [''];
   const all: string[] = [];
   for (let size = 1; size <= length; size += 1) {
-    current = current.flatMap((prefix) => alphabet.map((letter) => `${prefix}${letter}`));
+    current = current.flatMap((prefix) => parts.map((part) => `${prefix}${part}`));
     all.push(...current);
   }
   return all;
 }
 
-const candidates = stringsUpTo(5);
+const candidates = stringsUpTo(alphabet, 5);
 
 function isUpper(letter: string): boolean {
   return letter >= 'A' && letter <= 'Z';
@@ -84,31 +85,65 @@ const refusedElementNames = failingNames(guardsPackage, {
   ),
 });
 
-/** The Message names, out of the candidates, that the name grammar refuses. */
-const refusedMessageNames = failingNames(
-  defineService({
-    name: 'orders-service',
-    groups: [
-      defineGroup({
-        name: 'messages',
-        description: 'Messages',
-        events: candidates.map((name) =>
-          defineEvent({
-            name,
-            version: 1,
-            visibility: 'internal',
-            description: 'An event',
-            body: z.object({}),
-          }),
-        ),
-      } as unknown as Parameters<typeof defineGroup>[0]),
-    ],
-  }),
-  { packageName: 'orders-service' },
-);
+/** The Message names, out of `names`, that the name grammar refuses. */
+function refusedMessageNamesOf(names: readonly string[]): ReadonlySet<string> {
+  return failingNames(
+    defineService({
+      name: 'orders-service',
+      groups: [
+        defineGroup({
+          name: 'messages',
+          description: 'Messages',
+          events: names.map((name) =>
+            defineEvent({
+              name,
+              version: 1,
+              visibility: 'internal',
+              description: 'An event',
+              body: z.object({}),
+            }),
+          ),
+        } as unknown as Parameters<typeof defineGroup>[0]),
+      ],
+    }),
+    { packageName: 'orders-service' },
+  );
+}
+
+const refusedMessageNames = refusedMessageNamesOf(candidates);
 
 const elementNames = candidates.filter((name) => !refusedElementNames.has(name));
 const messageNames = candidates.filter((name) => !refusedMessageNames.has(name));
+
+/** The words a generated name is made of, which a Message name may hold: where kinded names could meet. */
+const messageWords = ['A', 'B', 'V1', 'Event', 'Command', 'Reader', 'CommandHandler', 'Handler'];
+const wordedNames = [...new Set(stringsUpTo(messageWords, 3))];
+const refusedWordedNames = refusedMessageNamesOf(wordedNames);
+const acceptedNames = [
+  ...new Set([...messageNames, ...wordedNames.filter((name) => !refusedWordedNames.has(name))]),
+];
+const versions = [1, 2, 10, 12];
+const messages = acceptedNames.flatMap((name) => versions.map((version) => ({ name, version })));
+
+function capitalized(name: string): string {
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+}
+
+/** A key's name and version, read from the text alone: the digits after its last `V`. */
+function keyReadBack(key: string): { readonly name: string; readonly version: number } {
+  const [, name = '', version = ''] = /^(.+)V([0-9]+)$/.exec(key) ?? [];
+  return { name: capitalized(name), version: Number(version) };
+}
+
+/** A kinded name's name, kind and version, read from the text alone: the digits, then the longest kind word. */
+function kindedReadBack(written: string) {
+  const [, rest = '', version = ''] = /^(.+)V([0-9]+)$/.exec(written) ?? [];
+  const kind = [...messageNameKinds]
+    .sort((left, right) => right.length - left.length)
+    .find((word) => rest.endsWith(word));
+  const name = rest.slice(0, rest.length - (kind?.length ?? 0));
+  return { name: capitalized(name), version: Number(version), kind };
+}
 
 describe('validateRoot: names are words', () => {
   test('an Element name is accepted exactly when it starts lower-case and every capital starts a word', () => {
@@ -150,6 +185,24 @@ describe('validateRoot: names are words', () => {
     expect(new Set(kebabs).size).toBe(messageNames.length);
     expect(fromCodeNames).toEqual(messageNames);
     expect(fromKebabs).toEqual(messageNames);
+  });
+
+  test('every accepted Message name has a key at every version that is its own and reads back to its name and version', () => {
+    const keys = messages.map((message) => codeNameOf(message));
+    const readBack = keys.map(keyReadBack);
+
+    expect(new Set(keys).size).toBe(messages.length);
+    expect(readBack).toEqual(messages);
+  });
+
+  test('every accepted Message name has a name at every version for each kind word that no name of another kind meets and that reads back to its name, kind and version', () => {
+    const written = messageNameKinds.flatMap((kind) =>
+      messages.map((message) => ({ ...message, kind, text: codeNameOf(message, kind) })),
+    );
+    const readBack = written.map(({ text }) => kindedReadBack(text));
+
+    expect(new Set(written.map(({ text }) => text)).size).toBe(written.length);
+    expect(readBack).toEqual(written.map(({ name, version, kind }) => ({ name, version, kind })));
   });
 });
 

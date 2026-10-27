@@ -9,4 +9,12 @@ describe('codeNameOf', () => {
 
     expect(name).toBe('orderCreatedV12');
   });
+
+  test('a kind’s word comes before V and the version, so the version is always last', () => {
+    const message = { name: 'OrderCreated', version: 12 };
+
+    const name = codeNameOf(message, 'Reader');
+
+    expect(name).toBe('orderCreatedReaderV12');
+  });
 });
