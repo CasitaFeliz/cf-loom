@@ -9,6 +9,7 @@ import {
 import { canonicalJson, type Defs, defsReachedOf } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
 import { endpointSiteOf, inputBodyDifferencesOf, queryDifferencesOf } from './endpoints.ts';
+import { graftedInputOf } from './grafting.ts';
 import { comparedShapesOf, type Pair, pairsOf } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 
@@ -75,7 +76,8 @@ function taggedBreakingOf(
 /**
  * The former Inputs a publish keeps, by Endpoint in code point order, each Endpoint's in the order
  * recorded: of each Endpoint kept by identity and not Retired now, the Baseline's former Inputs and
- * its own query and body, removed in this version, that the Endpoint still keeps apart.
+ * its own query and body, removed in this version, each rewritten onto the Endpoint's query and
+ * body, kept while it grafts a field.
  */
 export function formerInputsMerged(
   baseline: PublishedServiceSnapshot | undefined,
@@ -100,7 +102,6 @@ function keptFormerInputsOf(
   if (compared === undefined) {
     return [];
   }
-  const site = endpointSiteOf(pair);
   const { query, body } = compared.baseline.input;
   const own: FormerInput = {
     endpoint: pair.identity,
@@ -108,20 +109,15 @@ function keptFormerInputsOf(
     input: { query, body },
     defs: defsReachedOf(inputNodesOf({ query, body }), checked.baseline.defs),
   };
-  const held = [...formerInputsOf(checked.baseline, pair.identity), own];
-  return held.filter((former) =>
-    isKeptApart(differencesAgainst(former, compared.proposed, checked.proposed.defs), site),
-  );
-}
-
-/**
- * Whether an Endpoint keeps a former Input apart: it still lacks a field of it, so the Baseline does
- * not stand for that Input's Callers, and nothing it declares is Breaking against it, so no approved
- * break is reported again.
- */
-function isKeptApart(differences: readonly Difference[], site: ChangeSite): boolean {
-  const isBreaking = differences.some((difference) => isBreakingAt(site, difference));
-  return differences.some(isFieldRemoved) && !isBreaking;
+  const onto = { input: compared.proposed.input, defs: checked.proposed.defs };
+  const kept: FormerInput[] = [];
+  for (const former of [...formerInputsOf(checked.baseline, pair.identity), own]) {
+    const grafted = graftedInputOf(former, onto);
+    if (grafted !== undefined) {
+      kept.push({ endpoint: former.endpoint, removedIn: former.removedIn, ...grafted });
+    }
+  }
+  return kept;
 }
 
 /** A former Input's query and body compared with an Endpoint's, as a kept Endpoint's are. */
@@ -139,10 +135,6 @@ function differencesAgainst(
 
 function isBreakingAt(site: ChangeSite, difference: Difference): boolean {
   return classificationOf(site, difference).class === 'breaking';
-}
-
-function isFieldRemoved(difference: Difference): boolean {
-  return difference.kind === 'schema' && difference.shape.kind === 'field-removed';
 }
 
 function isSchemaDifference(difference: Difference): difference is SchemaDifference {

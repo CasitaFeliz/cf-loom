@@ -60,10 +60,10 @@ export type RemovedCode = CodeSnapshot & {
 export type PublishedCode = CodeSnapshot | RemovedCode;
 
 /**
- * An Endpoint's query and body as the versions before `removedIn` declared them, kept once a
- * publish removed a field from them, with the defs they reached then, which their `ref`s name:
- * Callers built on those versions still send this Input, so what the Endpoint declares again is
- * compared with it.
+ * An Endpoint's query and body as published, with every field the Callers built before `removedIn`
+ * send and the Endpoint lacks present as it last was, and the defs they reach, which their `ref`s
+ * name: those Callers still send those fields, so what the Endpoint declares again is compared
+ * with it.
  */
 export type FormerInput = {
   readonly endpoint: string;

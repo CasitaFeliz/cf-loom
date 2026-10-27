@@ -2132,6 +2132,26 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual({ kind: 'decoded', snapshot: published });
       });
 
+      test('a former Input whose def is named apart decodes', () => {
+        const grafted = anObjectOf(aRef('tree~1'));
+        const published = aService({
+          endpoints: { [orders]: withoutParams },
+          defs: { tree: treeDef },
+          formerInputs: [
+            {
+              endpoint: orders,
+              removedIn: '3.2.0',
+              input: { query: emptyPart, body: anObjectOf(aRef('tree~1')) },
+              defs: { 'tree~1': grafted },
+            },
+          ],
+        });
+
+        const result = roundTrip(published);
+
+        expect(result).toEqual({ kind: 'decoded', snapshot: published });
+      });
+
       test.each([
         ['does not hold', {}],
         ['holds as a tombstone', { [orders]: endpointTombstone }],

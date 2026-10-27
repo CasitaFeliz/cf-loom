@@ -170,6 +170,16 @@ function linesOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot):
   return compatibilityReportOf(baseline, proposed).changes.map(lineOf);
 }
 
+/** The former Input of `POST /orders` removed in a version, its query empty, with the body and defs given. */
+function anEntry(removedIn: string, body: Fields, defs: Defs = {}): FormerInput {
+  return {
+    endpoint: identity,
+    removedIn,
+    input: { query: anObject({}), body: anObject(body) },
+    defs,
+  };
+}
+
 function formerInputsAfter(...versions: readonly ServiceSnapshot[]): readonly FormerInput[] {
   return publishedThrough(...versions).formerInputs;
 }
@@ -523,7 +533,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     ]);
   });
 
-  test('a former Input is kept unchanged by a publish that removes nothing more', () => {
+  test('a former Input is rewritten onto an Input that adds a field, and holds the field', () => {
     const removed = publishedThrough(
       aService({ body: { id, note: optional(aNumber) } }),
       aService({ body: { id } }),
@@ -535,9 +545,8 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedAt('1.2.0'),
     );
 
-    expect([published.formerInputs, removed.formerInputs.length]).toEqual([
-      removed.formerInputs,
-      1,
+    expect(published.formerInputs).toEqual([
+      anEntry('1.1.0', { id, tag: optional(aString), note: optional(aNumber) }),
     ]);
   });
 
@@ -551,29 +560,31 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     expect(formerInputs).toEqual([]);
   });
 
-  test('a former Input against which a publish is Breaking is forgotten, and the next check reports nothing against it', () => {
+  test('a former Input is kept across a Breaking Change to a field it has, with that field as the Endpoint now declares it, and the break is not reported again', () => {
     const broken = publishedThrough(
       aService({ body: { id, note: optional(aNumber), tag: optional(aNumber) } }),
-      aService({ body: { id, tag: optional(aNumber) } }),
-      aService({ body: { id, note: optional(aString), tag: optional(aNumber) } }),
+      aService({ body: { id, note: optional(aNumber) } }),
+      aService({ body: { id, note: optional(aString) } }),
     );
-    const proposed = aService({ body: { id, tag: optional(aNumber) } });
+    const proposed = aService({ body: { id, note: optional(aString) } });
 
     const lines = linesOf(broken, proposed);
 
     expect([broken.formerInputs, lines]).toEqual([
+      [anEntry('1.1.0', { id, note: optional(aString), tag: optional(aNumber) })],
       [],
-      ['additive field-removed at input.body.note'],
     ]);
   });
 
-  test('a publish that removes a field and is Breaking against the Baseline’s Input keeps no new former Input', () => {
+  test('a publish that removes a field and breaks another keeps the removed field', () => {
     const formerInputs = formerInputsAfter(
       aService({ body: { id, note: optional(aNumber), tag: optional(aNumber) } }),
       aService({ body: { id, tag: optional(aString) } }),
     );
 
-    expect(formerInputs).toEqual([]);
+    expect(formerInputs).toEqual([
+      anEntry('1.1.0', { id, tag: optional(aString), note: optional(aNumber) }),
+    ]);
   });
 
   test('a former Input is kept across a Breaking Change to the Endpoint’s Success status', () => {
@@ -595,7 +606,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     ]);
   });
 
-  test('a former Input is kept across a Breaking Change to a field it lacks', () => {
+  test('a former Input is kept across a Breaking Change to a field it lacks, rewritten with that field as the Endpoint now declares it', () => {
     const removed = publishedThrough(
       aService({ body: { id, note: optional(aNumber), tag: optional(aNumber) } }),
       aService({ body: { id, tag: optional(aNumber), size: optional(aNumber) } }),
@@ -608,9 +619,301 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
       publishedAt('2.0.0'),
     );
 
-    expect([published.formerInputs, removed.formerInputs.length]).toEqual([
-      removed.formerInputs,
-      1,
+    expect(published.formerInputs).toEqual([
+      anEntry('1.1.0', { id, tag: optional(aNumber), size: tighter, note: optional(aNumber) }),
+    ]);
+  });
+
+  test('a former Input is rewritten onto a relaxed Input, and equals it where nothing was removed', () => {
+    const relaxed = optional({ type: 'number', min: 1 });
+
+    const formerInputs = formerInputsAfter(
+      aService({
+        body: { id, note: optional(aNumber), tag: optional({ type: 'number', min: 5 }) },
+      }),
+      aService({ body: { id, tag: relaxed } }),
+    );
+
+    expect(formerInputs).toEqual([anEntry('1.1.0', { id, tag: relaxed, note: optional(aNumber) })]);
+  });
+
+  test('an unchanged Contract leaves every former Input byte-identical and reports nothing', () => {
+    const tree = anObject({ label: optional(aNumber), child: optional(ref('tree')) });
+    const bare = anObject({ child: optional(ref('tree')) });
+    const proposed = aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: bare } });
+    const published = publishedThrough(
+      aService({
+        body: { id, root: optional(ref('tree')), note: optional(aNumber) },
+        defs: { tree },
+      }),
+      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree } }),
+      proposed,
+    );
+
+    const again = publishedSnapshotOf(published, proposed, publishedAt('1.3.0'));
+
+    expect([
+      canonicalTextOf(again.formerInputs as never),
+      linesOf(published, proposed),
+      published.formerInputs.length,
+    ]).toEqual([canonicalTextOf(published.formerInputs as never), [], 2]);
+  });
+
+  test('a field removed inside a def the Endpoint keeps is grafted into a copy of the def named apart, which the def’s own refs name', () => {
+    const tree = (label: boolean) =>
+      anObject({ ...(label ? { label: optional(aNumber) } : {}), child: optional(ref('tree')) });
+
+    const published = publishedThrough(
+      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: tree(true) } }),
+      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: tree(false) } }),
+    );
+
+    const grafted = anObject({ label: optional(aNumber), child: optional(ref('tree~1')) });
+    expect([published.formerInputs, decodeSnapshot(canonicalTextOf(published)).kind]).toEqual([
+      [anEntry('1.1.0', { id, root: optional(ref('tree~1')) }, { 'tree~1': grafted })],
+      'decoded',
+    ]);
+  });
+
+  test('a field removed inside a def two fields share is grafted once, and declaring it again is reported once', () => {
+    const tree = (label: SchemaNode | undefined) =>
+      anObject({ ...(label ? { label: optional(label) } : {}), child: optional(ref('tree')) });
+    const body = { id, left: optional(ref('tree')), right: optional(ref('tree')) };
+    const published = publishedThrough(
+      aService({ body, defs: { tree: tree(aNumber) } }),
+      aService({ body, defs: { tree: tree(undefined) } }),
+    );
+
+    const lines = linesOf(published, aService({ body, defs: { tree: tree(aString) } }));
+
+    const entry = published.formerInputs[0];
+    expect([Object.keys(entry?.defs ?? {}), lines]).toEqual([
+      ['tree~1'],
+      [
+        'additive field-added at input.body.left.label',
+        'breaking type-changed at input.body.left.label removedIn=1.1.0',
+      ],
+    ]);
+  });
+
+  test('two former defs the Endpoint merged into one are grafted apart, and a field declared again with one’s shape is Breaking for the other’s Callers', () => {
+    const before = { p: anObject({ c: optional(aNumber) }), q: anObject({ c: optional(aString) }) };
+    const published = publishedThrough(
+      aService({ body: { id, x: optional(ref('p')), y: optional(ref('q')) }, defs: before }),
+      aService({
+        body: { id, x: optional(ref('p')), y: optional(ref('p')) },
+        defs: { p: anObject({}) },
+      }),
+    );
+    const proposed = aService({
+      body: { id, x: optional(ref('p')), y: optional(ref('p')) },
+      defs: { p: anObject({ c: optional(aNumber) }) },
+    });
+
+    const lines = linesOf(published, proposed);
+
+    expect([Object.keys(published.formerInputs[0]?.defs ?? {}), lines]).toEqual([
+      ['p~1', 'p~2'],
+      [
+        'additive field-added at input.body.x.c',
+        'breaking type-changed at input.body.y.c removedIn=1.1.0',
+      ],
+    ]);
+  });
+
+  test('a removed field whose def the Endpoint still declares with another shape keeps a copy named apart, and the kept field names the Endpoint’s def', () => {
+    const note = anObject({ text: required(aString) });
+    const changed = anObject({ text: required(aString), size: optional(aNumber) });
+
+    const formerInputs = formerInputsAfter(
+      aService({
+        body: { id, note: optional(ref('note')), remark: optional(ref('note')) },
+        defs: { note },
+      }),
+      aService({ body: { id, remark: optional(ref('note')) }, defs: { note: changed } }),
+    );
+
+    expect(formerInputs).toEqual([
+      anEntry(
+        '1.1.0',
+        { id, remark: optional(ref('note')), note: optional(ref('note~1')) },
+        { note: changed, 'note~1': note },
+      ),
+    ]);
+  });
+
+  test('a def the former Input reaches both at a field and inside a plain union is held as declared for the union and grafted apart for the field, and the unchanged Input reports nothing', () => {
+    const union = optional({ type: 'union', options: [aString, ref('n')] });
+    const before = anObject({ c: optional(aNumber), d: optional(aString) });
+    const after = anObject({ d: optional(aString) });
+    const proposed = aService({
+      body: { id, a: optional(ref('n')), u: union },
+      defs: { n: after },
+    });
+    const published = publishedThrough(
+      aService({ body: { id, a: optional(ref('n')), u: union }, defs: { n: before } }),
+      proposed,
+    );
+
+    const lines = linesOf(published, proposed);
+
+    const grafted = anObject({ c: optional(aNumber), d: optional(aString) });
+    expect([published.formerInputs, lines]).toEqual([
+      [anEntry('1.1.0', { id, a: optional(ref('n~1')), u: union }, { n: after, 'n~1': grafted })],
+      [],
+    ]);
+  });
+
+  test('a field removed inside a tuple’s items keeps no former Input', () => {
+    const tuple = (fields: Fields) => optional({ type: 'tuple', items: [anObject(fields)] });
+
+    const formerInputs = formerInputsAfter(
+      aService({ body: { id, pair: tuple({ c: optional(aNumber) }) } }),
+      aService({ body: { id, pair: tuple({}) } }),
+    );
+
+    expect(formerInputs).toEqual([]);
+  });
+
+  test.each<[string, (fields: Fields) => SchemaNode, string]>([
+    [
+      'a record’s value',
+      (fields) => ({ type: 'record', key: aString, value: anObject(fields) }),
+      'value',
+    ],
+    ['a tuple’s rest', (fields) => ({ type: 'tuple', items: [], rest: anObject(fields) }), 'rest'],
+    [
+      'a tagged union’s kept variant',
+      (fields) => ({
+        type: 'tagged',
+        discriminator: 'kind',
+        variants: {
+          '"a"': anObject({
+            kind: required({ type: 'enum', values: ['a'], open: false }),
+            ...fields,
+          }),
+        },
+      }),
+      '"a"',
+    ],
+  ])(
+    'a field removed inside %s is grafted, and declaring it again with another type is Breaking',
+    (_name, holding, step) => {
+      const published = publishedThrough(
+        aService({ body: { id, held: optional(holding({ c: optional(aNumber) })) } }),
+        aService({ body: { id, held: optional(holding({})) } }),
+      );
+
+      const lines = linesOf(
+        published,
+        aService({ body: { id, held: optional(holding({ c: optional(aString) })) } }),
+      );
+
+      expect(lines).toEqual([
+        `additive field-added at input.body.held.${step}.c`,
+        `breaking type-changed at input.body.held.${step}.c removedIn=1.1.0`,
+      ]);
+    },
+  );
+
+  test('a publish that adds a body and removes a query param keeps the param', () => {
+    const page = { page: optional(aNumber) };
+
+    const formerInputs = formerInputsAfter(
+      aService({
+        query: page,
+        endpoint: { input: { ...anEndpoint({ query: page }).input, body: null } },
+      }),
+      aService({ body: { id } }),
+    );
+
+    expect(formerInputs).toEqual([
+      {
+        endpoint: identity,
+        removedIn: '1.1.0',
+        input: { query: anObject(page), body: anObject({ id }) },
+        defs: {},
+      },
+    ]);
+  });
+
+  test('a def first met at one field and reached again through another def keeps the removed field after a break at the first', () => {
+    const shared = (d: SchemaNode | undefined) =>
+      anObject({ c: optional(aNumber), ...(d === undefined ? {} : { d: optional(d) }) });
+    const holder = anObject({ y: optional(ref('y')) });
+    const body = (a: SchemaNode) => ({ id, a: optional(a), b: optional(ref('x')) });
+    const published = publishedThrough(
+      aService({ body: body(ref('y')), defs: { x: holder, y: shared(aNumber) } }),
+      aService({ body: body(ref('y')), defs: { x: holder, y: shared(undefined) } }),
+      aService({ body: body(aString), defs: { x: holder, y: shared(undefined) } }),
+    );
+
+    const lines = linesOf(
+      published,
+      aService({ body: body(aString), defs: { x: holder, y: shared(aString) } }),
+    );
+
+    expect(lines).toEqual([
+      'additive field-added at input.body.b.y.d',
+      'breaking type-changed at input.body.b.y.d removedIn=1.1.0',
+    ]);
+  });
+
+  test('a field removed through a nullable alias def, declared again not nullable, is Breaking', () => {
+    const target = anObject({ c: optional(aNumber) });
+    const alias: SchemaNode = { type: 'ref', name: 'n', nullable: true };
+    const published = publishedThrough(
+      aService({ body: { id, x: optional(ref('alias')) }, defs: { alias, n: target } }),
+      aService({ body: { id } }),
+    );
+
+    const lines = linesOf(
+      published,
+      aService({ body: { id, x: optional(ref('n')) }, defs: { n: target } }),
+    );
+
+    expect(lines).toEqual([
+      'additive field-added at input.body.x',
+      'breaking nullability-removed at input.body.x removedIn=1.1.0',
+    ]);
+  });
+
+  test('a copied def named apart twice decodes and is its own graft', () => {
+    const before = anObject({ c: optional(aNumber), d: optional(aNumber) });
+    const after = anObject({ c: optional(aNumber) });
+    const proposed = aService({ body: { id, a: optional(ref('n')) }, defs: { n: after } });
+    const published = publishedThrough(
+      aService({ body: { id, a: optional(ref('n')), b: optional(ref('n')) }, defs: { n: before } }),
+      proposed,
+    );
+
+    const again = publishedSnapshotOf(published, proposed, publishedAt('1.2.0'));
+
+    expect([
+      Object.keys(published.formerInputs[0]?.defs ?? {}),
+      decodeSnapshot(canonicalTextOf(published)).kind,
+      again.formerInputs,
+    ]).toEqual([['n~1', 'n~2'], 'decoded', published.formerInputs]);
+  });
+
+  test('a copied def keeps its name apart after the Snapshot frees it, so a plain union naming the def again is Breaking against it', () => {
+    const former = anObject({ k: optional(aString) });
+    const other = anObject({ z: optional(aNumber) });
+    const union = optional({ type: 'union', options: [ref('m'), aNumber] });
+    const published = publishedThrough(
+      aService({ body: { id, u: union }, defs: { m: former } }),
+      aService({ body: { id, w: optional(ref('m')) }, defs: { m: other } }),
+      aService({ body: { id, w: optional(ref('q')) }, defs: { q: other } }),
+    );
+
+    const lines = linesOf(
+      published,
+      aService({ body: { id, w: optional(ref('q')), u: union }, defs: { q: other, m: former } }),
+    );
+
+    expect(lines).toEqual([
+      'additive field-added at input.body.u',
+      'breaking union-changed at input.body.u removedIn=1.1.0',
     ]);
   });
 
@@ -684,15 +987,17 @@ function aGeneratedLeaf(next: () => number): SchemaNode | undefined {
 function aGeneratedSchema(next: () => number): SchemaNode {
   const leaf = aGeneratedLeaf(next);
   const inner: Fields = leaf === undefined ? {} : { inner: optional(leaf) };
-  switch (Math.floor(next() * 4)) {
+  switch (Math.floor(next() * 5)) {
     case 0:
       return leaf ?? aNumber;
     case 1:
       return anObject(inner);
     case 2:
       return { type: 'array', items: anObject({ id, ...inner }) };
-    default:
+    case 3:
       return ref('tree');
+    default:
+      return ref('leaf');
   }
 }
 
@@ -724,16 +1029,19 @@ function generatedFieldsOf(next: () => number, before: Fields | undefined): Fiel
   return fields;
 }
 
-/** A generated version of `POST /orders`, its `tree` def drawn with or without a label. */
+/** A generated version of `POST /orders`, its `tree` def drawn with or without a label, and the `leaf` def it reaches with or without `c`. */
 function aGeneratedService(next: () => number, fields: Fields): ServiceSnapshot {
   const { [generatedParam]: page, ...body } = fields;
   const label = next() < 0.5 ? { label: optional(next() < 0.5 ? aNumber : aString) } : {};
-  const tree = anObject({ ...label, child: optional(ref('tree')) });
+  const tree = anObject({ ...label, child: optional(ref('tree')), leaf: optional(ref('leaf')) });
+  const drawn = next() < 0.5 ? { c: optional(next() < 0.5 ? aNumber : aString) } : {};
+  const leaf = anObject({ ...drawn, d: optional(aString) });
   const usesTree = JSON.stringify(body).includes('"tree"');
+  const usesLeaf = usesTree || JSON.stringify(body).includes('"leaf"');
   return aService({
     body: { id, ...body },
     query: page === undefined ? {} : { [generatedParam]: page },
-    defs: usesTree ? { tree } : {},
+    defs: { ...(usesTree ? { tree } : {}), ...(usesLeaf ? { leaf } : {}) },
   });
 }
 
@@ -811,15 +1119,14 @@ function baselineDeclaring(
 }
 
 /** Whether a former Input has a field the Endpoint now lacks and nothing Breaking against it. */
+/** Whether a former Input differs from its Endpoint's Input only by fields removed, one at least, and by the names of its defs. */
 function isWellFormed(former: FormerInput, { proposed, published }: Published): boolean {
   const lines = linesOf(baselineDeclaring(published, former), proposed);
-  const removed = lines.some((line) => line.startsWith('additive field-removed'));
-  return removed && !lines.some((line) => line.startsWith('breaking'));
-}
-
-function holdsOneTwice({ published }: Published): boolean {
-  const texts = published.formerInputs.map(({ input, defs }) => JSON.stringify([input, defs]));
-  return new Set(texts).size !== texts.length;
+  const isRemovalOrName = (line: string) =>
+    line.startsWith('additive field-removed') || line.startsWith('neutral annotation-changed');
+  return (
+    lines.some((line) => line.startsWith('additive field-removed')) && lines.every(isRemovalOrName)
+  );
 }
 
 function shapeKeyOf(change: Change): string | undefined {
@@ -874,18 +1181,14 @@ describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over gene
     expect([unread.map(({ label }) => label), Math.max(...depths)]).toEqual([[], 4]);
   });
 
-  test('each former Input has a field removed and nothing Breaking against its Endpoint’s Input, and none is held twice', () => {
+  test('each former Input differs from its Endpoint’s Input only by fields removed, one at least, and by the names of its defs', () => {
     const held = publishes.flatMap((step) =>
       step.published.formerInputs.map((former) => ({ former, step })),
     );
 
     const malformed = held.filter(({ former, step }) => !isWellFormed(former, step));
-    const twice = publishes.filter(holdsOneTwice);
 
-    expect([malformed.map(({ step }) => step.label), twice.map(({ label }) => label)]).toEqual([
-      [],
-      [],
-    ]);
+    expect(malformed.map(({ step }) => step.label)).toEqual([]);
     expect(held.length).toBeGreaterThan(100);
   });
 

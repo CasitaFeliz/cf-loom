@@ -243,7 +243,7 @@ The Snapshot of the highest version of a Contract Package or Definitions Package
 _Avoid_: previous snapshot, reference
 
 **Former Input**:
-An Endpoint's query and body as a published version declared them, kept in the published Snapshot once a later version removed a field from them, with the defs they reached, because Callers built on that version still send them; the Compatibility Check compares what the Endpoint declares with each. Forgotten once the Endpoint declares every field it had again, once a publish is Breaking against it, or once the Endpoint is Retired.
+An Endpoint's query and body as published, with the fields a version removed from them present as the Callers built before that version still send them, kept in the published Snapshot with the defs they reach; the Compatibility Check compares what the Endpoint declares with each. Rewritten onto the Endpoint's query and body at every publish; forgotten once it adds no field to them, or once the Endpoint is Retired.
 _Avoid_: previous Input, input history, old shape, removed Input (the body a Caller no longer sends is removed; a former Input is kept)
 
 **Reader schema**:
