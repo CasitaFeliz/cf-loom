@@ -34,13 +34,19 @@ export function methodOf(
       return notSentFaultOf(signal);
     }
     const passed = fieldsOf(input);
-    const headers = await withConfiguredHeaders(called, calling.headers, passed['headers']);
-    const ready = await readyInputOf(called.endpoint, { ...passed, headers });
-    if (ready.kind === 'invalid') {
-      return invalidInputOf(called, ready.issues);
+    const headed = await withConfiguredHeaders(called, calling.headers, {
+      passed: passed['headers'],
+      signal,
+    });
+    if (headed.kind === 'not-sent') {
+      return headed.fault;
     }
+    const ready = await readyInputOf(called.endpoint, { ...passed, headers: headed.headers });
     if (signal !== undefined && isAborted(signal)) {
       return notSentFaultOf(signal);
+    }
+    if (ready.kind === 'invalid') {
+      return invalidInputOf(called, ready.issues);
     }
     const sent = requestOf(called.endpoint, calling.base, ready.input);
     const request = signal === undefined ? sent : new Request(sent, { signal });

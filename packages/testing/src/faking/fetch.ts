@@ -1,3 +1,4 @@
+import { abortableOf } from '@cf-loom/client/internal';
 import type { Http } from '@cf-loom/contract';
 import {
   invalidInputResponseOf,
@@ -188,16 +189,4 @@ async function stepAnswerOf(
     throw mistakeOf({ ...whoOf(listed), what: 'a step returned no answer built with its r' });
   }
   return returned as ScriptedAnswer;
-}
-
-/**
- * What a request waits for, or the signal's reason, as `fetch` rejects with it, once the signal
- * is aborted; it is never already aborted here, since `fetch` checked first.
- */
-function abortableOf<Value>(waited: Promise<Value>, signal: AbortSignal): Promise<Value> {
-  const aborted = Promise.withResolvers<never>();
-  const abort = () => aborted.reject(signal.reason);
-  signal.addEventListener('abort', abort, { once: true });
-  const settled = Promise.race([waited, aborted.promise]);
-  return settled.finally(() => signal.removeEventListener('abort', abort));
 }
