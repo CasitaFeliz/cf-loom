@@ -4919,6 +4919,25 @@ describe.concurrent('cf-loom check, the version publish would take', {
       tag: null,
     });
   });
+
+  test('a version that would not be above the Baseline still says that a Change needs a Breaking Change Approval, in lines and in --json', async ({
+    lab,
+  }) => {
+    const changed = await aChangedProject(lab, removedSuccessField, ['2.0.0-rc.1']);
+
+    const lines = await checkedAgainst(lab, changed, '--prerelease');
+    const json = await checkedAgainst(lab, changed, '--json', '--prerelease');
+
+    const notAbove = `${ordersPackage}@2.0.0-0 would not be above the Baseline 2.0.0-rc.1: publish a version above it by hand`;
+    const errors = [notAbove, approvalNeededLine];
+    expect(lines.ran).toMatchObject({ status: 3, stderr: `${errors.join('\n')}\n` });
+    expect(json.ran.status).toBe(3);
+    expect(documentOf(json.ran)).toMatchObject({
+      status: 3,
+      errors,
+      changes: [expect.objectContaining({ verdict: 'approval-needed' })],
+    });
+  });
 });
 
 describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
