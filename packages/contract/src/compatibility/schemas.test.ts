@@ -1587,6 +1587,38 @@ const sprawl = anObject(
 );
 
 describe('compatibilityReportOf, refs', () => {
+  test('a ref made nullable through an alias def is nullability added', () => {
+    const defs: Defs = { alias: aRef('target'), target: anObject({ v: required(aString) }) };
+
+    const report = reportOf(input, {
+      from: anObject({ x: required(aRef('alias')) }),
+      to: anObject({ x: required({ ...aRef('alias'), nullable: true }) }),
+      fromDefs: defs,
+      toDefs: defs,
+    });
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'x'])),
+    ]);
+  });
+
+  test('a def reached through two alias defs at two paths is one Change, at the first path', () => {
+    const aliases: Defs = { first: aRef('target'), second: aRef('target') };
+    const body = anObject({ x: required(aRef('first')), y: required(aRef('second')) });
+
+    const report = reportOf(input, {
+      from: body,
+      to: body,
+      fromDefs: { ...aliases, target: anObject({ v: required(aBoolean) }) },
+      toDefs: { ...aliases, target: anObject({ v: required(aString) }) },
+    });
+
+    const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, found(changed, breaksEverywhere, ['fields', 'x', 'fields', 'v'])),
+    ]);
+  });
+
   test.each(casesOf(refRows))('$change is $outcome in $place', expectRow);
 
   test.each(places)(

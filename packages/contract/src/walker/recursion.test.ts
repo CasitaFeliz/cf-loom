@@ -1483,6 +1483,23 @@ describe('reachedDefsOf', () => {
   const ref = (name: string): SchemaNode => ({ type: 'ref', name });
   const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
 
+  test('defs reached through several refs are named in the order the nodes hold them, depth first', () => {
+    const both: SchemaNode = {
+      type: 'object',
+      fields: { a: { required: true, schema: ref('a') }, b: { required: true, schema: ref('b') } },
+    };
+    const defs = {
+      a: holding(ref('c')),
+      b: holding(ref('d')),
+      c: { type: 'string' },
+      d: { type: 'string' },
+    } as const;
+
+    const names = reachedDefsOf([both], defs);
+
+    expect(names).toEqual(['a', 'b', 'c', 'd']);
+  });
+
   test.each([
     {
       reach: 'a chain whose last def closes a cycle',
@@ -1635,6 +1652,7 @@ describe('walkSchemas: depth', () => {
     ['an object', (next: z.ZodObject) => z.object({ inner: next })],
     ['an optional field', (next: z.ZodObject) => next.optional()],
     ['a nonoptional field', (next: z.ZodObject) => next.optional().nonoptional()],
+    ['a nonoptional field on a required schema', (next: z.ZodObject) => next.nonoptional()],
     ['an array', (next: z.ZodObject) => z.array(next)],
     ['a record', (next: z.ZodObject) => z.record(z.string(), next)],
     ['a tuple item', (next: z.ZodObject) => z.tuple([next])],
@@ -1766,7 +1784,7 @@ describe('walkSchemas: depth', () => {
   test('the order an object’s fields are written in changes neither the Snapshot nor the verdict', {
     timeout: deepTimeout,
   }, () => {
-    const draw = { seed: 4, size: depth, innermost: z.boolean() };
+    const draw = { seed: 4, size: 1_000, innermost: z.boolean() };
     const dated = { ...draw, innermost: z.date() };
 
     const written = serviceSnapshotOf(validated(aGraphOf({ ...draw, shuffled: false })));
