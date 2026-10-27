@@ -1,5 +1,10 @@
 import type { Command, Event, ServiceContract } from '@cf-loom/contract';
-import type { GroupedOf, IsOneLiteral, Refusal } from '@cf-loom/contract/internal';
+import type {
+  DeclaredFieldsRule,
+  GroupedOf,
+  IsOneLiteral,
+  Refusal,
+} from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { GivenHeaders } from './checks.ts';
 
@@ -74,18 +79,18 @@ type SentBodyOf<C extends ServiceContract, Name> =
 
 /** What a Service publishes its Events with: one body for each Active and Deprecated version of the named Event. */
 export type EventPublisher<C extends ServiceContract> = {
-  readonly publish: <Name extends PublishedNameOf<C>>(
+  readonly publish: <Name extends PublishedNameOf<C>, const Given = unknown>(
     name: Name,
     bodies: PublishedBodiesOf<C, Name>,
-    options: MessageOptions,
+    options: MessageOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessageOptions>>,
   ) => Promise<Published>;
 };
 
 /** What a Service sends its Commands with: the named Command's one Active version. */
 export type CommandSender<C extends ServiceContract> = {
-  readonly send: <Name extends SentNameOf<C>>(
+  readonly send: <Name extends SentNameOf<C>, const Given = unknown>(
     name: Name,
     body: SentBodyOf<C, Name>,
-    options: MessageOptions,
+    options: MessageOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessageOptions>>,
   ) => Promise<Sent>;
 };
