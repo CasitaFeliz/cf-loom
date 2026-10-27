@@ -9,6 +9,8 @@ import {
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Defs,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
@@ -63,18 +65,21 @@ const noBodies = {
   success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
 } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'createOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Places an order',
     params: [],
     guards: [],
     rejections: [],
     ...noBodies,
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 

@@ -9,6 +9,8 @@ import {
   type DefinitionsSnapshot,
   decodeSnapshot,
   defScopesOf,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type Field,
   type FormerInput,
@@ -79,16 +81,16 @@ type Declared = {
   readonly query?: Fields;
   readonly headers?: Fields;
   readonly defs?: Defs;
-  readonly endpoint?: Partial<EndpointSnapshot>;
+  readonly endpoint?: Partial<EndpointFields>;
+  readonly lifecycle?: EndpointLifecycle;
   readonly guards?: ServiceSnapshot['guards'];
 };
 
-function anEndpoint({ body = { id }, query = {}, headers = {}, endpoint }: Declared) {
+function anEndpoint({ body = { id }, query = {}, headers = {}, endpoint, lifecycle }: Declared) {
   const declared: EndpointSnapshot = {
     name: 'createOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Places an order',
     params: [],
     guards: [],
@@ -101,6 +103,7 @@ function anEndpoint({ body = { id }, query = {}, headers = {}, endpoint }: Decla
     success: { status: 201, headers: emptyObject, body: null },
     rejections: [],
     ...endpoint,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
   return declared;
 }
@@ -928,8 +931,8 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
     const formerInputs = formerInputsAfter(
       aService({ body: { id, note: optional(aNumber) } }),
-      aService({ body: { id }, endpoint: deprecated }),
-      aService({ body: { id }, endpoint: { lifecycle: 'retired' } }),
+      aService({ body: { id }, lifecycle: deprecated }),
+      aService({ body: { id }, lifecycle: { lifecycle: 'retired' } }),
     );
 
     expect(formerInputs).toEqual([]);
