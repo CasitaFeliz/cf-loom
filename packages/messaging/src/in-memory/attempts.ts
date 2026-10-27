@@ -8,14 +8,17 @@ import {
 import { InvalidInputError } from '@cf-loom/handlers';
 import { defaultedMetaOf, firstAttempt, writtenMessageBody } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
-import type { CoreConsumer } from '../consuming/index.ts';
+import type { CoreDurableConsumer } from '../consuming/index.ts';
 import { checkedHeadersOf, InvalidMessageError } from '../sending/index.ts';
 import type { DeliveryMeta } from './types.ts';
 
-/** One delivery to one consumer: the Delivery it receives. */
-export type Attempt = { readonly consumer: CoreConsumer; readonly delivery: Delivery };
+/** One delivery to one Durable consumer: the Delivery it receives. */
+export type Attempt = {
+  readonly durableConsumer: CoreDurableConsumer;
+  readonly delivery: Delivery;
+};
 
-/** The Delivery of a Message the first time a consumer receives it, with no wait: memory models no broker configuration. */
+/** The Delivery of a Message the first time a Durable consumer receives it, with no wait: memory models no broker configuration. */
 export function firstDeliveryOf({
   messageId,
   factId,
@@ -34,32 +37,32 @@ type Injection = {
 };
 
 /**
- * The Delivery of an injected Message to each consumer it reaches, in the order `consume` gave
+ * The Delivery of an injected Message to each Durable consumer it reaches, in the order `consume` gave
  * them, checked all together so that a body one Reader refuses delivers nothing.
  */
 export function injectedAttemptsOf(
-  consumers: readonly CoreConsumer[],
+  durableConsumers: readonly CoreDurableConsumer[],
   injection: Injection,
 ): readonly Attempt[] {
-  return attemptsOf(reachedBy(consumers, injection.message), injection);
+  return attemptsOf(reachedBy(durableConsumers, injection.message), injection);
 }
 
-/** The consumers a Message Version reaches: a Command's Message Handler, or the Subscriptions to an Event. */
+/** The Durable consumers a Message Version reaches: a Command's Message Handler, or the Subscriptions to an Event. */
 function reachedBy(
-  consumers: readonly CoreConsumer[],
+  durableConsumers: readonly CoreDurableConsumer[],
   message: Event | Command,
-): readonly CoreConsumer[] {
-  const reached = consumers.filter((consumer) => consumes(consumer, message));
+): readonly CoreDurableConsumer[] {
+  const reached = durableConsumers.filter((durableConsumer) => consumes(durableConsumer, message));
   if (reached.length === 0) {
     const named = messageIdentityOf(message.name, message.version);
     const reason = 'nothing consume()d takes it, or its Handler is a Stub';
-    throw new Error(`${named} has no consumer: ${reason}`);
+    throw new Error(`${named} has no Durable consumer: ${reason}`);
   }
   return reached;
 }
 
 function attemptsOf(
-  reached: readonly CoreConsumer[],
+  reached: readonly CoreDurableConsumer[],
   { message, body, meta }: Injection,
 ): readonly Attempt[] {
   const { headers: given = {}, ...ids } = meta;
@@ -70,21 +73,21 @@ function attemptsOf(
     throw new InvalidMessageError(invalid);
   }
   const parts = { messageId, factId, headers };
-  return reached.map((consumer) => {
-    const bytes = jsonBytesOf(writtenBodyOf(consumer, body));
-    return { consumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
+  return reached.map((durableConsumer) => {
+    const bytes = jsonBytesOf(writtenBodyOf(durableConsumer, body));
+    return { durableConsumer, delivery: firstDeliveryOf({ ...parts, body: bytes }) };
   });
 }
 
-function consumes({ declaration }: CoreConsumer, message: Event | Command): boolean {
+function consumes({ declaration }: CoreDurableConsumer, message: Event | Command): boolean {
   if (isCommand(message)) {
     return declaration === message;
   }
   return isSubscription(declaration) && declaration.event === message;
 }
 
-/** The body as it travels to a consumer, written back through its Reader; one that breaks it throws as a direct call does. */
-function writtenBodyOf({ declaration, reader }: CoreConsumer, body: unknown): unknown {
+/** The body as it travels to a Durable consumer, written back through its Reader; one that breaks it throws as a direct call does. */
+function writtenBodyOf({ declaration, reader }: CoreDurableConsumer, body: unknown): unknown {
   const written = writtenMessageBody(reader, body);
   if (written.kind === 'issues') {
     throw new InvalidInputError(declaration, written.issues);

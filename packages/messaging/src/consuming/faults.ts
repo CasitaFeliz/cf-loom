@@ -68,7 +68,7 @@ export type About = Pick<
 /** The delivery a fault speaks of: the Message's ids and which attempt. */
 type Delivered = Pick<Delivery, 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'>;
 
-/** Where a delivery went: the declaration its consumer handles, its subject, the Message's ids and which attempt. */
+/** Where a delivery went: the declaration its Durable consumer handles, its subject, the Message's ids and which attempt. */
 export function aboutOf(
   { declaration, subject }: Pick<Consumed, 'declaration' | 'subject'>,
   { messageId, factId, deliveryCount, lastAttempt }: Delivered,

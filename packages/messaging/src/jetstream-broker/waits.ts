@@ -1,13 +1,13 @@
 import type { ConsumerConfig } from '@nats-io/jetstream';
 import { millis } from '@nats-io/nats-core';
 
-/** The wait NATS gives a durable consumer's delivery when its configuration holds none. */
+/** The wait NATS gives a Durable consumer's delivery when its configuration holds none. */
 const natsAckWaitMs = 30_000;
 
-/** The waits NATS gives a durable consumer's deliveries to be acknowledged, in milliseconds. */
+/** The waits NATS gives a Durable consumer's deliveries to be acknowledged, in milliseconds. */
 export type Waits = { readonly ackWait: number; readonly backoff: readonly number[] };
 
-/** The waits a durable consumer's configuration holds, which the server always fills in. */
+/** The waits a Durable consumer's configuration holds, which the server always fills in. */
 export function waitsOf(config: ConsumerConfig): Waits {
   const ackWait = config.ack_wait === undefined ? natsAckWaitMs : millis(config.ack_wait);
   return { ackWait, backoff: (config.backoff ?? []).map((wait) => millis(wait)) };

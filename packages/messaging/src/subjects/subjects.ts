@@ -19,7 +19,7 @@ export type PublishedVersion = { readonly message: Event; readonly subject: stri
 /** The Active version of one of the Service's own Commands and the subject it is sent on. */
 export type SentVersion = { readonly message: Command; readonly subject: string };
 
-/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its durable consumer. */
+/** A Subscription or Command Version `consume` pulls: where its Handler sits in the map, and its Durable consumer. */
 export type Consumed = {
   readonly declaration: Subscription | Command;
   readonly at: { readonly map: 'commands' | 'subscriptions'; readonly key: string };

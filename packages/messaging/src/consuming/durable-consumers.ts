@@ -2,7 +2,7 @@ import type { HandlerMap } from '@cf-loom/handlers';
 import { identityOf, isStub, mappedMessageHandlerOf } from '@cf-loom/handlers/internal';
 import type { Consumed } from '../subjects/index.ts';
 import type { DeliveryEnds } from './deadline.ts';
-import type { CoreConsumer, Received } from './details.ts';
+import type { CoreDurableConsumer, Received } from './details.ts';
 import type { Report } from './faults.ts';
 import { settlementOf } from './receive.ts';
 
@@ -11,9 +11,9 @@ export type ConsumedHandlers = Pick<HandlerMap, 'commands' | 'subscriptions' | '
 
 /**
  * What one `consume` runs its Handlers with: where it reports faults, the Resources it hands them,
- * `received`, which wraps each consumer's run as the messaging's life allows it, and what ends a delivery early.
+ * `received`, which wraps each Durable consumer's run as the messaging's life allows it, and what ends a delivery early.
  */
-type ConsumersRun = {
+type DurableConsumersRun = {
   readonly report: Report;
   readonly resources: unknown;
   readonly received: Received;
@@ -21,16 +21,16 @@ type ConsumersRun = {
 };
 
 /**
- * The consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
+ * The Durable consumers of one `consume`: each Handler looked up as `serve` looks one up, and required to
  * be written for the very pairing the map's `readers` hold, which gives the Reader its Messages
  * are read with; a Stub left out with a warning, since `consume` does not pull from it; the rest
  * run with `consume`'s Resources.
  */
-export function consumersOf(
+export function durableConsumersOf(
   toConsume: readonly Consumed[],
   handlers: ConsumedHandlers,
-  { report, resources, received, ends }: ConsumersRun,
-): readonly CoreConsumer[] {
+  { report, resources, received, ends }: DurableConsumersRun,
+): readonly CoreDurableConsumer[] {
   const pulled = toConsume.map((consumed) => ({
     consumed,
     ...mappedMessageHandlerOf(handlers, consumed.at, consumed.declaration),

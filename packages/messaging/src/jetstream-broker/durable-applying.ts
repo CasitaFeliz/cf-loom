@@ -5,7 +5,7 @@ import type { PlannedDurable } from './settings.ts';
 
 type Held = 'no-stream' | 'no-durable' | 'held';
 
-/** Creates the pull durable consumer, or updates the one that exists, refusing one whose stream does not exist yet. */
+/** Creates the pull Durable consumer, or updates the one that exists, refusing one whose stream does not exist yet. */
 export async function applyDurable(
   manager: JetStreamManager,
   durable: PlannedDurable,
@@ -13,7 +13,7 @@ export async function applyDurable(
   try {
     return await createOrUpdate(manager, durable);
   } catch (error) {
-    return refusedBy(`The durable consumer ${durable.name}`, error);
+    return refusedBy(`The Durable consumer ${durable.name}`, error);
   }
 }
 
@@ -27,7 +27,7 @@ async function createOrUpdate(
     case 'no-stream':
       return {
         kind: 'refused',
-        message: `The durable consumer ${name} reads the stream ${stream}, which does not exist yet: apply its Service's plan first`,
+        message: `The Durable consumer ${name} reads the stream ${stream}, which does not exist yet: apply its Service's plan first`,
       };
     case 'no-durable':
       await manager.consumers.add(stream, settings);

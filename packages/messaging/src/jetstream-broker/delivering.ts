@@ -20,7 +20,7 @@ export async function deliver(message: PulledMessage, durable: FoundDurable): Pr
   const waitMs = waitOf(durable.waits, deliveryCount);
   const delivered = { messageId, factId, deliveryCount, lastAttempt, waitMs };
   const delivery = { ...delivered, headers, body: message.data };
-  applySettlement(message, await durable.consumer.receive(delivery));
+  applySettlement(message, await durable.durableConsumer.receive(delivery));
 }
 
 /** Whether NATS delivers no more after this delivery: a limit set, and reached. */

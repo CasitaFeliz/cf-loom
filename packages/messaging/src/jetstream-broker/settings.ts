@@ -19,14 +19,14 @@ export type PlannedStream = {
   readonly settings: Partial<StreamConfig>;
 };
 
-/** A durable consumer of the plan with the NATS settings its limits resolve to. */
+/** A Durable consumer of the plan with the NATS settings its limits resolve to. */
 export type PlannedDurable = {
   readonly name: string;
   readonly stream: string;
   readonly settings: DurableSettings;
 };
 
-/** Every stream and durable consumer of a plan with its settings. */
+/** Every stream and Durable consumer of a plan with its settings. */
 export type ResolvedPlan = {
   readonly kind: 'resolved';
   readonly streams: readonly PlannedStream[];
@@ -41,7 +41,7 @@ export type PlanSettings =
 type Resolved<Planned> = { readonly planned: Planned[]; readonly lines: string[] };
 
 /**
- * The settings of each stream and durable consumer of the plan, from its own limits over the
+ * The settings of each stream and Durable consumer of the plan, from its own limits over the
  * defaults, in NATS's units; limits that break their shape, name what the plan does not list or
  * leave a setting unset are refused whole.
  */
@@ -61,10 +61,12 @@ export function settingsOf(plan: BrokerPlan, limits: unknown): PlanSettings {
 
 function unlistedLinesOf(plan: BrokerPlan, limits: NatsBrokerLimits): readonly string[] {
   const streams = unlistedNamesOf(plan.streams, limits.streams);
-  const consumers = unlistedNamesOf(plan.consumers, limits.consumers);
+  const durableConsumers = unlistedNamesOf(plan.durableConsumers, limits.durableConsumers);
   return [
     ...streams.map((name) => `limits.streams names ${name}, which the plan does not list`),
-    ...consumers.map((name) => `limits.consumers names ${name}, which the plan does not list`),
+    ...durableConsumers.map(
+      (name) => `limits.durableConsumers names ${name}, which the plan does not list`,
+    ),
   ];
 }
 
@@ -111,19 +113,19 @@ function streamsOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<Planned
 function durablesOf(plan: BrokerPlan, limits: NatsBrokerLimits): Resolved<PlannedDurable> {
   const planned: PlannedDurable[] = [];
   const lines: string[] = [];
-  for (const [name, consumer] of Object.entries(plan.consumers)) {
-    const durableLimits = { ...limits.consumerDefaults, ...limits.consumers?.[name] };
+  for (const [name, durableConsumer] of Object.entries(plan.durableConsumers)) {
+    const durableLimits = { ...limits.durableConsumerDefaults, ...limits.durableConsumers?.[name] };
     if (isDurableSet(durableLimits)) {
-      const durable = { name, subject: consumer.subject };
+      const durable = { name, subject: durableConsumer.subject };
       planned.push({
         name,
-        stream: consumer.stream,
+        stream: durableConsumer.stream,
         settings: durableConfigOf(durable, durableLimits),
       });
     } else {
       const unset = unsetNamesOf(durableLimits, durableSettingNames).join(', ');
-      const where = 'limits.consumers or limits.consumerDefaults';
-      lines.push(`The durable consumer ${name} has no ${unset} in ${where}`);
+      const where = 'limits.durableConsumers or limits.durableConsumerDefaults';
+      lines.push(`The Durable consumer ${name} has no ${unset} in ${where}`);
     }
   }
   return { planned, lines };

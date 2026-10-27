@@ -13,10 +13,10 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
-  type BrokerConsumer,
   type ConsumedFault,
   DeadlineError,
   type Delivery,
+  type DurableConsumer,
   MessagingClosedError,
   type MessagingOptions,
   messaging,
@@ -125,14 +125,14 @@ const chargeCard = 'orders-service.command.ChargeCard.v2';
 
 const body = { orderId: ORDER_ID, status: 'paid' };
 
-/** A broker that records the consumers messaging gives it and delivers to them. */
+/** A broker that records the Durable consumers messaging gives it and delivers to them. */
 function aBroker() {
-  const consumers: BrokerConsumer[] = [];
+  const durableConsumers: DurableConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
       publish: async () => ({ duplicate: false }),
       consume: async (given) => {
-        consumers.push(...given);
+        durableConsumers.push(...given);
       },
       close: async () => undefined,
     }),
@@ -142,8 +142,8 @@ function aBroker() {
     delivered: unknown,
     delivery: Partial<Delivery> = {},
   ): Promise<Settlement> => {
-    const consumer = consumers.find((candidate) => candidate.subject === subject);
-    if (consumer === undefined) {
+    const durableConsumer = durableConsumers.find((candidate) => candidate.subject === subject);
+    if (durableConsumer === undefined) {
       throw new Error(`Nothing consumes ${subject}`);
     }
     const bytes =
@@ -158,9 +158,9 @@ function aBroker() {
       waitMs: undefined,
       headers: {},
     };
-    return consumer.receive({ ...meta, body: bytes, ...delivery });
+    return durableConsumer.receive({ ...meta, body: bytes, ...delivery });
   };
-  return { broker, consumers, deliver };
+  return { broker, durableConsumers, deliver };
 }
 
 /** A messaging connected and consuming, its Handlers replaced by those given and its faults kept. */
@@ -257,10 +257,14 @@ describe('consume', () => {
     expect(taken[1]).toBe(resources);
   });
 
-  test('consume gives the broker one consumer per Subscription and per Command Version not Retired, with its subject, stream and durable consumer name', async () => {
-    const { consumers } = await consuming();
+  test('consume gives the broker one Durable consumer per Subscription and per Command Version not Retired, with its subject, stream and Durable consumer name', async () => {
+    const { durableConsumers } = await consuming();
 
-    const routes = consumers.map(({ subject, stream, durable }) => ({ subject, stream, durable }));
+    const routes = durableConsumers.map(({ subject, stream, durable }) => ({
+      subject,
+      stream,
+      durable,
+    }));
 
     expect(routes).toEqual([
       {
@@ -287,10 +291,10 @@ describe('consume', () => {
   });
 
   test('a Subscription to a Provider’s Event consumes from that Provider’s stream and subject, with no Dependency', async () => {
-    const { consumers } = await consuming();
+    const { durableConsumers } = await consuming();
 
-    const settled = consumers.find(
-      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    const settled = durableConsumers.find(
+      (durableConsumer) => durableConsumer.durable === 'orders-service_notify-on-settled',
     );
 
     expect(settled).toMatchObject({
@@ -316,8 +320,8 @@ describe('consume', () => {
 
     await consume({ ...handlers, readers }, {});
 
-    const settled = recording.consumers.find(
-      (consumer) => consumer.durable === 'orders-service_notify-on-settled',
+    const settled = recording.durableConsumers.find(
+      (durableConsumer) => durableConsumer.durable === 'orders-service_notify-on-settled',
     );
     expect(settled).toMatchObject({
       stream: 'payments-service',
@@ -326,9 +330,9 @@ describe('consume', () => {
   });
 
   test('a Deprecated Command’s Version is consumed; a Retired one needs no Handler and is not', async () => {
-    const { consumers } = await consuming();
+    const { durableConsumers } = await consuming();
 
-    const durables = consumers.map((consumer) => consumer.durable);
+    const durables = durableConsumers.map((durableConsumer) => durableConsumer.durable);
 
     expect(durables).toContain('orders-service_command_ChargeCard_v1');
     expect(durables).not.toContain('orders-service_command_Refund_v1');
@@ -337,12 +341,12 @@ describe('consume', () => {
   test('a stub is not given to the broker, and consume warns naming it', async () => {
     const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    const { consumers } = await consuming({
+    const { durableConsumers } = await consuming({
       commands: { chargeCardV1: handle.stub(readers.commands.chargeCardV1) },
       subscriptions: { notifyOnCreated: handle.stub(readers.subscriptions.notifyOnCreated) },
     });
 
-    expect(consumers.map((consumer) => consumer.durable)).toEqual([
+    expect(durableConsumers.map((durableConsumer) => durableConsumer.durable)).toEqual([
       'orders-service_command_ChargeCard_v2',
       'orders-service_notify-on-settled',
     ]);

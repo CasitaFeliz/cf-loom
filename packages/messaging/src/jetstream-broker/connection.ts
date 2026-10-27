@@ -20,11 +20,11 @@ export function jetStreamConnectionOf(
       const ack = await client.publish(subject, message.body, { headers: natsHeadersOf(message) });
       return { duplicate: ack.duplicate };
     },
-    consume: async (consumers, { closing, troubled }) => {
+    consume: async (durableConsumers, { closing, troubled }) => {
       const manager = await managerOf(natsConnection, options);
       const inboxPrefix = inboxPrefixOf(natsConnection);
       const search = { manager, prefix, apiPrefix: client.apiPrefix, inboxPrefix };
-      const found = await durablesFoundOf(search, consumers);
+      const found = await durablesFoundOf(search, durableConsumers);
       if (found.kind === 'refused') {
         throw new Error(found.lines.join('\n'));
       }

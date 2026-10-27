@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/noExcessiveLinesPerFile: one responsibility: the ./internal entry, a list of re-exports that the Package layout forbids splitting into several files
 export type {
   BrokerPlan,
-  BrokerPlanConsumer,
+  BrokerPlanDurableConsumer,
   BrokerPlanStream,
   DecodedBrokerPlan,
 } from '../broker-plan/index.ts';

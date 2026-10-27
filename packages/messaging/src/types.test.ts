@@ -21,18 +21,18 @@ import { z } from 'zod';
 import {
   type Broker,
   type BrokerConnection,
-  type BrokerConsumer,
-  type BrokerService,
   type BrokerTrouble,
   type CloseOptions,
   type ConsumedFault,
   type ConsumeOptions,
   type ConsumeRun,
-  type ConsumerTrouble,
   type Delivery,
+  type DurableConsumer,
+  type DurableConsumerTrouble,
   type Messaging,
   type MessagingOptions,
   messaging,
+  type ServiceStream,
   type Settlement,
 } from './index.ts';
 
@@ -647,25 +647,25 @@ describe('the options, typed by what they declare', () => {
 
 describe('the Broker seam', () => {
   test('a Broker adapter implements connect with only the stream and subjects', () => {
-    expectTypeOf<keyof BrokerService>().toEqualTypeOf<'stream' | 'subjects'>();
+    expectTypeOf<keyof ServiceStream>().toEqualTypeOf<'stream' | 'subjects'>();
   });
 
-  test('a BrokerConsumer offers an adapter only its durable consumer, stream, subject and receive', () => {
-    expectTypeOf<keyof BrokerConsumer>().toEqualTypeOf<
+  test('a DurableConsumer offers an adapter only its Durable consumer, stream, subject and receive', () => {
+    expectTypeOf<keyof DurableConsumer>().toEqualTypeOf<
       'durable' | 'stream' | 'subject' | 'receive'
     >();
   });
 
-  test('an adapter’s consume receives the consumers and a ConsumeRun of closing and troubled', () => {
+  test('an adapter’s consume receives the Durable consumers and a ConsumeRun of closing and troubled', () => {
     expectTypeOf<Parameters<BrokerConnection['consume']>>().toEqualTypeOf<
-      [consumers: readonly BrokerConsumer[], run: ConsumeRun]
+      [durableConsumers: readonly DurableConsumer[], run: ConsumeRun]
     >();
     expectTypeOf<ConsumeRun>().toEqualTypeOf<{
       readonly closing: AbortSignal;
-      readonly troubled: (trouble: ConsumerTrouble) => void;
+      readonly troubled: (trouble: DurableConsumerTrouble) => void;
     }>();
-    expectTypeOf<ConsumerTrouble>().toEqualTypeOf<
-      { readonly consumer: BrokerConsumer } & (
+    expectTypeOf<DurableConsumerTrouble>().toEqualTypeOf<
+      { readonly durableConsumer: DurableConsumer } & (
         | { readonly kind: 'pull-failed'; readonly cause: unknown }
         | { readonly kind: 'recovered' }
       )

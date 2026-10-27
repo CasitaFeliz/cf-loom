@@ -15,7 +15,7 @@ export function streamConfigOf(limits: SetLimits<NatsStreamLimits>): Partial<Str
 }
 
 /**
- * A pull durable consumer's limits as the NATS settings nats.js takes, the same for creating it and
+ * A pull Durable consumer's limits as the NATS settings nats.js takes, the same for creating it and
  * for updating it; the backoff is always sent, empty for one ack wait, so an update clears an old one.
  */
 export function durableConfigOf(

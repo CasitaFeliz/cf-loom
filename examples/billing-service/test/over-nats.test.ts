@@ -63,7 +63,7 @@ function sequenceOf(subject: string, factId: string): Promise<number> {
   }, patience);
 }
 
-/** What a durable consumer holds once it has settled every Message up to a stream sequence. */
+/** What a Durable consumer holds once it has settled every Message up to a stream sequence. */
 function stateOnceSettled(durable: string, sequence: number): Promise<DurableState> {
   return vi.waitFor(async () => {
     const state = await durableStateOf(nats!.url, stream, durable);

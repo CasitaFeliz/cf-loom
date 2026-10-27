@@ -9,7 +9,7 @@ import {
 } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
-/** Creates a durable consumer as a test arranges it, with the NATS client and not through `applyBrokerPlan`. */
+/** Creates a Durable consumer as a test arranges it, with the NATS client and not through `applyBrokerPlan`. */
 export async function arrangeDurable(
   url: string,
   stream: string,
@@ -25,7 +25,7 @@ export async function arrangeDurable(
 }
 
 /**
- * Creates every durable consumer of a broker plan as the organization's tooling would from
+ * Creates every Durable consumer of a broker plan as the organization's tooling would from
  * `cf-loom broker-plan`, with the NATS client and not `applyBrokerPlan`: a pull consumer with explicit
  * acknowledgements filtered on its subject, with `settings` over that.
  */
@@ -34,13 +34,13 @@ export async function arrangeDurablesOf(
   plan: BrokerPlan,
   settings: Partial<ConsumerConfig> = {},
 ): Promise<void> {
-  for (const [name, durable] of Object.entries(plan.consumers)) {
+  for (const [name, durable] of Object.entries(plan.durableConsumers)) {
     const shape = { ack_policy: 'explicit', filter_subject: durable.subject } as const;
     await arrangeDurable(url, durable.stream, { ...shape, ...settings, durable_name: name });
   }
 }
 
-/** Deletes a durable consumer a test arranged, with the NATS client. */
+/** Deletes a Durable consumer a test arranged, with the NATS client. */
 export async function dropDurable(url: string, stream: string, durable: string): Promise<void> {
   const connection = await connect({ servers: url });
   try {
@@ -51,7 +51,7 @@ export async function dropDurable(url: string, stream: string, durable: string):
   }
 }
 
-/** What NATS holds about a durable consumer, read with the NATS client; undefined when it holds none. */
+/** What NATS holds about a Durable consumer, read with the NATS client; undefined when it holds none. */
 export async function durableInfoOf(
   url: string,
   stream: string,
@@ -71,7 +71,7 @@ export async function durableInfoOf(
   }
 }
 
-/** The configuration NATS holds for a durable consumer, read with the NATS client. */
+/** The configuration NATS holds for a Durable consumer, read with the NATS client. */
 export async function durableConfigOf(
   url: string,
   stream: string,
@@ -79,7 +79,7 @@ export async function durableConfigOf(
 ): Promise<ConsumerConfig> {
   const info = await durableInfoOf(url, stream, durable);
   if (info === undefined) {
-    throw new Error(`The durable consumer ${durable} does not exist on ${stream}`);
+    throw new Error(`The Durable consumer ${durable} does not exist on ${stream}`);
   }
   return info.config;
 }

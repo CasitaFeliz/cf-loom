@@ -93,7 +93,7 @@ const durableLimits = z.strictObject(durableShape);
 /** The name of each setting of a stream's limits. */
 export const streamSettingNames = streamLimits.keyof().options;
 
-/** The name of each setting of a durable consumer's limits. */
+/** The name of each setting of a Durable consumer's limits. */
 export const durableSettingNames = durableLimits.keyof().options;
 
 /** The settings of limits that are not `undefined`, which leaves one unset like a missing key. */
@@ -129,15 +129,18 @@ const definedDurableLimits = durableLimits.transform((limits) =>
 
 const brokerLimits = z.strictObject({
   streamDefaults: definedStreamLimits.optional(),
-  consumerDefaults: definedDurableLimits.optional(),
+  durableConsumerDefaults: definedDurableLimits.optional(),
   streams: z.record(z.string(), definedStreamLimits.optional()).transform(entriesOf).optional(),
-  consumers: z.record(z.string(), definedDurableLimits.optional()).transform(entriesOf).optional(),
+  durableConsumers: z
+    .record(z.string(), definedDurableLimits.optional())
+    .transform(entriesOf)
+    .optional(),
 });
 
 /** A stream's limits as NATS counts them, each possibly unset. */
 export type NatsStreamLimits = z.output<typeof streamLimits>;
 
-/** A durable consumer's limits as NATS counts them, each possibly unset. */
+/** A Durable consumer's limits as NATS counts them, each possibly unset. */
 export type NatsDurableLimits = z.output<typeof durableLimits>;
 
 /** The limits a Service passed, every value in NATS's units. */

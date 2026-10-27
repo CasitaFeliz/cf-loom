@@ -550,7 +550,7 @@ describe('deliver()', () => {
 
       const delivering = inMemory.deliver(declaration, body);
 
-      await expect(delivering).rejects.toThrow(`${named} has no consumer`);
+      await expect(delivering).rejects.toThrow(`${named} has no Durable consumer`);
     },
   );
 
@@ -559,7 +559,7 @@ describe('deliver()', () => {
 
     const delivering = inMemory.deliver(chargeCardV1, charge);
 
-    await expect(delivering).rejects.toThrow('ChargeCard@1 has no consumer');
+    await expect(delivering).rejects.toThrow('ChargeCard@1 has no Durable consumer');
   });
 
   test('deliver stops once its own Messages have settled: what their Handlers send stays lined up, and close() lists it as pending', async () => {

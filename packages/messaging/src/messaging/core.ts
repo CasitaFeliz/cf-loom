@@ -5,7 +5,7 @@ import type { ResourcesField } from '@cf-loom/handlers/internal';
 import {
   type BrokerTroubleHook,
   type ConsumedHandlers,
-  consumersOf,
+  durableConsumersOf,
   reportOf,
   type ServiceFaultHook,
   troubleTellOf,
@@ -15,11 +15,11 @@ import type { Subjects } from '../subjects/index.ts';
 import type { CloseOptions } from './closed.ts';
 import { type CoreConnection, MessagingLife } from './life.ts';
 
-/** What is operational about messaging and no part of the Contract: the hooks for what Message Handlers end or fail with, and for durable consumers no longer pulled from. */
+/** What is operational about messaging and no part of the Contract: the hooks for what Message Handlers end or fail with, and for Durable consumers no longer pulled from. */
 export type MessagingOptions = {
   /** Receives a Message ended for failing its schema, every Fault a Handler returned, retryable or not, and anything thrown; the console without it. */
   readonly onServiceFault?: ServiceFaultHook;
-  /** Receives each durable consumer stopping being pulled from, and its pulls answered again, once each time; the console without it. */
+  /** Receives each Durable consumer stopping being pulled from, and its pulls answered again, once each time; the console without it. */
   readonly onBrokerTrouble?: BrokerTroubleHook;
 };
 
@@ -58,7 +58,7 @@ export function connectedMessaging<C extends ServiceContract>(
     sender: { send: (...call: Parameters<typeof send>) => life.tracked(send(...call)) },
     consume: (handlers: ConsumedHandlers, { resources }: ConsumeOptions<object>) =>
       life.consume(
-        (lived) => consumersOf(subjects.consumed, handlers, { report, resources, ...lived }),
+        (lived) => durableConsumersOf(subjects.consumed, handlers, { report, resources, ...lived }),
         tellTrouble,
       ),
     close: (options?: CloseOptions) => life.close(options),

@@ -8,7 +8,7 @@ import {
 import { handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { type Broker, type BrokerConsumer, messaging, type OutgoingMessage } from './index.ts';
+import { type Broker, type DurableConsumer, messaging, type OutgoingMessage } from './index.ts';
 
 const money = z.object({ amount: z.number(), currency: z.string() });
 
@@ -58,10 +58,10 @@ const contract = defineService({
 type Resources = { readonly notifications: { readonly send: (orderId: string) => Promise<void> } };
 type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
-/** A broker that records what is published and the consumers it is given, built on the public `Broker` type. */
+/** A broker that records what is published and the Durable consumers it is given, built on the public `Broker` type. */
 function aBroker() {
   const published: OutgoingMessage[] = [];
-  const consumers: BrokerConsumer[] = [];
+  const durableConsumers: DurableConsumer[] = [];
   const broker: Broker = {
     connect: async () => ({
       publish: async (message) => {
@@ -69,12 +69,12 @@ function aBroker() {
         return { duplicate: false };
       },
       consume: async (given) => {
-        consumers.push(...given);
+        durableConsumers.push(...given);
       },
       close: async () => undefined,
     }),
   };
-  return { broker, published, consumers };
+  return { broker, published, durableConsumers };
 }
 
 describe('the messaging README', () => {
@@ -110,7 +110,7 @@ describe('the messaging README', () => {
   });
 
   test('the Message Handlers example runs through consume, reading its meta', async () => {
-    const { broker, consumers } = aBroker();
+    const { broker, durableConsumers } = aBroker();
     const received: unknown[] = [];
     const resources: Resources = {
       notifications: { send: async (orderId) => void received.push(orderId) },
@@ -148,11 +148,11 @@ describe('the messaging README', () => {
       headers: { traceparent: '00-abc-def-01' },
     };
     const body = { orderId: 'o-1', total: { amount: 12, currency: 'EUR' } };
-    const consumer = consumers.find(
+    const durableConsumer = durableConsumers.find(
       (candidate) => candidate.durable === 'orders-service_notify-on-created',
     );
 
-    const settlement = await consumer?.receive({
+    const settlement = await durableConsumer?.receive({
       ...meta,
       lastAttempt: false,
       waitMs: undefined,

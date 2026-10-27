@@ -97,7 +97,7 @@ describe('the Wire protocol over the broker', () => {
     expect(stream).toBe('orders-service');
   });
 
-  test('a Subscription’s durable consumer is <service>_<name in kebab-case> and a Command Version’s <service>_command_<Name>_v<n>', () => {
+  test('a Subscription’s Durable consumer is <service>_<name in kebab-case> and a Command Version’s <service>_command_<Name>_v<n>', () => {
     const durables = [
       durableNameOf('orders-service', notifyOnCreated),
       durableNameOf('orders-service', chargeCardV1),
@@ -109,7 +109,7 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
-  test('two Subscriptions whose names differ only in the case of a letter get two durable consumers', () => {
+  test('two Subscriptions whose names differ only in the case of a letter get two Durable consumers', () => {
     const settle2xy = defineSubscription({
       name: 'settle2xy',
       description: 'Settles lower',
@@ -129,7 +129,7 @@ describe('the Wire protocol over the broker', () => {
     expect(durables).toEqual(['orders-service_settle2xy', 'orders-service_settle2-xy']);
   });
 
-  test('a prefixed subject is <prefix>.<subject> and a prefixed stream or durable consumer <prefix>_<name>', () => {
+  test('a prefixed subject is <prefix>.<subject> and a prefixed stream or Durable consumer <prefix>_<name>', () => {
     const subject = subjectOf('orders-service', orderCreatedV2);
 
     const prefixed = [
@@ -145,7 +145,7 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
-  test('with no prefix a subject, a stream and a durable consumer are themselves', () => {
+  test('with no prefix a subject, a stream and a Durable consumer are themselves', () => {
     const subject = subjectOf('orders-service', orderCreatedV2);
 
     const names = [
@@ -161,7 +161,7 @@ describe('the Wire protocol over the broker', () => {
     ]);
   });
 
-  test('a stream, a durable consumer and a subject carry the prefix they were prefixed with', () => {
+  test('a stream, a Durable consumer and a subject carry the prefix they were prefixed with', () => {
     const subject = subjectOf('orders-service', orderCreatedV2);
 
     const carried = [

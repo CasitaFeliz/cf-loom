@@ -7,7 +7,12 @@ import { connect } from '@nats-io/transport-node';
 
 /** Every setting of a test's plans, for one throwaway nats-server, which holds one replica of anything. */
 const testLimits: BrokerLimits = {
-  consumerDefaults: { ackWait: '30s', deliverPolicy: 'all', maxAckPending: 100, maxDeliver: 5 },
+  durableConsumerDefaults: {
+    ackWait: '30s',
+    deliverPolicy: 'all',
+    maxAckPending: 100,
+    maxDeliver: 5,
+  },
   streamDefaults: {
     duplicateWindow: '2m',
     maxAge: '1h',
@@ -56,11 +61,11 @@ export async function lastMessageOn(
   }
 }
 
-/** What a durable consumer has settled and still holds. */
+/** What a Durable consumer has settled and still holds. */
 export type DurableState = {
   /** The stream sequence up to which every delivery is settled. */
   readonly ackFloor: number;
-  /** Messages the durable consumer has not delivered yet. */
+  /** Messages the Durable consumer has not delivered yet. */
   readonly pending: number;
   /** Deliveries waiting for their acknowledgement. */
   readonly ackPending: number;
@@ -68,7 +73,7 @@ export type DurableState = {
   readonly redelivered: number;
 };
 
-/** What NATS holds about a durable consumer's progress. */
+/** What NATS holds about a Durable consumer's progress. */
 export async function durableStateOf(
   url: string,
   stream: string,

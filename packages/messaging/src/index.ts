@@ -2,12 +2,12 @@ export type {
   Broker,
   BrokerAck,
   BrokerConnection,
-  BrokerConsumer,
-  BrokerService,
   ConsumeRun,
-  ConsumerTrouble,
   Delivery,
+  DurableConsumer,
+  DurableConsumerTrouble,
   OutgoingMessage,
+  ServiceStream,
   Settlement,
 } from './broker/index.ts';
 export type { BrokerTrouble, ConsumedFault } from './consuming/index.ts';

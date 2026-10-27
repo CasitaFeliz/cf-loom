@@ -1,5 +1,9 @@
 import type { Delivery, Settlement } from '../broker/index.ts';
-import { type CoreConsumer, consumedFaultLinesOf, type Settled } from '../consuming/index.ts';
+import {
+  type CoreDurableConsumer,
+  consumedFaultLinesOf,
+  type Settled,
+} from '../consuming/index.ts';
 import type { Attempt } from './attempts.ts';
 import { Failures } from './failures.ts';
 import { DeliveryLine, isCut } from './line.ts';
@@ -9,7 +13,7 @@ import type { PendingMessage } from './types.ts';
 /** How severe a settlement is, the most severe first. */
 const bySeverity: readonly Settlement[] = ['ended', 'pending', 'handed-back', 'acked'];
 
-/** What a `memory()` does with its consumers: delivers to them one at a time, and keeps what became of each delivery. */
+/** What a `memory()` does with its Durable consumers: delivers to them one at a time, and keeps what became of each delivery. */
 export class Deliveries {
   readonly #line: DeliveryLine;
   readonly #pending = new PendingList();
@@ -46,7 +50,7 @@ export class Deliveries {
     return bySeverity.find((settlement) => settlements.includes(settlement)) ?? 'acked';
   }
 
-  /** Lines every Message pending now up again, each for the consumer it is pending for, runs the line through them and waits for them. */
+  /** Lines every Message pending now up again, each for the Durable consumer it is pending for, runs the line through them and waits for them. */
   async redeliver(): Promise<void> {
     const pending = this.#pending.attempts();
     const lined = pending.map((attempt) =>
@@ -76,19 +80,19 @@ export class Deliveries {
   }
 
   /** A pending Message delivered as its next attempt, unless it left the list since `redeliver` was called. */
-  async #again({ consumer, delivery }: Attempt): Promise<void> {
-    const current = this.#pending.attemptFor(consumer, delivery.messageId);
+  async #again({ durableConsumer, delivery }: Attempt): Promise<void> {
+    const current = this.#pending.attemptFor(durableConsumer, delivery.messageId);
     if (current === undefined) {
       return;
     }
     const next = { ...current.delivery, deliveryCount: current.delivery.deliveryCount + 1 };
-    await this.#attempt(consumer, next);
+    await this.#attempt(durableConsumer, next);
   }
 
   #lined(attempt: Attempt): Promise<Settlement> {
-    const { consumer, delivery } = attempt;
+    const { durableConsumer, delivery } = attempt;
     return this.#line.add(
-      () => this.#attempt(consumer, delivery),
+      () => this.#attempt(durableConsumer, delivery),
       () => this.#leave(attempt),
     );
   }
@@ -99,24 +103,24 @@ export class Deliveries {
     return 'pending';
   }
 
-  async #attempt(consumer: CoreConsumer, delivery: Delivery): Promise<Settlement> {
-    const settled = await consumer.settle(delivery);
-    this.#apply(consumer, delivery, settled);
+  async #attempt(durableConsumer: CoreDurableConsumer, delivery: Delivery): Promise<Settlement> {
+    const settled = await durableConsumer.settle(delivery);
+    this.#apply(durableConsumer, delivery, settled);
     return settled.settlement;
   }
 
   /** What became of a delivery, kept in the list of pending Messages and the failures. */
-  #apply(consumer: CoreConsumer, delivery: Delivery, settled: Settled): void {
+  #apply(durableConsumer: CoreDurableConsumer, delivery: Delivery, settled: Settled): void {
     switch (settled.settlement) {
       case 'acked':
-        this.#pending.leave(consumer, delivery.messageId);
+        this.#pending.leave(durableConsumer, delivery.messageId);
         break;
       case 'pending':
       case 'handed-back':
-        this.#pending.put({ consumer, delivery });
+        this.#pending.put({ durableConsumer, delivery });
         break;
       case 'ended':
-        this.#pending.leave(consumer, delivery.messageId);
+        this.#pending.leave(durableConsumer, delivery.messageId);
         break;
     }
     this.#failed(settled);

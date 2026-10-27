@@ -150,7 +150,7 @@ _Avoid_: topic, queue, log
 
 **Durable consumer**:
 The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer.
-_Avoid_: subscriber, queue group, cursor
+_Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:
 An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the plan; it is no part of a Contract or a Snapshot.

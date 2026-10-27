@@ -31,7 +31,7 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
    * Delivers the Messages already lined up, then one new Message as attempt 1, and stops there:
    * an Event reaches every Subscription to it, a Command its Message Handler; resolves to the most
    * severe settlement, what the Handlers publish or send waiting for `settled()`. Its body is typed as its Message
-   * Version's writer writes it and is written back through each consumer's Reader. A Handler that
+   * Version's writer writes it and is written back through each Durable consumer's Reader. A Handler that
    * awaits it never settles.
    */
   readonly deliver: <const M extends Event | Command>(
@@ -40,7 +40,7 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
     meta?: DeliveryMeta,
   ) => Promise<Settlement>;
   /**
-   * Delivers every pending Message again, each to the consumer it is pending for alone, as attempt
+   * Delivers every pending Message again, each to the Durable consumer it is pending for alone, as attempt
    * `deliveryCount + 1`, and stops there: what the Handlers publish or send waits for `settled()`.
    */
   readonly redeliver: () => Promise<void>;
@@ -64,7 +64,7 @@ export type DeliveryMeta = {
   readonly headers?: GivenHeaders;
 };
 
-/** A Message a consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */
+/** A Message a Durable consumer left unacknowledged; `redeliver()` delivers it again. Its `body` is the wire JSON, for inspection. */
 export type PendingMessage = {
   readonly declaration: Subscription | Command;
   /** `notifyOnSettled` for a Subscription, `ChargeCard@1` for a Command's Message Version. */
