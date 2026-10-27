@@ -400,7 +400,7 @@ describe('decodeSnapshot', () => {
         codes: {
           ...standardCodes,
           [unauthenticated]: { ...aCode, status: 401 },
-          [gone]: { ...aCode, status: 410, removedIn: '3.2.0' },
+          [gone]: { ...aCode, status: 410, removedIn: '3.2.0', defs: {} },
         },
       });
 
@@ -455,7 +455,33 @@ describe('decodeSnapshot', () => {
     test('a removed code decodes with its removedIn and the status and body it last had', () => {
       const body: SchemaNode = { type: 'object', fields: {} };
       const published = aService({
-        codes: { ...standardCodes, [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0' } },
+        codes: {
+          ...standardCodes,
+          [gone]: { ...aCode, status: 410, body, removedIn: '3.2.0', defs: {} },
+        },
+      });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the defs its body reached, though the Snapshot holds none', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aService({ codes: { ...standardCodes, [gone]: removed } });
+
+      const result = roundTrip(published);
+
+      expect(result).toEqual({ kind: 'decoded', snapshot: published });
+    });
+
+    test('a removed code decodes with the def of a name the Snapshot holds as another def', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0', defs: { tree: treeDef } };
+      const published = aService({
+        defs: { tree: anObjectOf(stringNode) },
+        codes: { ...standardCodes, [gone]: removed },
       });
 
       const result = roundTrip(published);
@@ -1981,6 +2007,88 @@ describe('decodeSnapshot', () => {
       });
     });
 
+    describe('a removed code’s refs name the defs it holds, never the Snapshot’s', () => {
+      const body = anObjectOf(aRef('tree'));
+      const removed = { ...aCode, status: 410, body, removedIn: '3.2.0' };
+      const withCode = (code: object, fields: object = {}) =>
+        serviceWith({ codes: { ...standardCodes, [gone]: code }, ...fields });
+
+      test('a removed code whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode({ ...removed, defs: {} }, { defs: { tree: treeDef } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code’s def whose ref names a def only the Snapshot holds is malformed at the ref', () => {
+        const result = withCode(
+          { ...removed, defs: { tree: anObjectOf(aRef('other')) } },
+          { defs: { other: anObjectOf(stringNode) } },
+        );
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree', 'fields', 'name'],
+            'names a def the Snapshot does not hold: other',
+          ),
+        );
+      });
+
+      test('a Snapshot node whose ref names a def only a removed code holds is malformed at the ref', () => {
+        const kept = { ...aCode, body };
+
+        const result = serviceWith({
+          codes: {
+            ...standardCodes,
+            [gone]: { ...removed, defs: { tree: treeDef } },
+            [orderLocked]: kept,
+          },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', orderLocked, 'body', 'fields', 'name'],
+            'names a def the Snapshot does not hold: tree',
+          ),
+        );
+      });
+
+      test('a removed code without defs is malformed at defs: it is missing', () => {
+        const result = withCode(removed);
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs'], 'is missing'));
+      });
+
+      test('a declared code with defs is malformed at defs: its format does not define it', () => {
+        const result = withCode({ ...aCode, defs: {} });
+
+        expect(result).toEqual(
+          malformedAt(['codes', gone, 'defs'], 'is a key its format does not define'),
+        );
+      });
+
+      test('a removed code’s def that leads back to itself with no node between is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: aRef('tree') } });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['codes', gone, 'defs', 'tree'],
+            'leads back to itself through refs, unions and allOfs alone',
+          ),
+        );
+      });
+
+      test('a removed code’s def that is nullable is malformed at the def', () => {
+        const result = withCode({ ...removed, defs: { tree: { ...treeDef, nullable: true } } });
+
+        expect(result).toEqual(malformedAt(['codes', gone, 'defs', 'tree']));
+      });
+    });
+
     test.each<[string, SchemaNode]>([
       ['a string whose min passes its max', { type: 'string', min: 5, max: 3 }],
       ['an array whose min passes its max', { type: 'array', items: stringNode, min: 2, max: 1 }],
@@ -2298,6 +2406,7 @@ const formatOneFixture = `{
   "codes": {
     "GONE": {
       "body": null,
+      "defs": {},
       "headers": { "fields": {}, "type": "object" },
       "message": "Gone",
       "origin": "local",

@@ -1,5 +1,6 @@
 import {
   type CommandSnapshot,
+  declaredCodesOf,
   type EndpointSnapshot,
   type EventSnapshot,
   isDeclared,
@@ -9,9 +10,11 @@ import {
   type PublishedElement,
   type PublishedEvent,
   type PublishedServiceSnapshot,
+  removedCodesOf,
   type SubscriptionSnapshot,
 } from '../snapshot/index.ts';
 import {
+  type Defs,
   nodesWithin,
   type Path,
   type RefNode,
@@ -23,14 +26,22 @@ import {
 type SnapshotNode = { readonly at: Path; readonly node: SchemaNode };
 
 /**
- * A name a Snapshot uses, and where: a `ref`'s def, a code an Endpoint or Guard lists, the code a
- * Standard Rejection resolved to, a Guard, or the Group a declared Element or Subscription names.
+ * A name a Snapshot uses, and where: a `ref`'s def, with the defs it resolves in, a code an
+ * Endpoint or Guard lists, the code a Standard Rejection resolved to, a Guard, or the Group a
+ * declared Element or Subscription names.
  */
-export type Use = {
-  readonly kind: 'def' | 'code' | 'standard-code' | 'guard' | 'group';
-  readonly name: string;
-  readonly at: Path;
-};
+export type Use =
+  | {
+      readonly kind: 'def';
+      readonly name: string;
+      readonly at: Path;
+      readonly defs: Defs;
+    }
+  | {
+      readonly kind: 'code' | 'standard-code' | 'guard' | 'group';
+      readonly name: string;
+      readonly at: Path;
+    };
 
 type Used = PublishedServiceSnapshot | PublishedDefinitionsSnapshot;
 type DeclaredEndpoint = PublishedElement<EndpointSnapshot>;
@@ -43,7 +54,8 @@ export function usesOf(snapshot: Used): readonly Use[] {
   const endpoints = declaredEndpointsOf(snapshot);
   const guards = Object.entries(snapshot.guards);
   return [
-    ...refUsesOf(locatedNodesOf(snapshot, endpoints)),
+    ...refUsesOf(locatedNodesOf(snapshot, endpoints), snapshot.defs),
+    ...removedCodeRefUsesOf(snapshot),
     ...endpoints.flatMap(([identity, { rejections }]) =>
       namesAt(['endpoints', identity, 'rejections'], rejections, 'code'),
     ),
@@ -120,7 +132,11 @@ function exportedSchemasOf(snapshot: PublishedDefinitionsSnapshot): readonly Sna
   return nodes;
 }
 
-function namesAt(at: Path, names: readonly string[], kind: Use['kind']): readonly Use[] {
+function namesAt(
+  at: Path,
+  names: readonly string[],
+  kind: Exclude<Use['kind'], 'def'>,
+): readonly Use[] {
   return names.map((name, index) => ({ kind, name, at: [...at, index] }));
 }
 
@@ -135,7 +151,7 @@ function declaredEndpointsOf(snapshot: Used): readonly Keyed<DeclaredEndpoint>[]
   return declared;
 }
 
-function refUsesOf(nodes: readonly SnapshotNode[]): readonly Use[] {
+function refUsesOf(nodes: readonly SnapshotNode[], defs: Defs): readonly Use[] {
   const within: readonly SnapshotNode[] = nodes.flatMap(({ at, node }) =>
     nodesWithin(node).map((inner) => ({
       at: [...at, ...snapshotPathOf(inner.at)],
@@ -143,7 +159,18 @@ function refUsesOf(nodes: readonly SnapshotNode[]): readonly Use[] {
     })),
   );
   const refs = within.filter(isRefAt);
-  return refs.map(({ at, node }) => ({ kind: 'def', name: node.name, at }));
+  return refs.map(({ at, node }) => ({ kind: 'def', name: node.name, at, defs }));
+}
+
+/** The `ref`s of a removed code and of its defs, which name the defs it holds and never the Snapshot's. */
+function removedCodeRefUsesOf(snapshot: Used): readonly Use[] {
+  return removedCodesOf(snapshot.codes).flatMap(([code, { headers, body, defs }]) => {
+    const nodes = [
+      ...partsAt(['codes', code], { headers, body }),
+      ...partsAt(['codes', code, 'defs'], defs),
+    ];
+    return refUsesOf(nodes, defs);
+  });
 }
 
 function isRefAt(located: SnapshotNode): located is { at: Path; node: RefNode } {
@@ -162,7 +189,7 @@ function locatedNodesOf(snapshot: Used, endpoints: readonly Keyed<DeclaredEndpoi
       ...partsAt(['guards', name, 'demands'], guard.demands),
       ...partsAt(['guards', name], { context: guard.context, qualifier: guard.qualifier }),
     ]),
-    ...Object.entries(snapshot.codes).flatMap(([code, { headers, body }]) =>
+    ...declaredCodesOf(snapshot.codes).flatMap(([code, { headers, body }]) =>
       partsAt(['codes', code], { headers, body }),
     ),
   ];

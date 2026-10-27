@@ -5,6 +5,7 @@ export type { NamedFormat } from './format.ts';
 export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
 export { nestingFailureOf, snapshotNestingLimit, tooDeepPathOf } from './nesting.ts';
+export { codeNodesOf } from './nodes.ts';
 export { originPackagesOf } from './origin-packages.ts';
 export type { ListedRejection } from './own-rejections.ts';
 export { isDeclaredRejection, ownRejectionsOf } from './own-rejections.ts';
@@ -23,9 +24,16 @@ export type {
   PublishedHeading,
   PublishedServiceSnapshot,
   PublishedSnapshot,
+  RemovedCode,
   SubscriptionTombstone,
 } from './published.ts';
-export { isDeclared, isRemoved, isSubscriptionTombstone } from './published.ts';
+export {
+  declaredCodesOf,
+  isDeclared,
+  isRemoved,
+  isSubscriptionTombstone,
+  removedCodesOf,
+} from './published.ts';
 export type { SemanticVersionParts, VersionBump } from './semantic-version.ts';
 export { caretLineOf, isSemanticVersion, semanticVersionPartsOf } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';

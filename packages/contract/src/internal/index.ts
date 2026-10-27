@@ -111,6 +111,7 @@ export type {
   PublishedHeading,
   PublishedServiceSnapshot,
   PublishedSnapshot,
+  RemovedCode,
   SemanticVersionParts,
   ServiceSnapshot,
   ShadowingSnapshot,

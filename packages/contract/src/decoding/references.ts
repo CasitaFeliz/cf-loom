@@ -1,6 +1,10 @@
-import type { PublishedApplicationSnapshot, PublishedSnapshot } from '../snapshot/index.ts';
+import {
+  type PublishedApplicationSnapshot,
+  type PublishedSnapshot,
+  removedCodesOf,
+} from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
-import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
+import { leadsBackWithNoNode, type Path, type SchemaNode } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
 import { paramProblemsOf } from './params.ts';
 import {
@@ -9,7 +13,7 @@ import {
   standardHeaderProblemsOf,
 } from './standard-codes.ts';
 import { notEndpointIdentity } from './texts.ts';
-import { usesOf } from './uses.ts';
+import { type Use, usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
 type Located = { readonly at: Path; readonly text: string };
@@ -105,18 +109,30 @@ const unheld = {
   group: 'names a Group the Snapshot does not hold',
 } as const;
 
+/** The defs a Snapshot holds, with where they sit: its own, and each removed code's. */
+type DefsAt = { readonly at: Path; readonly defs: ReadonlyMap<string, SchemaNode> };
+
+function defsHeldBy(snapshot: Exclude<PublishedSnapshot, { kind: 'application' }>): DefsAt[] {
+  const removed = removedCodesOf(snapshot.codes).map(([code, held]) => ({
+    at: ['codes', code, 'defs'],
+    defs: new Map(Object.entries(held.defs)),
+  }));
+  return [{ at: ['defs'], defs: new Map(Object.entries(snapshot.defs)) }, ...removed];
+}
+
 function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
-  const defs = new Map(Object.entries(snapshot.defs));
   const problems: Problem[] = [];
-  for (const [name, def] of defs) {
-    if (leadsBackWithNoNode(name, def, defs)) {
-      problems.push({
-        at: ['defs', name],
-        reason: 'leads back to itself through refs, unions and allOfs alone',
-      });
+  for (const { at, defs } of defsHeldBy(snapshot)) {
+    for (const [name, def] of defs) {
+      if (leadsBackWithNoNode(name, def, defs)) {
+        problems.push({
+          at: [...at, name],
+          reason: 'leads back to itself through refs, unions and allOfs alone',
+        });
+      }
     }
   }
   return problems;
@@ -127,12 +143,17 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
     return [];
   }
   const held = {
-    def: snapshot.defs,
     code: snapshot.codes,
     'standard-code': snapshot.codes,
     guard: snapshot.guards,
     group: snapshot.kind === 'service' ? snapshot.groups : {},
   };
-  const missing = usesOf(snapshot).filter((use) => !Object.hasOwn(held[use.kind], use.name));
+  const missing = usesOf(snapshot).filter((use) => !holds(use, held));
   return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));
+}
+
+/** Whether the names a use resolves in hold it: a `ref`'s own defs, else the Snapshot's map of its kind. */
+function holds(use: Use, held: Record<Exclude<Use['kind'], 'def'>, object>): boolean {
+  const names = use.kind === 'def' ? use.defs : held[use.kind];
+  return Object.hasOwn(names, use.name);
 }
