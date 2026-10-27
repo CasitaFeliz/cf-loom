@@ -134,7 +134,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 
 | Lens | Checks |
 | --- | --- |
-| Design | Modules, seams, names, types: C1–C21 |
+| Design | Modules, seams, names, types: C1–C21 and C29 |
 | Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
 | Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
 

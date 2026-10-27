@@ -453,6 +453,12 @@ const lazyNode: z.ZodType = z
   .object({ value: z.string(), next: z.lazy(() => lazyNode).optional() })
   .meta({ id: 'lazyNode' });
 
+const aliasedInner: z.ZodType = z
+  .lazy(() => z.object({ value: z.string(), next: aliasedOuter.optional() }))
+  .meta({ id: 'aliasedInner' });
+const aliasedMiddle: z.ZodType = z.lazy(() => aliasedInner).meta({ id: 'aliasedMiddle' });
+const aliasedOuter: z.ZodType = z.lazy(() => aliasedMiddle).meta({ id: 'aliasedOuter' });
+
 const notObjects = {
   'a string': z.string(),
   'a literal': z.literal('created'),
@@ -464,6 +470,8 @@ const notObjects = {
   ]),
   'a nullable object': z.object({ orderId: z.uuid() }).nullable(),
   'a recursive array': recursiveArray,
+  'a nullable recursive object': lazyNode.nullable(),
+  'a nullable ref through alias defs': aliasedOuter.nullable(),
 };
 
 const objects = {
@@ -475,6 +483,7 @@ const objects = {
   'a z.lazy() object': z.lazy(() => z.object({ orderId: z.uuid() })),
   'a recursive object written with a getter': tree,
   'a recursive object written with z.lazy()': lazyNode,
+  'a ref through a chain of alias defs to an object': aliasedOuter,
 };
 
 describe('validateRoot: a Message body is an object of its fields', () => {
