@@ -12,8 +12,8 @@ import {
 
 /**
  * A Fault the Service's side produced, which `onServiceFault` receives: the Endpoint the request
- * matched as `declaration`, with its name as `identity`, also when a Guard's Handler produced it,
- * which `guard` then names; then how it failed.
+ * matched as `declaration`, with its `name`, also when a Guard's Handler produced it, which `guard`
+ * then names; then how it failed.
  */
 export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard } & (
     | HandlerFailure
@@ -22,7 +22,7 @@ export type ServedFault = HandlerFaultBase<Endpoint> & { readonly guard?: Guard 
   );
 
 /** Which Handler a Fault came from: the Endpoint's, or the Guard's it names. */
-export type FaultedBy = Pick<ServedFault, 'declaration' | 'identity' | 'guard'>;
+export type FaultedBy = Pick<ServedFault, 'declaration' | 'name' | 'guard'>;
 
 /**
  * One request answered, for metrics and tracing: its method, and the Endpoint it matched with that
@@ -130,6 +130,6 @@ function logServedFault(servedFault: ServedFault): void {
 }
 
 /** What names a Service's Fault in a line: the Endpoint's name, and the Guard's when it has one. */
-function sourceOf({ identity, guard }: FaultedBy): string {
-  return guard === undefined ? identity : `${identity} ${guard.name}`;
+function sourceOf({ name, guard }: FaultedBy): string {
+  return guard === undefined ? name : `${name} ${guard.name}`;
 }

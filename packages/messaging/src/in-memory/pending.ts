@@ -35,7 +35,7 @@ function keyOf(durableConsumer: CoreDurableConsumer, messageId: string): string 
 
 function pendingMessageOf({ durableConsumer, delivery }: Attempt): PendingMessage {
   const { messageId, factId, deliveryCount, headers, body } = delivery;
-  const { declaration, identity, subject } = durableConsumer;
+  const { declaration, name, subject } = durableConsumer;
   const wire = jsonBodyOf(body);
-  return { declaration, identity, subject, messageId, factId, deliveryCount, headers, body: wire };
+  return { declaration, name, subject, messageId, factId, deliveryCount, headers, body: wire };
 }

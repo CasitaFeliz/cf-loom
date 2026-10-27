@@ -1,4 +1,4 @@
-import { identityOf } from './errors.ts';
+import { nameOf } from './errors.ts';
 import type { Handled } from './handled.ts';
 
 /** What an implementation returned: what it built, or a `TypeError` naming a value it may not return. */
@@ -19,7 +19,7 @@ export async function returnedOf<Built>(
   if (isBuilt(built)) {
     return { kind: 'built', built };
   }
-  const named = `${identityOf(declaration)}'s Handler returned no ${answeredOf(declaration)}`;
+  const named = `${nameOf(declaration)}'s Handler returned no ${answeredOf(declaration)}`;
   return { kind: 'not-built', cause: new TypeError(`${named} but ${describedOf(built)}`) };
 }
 

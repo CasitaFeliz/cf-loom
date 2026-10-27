@@ -1,6 +1,6 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
-import { type Handled, identityOf, isPairing, type MessageHandled } from '../calls/index.ts';
+import { type Handled, isPairing, type MessageHandled, nameOf } from '../calls/index.ts';
 import type { HandlerMap } from './handler.ts';
 import { isWrittenForPairing, writtenDeclarationOf } from './written.ts';
 
@@ -39,11 +39,11 @@ function mismatchOf(written: Handled | undefined, declaration: Handled): string 
   if (written === undefined) {
     return 'holds a value handle() did not return: wrap inside the implementation instead';
   }
-  const name = identityOf(declaration);
-  if (written.kind === declaration.kind && identityOf(written) === name) {
+  const name = nameOf(declaration);
+  if (written.kind === declaration.kind && nameOf(written) === name) {
     return `holds a Handler written for another copy of ${name}: is @cf-loom/contract or the Contract loaded twice?`;
   }
-  return `holds the Handler written for ${identityOf(written)}`;
+  return `holds the Handler written for ${nameOf(written)}`;
 }
 
 /**

@@ -618,7 +618,7 @@ describe('pending and redeliver()', () => {
     ['threw', throwing],
     ['returned a retryable Fault', () => fault({ committed: 'no', retryable: true })],
   ])(
-    'a Message whose Handler %s is listed with its declaration, its identity, its ids, its attempt and its headers',
+    'a Message whose Handler %s is listed with its declaration, its name, its ids, its attempt and its headers',
     async (_how, answer) => {
       const headers = { traceparent: '00-abc-def-01' };
       const { inMemory } = await running(() => ({ notify: answer }));
@@ -628,7 +628,7 @@ describe('pending and redeliver()', () => {
       expect(inMemory.pending).toEqual([
         {
           declaration: notifyOnCreated,
-          identity: 'notifyOnCreated',
+          name: 'notifyOnCreated',
           subject: 'orders-service.event.OrderCreated.v2',
           messageId: 'event.OrderCreated.v2:o-1',
           factId: 'o-1',
@@ -645,9 +645,20 @@ describe('pending and redeliver()', () => {
 
     await inMemory.deliver(orderCreatedV2, created, { factId: 'o-1' });
 
-    const named = { declaration: notifyOnCreated, identity: 'notifyOnCreated' };
+    const named = { declaration: notifyOnCreated, name: 'notifyOnCreated' };
     expect(inMemory.pending).toMatchObject([named]);
     expect(faults).toMatchObject([named]);
+  });
+
+  test('a pending Message and its fault carry the name and no identity', async () => {
+    const { inMemory, faults } = await running(() => ({ notify: throwing }));
+
+    await inMemory.deliver(orderCreatedV2, created, { factId: 'o-1' });
+
+    for (const record of [inMemory.pending[0], faults[0]]) {
+      expect(record).toHaveProperty('name', 'notifyOnCreated');
+      expect(record).not.toHaveProperty('identity');
+    }
   });
 
   test('an Event two Subscriptions take, one ending it and one acknowledging, makes settled() reject with the one Fault’s line', async () => {
@@ -780,7 +791,7 @@ describe('pending and redeliver()', () => {
     expect(inMemory.pending).toMatchObject([
       {
         declaration: chargeCardV1,
-        identity: 'ChargeCard@1',
+        name: 'ChargeCard@1',
         subject: 'orders-service.command.ChargeCard.v1',
         body: charge,
       },

@@ -627,7 +627,7 @@ async function consumingReported(options: Parameters<typeof messaging>[2] = {}) 
 }
 
 describe('onBrokerTrouble', () => {
-  test('a Durable consumer the adapter reports failing reaches onBrokerTrouble with its declaration, identity, Durable consumer, stream and cause', async () => {
+  test('a Durable consumer the adapter reports failing reaches onBrokerTrouble with its declaration, name, Durable consumer, stream and cause', async () => {
     const troubles: BrokerTrouble[] = [];
     const { notifying, troubled } = await consumingReported({
       onBrokerTrouble: (trouble) => void troubles.push(trouble),
@@ -640,7 +640,7 @@ describe('onBrokerTrouble', () => {
     expect(troubles).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         durable: 'orders-service_notify-on-created',
         stream: 'orders-service',
         kind: 'pull-failed',
@@ -661,7 +661,7 @@ describe('onBrokerTrouble', () => {
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     expect(troubles[1]).toEqual({
       declaration: notifyOnCreated,
-      identity: 'notifyOnCreated',
+      name: 'notifyOnCreated',
       durable: 'orders-service_notify-on-created',
       stream: 'orders-service',
       kind: 'recovered',
@@ -755,10 +755,10 @@ describe('onBrokerTrouble', () => {
       }
     }
 
-    const named = (declaration: object, identity: string, durable: string) =>
+    const named = (declaration: object, name: string, durable: string) =>
       Array.from({ length: copies.length }, () => ({
         declaration,
-        identity,
+        name,
         durable,
         stream: 'orders-service',
         kind: 'recovered',
@@ -846,9 +846,7 @@ describe('close and a Handler’s wait', () => {
     expect(error).toMatchObject({
       name: 'CloseAbortedError',
       message: `close stopped waiting and handed back 1 Message: notifyOnCreated ${created} m-1 f-1`,
-      handedBack: [
-        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
-      ],
+      handedBack: [{ name: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' }],
       cause: reason,
     });
     await expect(delivered).resolves.toBe('handed-back');
@@ -864,8 +862,8 @@ describe('close and a Handler’s wait', () => {
 
     expect(error).toMatchObject({
       handedBack: [
-        { identity: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
-        { identity: 'notifyOnCreated', subject: created, messageId: 'm-2', factId: 'f-2' },
+        { name: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
+        { name: 'notifyOnCreated', subject: created, messageId: 'm-2', factId: 'f-2' },
       ],
     });
     expect(await Promise.all([first, second])).toEqual(['handed-back', 'handed-back']);

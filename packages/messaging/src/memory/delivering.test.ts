@@ -492,7 +492,7 @@ describe('memory(): what the Service publishes and sends', () => {
     await expect(settling).rejects.toThrow('onAudited');
     expect(received).toEqual([]);
     expect(faults).toMatchObject([
-      { kind: 'invalid-body', declaration: onAudited, identity: 'onAudited' },
+      { kind: 'invalid-body', declaration: onAudited, name: 'onAudited' },
     ]);
     expect(inMemory.pending).toEqual([]);
   });

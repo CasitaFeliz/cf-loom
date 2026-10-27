@@ -362,7 +362,7 @@ describe('publish and send types', () => {
     expectTypeOf<Extract<BrokerTrouble, { kind: 'pull-failed' }>['cause']>().toBeUnknown();
     expectTypeOf<Omit<BrokerTrouble, 'kind' | 'cause'>>().toEqualTypeOf<{
       readonly declaration: BrokerTrouble['declaration'];
-      readonly identity: string;
+      readonly name: string;
       readonly durable: string;
       readonly stream: string;
     }>();

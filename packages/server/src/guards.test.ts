@@ -465,7 +465,7 @@ describe('serve: Guards', () => {
       {
         kind: 'invalid-outcome',
         declaration: updateOrder,
-        identity: 'updateOrder',
+        name: 'updateOrder',
         guard: userToken,
         issues: [
           { part: 'context', path: ['userId'], code: 'invalid_type', message: expect.any(String) },
@@ -494,7 +494,7 @@ describe('serve: Guards', () => {
       {
         kind: 'runtime-bug',
         declaration: misattached,
-        identity: 'misattached',
+        name: 'misattached',
         guard: permission,
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },

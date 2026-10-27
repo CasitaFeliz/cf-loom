@@ -68,7 +68,7 @@ export type DeliveryMeta = {
 export type PendingMessage = {
   readonly declaration: Subscription | Command;
   /** `notifyOnSettled` for a Subscription, `ChargeCard@1` for a Command's Message Version. */
-  readonly identity: string;
+  readonly name: string;
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;

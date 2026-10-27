@@ -12,7 +12,7 @@ export type CloseOptions = { readonly signal?: AbortSignal | undefined };
 
 /** A Message `close` handed back: the Subscription or Command Version it was delivered for, its subject and its ids. */
 export type HandedBack = {
-  readonly identity: string;
+  readonly name: string;
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;
@@ -25,8 +25,8 @@ export class CloseAbortedError extends Error {
 
   constructor(handedBack: readonly HandedBack[], reason: unknown) {
     const count = handedBack.length === 1 ? '1 Message' : `${handedBack.length} Messages`;
-    const named = handedBack.map(({ identity, subject, messageId, factId }) =>
-      [identity, subject, messageId, factId].join(' '),
+    const named = handedBack.map(({ name, subject, messageId, factId }) =>
+      [name, subject, messageId, factId].join(' '),
     );
     super(`close stopped waiting and handed back ${count}: ${named.join(', ')}`, { cause: reason });
     this.handedBack = handedBack;

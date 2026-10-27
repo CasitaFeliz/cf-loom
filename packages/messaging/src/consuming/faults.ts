@@ -7,15 +7,15 @@ import {
   type HandlerFailure,
   type HandlerFaultBase,
   hookFailureOf,
-  identityOf,
   logOf,
+  nameOf,
 } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
 import type { Consumed } from '../subjects/index.ts';
 
 /**
  * What a Message Handler ended or failed with, which `onServiceFault` receives: the Subscription or
- * the Command's Message Version it handles as `declaration`, with its name or identity as `identity`,
+ * the Command's Message Version it handles as `declaration`, with its `name`, a Command's as `ChargeCard@1`,
  * the Message, then why.
  */
 export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
@@ -62,7 +62,7 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
 /** What a fault says of where it came from: the declaration handled, the Message and which attempt. */
 export type About = Pick<
   ConsumedFault,
-  'declaration' | 'identity' | 'subject' | 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'
+  'declaration' | 'name' | 'subject' | 'messageId' | 'factId' | 'deliveryCount' | 'lastAttempt'
 >;
 
 /** The delivery a fault speaks of: the Message's ids and which attempt. */
@@ -73,8 +73,8 @@ export function aboutOf(
   { declaration, subject }: Pick<Consumed, 'declaration' | 'subject'>,
   { messageId, factId, deliveryCount, lastAttempt }: Delivered,
 ): About {
-  const identity = identityOf(declaration);
-  return { declaration, identity, subject, messageId, factId, deliveryCount, lastAttempt };
+  const name = nameOf(declaration);
+  return { declaration, name, subject, messageId, factId, deliveryCount, lastAttempt };
 }
 
 /** A fault on the console: each of its lines, then its cause when it has one. */
@@ -96,7 +96,7 @@ function causeOf(fault: ConsumedFault): unknown {
 
 /** What names a Message in a line: the declaration handling it, its subject, broker message id, Fact id and attempt, the last one marked. */
 function sourceOf(about: About): string {
-  const { identity, subject, messageId, factId, deliveryCount, lastAttempt } = about;
+  const { name, subject, messageId, factId, deliveryCount, lastAttempt } = about;
   const attempt = lastAttempt ? `attempt ${deliveryCount}, the last` : `attempt ${deliveryCount}`;
-  return `${identity} ${subject} ${messageId} ${factId} ${attempt}`;
+  return `${name} ${subject} ${messageId} ${factId} ${attempt}`;
 }

@@ -58,10 +58,10 @@ export function messageAnswerOf(declaration: MessageHandled, run: MessageRun): F
 }
 
 /**
- * How errors and logs name a declaration: a Command's Message Version by its identity,
- * `ChargeCard@1`, any other by its name.
+ * How errors and logs name a declaration: a Command's Message Version as `ChargeCard@1`, any
+ * other by its name.
  */
-export function identityOf(declaration: Handled): string {
+export function nameOf(declaration: Handled): string {
   if (isCommand(declaration)) {
     return messageIdentityOf(declaration.name, declaration.version);
   }
@@ -88,5 +88,5 @@ export function faultLogOf(
 
 /** One line per Issue, naming the declaration. */
 function messageOf(declaration: Handled, issues: readonly Issue[]): string {
-  return issues.map((issue) => issueLineOf(identityOf(declaration), issue)).join('\n');
+  return issues.map((issue) => issueLineOf(nameOf(declaration), issue)).join('\n');
 }

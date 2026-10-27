@@ -15,8 +15,8 @@ export type Settled = {
 /** Runs a delivery through its Handler and answers how it settled. */
 export type Settle = (delivery: Delivery) => Promise<Settled>;
 
-/** What names a Durable consumer's deliveries when `close` hands them back: its identity and subject. */
-export type Named = { readonly identity: string; readonly subject: string };
+/** What names a Durable consumer's deliveries when `close` hands them back: its name and subject. */
+export type Named = { readonly name: string; readonly subject: string };
 
 /** Wraps a Durable consumer's `settle` as the messaging's life allows it: run while open, left pending once closing. */
 export type Received = (settle: Settle, named: Named) => Settle;
@@ -30,7 +30,7 @@ export const leftPending: Settled = {
 
 /**
  * A Durable consumer as the core built it: its name, the Stream and subject it is pulled through,
- * the declaration it consumes, its identity, the Reader its Handler reads with, and `settle`; the
+ * the declaration it consumes, its name, the Reader its Handler reads with, and `settle`; the
  * core names a trouble report from it and `memory()` delivers through it, and a Broker is handed
  * only the `DurableConsumer` made of it.
  */
@@ -39,7 +39,7 @@ export type CoreDurableConsumer = {
   readonly stream: string;
   readonly subject: string;
   readonly declaration: Subscription | Command;
-  readonly identity: string;
+  readonly name: string;
   readonly reader: core.$ZodType;
   readonly settle: Settle;
 };

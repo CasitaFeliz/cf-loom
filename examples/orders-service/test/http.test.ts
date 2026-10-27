@@ -149,7 +149,7 @@ describe('serve', () => {
 describe('onServiceFault', () => {
   test('one async hook for ServedFault and ConsumedFault is accepted by both serve and messaging', () => {
     const onServiceFault = async (fault: ServedFault | ConsumedFault): Promise<void> => {
-      expectTypeOf(fault.identity).toEqualTypeOf<string>();
+      expectTypeOf(fault.name).toEqualTypeOf<string>();
     };
 
     const served = serve(contract, handlers, { resources, onServiceFault });

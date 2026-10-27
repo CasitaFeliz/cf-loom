@@ -1139,7 +1139,7 @@ describe('consuming over jetstream()', () => {
     expect(troubles).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         durable: 'orders-service_notify-on-created',
         stream: 'orders-service',
         kind: 'pull-failed',
@@ -1175,7 +1175,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 6_000 });
     expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
-    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual([
+    expect(troubles.map(({ name, kind }) => [name, kind])).toEqual([
       ['notifyOnCreated', 'pull-failed'],
       ['notifyOnCreated', 'recovered'],
     ]);
@@ -1209,7 +1209,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2), { timeout: 4_000 });
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       [
         'ChargeCard@1',
@@ -1239,7 +1239,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
       ['notifyOnCreated', 'pull-failed', 'The NATS connection closed'],
@@ -1272,7 +1272,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
     await aWhile();
-    const reported = troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)]);
+    const reported = troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)]);
     expect(reported.sort()).toEqual([
       ['ChargeCard@1', 'pull-failed', 'The NATS connection closed'],
       [
@@ -1562,7 +1562,7 @@ describe('pulling over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 6_000 });
     await vi.waitFor(() => expect(troubles).toHaveLength(2));
-    expect(troubles.map((trouble) => [trouble.identity, trouble.kind, causeOf(trouble)])).toEqual([
+    expect(troubles.map((trouble) => [trouble.name, trouble.kind, causeOf(trouble)])).toEqual([
       [
         'notifyOnCreated',
         'pull-failed',
@@ -1721,12 +1721,12 @@ describe('pulling over jetstream()', () => {
     const orders = await aConsumingWithFailingPulls(aPrefix(), (trouble) => {
       troubles.push(trouble);
     });
-    const reportedBefore = troubles.map(({ identity, kind }) => [identity, kind]);
+    const reportedBefore = troubles.map(({ name, kind }) => [name, kind]);
 
     await orders.close();
     await aWhile();
 
-    expect(troubles.map(({ identity, kind }) => [identity, kind])).toEqual(reportedBefore);
+    expect(troubles.map(({ name, kind }) => [name, kind])).toEqual(reportedBefore);
     expect(reportedBefore).toHaveLength(2);
   }, 10_000);
 

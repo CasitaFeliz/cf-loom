@@ -8,12 +8,12 @@ import {
   endpointRunOf,
   guardRunOf,
   type Implementation,
-  identityOf,
   isPairing,
   type MessageHandled,
   type MessageWritten,
   messageAnswerOf,
   messageRunOf,
+  nameOf,
   type Pairing,
   type Written,
 } from '../calls/index.ts';
@@ -198,6 +198,6 @@ const notImplementedStub: Implementation = () => reject(notImplemented);
 
 function messageStubOf(declaration: MessageHandled): Implementation {
   return () => {
-    throw new Error(`${identityOf(declaration)}'s Handler is a Stub, which consume never runs`);
+    throw new Error(`${nameOf(declaration)}'s Handler is a Stub, which consume never runs`);
   };
 }

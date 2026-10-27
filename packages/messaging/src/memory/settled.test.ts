@@ -174,7 +174,7 @@ describe('settled()', () => {
 
     expect(rejection?.cause).toEqual({
       declaration: notifyOnCreated,
-      identity: 'notifyOnCreated',
+      name: 'notifyOnCreated',
       subject: 'orders-service.event.OrderCreated.v1',
       messageId: 'event.OrderCreated.v1:o-1',
       factId: 'o-1',
@@ -253,7 +253,7 @@ describe('settled()', () => {
 
     const rejection = await rejectionOf(inMemory.settled());
 
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
   });
 
   test('a failure is reported once: the next settled() resolves', async () => {
@@ -279,7 +279,7 @@ describe('settled()', () => {
     const rejection = await rejectionOf(inMemory.settled());
 
     expect(settlement).toBe('pending');
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
   });
 
   test('settled() rejects with the Fault’s line and the onServiceFault threw line when onServiceFault throws', async () => {
@@ -306,7 +306,7 @@ describe('settled()', () => {
         'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       ].join('\n'),
     );
-    expect(rejection?.cause).toMatchObject({ kind: 'thrown', identity: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'thrown', name: 'notifyOnCreated' });
     expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
   });
 
@@ -327,7 +327,7 @@ describe('settled()', () => {
         'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       ].join('\n'),
     );
-    expect(rejection?.cause).toMatchObject({ kind: 'returned', identity: 'notifyOnCreated' });
+    expect(rejection?.cause).toMatchObject({ kind: 'returned', name: 'notifyOnCreated' });
     expect(inMemory.pending).toMatchObject([{ declaration: notifyOnCreated, deliveryCount: 1 }]);
   });
 
@@ -357,7 +357,7 @@ describe('settled()', () => {
 
     await expect(settling).resolves.toBeUndefined();
     expect(charged).toEqual([]);
-    expect(inMemory.pending).toMatchObject([{ identity: 'ChargeCard@1', deliveryCount: 1 }]);
+    expect(inMemory.pending).toMatchObject([{ name: 'ChargeCard@1', deliveryCount: 1 }]);
   });
 
   test('a Message close({ signal }) handed back is listed in pending', async () => {
@@ -376,7 +376,7 @@ describe('settled()', () => {
     await expect(closing).rejects.toThrow('close stopped waiting and handed back 1 Message');
     await expect(delivered).resolves.toBe('handed-back');
     expect(inMemory.pending).toMatchObject([
-      { identity: 'notifyOnCreated', factId: 'o-1', deliveryCount: 1 },
+      { name: 'notifyOnCreated', factId: 'o-1', deliveryCount: 1 },
     ]);
   });
 
@@ -392,7 +392,7 @@ describe('settled()', () => {
 
     const rejection = await rejectionOf(inMemory.settled());
 
-    expect(faults).toMatchObject([{ kind: 'returned', identity: 'ChargeCard@1' }]);
+    expect(faults).toMatchObject([{ kind: 'returned', name: 'ChargeCard@1' }]);
     expect(rejection?.message).toBe(
       'ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:f-70 f-70 attempt 1: Card refused',
     );

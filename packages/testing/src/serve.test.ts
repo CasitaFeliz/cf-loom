@@ -364,7 +364,7 @@ describe('fakeProvider and serve answer alike', () => {
       {
         kind: 'invalid-outcome',
         declaration: expect.objectContaining({ name: 'getPayment' }),
-        identity: 'getPayment',
+        name: 'getPayment',
         issues: [
           {
             part: 'success.headers',

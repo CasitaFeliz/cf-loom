@@ -497,7 +497,7 @@ describe('a Message delivered', () => {
     expect(faults).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -576,7 +576,7 @@ describe('a Message delivered', () => {
     expect(faults).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -602,7 +602,7 @@ describe('a Message delivered', () => {
     expect(faults).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -635,7 +635,7 @@ describe('a Message delivered', () => {
     expect(faults).toEqual([
       {
         declaration: notifyOnCreated,
-        identity: 'notifyOnCreated',
+        name: 'notifyOnCreated',
         subject: created,
         messageId: 'm-1',
         factId: 'f-1',
@@ -666,16 +666,25 @@ describe('a Message delivered', () => {
     ]);
   });
 
-  test('onServiceFault receives the Subscription or Command as its declaration, and names a Subscription by name and a Command by its identity', async () => {
+  test('onServiceFault receives the Subscription or Command as its declaration, and names a Subscription by its name and a Command as ChargeCard@1', async () => {
     const { deliver, faults } = await consuming();
 
     await deliver(created, {});
     await deliver(chargeCard, {});
 
-    expect(faults.map(({ declaration, identity }) => [declaration, identity])).toEqual([
+    expect(faults.map(({ declaration, name }) => [declaration, name])).toEqual([
       [notifyOnCreated, 'notifyOnCreated'],
       [chargeCardV2, 'ChargeCard@2'],
     ]);
+  });
+
+  test('a ConsumedFault carries its name and no identity', async () => {
+    const { deliver, faults } = await consuming();
+
+    await deliver(created, {});
+
+    expect(faults[0]).toHaveProperty('name', 'notifyOnCreated');
+    expect(faults[0]).not.toHaveProperty('identity');
   });
 
   test('without onServiceFault, an ended Message is logged one line per Issue with its subject, broker message id and Fact id, never the value', async () => {
@@ -818,7 +827,7 @@ describe('a Message whose body is nested past the stack', () => {
     expect(faults).toMatchObject([
       {
         kind: 'invalid-body',
-        identity: 'Nest@1',
+        name: 'Nest@1',
         issues: [
           {
             part: 'body',
@@ -857,7 +866,7 @@ describe('a Handler’s signal and its delivery’s wait', () => {
     await vi.advanceTimersByTimeAsync(1_000);
 
     await expect(delivered).resolves.toBe('pending');
-    expect(faults).toMatchObject([{ kind: 'thrown', identity: 'notifyOnCreated' }]);
+    expect(faults).toMatchObject([{ kind: 'thrown', name: 'notifyOnCreated' }]);
     const cause = (faults[0] as { cause: unknown }).cause;
     expect(cause).toBeInstanceOf(DeadlineError);
     expect(cause).toMatchObject({

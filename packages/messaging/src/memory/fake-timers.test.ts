@@ -75,7 +75,7 @@ describe('memory() under fake timers installed before it loads', () => {
 
     await inMemory.close();
 
-    expect(inMemory.pending).toMatchObject([{ identity: 'ChargeCard@1', deliveryCount: 1 }]);
+    expect(inMemory.pending).toMatchObject([{ name: 'ChargeCard@1', deliveryCount: 1 }]);
     expect(handled).toEqual([]);
   });
 });

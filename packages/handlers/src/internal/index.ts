@@ -15,8 +15,8 @@ export {
   faultLogOf,
   firstAttempt,
   hookFailureOf,
-  identityOf,
   logOf,
+  nameOf,
 } from '../calls/index.ts';
 export type { EndpointGiven, GuardGiven } from '../checks/index.ts';
 export { checkedMessageBody, writtenMessageBody } from '../checks/index.ts';

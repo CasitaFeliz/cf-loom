@@ -6,9 +6,9 @@ export {
   faultLogOf,
   InvalidCallError,
   InvalidOutcomeError,
-  identityOf,
   logOf,
   messageAnswerOf,
+  nameOf,
 } from './errors.ts';
 export type { Handled, MessageHandled } from './handled.ts';
 export { isMessageHandled } from './handled.ts';
