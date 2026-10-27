@@ -28,13 +28,20 @@ import {
   client,
   type DeprecationNotice,
   type FaultSource,
+  type Happened,
   type Http,
+  type InferredFault,
   type Issue,
+  type ReceivedFault,
   type ReceivedOutcome,
   type ReceivedRejection,
   type ReceivedSuccess,
+  type ReceivedUnknownRejection,
   type ReservedCode,
 } from './index.ts';
+
+/** Every key any member of a union of records holds. */
+type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
 
 const orderLocked = defineRejection({
   code: 'ORDER_LOCKED',
@@ -68,6 +75,29 @@ const listOrders = defineEndpoint({
     headers: z.object({ 'x-api-key': z.string(), 'x-region': z.string() }),
   },
   success: { status: 200, body: z.object({ ids: z.array(z.string()) }) },
+});
+
+const quotaExceeded = defineRejection({
+  code: 'QUOTA_EXCEEDED',
+  status: 429,
+  message: 'Quota exceeded',
+  headers: z.object({ 'x-quota-reset': z.string() }),
+  body: z.object({ limit: z.int() }),
+});
+
+const putOrder = defineEndpoint({
+  name: 'putOrder',
+  method: 'PUT',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'Replaces an order',
+  input: { params: z.object({ orderId: z.string() }), body: z.object({ total: z.number() }) },
+  success: {
+    status: 200,
+    headers: z.object({ etag: z.string() }),
+    body: z.object({ id: z.string() }),
+  },
+  rejections: [quotaExceeded],
 });
 
 const ping = defineEndpoint({
@@ -115,11 +145,13 @@ const standards = providedStandardRejections({
   notImplemented: { code: 'NOT_YET', status: 501, message: 'Not yet' },
 });
 
-const orders = contractPackageOf({ getOrder, listOrders, ping }, standards);
+const orders = contractPackageOf({ getOrder, listOrders, ping, putOrder }, standards);
 
 const ordersDependency = defineDependency({
   endpoints: [orders.endpoints.getOrder, orders.endpoints.listOrders],
 });
+
+const replacingDependency = defineDependency({ endpoints: [orders.endpoints.putOrder] });
 
 const baseUrl = 'http://orders.test';
 
@@ -407,5 +439,70 @@ describe('a Fault’s source', () => {
     >();
     expectTypeOf<Fault['source']>().toEqualTypeOf<FaultSource>();
     expect(described('timeout')).toBe('the client met');
+  });
+});
+
+describe('the records a Caller passes and reads', () => {
+  test('a CallInput holds the parts its Endpoint declares: params, query, headers and body', () => {
+    expectTypeOf<keyof CallInput<typeof getOrder>>().toEqualTypeOf<'params' | 'headers'>();
+    expectTypeOf<keyof CallInput<typeof listOrders>>().toEqualTypeOf<'query' | 'headers'>();
+    expectTypeOf<keyof CallInput<typeof putOrder>>().toEqualTypeOf<'params' | 'body'>();
+  });
+
+  test('CallOptions hold the signal, and no more', () => {
+    expectTypeOf<keyof CallOptions>().toEqualTypeOf<'signal'>();
+  });
+
+  test('ClientOptions hold the base URL, headers, fetch, inference and Deprecation hook, and no more', () => {
+    expectTypeOf<keyof ClientOptions<typeof ordersDependency>>().toEqualTypeOf<
+      'baseUrl' | 'headers' | 'fetch' | 'inferFault' | 'onDeprecation'
+    >();
+  });
+
+  test('a DeprecationNotice holds the Provider, the Endpoint and the instant, and no more', () => {
+    expectTypeOf<keyof DeprecationNotice>().toEqualTypeOf<
+      'provider' | 'endpoint' | 'deprecatedAt'
+    >();
+  });
+
+  test('a ReceivedSuccess holds the status, headers and body its Endpoint declares, and no more', () => {
+    expectTypeOf<
+      KeysOfEach<ReceivedSuccess<typeof replacingDependency, 'putOrder'>>
+    >().toEqualTypeOf<'kind' | 'status' | 'headers' | 'body'>();
+  });
+
+  test('a ReceivedRejection holds its source, code, status, message, and the headers and body its code declares', () => {
+    expectTypeOf<
+      KeysOfEach<ReceivedRejection<typeof replacingDependency, 'putOrder'>>
+    >().toEqualTypeOf<'kind' | 'source' | 'code' | 'status' | 'message' | 'headers' | 'body'>();
+  });
+
+  test('a ReceivedUnknownRejection holds its source, code, status, message and body, and no more', () => {
+    expectTypeOf<keyof ReceivedUnknownRejection>().toEqualTypeOf<
+      'kind' | 'source' | 'code' | 'status' | 'message' | 'body'
+    >();
+  });
+
+  test('a ReceivedFault holds its source, whether it committed and may be retried, and what the response said, and no more', () => {
+    expectTypeOf<keyof ReceivedFault>().toEqualTypeOf<
+      | 'kind'
+      | 'source'
+      | 'committed'
+      | 'retryable'
+      | 'message'
+      | 'status'
+      | 'code'
+      | 'retryAfter'
+      | 'cause'
+      | 'issues'
+    >();
+  });
+
+  test('what Happened holds the error, status and headers a call met, beside its kind, and no more', () => {
+    expectTypeOf<KeysOfEach<Happened>>().toEqualTypeOf<'kind' | 'error' | 'status' | 'headers'>();
+  });
+
+  test('an InferredFault holds whether it committed and may be retried, and no more', () => {
+    expectTypeOf<keyof InferredFault>().toEqualTypeOf<'committed' | 'retryable'>();
   });
 });

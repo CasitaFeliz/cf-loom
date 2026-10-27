@@ -19,6 +19,10 @@ import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
 import {
+  type FakeClientOptions,
+  type FakeProvider,
+  type FakeProviderError,
+  type FakeProviderOptions,
   fakeProvider,
   type InvalidCall,
   type Script,
@@ -446,5 +450,50 @@ describe('fakeProvider: types', () => {
     });
 
     expect(Object.keys(configured)).toEqual(['getPayment', 'tagPayment', 'refundPayment']);
+  });
+});
+
+describe('the records a test reads and writes', () => {
+  test('FakeProviderOptions hold the base URL, and no more', () => {
+    expectTypeOf<keyof FakeProviderOptions>().toEqualTypeOf<'baseUrl'>();
+  });
+
+  test('FakeClientOptions hold the client’s headers, inference and Deprecation hook, and no more', () => {
+    expectTypeOf<keyof FakeClientOptions<typeof paymentsDependency>>().toEqualTypeOf<
+      'headers' | 'inferFault' | 'onDeprecation'
+    >();
+  });
+
+  test('a FakeProvider holds its fetch, client, scripts, calls and verify, and no more', () => {
+    expectTypeOf<keyof FakeProvider<typeof paymentsDependency>>().toEqualTypeOf<
+      'fetch' | 'client' | 'on' | 'calls' | 'invalidCalls' | 'verify'
+    >();
+  });
+
+  test('an InvalidCall holds the Issues, and no more', () => {
+    expectTypeOf<keyof InvalidCall>().toEqualTypeOf<'issues'>();
+  });
+
+  test('a Script holds once and otherwise, and no more', () => {
+    expectTypeOf<keyof Script<typeof paymentsDependency, 'getPayment'>>().toEqualTypeOf<
+      'once' | 'otherwise'
+    >();
+  });
+
+  test('a StepBuilder holds the ways to answer, and no more', () => {
+    expectTypeOf<keyof StepBuilder<typeof paymentsDependency, 'getPayment'>>().toEqualTypeOf<
+      | 'success'
+      | 'reject'
+      | 'unknownRejection'
+      | 'fault'
+      | 'reserved'
+      | 'noConnection'
+      | 'reset'
+      | 'status'
+    >();
+  });
+
+  test('FakeProviderError holds nothing beside an Error’s own', () => {
+    expectTypeOf<Exclude<keyof FakeProviderError, keyof Error>>().toBeNever();
   });
 });

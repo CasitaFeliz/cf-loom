@@ -20,19 +20,31 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
   type Broker,
+  type BrokerAck,
   type BrokerConnection,
   type BrokerTrouble,
   type CloseAbortedError,
   type CloseOptions,
+  type CommandSender,
   type ConsumedFault,
   type ConsumeOptions,
   type ConsumeRun,
+  type DeadlineError,
   type Delivery,
   type DurableConsumer,
   type DurableConsumerTrouble,
+  type EventPublisher,
+  type InvalidMessageError,
+  type InvalidPart,
+  type MessageNotSentError,
+  type MessageOptions,
   type Messaging,
+  type MessagingClosedError,
   type MessagingOptions,
   messaging,
+  type OutgoingMessage,
+  type Published,
+  type Sent,
   type ServiceStream,
   type Settlement,
 } from './index.ts';
@@ -679,9 +691,81 @@ describe('the records a Service reads', () => {
   });
 });
 
+describe('the records messaging takes and returns', () => {
+  test('MessagingOptions hold the Message Handler fault and Broker trouble hooks, and no more', () => {
+    expectTypeOf<keyof MessagingOptions>().toEqualTypeOf<'onServiceFault' | 'onBrokerTrouble'>();
+  });
+
+  test('ConsumeOptions hold the Resources, and no more', () => {
+    expectTypeOf<
+      keyof ConsumeOptions<{ readonly clock: () => Date }>
+    >().toEqualTypeOf<'resources'>();
+  });
+
+  test('a Messaging holds its publisher, sender, consume and close, and no more', () => {
+    expectTypeOf<keyof Messaging<typeof contract>>().toEqualTypeOf<
+      'publisher' | 'sender' | 'consume' | 'close'
+    >();
+  });
+
+  test('an EventPublisher holds publish, and no more', () => {
+    expectTypeOf<keyof EventPublisher<typeof contract>>().toEqualTypeOf<'publish'>();
+  });
+
+  test('a CommandSender holds send, and no more', () => {
+    expectTypeOf<keyof CommandSender<typeof contract>>().toEqualTypeOf<'send'>();
+  });
+
+  test('MessageOptions hold the Fact id and the headers, and no more', () => {
+    expectTypeOf<keyof MessageOptions>().toEqualTypeOf<'factId' | 'headers'>();
+  });
+
+  test('Published holds the Fact id and the duplicates, and no more', () => {
+    expectTypeOf<keyof Published>().toEqualTypeOf<'factId' | 'duplicates'>();
+  });
+
+  test('Sent holds the Fact id and whether it was a duplicate, and no more', () => {
+    expectTypeOf<keyof Sent>().toEqualTypeOf<'factId' | 'duplicate'>();
+  });
+
+  test('an InvalidPart holds the kind of refusal and the identity, Issues, id, header or size it names, and no more', () => {
+    expectTypeOf<KeysOfEach<InvalidPart>>().toEqualTypeOf<
+      'kind' | 'identity' | 'issues' | 'at' | 'name' | 'fit' | 'bytes'
+    >();
+  });
+
+  test('the errors messaging throws hold what each says went wrong, beside an Error’s own', () => {
+    expectTypeOf<Exclude<keyof DeadlineError, keyof Error>>().toEqualTypeOf<'waitMs'>();
+    expectTypeOf<Exclude<keyof MessagingClosedError, keyof Error>>().toBeNever();
+    expectTypeOf<Exclude<keyof CloseAbortedError, keyof Error>>().toEqualTypeOf<'handedBack'>();
+    expectTypeOf<Exclude<keyof InvalidMessageError, keyof Error>>().toEqualTypeOf<'invalid'>();
+    expectTypeOf<Exclude<keyof MessageNotSentError, keyof Error>>().toEqualTypeOf<
+      'factId' | 'sent'
+    >();
+  });
+});
+
 describe('the Broker seam', () => {
   test('a Broker adapter implements connect with only the stream and subjects', () => {
     expectTypeOf<keyof ServiceStream>().toEqualTypeOf<'stream' | 'subjects'>();
+  });
+
+  test('a Broker holds connect, and no more', () => {
+    expectTypeOf<keyof Broker>().toEqualTypeOf<'connect'>();
+  });
+
+  test('a BrokerConnection holds publish, consume and close, and no more', () => {
+    expectTypeOf<keyof BrokerConnection>().toEqualTypeOf<'publish' | 'consume' | 'close'>();
+  });
+
+  test('a BrokerAck holds whether the Broker dropped the Message as a duplicate, and no more', () => {
+    expectTypeOf<keyof BrokerAck>().toEqualTypeOf<'duplicate'>();
+  });
+
+  test('an OutgoingMessage holds its subject, ids, headers and body, and no more', () => {
+    expectTypeOf<keyof OutgoingMessage>().toEqualTypeOf<
+      'subject' | 'messageId' | 'factId' | 'headers' | 'body'
+    >();
   });
 
   test('a DurableConsumer offers an adapter only its `durable`, stream, subject and receive', () => {
