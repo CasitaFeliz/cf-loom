@@ -1911,34 +1911,53 @@ describe('cf-loom generate: a configured layout', { timeout: layoutTimeout }, ()
     });
   });
 
+  /** Runs `generate` in a Service with a stale generated file that can be deleted and one in a folder that cannot, which sorts after it. */
+  function generatedWithLockedStaleFile(...args: string[]) {
+    const stale = `${header}\nexport {};\n`;
+    const project = aProject({
+      ...aService(),
+      'src/a.generated.ts': stale,
+      'src/locked/old.generated.ts': stale,
+    });
+    chmodSync(join(project, 'src/locked'), 0o555);
+    try {
+      return cfLoom(project, 'generate', ...args);
+    } finally {
+      chmodSync(join(project, 'src/locked'), 0o755);
+    }
+  }
+
+  const lockedLine = /^src\/locked\/old\.generated\.ts cannot be deleted: [^\n]+\n$/;
+
   test.skipIf(isRoot)(
-    'a stale generated file that cannot be deleted is said after every file was written (skipped as root)',
+    'a stale generated file that cannot be deleted is said after every file was written and the stale one before it was deleted (skipped as root)',
     () => {
-      const project = aProject({
-        ...aService(),
-        'src/locked/old.generated.ts': `${header}\nexport {};\n`,
-      });
-      chmodSync(join(project, 'src/locked'), 0o555);
+      const ran = generatedWithLockedStaleFile();
 
-      let text: ReturnType<typeof cfLoom>;
-      let document: ReturnType<typeof cfLoom>;
-      try {
-        text = cfLoom(project, 'generate');
-        document = cfLoom(project, 'generate', '--json');
-      } finally {
-        chmodSync(join(project, 'src/locked'), 0o755);
-      }
+      expect(ran.status).toBe(3);
+      expect(ran.stdout.split('\n')).toEqual([
+        ...ran.stdout.split('\n').filter((line) => line.startsWith('Wrote')),
+        'Deleted src/a.generated.ts',
+        '',
+      ]);
+      expect(ran.stdout).toContain('Wrote contract.snapshot.json\n');
+      expect(ran.stderr).toMatch(lockedLine);
+    },
+  );
 
-      expect(text.status).toBe(3);
-      expect(text.stdout.split('\n')).toContain('Wrote contract.snapshot.json');
-      expect(text.stderr).toMatch(/^src\/locked\/old\.generated\.ts cannot be deleted: [^\n]+\n$/);
-      const [line] = text.stderr.split('\n');
-      expect(JSON.parse(document.stdout)).toMatchObject({
+  test.skipIf(isRoot)(
+    'generate --json keeps the files it wrote and deleted beside the stale file it could not delete (skipped as root)',
+    () => {
+      const ran = generatedWithLockedStaleFile('--json');
+
+      const [line] = ran.stderr.split('\n');
+      expect(ran.stderr).toMatch(lockedLine);
+      expect(JSON.parse(ran.stdout)).toMatchObject({
         status: 3,
         errors: [line],
         moved: [],
         wrote: expect.arrayContaining(['contract.snapshot.json']),
-        deleted: [],
+        deleted: ['src/a.generated.ts'],
       });
     },
   );
