@@ -1,4 +1,4 @@
-import { isBrokerPrefix } from '@cf-loom/contract/internal';
+import { brokerPrefixRule, isBrokerPrefix } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
@@ -22,7 +22,7 @@ export type JetStreamConnecting = {
 
 /** What `jetstream()` takes: how to connect, and the Broker prefix of every name it uses on the Broker. */
 export type JetStreamBrokerOptions = JetStreamConnecting & {
-  /** Goes in front of every subject, Stream and Durable consumer name, so several environments share one Broker; kebab-case, as a Service name is. */
+  /** Goes in front of every subject, Stream and Durable consumer name, so several environments share one Broker; kebab-case of at most 64 characters, as a Service name is. */
   readonly prefix?: string | undefined;
 };
 
@@ -73,7 +73,7 @@ function checkedPrefixOf(prefix: string | undefined): string | null {
   }
   if (!isBrokerPrefix(prefix)) {
     throw new Error(
-      `The broker prefix "${prefix}" is not kebab-case, such as staging: leave prefix undefined for none`,
+      `The broker prefix "${prefix}" is not ${brokerPrefixRule}: leave prefix undefined for none`,
     );
   }
   return prefix;
