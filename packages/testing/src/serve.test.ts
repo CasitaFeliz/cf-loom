@@ -112,18 +112,21 @@ const locked = { reason: 'settled', lockedAt: '2026-10-19T10:00:00Z' } as const;
 /** What the Provider reports to its Service through `onServiceFault`. */
 const serviceFaults: ServedFault[] = [];
 
+/** The Provider's Contract. */
+const paymentsService = defineService({
+  name: 'payments-service',
+  groups: [
+    defineGroup({
+      name: 'payments',
+      description: 'Payments',
+      endpoints: [getPayment, capturePayment],
+    }),
+  ],
+});
+
 /** The Provider itself, its Handler answering by the payment asked for. */
 const served = serve(
-  defineService({
-    name: 'payments-service',
-    groups: [
-      defineGroup({
-        name: 'payments',
-        description: 'Payments',
-        endpoints: [getPayment, capturePayment],
-      }),
-    ],
-  }),
+  paymentsService,
   {
     endpoints: {
       getPayment: handle(getPayment, ({ params }) => {
@@ -187,6 +190,27 @@ const capture = (body: string, contentType = 'application/json'): RequestInit =>
   body,
 });
 
+/** Every Fault `fault()` builds from what a Handler gives it, a message given or not. */
+const faultsGiven = (['no', 'yes', 'unknown'] as const).flatMap((committed) =>
+  [undefined, 'Down for now'].flatMap((message) =>
+    [
+      { retryable: false },
+      { retryable: true },
+      { retryable: true, retryAfter: 0 },
+      { retryable: true, retryAfter: 30 },
+    ].map((given) => ({ committed, ...given, ...(message === undefined ? {} : { message }) })),
+  ),
+);
+
+/** The Provider itself, its Handler returning the Fault it is given. */
+function servedFaultOf(given: (typeof faultsGiven)[number]) {
+  const endpoints = {
+    getPayment: handle(getPayment, () => fault(given as never)),
+    capturePayment: handle(capturePayment, () => success()),
+  };
+  return serve(paymentsService, { endpoints, guards: {} }, { onServiceFault: () => undefined });
+}
+
 describe('fakeProvider and serve answer alike', () => {
   test('a code another Endpoint declares, sent by r.unknownRejection, is answered with the bytes serve sends for it', async () => {
     const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
@@ -203,6 +227,23 @@ describe('fakeProvider and serve answer alike', () => {
     expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
     expect(await fromFake.text()).toBe(await fromServe.text());
   });
+
+  test.each(faultsGiven)(
+    'the Fault %j is answered with the bytes serve sends for it, Retry-After included',
+    async (given) => {
+      const payments = fakeProvider(paymentsDependency, { baseUrl: 'http://payments.test' });
+      payments.on('getPayment').otherwise((r) => r.fault(given as never));
+      const url = 'http://payments.test/payments/pay-1';
+
+      const fromServe = await servedFaultOf(given)(new Request(url));
+      const fromFake = await payments.fetch(new Request(url));
+
+      expect(fromFake.status).toBe(fromServe.status);
+      expect(fromFake.headers.get('retry-after')).toBe(fromServe.headers.get('retry-after'));
+      expect(fromFake.headers.get('content-type')).toBe(fromServe.headers.get('content-type'));
+      expect(await fromFake.text()).toBe(await fromServe.text());
+    },
+  );
 
   test('a request a Retired Endpoint the Provider does not export wins is answered with the bytes serve sends for it', async () => {
     const retired = defineEndpoint({

@@ -293,6 +293,64 @@ describe('fakeProvider: types', () => {
     expect(payments.calls('getPayment')).toEqual([]);
   });
 
+  test('r.fault takes retryAfter only with retryable true', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
+      .once((r) => r.fault({ committed: 'no', retryable: true }))
+      // @ts-expect-error a Fault that is not retryable takes no retryAfter
+      .once((r) => r.fault({ committed: 'no', retryable: false, retryAfter: 30 }))
+      // @ts-expect-error retryAfter is whole seconds, a number
+      .otherwise((r) => r.fault({ committed: 'no', retryable: true, retryAfter: '30' }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault with a boolean retryable takes no retryAfter', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const retryable: boolean = Math.random() > 0.5;
+
+    payments
+      .on('getPayment')
+      .once((r) => r.fault({ committed: 'no', retryable }))
+      // @ts-expect-error a retryable that may be false takes no retryAfter
+      .otherwise((r) => r.fault({ committed: 'no', retryable, retryAfter: 30 }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault refuses a code, which r.reserved takes', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error a Reserved code is no Fault
+      .once((r) => r.fault({ code: 'RETIRED' }))
+      // @ts-expect-error a Fault carries no code
+      .once((r) => r.fault({ committed: 'yes', retryable: true, code: 'RETIRED' }))
+      .otherwise((r) => r.reserved('RETIRED'));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.reserved takes only a Reserved code', () => {
+    const payments = fakeProvider(paymentsDependency);
+
+    payments
+      .on('getPayment')
+      .once((r) => r.reserved('NO_SUCH_ENDPOINT'))
+      // @ts-expect-error BOGUS is no Reserved code
+      .once((r) => r.reserved('BOGUS'))
+      // @ts-expect-error a Reserved code is a string
+      .once((r) => r.reserved(410))
+      // @ts-expect-error a Reserved code is given alone
+      .otherwise((r) => r.reserved('RETIRED', { retryAfter: 30 }));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
   test('success takes the Success as a Caller reads it: an Open Enum’s Unknown case, never a bare string', () => {
     const payments = fakeProvider(paymentsDependency);
 

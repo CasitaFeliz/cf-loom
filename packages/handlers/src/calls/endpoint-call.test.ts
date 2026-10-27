@@ -973,6 +973,19 @@ describe('fault() retryAfter', () => {
     );
   });
 
+  test.each([
+    { label: '{}', given: {}, named: 'an object' },
+    { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
+    { label: '[1]', given: [1], named: 'a list' },
+    { label: '1n', given: 1n, named: '1' },
+  ])('fault() refuses a retryAfter of $label, naming it as a written value', ({ given, named }) => {
+    const building = () => fault({ committed: 'no', retryable: true, retryAfter: given as number });
+
+    expect(building).toThrow(
+      `fault(): retryAfter is no whole number of seconds from 0: got ${named}`,
+    );
+  });
+
   test('the Fault type gives retryAfter to a retryable Fault only', () => {
     const given = { committed: 'no', retryable: false, retryAfter: 5 } as const;
     const retryable: boolean = given.retryable;
