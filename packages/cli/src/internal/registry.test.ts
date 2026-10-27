@@ -100,10 +100,17 @@ function ordersWith(...versions: readonly ServedVersion[]): RegistryOptions {
 }
 
 function baselineIn(read: ReadBaseline) {
-  if (read.kind !== 'baseline') {
+  if (read.kind !== 'read' || read.baseline.kind !== 'baseline') {
     throw new Error(`not a baseline: ${JSON.stringify(read)}`);
   }
-  return read;
+  return read.baseline;
+}
+
+function listingIn(read: ReadBaseline) {
+  if (read.kind !== 'read') {
+    throw new Error(`not a listing: ${JSON.stringify(read)}`);
+  }
+  return read.listing;
 }
 
 function failureIn(read: ReadBaseline): string {
@@ -171,6 +178,45 @@ function tarballsRequested(registry: Registry): readonly string[] {
   return registry.requests.map((request) => request.path).filter((p) => p.startsWith('/tarballs/'));
 }
 
+/** The versions whose metadata npm was asked for, in order, from the calls a recording npm logged. */
+function versionsViewedIn(calls: readonly string[]): readonly string[] {
+  const prefix = `view ${ordersPackage}@`;
+  const viewed = calls.filter((call) => call.startsWith(prefix));
+  return viewed.map((call) => (call.split(' ')[1] ?? '').slice(ordersPackage.length + 1));
+}
+
+/** A version of the pool the exhaustive read lists, and whether cf-loom published it. */
+type Listed = { readonly version: string; readonly byCfLoom: boolean };
+
+/** The versions the exhaustive read draws its lists from, lowest first. */
+const pool = ['1.0.0-0', '1.0.0', '1.1.0-0', '1.1.0'] as const;
+
+/** Every non-empty list of the pool, each version published by cf-loom or not. */
+function everyListing(): readonly (readonly Listed[])[] {
+  const listings: Listed[][] = [];
+  for (let code = 1; code < 3 ** pool.length; code += 1) {
+    const listing: Listed[] = [];
+    for (const [index, version] of pool.entries()) {
+      const state = Math.floor(code / 3 ** index) % 3;
+      if (state > 0) {
+        listing.push({ version, byCfLoom: state === 1 });
+      }
+    }
+    listings.push(listing);
+  }
+  return listings;
+}
+
+function isStableVersion(version: string): boolean {
+  return !version.includes('-');
+}
+
+function listingText(listing: readonly Listed[]): string {
+  return listing
+    .map(({ version, byCfLoom }) => `${version}${byCfLoom ? '' : ' (hand)'}`)
+    .join(', ');
+}
+
 describe.concurrent('baselineOf', () => {
   test('a package’s Baseline is the snapshot.json of its highest published version', async ({
     lab,
@@ -208,7 +254,7 @@ describe.concurrent('baselineOf', () => {
 
     const { read } = await readOrders(lab, served);
 
-    expect(baselineIn(read).versions).toEqual(ascending);
+    expect(listingIn(read).versions).toEqual(ascending);
   });
 
   test.for([
@@ -221,16 +267,27 @@ describe.concurrent('baselineOf', () => {
 
       const { read } = await readOrders(lab, served);
 
-      expect(baselineIn(read).versions).toEqual([lower, higher]);
+      expect(listingIn(read).versions).toEqual([lower, higher]);
     },
   );
 
-  test('a prerelease above the highest stable version is the Baseline', async ({ lab }) => {
-    const served = ordersWith(aVersion('1.0.0'), aVersion('2.0.0-rc.1'));
+  test('with a prerelease above the highest stable version, the Baseline is the stable one, and the prerelease is never read', async ({
+    lab,
+  }) => {
+    const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0'), aVersion('2.0.0-rc.1'));
+    const registry = await lab.aRegistry(served);
+    const recording = aRecordingNpm(lab);
+    const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
 
-    const { read } = await readOrders(lab, served);
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
 
-    expect(baselineIn(read).snapshot.version).toBe('2.0.0-rc.1');
+    expect(baselineIn(read).snapshot.version).toBe('1.1.0');
+    expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, '1.1.0')]);
+    expect(versionsViewedIn(recording.calls())).toEqual(['1.1.0']);
   });
 
   test('a prerelease below the highest stable version is not the Baseline', async ({ lab }) => {
@@ -241,17 +298,34 @@ describe.concurrent('baselineOf', () => {
     expect(baselineIn(read).snapshot.version).toBe('1.0.0');
   });
 
-  test('the Baseline names the highest stable version beside it', async ({ lab }) => {
+  test('a read without --against says that the version was chosen as the Baseline', async ({
+    lab,
+  }) => {
     const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0'), aVersion('2.0.0-rc.1'));
 
     const { read } = await readOrders(lab, served);
 
-    expect(baselineIn(read)).toMatchObject({ stable: '1.1.0', chosen: 'highest' });
+    expect(baselineIn(read).chosen).toBe('baseline');
+  });
+
+  test('--against names the version read, and the read says it was named', async ({ lab }) => {
+    const registry = await lab.aRegistry(ordersWith(aVersion('1.0.0'), aVersion('1.1.0')));
+    const npm = lab.aPlace({ userConfig: loginTo(registry) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: '1.0.0',
+    });
+
+    expect(baselineIn(read).chosen).toBe('against');
+    expect(baselineIn(read).snapshot.version).toBe('1.0.0');
   });
 
   test.for([
     ['a lower version', '1.0.0'],
     ['the highest stable version', '1.1.0'],
+    ['the prerelease', '2.0.0-rc.1'],
   ] as const)(
     'the latest dist-tag is never read, even when it points at %s',
     async ([, tagged], { lab }) => {
@@ -260,7 +334,7 @@ describe.concurrent('baselineOf', () => {
 
       const { read } = await readOrders(lab, served);
 
-      expect(baselineIn(read).snapshot.version).toBe('2.0.0-rc.1');
+      expect(baselineIn(read).snapshot.version).toBe('1.1.0');
     },
   );
 
@@ -272,14 +346,11 @@ describe.concurrent('baselineOf', () => {
     expect(baselineIn(read).snapshot.version).toBe('1.1.0');
   });
 
-  test('a package with only prereleases has the highest one as its Baseline, and no stable version', async ({
-    lab,
-  }) => {
+  test('a package with only prereleases has the highest one as its Baseline', async ({ lab }) => {
     const served = ordersWith(aVersion('1.0.0-rc.2'), aVersion('1.0.0-rc.1'));
 
     const { read, registry } = await readOrders(lab, served);
 
-    expect(baselineIn(read)).toMatchObject({ stable: undefined });
     expect(baselineIn(read).snapshot.version).toBe('1.0.0-rc.2');
     expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, '1.0.0-rc.2')]);
   });
@@ -291,7 +362,7 @@ describe.concurrent('baselineOf', () => {
 
     const { read } = await readOrders(lab, ordersWith(...versions.map((v) => aVersion(v))));
 
-    expect(baselineIn(read).versions).toEqual(['1.0.0', '1.1.0', '1.2.0-rc.1', '1.2.0', '1.10.0']);
+    expect(listingIn(read).versions).toEqual(['1.0.0', '1.1.0', '1.2.0-rc.1', '1.2.0', '1.10.0']);
   });
 
   test('the Baseline’s peer ranges are those of its own version', async ({ lab }) => {
@@ -371,9 +442,9 @@ describe.concurrent('baselineOf', () => {
     });
 
     expect(read).toEqual({
-      kind: 'no-baseline',
-      packageName: ordersPackage,
-      why: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
+      kind: 'read',
+      listing: { packageName: ordersPackage, versions: [] },
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/`, username: 'tester' },
     });
     const whoami = registry.requests.find((request) => request.path === '/-/whoami');
     expect(whoami?.authorization).toBe(`Bearer ${token}`);
@@ -393,7 +464,7 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read.kind).toBe('no-baseline');
+    expect(read).toMatchObject({ baseline: { kind: 'unknown-package' } });
     expect(scoped.requests.map((request) => request.path)).toContain('/-/whoami');
     expect(standard.requests).toEqual([]);
   });
@@ -409,7 +480,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('whoami asks the scope’s registry although the default registry holds credentials', async ({
@@ -426,7 +499,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('a default registry that holds credentials, with none for the scope, fails without them', async ({
@@ -477,7 +552,9 @@ describe.concurrent('baselineOf', () => {
       against: undefined,
     });
 
-    expect(read).toMatchObject({ why: { kind: 'unknown-package', registry: `${registry.url}/` } });
+    expect(read).toMatchObject({
+      baseline: { kind: 'unknown-package', registry: `${registry.url}/` },
+    });
   });
 
   test('a registry URL’s user is left out of a refusal too', async ({ lab }) => {
@@ -534,7 +611,8 @@ describe.concurrent('baselineOf', () => {
 
       const read = await baselineOf(npm, { packageName, declared, against: undefined });
 
-      expect(baselineIn(read)).toMatchObject({ packageName, snapshot: { kind, name } });
+      expect(baselineIn(read)).toMatchObject({ snapshot: { kind, name } });
+      expect(listingIn(read).packageName).toBe(packageName);
     },
   );
 
@@ -552,17 +630,66 @@ describe.concurrent('baselineOf', () => {
     expect(tarballsRequested(registry)).toEqual([]);
   });
 
-  test('a highest version without cfLoom fails, naming the package and version', async ({
+  test('a highest version without cfLoom is passed over for the next that has it, and its tarball is not requested', async ({
     lab,
   }) => {
     const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0', { cfLoom: null }));
 
-    const { read } = await readOrders(lab, served);
+    const { read, registry } = await readOrders(lab, served);
+
+    expect(baselineIn(read).snapshot.version).toBe('1.0.0');
+    expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, '1.0.0')]);
+  });
+
+  test('a lone version without cfLoom gives no Baseline, naming the highest version and every one listed', async ({
+    lab,
+  }) => {
+    const served = ordersWith(aVersion('0.0.0', { cfLoom: null }));
+
+    const { read, registry } = await readOrders(lab, served);
+
+    expect(read).toEqual({
+      kind: 'read',
+      listing: { packageName: ordersPackage, versions: ['0.0.0'] },
+      baseline: { kind: 'none-published' },
+    });
+    expect(tarballsRequested(registry)).toEqual([]);
+  });
+
+  test('--against naming a version without cfLoom fails, naming the package and version', async ({
+    lab,
+  }) => {
+    const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0', { cfLoom: null }));
+    const registry = await lab.aRegistry(served);
+    const npm = lab.aPlace({ userConfig: loginTo(registry) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: '1.1.0',
+    });
 
     expect(failureIn(read)).toBe(
       `${ordersPackage}@1.1.0 has no cfLoom: it was not published by cf-loom publish`,
     );
   });
+
+  test.for([
+    ['no kind', {}],
+    ['a kind that is no text', { kind: 5 }],
+  ] as const)(
+    'a version whose cfLoom has %s fails rather than being passed over, and its tarball is not requested',
+    async ([, cfLoom], { lab }) => {
+      const served = ordersWith(aVersion('1.0.0'), aVersion('1.1.0', { cfLoom }));
+
+      const { read, registry } = await readOrders(lab, served);
+
+      expect(failureIn(read)).toBe(
+        `${ordersPackage}@1.1.0 has a malformed cfLoom: its kind is no text`,
+      );
+      expect(tarballsRequested(registry)).toEqual([]);
+    },
+  );
 
   test.for([
     [
@@ -1581,9 +1708,64 @@ function packDestinationIn(calls: readonly string[]): string {
   return destination;
 }
 
+/** The versions of a listing that cf-loom published, lowest first. */
+function publishedIn(listing: readonly Listed[]): readonly string[] {
+  return listing.filter(({ byCfLoom }) => byCfLoom).map(({ version }) => version);
+}
+
+/** Reads the Baseline of a package that lists these versions, through an npm that records its calls. */
+async function readListing(lab: Lab, listing: readonly Listed[]) {
+  const versions = listing.map(({ version, byCfLoom }) =>
+    aVersion(version, byCfLoom ? {} : { cfLoom: null }),
+  );
+  const registry = await lab.aRegistry(ordersWith(...versions));
+  const recording = aRecordingNpm(lab);
+  const npm = lab.aPlace({ userConfig: loginTo(registry), path: recording.path });
+  const query = { packageName: ordersPackage, declared: orders, against: undefined };
+  return { read: await baselineOf(npm, query), registry, recording };
+}
+
+const listings = everyListing().map((listing) => [listingText(listing), listing] as const);
+const withBaseline = listings.filter(([, listing]) => publishedIn(listing).length > 0);
+const withoutBaseline = listings.filter(([, listing]) => publishedIn(listing).length === 0);
+
+describe.concurrent('baselineOf, among every list of up to four versions', () => {
+  test.for(withBaseline)(
+    'the Baseline of %s is the highest stable version cf-loom published, else its highest prerelease',
+    async ([, listing], { lab }) => {
+      const { read, registry, recording } = await readListing(lab, listing);
+
+      const versions = listing.map(({ version }) => version);
+      const published = publishedIn(listing);
+      const stable = published.filter(isStableVersion);
+      const [expected = ''] = (stable.length > 0 ? stable : published).toReversed();
+      const triedFirst = versions.filter(isStableVersion).reverse();
+      const triedThen = versions.filter((version) => !isStableVersion(version)).reverse();
+      const tried = [...triedFirst, ...triedThen];
+      expect(baselineIn(read).snapshot.version).toBe(expected);
+      expect(tarballsRequested(registry)).toEqual([tarballPathOf(ordersPackage, expected)]);
+      expect(versionsViewedIn(recording.calls())).toEqual(
+        tried.slice(0, tried.indexOf(expected) + 1),
+      );
+    },
+  );
+
+  test.for(withoutBaseline)(
+    '%s has no Baseline, naming the highest version and every one listed',
+    async ([, listing], { lab }) => {
+      const { read, registry } = await readListing(lab, listing);
+
+      const versions = listing.map(({ version }) => version);
+      const listed = { packageName: ordersPackage, versions };
+      expect(read).toEqual({ kind: 'read', listing: listed, baseline: { kind: 'none-published' } });
+      expect(tarballsRequested(registry)).toEqual([]);
+    },
+  );
+});
+
 describe('baselineOf and its temporary folder', () => {
   test.for([
-    ['succeeds', ordersWith(aVersion('1.0.0')), 'baseline'],
+    ['succeeds', ordersWith(aVersion('1.0.0')), 'read'],
     ['fails', ordersWith(aVersion('1.0.0', { snapshotJson: '{' })), 'failed'],
   ] as const)(
     'the temporary folder is made under the system’s and removed whether a read %s',
@@ -1624,7 +1806,7 @@ describe('baselineOf and its temporary folder', () => {
       chmodSync(tmp, 0o755);
     });
 
-    expect(read.kind).toBe('baseline');
+    expect(read.kind).toBe('read');
   });
 
   test('a temporary folder that cannot be made fails rather than throws', async ({ lab }) => {

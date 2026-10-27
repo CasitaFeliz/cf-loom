@@ -1,4 +1,5 @@
 import type { VersionBump } from '@cf-loom/contract/internal';
+import { listedVersionsOf } from './listed-versions.ts';
 import {
   bumpedVersionOf,
   compareSemanticVersions,
@@ -15,13 +16,15 @@ export type DeriveOptions = { readonly force: boolean; readonly prerelease: bool
 
 /**
  * Why a version is derived: the package has no Baseline, the size of what moved, a prerelease
- * Baseline promoted to the version that is not one, or `--force` over a Baseline nothing moved from.
+ * Baseline promoted to the version that is not one, `--force` over a Baseline nothing moved
+ * from, or a listed version cf-loom did not publish that the version must be a major above.
  */
 export type Why =
   | { readonly kind: 'first-version' }
   | { readonly kind: 'bump'; readonly bump: VersionBump }
   | { readonly kind: 'promotes'; readonly baseline: string }
-  | { readonly kind: 'forced' };
+  | { readonly kind: 'forced' }
+  | { readonly kind: 'above-unchecked'; readonly version: string };
 
 /** The version `publish` derives, the dist-tag it takes and why. */
 export type DerivedVersion = {
@@ -40,14 +43,13 @@ export type Derived =
   | { readonly kind: 'unchanged'; readonly baseline: string }
   | { readonly kind: 'not-above'; readonly version: string; readonly baseline: string };
 
-/** A Baseline's version, the highest version that is not a prerelease, and how far the proposed Snapshot and peer ranges move from the Baseline. */
-type Moved = {
-  readonly version: string;
-  readonly stable: string | undefined;
-  readonly bump: VersionBump | 'unchanged';
-};
+/** A Baseline's version and how far the proposed Snapshot and peer ranges move from it. */
+type Moved = { readonly version: string; readonly bump: VersionBump | 'unchanged' };
 
-/** What the version is derived from: the Baseline and its bump, every listed version lowest first, and the options. */
+/**
+ * What the version is derived from: the Baseline `baselineOf` chose and its bump, none when the
+ * package has none, every listed version lowest first, and the options.
+ */
 export type Deriving = {
   readonly baseline: Moved | undefined;
   readonly versions: readonly string[];
@@ -55,27 +57,33 @@ export type Deriving = {
 
 const firstVersion = '1.0.0';
 
-/**
- * The version a publish takes, as the prerelease `<version>-<n>` when asked, or the Baseline that
- * already holds what it would publish.
- */
+/** The version a publish takes, so that it is above the Baseline and every listed version that is not a prerelease, or why no publish may take one. */
 export function derivedVersionOf({ baseline, versions, force, prerelease }: Deriving): Derived {
   if (baseline !== undefined && isNothingToPublish(baseline, { force, prerelease })) {
     return { kind: 'unchanged', baseline: baseline.version };
   }
-  const next = nextVersionOf(baseline);
-  const version = prerelease ? nextPrereleaseOf(next, versions) : next;
+  const { numbers, above } = numbersAfter(baseline, uncheckedOf(baseline, versions));
+  const version = prerelease ? nextPrereleaseOf(numbers, versions) : numbers;
   if (baseline !== undefined && compareSemanticVersions(version, baseline.version) <= 0) {
     return { kind: 'not-above', version, baseline: baseline.version };
   }
-  const tag = prerelease && baseline?.stable !== undefined ? 'next' : 'latest';
-  return { kind: 'version', version, tag, why: whyOf(baseline, prerelease) };
+  const tag = tagOf(baseline, prerelease);
+  return { kind: 'version', version, tag, why: whyOf(baseline, above, prerelease) };
 }
 
-/** Why the version is the one derived: what moved, else that a prerelease Baseline is promoted, else that `--force` asked. */
-function whyOf(baseline: Moved | undefined, prerelease: boolean): Why {
+/** `latest` for the version that becomes the Baseline: a prerelease only while cf-loom published no version that is not one; else `next`. */
+function tagOf(baseline: Moved | undefined, prerelease: boolean): DistTag {
+  const hasPublishedStable = baseline !== undefined && !isPrerelease(baseline.version);
+  return prerelease && hasPublishedStable ? 'next' : 'latest';
+}
+
+/** Why the version is the one derived: the first, a major above a version cf-loom did not publish, what moved, a promotion, or `--force`. */
+function whyOf(baseline: Moved | undefined, above: string | undefined, prerelease: boolean): Why {
   if (baseline === undefined) {
     return { kind: 'first-version' };
+  }
+  if (above !== undefined) {
+    return { kind: 'above-unchecked', version: above };
   }
   if (baseline.bump !== 'unchanged') {
     return { kind: 'bump', bump: baseline.bump };
@@ -86,11 +94,12 @@ function whyOf(baseline: Moved | undefined, prerelease: boolean): Why {
 }
 
 /**
- * The first version that is not a prerelease for a package whose highest version is a prerelease
- * and which lists none that is not: 1.0.0, or that prerelease's numbers when they are higher.
+ * The first version that is not a prerelease over a prerelease Baseline: 1.0.0, or the next
+ * major above the highest listed version that is not a prerelease, or the Baseline's numbers
+ * when higher.
  */
-export function firstStableOf(prerelease: string): string {
-  return higherOf(firstVersion, numbersOf(prerelease));
+export function firstStableOf(prerelease: string, stable: string | undefined): string {
+  return raisedAbove(firstNumbersOf(prerelease), stable).numbers;
 }
 
 /** Whether the Baseline already holds what would be published: nothing changed, and no prerelease Baseline left to promote. */
@@ -101,16 +110,45 @@ function isNothingToPublish(baseline: Moved, { force, prerelease }: DeriveOption
   return prerelease || !isPrerelease(baseline.version);
 }
 
-/** The numbers after the Baseline: 1.0.0 with none, else the higher of the stable version bumped and the Baseline's own numbers. */
-function nextVersionOf(baseline: Moved | undefined): string {
+/** The highest listed version that is not a prerelease, when it is not the Baseline: cf-loom did not publish it, or the Baseline would be it. */
+function uncheckedOf(baseline: Moved | undefined, versions: readonly string[]): string | undefined {
+  const { stable } = listedVersionsOf(versions);
+  return stable === baseline?.version ? undefined : stable;
+}
+
+/** The numbers after the Baseline, and the unchecked version they had to rise above when it is higher than what the Baseline gives. */
+function numbersAfter(baseline: Moved | undefined, unchecked: string | undefined): Raised {
+  return raisedAbove(givenBy(baseline), unchecked);
+}
+
+/** Numbers, and the version they had to rise above, when there is one. */
+type Raised = { readonly numbers: string; readonly above: string | undefined };
+
+/** The higher of the given numbers and the major above the unchecked version, which `above` names when it is the higher. */
+function raisedAbove(given: string, unchecked: string | undefined): Raised {
+  if (unchecked === undefined) {
+    return { numbers: given, above: undefined };
+  }
+  const floor = bumpedVersionOf(unchecked, 'major');
+  return compareSemanticVersions(floor, given) > 0
+    ? { numbers: floor, above: unchecked }
+    : { numbers: given, above: undefined };
+}
+
+/** What the Baseline gives: 1.0.0 with none, the Baseline bumped when it is not a prerelease, else the first numbers of the prerelease. */
+function givenBy(baseline: Moved | undefined): string {
   if (baseline === undefined) {
     return firstVersion;
   }
-  if (baseline.stable === undefined) {
-    return firstStableOf(baseline.version);
+  if (isPrerelease(baseline.version)) {
+    return firstNumbersOf(baseline.version);
   }
-  const bump = baseline.bump === 'unchanged' ? 'patch' : baseline.bump;
-  return higherOf(numbersOf(baseline.version), bumpedVersionOf(baseline.stable, bump));
+  return bumpedVersionOf(baseline.version, baseline.bump === 'unchanged' ? 'patch' : baseline.bump);
+}
+
+/** 1.0.0, or a prerelease's own numbers when they are higher. */
+function firstNumbersOf(prerelease: string): string {
+  return higherOf(firstVersion, numbersOf(prerelease));
 }
 
 function higherOf(left: string, right: string): string {

@@ -6,7 +6,7 @@ import { done, type Exit, toolingError } from './exit.ts';
 import { preparedOf } from './prepared.ts';
 import type { Ending, Run } from './run.ts';
 
-/** How `check` was asked to run: the version or dist-tag to compare with instead of the highest version, and whether to derive a prerelease. */
+/** How `check` was asked to run: the version or dist-tag to compare with instead of the Baseline, and whether to derive a prerelease. */
 export type CheckOptions = { readonly against: string | undefined; readonly prerelease: boolean };
 
 /**

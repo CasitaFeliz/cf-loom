@@ -239,7 +239,7 @@ A language-neutral description of a Contract or a Definitions Package, frozen wh
 _Avoid_: schema dump, manifest
 
 **Baseline**:
-The Snapshot of the highest published version of a Contract Package or Definitions Package, a prerelease included, against which every proposed change is judged.
+The Snapshot of the highest version of a Contract Package or Definitions Package that cf-loom published and that is not a prerelease, or, when cf-loom published none, of the highest prerelease it published, against which every proposed change is judged. A version cf-loom did not publish is never the Baseline.
 _Avoid_: previous snapshot, reference
 
 **Reader schema**:
