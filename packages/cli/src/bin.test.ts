@@ -1729,6 +1729,65 @@ function aGuardedRoot(guards: string, attachment: string): Readonly<Record<strin
   };
 }
 
+/** The source of a value of `depth` lists, each holding the next, the innermost empty. */
+function deepListSource(depth: number): string {
+  return [
+    '(() => {',
+    '  let list: unknown[] = [];',
+    `  for (let level = 1; level < ${depth}; level++) {`,
+    '    list = [list];',
+    '  }',
+    '  return list;',
+    '})()',
+  ].join('\n');
+}
+
+const anyJsonGuard =
+  "export const perm = defineGuard({ name: 'perm', description: 'A permission', qualifier: z.json() });";
+
+describe('cf-loom generate: a value nested deeper than a Snapshot holds', () => {
+  test('a z.json() body whose example nests 100,000 lists deep fails generate on the example line', () => {
+    const body = `z.json().meta({ examples: [${deepListSource(100_000)}] })`;
+    const project = aProject({ 'cf-loom.config.ts': config, ...aRoot({ body }) });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) success.body';
+    const stderr = `${at} not allowed: an example the schema refuses (examples[0])\n`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
+  });
+
+  test('a z.json() Qualifier attached with a value 100,000 lists deep fails generate on qualifier-value', () => {
+    const attachment = `{ guard: perm, qualifier: ${deepListSource(100_000)} }`;
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aGuardedRoot(anyJsonGuard, attachment),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const at = 'src/contract/ping.endpoint.ts: endpoints.GET /ping (ping) guards[0].qualifier';
+    const stderr = `${at} qualifier-value: perm takes a Qualifier its schema accepts\n`;
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
+  });
+
+  test('a z.json() Qualifier that holds itself fails generate on the 256 levels, never hanging', () => {
+    const selfHolding = '(() => { const list: unknown[] = []; list.push(list); return list; })()';
+    const attachment = `{ guard: perm, qualifier: ${selfHolding} }`;
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      ...aGuardedRoot(anyJsonGuard, attachment),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    const stderr =
+      'endpoints.GET /ping (ping) not allowed: JSON nested deeper than the 256 levels a Snapshot holds\n';
+    expect(ran).toEqual({ status: 1, stdout: '', stderr });
+    expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+  });
+});
+
 describe('cf-loom generate: Guards that list Guards', () => {
   test('an Endpoint attaching only the last of 5,000 Guards in a chain fails generate on guard-order', () => {
     const guards = [
