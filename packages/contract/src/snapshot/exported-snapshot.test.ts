@@ -22,6 +22,7 @@ import {
   type GuardSnapshot,
   matchOf,
   type ObjectNode,
+  type PublishedEndpoint,
   type PublishedServiceSnapshot,
   type ResolvedDefinitions,
   type SchemaNode,
@@ -71,7 +72,7 @@ function anEndpointEntry(fields: Partial<EndpointSnapshot> = {}): EndpointSnapsh
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function aGuardEntry(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
@@ -216,7 +217,7 @@ describe('exportedSnapshotOf', () => {
     const endpoints = {
       'GET /orders': attaching('apiKey'),
       'DELETE /orders': { ...attaching('admin'), visibility: 'private' as const },
-      'POST /orders': { ...attaching('legacyKey'), lifecycle: 'retired' as const },
+      'POST /orders': { ...attaching('legacyKey'), lifecycle: 'retired' } as EndpointSnapshot,
     };
     const guards = { admin: aGuardEntry(), apiKey: aGuardEntry(), legacyKey: aGuardEntry() };
 
@@ -524,8 +525,12 @@ describe('exportedSnapshotOf', () => {
       commands: {},
       subscriptions: {},
       endpoints: {
-        'GET /orders': { ...anEndpointEntry(), lifecycle: 'active' },
-        'GET /legacy': { ...anEndpointEntry(), lifecycle: 'retired', retiredIn: '3.0.0' },
+        'GET /orders': anEndpointEntry() as PublishedEndpoint,
+        'GET /legacy': {
+          ...anEndpointEntry(),
+          lifecycle: 'retired',
+          retiredIn: '3.0.0',
+        } as PublishedEndpoint,
         'DELETE /orders': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'purgeOrders' },
       },
       events: {
@@ -743,9 +748,13 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
       subscriptions: {},
       events: {},
       endpoints: {
-        'GET /payments/{}': { ...exportedParam, lifecycle: 'active' },
+        'GET /payments/{}': exportedParam as PublishedEndpoint,
         'GET /payments/latest': { lifecycle: 'retired', retiredIn: '3.0.0', name: 'getLatest' },
-        'GET /payments/first': { ...anEndpointEntry(), lifecycle: 'retired', retiredIn: '3.1.0' },
+        'GET /payments/first': {
+          ...anEndpointEntry(),
+          lifecycle: 'retired',
+          retiredIn: '3.1.0',
+        } as PublishedEndpoint,
       },
     };
 

@@ -14,7 +14,12 @@ import {
 import { codeOfStandard, sortedCodes } from './codes.ts';
 import type { SnapshotSources } from './context.ts';
 import { inputOf, textPartOf } from './input.ts';
-import type { AttachmentSnapshot, EndpointSnapshot, SuccessSnapshot } from './types.ts';
+import type {
+  AttachmentSnapshot,
+  EndpointLifecycle,
+  EndpointSnapshot,
+  SuccessSnapshot,
+} from './types.ts';
 
 /** Every Endpoint by its identity, its Input merged and its codes resolved. */
 export function endpointSnapshotsOf(
@@ -23,27 +28,28 @@ export function endpointSnapshotsOf(
 ): Readonly<Record<string, EndpointSnapshot>> {
   const entries = endpoints.map(({ endpoint, group }) => {
     const identity = identityOf(endpoint.method, endpoint.path);
-    const lifecycle = lifecycleOf(endpoint);
     const snapshot = {
       ...endpointOf(endpoint, group.name, sources),
-      lifecycle,
-      ...instantOf(endpoint),
+      ...endpointLifecycleOf(endpoint),
     };
     return [identity, snapshot] as const;
   });
   return Object.fromEntries(entries);
 }
 
-/** The instant a Deprecated Endpoint declares it is Deprecated as of; none for any other. */
-function instantOf({ deprecatedAt }: Endpoint): { readonly deprecatedAt?: string } {
-  return deprecatedAt === undefined ? {} : { deprecatedAt };
+/** An Endpoint's lifecycle, with the instant it declares it is Deprecated as of when it is Deprecated. */
+function endpointLifecycleOf(endpoint: Endpoint): EndpointLifecycle {
+  if (endpoint.lifecycle === 'deprecated') {
+    return { lifecycle: 'deprecated', deprecatedAt: endpoint.deprecatedAt };
+  }
+  return { lifecycle: lifecycleOf(endpoint) };
 }
 
 function endpointOf(
   endpoint: Endpoint,
   group: string,
   sources: SnapshotSources,
-): Omit<EndpointSnapshot, 'lifecycle' | 'deprecatedAt'> {
+): Omit<EndpointSnapshot, keyof EndpointLifecycle> {
   const guards = attachedGuardsOf(endpoint);
   return {
     name: endpoint.name,

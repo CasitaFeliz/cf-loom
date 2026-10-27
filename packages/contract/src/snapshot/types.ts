@@ -31,20 +31,23 @@ export type SuccessSnapshot = {
   readonly body: SchemaNode | null;
 };
 
+/** An Endpoint's lifecycle, and the instant it is Deprecated as of, which only a Deprecated Endpoint carries. */
+export type EndpointLifecycle =
+  | { readonly lifecycle: 'active' | 'retired'; readonly deprecatedAt?: never }
+  | { readonly lifecycle: 'deprecated'; readonly deprecatedAt: string };
+
 /** An Endpoint by its identity, its Input merged with its Guards' demands and its codes resolved. */
 export type EndpointSnapshot = {
   readonly name: string;
   readonly group: string;
   readonly visibility: Visibility;
-  readonly lifecycle: Lifecycle;
   readonly description: string;
   readonly params: readonly string[];
   readonly guards: readonly AttachmentSnapshot[];
   readonly input: InputSnapshot;
   readonly success: SuccessSnapshot;
   readonly rejections: readonly string[];
-  readonly deprecatedAt?: string;
-};
+} & EndpointLifecycle;
 
 /** A Guard: what it demands, the Guards it reads, its Qualifier's schema and its codes. */
 export type GuardSnapshot = {

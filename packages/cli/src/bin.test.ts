@@ -3789,20 +3789,32 @@ describe.concurrent('cf-loom check', () => {
   );
 
   test.for(['codes', 'guards', 'exports'] as const)(
-    'a Baseline whose %s hold a name with a line break is written as JSON, so the Change stays on one line',
+    'a Baseline whose %s hold a name with a line break, exported, is written as JSON, so each Change stays on one line',
     async (section, { lab }) => {
       const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
       const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
       const [declared] = Object.values(snapshot[section]);
-      const more = { [section]: { ...snapshot[section], 'odd\nname': declared } };
+      const name = 'odd\nname';
+      const exportOf = {
+        codes: { kind: 'rejection', code: name },
+        guards: { kind: 'guard', guard: name },
+        exports: declared,
+      };
+      const more = {
+        [section]: { ...snapshot[section], [name]: declared },
+        exports: { ...snapshot.exports, [name]: exportOf[section] },
+      };
       const served = servedAs('@org/definitions', publishedAs(project, '1.0.0', more));
 
       const { ran } = await checkedAgainst(lab, { project, served });
 
       const approval = 'Breaking, needs a Breaking Change Approval';
+      const removed = [...new Set(['exports', section])].map(
+        (holder) => `${holder}."odd\\nname" removed: ${approval}`,
+      );
       expect(ran.stdout.split('\n')).toEqual([
         'Checked against @org/definitions@1.0.0',
-        `${section}."odd\\nname" removed: ${approval}`,
+        ...removed,
         'Would publish @org/definitions@2.0.0 (major)',
         '',
       ]);

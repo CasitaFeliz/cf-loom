@@ -101,7 +101,7 @@ function anEndpoint({ body = { id }, query = {}, headers = {}, endpoint }: Decla
     success: { status: 201, headers: emptyObject, body: null },
     rejections: [],
     ...endpoint,
-  };
+  } as EndpointSnapshot;
   return declared;
 }
 

@@ -15,6 +15,7 @@ import {
   type PeerMove,
   type PublishedApplicationSnapshot,
   type PublishedDefinitionsSnapshot,
+  type PublishedEndpoint,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
   type Verdict,
@@ -140,7 +141,7 @@ function anEndpointOf(
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function reportOfShadowing(visibility: EndpointSnapshot['visibility']): ComparedReport {
@@ -159,7 +160,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
     version: '3.4.0',
     generator: publishedBy,
     formerInputs: [],
-    endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
+    endpoints: { [orderById]: getOrder as PublishedEndpoint },
   };
   const proposed: ServiceSnapshot = {
     ...serviceHeading,
@@ -200,7 +201,7 @@ function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): C
     version: '3.4.0',
     generator: publishedBy,
     formerInputs: [],
-    endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
+    endpoints: { [latestOrder]: endpoint as PublishedEndpoint },
     codes: { [orderLocked]: aCode(409) },
   };
   const proposed: ServiceSnapshot = {

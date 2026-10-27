@@ -5,9 +5,11 @@ import { publishedAt, publishedServiceAt } from '../../test/snapshots.ts';
 import {
   compatibilityReportOf,
   decodeSnapshot,
+  type ObjectNode,
   type Path,
   type PublishedSnapshot,
   publishedSnapshotOf,
+  type SchemaNode,
   type Snapshot,
 } from '../internal/index.ts';
 
@@ -124,20 +126,9 @@ function mapMutations(
 /** The keys every Snapshot starts with, which identify the package and the format, not its Contract. */
 const headingKeys = ['format', 'kind', 'name'];
 
-/**
- * Whether `generate` never writes a place changed alone, which the decoder does not refuse: the
- * heading, what it derives from other places (the codes nothing answers), the Guards no Endpoint
- * attaches and the Groups no Element lists.
- */
-function isUnwritableAlone(kind: string, at: Path): boolean {
-  const [section] = at;
-  if (at.length === 1 && headingKeys.includes(String(section))) {
-    return true;
-  }
-  if (section === 'codes' || section === 'groups') {
-    return at.length === 1;
-  }
-  return section === 'guards' && kind === 'service' && at.length === 1;
+/** Whether a place is the heading, which names the package and its format, not its Contract. */
+function isHeading(at: Path): boolean {
+  return at.length === 1 && headingKeys.includes(String(at[0]));
 }
 
 /** A Snapshot with every use of a code under another name, as when a Standard Rejection resolves to it. */
@@ -171,7 +162,7 @@ function remapsOf(declared: Json): readonly Mutation[] {
 function mutationsOf(declared: Json): readonly Mutation[] {
   const kind = String(Reflect.get(declared as object, 'kind'));
   const places = placesOf(declared)
-    .filter((at) => at.length > 0 && !isUnwritableAlone(kind, at))
+    .filter((at) => at.length > 0 && !isHeading(at))
     .flatMap((at) => mutationsAt(declared, at));
   return kind === 'application' ? places : [...places, ...remapsOf(declared)];
 }
@@ -258,4 +249,179 @@ describe('compatibilityReportOf, every difference in the published text is a Cha
       expect(missed).toEqual([]);
     },
   );
+});
+
+/** A field of an object node. */
+function aField(schema: SchemaNode, required = false) {
+  return { required, schema };
+}
+
+const emptyPart = { type: 'object', fields: {} } as const;
+const invalidInput = 'INVALID_INPUT';
+const notFound = 'NOT_FOUND';
+const notImplemented = 'NOT_IMPLEMENTED';
+const taken = 'TAKEN';
+
+/** A declared Service of one Endpoint, `POST /orders`, with the query, body, defs and codes given. */
+function anOrdersService(declared: {
+  readonly query: ObjectNode['fields'];
+  readonly body: ObjectNode['fields'];
+  readonly defs: Readonly<Record<string, SchemaNode>>;
+  readonly codes: Readonly<Record<string, SchemaNode>>;
+}): Snapshot {
+  const standard = { origin: 'standard', headers: emptyPart, body: null } as const;
+  const local = Object.entries(declared.codes).map(([code, body]) => [
+    code,
+    { origin: 'local', status: 409, message: 'Taken', headers: emptyPart, body },
+  ]);
+  return {
+    format: 1,
+    kind: 'service',
+    name: 'orders-service',
+    standardRejections: { invalidInput, notFound, notImplemented },
+    groups: { orders: { description: 'Orders' } },
+    defs: declared.defs,
+    endpoints: {
+      'POST /orders': {
+        name: 'createOrder',
+        group: 'orders',
+        visibility: 'public',
+        lifecycle: 'active',
+        description: 'Places an order',
+        params: [],
+        guards: [],
+        input: {
+          params: null,
+          query: { type: 'object', fields: declared.query },
+          headers: emptyPart,
+          body: { type: 'object', fields: declared.body },
+        },
+        success: { status: 201, headers: emptyPart, body: null },
+        rejections: Object.keys(declared.codes).sort(),
+      },
+    },
+    events: {},
+    commands: {},
+    guards: {},
+    codes: {
+      [invalidInput]: { ...standard, status: 400, message: 'Invalid', body: emptyPart },
+      [notFound]: { ...standard, status: 404, message: 'Not found' },
+      [notImplemented]: { ...standard, status: 501, message: 'No' },
+      ...Object.fromEntries(local),
+    },
+    subscriptions: {},
+    dependencies: {},
+  };
+}
+
+/**
+ * Three publishes of one Endpoint: fields removed from its query and body, a code that reached a
+ * def removed, and an alias def dropped, so the last holds former Inputs with defs and a removed code.
+ */
+function aHistory(): { readonly baseline: PublishedSnapshot; readonly declared: Snapshot } {
+  const ref = (name: string): SchemaNode => ({ type: 'ref', name });
+  const item: SchemaNode = {
+    type: 'object',
+    fields: { label: aField({ type: 'string' }), child: aField(ref('item')) },
+  };
+  const id = aField({ type: 'string' }, true);
+  const items = aField({ type: 'array', items: ref('item') });
+  const takenBy = { type: 'object', fields: { by: aField(ref('item'), true) } } as const;
+  const versions = [
+    anOrdersService({
+      query: { page: aField({ type: 'number' }) },
+      body: { id, first: aField(ref('alias')), count: aField({ type: 'number' }), items },
+      defs: { item, alias: ref('item') },
+      codes: { [taken]: takenBy },
+    }),
+    anOrdersService({
+      query: {},
+      body: { id, first: aField(ref('alias')), items },
+      defs: { item, alias: ref('item') },
+      codes: {},
+    }),
+    anOrdersService({ query: {}, body: { id, items }, defs: { item }, codes: {} }),
+  ];
+  let baseline: PublishedSnapshot | undefined;
+  versions.forEach((declared, index) => {
+    baseline = publishedSnapshotOf(baseline, declared, publishedAt(`1.${index}.0`));
+  });
+  return { baseline: baseline as PublishedSnapshot, declared: versions[2] as Snapshot };
+}
+
+/** Every mutation of a published Baseline's places but its heading, which names the package and its format. */
+function baselineMutationsOf(baseline: Json): readonly Mutation[] {
+  const places = placesOf(baseline).filter((at) => at.length > 0 && !isHeading(at));
+  return places.flatMap((at) => mutationsAt(baseline, at));
+}
+
+/** How a mutated Baseline fares: refused by the decoder, or decoded and checked, or what threw. */
+function thrownFor(baseline: Json, mutations: readonly Mutation[], declared: Snapshot) {
+  let mutated: Json = baseline;
+  for (const mutation of mutations) {
+    mutated = mutation.change(mutated);
+  }
+  try {
+    const decoded = decodeSnapshot(JSON.stringify(mutated));
+    if (decoded.kind === 'decoded') {
+      compatibilityReportOf(decoded.snapshot, declared);
+    }
+    return undefined;
+  } catch (error) {
+    return `${describeMutations(mutations)}: ${error instanceof Error ? error.message : error}`;
+  }
+}
+
+describe('decodeSnapshot, a Baseline it decodes never makes the Check throw', () => {
+  const published = (example: string) => {
+    const declared = declaredSnapshotOf(example) as Snapshot;
+    const baseline = publishedSnapshotOf(undefined, declared, publishedAt('1.0.0'));
+    return { baseline, declared };
+  };
+
+  test.each(examples)(
+    'every single-place mutation of the Baseline %s publishes',
+    { timeout: 30_000 },
+    (example) => {
+      const { baseline, declared } = published(example);
+
+      const thrown = baselineMutationsOf(baseline).map((mutation) =>
+        thrownFor(baseline, [mutation], declared),
+      );
+
+      expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+    },
+  );
+
+  test.each(examples)(
+    'seeded mutations of several places of the Baseline %s publishes',
+    { timeout: 30_000 },
+    (example) => {
+      const { baseline, declared } = published(example);
+      const candidates = baselineMutationsOf(baseline);
+      const next = seededNext(341);
+
+      const thrown = Array.from({ length: 300 }, () => {
+        const count = 2 + Math.floor(next() * 3);
+        const chosen = Array.from(
+          { length: count },
+          () => candidates[Math.floor(next() * candidates.length)] as Mutation,
+        );
+        return thrownFor(baseline, chosen, declared);
+      });
+
+      expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+    },
+  );
+
+  test('every single-place mutation of a Baseline with former Inputs, a removed code and an alias def', () => {
+    const { baseline, declared } = aHistory();
+
+    const thrown = baselineMutationsOf(baseline).map((mutation) =>
+      thrownFor(baseline, [mutation], declared),
+    );
+
+    expect(baseline.kind === 'service' && baseline.formerInputs.length).toBeGreaterThan(0);
+    expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+  });
 });

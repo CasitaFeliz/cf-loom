@@ -1,7 +1,9 @@
 import {
+  declaredCodesOf,
   declaredEndpointsOf,
   defScopesOf,
   type PublishedApplicationSnapshot,
+  type PublishedServiceSnapshot,
   type PublishedSnapshot,
 } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
@@ -14,6 +16,7 @@ import {
   standardHeaderProblemsOf,
 } from './standard-codes.ts';
 import { notEndpointIdentity } from './texts.ts';
+import { unusedProblemsOf } from './unused.ts';
 import { type Use, usesOf } from './uses.ts';
 
 /** A text a Snapshot holds, and where. */
@@ -21,11 +24,9 @@ type Located = { readonly at: Path; readonly text: string };
 
 /**
  * The first identity a Snapshot holds that is none, an Endpoint's params that are not its
- * identity's, a name it uses and does not hold (a `ref`'s def, a code an Endpoint or Guard lists
- * or a Standard Rejection names, a Guard, a Group, or the Endpoint a former Input was of), a
- * Standard Rejection's code with a body it does not have or with headers, a code's status no
- * Rejection has, or a def that leads back to itself with no node between; `undefined` when there
- * is none.
+ * identity's, a name it uses and does not hold live, or holds and does not use, a Standard
+ * Rejection's code with a body it does not have or with headers, a code's status no Rejection
+ * has, or a def that leads back to itself with no node between; `undefined` when there is none.
  */
 export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined {
   return [
@@ -36,6 +37,7 @@ export function heldProblemOf(snapshot: PublishedSnapshot): Problem | undefined 
     ...standardHeaderProblemsOf(snapshot),
     ...codeStatusProblemsOf(snapshot),
     ...nodelessCycleProblemsOf(snapshot),
+    ...unusedProblemsOf(snapshot),
   ][0];
 }
 
@@ -112,6 +114,11 @@ const unheld = {
   endpoint: 'names an Endpoint the Snapshot does not declare, or holds Retired',
 } as const;
 
+const heldRemoved = {
+  code: 'lists a code the Snapshot holds removed',
+  'standard-code': 'names a code the Snapshot holds removed',
+} as const;
+
 function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
@@ -135,9 +142,10 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
   if (snapshot.kind === 'application') {
     return [];
   }
+  const live = Object.fromEntries(declaredCodesOf(snapshot.codes));
   const held = {
-    code: snapshot.codes,
-    'standard-code': snapshot.codes,
+    code: live,
+    'standard-code': live,
     guard: snapshot.guards,
     group: snapshot.kind === 'service' ? snapshot.groups : {},
     endpoint: Object.fromEntries(
@@ -145,7 +153,18 @@ function unheldProblemsOf(snapshot: PublishedSnapshot): readonly Problem[] {
     ),
   };
   const missing = usesOf(snapshot).filter((use) => !holds(use, held));
-  return missing.map(({ kind, name, at }) => ({ at, reason: `${unheld[kind]}: ${name}` }));
+  return missing.map((use) => ({
+    at: use.at,
+    reason: `${unheldReasonOf(use, snapshot)}: ${use.name}`,
+  }));
+}
+
+/** Why a use's name is not held: a code held removed where a live one is meant, or not held at all. */
+function unheldReasonOf(use: Use, { codes }: Pick<PublishedServiceSnapshot, 'codes'>): string {
+  if ((use.kind === 'code' || use.kind === 'standard-code') && Object.hasOwn(codes, use.name)) {
+    return heldRemoved[use.kind];
+  }
+  return unheld[use.kind];
 }
 
 /** Whether the names a use resolves in hold it: a `ref`'s own defs, else the Snapshot's map of its kind. */

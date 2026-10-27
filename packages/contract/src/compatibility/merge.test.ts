@@ -63,7 +63,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 /** The Endpoint on a path with no params, as `POST /orders` has none. */
@@ -266,22 +266,29 @@ function generatedDefs(next: () => number): Readonly<Record<string, SchemaNode>>
   return { kin, tree: aTree({ label: next() < 0.5 }) };
 }
 
-/** A declared Service Snapshot drawn at random: each generated code declared or not, reaching what it draws. */
+/** A declared Service Snapshot drawn at random: each generated code declared or not, reaching what it draws, and answered by its one Endpoint. */
 function aGeneratedProposed(next: () => number): ServiceSnapshot {
   const drawn = generatedDefs(next);
   const codes: Record<string, CodeSnapshot> = { ...standardCodes };
+  const answered: string[] = [];
   const reached = new Set<string>();
   for (const code of generatedCodes) {
     const reach = generatedReach[Math.floor(next() * (generatedReach.length + 1))];
     if (reach !== undefined) {
       codes[code] = aCode({ body: reach.body });
+      answered.push(code);
       for (const name of reach.defs) {
         reached.add(name);
       }
     }
   }
   const defs = Object.entries(drawn).filter(([name]) => reached.has(name));
-  return aProposed({ defs: Object.fromEntries(defs), codes });
+  const endpoint = withoutParams(anEndpoint({ name: 'createOrder', rejections: answered }));
+  return aProposed({
+    defs: Object.fromEntries(defs),
+    codes,
+    endpoints: { 'POST /orders': endpoint },
+  });
 }
 
 /** How many keys below the outermost object the root of each schema node of a Snapshot sits. */
@@ -733,7 +740,11 @@ describe('publishedSnapshotOf', () => {
       subscriptions: { legacySync: aSubscription('orders-service:OrderPlaced@1') },
     });
     const proposed = aProposed({
-      endpoints: { 'POST /orders': withoutParams(anEndpoint({ name: 'createOrder' })) },
+      endpoints: {
+        'POST /orders': withoutParams(
+          anEndpoint({ name: 'createOrder', rejections: [orderLocked] }),
+        ),
+      },
       commands: { 'ChargeCard@1': aCommand({ lifecycle: 'retired' }) },
       codes: { ...standardCodes, [orderLocked]: aCode() },
     });

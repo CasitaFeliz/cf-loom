@@ -72,13 +72,13 @@ function anEndpoint(identity: string, fields: Partial<EndpointSnapshot> = {}): E
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function publishedOf(endpoint: EndpointSnapshot): PublishedServiceSnapshot['endpoints'][string] {
   return endpoint.lifecycle === 'retired'
     ? { ...endpoint, lifecycle: 'retired', retiredIn: '2.0.0' }
-    : { ...endpoint, lifecycle: endpoint.lifecycle };
+    : (endpoint as PublishedServiceSnapshot['endpoints'][string]);
 }
 
 function aBaseline(

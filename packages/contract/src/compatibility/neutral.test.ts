@@ -62,7 +62,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function anEvent(fields: Partial<EventSnapshot> = {}): EventSnapshot {
@@ -708,7 +708,7 @@ describe('compatibilityReportOf, a code’s Neutral Changes', () => {
 
 describe('compatibilityReportOf, an Element Retired in the proposed Snapshot', () => {
   const retired = (fields: Partial<EndpointSnapshot> = {}) =>
-    anEndpoint({ ...fields, lifecycle: 'retired' });
+    anEndpoint({ ...fields, lifecycle: 'retired' } as Partial<EndpointSnapshot>);
 
   test.each([
     { name: 'description', fields: { description: 'Reworded' } },

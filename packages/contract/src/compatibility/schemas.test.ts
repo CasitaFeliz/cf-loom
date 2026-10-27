@@ -74,7 +74,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     rejections: [],
     ...noBodies,
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function anEndpointReading(input: SchemaNode | null, success: SchemaNode | null): EndpointSnapshot {

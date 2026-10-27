@@ -84,11 +84,11 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function aLive(endpoint: EndpointSnapshot): PublishedEndpoint {
-  return { ...endpoint, lifecycle: 'active' };
+  return { ...endpoint, lifecycle: 'active' } as PublishedEndpoint;
 }
 
 function aCode(fields: Partial<PublishedCode> = {}): PublishedCode {
@@ -460,7 +460,7 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   test('a Retired Endpoint that still lists a code does not count toward its Visibility: it answers only RETIRED', () => {
     const retired = anEndpoint({ lifecycle: 'retired', rejections: [orderLocked] });
     const baseline = aBaseline({
-      endpoints: { [identity]: { ...retired, retiredIn: '3.0.0' } },
+      endpoints: { [identity]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
       codes: { [orderLocked]: lockedStatus(409) },
     });
     const proposed = aProposed({
@@ -474,13 +474,19 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('an Endpoint retired in this change counts with its Baseline Visibility', () => {
-    const deprecated = anEndpoint({ lifecycle: 'deprecated', rejections: [orderLocked] });
+    const deprecated = anEndpoint({ lifecycle: 'active', rejections: [orderLocked] });
     const baseline = aBaseline({
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      endpoints: {
+        [identity]: {
+          ...deprecated,
+          lifecycle: 'deprecated',
+          deprecatedAt: '2026-10-17T09:30:00Z',
+        },
+      },
       codes: { [orderLocked]: lockedStatus(409) },
     });
     const proposed = aProposed({
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'retired' } },
+      endpoints: { [identity]: { ...deprecated, lifecycle: 'retired' } as EndpointSnapshot },
       codes: { [orderLocked]: lockedStatus(422) },
     });
 

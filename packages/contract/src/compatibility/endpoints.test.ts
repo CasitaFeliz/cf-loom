@@ -91,7 +91,7 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: aSuccess(),
     rejections: [],
     ...fields,
-  };
+  } as EndpointSnapshot;
 }
 
 function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
@@ -111,7 +111,10 @@ function aBaseline(
   endpoint: EndpointSnapshot,
   fields: Partial<PublishedServiceSnapshot> = {},
 ): PublishedServiceSnapshot {
-  const live = { ...endpoint, lifecycle: 'active' } as const;
+  const live = {
+    ...endpoint,
+    lifecycle: 'active',
+  } as PublishedServiceSnapshot['endpoints'][string];
   return {
     ...heading,
     version: '3.4.0',
@@ -695,7 +698,9 @@ describe('compatibilityReportOf, an Endpoint’s Rejections', () => {
 });
 
 function endpointsOf(endpoint: EndpointSnapshot, other: string) {
-  const live = { ...endpoint, lifecycle: 'active' } as const;
+  const live = { ...endpoint, lifecycle: 'active' } as EndpointSnapshot & {
+    readonly lifecycle: 'active';
+  };
   return { [identity]: live, [other]: { ...live, name: 'auditOrder' } };
 }
 
@@ -842,7 +847,7 @@ function describedAs(difference: Difference): string {
 }
 
 describe('compatibilityReportOf, retiring an Endpoint compares nothing it declares', () => {
-  const deprecated = anEndpoint({ lifecycle: 'deprecated' });
+  const deprecated = anEndpoint({ lifecycle: 'deprecated', deprecatedAt: '2026-10-17T09:30:00Z' });
   const locked: CodeSnapshot = {
     origin: 'local',
     status: 409,
@@ -857,10 +862,12 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       version: '3.4.0',
       generator: publishedBy,
       formerInputs: [],
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      endpoints: { [identity]: deprecated as PublishedServiceSnapshot['endpoints'][string] },
       codes: { [orderLocked]: locked },
     };
-    const proposed = aProposed({ ...retired, lifecycle: 'retired' }, { codes: baseline.codes });
+    const proposed = aProposed({ ...retired, lifecycle: 'retired' } as EndpointSnapshot, {
+      codes: baseline.codes,
+    });
     return reportOf(baseline, proposed).changes;
   }
 
@@ -880,7 +887,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
   ])(
     'retiring a Deprecated Endpoint with %s compares nothing but reports retired-changed',
     (_name, change) => {
-      const changes = retiringChangesOf({ ...deprecated, ...change });
+      const changes = retiringChangesOf({ ...deprecated, ...change } as EndpointSnapshot);
 
       expect(changes.map(({ difference }) => difference.kind)).toEqual([
         'retired',
@@ -895,7 +902,7 @@ describe('compatibilityReportOf, retiring an Endpoint compares nothing it declar
       version: '3.4.0',
       generator: publishedBy,
       formerInputs: [],
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      endpoints: { [identity]: deprecated as PublishedServiceSnapshot['endpoints'][string] },
     };
     const proposed = aProposed({ ...deprecated, success: aSuccess({ status: 201 }) });
 
