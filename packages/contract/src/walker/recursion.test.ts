@@ -1714,15 +1714,15 @@ describe('walkSchemas: depth', () => {
   );
 
   test.for([
-    ['.optional()', (inner: z.ZodType) => inner.optional()],
-    ['.readonly()', (inner: z.ZodType) => inner.readonly()],
-    ['z.set()', (inner: z.ZodType) => z.set(inner)],
-    ['z.map()', (inner: z.ZodType) => z.map(z.string(), inner)],
-    ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean())],
+    ['.optional()', (inner: z.ZodType) => inner.optional(), 1],
+    ['.readonly()', (inner: z.ZodType) => inner.readonly(), 1],
+    ['z.set()', (inner: z.ZodType) => z.set(inner), 1],
+    ['z.map()', (inner: z.ZodType) => z.map(z.string(), inner), 2],
+    ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean()), 2],
   ] as const)(
-    '5,000 of %s around one schema are each refused down to the 256th, and the 257th is refused as too deep',
+    '5,000 of %s around one schema are each refused down to the 256th, and what sits at the 257th as too deep',
     { timeout: deepTimeout },
-    ([_wrapper, wrap]) => {
+    ([_wrapper, wrap, atTheLimit]) => {
       const schema = aNestOf(depth, wrap);
 
       const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
@@ -1731,7 +1731,7 @@ describe('walkSchemas: depth', () => {
       const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
       const tooDeep = refusals.filter(({ construct }) => construct === writtenTooDeep);
       expect(refusals.length - tooDeep.length).toBe(256);
-      expect(tooDeep.length).toBeGreaterThan(0);
+      expect(tooDeep).toHaveLength(atTheLimit);
     },
   );
 

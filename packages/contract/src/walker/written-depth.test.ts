@@ -27,41 +27,61 @@ function aNestOf(count: number, wrap: (inner: z.ZodType) => z.ZodType, innermost
 
 /**
  * Each kind of schema zod enters on the way to the one it holds, with the step of the author's path
- * it adds, and the schemas it holds beside it, which sit as deep.
+ * it adds, and the last step of each schema that sits at the 257th, in the order they are refused:
+ * a record's key, a union's other option and an intersection's other item sit as deep as the next.
  */
 const kinds = [
-  ['.nullable()', (inner: z.ZodType) => inner.nullable(), '', 0],
-  ['z.lazy()', (inner: z.ZodType) => z.lazy(() => inner), '', 0],
-  ['z.array()', (inner: z.ZodType) => z.array(inner), '[]', 0],
-  ['an object’s field', (inner: z.ZodType) => z.object({ a: inner }), '.a', 0],
-  ['a record’s value', (inner: z.ZodType) => z.record(z.string(), inner), '{}', 1],
-  ['a tuple’s item', (inner: z.ZodType) => z.tuple([inner]), '[0]', 0],
-  ['a union’s option', (inner: z.ZodType) => z.union([inner, z.string()]), '<|0>', 1],
-  ['an intersection’s item', (inner: z.ZodType) => z.intersection(inner, z.object({})), '[0]', 1],
+  ['.nullable()', (inner: z.ZodType) => inner.nullable(), '', ['']],
+  ['z.lazy()', (inner: z.ZodType) => z.lazy(() => inner), '', ['']],
+  ['z.array()', (inner: z.ZodType) => z.array(inner), '[]', ['[]']],
+  ['an object’s field', (inner: z.ZodType) => z.object({ a: inner }), '.a', ['.a']],
+  ['a record’s value', (inner: z.ZodType) => z.record(z.string(), inner), '{}', ['{key}', '{}']],
+  ['a tuple’s item', (inner: z.ZodType) => z.tuple([inner]), '[0]', ['[0]']],
+  [
+    'a union’s option',
+    (inner: z.ZodType) => z.union([inner, z.string()]),
+    '<|0>',
+    ['<|0>', '<|1>'],
+  ],
+  [
+    'an intersection’s item',
+    (inner: z.ZodType) => z.intersection(inner, z.object({})),
+    '[0]',
+    ['[0]', '[1]'],
+  ],
 ] as const;
 
-const counts = [254, 255, 256, 257, 258];
+function casesOf(counts: readonly number[]) {
+  return kinds.flatMap(([kind, wrap, step, lastSteps]) =>
+    counts.map((count) => ({ kind, wrap, step, lastSteps, count })),
+  );
+}
 
 describe('walkSchemas: how deep a schema nests as written', () => {
-  const cases = kinds.flatMap(([kind, wrap, step, beside]) =>
-    counts.map((count) => ({ kind, wrap, step, beside, count })),
-  );
-
-  test.for(cases)(
-    '$count of $kind around z.number() are refused exactly past 256 schemas, at each 257th',
-    ({ wrap, step, beside, count }) => {
+  test.for(casesOf([254, 255]))(
+    '$count of $kind around z.number(), 256 schemas at most, walk',
+    ({ wrap, count }) => {
       const schema = aNestOf(count, wrap, z.number());
 
       const walked = walkBody(schema).located[0];
 
-      const at = step.repeat(256).replace(/^\./, '');
-      const failures = walked?.kind === 'not-allowed' ? walked.failures : [];
-      expect(walked?.kind).toBe(count + 1 > 256 ? 'not-allowed' : 'walked');
-      expect(failures).toHaveLength(count + 1 > 256 ? 1 + beside : 0);
-      expect(failures.every(({ construct }) => construct === writtenTooDeep.construct)).toBe(true);
-      if (failures.length > 0) {
-        expect(failures).toContainEqual({ kind: 'not-allowed', at, ...writtenTooDeep });
-      }
+      expect(walked?.kind).toBe('walked');
+    },
+  );
+
+  test.for(casesOf([256, 257, 258]))(
+    '$count of $kind around z.number() are refused at each schema that sits 257th',
+    ({ wrap, step, lastSteps, count }) => {
+      const schema = aNestOf(count, wrap, z.number());
+
+      const walked = walkBody(schema).located[0];
+
+      const failures = lastSteps.map((last) => ({
+        kind: 'not-allowed',
+        at: `${step.repeat(255)}${last}`.replace(/^\./, ''),
+        ...writtenTooDeep,
+      }));
+      expect(walked).toEqual({ kind: 'not-allowed', failures });
     },
   );
 
@@ -101,12 +121,12 @@ describe('walkSchemas: how deep a schema nests as written', () => {
     },
   );
 
-  test('a def 200 schemas deep, reached 200 deep in one declaration and 2 deep in another, is allowed in both orders', () => {
+  test('a def 200 schemas deep, reached 257, 200 and 2 deep in three declarations, is allowed in either order', () => {
     const def = aDefOf(200);
 
-    const verdicts = usesWalked(def, [200, 2]);
+    const verdicts = usesWalked(def, [257, 200, 2]);
 
-    expect(verdicts).toEqual(['walked', 'walked', 'walked', 'walked']);
+    expect(verdicts).toEqual(Array(6).fill('walked'));
   });
 });
 

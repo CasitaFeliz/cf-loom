@@ -88,13 +88,24 @@ function aJsonValueOf(next: () => number, depth: number): unknown {
   return Object.fromEntries(entries);
 }
 
-/** The canonical text of `depth` lists, each holding the next, around `{ z: 1, a: 0 }`. */
-function nestOfListsText(depth: number): string {
+/** `depth` containers, lists and objects in turn from a list, each holding the next, around `inner`. */
+function aNestOfListsAndObjects(depth: number, inner: unknown): unknown {
+  let value = inner;
+  for (let level = depth - 1; level >= 0; level--) {
+    value = level % 2 === 0 ? [value] : { a: value };
+  }
+  return value;
+}
+
+/** The canonical text of `aNestOfListsAndObjects(depth, { z: 1, a: 0 })`, written level by level. */
+function nestText(depth: number): string {
   const opened: string[] = [];
   const closed: string[] = [];
   for (let level = 0; level < depth; level++) {
-    opened.push(`[\n${'  '.repeat(level + 1)}`);
-    closed.unshift(`\n${'  '.repeat(level)}]`);
+    const inner = '  '.repeat(level + 1);
+    const isList = level % 2 === 0;
+    opened.push(isList ? `[\n${inner}` : `{\n${inner}"a": `);
+    closed.unshift(`\n${'  '.repeat(level)}${isList ? ']' : '}'}`);
   }
   const indent = '  '.repeat(depth);
   const innermost = `{\n${indent}  "a": 0,\n${indent}  "z": 1\n${indent}}`;
@@ -114,12 +125,12 @@ describe('canonicalTextOf', () => {
     },
   );
 
-  test('a value nested 5,000 lists deep is written whole, its object sorted and every line indented', () => {
-    const value = aNestOfLists(5_000, { z: 1, a: 0 });
+  test('a value nested 5,000 lists and objects deep is written whole, its object sorted and every line indented', () => {
+    const value = aNestOfListsAndObjects(5_000, { z: 1, a: 0 });
 
     const text = canonicalTextOf(value as never);
 
-    expect(text === nestOfListsText(5_000)).toBe(true);
+    expect(text === nestText(5_000)).toBe(true);
   });
 });
 

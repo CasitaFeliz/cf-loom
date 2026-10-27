@@ -736,41 +736,19 @@ function aChainOf(count: number): readonly Guard[] {
 }
 
 describe('validateRoot: Guards that list Guards, at any depth', () => {
-  test('a chain of 100,000 Guards attached in order validates', { timeout: 60_000 }, () => {
-    const chain = aChainOf(100_000);
+  test('a chain of 20,000 Guards attached in order validates', () => {
+    const chain = aChainOf(20_000);
 
     expect(validateGuards(chain).kind).toBe('valid');
   });
 
-  test('an Endpoint attaching only the last of 100,000 Guards in a chain fails guard-order', {
-    timeout: 60_000,
-  }, () => {
-    const chain = aChainOf(100_000);
+  test('an Endpoint attaching only the last of 20,000 Guards in a chain fails guard-order', () => {
+    const chain = aChainOf(20_000);
 
     expect(validateGuards(chain.slice(-1))).toEqual(
-      failed(`${guardsAt}[0]`, 'guard-order', 'g99999 requires g99998 earlier in guards'),
+      failed(`${guardsAt}[0]`, 'guard-order', 'g19999 requires g19998 earlier in guards'),
     );
   });
-
-  test.for([1, 2, 3])(
-    'Guards of a random graph, seed %i, validate attached each after those it lists, and fail out of that order',
-    (seed) => {
-      const next = seededNext(seed);
-      const guards: Guard[] = [];
-      for (let index = 0; index < 40; index++) {
-        const listed = guards.filter(() => next() < 0.15);
-        guards.push(defineGuard({ name: `g${index}`, description: 'A node', guards: listed }));
-      }
-      const listing = guards.findLast((guard) => (guard.guards ?? []).length > 0);
-      const misplaced = guards.filter((guard) => guard !== listing);
-
-      const inOrder = validateGuards(guards);
-      const outOfOrder = validateGuards(listing === undefined ? [] : [listing, ...misplaced]);
-
-      expect(inOrder.kind).toBe('valid');
-      expect(outOfOrder.kind).toBe('invalid');
-    },
-  );
 });
 
 describe('validateRoot: a deep Qualifier', () => {

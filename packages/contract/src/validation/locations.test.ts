@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { pingedV1 } from '../../test/ping-package.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
@@ -11,6 +12,7 @@ import {
   defineRejection,
   defineService,
   type Endpoint,
+  type Guard,
 } from '../index.ts';
 import {
   type ApplicationSnapshot,
@@ -435,6 +437,24 @@ describe('failure lines: a declaration with no usable name', () => {
     ]);
   });
 
+  test.for([1, 2, 3])(
+    'the Guards an exported Guard reaches unexported, seed %i, are each named once, after the Guards it lists',
+    (seed) => {
+      const next = seededNext(seed);
+      const guards: Guard[] = [];
+      for (let index = 0; index < 30; index++) {
+        const listed = guards.filter(() => next() < 0.2);
+        guards.push(defineGuard({ name: `g${index}`, description: 'A node', guards: listed }));
+      }
+      const top = defineGuard({ name: 'top', description: 'Top', guards: [...guards].reverse() });
+
+      const lines = linesOf(defineDefinitions({}), { rootExports: { top } });
+
+      const named = lines.map((line) => line.split(': ').at(-1));
+      expect(named).toEqual(listedFirstOf(top).filter((name) => name !== 'top'));
+    },
+  );
+
   test('a Rejection whose code is no string sits at the Endpoint that lists it, before its Guard', () => {
     const nameless = defineRejection({ code: 5 as never, status: 409, message: 'Locked' });
     const locker = defineGuard({ name: 'locker', description: 'Locks', rejections: [nameless] });
@@ -593,3 +613,14 @@ describe('failure lines: Standard Rejections and the Snapshot', () => {
     ]);
   });
 });
+
+/** The names of a Guard and every Guard it reaches, each once, every Guard after those it lists. */
+function listedFirstOf(guard: Guard, named: string[] = []): string[] {
+  for (const listed of guard.guards ?? []) {
+    listedFirstOf(listed, named);
+  }
+  if (!named.includes(String(guard.name))) {
+    named.push(String(guard.name));
+  }
+  return named;
+}
