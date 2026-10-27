@@ -30,6 +30,7 @@ export {
 export type {
   AttachedGuardsOf,
   CodeNameOf,
+  DeclaredFieldsRule,
   GivenShapeOf,
   GroupedField,
   GroupedOf,

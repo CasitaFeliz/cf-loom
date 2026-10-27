@@ -12,6 +12,7 @@ import {
   type HandlerMapOf,
   handle,
   type NoResources,
+  type ResourcesOf,
   readersOf,
   type WithResources,
 } from '@cf-loom/handlers';
@@ -25,6 +26,7 @@ import {
   type BrokerTrouble,
   type CloseOptions,
   type ConsumedFault,
+  type ConsumeOptions,
   type ConsumeRun,
   type ConsumerTrouble,
   type Delivery,
@@ -514,6 +516,132 @@ describe('publish and send types', () => {
     ];
 
     expect(consuming).toBeTypeOf('function');
+  });
+});
+
+describe('the options, typed by what they declare', () => {
+  test('messaging() refuses an options variable holding a declared hook and a misspelled one', () => {
+    const options = { onServiceFault: () => undefined, onBrokerTrubble: () => undefined };
+
+    // @ts-expect-error onBrokerTrubble is not a declared field
+    const opening = () => messaging(contract, broker, options);
+
+    expect(opening).toBeTypeOf('function');
+  });
+
+  test('messaging() accepts an options variable holding only declared fields', () => {
+    const options = { onServiceFault: () => undefined, onBrokerTrouble: () => undefined };
+    const typed: MessagingOptions = {};
+
+    const opening = [messaging(contract, broker, options), messaging(contract, broker, typed)];
+
+    expect(opening).toHaveLength(2);
+  });
+
+  test('messaging() gives a hook written inline in its options its parameter types', () => {
+    const opening = messaging(contract, broker, {
+      onServiceFault: (fault) => {
+        expectTypeOf(fault).toEqualTypeOf<ConsumedFault>();
+      },
+      onBrokerTrouble: (trouble) => {
+        expectTypeOf(trouble).toEqualTypeOf<BrokerTrouble>();
+      },
+    });
+
+    expect(opening).toBeInstanceOf(Promise);
+  });
+
+  test('publish refuses options holding a factId and a misspelled headers', () => {
+    const options = { factId: 'o-1', header: { traceparent: '00-abc-def-01' } };
+
+    // @ts-expect-error header is not a declared field
+    const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, options);
+
+    expect(publishing).toBeTypeOf('function');
+  });
+
+  test('send refuses options holding a factId and a misspelled headers', () => {
+    const options = { factId: 'o-1', header: { traceparent: '00-abc-def-01' } };
+
+    // @ts-expect-error header is not a declared field
+    const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, options);
+
+    expect(sending).toBeTypeOf('function');
+  });
+
+  test('publish and send accept an options variable holding only declared fields', () => {
+    const options = { factId: 'o-1', headers: { traceparent: '00-abc-def-01' } };
+
+    const calls = [
+      publisher.publish('OrderCreated', { v2, v3 }, options),
+      sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, options),
+    ];
+
+    expect(calls).toHaveLength(2);
+  });
+
+  test('consume refuses an options variable holding resources and a field it does not declare', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      readers.subscriptions.notifyOnCreated,
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
+    const resources: Notifications = { notifications: { send: () => undefined } };
+    const options = { resources, onServiceFault: () => undefined };
+
+    // @ts-expect-error onServiceFault is a field of messaging(), not of consume
+    const consuming = () => consume(handlers, options);
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('consume accepts an options variable holding only resources', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const notifying = handle(
+      readers.subscriptions.notifyOnCreated,
+      (_body, _meta, { resources }: WithResources<Notifications>) => {
+        resources.notifications.send();
+      },
+    );
+    const handlers = { commands, subscriptions: { notifyOnCreated: notifying }, readers };
+    const options = { resources: { notifications: { send: () => undefined } } };
+
+    const consuming = () => consume(handlers, options);
+
+    expect(consuming).toBeTypeOf('function');
+  });
+
+  test('a wrapper whose options parameter is the concrete options type is accepted over consume', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    const wrapper = (
+      map: HandlerMapOf<typeof contract, Notifications>,
+      options: ConsumeOptions<Notifications>,
+    ) => consume(map, options);
+
+    expect(wrapper).toBeTypeOf('function');
+  });
+
+  test('a wrapper whose options parameter is a type parameter constrained to the options type is a type error over consume', () => {
+    type Notifications = { readonly notifications: { readonly send: () => void } };
+    type Consumed = Pick<
+      HandlerMapOf<typeof contract, Notifications>,
+      'commands' | 'subscriptions' | 'readers'
+    >;
+    const overOptions = <O extends ConsumeOptions<Notifications>>(
+      map: HandlerMapOf<typeof contract, Notifications>,
+      options: O,
+      // @ts-expect-error O may hold a field ConsumeOptions does not declare
+    ) => consume(map, options);
+    const overMap = <const H extends Consumed>(
+      map: H,
+      options: ConsumeOptions<ResourcesOf<Pick<H, 'commands' | 'subscriptions'>>>,
+      // @ts-expect-error the options of a generic Handler map cannot be checked for undeclared fields
+    ) => consume(map, options);
+
+    expect([overOptions, overMap]).toHaveLength(2);
   });
 });
 

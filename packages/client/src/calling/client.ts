@@ -1,4 +1,5 @@
 import type { Http } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
@@ -11,9 +12,15 @@ import { deprecationWatchOf, warnDeprecation } from './deprecation.ts';
  * Rejection or a Fault; what a header function, `fetch` or `inferFault` throws otherwise reaches
  * the Caller.
  */
-export function client<const D extends AnyDependency, Configured extends ConfiguredName<D> = never>(
+export function client<
+  const D extends AnyDependency,
+  Configured extends ConfiguredName<D> = never,
+  const Given = unknown,
+>(
   dependency: D,
-  options: ClientOptions<D, Configured>,
+  options: ClientOptions<D, Configured> &
+    Given &
+    NoInfer<DeclaredFieldsRule<Given, ClientOptions<D, Configured>>>,
 ): Client<D, Configured> {
   const calling: Calling = {
     base: baseUrlOf(options.baseUrl),

@@ -1,4 +1,5 @@
 import type { Http, ServiceContract } from '@cf-loom/contract';
+import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, NoResources, ResourcesOf } from '@cf-loom/handlers';
 import type { ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
@@ -46,10 +47,11 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
 export function serve<
   const C extends ServiceContract,
   const Handlers extends Pick<HandlerMapOf<C, never>, 'endpoints' | 'guards'>,
+  const Given extends ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>,
 >(
   contract: C,
   handlers: Handlers,
-  options: ServeOptions<ResourcesOf<Pick<Handlers, 'endpoints' | 'guards'>>>,
+  options: Given & NoInfer<DeclaredFieldsRule<Given, ServeOptions<object>>>,
 ): Http;
 export function serve(
   contract: ServiceContract,
