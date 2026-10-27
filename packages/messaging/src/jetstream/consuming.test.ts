@@ -768,6 +768,7 @@ describe('consuming over jetstream()', () => {
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
     await vi.waitFor(() => expect(overMemory).toHaveLength(1));
@@ -792,6 +793,7 @@ describe('consuming over jetstream()', () => {
 
     await orders.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
     await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.settled();
 
     await vi.waitFor(() => expect(overJetstream).toHaveLength(1));
     await vi.waitFor(() => expect(overMemory).toHaveLength(1));

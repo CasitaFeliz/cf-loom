@@ -9,13 +9,14 @@ type WrittenBodyOf<M extends Event | Command> = core.output<M['body']>;
 
 /**
  * What `memory()` resolves to: one `Messaging` that keeps everything in memory and delivers one
- * Message at a time, and what a test drives and watches it with.
+ * Message at a time while a test waits for `settled()`, `deliver()` or `redeliver()`, and what a
+ * test drives and watches it with.
  */
 export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
   /**
-   * Waits until nothing is in flight, Messages Handlers publish or send meanwhile included; rejects
-   * when a Handler threw or returned a Fault, a Message was ended, an `onServiceFault` threw or deliveries were cut
-   * since the last `settled()`.
+   * Delivers every Message lined up, Messages Handlers publish or send meanwhile included, and
+   * waits until none is left; rejects when a Handler threw or returned a Fault, a Message was
+   * ended, an `onServiceFault` threw or deliveries were cut since the last `settled()`.
    */
   readonly settled: () => Promise<void>;
   /** Every Message the Service published or sent, in the order it was taken, duplicates dropped. */
@@ -31,8 +32,8 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
     message: M,
   ) => readonly RecordedMessage<M>[];
   /**
-   * Delivers one new Message as attempt 1: an Event reaches every Subscription to it, a Command its
-   * Message Handler; resolves to the most severe settlement. Its body is typed as its Message
+   * Delivers the Messages already lined up, then one new Message as attempt 1: an Event reaches
+   * every Subscription to it, a Command its Message Handler; resolves to the most severe settlement. Its body is typed as its Message
    * Version's writer writes it and is written back through each consumer's Reader. A Handler that
    * awaits it never settles.
    */

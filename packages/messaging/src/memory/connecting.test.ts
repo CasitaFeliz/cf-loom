@@ -97,6 +97,19 @@ describe('memory(): one connection', () => {
     ).rejects.toThrow('messaging is closed');
   });
 
+  test('a Message sent just before close() is listed in pending when close() resolves, its Handler never run', async () => {
+    const handled: string[] = [];
+    const inMemory = await running(async (orderId) => void handled.push(orderId));
+    await inMemory.sender.send('ChargeCard', charge, { factId: 'f-20' });
+
+    await inMemory.close();
+
+    expect(inMemory.pending).toMatchObject([
+      { messageId: 'command.ChargeCard.v1:f-20', deliveryCount: 1 },
+    ]);
+    expect(handled).toEqual([]);
+  });
+
   test('Messages still lined up when messaging closes are left pending, their Handlers never run', async () => {
     const gate = aGate();
     const entered = Promise.withResolvers<void>();
@@ -108,13 +121,16 @@ describe('memory(): one connection', () => {
     });
     await inMemory.sender.send('ChargeCard', { orderId: 'a' }, { factId: 'a' });
     await inMemory.sender.send('ChargeCard', { orderId: 'b' }, { factId: 'b' });
+    const settling = inMemory.settled();
     await entered.promise;
 
     const closing = inMemory.close();
+    const whileClosing = inMemory.pending.map(({ messageId }) => messageId);
     gate.open();
     await closing;
-    await inMemory.settled();
+    await settling;
 
+    expect(whileClosing).toEqual(['command.ChargeCard.v1:b']);
     expect(handled).toEqual(['a']);
     expect(inMemory.pending).toMatchObject([
       { messageId: 'command.ChargeCard.v1:b', deliveryCount: 1 },
@@ -148,12 +164,13 @@ describe('memory(): one connection', () => {
     await inMemory.sender.send('ChargeCard', { orderId: 'x' }, { factId: 'x' });
     await inMemory.settled().catch(() => undefined);
     await inMemory.sender.send('ChargeCard', { orderId: 'hold' }, { factId: 'hold' });
+    const settling = inMemory.settled();
     await holding.promise;
 
     const closing = inMemory.close();
     const redelivering = inMemory.redeliver();
     gate.open();
-    await Promise.all([closing, redelivering]);
+    await Promise.all([closing, redelivering, settling]);
 
     expect(handled).toEqual(['x:1', 'hold:1']);
     expect(inMemory.pending).toMatchObject([

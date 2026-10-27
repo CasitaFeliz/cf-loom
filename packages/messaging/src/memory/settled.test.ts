@@ -343,12 +343,12 @@ describe('settled()', () => {
       },
     }));
     await publisher.publish('OrderCreated', { v1: created }, { factId: 'o-1' });
+    const settling = inMemory.settled();
     await entered.promise;
 
     const closing = close();
     gate.open();
     await closing;
-    const settling = inMemory.settled();
 
     await expect(settling).resolves.toBeUndefined();
     expect(charged).toEqual([]);

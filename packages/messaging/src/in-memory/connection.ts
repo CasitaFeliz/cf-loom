@@ -1,5 +1,5 @@
-import type { BrokerAck, OutgoingMessage } from '../broker/index.ts';
-import type { CoreConsumer } from '../consuming/index.ts';
+import type { BrokerAck, ConsumeRun, OutgoingMessage } from '../broker/index.ts';
+import { type CoreConsumer, whenAborted } from '../consuming/index.ts';
 import type { CoreConnection } from '../messaging/index.ts';
 import { type Attempt, firstDeliveryOf } from './attempts.ts';
 import type { Deliveries } from './deliveries.ts';
@@ -29,8 +29,9 @@ export class MemoryConnection implements CoreConnection {
     return { duplicate: false };
   };
 
-  readonly consume = async (consumers: readonly CoreConsumer[]): Promise<void> => {
+  readonly consume = async (consumers: readonly CoreConsumer[], run: ConsumeRun): Promise<void> => {
     this.#consumers = consumers;
+    whenAborted(run.closing, () => this.#deliveries.leaveLined());
   };
 
   readonly close = async (): Promise<void> => {

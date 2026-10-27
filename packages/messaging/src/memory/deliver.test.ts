@@ -195,11 +195,6 @@ function aGate() {
   return { opened, open };
 }
 
-/** Lets every Handler that can run, run. */
-function flush(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
 /** What a promise rejected with, or undefined when it resolved. */
 async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -563,10 +558,12 @@ describe('deliver()', () => {
 
   test('deliver waits for the Messages already lined up', async () => {
     const gate = aGate();
+    const entered = Promise.withResolvers<void>();
     const log: string[] = [];
     const { inMemory, sender } = await running(() => ({
       charge: async (_body, meta) => {
         log.push(`${meta.factId} starts`);
+        entered.resolve();
         await gate.opened;
         log.push(`${meta.factId} ends`);
         return undefined;
@@ -575,7 +572,7 @@ describe('deliver()', () => {
     await sender.send('ChargeCard', charge, { factId: 'sent' });
 
     const delivering = inMemory.deliver(chargeCardV1, charge, { factId: 'delivered' });
-    await flush();
+    await entered.promise;
     const whileHeld = [...log];
     gate.open();
     await delivering;

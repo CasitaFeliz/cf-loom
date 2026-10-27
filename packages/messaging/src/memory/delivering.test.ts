@@ -8,7 +8,7 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import { handle, type MessageMeta, readersOf } from '@cf-loom/handlers';
-import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import type { ConsumedFault, Messaging } from '../index.ts';
 import { memory } from './index.ts';
@@ -173,11 +173,6 @@ function aGate() {
   return { opened, open };
 }
 
-/** Lets every Handler that can run, run. */
-function flush(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
 const v1Body = { orderId: 'o-1' };
 
 const v2Body = { orderId: 'o-1', status: 'paid' } as const;
@@ -212,11 +207,13 @@ describe('memory(): what the Service publishes and sends', () => {
 
   test('an Event two Subscriptions take reaches each, one after the other, in the order consume was given them', async () => {
     const gate = aGate();
+    const entered = Promise.withResolvers<void>();
     const log: string[] = [];
     const { publisher, inMemory } = await running(() => ({
       subscriptions: {
         notifyOnCreated: handle(readers.subscriptions.notifyOnCreated, async () => {
           log.push('notify starts');
+          entered.resolve();
           await gate.opened;
           log.push('notify ends');
         }),
@@ -227,10 +224,11 @@ describe('memory(): what the Service publishes and sends', () => {
     }));
     await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-26' });
 
-    await flush();
+    const settling = inMemory.settled();
+    await entered.promise;
     const whileHeld = [...log];
     gate.open();
-    await inMemory.settled();
+    await settling;
 
     expect(whileHeld).toEqual(['notify starts']);
     expect(log).toEqual(['notify starts', 'notify ends', 'audit']);
@@ -351,18 +349,21 @@ describe('memory(): what the Service publishes and sends', () => {
     expect(sends).toEqual(['top-level', 'from-handler']);
   });
 
-  test('under Vitest fake timers, settled() still waits for the Handlers', async () => {
-    vi.useFakeTimers();
-    onTestFinished(() => void vi.useRealTimers());
-    const { publisher, inMemory, received } = await running();
-
+  test('a Handler runs only while settled(), deliver() or redeliver() is waited for', async () => {
+    const { publisher, sender, inMemory, received } = await running();
     await publisher.publish('OrderCreated', { v1: v1Body, v2: v2Body }, { factId: 'f-1' });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-2' });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const beforeWaiting = [...received];
     await inMemory.settled();
 
+    expect(beforeWaiting).toEqual([]);
     expect(received.map(({ handler }) => handler)).toEqual([
       'notifyOnCreated',
       'auditCreated',
       'notifyOnV1',
+      'ChargeCard@1',
     ]);
   });
 

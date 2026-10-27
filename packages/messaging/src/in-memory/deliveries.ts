@@ -14,6 +14,7 @@ export class Deliveries {
   readonly #line: DeliveryLine;
   readonly #pending = new PendingList();
   readonly #failures = new Failures();
+  #left = false;
 
   constructor() {
     this.#line = new DeliveryLine((cut) =>
@@ -22,34 +23,52 @@ export class Deliveries {
   }
 
   /**
-   * Lines deliveries up without waiting for them; a cut drops them, and `settled()` reports it,
-   * while a delivery that fails on its own reaches the runtime, as nothing waits for it.
+   * Lines deliveries up without running them: they run while `settled()`, `deliver()` or
+   * `redeliver()` drives the line. A cut drops them, and `settled()` reports it, while a delivery
+   * that fails on its own reaches the runtime, as nothing waits for it. Once the line is left,
+   * nothing is lined up: each is pending at once.
    */
   lineUp(attempts: readonly Attempt[]): void {
-    for (const { consumer, delivery } of attempts) {
-      this.#line.add(() => this.#attempt(consumer, delivery)).catch(unlessCut);
+    for (const attempt of attempts) {
+      if (this.#left) {
+        this.#leave(attempt);
+        continue;
+      }
+      this.#lined(attempt).catch(unlessCut);
     }
   }
 
-  /** Lines deliveries up and waits for them: the most severe settlement, or the cut that dropped one. */
+  /** Lines deliveries up and runs the line until they settle: the most severe settlement, or the cut that dropped one. */
   async lineUpAndWait(attempts: readonly Attempt[]): Promise<Settlement> {
-    const lined = attempts.map(({ consumer, delivery }) =>
-      this.#line.add(() => this.#attempt(consumer, delivery)),
-    );
+    const lined = attempts.map((attempt) => this.#lined(attempt));
+    void this.#line.drive();
     const settlements = await Promise.all(lined);
     return bySeverity.find((settlement) => settlements.includes(settlement)) ?? 'acked';
   }
 
-  /** Lines every Message pending now up again, each for the consumer it is pending for, and waits for them. */
+  /** Lines every Message pending now up again, each for the consumer it is pending for, runs the line and waits for them. */
   async redeliver(): Promise<void> {
     const pending = this.#pending.attempts();
-    await Promise.all(pending.map((attempt) => this.#line.add(() => this.#again(attempt))));
+    const lined = pending.map((attempt) =>
+      this.#line.add(
+        () => this.#again(attempt),
+        () => undefined,
+      ),
+    );
+    void this.#line.drive();
+    await Promise.all(lined);
   }
 
-  /** Waits until nothing is in flight, then rejects if anything failed since the last time. */
+  /** Runs the line until nothing is lined up, then rejects if anything failed since the last time. */
   async settled(): Promise<void> {
-    await this.#line.idle();
+    await this.#line.drive();
     this.#failures.report();
+  }
+
+  /** Leaves every Message lined up pending, and every Message lined up from now on, once the `closing` the core hands `consume` aborted. */
+  leaveLined(): void {
+    this.#left = true;
+    this.#line.leaveAll();
   }
 
   pending(): readonly PendingMessage[] {
@@ -64,6 +83,20 @@ export class Deliveries {
     }
     const next = { ...current.delivery, deliveryCount: current.delivery.deliveryCount + 1 };
     await this.#attempt(consumer, next);
+  }
+
+  #lined(attempt: Attempt): Promise<Settlement> {
+    const { consumer, delivery } = attempt;
+    return this.#line.add(
+      () => this.#attempt(consumer, delivery),
+      () => this.#leave(attempt),
+    );
+  }
+
+  /** A Message left unrun is pending, as one left by the core while closing is. */
+  #leave(attempt: Attempt): Settlement {
+    this.#pending.put(attempt);
+    return 'pending';
   }
 
   async #attempt(consumer: CoreConsumer, delivery: Delivery): Promise<Settlement> {
