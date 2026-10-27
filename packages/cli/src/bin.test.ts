@@ -1558,7 +1558,7 @@ describe('cf-loom generate: how deep a Snapshot nests', () => {
   /** The Snapshot as a publish would write it, which is what the decoder reads. */
   function published(snapshotJson: string): string {
     const heading = { version: '1.0.0', generator: `@cf-loom/cli@${cliVersion}` };
-    return JSON.stringify({ ...JSON.parse(snapshotJson), ...heading });
+    return JSON.stringify({ ...JSON.parse(snapshotJson), ...heading, formerInputs: [] });
   }
 });
 
