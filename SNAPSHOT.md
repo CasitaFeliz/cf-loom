@@ -4,7 +4,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 
 ## Where it lives
 
-- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version` and `generator`; `cf-loom package` writes the declared Snapshot into the package it writes, with the `generator` of the CLI that runs it and without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Provider it uses, each as the Snapshot records it with `events`, the identities of the Provider's Events its Subscriptions receive, sorted (empty for an Application), and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, into which `publish` writes `version`, `cfLoom` (with `dependencies` empty) and `peerDependencies` (the two ranges the CLI declares, as [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md says), and beside which it adds `snapshot.json`, listed in its `files` when it has them.
+- `cf-loom publish` writes the Snapshot into the published package as `snapshot.json`, and fills in `version` and `generator`; `cf-loom package` writes the declared Snapshot into the package it writes, with the `generator` of the CLI that runs it and without `version` (see [Commands](packages/cli/README.md#commands) in the CLI README). The package.json it publishes carries `cfLoom: { format, snapshotHash, kind, dependencies }`: the registry's package metadata says which kind of package each version is and records every Provider it uses, each as the Snapshot records it with `events`, the identities of the Provider's Events its Subscriptions receive, sorted (empty for an Application), and `snapshotHash` lets the organization's tooling tell from the metadata whether two versions' Snapshots differ, though cf-loom itself never reads it; `check` and `publish` read the Baseline's `cfLoom` and peer ranges from the metadata and download only its `snapshot.json`. A Definitions Package is published from its own package.json and files, with `snapshot.json` added and `cfLoom` written in (see [Commands](packages/cli/README.md#commands) in the CLI README).
 - Each Endpoint a Service's Contract Package exports also carries the exported Snapshot cut to it (the Snapshot cut to what the package exports, then to that Endpoint): the Endpoint, its Guards, codes and defs, keyed as here, with `format` and no other heading, no Events, and a `shadowing` key (see [The Contract Package](ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). The client and `@cf-loom/testing` read Snapshot nodes from it at runtime, by the format it names and once per Endpoint, so they too read every format number the CLI ever wrote, as the Compatibility Check does, and refuse any other, or a Snapshot its format does not describe, never reading it as far as it goes (see [Consuming a Contract](packages/client/README.md#consuming-a-contract) in the client README).
 - `cf-loom generate` also writes the *declared* Snapshot to `contract.snapshot.json` next to package.json, so every Contract change shows up in review. It is built offline, a function of the source and the installed packages. `cf-loom verify` fails if it differs from what `generate` would write.
 - The declared Snapshot leaves out `version`, `generator` and the history only the Baseline knows: the version each Retired Element was Retired in, tombstones of deleted Retired Elements, removed codes (each with the `removedIn` that first published it removed, and the defs it reached then), removed Subscriptions, and the former Inputs of its Endpoints (each with the `removedIn` that first published a field of it removed, and the defs it reaches). `check` and `publish` read the Baseline and merge that history in, so the published `snapshot.json` is complete.
@@ -19,6 +19,8 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 - The Snapshot's hash is the SHA-256 of those bytes without `version` and `generator`, written in lowercase hex; the published package.json carries it as `snapshotHash`, and the Compatibility Check reports every difference in those bytes as a Change (see [Versioning](COMPATIBILITY.md#versioning) in COMPATIBILITY.md). Each Provider's `against` and the version in every `origin` are in it, so adopting a newer version is a Neutral Change even when no shape changed.
 
 ## Top level
+
+The examples show each part of a Snapshot on its own, a map they do not show written `{}`; a schema node is always written whole, and keys are in the canonical order.
 
 ```json
 {
@@ -42,7 +44,7 @@ The format of a Snapshot: the language-neutral description of a Contract or a De
 ```
 
 - `format` is the version of this specification, and the CLI reads a Baseline written in any format number it ever wrote; `generator` is the cf-loom CLI that wrote a published or packaged file; the declared file has none. From cf-loom 1.0.0 on, anything this specification adds or changes is a new format; before it, format 1 still changes in place, so a newer cf-loom may find a Baseline or an exported Snapshot cut that an older one wrote malformed (see [Before cf-loom 1.0.0](packages/cli/README.md#before-cf-loom-100) in the CLI README).
-- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def (a removed code's or a former Input's in its own `defs`, every other in the Snapshot's), a code an Endpoint or Guard lists, a Standard Rejection names or an export names, a Guard an Endpoint attaches, a Guard lists or an export names, the Group a declared Endpoint, Event, Command or Subscription records, or the Endpoint a former Input names, which it must declare and not hold Retired; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones, or headers on any of them; a def, a removed code's or a former Input's included, that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once, and `formerInputs` by `endpoint`, each Endpoint's `removedIn` once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; a text part that is not an object, a def that is `nullable`, and an Endpoint's `params` that are not its identity's `{}`, each once, or an `input.params` that is not `null` for a path without params, or not exactly those params as required fields; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure, and each schema node nested at most 252 levels, judged after it as `generate` does. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
+- The CLI decodes a `snapshot.json` by the format it names and fails closed. Each of these is a tooling error, never read as far as it goes: no JSON; a format newer than the CLI; a key or value its format does not define, a map's key `__proto__` included; a Snapshot too large to read; no `version` or `generator`, or a `version`, `retiredIn` or `removedIn` that is not a semantic version; an identity it cannot read; a name the Snapshot uses and does not hold, such as a `ref`'s def (a removed code's or a former Input's in its own `defs`, every other in the Snapshot's), a code an Endpoint or Guard lists, a Standard Rejection names or an export names, a Guard an Endpoint attaches, a Guard lists or an export names, the Group a declared Endpoint, Event, Command or Subscription records, or the Endpoint a former Input names, which it must declare and not hold Retired; a body on the code a Standard Rejection names that the Rejection does not have, none on the invalid-input one or one on the not-found and not-implemented ones, or headers on any of them; a def, a removed code's or a former Input's included, that leads back to itself through `ref`s, `union` options and `allOf` items alone, with no other node between. It also judges again, with the rules `generate` uses, what makes the Check or the hash wrong when broken: arrays whose order means nothing in canonical order, each item once, and `formerInputs` by `endpoint`, each Endpoint's `removedIn` once; `against` a semantic version; `deprecatedAt` only on a Deprecated Endpoint; a Success status `generate` allows, and a code status of 4xx, or 501 on the code the not-implemented Standard Rejection names or on a removed code; `formatOptions` by option; a node's bounds that admit a value, and an enum, union or tagged with at least one value or option; a text part that is not an object, a def that is `nullable`, and an Endpoint's `params` that are not its identity's `{}`, each once, or an `input.params` that is not `null` for a path without params, or not exactly those params as required fields; and a JSON nesting of at most 256 levels, judged once the format is read and before the structure, and each schema node nested at most 252 levels, judged after it as `generate` does. It does not judge again the other rules `generate` enforced, such as a code declared once or a Guard's closure.
 - `kind` is `service`, `application` or `definitions`. `name` is a Service's or Application's Root name, and a Definitions Package's package.json name, scope included. An Application's Snapshot holds only `dependencies`; a Definitions Package's holds `exports` (what its Root file exports, by name: a Guard by its name, a Rejection by its code, a shared schema's node), `guards`, `codes`, `standardRejections` and `defs`.
 
 A Service's `groups` holds each of its Groups by name with its `description`, which is Neutral; every `group` a declared Element or Subscription records is held there, and every Group lists at least one Element or Subscription.
@@ -59,9 +61,9 @@ A Definitions Package's Snapshot:
   "codes": {},
   "defs": {},
   "exports": {
-    "apiKey": { "kind": "guard", "guard": "apiKey" },
-    "money": { "kind": "schema", "schema": {} },
-    "unauthenticated": { "kind": "rejection", "code": "UNAUTHENTICATED" }
+    "apiKey": { "guard": "apiKey", "kind": "guard" },
+    "money": { "kind": "schema", "schema": { "fields": {}, "type": "object" } },
+    "unauthenticated": { "code": "UNAUTHENTICATED", "kind": "rejection" }
   },
   "guards": {},
   "standardRejections": { "invalidInput": "INVALID_INPUT", "notFound": "NOT_FOUND", "notImplemented": "NOT_IMPLEMENTED" }
@@ -85,28 +87,31 @@ A Definitions Package's Snapshot:
 
 ```json
 "GET /orders/{}": {
-  "name": "getOrder",
-  "group": "orders",
-  "visibility": "public",
-  "lifecycle": "active",
   "description": "One order by id",
-  "params": ["orderId"],
+  "group": "orders",
   "guards": [{ "guard": "apiKey", "qualifier": null }],
   "input": {
-    "params": {
-      "type": "object",
-      "fields": { "orderId": { "required": true, "schema": { "type": "string" } } }
+    "body": null,
+    "headers": {
+      "fields": { "x-api-key": { "required": false, "schema": { "type": "string" } } },
+      "type": "object"
     },
-    "query": { "type": "object", "fields": {} },
-    "headers": { "type": "object", "fields": {} },
-    "body": null
+    "params": {
+      "fields": { "orderId": { "required": true, "schema": { "type": "string" } } },
+      "type": "object"
+    },
+    "query": { "fields": {}, "type": "object" }
   },
+  "lifecycle": "active",
+  "name": "getOrder",
+  "params": ["orderId"],
+  "rejections": ["BAD_REQUEST", "NOT_FOUND", "NOT_IMPLEMENTED", "ORDER_LOCKED", "UNAUTHENTICATED"],
   "success": {
-    "status": 200,
-    "headers": { "type": "object", "fields": {} },
-    "body": { "type": "object", "fields": {} }
+    "body": { "fields": {}, "type": "object" },
+    "headers": { "fields": {}, "type": "object" },
+    "status": 200
   },
-  "rejections": ["BAD_REQUEST", "NOT_FOUND", "NOT_IMPLEMENTED", "ORDER_LOCKED", "UNAUTHENTICATED"]
+  "visibility": "public"
 }
 ```
 
@@ -121,19 +126,19 @@ A Definitions Package's Snapshot:
 ```json
 "formerInputs": [
   {
+    "defs": {},
     "endpoint": "POST /orders",
-    "removedIn": "1.1.0",
     "input": {
-      "query": { "type": "object", "fields": {} },
       "body": {
-        "type": "object",
         "fields": {
           "id": { "required": true, "schema": { "type": "string" } },
           "note": { "required": false, "schema": { "type": "number" } }
-        }
-      }
+        },
+        "type": "object"
+      },
+      "query": { "fields": {}, "type": "object" }
     },
-    "defs": {}
+    "removedIn": "1.1.0"
   }
 ]
 ```
@@ -143,8 +148,23 @@ A published Service Snapshot's `formerInputs` holds, for each Endpoint, a former
 ## Messages
 
 ```json
-"events":   { "OrderCreated@2": { "group": "orders", "visibility": "internal", "lifecycle": "active", "description": "", "body": {} } },
-"commands": { "ChargeCard@1":   { "group": "orders", "lifecycle": "active", "description": "", "body": {} } }
+"commands": {
+  "ChargeCard@1": {
+    "body": { "fields": { "orderId": { "required": true, "schema": { "type": "string" } } }, "type": "object" },
+    "description": "Charges the card an order is paid with",
+    "group": "orders",
+    "lifecycle": "active"
+  }
+},
+"events": {
+  "OrderCreated@2": {
+    "body": { "fields": { "orderId": { "required": true, "schema": { "type": "string" } } }, "type": "object" },
+    "description": "An order was placed, with its total",
+    "group": "orders",
+    "lifecycle": "active",
+    "visibility": "internal"
+  }
+}
 ```
 
 `group` names the Group that lists the Message Version, as an Endpoint's does; a tombstone has none.
@@ -159,12 +179,21 @@ Subjects, Stream names and Durable consumer names are derived from these identit
 
 ```json
 "apiKey": {
-  "origin": "local",
+  "context": {
+    "fields": { "callerId": { "required": true, "schema": { "type": "string" } } },
+    "type": "object"
+  },
+  "demands": {
+    "headers": {
+      "fields": { "x-api-key": { "required": false, "schema": { "type": "string" } } },
+      "type": "object"
+    },
+    "query": { "fields": {}, "type": "object" }
+  },
   "description": "An API key per Caller",
   "guards": [],
+  "origin": "local",
   "qualifier": null,
-  "demands": { "headers": {}, "query": {} },
-  "context": {},
   "rejections": ["UNAUTHENTICATED"]
 }
 ```
@@ -175,14 +204,34 @@ Subjects, Stream names and Durable consumer names are derived from these identit
 
 ```json
 "codes": {
-  "ORDER_LOCKED": { "origin": "local", "status": 409, "message": "The order can no longer be changed", "headers": {}, "body": {} },
-  "ORDER_PURGED": { "origin": "local", "status": 410, "message": "The order was purged", "headers": {}, "body": null, "removedIn": "3.2.0", "defs": {} },
+  "ORDER_LOCKED": {
+    "body": {
+      "fields": { "lockedAt": { "required": true, "schema": { "format": "datetime", "type": "string" } } },
+      "type": "object"
+    },
+    "headers": { "fields": {}, "type": "object" },
+    "message": "The order can no longer be changed",
+    "origin": "local",
+    "status": 409
+  },
+  "ORDER_PURGED": {
+    "body": null,
+    "defs": {},
+    "headers": { "fields": {}, "type": "object" },
+    "message": "The order was purged",
+    "origin": "local",
+    "removedIn": "3.2.0",
+    "status": 410
+  },
   "UNAUTHENTICATED": {
-    "origin": "@org/definitions@4.2.0",
-    "status": 401,
+    "body": null,
+    "headers": {
+      "fields": { "www-authenticate": { "required": true, "schema": { "type": "string" } } },
+      "type": "object"
+    },
     "message": "The API key is missing or unknown",
-    "headers": { "type": "object", "fields": { "www-authenticate": { "required": true, "schema": { "type": "string" } } } },
-    "body": null
+    "origin": "@org/definitions@4.2.0",
+    "status": 401
   }
 }
 ```
@@ -192,18 +241,18 @@ Every code that ever existed in the Contract stays here, with the status, header
 ## Subscriptions and Dependencies
 
 ```json
-"subscriptions": {
-  "notifyOnSettled": {
-    "group": "orders",
-    "description": "Notifies the customer of each payment settled",
-    "event": "payments-service:PaymentSettled@1"
-  },
-  "legacySync": { "event": "orders-service:OrderCreated@1", "removedIn": "3.2.0" }
-},
 "dependencies": {
   "payments-service": {
     "against": "5.1.0",
     "endpoints": [{ "id": "GET /payments/{}", "name": "getPayment" }]
+  }
+},
+"subscriptions": {
+  "legacySync": { "event": "orders-service:OrderCreated@1", "removedIn": "3.2.0" },
+  "notifyOnSettled": {
+    "description": "Notifies the customer of each payment settled",
+    "event": "payments-service:PaymentSettled@1",
+    "group": "orders"
   }
 }
 ```
