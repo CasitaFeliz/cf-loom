@@ -46,6 +46,7 @@ export {
   successStatuses,
 } from './http.ts';
 export type {
+  BodyOf,
   ContextOf,
   DemandsOf,
   GivenShapeOf,
