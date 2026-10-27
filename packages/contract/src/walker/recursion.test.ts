@@ -2,7 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf } from '../../test/failures.ts';
-import { reachedDefsOf, type SchemaNode, siteTextOf, walkSchemas } from '../internal/index.ts';
+import {
+  defsReachedOf,
+  reachedDefsOf,
+  type SchemaNode,
+  siteTextOf,
+  walkSchemas,
+} from '../internal/index.ts';
 
 /** The place of a schema walked on its own: the export of the name given, with no steps. */
 function placeAt(name: string) {
@@ -1484,5 +1490,33 @@ describe('reachedDefsOf', () => {
     const names = reachedDefsOf(nodes, defs);
 
     expect(names).toEqual(reached);
+  });
+});
+
+describe('defsReachedOf', () => {
+  const ref = (name: string): SchemaNode => ({ type: 'ref', name });
+  const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
+
+  test('the defs nodes reach through other defs are kept as the map holds them, in its order', () => {
+    const defs = { z: holding(ref('a')), a: holding(ref('a')), unreached: holding(ref('z')) };
+
+    const reached = defsReachedOf([ref('z')], defs);
+
+    expect(reached).toEqual({ z: defs.z, a: defs.a });
+    expect(Object.keys(reached)).toEqual(['z', 'a']);
+  });
+
+  test('a ref that names no def is left out', () => {
+    const defs = { a: holding(ref('gone')) };
+
+    const reached = defsReachedOf([ref('a')], defs);
+
+    expect(reached).toEqual({ a: defs.a });
+  });
+
+  test('nodes that reach no def reach an empty map', () => {
+    const reached = defsReachedOf([holding({ type: 'string' })], { a: holding(ref('a')) });
+
+    expect(reached).toEqual({});
   });
 });
