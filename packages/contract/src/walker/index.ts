@@ -70,3 +70,4 @@ export {
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema, Memo } from './walked.ts';
+export { failuresOf, refusalsIn } from './walked.ts';

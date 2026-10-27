@@ -11,7 +11,15 @@ import {
   refusedCheckOnOptional,
   refusedRepeatedCheck,
 } from './not-allowed.ts';
-import { failed, type Outline, outlineOf, type Reached, type Walked, walked } from './walked.ts';
+import {
+  type FailureTree,
+  failed,
+  type Outline,
+  outlineOf,
+  type Reached,
+  type Walked,
+  walked,
+} from './walked.ts';
 
 /** What a schema is whose checks are judged: any schema, or the wrapper of a field. */
 export type CheckedKind = 'schema' | 'optional' | 'nonoptional';
@@ -36,7 +44,7 @@ export function constrain(
     ...emptinessFailuresOf(constrainedOutline, at),
   ];
   if (walkedSchema.kind === 'not-allowed') {
-    return failed([...walkedSchema.failures, ...failures], constrainedOutline);
+    return failed([walkedSchema.tree, ...failures], constrainedOutline);
   }
   if (failures.length > 0) {
     return failed(failures, constrainedOutline);
@@ -109,12 +117,12 @@ function failuresOfConstraints(
   constraints: readonly Walked<object>[],
   nodeKeys: readonly string[],
   at: Reached,
-): NotAllowed[] {
-  const failures: NotAllowed[] = [];
+): FailureTree {
+  const failures: (NotAllowed | FailureTree)[] = [];
   const taken = new Set(nodeKeys.map(slotOf));
   for (const constraint of constraints) {
     if (constraint.kind === 'not-allowed') {
-      failures.push(...constraint.failures);
+      failures.push(constraint.tree);
       continue;
     }
     if (Object.values(constraint.value).some(isNonFinite)) {

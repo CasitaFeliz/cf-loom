@@ -5,8 +5,11 @@ import type { AllOfNode, Field, NotAllowed, Origin, SchemaNode, UnionNode } from
 /** A schema of a Snapshot, and where it sits in it. */
 export type LocatedSchema = { readonly at: Place; readonly schema: core.$ZodType };
 
-/** Every construct that is not allowed in a schema: a failed walk names at least one. */
-export type Failures = readonly [NotAllowed, ...NotAllowed[]];
+/**
+ * The refusals of a failed walk, held as the trees of what it holds: a failing schema used many
+ * times is held, never copied, so a walk's failures cost what its schemas do.
+ */
+export type FailureTree = readonly (NotAllowed | FailureTree)[];
 
 /**
  * The node a failed walk was building, as far as it got: its type, and the constraints already
@@ -16,10 +19,10 @@ export type Failures = readonly [NotAllowed, ...NotAllowed[]];
  */
 export type Outline = Partial<SchemaNode>;
 
-/** A failed walk: every construct in it that is not allowed, and the node it was building. */
+/** A failed walk: the tree of every construct in it that is not allowed, and the node it was building. */
 export type Failed = {
   readonly kind: 'not-allowed';
-  readonly failures: Failures;
+  readonly tree: FailureTree;
   readonly outline?: Outline;
 };
 
@@ -80,13 +83,43 @@ export function allWalked<Value>(list: readonly Walked<Value>[]): Walked<readonl
   return walked(list.filter(isWalked).map((success) => success.value));
 }
 
-/** A failed walk, from failures a caller already knows are there, each once: none at all is a bug. */
-export function failed(failures: readonly NotAllowed[], outline?: Outline): Failed {
-  const [first, ...others] = new Set(failures);
-  if (first === undefined) {
+/** A failed walk, from refusals or failure trees a caller already knows are there: an empty tree is a bug. */
+export function failed(tree: FailureTree, outline?: Outline): Failed {
+  if (tree.length === 0) {
     throw new Error('A failed walk must name the construct that is not allowed.');
   }
-  return { kind: 'not-allowed', failures: [first, ...others], ...(outline && { outline }) };
+  return { kind: 'not-allowed', tree, ...(outline && { outline }) };
+}
+
+/**
+ * Every refusal in the trees, each once, in the order a walk first meets it: a refusal or subtree
+ * already in `seen` is skipped whole, and each one met joins it, so a walk-wide `seen` takes each once.
+ */
+export function refusalsIn(
+  trees: readonly FailureTree[],
+  seen: Set<NotAllowed | FailureTree> = new Set(),
+): readonly NotAllowed[] {
+  const refusals: NotAllowed[] = [];
+  const pending: (NotAllowed | FailureTree)[] = trees.toReversed();
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
+    if (seen.has(item)) {
+      continue;
+    }
+    seen.add(item);
+    if (!isFailureTree(item)) {
+      refusals.push(item);
+      continue;
+    }
+    for (const part of item.toReversed()) {
+      pending.push(part);
+    }
+  }
+  return refusals;
+}
+
+/** Whether a part of a failure tree is a subtree and not a refusal. */
+export function isFailureTree(part: NotAllowed | FailureTree): part is FailureTree {
+  return Array.isArray(part);
 }
 
 /** A refused construct reported beside the walk of what it holds, whose node it stands for. */
@@ -99,9 +132,9 @@ export function outlineOf(walkedSchema: Walked): Outline {
   return walkedSchema.kind === 'walked' ? walkedSchema.value : (walkedSchema.outline ?? {});
 }
 
-/** Every failure among walked values, in order. */
-export function failuresOf(list: readonly Walked<unknown>[]): readonly NotAllowed[] {
-  return list.filter(isNotAllowed).flatMap((failure) => failure.failures);
+/** The failure trees of the failed ones among walked values, in order. */
+export function failuresOf(list: readonly Walked<unknown>[]): FailureTree {
+  return list.filter(isNotAllowed).map((failure) => failure.tree);
 }
 
 function isWalked<Value>(

@@ -2,6 +2,7 @@ import { expect } from 'vitest';
 import {
   authorPathOf,
   type Failure,
+  refusalsIn,
   siteTextOf,
   type ValidatedRoot,
   type walkSchemas,
@@ -57,7 +58,7 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
         ? walked
         : {
             kind: walked.kind,
-            failures: walked.failures.map(({ steps, construct, instead }) => ({
+            failures: refusalsIn([walked.tree]).map(({ steps, construct, instead }) => ({
               kind: 'not-allowed',
               at: authorPathOf(steps) ?? '',
               construct,

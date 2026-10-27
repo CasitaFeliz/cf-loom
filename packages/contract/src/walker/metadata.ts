@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { globalRegistry, safeParse } from 'zod/v4/core';
 import { camelCase, follows } from '../declarations/index.ts';
 import { isJsonValue } from './canonical-json.ts';
-import type { Annotations, NotAllowed, SchemaNode } from './nodes.ts';
+import type { Annotations, SchemaNode } from './nodes.ts';
 import {
   notAllowed,
   type Refused,
@@ -12,7 +12,15 @@ import {
   refusedMetaKey,
   refusedNonCamelCaseId,
 } from './not-allowed.ts';
-import { failed, failuresOf, type Reached, refusedBeside, type Walked, walked } from './walked.ts';
+import {
+  type FailureTree,
+  failed,
+  failuresOf,
+  type Reached,
+  refusedBeside,
+  type Walked,
+  walked,
+} from './walked.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };
@@ -50,7 +58,7 @@ export function hasOwnId(schema: core.$ZodType): boolean {
  */
 export function annotated(result: Walked, annotations: Annotations): Walked {
   if (result.kind === 'not-allowed') {
-    return failed(result.failures, { ...result.outline, ...annotations });
+    return failed(result.tree, { ...result.outline, ...annotations });
   }
   const node: SchemaNode = { ...result.value, ...annotations };
   return walked(node);
@@ -84,7 +92,7 @@ function ownMetaOf(schema: core.$ZodType): Readonly<Record<string, unknown>> {
   return globalRegistry.get(schema) ?? {};
 }
 
-function metaFailures(meta: Readonly<Record<string, unknown>>, at: Reached): readonly NotAllowed[] {
+function metaFailures(meta: Readonly<Record<string, unknown>>, at: Reached): FailureTree {
   const declared = Object.entries(meta).filter(([, value]) => value !== undefined);
   const unknownKeys = declared.map(([key]) => key).filter((key) => !allowedKeys.has(key));
   const keyRefusals = unknownKeys.map(refusedMetaKey);

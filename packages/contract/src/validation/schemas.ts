@@ -1,11 +1,13 @@
 import type { $ZodType } from 'zod/v4/core';
 import {
+  failuresOf,
   type LocatedSchema,
   type NotAllowed,
   type ObjectNode,
   type Place,
   placeNameOf,
   placeOf,
+  refusalsIn,
   type SchemaNode,
   type WalkedLocation,
   type WalkedSchemas,
@@ -137,9 +139,9 @@ export function nodeLookupOf(nodes: Nodes): NodeLookup {
   return nodeOf;
 }
 
-/** What the walk refused at a location; a cycle's failure comes back wherever the cycle is met. */
-export function failuresAt(location: WalkedLocation): readonly NotAllowed[] {
-  return location.walked.kind === 'not-allowed' ? location.walked.failures : [];
+/** Every refusal the walk made at the locations, each once, in the order it first meets them. */
+export function refusalsAt(locations: readonly WalkedLocation[]): readonly NotAllowed[] {
+  return refusalsIn([failuresOf(locations.map(({ walked }) => walked))]);
 }
 
 function endpointSlots({ at, endpoint }: LocatedEndpoint): readonly Slot[] {

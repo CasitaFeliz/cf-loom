@@ -33,7 +33,7 @@ export function walkEnum(schema: core.$ZodEnum, at: Reached): Walked {
   }
   const closed = enumOf(strings, at);
   if (closed.kind === 'not-allowed') {
-    return failed(closed.failures, { type: 'enum' });
+    return failed(closed.tree, { type: 'enum' });
   }
   return walked({ ...closed.value, open: isOpen(schema) });
 }
@@ -51,7 +51,7 @@ export function walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): 
     return failed(failuresOf([notAllowed(at, refused.xor), options]), { type: 'union' });
   }
   if (options.kind === 'not-allowed') {
-    return failed(options.failures, { type: 'union' });
+    return failed(options.tree, { type: 'union' });
   }
   return choiceOf(options.value, at);
 }
@@ -180,7 +180,7 @@ function choiceOf(options: readonly SchemaNode[], at: Reached): Walked {
     at,
   );
   if (values.kind === 'not-allowed') {
-    return failed(values.failures, { type: 'enum' });
+    return failed(values.tree, { type: 'enum' });
   }
   const nullable = literals.some((literal) => literal.nullable === true);
   return walked(nullable ? { ...values.value, nullable: true } : values.value);
