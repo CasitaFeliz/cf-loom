@@ -75,8 +75,8 @@ or a copy is never left for the user to overrule later: it runs the check or goe
 
 The agent prototypes the option it recommends and runs on it the reproductions and every instance found. The main
 session adopts a recommendation only when every unverified fact it rests on has been probed, or is put to the user
-marked unverified; that fact becomes the plan's first failing test. The invariant a decision establishes is written in
-the package's ARCHITECTURE.md, with a randomized or exhaustive test, in the same PR. When a check reverses a plan
+marked unverified; that fact becomes the plan's first failing test. The invariant the adopted option establishes is
+written in the package's ARCHITECTURE.md, with a randomized or exhaustive test, in the same PR. When a check reverses a plan
 decision that other decisions rest on, or an earlier check's option, the plan is rewritten and vetted again before
 more code is written.
 

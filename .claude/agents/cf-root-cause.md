@@ -26,7 +26,8 @@ Work in this order, and do not propose a fix before step 3:
    with an argument why the cause is not worth fixing.
 6. Recommend one, with the strongest argument against it. Prototype it in the probe directory and run on it the
    reproductions, every instance found, the existing tests of the files it changes, and, when it changes a walk, a
-   fold or a stored format, a depth and size probe at two sizes against main. List under **Unverified** only what the
+   fold or a stored format, a depth and size probe at two sizes against main; when it changes a public type, the
+   type-promise rows of [1. Plan](../../WORKFLOW.md#1-plan). List under **Unverified** only what the
    prototype could not run, and say which of those the recommendation rests on.
 
 Write nothing in the worktree. Your final message is:
