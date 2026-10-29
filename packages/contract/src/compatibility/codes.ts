@@ -1,3 +1,4 @@
+import type { Visibility } from '../declarations/index.ts';
 import {
   type CodeSnapshot,
   type DefinitionsSnapshot,
@@ -18,34 +19,38 @@ import { widestVisibilitiesOf } from './visibility.ts';
 
 /**
  * A Service's codes by code in code point order, each its status, headers then body read as Success; a
- * code answered or no longer answered shows on its Endpoints instead.
+ * code answered or no longer answered shows on its Endpoints instead. A code's site takes the widest
+ * Visibility of the Endpoints that answer it, Private when none does.
  */
 export function serviceCodeDifferencesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly SiteDifferences[] {
-  const defs = bothDefsOf(baseline, proposed);
   const visibilities = widestVisibilitiesOf(baseline, proposed, (endpoint) => endpoint.rejections);
-  return counterpartsOf(baseline.codes, proposed.codes).map(
-    (code): SiteDifferences => ({
-      site: { kind: 'code', code: code.key, visibility: visibilities.get(code.key) ?? 'private' },
-      differences: comparedDifferencesOf(code, defs),
-    }),
-  );
+  return codeSitesOf(baseline, proposed, (code) => visibilities.get(code) ?? 'private');
 }
 
 /**
- * A Definitions Package's codes by code in code point order, compared as a Service's are. A code
- * added or removed is no Change here: Services import a Rejection by its export, which says it.
+ * A Definitions Package's codes by code in code point order, compared as a Service's are, each Public,
+ * since the Services that import it may use all of it. A code added or removed is no Change here:
+ * Services import a Rejection by its export, which says it.
  */
 export function definitionsCodeDifferencesOf(
   baseline: PublishedDefinitionsSnapshot,
   proposed: DefinitionsSnapshot,
 ): readonly SiteDifferences[] {
+  return codeSitesOf(baseline, proposed, () => 'public');
+}
+
+function codeSitesOf(
+  baseline: PublishedServiceSnapshot | PublishedDefinitionsSnapshot,
+  proposed: ServiceSnapshot | DefinitionsSnapshot,
+  visibilityOf: (code: string) => Visibility,
+): readonly SiteDifferences[] {
   const defs = bothDefsOf(baseline, proposed);
   return counterpartsOf(baseline.codes, proposed.codes).map(
     (code): SiteDifferences => ({
-      site: { kind: 'code', code: code.key, visibility: 'public' },
+      site: { kind: 'code', code: code.key, visibility: visibilityOf(code.key) },
       differences: comparedDifferencesOf(code, defs),
     }),
   );

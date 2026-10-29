@@ -28,13 +28,10 @@ export function guardDifferencesOf(
   return counterpartsOf(baseline.guards, proposed.guards).map(
     (guard): SiteDifferences => ({
       site: { kind: 'guard', name: guard.key, visibility: 'public' },
-      differences: differencesOf(guard, defs),
+      differences:
+        guard.kind === 'kept' ? keptDifferencesOf(guard.baseline, guard.proposed, defs) : [],
     }),
   );
-}
-
-function differencesOf(guard: Counterpart<GuardSnapshot>, defs: BothDefs): readonly Difference[] {
-  return guard.kind === 'kept' ? keptDifferencesOf(guard.baseline, guard.proposed, defs) : [];
 }
 
 /**

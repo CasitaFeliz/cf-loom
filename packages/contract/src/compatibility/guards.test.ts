@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { publishedBy, schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
@@ -13,6 +13,7 @@ import {
   type ObjectNode,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
+  publishedSnapshotOf,
   type RemovedCode,
   type SchemaNode,
   type Step,
@@ -353,6 +354,45 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
   });
 });
 
+describe('compatibilityReportOf, a Guard no export names, listed by a kept Guard', () => {
+  const session = 'session';
+  const demandingKey = aGuard({
+    demands: { headers: anOpenObject({ 'x-key': required(aString) }), query: anOpenObject() },
+  });
+  const listingNothing = aGuard();
+  const listingSession = aGuard({ guards: [session] });
+
+  test('adding it is only the listing Guard’s Neutral guards-changed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingNothing },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingSession, [session]: demandingKey },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'guards-changed' })]);
+  });
+
+  test('removing it is only the listing Guard’s Neutral guards-changed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingSession, [session]: demandingKey },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingNothing },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'guards-changed' })]);
+  });
+});
+
 describe('compatibilityReportOf, a Definitions Package’s codes', () => {
   test('adding an exported Rejection is one Additive Change, at its export', () => {
     const proposed = aDefinitions({
@@ -591,23 +631,16 @@ describe('compatibilityReportOf, one removal from a Definitions Package', () => 
     ),
   );
 
-  /** A declared Snapshot as published, read back by the decoder; one it refuses is reported whole. */
   function decodedOf(snapshot: DefinitionsSnapshot) {
-    const text = JSON.stringify({ ...snapshot, version: '4.2.0', generator: publishedBy });
-    return decodeSnapshot(text);
+    return decodeSnapshot(JSON.stringify({ ...snapshot, ...publishedAt('4.2.0') }));
   }
 
-  function publishedOf(snapshot: DefinitionsSnapshot): PublishedDefinitionsSnapshot {
-    const decoded = decodedOf(snapshot);
-    if (decoded.kind !== 'decoded' || decoded.snapshot.kind !== 'definitions') {
-      throw new Error(`Expected a decoded Definitions Snapshot: ${JSON.stringify(decoded)}`);
-    }
-    return decoded.snapshot;
-  }
+  const unusedName = /^is a (def|Guard|code) (no|nothing)\b/;
 
   /**
    * The declared Snapshot without one export and whatever only that export used, as `generate`
-   * would write it: each def, Guard or code the decoder finds unused is left out in turn.
+   * would write it: each def, Guard or code the decoder refuses as unused is left out in turn, and
+   * any other refusal is reported whole.
    */
   function withoutExport(name: string): DefinitionsSnapshot {
     const { [name]: _removed, ...exports } = declared.exports;
@@ -615,7 +648,13 @@ describe('compatibilityReportOf, one removal from a Definitions Package', () => 
     for (let decoded = decodedOf(held as DefinitionsSnapshot); decoded.kind !== 'decoded'; ) {
       const [part, key] = decoded.kind === 'malformed' ? decoded.at : [];
       const container = typeof part === 'string' ? held[part] : undefined;
-      if (typeof key !== 'string' || typeof container !== 'object' || container === null) {
+      const isUnused = decoded.kind === 'malformed' && unusedName.test(decoded.reason);
+      if (
+        !isUnused ||
+        typeof key !== 'string' ||
+        typeof container !== 'object' ||
+        container === null
+      ) {
         throw new Error(`Expected an unused name: ${JSON.stringify(decoded)}`);
       }
       const { [key]: _unused, ...kept } = container as Record<string, unknown>;
@@ -628,7 +667,9 @@ describe('compatibilityReportOf, one removal from a Definitions Package', () => 
   test.each(Object.keys(declared.exports))(
     'removing the export %s, and what only it used, is one removed Change, at the export',
     (name) => {
-      const { changes } = compatibilityReportOf(publishedOf(declared), withoutExport(name));
+      const published = publishedSnapshotOf(undefined, declared, publishedAt('4.2.0'));
+
+      const { changes } = compatibilityReportOf(published, withoutExport(name));
 
       const removals = changes.filter(({ difference }) => difference.kind === 'removed');
       expect(removals).toEqual([breaking(exportSite(name), { kind: 'removed' })]);

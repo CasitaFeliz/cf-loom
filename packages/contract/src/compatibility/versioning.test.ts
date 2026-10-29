@@ -184,7 +184,7 @@ function aCode(status: number): CodeSnapshot {
   };
 }
 
-function aGuard(): GuardSnapshot {
+function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
   return {
     origin: 'local',
     description: 'Authenticates the Caller',
@@ -193,6 +193,7 @@ function aGuard(): GuardSnapshot {
     demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
+    ...fields,
   };
 }
 
@@ -423,9 +424,15 @@ describe('versionBumpOf', () => {
 
   test('a Breaking Change on a Definitions Package’s Guard bumps major', () => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
-    const token = { required: true, schema: { type: 'string' } } as const;
-    const query = { type: 'object', fields: { token } } as const;
-    const demanding = { ...aGuard(), demands: { ...aGuard().demands, query } };
+    const demanding = aGuard({
+      demands: {
+        headers: { type: 'object', fields: {} },
+        query: {
+          type: 'object',
+          fields: { token: { required: true, schema: { type: 'string' } } },
+        },
+      },
+    });
 
     const report = comparedReportOf(
       baseline,
