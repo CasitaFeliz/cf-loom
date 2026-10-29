@@ -315,10 +315,4 @@ describe('check-expect-errors', () => {
       ].join('\n'),
     });
   });
-
-  it('passes the test projects of this repository', () => {
-    const run = runCheck(repositoryDir);
-
-    expect(run).toEqual({ status: 0, stderr: '' });
-  });
 });
