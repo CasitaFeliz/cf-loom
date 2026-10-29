@@ -11,7 +11,8 @@
     "test",
     "cf-loom.config.ts",
     "vitest.config.ts",
-    "../../packages/messaging/test/nats-server.ts"
+    "../../packages/messaging/test/nats-server.ts",
+    "../../packages/messaging/test/test-process.ts"
   ],
   "references": [
     {

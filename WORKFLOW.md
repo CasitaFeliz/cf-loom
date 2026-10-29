@@ -216,7 +216,7 @@ round, at most two rounds. The reviewer reads once the change passes locally.
 - Probes and scratch files go under the scratchpad directory the prompt names, or a directory of your own from
   `mkdtemp`. Delete only the directories you created, by name, never by a glob.
 - A server you start listens on port 0 on 127.0.0.1. Never use another process's port, the user's registry
-  (127.0.0.1:4873) or a NATS server you did not start; tests that need NATS start their own
+  (127.0.0.1:4873) or a NATS or moto server you did not start; tests that need NATS or moto start their own
   ([CLAUDE.md](CLAUDE.md#repository)).
 - Never read or print `~/.npmrc`, environment variables or any file that holds credentials, and never publish except
   to a registry you started yourself.
