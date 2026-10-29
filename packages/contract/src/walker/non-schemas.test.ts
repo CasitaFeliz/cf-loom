@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 import type * as core from 'zod/v4/core';
 import { refusalsOf } from '../../test/failures.ts';
-import { authorPathOf, type Step, walkSchemas } from '../internal/index.ts';
+import { authorPathOf, type Def, type Step, walkSchemas } from '../internal/index.ts';
 
 const notZod4 = 'a value that is no zod 4 schema (zod/v3 is not read)';
 
@@ -414,5 +414,21 @@ describe('walkSchemas: a union holding a value that is no zod 4 schema', () => {
     expect(sortedFailuresOf(json)).toEqual(
       sortedLines(oneOf('<|3>', 'z.null()', '.nullable()'), oneOf('<|5>{key}', notZod4)),
     );
+  });
+});
+
+describe('a zod def as the walker reads it', () => {
+  test('holds no schema it has judged: a lazy’s getter returns unknown', () => {
+    type Lazy = Extract<Def, { readonly type: 'lazy' }>;
+
+    expectTypeOf<ReturnType<Lazy['getter']>>().toEqualTypeOf<unknown>();
+  });
+
+  test('holds no schema it has judged: an object’s fields and a union’s options are unknown', () => {
+    type ObjectDef = Extract<Def, { readonly type: 'object' }>;
+    type UnionDef = Extract<Def, { readonly type: 'union' }>;
+
+    expectTypeOf<ObjectDef['shape'][string]>().toEqualTypeOf<unknown>();
+    expectTypeOf<UnionDef['options'][number]>().toEqualTypeOf<unknown>();
   });
 });

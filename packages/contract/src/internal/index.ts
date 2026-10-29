@@ -189,6 +189,7 @@ export {
 } from '../validation/index.ts';
 export type {
   Catchalls,
+  Def,
   Defs,
   DefTypes,
   EnumNode,

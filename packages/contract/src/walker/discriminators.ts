@@ -67,7 +67,7 @@ function forwardedDefOf(value: unknown, forwarding: ReadonlySet<string>): Def | 
 function nextOf(schema: core.$ZodType, def: Def): unknown {
   switch (def.type) {
     case 'lazy':
-      return innerOfOneLazy(schema as core.$ZodLazy);
+      return innerOfOneLazy(schema);
     case 'readonly':
       return def.innerType;
     case 'pipe':

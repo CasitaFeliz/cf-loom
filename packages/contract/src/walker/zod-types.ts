@@ -108,7 +108,7 @@ function* walkedNodeOf({ schema, at }: ReachedSchema, def: WalkedDef, walker: Wa
     case 'intersection':
       return yield* walkIntersection(def, at, walker);
     case 'lazy':
-      return yield* walker.schema(innerOfOneLazy(schema as core.$ZodLazy), at);
+      return yield* walker.schema(innerOfOneLazy(schema), at);
     case 'nullable':
       return annotated(yield* walker.schema(def.innerType, at), { nullable: true });
   }

@@ -3,11 +3,11 @@ import { defOf, isSchema } from './def-types.ts';
 
 /**
  * What one `z.lazy()` stands for, a schema of its own unless its function returned another
- * value. The walk takes one level at a time, so an id or annotations on any lazy of a chain are
- * read.
+ * value, and the one read of a lazy's `innerType`, which zod types as a schema. The walk takes one
+ * level at a time, so an id or annotations on any lazy of a chain are read.
  */
-export function innerOfOneLazy(schema: core.$ZodLazy): unknown {
-  return schema._zod.innerType;
+export function innerOfOneLazy(lazy: core.$ZodType): unknown {
+  return (lazy as core.$ZodLazy)._zod.innerType;
 }
 
 /**
@@ -20,7 +20,7 @@ export function innerOfLazy(value: unknown): unknown {
   let current = value;
   while (isSchema(current) && defOf(current).type === 'lazy' && !met.has(current)) {
     met.add(current);
-    current = innerOfOneLazy(current as core.$ZodLazy);
+    current = innerOfOneLazy(current);
   }
   return current;
 }

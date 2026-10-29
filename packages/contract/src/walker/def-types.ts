@@ -1,14 +1,16 @@
 import * as core from 'zod/v4/core';
 import type { refused } from './not-allowed.ts';
 
-/** What a def holds where zod types a schema: unknown, until `isSchema` judges it. */
+/** What a def holds where zod types a schema, or a function of one: unknown, until judged. */
 type Unjudged<Held> = Held extends core.$ZodType
   ? unknown
-  : Held extends readonly core.$ZodType[]
-    ? readonly unknown[]
-    : Held extends Readonly<Record<string, core.$ZodType>>
-      ? Readonly<Record<string, unknown>>
-      : Held;
+  : Held extends () => core.$ZodType
+    ? () => unknown
+    : Held extends readonly core.$ZodType[]
+      ? readonly unknown[]
+      : Held extends Readonly<Record<string, core.$ZodType>>
+        ? Readonly<Record<string, unknown>>
+        : Held;
 
 /** A zod def with every schema it holds typed unknown, so a child is read only once judged. */
 type UnjudgedDef<Zod> = Zod extends unknown
