@@ -75,7 +75,7 @@ The Handlers and the two generated files sit where the tree shows by default; a 
 
 A Definitions Package is laid out the same way under `src/definitions/`: its Root `index.ts` exports its Definitions object (`init` names it `definitions`) and every Guard, Rejection and schema Services import, and nothing else, from `guards/`, `rejections/` and `schemas/` beside it (see [Definitions Packages](packages/contract/README.md#definitions-packages) in the contract README). [`org-definitions`](examples/org-definitions) is the one both example Services import.
 
-The examples in the package READMEs are files of one Service, which `scripts/readme-service/` completes and runs: each block names its files in path comments, or is written out under its heading, and leaves out only the imports of `zod`, `@cf-loom/contract` and sibling files.
+The examples in the package READMEs are files that `scripts/readme-service/` completes and runs: each block names its files in path comments, or is written out under its heading, and leaves out only the imports of `zod`, `@cf-loom/contract` and sibling files.
 
 ### Set up
 

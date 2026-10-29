@@ -20,15 +20,25 @@ import { notifyOnSettled } from '../src/contract/subscriptions/orders/notify-on-
 import { application } from '../web-admin/src/contract/index.ts';
 
 describe('the contract README’s declaration examples', () => {
-  test('a Service’s Root names its Standard Rejections’ package, lists its Groups, which list its Elements and Subscriptions, and its Dependencies', () => {
+  test('a Service’s Root takes its Standard Rejections from the Definitions Package', () => {
     expect(contract.standardRejections).toBe(definitions);
+  });
+
+  test('a Service’s Root lists its Groups, which list its Elements and Subscriptions', () => {
     expect(contract.groups[0]).toBe(ordersGroup);
-    expect(contract.groups[0].endpoints[0].success.body.shape.total).toBe(money);
-    expect(contract.groups[0].subscriptions[0]).toBe(notifyOnSettled);
+    expect(ordersGroup.endpoints[0]).toBe(getOrder);
+    expect(ordersGroup.subscriptions[0]).toBe(notifyOnSettled);
+  });
+
+  test('a Service’s Root lists its Dependencies', () => {
     expect(contract.dependencies[0]).toBe(paymentsDependency);
   });
 
-  test('the contract README’s Root takes unauthenticated and apiKey from the Definitions Package', () => {
+  test('an Endpoint’s Success body takes a shared schema from the Definitions Package', () => {
+    expect(getOrder.success.body.shape.total).toBe(money);
+  });
+
+  test('an Endpoint attaches the Definitions Package’s apiKey Guard, which rejects with its unauthenticated Rejection', () => {
     expect(getOrder.guards[0]).toBe(apiKey);
     expect(apiKey.rejections[0]).toBe(unauthenticated);
   });

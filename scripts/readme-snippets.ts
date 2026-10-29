@@ -101,12 +101,12 @@ function scopeOf(repository: string): Scope {
   return Object.fromEntries(paths.map((path) => [path, readFileSync(join(folder, path), 'utf8')]));
 }
 
-/** The names `@cf-loom/contract` exports, types included, as its entry lists them. */
+/** The names `@cf-loom/contract` exports, types included, as its `index.ts` lists them. */
 function contractNames(repository: string): string[] {
   const source = readFileSync(join(repository, 'packages/contract/src/index.ts'), 'utf8');
   const lists = [...source.matchAll(/^export\s+(?:type\s+)?\{([^}]*)\}/gm)];
-  const entries = lists.flatMap((list) => (list[1] ?? '').split(','));
-  const names = entries.map((entry) => entry.trim().split(/\s+/).at(-1) ?? '');
+  const exported = lists.flatMap((list) => (list[1] ?? '').split(','));
+  const names = exported.map((name) => name.trim().split(/\s+/).at(-1) ?? '');
   return names.filter((name) => /^\w+$/.test(name));
 }
 
@@ -146,7 +146,7 @@ function writeProject(directory: string, project: Project, repository: string): 
 
 /** The compiler options the root README recommends, with the scope's packages found where they sit. */
 function tsconfigOf(project: Project) {
-  const entries = scopePackagesOf([...project.keys()]).map(([name, path]) => [name, [`./${path}`]]);
+  const aliases = scopePackagesOf([...project.keys()]).map(([name, path]) => [name, [`./${path}`]]);
   return {
     compilerOptions: {
       allowImportingTsExtensions: true,
@@ -154,7 +154,7 @@ function tsconfigOf(project: Project) {
       lib: ['ES2024'],
       module: 'nodenext',
       noEmit: true,
-      paths: Object.fromEntries(entries),
+      paths: Object.fromEntries(aliases),
       rootDirs: ['.', ...earlierRootsOf(project)],
       skipLibCheck: true,
       strict: true,
