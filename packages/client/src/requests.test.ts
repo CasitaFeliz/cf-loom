@@ -425,6 +425,7 @@ describe('Input that cannot be sent', () => {
         issues: [
           { in: 'body', path: ['quantity'], code: 'too_small', message: expect.any(String) },
         ],
+        omittedIssues: 0,
       },
     });
     expect(calls()).toBe(0);
@@ -645,7 +646,7 @@ describe('Input of many Issues', () => {
   const taggingPackage = contractPackageOf({ tagOrders }, defaultStandards);
   const tagging = defineDependency({ endpoints: [taggingPackage.endpoints.tagOrders] });
 
-  test('an Input whose 300,000 items each break its schema is the invalid-input Rejection, never sent', async () => {
+  test('an Input whose 300,000 items each break its schema is the invalid-input Rejection of its first 100 Issues, never sent', async () => {
     const sent: Request[] = [];
     const tags = client(tagging, {
       baseUrl: 'http://orders.test',
@@ -662,8 +663,10 @@ describe('Input of many Issues', () => {
     if (outcome.kind !== 'rejection' || outcome.code !== 'INVALID_INPUT') {
       throw new Error('the call did not end in the invalid-input Rejection');
     }
-    expect(outcome.body.issues).toHaveLength(300_000);
-    expect(outcome.body.issues[299_999]).toMatchObject({ in: 'body', path: [299_999] });
+    expect(outcome.body.issues.map((issue) => issue.path)).toEqual(
+      Array.from({ length: 100 }, (_, index) => [index]),
+    );
+    expect(outcome.body.omittedIssues).toBe(299_900);
     expect(sent).toEqual([]);
   });
 });
