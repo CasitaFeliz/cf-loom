@@ -152,7 +152,8 @@
     "./lint/no-boolean-parameter.grit",
     "./lint/no-flatmap-filter.grit",
     "./lint/no-reduce.grit",
-    "./lint/no-short-name.grit"
+    "./lint/no-short-name.grit",
+    "./lint/no-spread-push.grit"
   ],
   "vcs": {
     "clientKind": "git",
