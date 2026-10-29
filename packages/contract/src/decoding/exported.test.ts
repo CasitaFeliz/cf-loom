@@ -250,6 +250,18 @@ describe('providedSnapshotOf', () => {
     });
   });
 
+  test('a Deprecated Endpoint without its instant is refused as malformed, naming deprecatedAt', () => {
+    const cut = structuredClone(exportedCutOf(ordersSnapshot(), 'GET /old-orders/{}'));
+    delete entryOf(cut as Record<string, unknown>, 'GET /old-orders/{}')['deprecatedAt'];
+
+    const read = () =>
+      providedSnapshotOf(providedEndpoint(aProvider('orders-service'), oldOrder, cut));
+
+    expect(read).toThrow(
+      "orders-service's exported Snapshot is malformed: endpoints.GET /old-orders/{}.deprecatedAt is missing",
+    );
+  });
+
   test.each([
     ['body', { headers: { type: 'object', fields: {} }, body: 'text' }],
     ['headers', { headers: 'text', body: null }],

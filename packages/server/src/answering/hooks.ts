@@ -35,9 +35,9 @@ export type AnsweredRequest = {
   readonly kind: 'success' | 'rejection' | 'fault';
   /** The code sent: a Rejection's, as the Root resolved it, or a Reserved code; none for a Success or a Fault the Service produced. */
   readonly code?: string;
-  /** Whether the Caller went away before `serve` had its answer: the request's signal when the record is built. */
+  /** Whether the request's signal had aborted when the record was built, after `onServiceFault`, as when the Caller went away. */
   readonly aborted: boolean;
-  /** How long the request took, in milliseconds. */
+  /** How long the request took, in milliseconds, until the record was built, `onServiceFault` included. */
   readonly durationMs: number;
 } & (
   | {
@@ -61,7 +61,7 @@ export type AnsweredRequest = {
 
 /**
  * The record `onAnswered` receives: the method, and the matched Endpoint's name and path, and
- * whether the request's signal aborted before its answer.
+ * whether the request's signal had aborted when the record was built.
  */
 export function answeredRequestOf(
   request: Request,

@@ -10,6 +10,8 @@ import {
   type CommandSnapshot,
   compatibilityReportOf,
   type Difference,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
@@ -66,12 +68,14 @@ function anOpenObject(fields: Readonly<Record<string, Field>> = {}): ObjectNode 
   return { type: 'object', fields };
 }
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'One order',
     params: [],
     guards: [],
@@ -84,10 +88,11 @@ function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
-function aLive(endpoint: EndpointSnapshot): PublishedEndpoint {
+function aLive(endpoint: EndpointFields): PublishedEndpoint {
   return { ...endpoint, lifecycle: 'active' };
 }
 
@@ -458,9 +463,9 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('a Retired Endpoint that still lists a code does not count toward its Visibility: it answers only RETIRED', () => {
-    const retired = anEndpoint({ lifecycle: 'retired', rejections: [orderLocked] });
+    const retired = anEndpoint({ rejections: [orderLocked] }, { lifecycle: 'retired' });
     const baseline = aBaseline({
-      endpoints: { [identity]: { ...retired, retiredIn: '3.0.0' } },
+      endpoints: { [identity]: { ...retired, lifecycle: 'retired', retiredIn: '3.0.0' } },
       codes: { [orderLocked]: lockedStatus(409) },
     });
     const proposed = aProposed({
@@ -474,13 +479,18 @@ describe('compatibilityReportOf, a Service’s codes', () => {
   });
 
   test('an Endpoint retired in this change counts with its Baseline Visibility', () => {
-    const deprecated = anEndpoint({ lifecycle: 'deprecated', rejections: [orderLocked] });
+    const listing = { rejections: [orderLocked] };
     const baseline = aBaseline({
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'deprecated' } },
+      endpoints: {
+        [identity]: anEndpoint(listing, {
+          lifecycle: 'deprecated',
+          deprecatedAt: '2026-10-17T09:30:00Z',
+        }),
+      },
       codes: { [orderLocked]: lockedStatus(409) },
     });
     const proposed = aProposed({
-      endpoints: { [identity]: { ...deprecated, lifecycle: 'retired' } },
+      endpoints: { [identity]: anEndpoint(listing, { lifecycle: 'retired' }) },
       codes: { [orderLocked]: lockedStatus(422) },
     });
 

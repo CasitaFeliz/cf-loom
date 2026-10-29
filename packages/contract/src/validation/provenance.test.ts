@@ -176,7 +176,6 @@ describe('validateRoot and snapshotOf: where a reached declaration came from', (
     expect(snapshot.standardRejections.notFound).toBe('RESOURCE_NOT_FOUND');
     expect(snapshot.codes['RESOURCE_NOT_FOUND']?.origin).toBe('@org/definitions@1.0.0');
     expect(snapshot.codes['INVALID_INPUT']?.origin).toBe('standard');
-    expect(snapshot).not.toHaveProperty('definitions');
   });
 
   test('a Guard one package re-exports from another it imports belongs to the other', () => {

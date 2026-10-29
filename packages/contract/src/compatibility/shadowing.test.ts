@@ -5,6 +5,8 @@ import {
   type Change,
   type ComparedReport,
   compatibilityReportOf,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type ObjectNode,
   type PublishedServiceSnapshot,
@@ -14,7 +16,10 @@ import {
 } from '../internal/index.ts';
 
 type Visibility = EndpointSnapshot['visibility'];
-type Endpoints = Readonly<Record<string, Partial<EndpointSnapshot>>>;
+/** Each Endpoint by identity: what it declares besides the fixture's, and whether it is Retired. */
+type Endpoints = Readonly<
+  Record<string, Partial<EndpointFields> & { readonly lifecycle?: 'active' | 'retired' }>
+>;
 
 const standardRejections: ServiceSnapshot['standardRejections'] = {
   invalidInput: 'INVALID_INPUT',
@@ -53,13 +58,16 @@ function paramsNodeOf(names: readonly string[], schema: SchemaNode = aString): O
   return { type: 'object', fields: Object.fromEntries(fields) };
 }
 
-function anEndpoint(identity: string, fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  identity: string,
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   const params = fields.params ?? paramNamesOf(identity);
   return {
     name: identity,
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'An Endpoint',
     params,
     guards: [],
@@ -72,13 +80,24 @@ function anEndpoint(identity: string, fields: Partial<EndpointSnapshot> = {}): E
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
 function publishedOf(endpoint: EndpointSnapshot): PublishedServiceSnapshot['endpoints'][string] {
-  return endpoint.lifecycle === 'retired'
-    ? { ...endpoint, lifecycle: 'retired', retiredIn: '2.0.0' }
-    : { ...endpoint, lifecycle: endpoint.lifecycle };
+  switch (endpoint.lifecycle) {
+    case 'retired':
+      return { ...endpoint, lifecycle: 'retired', retiredIn: '2.0.0' };
+    case 'active':
+      return { ...endpoint, lifecycle: 'active' };
+    case 'deprecated':
+      return endpoint;
+  }
+}
+
+function declaredAs(identity: string, declared: Endpoints[string]): EndpointSnapshot {
+  const { lifecycle = 'active', ...fields } = declared;
+  return anEndpoint(identity, fields, { lifecycle });
 }
 
 function aBaseline(
@@ -86,7 +105,7 @@ function aBaseline(
   tombstones: readonly string[] = [],
 ): PublishedServiceSnapshot {
   const published = Object.entries(endpoints).map(
-    ([identity, fields]) => [identity, publishedOf(anEndpoint(identity, fields))] as const,
+    ([identity, declared]) => [identity, publishedOf(declaredAs(identity, declared))] as const,
   );
   const retired = tombstones.map(
     (identity) => [identity, { lifecycle: 'retired', retiredIn: '2.0.0', name: identity }] as const,
@@ -102,7 +121,7 @@ function aBaseline(
 
 function aProposed(endpoints: Endpoints): ServiceSnapshot {
   const declared = Object.entries(endpoints).map(
-    ([identity, fields]) => [identity, anEndpoint(identity, fields)] as const,
+    ([identity, declared]) => [identity, declaredAs(identity, declared)] as const,
   );
   return { ...heading, endpoints: Object.fromEntries(declared) };
 }
@@ -230,7 +249,7 @@ describe('compatibilityReportOf, shadowing', () => {
 });
 
 /** An Endpoint whose one param has this schema. */
-function byParam(schema: SchemaNode): Partial<EndpointSnapshot> {
+function byParam(schema: SchemaNode): Partial<EndpointFields> {
   return {
     params: ['orderId'],
     input: {
