@@ -241,6 +241,26 @@ describe('a run given the Context and Qualifier serve built', () => {
     });
   });
 
+  test('a Context and a Qualifier that both break the Contract are listed in that order in runGuard', async () => {
+    const call = {
+      demands: {},
+      context: brokenContext,
+      qualifier: 'orders:delete',
+      request,
+      resources: undefined,
+    };
+
+    const run = await runGuard(permissionHandler, call);
+
+    expect(run).toMatchObject({
+      kind: 'invalid-call',
+      issues: [
+        { part: 'context', path: ['apiKey', 'callerId'] },
+        { part: 'qualifier', code: 'invalid_value' },
+      ],
+    });
+  });
+
   test('each Handler run gets its own parsed Context, not the object it was given', async () => {
     const received: unknown[] = [];
     const readingEndpoint = handle(getOrder, (_input, { context }) => {
