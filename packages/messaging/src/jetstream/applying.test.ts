@@ -1012,6 +1012,11 @@ describe('what applyBrokerPlan refuses', () => {
       { durableConsumerDefaults: { ackWait: [] } },
       'limits.durableConsumerDefaults.ackWait [] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them',
     ],
+    [
+      'a list of ack waits in which one is no duration',
+      { durableConsumerDefaults: { ackWait: ['30s', '0s'] } },
+      "limits.durableConsumerDefaults.ackWait [ '30s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+    ],
     ['limits that are no object', 'unlimited', 'limits is not an object'],
   ])(
     'applyBrokerPlan refuses %s, naming where it is, without calling connect',
