@@ -193,7 +193,8 @@ After a merge, the main session starts the next issue in milestone order without
 each other may be planned in parallel, and implemented in parallel when their plans share no code file: documents (`*.md`) and `index.ts` export files may be
 shared, code, tests, generated files and `pnpm-lock.yaml` may not. A PR whose base moved gets `main` merged into its
 branch, a plain push, and `pnpm build`, `pnpm test` and `pnpm check` run again; when the merge touched a file the PR
-changes, a short recheck reads the merge before it merges.
+changes, a short recheck reads the merge before it merges. At most four agents build or run tests at once, since more
+have brought the machine down.
 
 ## Milestone sweep
 
@@ -220,10 +221,17 @@ round, at most two rounds. The reviewer reads once the change passes locally.
   ([CLAUDE.md](CLAUDE.md#repository)).
 - Never read or print `~/.npmrc`, environment variables or any file that holds credentials, and never publish except
   to a registry you started yourself.
+- Never reach a real registry, even to read: `npm view`, `npm info`, `npx` and installing a tool all read the user's
+  npm configuration. A probe that needs registry data uses a registry you started.
+- Never use `git stash`: every worktree shares one stash list. Commit work in progress to your own branch instead.
+- Stop only the processes you started, by their PID; never by a pattern (`pkill`, `killall`).
+- Never load the machine on purpose to reproduce a timing failure; report it as a test that bounds time.
+- Run commands with the Node of `.node-version` and the npm it bundles first on `PATH`, as CI does.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
-[`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools; the rest
-of these rules rest on the agents.
+[`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools and running
+`git stash`, `pkill`, `killall` and `npx`, and refuses an `AskUserQuestion` call with more than one question
+([Decisions](#decisions)); the rest of these rules rest on the agents.
 
 ## Changesets
 

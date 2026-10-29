@@ -1,5 +1,21 @@
 {
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          { "command": "node \"$CLAUDE_PROJECT_DIR/scripts/one-question.ts\"", "type": "command" }
+        ],
+        "matcher": "AskUserQuestion"
+      }
+    ]
+  },
   "permissions": {
-    "deny": ["Read(~/.npmrc)"]
+    "deny": [
+      "Read(~/.npmrc)",
+      "Bash(git stash:*)",
+      "Bash(pkill:*)",
+      "Bash(killall:*)",
+      "Bash(npx:*)"
+    ]
   }
 }
