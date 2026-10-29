@@ -1017,6 +1017,17 @@ describe('what applyBrokerPlan refuses', () => {
       { durableConsumerDefaults: { ackWait: ['30s', '0s'] } },
       "limits.durableConsumerDefaults.ackWait [ '30s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
+    [
+      'settings broken in the defaults of the Durable consumers and in one stream’s own limits, the defaults first',
+      {
+        streams: { orders: { replicas: 0 } },
+        durableConsumerDefaults: { maxDeliver: 'many' },
+      },
+      [
+        "limits.durableConsumerDefaults.maxDeliver 'many' is not a whole number from 1, or 'unlimited'",
+        'limits.streams.orders.replicas 0 is not a whole number from 1',
+      ].join('\n'),
+    ],
     ['limits that are no object', 'unlimited', 'limits is not an object'],
   ])(
     'applyBrokerPlan refuses %s, naming where it is, without calling connect',

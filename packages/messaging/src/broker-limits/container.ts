@@ -53,8 +53,7 @@ export type ReadOf<Reading extends Readers> = {
 export type Container<
   StreamReaders extends Readers,
   DurableConsumerReaders extends Readers,
-> = OutputOf<ReturnType<typeof streamFieldsOf<StreamReaders>>> &
-  OutputOf<ReturnType<typeof durableConsumerFieldsOf<DurableConsumerReaders>>>;
+> = OutputOf<ReturnType<typeof containerFieldsOf<StreamReaders, DurableConsumerReaders>>>;
 
 type OutputOf<Fields> = { readonly [Name in keyof Fields]?: z.output<Fields[Name]> };
 
@@ -122,16 +121,23 @@ function durableConsumerFieldsOf<Reading extends Readers>(readers: Reading) {
   };
 }
 
+/** The container's four keys, in the order their refusal lines come. */
+function containerFieldsOf<StreamReaders extends Readers, DurableConsumerReaders extends Readers>(
+  stream: StreamReaders,
+  durableConsumer: DurableConsumerReaders,
+) {
+  const { streamDefaults, streams } = streamFieldsOf(stream);
+  const { durableConsumerDefaults, durableConsumers } = durableConsumerFieldsOf(durableConsumer);
+  return { streamDefaults, durableConsumerDefaults, streams, durableConsumers };
+}
+
 function containerOf<StreamReaders extends Readers, DurableConsumerReaders extends Readers>(
   kinds: KindReaders<StreamReaders, DurableConsumerReaders>,
 ): z.ZodType<Container<StreamReaders, DurableConsumerReaders>> {
-  const durableConsumer = durableConsumerFieldsOf(kinds.durableConsumer);
   if (kinds.stream === undefined) {
-    return z.strictObject(durableConsumer);
+    return z.strictObject(durableConsumerFieldsOf(kinds.durableConsumer));
   }
-  const { streamDefaults, streams } = streamFieldsOf(kinds.stream);
-  const { durableConsumerDefaults, durableConsumers } = durableConsumer;
-  return z.strictObject({ streamDefaults, durableConsumerDefaults, streams, durableConsumers });
+  return z.strictObject(containerFieldsOf(kinds.stream, kinds.durableConsumer));
 }
 
 /** Reads the limits an adapter's `applyBrokerPlan` took, which only a JSON file or untyped code can get wrong. */
