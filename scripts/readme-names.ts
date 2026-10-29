@@ -2,6 +2,9 @@ const declarations =
   /^(?:export\s+)?(?:declare\s+)?(?:default\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum)\s+(\w+)/gm;
 const exportedDeclarations =
   /^export\s+(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum)\s+(\w+)/gm;
+const ownDeclarations =
+  /^(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class)\s+(\w+)/gm;
+const ownDestructurings = /^(?:const|let|var)\s+\{([^}]*)\}/gm;
 const destructurings = /^(?:export\s+)?(?:const|let|var)\s+\{([^}]*)\}/gm;
 const imports = /^import\s+(?:type\s+)?([^;'"]*?)\s+from\s+['"][^'"]+['"]/gm;
 
@@ -20,6 +23,15 @@ export function declaredNames(source: string): Set<string> {
 /** The names a file exports by declaring them, which another file may import. */
 export function exportedNames(source: string): string[] {
   return [...source.matchAll(exportedDeclarations)].map((match) => match[1] ?? '');
+}
+
+/** The names a file declares at its top level for itself: no import, type or export. */
+export function ownNames(source: string): string[] {
+  const names = [...source.matchAll(ownDeclarations)].map((match) => match[1] ?? '');
+  for (const match of source.matchAll(ownDestructurings)) {
+    names.push(...(match[1] ?? '').split(',').map(boundName));
+  }
+  return names.filter((name) => name !== '');
 }
 
 /** Every word of a file that could name something. */

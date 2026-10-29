@@ -1,11 +1,10 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { describe, expect, test } from 'vitest';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, describe, expect, test } from 'vitest';
 import type { Readme } from './readme-blocks.ts';
-import { readmeScope } from './readme-scope.ts';
-import { snippetProblems } from './readme-snippets.ts';
+import { readmeServiceProblems, snippetProblems, writeReadmeService } from './readme-snippets.ts';
 
-const root = join(import.meta.dirname, '..');
 const fence = '```';
 
 function aReadme(path: string, ...blocks: string[]): Readme {
@@ -157,18 +156,138 @@ describe('the README snippet check', () => {
   });
 });
 
+const repositories: string[] = [];
+
+afterEach(() => {
+  for (const repository of repositories.splice(0)) {
+    rmSync(repository, { recursive: true, force: true });
+  }
+});
+
+/** A repository with `packages/contract/src/index.ts` and no built package, to write a Service from. */
+function aRepository(
+  readmes: Partial<Record<'contract' | 'handlers' | 'messaging' | 'server', string>>,
+  scope: Record<string, string> = {},
+): string {
+  const repository = mkdtempSync(join(tmpdir(), 'readme-repository-'));
+  repositories.push(repository);
+  const files: Record<string, string> = {
+    'packages/contract/src/index.ts': "export { defineGuard } from './declarations/index.ts';\n",
+    ...Object.fromEntries(
+      ['contract', 'handlers', 'messaging', 'server'].map((name) => [
+        `packages/${name}/README.md`,
+        readmes[name as 'contract'] ?? `# ${name}\n`,
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(scope).map(([path, source]) => [`scripts/readme-service/${path}`, source]),
+    ),
+  };
+  mkdirSync(join(repository, 'scripts/readme-service'), { recursive: true });
+  for (const [path, source] of Object.entries(files)) {
+    mkdirSync(dirname(join(repository, path)), { recursive: true });
+    writeFileSync(join(repository, path), source);
+  }
+  return repository;
+}
+
+function serviceWrittenFrom(readme: string): string {
+  const repository = aRepository({ handlers: readme });
+  const directory = join(repository, '.readme-service');
+  writeReadmeService(directory, repository);
+  return directory;
+}
+
+function fileOf(directory: string, path: string): string {
+  return readFileSync(join(directory, path), 'utf8');
+}
+
+describe('the README Service written out', () => {
+  test('the README Service is written out without the packages being built', () => {
+    const directory = serviceWrittenFrom(
+      aReadme('packages/handlers/README.md', '// src/a.ts\nexport const a = 1;').markdown,
+    );
+
+    expect(fileOf(directory, 'src/a.ts')).toContain('export const a = 1;');
+  });
+
+  test('a block with two path comments is written as two files', () => {
+    const block = [
+      '// src/a.ts',
+      'export const a = 1;',
+      '',
+      '// src/b.ts',
+      'export const b = a + 1;',
+    ].join('\n');
+
+    const directory = serviceWrittenFrom(aReadme('packages/handlers/README.md', block).markdown);
+
+    expect(fileOf(directory, 'src/a.ts')).not.toContain('const b');
+    expect(fileOf(directory, 'src/b.ts')).toContain('export const b = a + 1;');
+    expect(fileOf(directory, 'src/b.ts')).toContain("import { a } from './a.ts';");
+  });
+
+  test('a block without a path is written under its README heading and exports what it declares', () => {
+    const markdown = [
+      '# @cf-loom/handlers',
+      '',
+      "## Testing a Service's own code",
+      '',
+      `${fence}ts`,
+      "import { thing } from '../src/thing.ts';",
+      'const outcome = await thing();',
+      'export const kept = outcome;',
+      fence,
+      '',
+      `${fence}ts`,
+      'const answer = 1;',
+      fence,
+      '',
+    ].join('\n');
+
+    const directory = serviceWrittenFrom(markdown);
+
+    const first = fileOf(directory, 'snippets/handlers-testing-a-services-own-code.ts');
+    expect(first).toContain('export { outcome };');
+    expect(first).not.toContain('export { thing');
+    expect(first).not.toContain('export { kept');
+    const second = fileOf(directory, 'snippets/handlers-testing-a-services-own-code-2.ts');
+    expect(second).toContain('export { answer };');
+  });
+
+  test('when two blocks name one path, the later is the file the Service has', () => {
+    const first = ['// src/a.ts', 'export const a = 1;'].join('\n');
+    const later = ['// src/a.ts', 'export const a = 2;', 'export const more = a;'].join('\n');
+    const user = ['// src/user.ts', 'export const user = more;'].join('\n');
+
+    const directory = serviceWrittenFrom(
+      aReadme('packages/handlers/README.md', first, later, user).markdown,
+    );
+
+    expect(fileOf(directory, 'src/a.ts')).toContain('export const a = 2;');
+    expect(fileOf(directory, 'src/user.ts')).toContain("import { more } from './a.ts';");
+  });
+
+  test('a name a block without a path declares is no import for another block', () => {
+    const readme = aReadme('FIXTURE.md', 'const shared = 1;', 'export const again = shared;');
+
+    const problems = snippetProblems([readme], {});
+
+    expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:10: error TS2304.*shared/)]);
+  });
+});
+
 describe('the READMEs', () => {
   test('every TypeScript block of the contract, handlers, messaging and server READMEs type-checks', () => {
-    const paths = ['contract', 'handlers', 'messaging', 'server'].map(
-      (name) => `packages/${name}/README.md`,
-    );
-    const readmes = paths.map((path) => ({
-      path,
-      markdown: readFileSync(join(root, path), 'utf8'),
-    }));
+    const directory = mkdtempSync(join(tmpdir(), 'readme-service-'));
+    try {
+      writeReadmeService(directory);
 
-    const problems = snippetProblems(readmes, readmeScope);
+      const problems = readmeServiceProblems(directory);
 
-    expect(problems).toEqual([]);
+      expect(problems).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
