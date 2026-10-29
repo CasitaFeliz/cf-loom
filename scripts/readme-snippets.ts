@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
-import { contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
+import { cfLoomProblemsOf, contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
 import {
   completed,
   declaredTwice,
@@ -55,18 +55,20 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
  * Writes the Service the READMEs describe to `directory`: the blocks of the READMEs of
  * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows, then
  * what `cf-loom generate` and `cf-loom package` write for its other Services, so it needs the CLI
- * built. It replaces what the directory held.
+ * built; what cf-loom refuses is kept for `readmeServiceProblems`. It replaces what the directory
+ * held.
  */
 export function writeReadmeService(directory: string, repository: string = root): void {
   const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
   rmSync(directory, { recursive: true, force: true });
   writeProject(directory, project, repository);
-  runCfLoom(directory, [...project.keys()], repository);
+  runCfLoom(directory, [...project.keys()]);
 }
 
 /**
- * Why the Service written to `directory` does not compile, as `snippetProblems` reports it. It
- * compiles `directory` where it is and never writes to it.
+ * Why the Service written to `directory` does not compile, as `snippetProblems` reports it, and
+ * what cf-loom refused in its other Services, each at its README line. It compiles `directory`
+ * where it is and never writes to it.
  */
 export function readmeServiceProblems(directory: string, repository: string = root): string[] {
   if (!existsSync(join(directory, 'tsconfig.json'))) {
@@ -75,7 +77,10 @@ export function readmeServiceProblems(directory: string, repository: string = ro
     );
   }
   const { problems, project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
-  return [...problems, ...problemsOf(compile(directory), project)];
+  const refused = cfLoomProblemsOf(directory).map(({ path, row, message }) =>
+    path === undefined ? `cf-loom: ${message}` : `${locationOf(path, row, project)}: ${message}`,
+  );
+  return [...problems, ...refused, ...problemsOf(compile(directory), project)];
 }
 
 function projectOfReadmes(readmes: readonly Readme[], scope: Scope) {

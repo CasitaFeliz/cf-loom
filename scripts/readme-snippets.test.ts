@@ -416,6 +416,48 @@ describe('the READMEs', () => {
     expect(JSON.parse(contractPackage)).toMatchObject({ name: '@org/contract-payments-service' });
   });
 
+  test('a block cf-loom refuses in another Service is a problem at its README line', () => {
+    const unlisted = [
+      '// payments-service/src/contract/endpoints/payments/unlisted.endpoint.ts',
+      "import { defineEndpoint } from '@cf-loom/contract';",
+      "import { z } from 'zod';",
+      '',
+      'export const unlisted = defineEndpoint({',
+      "  name: 'unlisted',",
+      "  method: 'GET',",
+      "  path: '/unlisted',",
+      "  visibility: 'public',",
+      "  description: 'Listed in no Group',",
+      '  success: { status: 200, body: z.object({}) },',
+      '});',
+    ].join('\n');
+    const repository = aRepository(
+      { client: aReadme('packages/client/README.md', unlisted).markdown },
+      {
+        'payments-service/package.json': JSON.stringify({
+          name: '@org/payments-service',
+          version: '0.0.0',
+          type: 'module',
+        }),
+        'payments-service/src/contract/index.ts': [
+          "import { defineService } from '@cf-loom/contract';",
+          '',
+          "export const contract = defineService({ name: 'payments-service', groups: [] });",
+        ].join('\n'),
+      },
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toContainEqual(
+      expect.stringMatching(
+        /^packages\/client\/README\.md:4: .*exports unlisted, which no Group lists/,
+      ),
+    );
+  });
+
   test('the check reports a block at its README line and leaves the folder it compiles as it is', () => {
     const repository = aRepository(
       {
