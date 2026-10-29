@@ -231,8 +231,13 @@ The three Standard Rejections, invalid input, not found and not implemented, are
 The body of the invalid-input Rejection is cf-loom's, whatever the Definitions Package declares, and its runtime produces it:
 
 ```ts
-{ issues: [{ in: 'params' | 'query' | 'headers' | 'body', path: (string | number)[], code: string, message: string }] }
+{
+  issues: [{ in: 'params' | 'query' | 'headers' | 'body', path: (string | number)[], code: string, message: string }],
+  omittedIssues: number,
+}
 ```
+
+`issues` lists the issues in the order the Provider read them (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md): by part, params, query, headers, then body, and within a part in zod's order. It stops before the first issue that would make it more than 100 issues or more than 64 KiB of JSON (65,536 bytes of UTF-8, the array as sent). `omittedIssues` counts every issue not listed, 0 when every issue is: so the listed issues are always the first ones, and an issue whose path alone holds more than 64 KiB, such as a long record key, is counted, never listed. A Caller tells a whole list by `omittedIssues === 0`.
 
 `code` is one of a set cf-loom owns, not zod's issue codes: `required`, `invalid_type`, `invalid_value`, `invalid_format`, `too_small`, `too_big`, `not_multiple`, `unrecognized_key` and `malformed` (an unparseable body, a wrong content type or a value nested too deeply to read). An issue is `required` when nothing is at its path: a key the value does not hold itself, a hole of a list, or `undefined`. `in` and `code` are Open Enums, which a Caller reads through its Provider's Contract Package with their Unknown case, so a part or a code a later cf-loom adds is an Additive Change. An issue never carries the received value.
 
