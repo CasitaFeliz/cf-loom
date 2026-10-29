@@ -1,10 +1,10 @@
+export type { Duration } from '../broker-limits/index.ts';
 export type {
   BrokerLimits,
   BrokerPlan,
   BrokerPlanDurableConsumer,
   BrokerPlanStream,
   DurableConsumerLimits,
-  Duration,
   JetStreamBrokerOptions,
   JetStreamConnecting,
   StreamLimits,

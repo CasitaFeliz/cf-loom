@@ -1,3 +1,5 @@
+import type { Duration } from '../broker-limits/index.ts';
+
 /** The retentions NATS has, written once for the type of a stream's limits and for reading them. */
 export const retentions = ['limits', 'interest', 'workqueue'] as const;
 
@@ -6,9 +8,6 @@ export const storages = ['file', 'memory'] as const;
 
 /** The deliver policies a Durable consumer's limits may name, written once for their type and for reading them. */
 export const deliverPolicies = ['all', 'new', 'last', 'last_per_subject'] as const;
-
-/** A length of time as limits write it: a whole number from 1 and one unit, `500ms`, `30s`, `2m`, `1h` or `7d`. */
-export type Duration = `${number}${'ms' | 's' | 'm' | 'h' | 'd'}`;
 
 /** A stream's settings cf-loom has no opinion on, which the organization chooses. */
 export type StreamLimits = {

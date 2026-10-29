@@ -1,6 +1,13 @@
-import { inspect } from 'node:util';
 import { type Problem, problemLineOf, readWith } from '@cf-loom/contract/internal';
 import { z } from 'zod';
+import {
+  choice,
+  countOf,
+  durationText,
+  millisecondsOf,
+  oneOrListOf,
+  readAs,
+} from '../broker-limits/index.ts';
 import {
   type DurableConsumerLimits,
   deliverPolicies,
@@ -9,63 +16,20 @@ import {
   storages,
 } from './limits.ts';
 
-const nanosInUnit = new Map([
-  ['ms', 1_000_000n],
-  ['s', 1_000_000_000n],
-  ['m', 60_000_000_000n],
-  ['h', 3_600_000_000_000n],
-  ['d', 86_400_000_000_000n],
-]);
+const nanosInMillisecond = 1_000_000n;
 
 const int64Max = 2n ** 63n - 1n;
 
 /** The nanoseconds of a duration text, when NATS can hold them in 64 bits and a number exactly. */
 function nanosOf(input: unknown): number | undefined {
-  const match = typeof input === 'string' ? /^([1-9]\d*)(ms|s|m|h|d)$/.exec(input) : null;
-  const [, count = '', unit = ''] = match ?? [];
-  const unitNanos = nanosInUnit.get(unit);
-  if (unitNanos === undefined) {
+  const milliseconds = millisecondsOf(input);
+  if (milliseconds === undefined) {
     return undefined;
   }
-  const exact = BigInt(count) * unitNanos;
+  const exact = milliseconds * nanosInMillisecond;
   return exact <= int64Max && BigInt(Number(exact)) === exact ? Number(exact) : undefined;
 }
 
-function countOf(input: unknown): number | undefined {
-  return typeof input === 'number' && Number.isSafeInteger(input) && input >= 1 ? input : undefined;
-}
-
-function isCounted(value: number | undefined): value is number {
-  return value !== undefined;
-}
-
-/** The nanoseconds of one duration text, or of each in a list, when there is at least one and NATS can hold them all. */
-function nanosListOf(input: unknown): readonly [number, ...number[]] | undefined {
-  const waits = (Array.isArray(input) ? input : [input]).map(nanosOf);
-  const [first, ...later] = waits.filter(isCounted);
-  const isEveryWaitCounted = first !== undefined && later.length + 1 === waits.length;
-  return isEveryWaitCounted ? [first, ...later] : undefined;
-}
-
-/** A value read by `read`, which answers undefined for what it refuses, as an issue that shows the value. */
-function readAs<Value>(expected: string, read: (input: unknown) => Value | undefined) {
-  return z.unknown().transform((input, context) => {
-    const value = read(input);
-    if (value === undefined) {
-      const message = `${inspect(input, { breakLength: Infinity })} is not ${expected}`;
-      context.issues.push({ code: 'custom', message, input });
-      return z.NEVER;
-    }
-    return value;
-  });
-}
-
-function choice<const Choice extends string>(choices: readonly Choice[]) {
-  const expected = `one of ${choices.slice(0, -1).join(', ')} or ${choices.at(-1)}`;
-  return readAs(expected, (input) => choices.find((candidate) => candidate === input));
-}
-
-const durationText = 'a duration such as 500ms, 30s, 2m, 1h or 7d';
 const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
   input === 'unlimited' ? -1 : countOf(input),
 );
@@ -82,7 +46,7 @@ const streamShape = {
 
 const durableConsumerShape = {
   deliverPolicy: choice(deliverPolicies).optional(),
-  ackWait: readAs(`${durationText}, or a list of them`, nanosListOf).optional(),
+  ackWait: readAs(`${durationText}, or a list of them`, oneOrListOf(nanosOf)).optional(),
   maxDeliver: unlimitedCount.optional(),
   maxAckPending: unlimitedCount.optional(),
 } satisfies Record<keyof DurableConsumerLimits, z.ZodType>;
