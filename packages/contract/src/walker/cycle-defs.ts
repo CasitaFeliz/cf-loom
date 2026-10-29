@@ -70,7 +70,10 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
     state.reported.report(schema, failure);
   }
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
-  state.openDefs.splice(0, state.openDefs.length, ...remaining);
+  state.openDefs.length = 0;
+  for (const def of remaining) {
+    state.openDefs.push(def);
+  }
   return failure;
 }
 

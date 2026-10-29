@@ -101,7 +101,9 @@ type GuardMember = Extract<Member, { readonly kind: 'guard' }>;
 function readLists({ ownMembers, endpoints }: Sources, reached: readonly Guard[]): Lists {
   const lists: Lists = { places: new Map(), rejections: [] };
   for (const { at, endpoint } of endpoints) {
-    lists.rejections.push(...listedIn(at, endpoint.rejections));
+    for (const listed of listedIn(at, endpoint.rejections)) {
+      lists.rejections.push(listed);
+    }
     for (const [index, attachment] of listOf(endpoint.guards).entries()) {
       const guard = attachedGuardOf(attachment);
       if (guard !== undefined) {
@@ -113,7 +115,9 @@ function readLists({ ownMembers, endpoints }: Sources, reached: readonly Guard[]
   for (const { name, value } of exportedGuardsInOrder(members, reached)) {
     visit(lists, value, placeOf({ kind: 'export', name }, value));
   }
-  lists.rejections.push(...members.flatMap(exportedRejectionOf));
+  for (const listed of members.flatMap(exportedRejectionOf)) {
+    lists.rejections.push(listed);
+  }
   return lists;
 }
 
@@ -149,8 +153,12 @@ function visit(lists: Lists, guard: Guard, held: Place): void {
     const site: Site | undefined = typeof name === 'string' ? { kind: 'guard', name } : undefined;
     const at = placedBy(site, next.held, next.guard);
     lists.places.set(next.guard, at);
-    lists.rejections.push(...listedIn(at, next.guard.rejections));
-    pending.push(...listedGuardsOf(next.guard, at).reverse());
+    for (const listed of listedIn(at, next.guard.rejections)) {
+      lists.rejections.push(listed);
+    }
+    for (const heldGuard of listedGuardsOf(next.guard, at).reverse()) {
+      pending.push(heldGuard);
+    }
   }
 }
 

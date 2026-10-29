@@ -131,7 +131,9 @@ function writeAll(cwd: string, { root, attributes }: Planned): string | undefine
   const created: string[] = [];
   try {
     const folders = foldersOf(root.path).filter((folder) => !existsSync(join(cwd, folder)));
-    created.push(...folders);
+    for (const folder of folders) {
+      created.push(folder);
+    }
     mkdirSync(dirname(join(cwd, root.path)), { recursive: true });
     writeFileSync(join(cwd, root.path), root.text, { flag: 'wx' });
     created.push(root.path);

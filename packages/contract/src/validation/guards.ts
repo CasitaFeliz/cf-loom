@@ -65,11 +65,18 @@ export function attachmentFailures({
   const earlier: string[] = [];
   for (const { at: attachedAt, attachment, guard } of listedOf(at, endpoint)) {
     if (guard === undefined) {
-      failures.push(...noAttachmentFailures(attachedAt, attachment));
+      for (const noAttachmentFailure of noAttachmentFailures(attachedAt, attachment)) {
+        failures.push(noAttachmentFailure);
+      }
       continue;
     }
-    failures.push(...shapeFailures({ at: attachedAt, attachment, guard }));
-    failures.push(...orderFailures({ at: attachedAt, attachment, guard }, earlier));
+    const listed = { at: attachedAt, attachment, guard };
+    for (const shapeFailure of shapeFailures(listed)) {
+      failures.push(shapeFailure);
+    }
+    for (const orderFailure of orderFailures(listed, earlier)) {
+      failures.push(orderFailure);
+    }
     earlier.push(textOf(guard.name));
   }
   return failures;

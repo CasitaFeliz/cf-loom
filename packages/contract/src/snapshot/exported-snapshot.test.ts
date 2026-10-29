@@ -787,7 +787,9 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
       );
       const snapshot = aServiceSnapshot({ endpoints });
       for (const [identity] of declared.filter(([, visibility]) => visibility === 'public')) {
-        mismatches.push(...misroutedUrlsOf(snapshot, identity));
+        for (const mismatch of misroutedUrlsOf(snapshot, identity)) {
+          mismatches.push(mismatch);
+        }
       }
     }
 

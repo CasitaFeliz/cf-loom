@@ -82,7 +82,9 @@ function reachableFrom(
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     if (!reached.has(next)) {
       reached.add(next);
-      pending.push(...(graph.get(next) ?? []));
+      for (const dependent of graph.get(next) ?? []) {
+        pending.push(dependent);
+      }
     }
   }
   return reached;
