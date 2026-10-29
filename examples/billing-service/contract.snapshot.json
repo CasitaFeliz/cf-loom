@@ -70,6 +70,14 @@
               },
               "type": "array"
             }
+          },
+          "omittedIssues": {
+            "required": true,
+            "schema": {
+              "int": true,
+              "min": 0,
+              "type": "number"
+            }
           }
         },
         "type": "object"

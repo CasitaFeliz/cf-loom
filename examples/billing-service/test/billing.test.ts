@@ -160,7 +160,7 @@ describe('invoiceFor', () => {
           case 'NOT_YET_IMPLEMENTED':
             return respond.reject('NOT_YET_IMPLEMENTED');
           case 'BAD_REQUEST':
-            return respond.reject('BAD_REQUEST', { issues: [] });
+            return respond.reject('BAD_REQUEST', { issues: [], omittedIssues: 0 });
         }
       });
 
