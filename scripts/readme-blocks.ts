@@ -28,15 +28,16 @@ const opening = /^(\s*)```(?:ts|typescript)(?:\s.*)?$/;
 const anyFence = /^\s*```/;
 const closing = /^\s*```\s*$/;
 const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/;
-const pathComment = /^\/\/\s+((?:[\w.-]+\/)+[\w.-]+\.ts)\b/;
+const pathComment = /^\/\/\s+((?:(?!\.\.?\/)[\w.-]+\/)+[\w.-]+\.ts)\b/;
 
 /**
  * Every file the TypeScript blocks of a README show. A path comment names a file, and starts
- * another when it follows a blank line; a file with none is written under its nearest heading.
+ * another when it follows a blank line; its path has no `.` or `..` segment. A file with none is
+ * written under its nearest heading.
  */
 export function blocksOf(readme: Readme): Blocks {
   const lines = readme.markdown.split(/\r?\n/);
-  const candidates: Block[] = [];
+  const blocks: Block[] = [];
   const problems: string[] = [];
   const snippetPath = snippetNamer(readme.path);
   let anchor = '';
@@ -56,7 +57,7 @@ export function blocksOf(readme: Readme): Blocks {
         for (const file of filesOf(dedented, piece.at + 2)) {
           const path = file.path ?? snippetPath(anchor);
           const named = file.path !== undefined;
-          candidates.push({
+          blocks.push({
             readme: readme.path,
             line: file.line,
             path,
@@ -67,39 +68,7 @@ export function blocksOf(readme: Readme): Blocks {
       }
     }
   }
-  const accepted = accepting(candidates);
-  return { blocks: accepted.blocks, problems: [...problems, ...accepted.problems] };
-}
-
-/** The files that can be written where they say, and why the others cannot. */
-function accepting(candidates: readonly Block[]): Blocks {
-  const blocks: Block[] = [];
-  const problems: string[] = [];
-  const snippetLines = new Map<string, number>();
-  for (const block of candidates) {
-    const refusal = refusalOf(block, snippetLines);
-    if (refusal !== undefined) {
-      problems.push(refusal);
-      continue;
-    }
-    blocks.push(block);
-    if (!block.named) {
-      snippetLines.set(block.path, block.line);
-    }
-  }
   return { blocks, problems };
-}
-
-/** Why a file cannot be written at its path: it leaves the Service, or an earlier snippet has its name. */
-function refusalOf(block: Block, snippetLines: ReadonlyMap<string, number>): string | undefined {
-  const where = `${block.readme}:${block.line}: ${block.path}`;
-  if (block.path.split('/').includes('..')) {
-    return `${where} leaves the Service`;
-  }
-  const first = block.named ? undefined : snippetLines.get(block.path);
-  return first === undefined
-    ? undefined
-    : `${where} is also the file of the snippet at line ${first}`;
 }
 
 /** The headings and TypeScript blocks of a README in order, other fenced blocks skipped whole. */

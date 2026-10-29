@@ -91,11 +91,10 @@ export type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, K
 ```
 
 ```ts
-// src/main.ts
 import { client } from '@cf-loom/client';
 import { messaging } from '@cf-loom/messaging';
 import { serve } from '@cf-loom/server';
-import handlers from './handlers.generated.ts';
+import handlers from '../src/handlers.generated.ts';
 
 const running = await messaging(contract, broker);
 const resources: Resources = {

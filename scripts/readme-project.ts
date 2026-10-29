@@ -20,52 +20,46 @@ export type Providers = {
 /** Where the scope's packages sit in the project, found by the compiler options and the aliases. */
 export const packagesAt = 'scope-packages';
 
-/** Where the blocks that a later block replaces are written, a folder for each README and each count of later blocks naming their path. */
-export const earlierAt = 'earlier-';
-
-const earlierRoot = /^earlier-[^/]+\//;
-
 /**
- * The project the blocks and the scope make. Of several blocks that name one path the last is that
- * file; the ones before it are written together, so that those of one README that the same number
- * of blocks replace import each other.
+ * The project the blocks and the scope make: each block is the file its path names. A path names
+ * one file once, so a block whose path an earlier block or the scope already names is left out
+ * and reported, as `README:line: …`, with what its author does about it.
  */
-export function projectOf(blocks: readonly Block[], scope: Scope): Map<string, ProjectFile> {
+export function projectOf(
+  blocks: readonly Block[],
+  scope: Scope,
+): { project: Map<string, ProjectFile>; problems: string[] } {
   const project = new Map<string, ProjectFile>();
+  const problems: string[] = [];
   for (const [path, source] of Object.entries(scope)) {
     project.set(path, { source });
   }
-  const generations = generationsOf(blocks);
-  for (const [index, block] of blocks.entries()) {
-    const generation = generations[index] ?? 0;
-    const slug = block.readme.replaceAll(/\W+/g, '-');
-    const file = generation === 0 ? block.path : `${earlierAt}${slug}-${generation}/${block.path}`;
-    project.set(file, { source: block.source, block });
+  for (const block of blocks) {
+    const claimed = project.get(block.path);
+    if (claimed === undefined) {
+      project.set(block.path, { source: block.source, block });
+    } else {
+      problems.push(
+        `${block.readme}:${block.line}: ${block.path} is also ${claimOf(claimed.block)}`,
+      );
+    }
   }
-  return project;
+  return { project, problems };
 }
 
-/** How many blocks after each block name its path. */
-function generationsOf(blocks: readonly Block[]): number[] {
-  const later = new Map<string, number>();
-  const generations: number[] = [];
-  for (const block of blocks.toReversed()) {
-    const count = later.get(block.path) ?? 0;
-    later.set(block.path, count + 1);
-    generations.push(count);
+/** Who holds a path already, and how the author names the later block otherwise. */
+function claimOf(holder: Block | undefined): string {
+  if (holder === undefined) {
+    return 'a file of the scope: the scope holds only what no block shows, so its file goes or the block names another path';
   }
-  return generations.toReversed();
+  const at = `${holder.readme}:${holder.line}`;
+  return holder.named
+    ? `named at ${at}: a path names a whole file of a Service once, so a block that shows another Service names its folder, and one that shows part of a file names no path`
+    : `the snippet at ${at}: snippets are named by their heading, so one of the headings changes`;
 }
 
-/** The paths of the blocks that name one of the scope's files, as `README:line: …`. */
-export function pathsOfScope(blocks: readonly Block[], scope: Scope): string[] {
-  const held = blocks.filter((block) => Object.hasOwn(scope, block.path));
-  return held.map((block) => `${block.readme}:${block.line}: ${block.path} is a file of the scope`);
-}
-
-/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service; an earlier block's belongs where its path says. */
-function packageOf(file: string): string {
-  const path = file.replace(earlierRoot, '');
+/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service. */
+function packageOf(path: string): string {
   const [folder = '', second] = path.split('/');
   if (folder === packagesAt) {
     return path;
@@ -105,7 +99,7 @@ export function providersOf(project: Project, contract: readonly string[]): Prov
   const siblings = new Map<string, Map<string, string>>();
   for (const [path, file] of project) {
     const own = siblings.get(packageOf(path)) ?? new Map<string, string>();
-    for (const name of path.endsWith('.ts') && isImportable(path, file)
+    for (const name of path.endsWith('.ts') && isImportable(file)
       ? exportedNames(file.source)
       : []) {
       own.set(name, own.get(name) ?? path);
@@ -115,9 +109,9 @@ export function providersOf(project: Project, contract: readonly string[]): Prov
   return { contract: new Set(contract), siblings };
 }
 
-/** Whether other files may import from the file: one a block names or the scope holds, not a snippet. */
-function isImportable(path: string, file: ProjectFile): boolean {
-  return file.block === undefined || (file.block.named && file.block.path === path);
+/** Whether other files may import from the file: any but a snippet. */
+function isImportable(file: ProjectFile): boolean {
+  return file.block?.named !== false;
 }
 
 /**

@@ -8,42 +8,42 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## First declarations
 
-An Endpoint, the Group that lists it and the Root that lists the Group are three files, which `generate` reads to write the Snapshot, shown with their imports:
+An Endpoint, the Group that lists it and the Root that lists the Group are three files, which `generate` reads to write the Snapshot, shown here with their imports for `notes-service`, a small Service of its own:
 
 ```ts
-// src/contract/endpoints/orders/get-order.endpoint.ts
+// notes-service/src/contract/endpoints/notes/get-note.endpoint.ts
 import { defineEndpoint } from '@cf-loom/contract';
 import { z } from 'zod';
 
-export const getOrder = defineEndpoint({
-  name: 'getOrder',
+export const getNote = defineEndpoint({
+  name: 'getNote',
   method: 'GET',
-  path: '/orders/:orderId',
+  path: '/notes/:noteId',
   visibility: 'internal',
-  description: 'One order by id',
-  input: { params: z.object({ orderId: z.uuid() }) },
-  success: { status: 200, body: z.object({ id: z.uuid(), total: z.number() }) },
+  description: 'One note by id',
+  input: { params: z.object({ noteId: z.uuid() }) },
+  success: { status: 200, body: z.object({ id: z.uuid(), text: z.string() }) },
 });
 ```
 
 ```ts
-// src/contract/groups/orders.group.ts
+// notes-service/src/contract/groups/notes.group.ts
 import { defineGroup } from '@cf-loom/contract';
-import { getOrder } from '../endpoints/orders/get-order.endpoint.ts';
+import { getNote } from '../endpoints/notes/get-note.endpoint.ts';
 
-export const ordersGroup = defineGroup({
-  name: 'orders',
-  description: 'Order lifecycle',
-  endpoints: [getOrder],
+export const notesGroup = defineGroup({
+  name: 'notes',
+  description: 'Notes',
+  endpoints: [getNote],
 });
 ```
 
 ```ts
-// src/contract/index.ts
+// notes-service/src/contract/index.ts
 import { defineService } from '@cf-loom/contract';
-import { ordersGroup } from './groups/orders.group.ts';
+import { notesGroup } from './groups/notes.group.ts';
 
-export const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
+export const contract = defineService({ name: 'notes-service', groups: [notesGroup] });
 ```
 
 [Required fields](#required-fields) says what a declaration may leave out, and [The Root](#the-root) and [Groups](#groups) show the rest of what these three take.

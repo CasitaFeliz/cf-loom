@@ -5,7 +5,7 @@ import type { Notes } from '../../service-code.ts';
 export default handle(
   getNote,
   async ({ params }, _call, { resources: { notes } }: { resources: { notes: Notes } }) => {
-    await notes.find(params.noteId);
-    return success({ id: params.noteId });
+    const note = await notes.find(params.noteId);
+    return success({ id: params.noteId, text: note?.text ?? '' });
   },
 );

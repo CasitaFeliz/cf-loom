@@ -16,10 +16,8 @@ import { blocksOf, type Readme } from './readme-blocks.ts';
 import {
   completed,
   declaredTwice,
-  earlierAt,
   type Project,
   packagesAt,
-  pathsOfScope,
   projectOf,
   providersOf,
   type Scope,
@@ -80,9 +78,9 @@ export function readmeServiceProblems(directory: string, repository: string = ro
 function projectOfReadmes(readmes: readonly Readme[], scope: Scope) {
   const parsed = readmes.map(blocksOf);
   const blocks = parsed.flatMap((readmeBlocks) => readmeBlocks.blocks);
-  const project = projectOf(blocks, scope);
+  const { project, problems: claimedTwice } = projectOf(blocks, scope);
   const unreadable = parsed.flatMap((readmeBlocks) => readmeBlocks.problems);
-  const problems = [...unreadable, ...pathsOfScope(blocks, scope), ...declaredTwice(project)];
+  const problems = [...unreadable, ...claimedTwice, ...declaredTwice(project)];
   return { problems, project };
 }
 
@@ -155,7 +153,6 @@ function tsconfigOf(project: Project) {
       module: 'nodenext',
       noEmit: true,
       paths: Object.fromEntries(aliases),
-      rootDirs: ['.', ...earlierRootsOf(project)],
       skipLibCheck: true,
       strict: true,
       target: 'ES2024',
@@ -163,12 +160,6 @@ function tsconfigOf(project: Project) {
     },
     include: ['**/*.ts'],
   };
-}
-
-/** The folders the earlier blocks of a path are written to, which resolve what they import in each other first. */
-function earlierRootsOf(project: Project): string[] {
-  const roots = [...project.keys()].map((path) => path.split('/')[0] ?? '');
-  return [...new Set(roots.filter((root) => root.startsWith(earlierAt)))];
 }
 
 /** What `tsc` printed over the project, and whether it ended in failure. */
