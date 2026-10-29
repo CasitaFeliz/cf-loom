@@ -100,3 +100,18 @@ export function recordingInputs(sqs: SQSClient, commandName: string) {
   );
   return { sent: () => inputs };
 }
+
+/** Makes a client act as another account of the moto server, as an AWS whose credentials belong to it would. */
+export function inAccount(client: SNSClient | SQSClient, account: string): void {
+  const stack = (client as SNSClient).middlewareStack;
+  stack.add(
+    (next) => (args) => {
+      const request: unknown = args.request;
+      if (isRecord(request) && isRecord(request['headers'])) {
+        request['headers']['x-moto-account-id'] = account;
+      }
+      return next(args);
+    },
+    { step: 'build', name: `in-account-${account}` },
+  );
+}

@@ -10,20 +10,20 @@ import {
 } from '@aws-sdk/client-sqs';
 import { answeredWith, isAwsError } from './aws-errors.ts';
 
-/** A queue or dead-letter queue as the plan wants it: the ARN its name has in the place of the SQS client, its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds and the queue's ARN. */
+/** A queue or dead-letter queue as the plan wants it: the ARN its name has in the place of the clients, its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds. */
 export type QueueToApply = {
   readonly name: string;
   readonly arn: string;
   readonly attributes: Readonly<Record<string, string>>;
   readonly tags: Readonly<Record<string, string>>;
   readonly untagged: readonly string[];
-  readonly policy?: (held: string | undefined, queueArn: string) => string;
+  readonly policy?: (held: string | undefined) => string;
 };
 
-/** A queue that exists: its URL, and its ARN as SQS gives it. */
+/** A queue that exists: its URL, and its ARN, which SQS gave it as built. */
 export type AppliedQueue = { readonly url: string; readonly arn: string };
 
-/** Creates the queue with everything it needs at once, or sets the attributes and tags of the one that exists and keeps every other attribute and tag. */
+/** Creates the queue with everything it needs at once, or sets the attributes and tags of the one that exists and keeps every other attribute and tag; either way SQS must give it the ARN built, which a wrong account or region does not. */
 export async function applyQueue(sqs: SQSClient, queue: QueueToApply): Promise<AppliedQueue> {
   const url = await urlOf(sqs, queue.name);
   return url === undefined ? await create(sqs, queue) : await update(sqs, url, queue);
@@ -50,30 +50,27 @@ async function urlOf(sqs: SQSClient, name: string): Promise<string | undefined> 
   }
 }
 
-/** Creates the queue with its attributes, policy and tags in one request, since SQS takes up to a minute to propagate an attribute set afterwards, then checks that its ARN is the one its policy names. */
+/** Creates the queue with its attributes, policy and tags in one request, since SQS takes up to a minute to propagate an attribute set afterwards. */
 async function create(sqs: SQSClient, queue: QueueToApply): Promise<AppliedQueue> {
-  const Attributes = withPolicy(queue, undefined, queue.arn);
+  const Attributes = withPolicy(queue, undefined);
   const created = await sqs.send(
     new CreateQueueCommand({ QueueName: queue.name, Attributes, tags: { ...queue.tags } }),
   );
   const url = answeredWith(created.QueueUrl, 'QueueUrl');
-  const { arn } = await heldOf(sqs, url);
-  if (arn !== queue.arn) {
-    const given = `SQS gave the queue ${queue.name} the ARN ${arn}, not ${queue.arn}`;
-    throw new Error(`${given}: check connecting.account and the region of the SQS client`);
-  }
-  return { url, arn };
+  confirmArn(queue, (await heldOf(sqs, url)).arn);
+  return { url, arn: queue.arn };
 }
 
 async function update(sqs: SQSClient, url: string, queue: QueueToApply): Promise<AppliedQueue> {
   const held = await heldOf(sqs, url);
-  const Attributes = withPolicy(queue, held.policy, held.arn);
+  confirmArn(queue, held.arn);
+  const Attributes = withPolicy(queue, held.policy);
   await sqs.send(new SetQueueAttributesCommand({ QueueUrl: url, Attributes }));
   await tagQueue(sqs, url, queue.tags);
   if (queue.untagged.length > 0) {
     await sqs.send(new UntagQueueCommand({ QueueUrl: url, TagKeys: [...queue.untagged] }));
   }
-  return { url, arn: held.arn };
+  return { url, arn: queue.arn };
 }
 
 type Held = { readonly arn: string; readonly policy: string | undefined };
@@ -86,14 +83,18 @@ async function heldOf(sqs: SQSClient, url: string): Promise<Held> {
   return { arn: answeredWith(attributes['QueueArn'], 'QueueArn'), policy: attributes['Policy'] };
 }
 
+/** Refuses a queue whose ARN SQS gives otherwise than built, since its policy, its redrive target and its subscription name the one built. */
+function confirmArn(queue: QueueToApply, arn: string): void {
+  if (arn !== queue.arn) {
+    const given = `SQS gave the queue ${queue.name} the ARN ${arn}, not ${queue.arn}`;
+    throw new Error(`${given}: check connecting.account and the region of the clients`);
+  }
+}
+
 /** The queue's attributes with the policy that follows from the one it holds, in the same request. */
-function withPolicy(
-  queue: QueueToApply,
-  heldPolicy: string | undefined,
-  queueArn: string,
-): Record<string, string> {
+function withPolicy(queue: QueueToApply, heldPolicy: string | undefined): Record<string, string> {
   const policy = queue.policy;
   return policy === undefined
     ? { ...queue.attributes }
-    : { ...queue.attributes, Policy: policy(heldPolicy, queueArn) };
+    : { ...queue.attributes, Policy: policy(heldPolicy) };
 }

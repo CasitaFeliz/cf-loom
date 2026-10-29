@@ -12,12 +12,11 @@ import type { Subscribing } from './subscribing.ts';
 import { subscriptionShapeOf } from './subscription-shape.ts';
 import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from './tags.ts';
 
-/** What applying works with: the SNS and SQS clients, the place of each, and the subscriptions made so far. */
+/** What applying works with: the SNS and SQS clients, their place, and the subscriptions made so far. */
 export type Applier = {
   readonly sns: SNSClient;
   readonly sqs: SQSClient;
-  readonly topicPlace: Place;
-  readonly queuePlace: Place;
+  readonly place: Place;
   readonly subscribing: Subscribing;
 };
 
@@ -35,7 +34,7 @@ export async function applyDurableConsumer(
 
 async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<Applied> {
   const { sns, sqs } = applier;
-  const topicArn = topicArnOf(applier.topicPlace, planned.stream);
+  const topicArn = topicArnOf(applier.place, planned.stream);
   if (!(await isTopic(sns, topicArn))) {
     const reads = `reads the stream ${planned.stream}, whose topic ${topicArn} does not exist yet`;
     const remedy = "apply its Service's plan first";
@@ -62,13 +61,13 @@ async function isTopic(sns: SNSClient, topicArn: string): Promise<boolean> {
 }
 
 function applyDeadLetterQueue(
-  { sqs, queuePlace }: Applier,
+  { sqs, place }: Applier,
   planned: PlannedQueue,
 ): Promise<AppliedQueue> {
   const name = deadLetterQueueNameOf(planned.name);
   return applyQueue(sqs, {
     name,
-    arn: queueArnOf(queuePlace, name),
+    arn: queueArnOf(place, name),
     attributes: { MessageRetentionPeriod: String(planned.deadLetterRetention) },
     tags: deadLetterQueueTagsOf(planned),
     untagged: [],
@@ -79,15 +78,16 @@ function applyDeadLetterQueue(
 type Around = { readonly deadLetterQueue: AppliedQueue; readonly topicArn: string };
 
 function applyMainQueue(
-  { sqs, queuePlace }: Applier,
+  { sqs, place }: Applier,
   planned: PlannedQueue,
   { deadLetterQueue, topicArn }: Around,
 ): Promise<AppliedQueue> {
   const redrive = { deadLetterTargetArn: deadLetterQueue.arn, maxReceiveCount: planned.maxDeliver };
   const name = queueNameOf(planned.name);
+  const arn = queueArnOf(place, name);
   return applyQueue(sqs, {
     name,
-    arn: queueArnOf(queuePlace, name),
+    arn,
     attributes: {
       VisibilityTimeout: String(planned.visibilityTimeout),
       MessageRetentionPeriod: String(planned.retention),
@@ -95,6 +95,6 @@ function applyMainQueue(
     },
     tags: queueTagsOf(planned),
     untagged: planned.backoff === undefined ? [backoffTag] : [],
-    policy: (held, queueArn) => queuePolicyWith(held, { queueArn, topicArn }),
+    policy: (held) => queuePolicyWith(held, { queueArn: arn, topicArn }),
   });
 }

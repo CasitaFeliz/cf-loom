@@ -16,6 +16,7 @@ import {
   alteringAnswers,
   anAwsConnecting,
   countCommands,
+  inAccount,
   recordingInputs,
 } from '../../test/aws-clients.ts';
 import {
@@ -928,32 +929,34 @@ describe('applyBrokerPlan', () => {
     expect(await topicNamesOf(connecting.sns)).toEqual([]);
   });
 
-  test.each([
-    ['', '123456789012'],
-    ['another account is given, ', '210987654321'],
-  ])(
-    'a Durable consumer whose Stream’s topic does not exist yet is refused naming the Stream and the topic ARN it looked for, and the topics created before it stay, when %sthe topic is in %s',
-    async (_given, account) => {
-      const billing = aBilling();
-      const own: BrokerPlan = {
-        ...billing.plan,
-        streams: {
-          'billing-service': {
-            service: 'billing-service',
-            subjects: ['billing-service.event.E.v1'],
-          },
-        },
-      };
-      const connecting = anAwsConnecting(moto.url, { account });
+  test('a Durable consumer whose Stream’s topic does not exist yet is refused naming the Stream and the topic ARN it looked for, and the topics created before it stay', async () => {
+    const billing = aBilling();
+    const own: BrokerPlan = {
+      ...billing.plan,
+      streams: {
+        'billing-service': { service: 'billing-service', subjects: ['billing-service.event.E.v1'] },
+      },
+    };
+    const connecting = anAwsConnecting(moto.url);
 
-      const error = await rejectionOf(applyBrokerPlan(connecting, own, testLimits));
+    const error = await rejectionOf(applyBrokerPlan(connecting, own, testLimits));
 
-      expect(error.message).toBe(
-        `The Durable consumer ${billing.durable} reads the stream orders-service, whose topic arn:aws:sns:eu-west-1:${account}:orders-service does not exist yet: apply its Service's plan first`,
-      );
-      expect(await topicNamesOf(connecting.sns)).toEqual(['billing-service']);
-    },
-  );
+    expect(error.message).toBe(
+      `The Durable consumer ${billing.durable} reads the stream orders-service, whose topic ${snsArnOf('orders-service')} does not exist yet: apply its Service's plan first`,
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual(['billing-service']);
+  });
+
+  test('with another account given, the topic ARN the refusal names shows that account', async () => {
+    const billing = aBilling();
+    const connecting = anAwsConnecting(moto.url, { account: '210987654321' });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, billing.plan, testLimits));
+
+    expect(error.message).toBe(
+      `The Durable consumer ${billing.durable} reads the stream orders-service, whose topic arn:aws:sns:eu-west-1:210987654321:orders-service does not exist yet: apply its Service's plan first`,
+    );
+  });
 
   test('applyBrokerPlan stops at the first Durable consumer it cannot apply and creates none after it', async () => {
     const orders = anOrders();
@@ -996,7 +999,7 @@ describe('applyBrokerPlan', () => {
     expect(error.cause).toBeInstanceOf(Error);
   });
 
-  test('the region of the SNS client decides the partition of every ARN', async () => {
+  test('the region of the clients decides the partition of every ARN', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url, { region: 'us-gov-west-1' });
 
@@ -1059,18 +1062,64 @@ describe('applyBrokerPlan', () => {
     ]);
   });
 
-  test('the ARN of each queue is the one SQS gives it, whatever region the SNS client is in', async () => {
+  test('clients in two regions are refused naming both, creating nothing', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url, { region: 'eu-west-1', sqsRegion: 'us-east-1' });
-    const queueArn = `arn:aws:sqs:us-east-1:123456789012:${orders.chargeDurable}`;
 
-    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
-    const queue = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
-    const [subscription] = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
-    expect(JSON.parse(queue['RedrivePolicy'] ?? '{}').deadLetterTargetArn).toBe(`${queueArn}_dlq`);
-    expect(JSON.parse(queue['Policy'] ?? '{}').Statement[0].Resource).toBe(queueArn);
-    expect(subscription?.endpoint).toBe(queueArn);
+    expect(error.message).toBe(
+      'connecting.sns is in the region eu-west-1 and connecting.sqs in us-east-1: they must be in one region',
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
+  });
+
+  test('clients of two regions and an account that is not 12 digits are refused in one error, a line each', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, {
+      region: 'eu-west-1',
+      sqsRegion: 'us-east-1',
+      account: '1234',
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message.split('\n')).toEqual([
+      "connecting.account '1234' is not a 12-digit AWS account id",
+      'connecting.sns is in the region eu-west-1 and connecting.sqs in us-east-1: they must be in one region',
+    ]);
+  });
+
+  test('an SQS client in another account than the account is refused on every run, naming both ARNs, before anything is set or subscribed', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    inAccount(connecting.sqs, '210987654321');
+    const set = recordingInputs(connecting.sqs, 'SetQueueAttributesCommand');
+    const subscribes = countCommands(connecting.sns, 'SubscribeCommand');
+    const refused = `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:${orders.chargeDurable}_dlq, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the clients`;
+
+    const runs = [
+      await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits)),
+      await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits)),
+      await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits)),
+    ];
+
+    expect(runs.map((error) => error.message)).toEqual([refused, refused, refused]);
+    expect(set.sent()).toEqual([]);
+    expect(subscribes.sent()).toBe(0);
+  });
+
+  test('an account other than the topics’ own is refused as the ARN CreateTopic gave, not the one built', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { account: '210987654321' });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(
+      `The stream ${orders.stream} could not be applied: CreateTopic gave ${snsArnOf(orders.stream)}, not arn:aws:sns:eu-west-1:210987654321:${orders.stream}`,
+    );
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
   });
 
   test.each([
@@ -1169,7 +1218,7 @@ describe('applyBrokerPlan', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toBe(
-      `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:elsewhere, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the SQS client`,
+      `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:elsewhere, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the clients`,
     );
     expect(await subscriptionsOf(connecting.sns, snsArnOf(orders.stream))).toEqual([]);
   });
