@@ -21,6 +21,7 @@ import {
   type Walked,
   walked,
 } from './walked.ts';
+import { withinStack } from './within-stack.ts';
 
 /** What a schema's own `.describe()` and `.meta()` say: its annotations and its recursion id. */
 export type Metadata = { readonly annotations: Annotations; readonly id?: string };
@@ -74,7 +75,8 @@ export function annotatedBy(result: Walked, metadata: Walked<Metadata>): Walked 
 
 /**
  * A walked node whose examples its own schema accepts, each parsed by that schema; a schema that
- * failed to walk is never parsed, so no function of the author's runs.
+ * failed to walk is never parsed, so no function of the author's runs. An example zod cannot parse
+ * within the call stack is one its schema refuses.
  */
 export function withExamplesParsed(schema: core.$ZodType, result: Walked, at: Reached): Walked {
   if (result.kind === 'not-allowed') {
@@ -83,7 +85,7 @@ export function withExamplesParsed(schema: core.$ZodType, result: Walked, at: Re
   const examples = result.value.examples ?? [];
   const refusals = examples
     .map((example, index) => ({ example, index }))
-    .filter(({ example }) => !safeParse(schema, example).success)
+    .filter(({ example }) => withinStack(() => safeParse(schema, example))?.success !== true)
     .map(({ index }) => notAllowed(at, refusedExample(index)));
   return refusals.length === 0 ? result : failed(failuresOf(refusals), result.value);
 }

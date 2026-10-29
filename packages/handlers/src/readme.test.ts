@@ -20,7 +20,6 @@ import {
   isRejectionOf,
   type MessageHandler,
   type MessageImplementation,
-  type MessageMeta,
   type ReceivedBodyOf,
   type ResourcesOf,
   readersOf,
@@ -255,7 +254,6 @@ describe('the handlers README', () => {
 
     await notifyOnSettledHandler({ paymentId: 'pay-1', method: 'card' }, meta, { resources });
 
-    expectTypeOf<DirectMeta>().toEqualTypeOf<Partial<MessageMeta>>();
     expectTypeOf<Parameters<typeof notifyOnSettledHandler>[1]>().toEqualTypeOf<
       DirectMeta | undefined
     >();

@@ -6,7 +6,7 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { Child } from './children.ts';
+export type { Child, ResolvedRef } from './children.ts';
 export {
   childrenOf,
   defsReachedOf,
@@ -22,8 +22,6 @@ export type { Catchalls, DefTypes, PipeRefusals } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
-export type { HashFormat } from './hash-formats.ts';
-export { hashPartsOf, isHashFormat } from './hash-formats.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
@@ -54,7 +52,7 @@ export { neutralAnnotations } from './nodes.ts';
 export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
-export { shapeKey, shapeOf } from './shapes.ts';
+export { byShape, shapeKey, shapeOf } from './shapes.ts';
 export type { PartName, Step } from './steps.ts';
 export {
   authorPathOf,
@@ -75,3 +73,4 @@ export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema, Memo } from './walked.ts';
 export { failuresOf, refusalsIn } from './walked.ts';
 export { refNamed, withChild, withField, withoutNullable } from './with-child.ts';
+export { withinStack } from './within-stack.ts';

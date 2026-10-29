@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
+import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -47,6 +48,7 @@ function refusalSitesOf({ located }: ReturnType<typeof walkSchemas>) {
 
 const unnamedCycle = { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' };
 const dateRefused = { construct: 'z.date()', instead: 'z.iso.datetime()' };
+const writtenTooDeep = 'a schema nested deeper than 256 schemas as written';
 
 const categoryDef = {
   type: 'object',
@@ -150,7 +152,13 @@ describe('walkSchemas: recursion', () => {
 
       const written = walkBody(z.object({ root: node.nullable(), other: node }));
 
-      expect(written.defs['tree']?.nullable).toBeUndefined();
+      expect(written.defs['tree']).toStrictEqual({
+        type: 'object',
+        fields: {
+          label: { required: true, schema: { type: 'string' } },
+          next: { required: true, schema: { type: 'ref', name: 'tree', nullable: true } },
+        },
+      });
       expect(written.located).toEqual([
         walkedTo({
           type: 'object',
@@ -1430,8 +1438,8 @@ describe('walkSchemas: recursion', () => {
     );
   });
 
-  test('a ring of 400 schemas walks fast', () => {
-    const count = 400;
+  /** A ring of `count` objects, each holding the next by `next`, the first with an id. */
+  function aRingOf(count: number): z.ZodType {
     const ring: z.ZodType[] = [];
     for (let index = 0; index < count; index++) {
       const shape = {};
@@ -1442,14 +1450,205 @@ describe('walkSchemas: recursion', () => {
       const link = z.object(shape);
       ring.push(index === 0 ? link.meta({ id: 'start' }) : link);
     }
+    return ring[0] ?? z.never();
+  }
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: ring[0]! }], () => undefined);
-    const elapsed = performance.now() - started;
+  /** The CPU time a walk of the ring stays under. */
+  const ringCpuMilliseconds = 1000;
+
+  test('a ring of 255 schemas walks fast', () => {
+    const ring = aRingOf(255);
+
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, ringCpuMilliseconds);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(ringCpuMilliseconds);
   });
+
+  test('a ring of 400 schemas is refused at its 257th', () => {
+    const ring = aRingOf(400);
+
+    const walked = walkBody(ring);
+
+    const at = 'next'.concat('.next'.repeat(255));
+    expect(walked.located[0]).toStrictEqual(refused([{ at, construct: writtenTooDeep }]));
+  });
+
+  /** `count` arrays, each holding the next, around `inner`. */
+  function arraysAround(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      schema = z.array(schema);
+    }
+    return schema;
+  }
+
+  /** The constructs of every refusal of each located schema, in order. */
+  function constructsOf(walked: ReturnType<typeof walkSchemas>) {
+    return walked.located.map(({ walked: located }) =>
+      located.kind === 'walked' ? [] : refusalsIn(located.tree).map(({ construct }) => construct),
+    );
+  }
+
+  test('a def whose cycle closes past its 256th schema is refused for its depth alone, never as off a cycle', () => {
+    const def: z.ZodType = z
+      .object({
+        a: arraysAround(
+          255,
+          z.lazy(() => def),
+        ),
+      })
+      .meta({ id: 'deeTwo' });
+
+    const walked = walkBody(def);
+
+    const at = `a${'[]'.repeat(255)}`;
+    expect(walked.located[0]).toStrictEqual(refused([{ at, construct: writtenTooDeep }]));
+  });
+
+  test('a def that leads back to a def above it only past its 256th schema leaves that def unjudged as off a cycle', () => {
+    const outer: z.ZodType = z
+      .object({
+        get inner() {
+          return inner;
+        },
+      })
+      .meta({ id: 'outer' });
+    const inner: z.ZodType = z
+      .object({
+        back: arraysAround(
+          255,
+          z.lazy(() => outer),
+        ),
+        get again() {
+          return inner.optional();
+        },
+      })
+      .meta({ id: 'inner' });
+
+    const walked = walkSchemas([{ at: placeAt('body'), schema: outer }], () => undefined);
+
+    expect(constructsOf(walked)).toStrictEqual([[writtenTooDeep]]);
+  });
+
+  test.for([
+    ['the inner def', 'first', [[writtenTooDeep], [writtenTooDeep]]],
+    ['the outer def', 'second', [[writtenTooDeep], [writtenTooDeep]]],
+  ] as const)(
+    'a def whose cycle through another closes past the limit, %s declared first, is refused for its depth alone',
+    ([, declaredFirst, expected]) => {
+      const outer: z.ZodType = z
+        .object({
+          get inner() {
+            return inner;
+          },
+        })
+        .meta({ id: 'zed' });
+      const inner: z.ZodType = z
+        .object({
+          get again() {
+            return inner.optional();
+          },
+          back: arraysAround(
+            255,
+            z.lazy(() => outer),
+          ),
+        })
+        .meta({ id: 'dee' });
+      const schemas = declaredFirst === 'first' ? [inner, outer] : [outer, inner];
+
+      const walked = walkSchemas(
+        schemas.map((schema, index) => ({ at: placeAt(`body${index}`), schema })),
+        () => undefined,
+      );
+
+      expect(constructsOf(walked)).toStrictEqual(expected);
+    },
+  );
+
+  test('a def holding another, neither on a cycle and the inner one failing, has each id and the failure told', () => {
+    const inner = z.object({ x: z.bigint() }).meta({ id: 'bee' });
+    const outer = z.object({ b: inner }).meta({ id: 'ay' });
+
+    const walked = walkBody(outer);
+
+    const offCycle = (id: string) => ({
+      construct: `.meta({ id: "${id}" }) on a schema that lies on no cycle`,
+      instead: '.meta({ id }) only on a recursive schema',
+    });
+    expect(walked.located[0]).toStrictEqual(
+      refused([
+        { at: '', ...offCycle('ay') },
+        { at: 'b', ...offCycle('bee') },
+        { at: 'b.x', construct: 'z.bigint()' },
+      ]),
+    );
+  });
+
+  /** A chain of `count` ids around `inner`, each holding the next. */
+  function aChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      schema = z.object({ next: schema }).meta({ id: `link${index}` });
+    }
+    return schema;
+  }
+
+  /** A chain of `count` ids around `inner`, each holding the next and itself, so on a cycle of its own. */
+  function aLoopedChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      const next = schema;
+      const link: z.ZodType = z
+        .object({
+          next,
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      schema = link;
+    }
+    return schema;
+  }
+
+  /**
+   * How many times longer the chain's walk may take than a walk of as many ids, each on a cycle of
+   * its own, that refuses nothing: under 1 when the walk reads each failure tree once, and many times
+   * over 3 when it reads the trees afresh for each id. The walk's memory grows with the square of a
+   * chain of ids, so the chain stays at 7,000.
+   */
+  const memoCpuRatio = 3;
+
+  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
+  const memoTimeout = 240_000;
+
+  test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
+    timeout: memoTimeout,
+  }, () => {
+    const schema = aChainOf(7_000, arraysAround(250, z.bigint()));
+    const looped = aLoopedChainOf(7_000, arraysAround(250, z.string()));
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walkLooped = () =>
+      walkSchemas([{ at: placeAt('body'), schema: looped }], () => undefined);
+
+    const walked = walk();
+    walkLooped();
+    const cpuRatio = cpuRatioOf(walk, walkLooped, memoCpuRatio);
+
+    const constructs = constructsOf(walked).flat();
+    const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
+    expect(offCycle).toHaveLength(7_000);
+    expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
+    expect(constructs).toHaveLength(7_001);
+    expect(cpuRatio).toBeLessThan(memoCpuRatio);
+  });
+
+  /** The CPU time a walk stays under when it walks the failing def once, not once per path. */
+  const manyPathsCpuMilliseconds = 1000;
 
   test('a failing def met by many paths is reported once and walked once', () => {
     const count = 26;
@@ -1467,15 +1666,16 @@ describe('walkSchemas: recursion', () => {
       steps.push(z.object(shape).meta({ id: `step${index}` }));
     }
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
   });
 });
 
@@ -1523,8 +1723,11 @@ describe('reachedDefsOf', () => {
 /** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */
 const depth = 5_000;
 
-/** A deep test walks thousands of schemas, which takes seconds on a CI runner with shared cores. */
-const deepTimeout = 60_000;
+/**
+ * A deep test walks thousands of schemas, which takes up to 8 s while the project's files run in
+ * parallel, and several times that on a CI runner that several runs share.
+ */
+const deepTimeout = 240_000;
 
 /**
  * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies
@@ -1676,41 +1879,43 @@ describe('walkSchemas: depth', () => {
   );
 
   test.for([
-    ['z.lazy()', (inner: z.ZodType) => z.lazy(() => inner), { type: 'boolean' }],
-    ['.nullable()', (inner: z.ZodType) => inner.nullable(), { type: 'boolean', nullable: true }],
+    ['z.lazy()', (inner: z.ZodType) => z.lazy(() => inner)],
+    ['.nullable()', (inner: z.ZodType) => inner.nullable()],
   ] as const)(
-    '5,000 of %s around one schema walk to its one node',
+    '5,000 of %s around one schema are refused once, at the 257th',
     { timeout: deepTimeout },
-    ([_wrapper, wrap, node]) => {
+    ([_wrapper, wrap]) => {
       const schema = aNestOf(depth, wrap);
 
-      const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+      const walked = walkBody(schema);
 
-      expect(walked.located[0]?.walked).toEqual(walkedTo(node));
+      expect(walked.located[0]).toEqual(refused([{ at: '', construct: writtenTooDeep }]));
     },
   );
 
   test.for([
-    ['.optional()', (inner: z.ZodType) => inner.optional()],
-    ['.readonly()', (inner: z.ZodType) => inner.readonly()],
-    ['z.set()', (inner: z.ZodType) => z.set(inner)],
-    ['z.map()', (inner: z.ZodType) => z.map(z.string(), inner)],
-    ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean())],
+    ['.optional()', (inner: z.ZodType) => inner.optional(), 1],
+    ['.readonly()', (inner: z.ZodType) => inner.readonly(), 1],
+    ['z.set()', (inner: z.ZodType) => z.set(inner), 1],
+    ['z.map()', (inner: z.ZodType) => z.map(z.string(), inner), 2],
+    ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean()), 2],
   ] as const)(
-    '5,000 of %s around one schema are each refused',
+    '5,000 of %s around one schema are each refused down to the 256th, and what sits at the 257th as too deep',
     { timeout: deepTimeout },
-    ([_wrapper, wrap]) => {
+    ([_wrapper, wrap, atTheLimit]) => {
       const schema = aNestOf(depth, wrap);
 
       const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
 
       const located = walked.located[0]?.walked;
       const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
-      expect(refusals).toHaveLength(depth);
+      const tooDeep = refusals.filter(({ construct }) => construct === writtenTooDeep);
+      expect(refusals.length - tooDeep.length).toBe(256);
+      expect(tooDeep).toHaveLength(atTheLimit);
     },
   );
 
-  test('a def on a cycle holding 5,000 nested z.set() around a z.date() reports each refusal', {
+  test('a def on a cycle holding 5,000 nested z.set() reports each z.set() it walks and the depth once', {
     timeout: deepTimeout,
   }, () => {
     const held = aNestOf(depth, (inner) => z.set(inner), z.date());
@@ -1722,7 +1927,8 @@ describe('walkSchemas: depth', () => {
 
     const located = walked.located[0]?.walked;
     const refusals = located?.kind === 'not-allowed' ? refusalsIn(located.tree) : [];
-    expect(refusals).toHaveLength(depth + 1);
+    const constructs = refusals.map(({ construct }) => construct);
+    expect(constructs).toEqual([...Array(255).fill('z.set()'), writtenTooDeep]);
   });
 
   test('one cycle through 5,000 ids walks to 5,000 defs, each a ref to the next', {

@@ -2,15 +2,15 @@ import type { z } from 'zod';
 import {
   canonicalSnapshotOf,
   type NamedFormat,
+  nestingProblemOf,
   nodeNestingLimit,
   type PublishedSnapshot,
   type SnapshotFormat,
   snapshotFormatOf,
-  snapshotNestingLimit,
   tooDeepNodePathOf,
-  tooDeepPathOf,
 } from '../snapshot/index.ts';
 import { readWith } from '../validation/index.ts';
+import { formerInputProblemsOf } from './former-inputs.ts';
 import { heldProblemOf } from './references.ts';
 import { publishedSnapshot } from './structure.ts';
 import { formatDefiner } from './texts.ts';
@@ -28,9 +28,8 @@ const structures: Readonly<Record<SnapshotFormat, z.ZodType<PublishedSnapshot>>>
 
 /**
  * A `snapshot.json` from the registry, decoded by the format it names into the published Snapshot
- * in canonical order; JSON nested past the Snapshot's limit, anything its format does not define,
- * a name it uses and does not hold, or a def that leads back to itself with no node between, is
- * refused rather than read as far as it goes.
+ * in canonical order; anything `generate` and `publish` never write that would make the Check or
+ * the hash wrong is refused rather than read as far as it goes.
  */
 export function decodeSnapshot(text: string): DecodedSnapshot {
   const parsed = parsedJsonOf(text);
@@ -41,10 +40,9 @@ export function decodeSnapshot(text: string): DecodedSnapshot {
   if (format.kind !== 'known') {
     return format;
   }
-  const tooDeep = tooDeepPathOf(parsed.json);
+  const tooDeep = nestingProblemOf(parsed.json);
   if (tooDeep !== undefined) {
-    const reason = `nests deeper than ${snapshotNestingLimit} levels`;
-    return { kind: 'malformed', at: tooDeep, reason };
+    return { kind: 'malformed', ...tooDeep };
   }
   return decodedWithinStack(structures[format.format], parsed.json);
 }
@@ -86,7 +84,7 @@ function decodedBy(structure: z.ZodType<PublishedSnapshot>, json: unknown): Deco
     const reason = `a schema nests deeper than ${nodeNestingLimit} levels`;
     return { kind: 'malformed', at: tooDeep, reason };
   }
-  const problem = heldProblemOf(structured.value);
+  const problem = heldProblemOf(structured.value) ?? formerInputProblemsOf(structured.value)[0];
   if (problem !== undefined) {
     return { kind: 'malformed', ...problem };
   }

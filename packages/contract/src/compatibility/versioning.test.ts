@@ -9,6 +9,8 @@ import {
   type ComparedReport,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type GuardSnapshot,
@@ -119,15 +121,15 @@ const idParams: EndpointSnapshot['input']['params'] = {
   fields: { id: { required: true, schema: { type: 'string' } } },
 };
 
-function anEndpointOf(
+function anEndpointOf<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
   visibility: EndpointSnapshot['visibility'],
-  fields: Partial<EndpointSnapshot> = {},
-): EndpointSnapshot {
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'latestOrder',
     group: 'orders',
     visibility,
-    lifecycle: 'active',
     description: 'An Endpoint',
     params: [],
     guards: [],
@@ -140,6 +142,7 @@ function anEndpointOf(
     success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
     rejections: [],
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -159,7 +162,7 @@ function reportOfShadowing(visibility: EndpointSnapshot['visibility']): Compared
     version: '3.4.0',
     generator: publishedBy,
     formerInputs: [],
-    endpoints: { [orderById]: { ...getOrder, lifecycle: 'active' } },
+    endpoints: { [orderById]: getOrder },
   };
   const proposed: ServiceSnapshot = {
     ...serviceHeading,
@@ -181,7 +184,7 @@ function aCode(status: number): CodeSnapshot {
   };
 }
 
-function aGuard(): GuardSnapshot {
+function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
   return {
     origin: 'local',
     description: 'Authenticates the Caller',
@@ -190,6 +193,7 @@ function aGuard(): GuardSnapshot {
     demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
+    ...fields,
   };
 }
 
@@ -200,7 +204,7 @@ function reportOfCodeStatusChange(visibility: EndpointSnapshot['visibility']): C
     version: '3.4.0',
     generator: publishedBy,
     formerInputs: [],
-    endpoints: { [latestOrder]: { ...endpoint, lifecycle: 'active' } },
+    endpoints: { [latestOrder]: endpoint },
     codes: { [orderLocked]: aCode(409) },
   };
   const proposed: ServiceSnapshot = {
@@ -364,7 +368,7 @@ describe('versionBumpOf', () => {
   });
 
   test('a change only to a Public Endpoint Retired on both sides bumps patch', () => {
-    const retired = anEndpointOf('public', { lifecycle: 'retired' });
+    const retired = anEndpointOf('public', {}, { lifecycle: 'retired' });
     const baseline: PublishedServiceSnapshot = {
       ...serviceHeading,
       version: '3.4.0',
@@ -420,14 +424,29 @@ describe('versionBumpOf', () => {
 
   test('a Breaking Change on a Definitions Package’s Guard bumps major', () => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
+    const demanding = aGuard({
+      demands: {
+        headers: { type: 'object', fields: {} },
+        query: {
+          type: 'object',
+          fields: { token: { required: true, schema: { type: 'string' } } },
+        },
+      },
+    });
 
-    const report = comparedReportOf(baseline, aDefinitions());
+    const report = comparedReportOf(
+      baseline,
+      aDefinitions({ guards: { authenticated: demanding } }),
+    );
 
     expect(versionBumpOf(report, unmoved)).toBe('major');
   });
 
-  test('an Additive Change on a Definitions Package’s code bumps minor', () => {
-    const proposed = aDefinitions({ codes: { [orderLocked]: aCode(409) } });
+  test('an Additive Change on a Definitions Package’s export bumps minor', () => {
+    const proposed = aDefinitions({
+      exports: { [orderLocked]: { kind: 'rejection', code: orderLocked } },
+      codes: { [orderLocked]: aCode(409) },
+    });
 
     const report = comparedReportOf(aBaselineDefinitions(), proposed);
 

@@ -247,9 +247,11 @@ The Service's NATS permissions must allow the subjects of `messaging()` and `con
 Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything.
 
 ```ts
+import { execFileSync } from 'node:child_process';
 import { connect } from '@nats-io/transport-node';
 import { applyBrokerPlan } from '@cf-loom/messaging/jetstream';
 
+const { plan } = JSON.parse(execFileSync('npx', ['cf-loom', 'broker-plan', '--json'], { encoding: 'utf8' }));
 const connecting = { connect: () => connect({ servers: process.env.NATS_URL }) };
 await applyBrokerPlan(connecting, plan, limits);   // creates and updates, never removes
 ```

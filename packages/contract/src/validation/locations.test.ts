@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { pingedV1 } from '../../test/ping-package.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
   defineDefinitions,
@@ -11,6 +12,7 @@ import {
   defineRejection,
   defineService,
   type Endpoint,
+  type Guard,
 } from '../index.ts';
 import {
   type ApplicationSnapshot,
@@ -288,6 +290,23 @@ describe('failure lines: a Snapshot nested too deep', () => {
     });
   });
 
+  test.for([
+    { what: 'an array', wide: () => Array.from({ length: 300_000 }, () => ({})) },
+    {
+      what: 'a map',
+      wide: () => Object.fromEntries(Array.from({ length: 300_000 }, (_, i) => [`k${i}`, {}])),
+    },
+  ])(
+    'a json example holding $what of 300,000 objects is no nesting failure, however wide it is',
+    ({ wide }) => {
+      const body: SchemaNode = { type: 'json', examples: [wide()] };
+
+      const failure = nestingFailureOf(service({ defs: { wide: body } }));
+
+      expect(failure).toBeUndefined();
+    },
+  );
+
   test('an Application holds no schema, so nothing nests too deep in it', () => {
     const application: ApplicationSnapshot = {
       format: 1,
@@ -420,6 +439,36 @@ describe('failure lines: a declaration with no usable name', () => {
         `exports.${listingExport} guards[0].name not-a-string: name is a string`,
         `exports.${listingExport} name not-a-string: name is a string`,
       ]);
+    },
+  );
+
+  test('a Guard whose name is no string that two lists reach sits at the one met first, the deeper one', () => {
+    const nameless = defineGuard({ name: 5 as never, description: 'A guard' });
+    const middle = defineGuard({ name: 'middle', description: 'Middle', guards: [nameless] });
+    const outer = defineGuard({ name: 'outer', description: 'Outer', guards: [middle, nameless] });
+    const root = defineDefinitions({});
+    const rootExports = { a: outer, b: middle, c: nameless };
+
+    expect(linesOf(root, { rootExports })).toEqual([
+      'guards.middle guards[0].name not-a-string: name is a string',
+    ]);
+  });
+
+  test.for([1, 2, 3])(
+    'the Guards an exported Guard reaches unexported, seed %i, are each named once, after the Guards it lists',
+    (seed) => {
+      const next = seededNext(seed);
+      const guards: Guard[] = [];
+      for (let index = 0; index < 30; index++) {
+        const listed = guards.filter(() => next() < 0.2);
+        guards.push(defineGuard({ name: `g${index}`, description: 'A node', guards: listed }));
+      }
+      const top = defineGuard({ name: 'top', description: 'Top', guards: [...guards].reverse() });
+
+      const lines = linesOf(defineDefinitions({}), { rootExports: { top } });
+
+      const named = lines.map((line) => line.split(': ').at(-1));
+      expect(named).toEqual(listedFirstOf(top).filter((name) => name !== 'top'));
     },
   );
 
@@ -581,3 +630,14 @@ describe('failure lines: Standard Rejections and the Snapshot', () => {
     ]);
   });
 });
+
+/** The names of a Guard and every Guard it reaches, each once, every Guard after those it lists. */
+function listedFirstOf(guard: Guard, named: string[] = []): string[] {
+  for (const listed of guard.guards ?? []) {
+    listedFirstOf(listed, named);
+  }
+  if (!named.includes(String(guard.name))) {
+    named.push(String(guard.name));
+  }
+  return named;
+}

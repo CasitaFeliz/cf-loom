@@ -14,10 +14,10 @@ export { snapshotFormatOf } from './format.ts';
 export { isEmptyTextPart } from './input.ts';
 export {
   nestingFailureOf,
+  nestingProblemOf,
   nodeNestingLimit,
   snapshotNestingLimit,
   tooDeepNodePathOf,
-  tooDeepPathOf,
 } from './nesting.ts';
 export { codeNodesOf, inputNodesOf } from './nodes.ts';
 export { originPackagesOf } from './origin-packages.ts';
@@ -51,6 +51,7 @@ export {
   isSubscriptionTombstone,
   removedCodesOf,
 } from './published.ts';
+export { reachedGuardNamesOf } from './reached-guards.ts';
 export type { SemanticVersionParts, VersionBump } from './semantic-version.ts';
 export { caretLineOf, isSemanticVersion, semanticVersionPartsOf } from './semantic-version.ts';
 export { snapshotOf } from './snapshot.ts';
@@ -62,6 +63,8 @@ export type {
   CommandSnapshot,
   DefinitionsSnapshot,
   DependencySnapshot,
+  EndpointFields,
+  EndpointLifecycle,
   EndpointSnapshot,
   EventSnapshot,
   ExportedCut,

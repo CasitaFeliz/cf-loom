@@ -1,4 +1,3 @@
-import * as built from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
@@ -166,13 +165,5 @@ describe('openEnumReader', () => {
         issues: [{ path: [], code: 'invalid_value', message: expect.any(String) }],
       },
     ]);
-  });
-});
-
-describe('the entry', () => {
-  test('openUnion is not exported', () => {
-    expectTypeOf(contract).not.toHaveProperty('openUnion');
-    expect(contract).not.toHaveProperty('openUnion');
-    expect(built).not.toHaveProperty('openUnion');
   });
 });

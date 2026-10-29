@@ -19,6 +19,8 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
 
+The packages are published to npmjs.com with access restricted to the @cf-loom npm organization: install them logged in with an npm account in that organization. Until 1.0.0, install the release candidate, `npm install @cf-loom/<name>@rc`.
+
 Each package's README lists what it exports. How the packages relate to each other is in [Packages](ARCHITECTURE.md#packages) in ARCHITECTURE.md.
 
 ## A first Service
@@ -79,8 +81,8 @@ The examples in the package READMEs follow this layout and leave out imports of 
 
 A Service, an Application and a Definitions Package are each a package of their own, whose `package.json` has:
 
-- `"type": "module"`: every `cf-loom` command exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
-- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, in kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
+- `"type": "module"`: every `cf-loom` command but `--help`, `help` and `--version` exits 3 without it, since the CLI loads the Contract's files and `cf-loom.config.ts` as ES modules (see [Where Contracts live](ARCHITECTURE.md#where-contracts-live));
+- a `name`, usually scoped, such as `@org/orders-service`: the Contract of a Service or an Application is named after it without the scope, and that name must be kebab-case of at most 64 characters, and its Contract Package is `@org/contract-orders-service`;
 - `"engines": { "node": ">=24" }`, the Node every cf-loom package requires.
 
 `zod` and `@cf-loom/contract` are peers of every cf-loom package, and so is each cf-loom package another one uses, so install every one of these that applies:
@@ -92,6 +94,7 @@ A Service, an Application and a Definitions Package are each a package of their 
 | A Service | `@types/node` as a devDependency |
 | Endpoints | `@cf-loom/handlers` and `@cf-loom/server` |
 | Messages | `@cf-loom/handlers` and `@cf-loom/messaging`; on JetStream also `@nats-io/jetstream`, `@nats-io/nats-core` and a transport such as `@nats-io/transport-node`, all on one version (see [JetStream](packages/messaging/README.md#jetstream)) |
+| Subscribing to another Service's Event | `@cf-loom/handlers` and `@cf-loom/messaging`, and the Provider's Contract Package as an ordinary dependency |
 | Calling a Provider | `@cf-loom/client`, and the Provider's Contract Package as an ordinary dependency |
 | Tests of a Consumer | `@cf-loom/testing` as a devDependency |
 | A Definitions Package | `@cf-loom/contract` and `zod` as `peerDependencies` too (see [Definitions Packages](packages/contract/README.md#definitions-packages)) |
@@ -109,11 +112,28 @@ Use TypeScript 7, the version cf-loom is built and tested with; 5.x does not typ
     "noEmit": true,
     "types": ["node"]
   },
+  "include": ["src", "test", "cf-loom.config.ts"]
+}
+```
+
+A Definitions Package is built, since `publish` needs it built first (see [Commands](packages/cli/README.md#commands) in the CLI README). It keeps this `tsconfig.json` to type-check, without `"types": ["node"]` unless its tests use Node's API, when it installs `@types/node` too, and adds a `tsconfig.build.json` that emits only `src/`, with the declarations its Consumers' types come from, and no Node types, since Applications import it too. Build it with `tsc -p tsconfig.build.json`; [`org-definitions`](examples/org-definitions) has both files:
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": []
+  },
   "include": ["src"]
 }
 ```
 
-A project that emits with `tsc` sets `rewriteRelativeImportExtensions`, a `rootDir` and an `outDir` in place of `allowImportingTsExtensions` and `noEmit`. Put `.cf-loom/` in `.gitignore`.
+Put `.cf-loom/` in `.gitignore`.
 
 `check` and `publish` read the registry through the `npm` on your `PATH`, so they need an npm login that can read the scope's registry, even before the first publish; `generate`, `verify` and `package` run offline (see [Configuration](packages/cli/README.md#configuration)).
 
@@ -128,6 +148,26 @@ A project that emits with `tsc` sets `rewriteRelativeImportExtensions`, a `rootD
 ### Implement
 
 Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its Stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
+
+### Apply the broker plan
+
+A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's plan before its Subscribers' (the limits are the organization's: see [Applying the plan](packages/messaging/README.md#applying-the-plan) in the messaging README for them, for the prefix and for what applying never removes):
+
+```ts
+// scripts/apply-broker-plan.ts
+import { execFileSync } from 'node:child_process';
+import { applyBrokerPlan, type BrokerLimits } from '@cf-loom/messaging/jetstream';
+import { connect } from '@nats-io/transport-node';
+
+const limits: BrokerLimits = {
+  streamDefaults: { retention: 'limits', maxAge: '7d', duplicateWindow: '2m', replicas: 1, storage: 'file' },
+  durableConsumerDefaults: { deliverPolicy: 'all', ackWait: '30s', maxDeliver: 5, maxAckPending: 100 },
+};
+const { plan } = JSON.parse(execFileSync('npx', ['cf-loom', 'broker-plan', '--json'], { encoding: 'utf8' }));
+const servers = process.env['NATS_URL'];
+if (servers === undefined) throw new Error('NATS_URL is not set');
+await applyBrokerPlan({ connect: () => connect({ servers }) }, plan, limits);
+```
 
 ### Serve
 
@@ -145,16 +185,19 @@ Until cf-loom 1.0.0, publish only prereleases: run `npx cf-loom check --prerelea
 
 #### Check in CI
 
-A CI job runs plain commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
+A CI job runs commands after the install and reads their exit status, which the Exit status paragraph under [Commands](packages/cli/README.md#commands) in the CLI README lists; `check` needs the npm login of [Set up](#set-up). The commands run from the project's install with `npx`, or the `exec` of any other package manager:
 
 ```sh
 npx cf-loom verify
-npx cf-loom check
+s=0; npx cf-loom check || s=$?
+[ "$s" -eq 0 ] || [ "$s" -eq 2 ] || exit "$s"
 ```
+
+Run with `-e`, as GitHub Actions runs a `bash` step, the job fails when `verify` fails and when `check` exits 1 or 3, and passes when it exits 2.
 
 Before cf-loom 1.0.0, run `check --prerelease` (see [Publish](#publish)); the samples below show a package as it is after 1.0.0, when it publishes versions that are not prereleases.
 
-Exit 2 means an Approver must give a Breaking Change Approval, which your review process enforces; cf-loom does not. Removing a Success field is such a Change:
+Exit 2 means an Approver must give a Breaking Change Approval. Nothing records one, so the job above passes on it, and your organization's review process must enforce the Approval, or a Breaking Change merges on a green job (see [Breaking Change Approval](COMPATIBILITY.md#breaking-change-approval) in COMPATIBILITY.md); required reviews of `contract.snapshot.json` are one way. cf-loom enforces nothing here; a job that must stay red until an Approval is the organization's own, reading `check --json`. Removing a Success field is a Breaking Change that needs an Approval:
 
 ```
 Checked against @org/contract-orders-service@1.0.0
