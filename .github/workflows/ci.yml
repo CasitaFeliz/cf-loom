@@ -42,6 +42,23 @@ jobs:
           echo "${NATS_SERVER_SHA256}  $RUNNER_TEMP/$archive.tar.gz" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
+      - name: Install moto
+        if: runner.arch == 'X64'
+        env:
+          UV_VERSION: 0.13.1
+          UV_SHA256: eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220
+        run: |
+          archive="uv-x86_64-unknown-linux-gnu"
+          curl -fsSL -o "$RUNNER_TEMP/$archive.tar.gz" \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$archive.tar.gz"
+          echo "${UV_SHA256}  $RUNNER_TEMP/$archive.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/$archive/uv" venv "$RUNNER_TEMP/moto"
+          "$RUNNER_TEMP/$archive/uv" pip install --python "$RUNNER_TEMP/moto/bin/python" --require-hashes --no-build \
+            -r packages/messaging/test/moto-requirements.txt
+          mkdir "$RUNNER_TEMP/moto-bin"
+          ln -s "$RUNNER_TEMP/moto/bin/moto_server" "$RUNNER_TEMP/moto-bin/moto_server"
+          echo "$RUNNER_TEMP/moto-bin" >> "$GITHUB_PATH"
       - name: Lint the workflows
         env:
           ACTIONLINT_VERSION: 1.7.12
