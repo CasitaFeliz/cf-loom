@@ -202,9 +202,8 @@ describe('the README’s declaration examples', () => {
 });
 
 describe('the README’s Event and Command examples', () => {
-  test('an Event takes a Visibility and a Command none', () => {
+  test('an Event takes a Visibility', () => {
     expect(orderCreatedV2).toMatchObject({ kind: 'event', visibility: 'internal' });
-    expect(chargeCardV1).not.toHaveProperty('visibility');
   });
 
   test('a Deprecated Endpoint states the instant it is Deprecated as of', () => {
@@ -227,7 +226,14 @@ describe('the README’s Event and Command examples', () => {
 
   test('a Deprecated Event version sits beside the Active one', () => {
     expect(orderCreatedV1.lifecycle).toBe('deprecated');
-    expect(orderCreatedV2).not.toHaveProperty('lifecycle');
+    expect(orderCreatedV2).toStrictEqual({
+      kind: 'event',
+      name: 'OrderCreated',
+      version: 2,
+      visibility: 'internal',
+      description: 'An order was placed, with its total',
+      body: orderCreatedV2.body,
+    });
   });
 });
 

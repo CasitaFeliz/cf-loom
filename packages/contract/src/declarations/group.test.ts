@@ -71,7 +71,12 @@ describe('defineGroup', () => {
       events: [orderCreatedV1],
     });
 
-    expect(ordersGroup).not.toHaveProperty('endpoints');
+    expect(ordersGroup).toStrictEqual({
+      kind: 'group',
+      name: 'orders',
+      description: 'Order lifecycle',
+      events: [orderCreatedV1],
+    });
   });
 
   test('a Group that lists nothing is a type error', () => {

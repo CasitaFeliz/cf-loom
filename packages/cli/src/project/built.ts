@@ -89,7 +89,8 @@ export type Declared =
 
 /**
  * Validates a Root and declares its Snapshot in canonical order, the one way every Snapshot is
- * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules.
+ * declared; a Snapshot nested deeper than a Snapshot may be breaks the Contract's rules, judged
+ * before any read of its whole, so a Qualifier that holds itself is refused, never read forever.
  */
 export function declaredOf(declaring: DeclaredRoot): Declared {
   const validated = validatedOf(declaring);
@@ -99,11 +100,12 @@ export function declaredOf(declaring: DeclaredRoot): Declared {
     case 'invalid':
       return invalid(validated.failures);
     case 'valid': {
-      const snapshot = canonicalSnapshotOf(snapshotOf(validated));
-      const tooDeep = tooDeepOf(snapshot);
+      const declared = snapshotOf(validated);
+      const tooDeep = tooDeepOf(declared);
       if (tooDeep !== undefined) {
         return tooDeep;
       }
+      const snapshot = canonicalSnapshotOf(declared);
       const text = canonicalTextOf(snapshot);
       return { kind: 'declared', validated, snapshot, text, bytes: Buffer.from(text, 'utf8') };
     }

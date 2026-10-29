@@ -1,33 +1,43 @@
 import type * as core from 'zod/v4/core';
-import { isUnnamedCycle } from './not-allowed.ts';
+import type { NotAllowed } from './nodes.ts';
+import { isUnnamedCycle, isWrittenTooDeep } from './not-allowed.ts';
 import { type Failed, type FailureTree, isFailureTree } from './walked.ts';
 
-/** The failing schemas a walk answers from memory, and for how long each is kept. */
+/**
+ * Two facts of a walk's failures: the failing schemas it answers from memory, each for as long as
+ * it is kept, and whether a failure holds a schema refused for its depth.
+ */
 export type Reported = {
   readonly report: (schema: core.$ZodType, failure: Failed) => void;
   readonly failureOf: (schema: core.$ZodType) => Failed | undefined;
   /** Forgets the failures each declaration walks afresh, and returns their schemas. */
   readonly forgetInDeclaration: () => readonly core.$ZodType[];
+  /** Whether a failure holds a schema refused for its depth, so its walk did not see all it reaches. */
+  readonly holdsWrittenTooDeep: (tree: FailureTree) => boolean;
 };
 
 type State = {
   readonly reportedBySchema: Map<core.$ZodType, Failed>;
   readonly reportedInDeclaration: Map<core.$ZodType, Failed>;
-  readonly holdsUnnamedCycleByTree: Map<FailureTree, boolean>;
+  readonly holdsUnnamedCycle: (tree: FailureTree) => boolean;
 };
 
-/** The failures of one walk, which tells a failure that holds a cycle no id names once, when it is reported. */
+/**
+ * The failures of one walk, which tells once for each failure tree whether it holds a cycle no id
+ * names, and whether it holds a schema refused for its depth.
+ */
 export function startReported(): Reported {
   const state: State = {
     reportedBySchema: new Map(),
     reportedInDeclaration: new Map(),
-    holdsUnnamedCycleByTree: new Map(),
+    holdsUnnamedCycle: holdingReaderOf(isUnnamedCycle),
   };
   return {
     report: (schema, failure) => report(state, schema, failure),
     failureOf: (schema) =>
       state.reportedBySchema.get(schema) ?? state.reportedInDeclaration.get(schema),
     forgetInDeclaration: () => forgetInDeclaration(state),
+    holdsWrittenTooDeep: holdingReaderOf(isWrittenTooDeep),
   };
 }
 
@@ -38,7 +48,7 @@ export function startReported(): Reported {
  * def fails, answering from memory until the declaration map is cleared before any re-walk.
  */
 function report(state: State, schema: core.$ZodType, failure: Failed): void {
-  const kept = holdsUnnamedCycle(state, failure.tree)
+  const kept = state.holdsUnnamedCycle(failure.tree)
     ? state.reportedInDeclaration
     : state.reportedBySchema;
   kept.set(schema, failure);
@@ -50,9 +60,20 @@ function forgetInDeclaration(state: State): readonly core.$ZodType[] {
   return forgotten;
 }
 
-/** Whether the tree holds a refusal of a cycle no id names, told once for each tree. */
-function holdsUnnamedCycle(state: State, tree: FailureTree): boolean {
-  const known = state.holdsUnnamedCycleByTree;
+/**
+ * Whether a failure tree holds a refusal `isHeld` picks, read with an explicit stack and told once
+ * for each tree, since a failing def's tree is shared by every failure that holds it.
+ */
+function holdingReaderOf(isHeld: (refusal: NotAllowed) => boolean): (tree: FailureTree) => boolean {
+  const known = new Map<FailureTree, boolean>();
+  return (tree) => holds(tree, isHeld, known);
+}
+
+function holds(
+  tree: FailureTree,
+  isHeld: (refusal: NotAllowed) => boolean,
+  known: Map<FailureTree, boolean>,
+): boolean {
   const answered = known.get(tree);
   if (answered !== undefined) {
     return answered;
@@ -65,14 +86,14 @@ function holdsUnnamedCycle(state: State, tree: FailureTree): boolean {
       open.pop();
       continue;
     }
-    const holds = isFailureTree(part) ? known.get(part) : isUnnamedCycle(part);
-    if (holds === true) {
+    const isFound = isFailureTree(part) ? known.get(part) : isHeld(part);
+    if (isFound === true) {
       for (const holder of open) {
         known.set(holder.tree, true);
       }
       return true;
     }
-    if (holds === undefined && isFailureTree(part)) {
+    if (isFound === undefined && isFailureTree(part)) {
       open.push({ tree: part, next: 0 });
     }
   }
