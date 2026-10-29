@@ -1,12 +1,14 @@
-import { isLive, type Lifecycle } from '../declarations/index.ts';
+import type { Lifecycle } from '../declarations/index.ts';
 import type { ServiceSnapshot } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import {
-  durableNameOf,
+  brokerNeedsOf,
+  type NeededDurableConsumer,
   prefixedNameOf,
   prefixedSubjectOf,
+  type RoutedMessage,
+  type RoutedSubscription,
   streamNameOf,
-  subjectOf,
 } from '../wire/index.ts';
 import { nameAndVersionOf, readEventReference } from '../written/index.ts';
 
@@ -30,42 +32,53 @@ export type BrokerPlan = {
   readonly durableConsumers: Readonly<Record<string, BrokerPlanDurableConsumer>>;
 };
 
-type LiveMessage<Kind extends 'event' | 'command'> = {
-  readonly kind: Kind;
-  readonly name: string;
-  readonly version: number;
-};
-
-type NamedDurableConsumer = readonly [name: string, durableConsumer: BrokerPlanDurableConsumer];
-
 /**
  * The broker plan of a Service's Snapshot under a prefix `isBrokerPrefix` accepts: its stream when a
  * Message Version of its own is not Retired, and the Durable consumer of each Subscription and live Command Version.
  */
 export function brokerPlanOf(snapshot: ServiceSnapshot, prefix: string | null): BrokerPlan {
-  const durableConsumers = [
-    ...commandDurableConsumersOf(snapshot, prefix),
-    ...subscriptionDurableConsumersOf(snapshot, prefix),
-  ].toSorted(([left], [right]) => byCodePoint(left, right));
+  const service = snapshot.name;
+  const needs = brokerNeedsOf(
+    service,
+    [...messagesOf('event', snapshot.events), ...messagesOf('command', snapshot.commands)],
+    Object.entries(snapshot.subscriptions).map(subscriptionOf),
+  );
+  const durableConsumers = needs.durableConsumers
+    .map((need) => namedDurableConsumerOf(service, prefix, need))
+    .toSorted(([left], [right]) => byCodePoint(left, right));
   return {
     prefix,
-    streams: streamsOf(snapshot, prefix),
+    streams: streamsOf(service, needs.streamSubjects, prefix),
     durableConsumers: Object.fromEntries(durableConsumers),
   };
 }
 
-function streamsOf(snapshot: ServiceSnapshot, prefix: string | null): BrokerPlan['streams'] {
-  const service = snapshot.name;
-  const messages = [
-    ...liveMessagesOf('event', snapshot.events),
-    ...liveMessagesOf('command', snapshot.commands),
+type NamedDurableConsumer = readonly [name: string, durableConsumer: BrokerPlanDurableConsumer];
+
+function namedDurableConsumerOf(
+  service: string,
+  prefix: string | null,
+  need: NeededDurableConsumer<unknown>,
+): NamedDurableConsumer {
+  return [
+    prefixedNameOf(prefix, need.durable),
+    {
+      service,
+      stream: prefixedNameOf(prefix, need.stream),
+      subject: prefixedSubjectOf(prefix, need.subject),
+    },
   ];
-  const subjects = messages.map((message) =>
-    prefixedSubjectOf(prefix, subjectOf(service, message)),
-  );
-  if (subjects.length === 0) {
+}
+
+function streamsOf(
+  service: string,
+  streamSubjects: readonly string[],
+  prefix: string | null,
+): BrokerPlan['streams'] {
+  if (streamSubjects.length === 0) {
     return {};
   }
+  const subjects = streamSubjects.map((subject) => prefixedSubjectOf(prefix, subject));
   return {
     [prefixedNameOf(prefix, streamNameOf(service))]: {
       service,
@@ -74,45 +87,25 @@ function streamsOf(snapshot: ServiceSnapshot, prefix: string | null): BrokerPlan
   };
 }
 
-function liveMessagesOf<Kind extends 'event' | 'command'>(
-  kind: Kind,
+function messagesOf(
+  kind: 'event' | 'command',
   messages: Readonly<Record<string, { readonly lifecycle: Lifecycle }>>,
-): readonly LiveMessage<Kind>[] {
-  return Object.entries(messages)
-    .filter(([, message]) => isLive(message))
-    .map(([identity]) => ({ kind, ...nameAndVersionOf(identity) }));
+): readonly RoutedMessage[] {
+  return Object.entries(messages).map(([identity, { lifecycle }]) => ({
+    kind,
+    ...nameAndVersionOf(identity),
+    lifecycle,
+  }));
 }
 
-function commandDurableConsumersOf(
-  snapshot: ServiceSnapshot,
-  prefix: string | null,
-): NamedDurableConsumer[] {
-  const service = snapshot.name;
-  const stream = prefixedNameOf(prefix, streamNameOf(service));
-  return liveMessagesOf('command', snapshot.commands).map((command) => [
-    prefixedNameOf(prefix, durableNameOf(service, command)),
-    { service, stream, subject: prefixedSubjectOf(prefix, subjectOf(service, command)) },
-  ]);
-}
-
-function subscriptionDurableConsumersOf(
-  snapshot: ServiceSnapshot,
-  prefix: string | null,
-): NamedDurableConsumer[] {
-  const service = snapshot.name;
-  return Object.entries(snapshot.subscriptions).map(([name, { event }]) => {
-    const reference = readEventReference(event);
-    if (reference === undefined) {
-      throw new Error(`${event} is no Subscription’s Event: a bug.`);
-    }
-    const { service: provider, ...version } = reference;
-    return [
-      prefixedNameOf(prefix, durableNameOf(service, { kind: 'subscription', name })),
-      {
-        service,
-        stream: prefixedNameOf(prefix, streamNameOf(provider)),
-        subject: prefixedSubjectOf(prefix, subjectOf(provider, { kind: 'event', ...version })),
-      },
-    ];
-  });
+function subscriptionOf([name, { event }]: readonly [
+  string,
+  { readonly event: string },
+]): RoutedSubscription {
+  const reference = readEventReference(event);
+  if (reference === undefined) {
+    throw new Error(`${event} is no Subscription’s Event: a bug.`);
+  }
+  const { service: provider, ...version } = reference;
+  return { name, provider, event: version };
 }

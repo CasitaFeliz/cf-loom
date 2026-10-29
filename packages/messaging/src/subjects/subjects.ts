@@ -1,13 +1,15 @@
 import type { Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
 import {
+  brokerNeedsOf,
   codeNameOf,
   commandsOf,
-  durableNameOf,
   eventServiceOf,
   eventsOf,
   isLive,
   isServiceContract,
   lifecycleOf,
+  type NeededDurableConsumer,
+  type RoutedSubscription,
   streamNameOf,
   subjectOf,
   subscriptionsOf,
@@ -46,18 +48,17 @@ export function subjectsOf(root: unknown): Subjects {
   const service = contract.name;
   const events = eventsOf(contract).filter(isLive).toSorted(byVersion);
   const commands = commandsOf(contract);
+  const subscriptions = subscriptionsOf(contract).map((subscription) =>
+    routeOf(contract, subscription),
+  );
+  const { durableConsumers } = brokerNeedsOf(service, commands, subscriptions);
   const active = commands.filter((command) => lifecycleOf(command) === 'active');
   return {
     service,
     stream: streamNameOf(service),
     published: events.map((event) => ({ message: event, subject: subjectOf(service, event) })),
     sent: active.map((command) => ({ message: command, subject: subjectOf(service, command) })),
-    consumed: [
-      ...commands.filter(isLive).map((command) => consumedCommandOf(service, command)),
-      ...subscriptionsOf(contract).map((subscription) =>
-        consumedSubscriptionOf(contract, subscription),
-      ),
-    ],
+    consumed: durableConsumers.map(consumedOf),
   };
 }
 
@@ -90,27 +91,37 @@ function byVersion(left: Event, right: Event): number {
   return left.version - right.version;
 }
 
-function consumedCommandOf(service: string, command: Command): Consumed {
-  return {
-    declaration: command,
-    at: { map: 'commands', key: codeNameOf(command) },
-    subject: subjectOf(service, command),
-    stream: streamNameOf(service),
-    durable: durableNameOf(service, command),
-  };
-}
+/** A Subscription with the Provider of its Event, as the Broker routes it. */
+type SubscriptionRoute = RoutedSubscription & {
+  readonly kind: 'subscription';
+  readonly declaration: Subscription;
+};
 
-function consumedSubscriptionOf(contract: ServiceContract, subscription: Subscription): Consumed {
+function routeOf(contract: ServiceContract, subscription: Subscription): SubscriptionRoute {
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
     const message = `${subscription.name} subscribes to an Event neither a Group lists nor another Service's Contract Package exports`;
     throw new Error(message);
   }
   return {
+    kind: 'subscription',
+    name: subscription.name,
+    provider,
+    event: subscription.event,
     declaration: subscription,
-    at: { map: 'subscriptions', key: subscription.name },
-    subject: subjectOf(provider, subscription.event),
-    stream: streamNameOf(provider),
-    durable: durableNameOf(contract.name, subscription),
   };
+}
+
+function consumedOf(need: NeededDurableConsumer<Command | SubscriptionRoute>): Consumed {
+  const { from, ...broker } = need;
+  switch (from.kind) {
+    case 'command':
+      return { declaration: from, at: { map: 'commands', key: codeNameOf(from) }, ...broker };
+    case 'subscription':
+      return {
+        declaration: from.declaration,
+        at: { map: 'subscriptions', key: from.name },
+        ...broker,
+      };
+  }
 }
