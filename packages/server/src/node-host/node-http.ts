@@ -9,7 +9,12 @@ import type { Http } from '@cf-loom/contract';
 import { reservedResponseOf } from '@cf-loom/contract/internal';
 import { faultLineOf } from '@cf-loom/handlers/internal';
 import { answeredOf } from '../answering/index.ts';
-import { closedSignalOf, incomingRequestOf, incomingUrlOf } from '../incoming/index.ts';
+import {
+  closedSignalOf,
+  incomingRequestOf,
+  incomingUrlOf,
+  unreadableResponse,
+} from '../incoming/index.ts';
 import { respondedWith } from '../outgoing/index.ts';
 
 /** The line a handler that rejects is logged on. */
@@ -32,13 +37,13 @@ export function nodeHttp(http: Http): Server {
 
 /** Answers an incoming message with what `http` returns, written as `outgoing` does. */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const response = await answeredFor(http, incoming, closedSignalOf(outgoing));
-  await respondedWith(incoming, outgoing, response);
+  const answer = answeredFor(http, incoming, closedSignalOf(outgoing));
+  await respondedWith({ incoming, outgoing }, answer);
 }
 
 /**
  * What answers an incoming message: `http`'s Response, `NO_SUCH_ENDPOINT` for a method a `Request`
- * refuses, which no Endpoint can have, and 400 when its target or its `Host` names no URL.
+ * refuses, which no Endpoint can have, and 400 for one that cannot be read.
  */
 async function answeredFor(
   http: Http,
@@ -46,17 +51,12 @@ async function answeredFor(
   signal: AbortSignal,
 ): Promise<Response> {
   const read = incomingUrlOf(incoming);
-  switch (read.kind) {
-    case 'refused-method':
-      return reservedResponseOf('NO_SUCH_ENDPOINT');
-    case 'unreadable':
-      return new Response(null, { status: 400 });
-    case 'url': {
-      const request = incomingRequestOf(incoming, read.url, signal);
-      if (request === undefined) {
-        return new Response(null, { status: 400 });
-      }
-      return await answeredOf(http, request, rejectedLine);
-    }
+  if (read.kind === 'refused-method') {
+    return reservedResponseOf('NO_SUCH_ENDPOINT');
   }
+  const request = read.kind === 'url' ? incomingRequestOf(incoming, read.url, signal) : undefined;
+  if (request === undefined) {
+    return unreadableResponse();
+  }
+  return await answeredOf(http, request, rejectedLine);
 }

@@ -42,7 +42,7 @@ export async function rawFor(url: string, text: string, ms: number) {
 
 /** Every status line in a raw answer, one for each response of a pipelined connection. */
 export function statusLinesOf(received: string): string[] {
-  return received.match(/HTTP\/1\.1 \d+ [^\r\n]+/g) ?? [];
+  return received.match(/^HTTP\/1\.1 \d+ .+$/gm) ?? [];
 }
 
 /** The first status line of a raw answer. */

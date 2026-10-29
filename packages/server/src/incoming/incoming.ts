@@ -13,10 +13,7 @@ export type IncomingUrl =
   | { readonly kind: 'refused-method' }
   | { readonly kind: 'unreadable' };
 
-/**
- * The URL of an incoming message by one set of rules for every host, or why it has none: a method
- * a `Request` refuses, which no Endpoint can have, or a target or `Host` that names no URL.
- */
+/** The URL of an incoming message by one set of rules for every host, or why it has none. */
 export function incomingUrlOf(incoming: IncomingMessage): IncomingUrl {
   if (refusedMethods.includes((incoming.method ?? '').toUpperCase())) {
     return { kind: 'refused-method' };
@@ -39,6 +36,11 @@ export function incomingRequestOf(
   } catch {
     return undefined;
   }
+}
+
+/** What answers a request that cannot be read as a web-standard one: 400. */
+export function unreadableResponse(): Response {
+  return new Response(null, { status: 400 });
 }
 
 /** A signal that aborts when the response closes before it finished, as when the Caller goes away. */

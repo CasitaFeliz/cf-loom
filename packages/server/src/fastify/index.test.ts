@@ -668,7 +668,7 @@ describe('fastifyServe', () => {
       expect(uncaught).toEqual([]);
     });
 
-    test('with handlerTimeout shorter than the Handler, the Caller receives the Endpoint’s answer, never Fastify’s 503, and the process lives on', async () => {
+    test('with handlerTimeout shorter than the Handler, the Caller receives the Endpoint’s answer, never Fastify’s 503: once taken, the request is no longer Fastify’s', async () => {
       const slow = handle(getOrder, async ({ params }) => {
         await waitFor(250);
         return success(getOrder, { id: params.orderId });
@@ -708,33 +708,43 @@ describe('fastifyServe', () => {
       expect(statusLineOf(received)).toBe('HTTP/1.1 200 OK');
       expect(bodyOf(received).length).toBe(JSON.stringify({ data: bigData }).length);
     });
+  });
 
-    test('a Caller that goes away while an app’s async onSend hook would have run for an app route does not affect an Endpoint answered on the same app', async () => {
-      const sends: string[] = [];
-      const slow = handle(getOrder, async ({ params }) => {
-        await waitFor(100);
-        return success(getOrder, { id: params.orderId });
-      });
+  describe('when something fails once a request is taken', () => {
+    test('a header an earlier app hook set that Node refuses destroys the socket for an Endpoint, and the app’s routes keep answering', async () => {
       const { url } = await served({
-        handlers: withEndpoints({ getOrder: slow }),
         before: (app) =>
-          app.addHook('onSend', async (request) => {
-            sends.push(request.url);
-            await waitFor(50);
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('x-bad', 'a\u0001b');
+            }
           }),
       });
 
       const uncaught = await uncaughtDuring(async () => {
-        const socket = connect(Number(new URL(url).port), '127.0.0.1');
-        socket.on('error', () => undefined);
-        socket.write(requestText('GET', '/orders/o-1'));
-        await waitFor(30);
-        socket.destroy();
-        await waitFor(300);
+        const endpoint = await rawFor(url, requestText('GET', '/orders/o-1'), 1000);
+        expect(endpoint).toEqual({ received: '', closed: true });
+      });
+      const own = await fetch(`${url}/healthz`);
+
+      expect(uncaught).toEqual([]);
+      expect(await own.text()).toBe('ok');
+    });
+
+    test('a content-length an earlier app hook set never reaches the Caller, since the body is framed by Node', async () => {
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (_request, reply) => {
+            reply.header('content-length', '5');
+          }),
       });
 
-      expect(sends).toEqual([]);
-      expect(uncaught).toEqual([]);
+      const answer = await raw(url, requestText('GET', '/orders/o-1'));
+
+      const [head = ''] = answer.split('\r\n\r\n');
+      expect(head).not.toMatch(/^content-length:/im);
+      expect(head).toMatch(/^transfer-encoding: chunked$/im);
+      expect(bodyOf(answer)).toBe('{"id":"o-1"}');
     });
   });
 

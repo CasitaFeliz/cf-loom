@@ -1,38 +1,44 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+/** A request taken from its host: the messages to answer it on, and the headers the host set before. */
+export type Taken = {
+  readonly incoming: IncomingMessage;
+  readonly outgoing: ServerResponse;
+  /** The host's headers, which the Response's replace; its `content-length` frames a body that is not the Response's, so it is dropped. */
+  readonly hostHeaders?: Readonly<Record<string, number | string | string[] | undefined>>;
+};
+
+/** The reader of a Response's body, whose chunks are bytes. */
+type BodyReader = ReadableStreamDefaultReader<Uint8Array>;
+
 /**
- * Writes a `Response` to the outgoing message: its status and headers, each replacing one the host
- * set before, and its body. A body that ends in its first chunk is sent in one piece with its
- * `content-length`; one that streams, as it streams. A response sent before the request's body
- * arrived whole closes the connection, and a body that fails while written destroys the socket.
+ * Writes the Response `answer` resolves to onto a taken request, and destroys its socket if
+ * anything fails on the way, so such a request never crashes the process or leaves its Caller
+ * waiting.
  */
-export async function respondedWith(
-  incoming: IncomingMessage,
-  outgoing: ServerResponse,
-  response: Response,
-): Promise<void> {
-  outgoing.statusCode = response.status;
-  setHeadersOf(outgoing, response.headers);
-  if (!incoming.complete) {
-    outgoing.setHeader('connection', 'close');
-  }
-  if (response.body === null) {
-    outgoing.end();
-    return;
-  }
-  const reader = response.body.getReader();
-  outgoing.once('close', () => void reader.cancel().catch(() => undefined));
+export async function respondedWith(taken: Taken, answer: Promise<Response>): Promise<void> {
+  const { outgoing } = taken;
   try {
+    const response = await answer;
+    const reader = response.body?.getReader();
+    outgoing.once('close', () => void reader?.cancel().catch(() => undefined));
+    outgoing.strictContentLength = true;
+    headWritten(taken, response);
     await bodyWritten(outgoing, reader);
   } catch {
     outgoing.destroy();
   }
 }
 
-/** Writes each header: the first value of a name replaces the one the host set, later ones are added. */
-function setHeadersOf(outgoing: ServerResponse, headers: Headers) {
+function headWritten({ incoming, outgoing, hostHeaders = {} }: Taken, response: Response) {
+  outgoing.statusCode = response.status;
+  for (const [name, value] of Object.entries(hostHeaders)) {
+    if (value !== undefined && name !== 'content-length') {
+      outgoing.setHeader(name, value);
+    }
+  }
   const named = new Set<string>();
-  for (const [name, value] of headers) {
+  for (const [name, value] of response.headers) {
     if (named.has(name)) {
       outgoing.appendHeader(name, value);
     } else {
@@ -40,43 +46,17 @@ function setHeadersOf(outgoing: ServerResponse, headers: Headers) {
       named.add(name);
     }
   }
+  if (!incoming.complete) {
+    outgoing.setHeader('connection', 'close');
+  }
 }
 
-/** A chunk read from a body, or its end. */
-type Read = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']>>;
-
-/** What a body streams to `outgoing`, or sends in one piece when its first chunk is also its last. */
-async function bodyWritten(
-  outgoing: ServerResponse,
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-) {
-  const first = await reader.read();
-  if (first.done) {
+async function bodyWritten(outgoing: ServerResponse, reader: BodyReader | undefined) {
+  if (reader === undefined) {
     outgoing.end();
     return;
   }
-  const following = reader.read();
-  const second = await Promise.race([following, nextTurn()]);
-  if (second?.done) {
-    outgoing.setHeader('content-length', first.value.byteLength);
-    outgoing.end(first.value);
-    return;
-  }
-  await accepted(outgoing, first.value);
-  await streamed(outgoing, reader, second ?? following);
-}
-
-/** The end of this turn of the event loop, by which a body built in memory has produced its end. */
-function nextTurn(): Promise<undefined> {
-  return new Promise((resolve) => setImmediate(() => resolve(undefined)));
-}
-
-async function streamed(
-  outgoing: ServerResponse,
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  following: Read | Promise<Read>,
-) {
-  for (let read = await following; !read.done; read = await reader.read()) {
+  for (let read = await reader.read(); !read.done; read = await reader.read()) {
     await accepted(outgoing, read.value);
   }
   outgoing.end();

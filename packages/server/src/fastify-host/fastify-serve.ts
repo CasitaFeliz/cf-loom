@@ -1,5 +1,5 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ServiceContract } from '@cf-loom/contract';
+import type { IncomingMessage } from 'node:http';
+import type { Http, ServiceContract } from '@cf-loom/contract';
 import { allowedMethodsOf, type Closed, type Matchable } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
@@ -9,15 +9,18 @@ import {
   type Serving,
   servingOf,
 } from '../answering/index.ts';
-import { closedSignalOf, incomingRequestOf, incomingUrlOf } from '../incoming/index.ts';
-import { respondedWith } from '../outgoing/index.ts';
+import {
+  closedSignalOf,
+  incomingRequestOf,
+  incomingUrlOf,
+  unreadableResponse,
+} from '../incoming/index.ts';
+import { respondedWith, type Taken } from '../outgoing/index.ts';
 
 /**
- * A Fastify plugin that answers a Contract's Endpoints with their Handlers inside the app, beside
- * the app's own routes: a request whose method and path a declared Endpoint has, Retired ones
- * included, is taken from Fastify and answered as `serve` answers it; every other request goes on
- * to the app. Takes what `serve` takes but `fallback`, and runs `serve`'s startup checks when
- * called. Registering it with a prefix, inside an encapsulated plugin, or on an HTTP/2 app throws.
+ * A Fastify plugin that answers a Contract's Endpoints with their Handlers inside the app, taking
+ * from Fastify every request whose method and path a declared Endpoint has and leaving the rest
+ * to the app's own routes. It takes what `serve` takes but `fallback`.
  */
 export function fastifyServe<
   const C extends ServiceContract,
@@ -76,12 +79,14 @@ async function answeredWhenServed(serving: Serving, request: FastifyRequest, rep
     return;
   }
   reply.hijack();
-  const outgoing = reply.raw;
-  setHeadersOfApp(outgoing, reply);
-  const asked = incomingRequestOf(request.raw, url, closedSignalOf(outgoing));
-  const response =
-    asked === undefined ? new Response(null, { status: 400 }) : await serving.http(asked);
-  await respondedWith(request.raw, outgoing, response);
+  const taken = { incoming: request.raw, outgoing: reply.raw, hostHeaders: reply.getHeaders() };
+  await respondedWith(taken, answeredFor(serving.http, taken, url));
+}
+
+/** What answers a request taken from Fastify: `serve`'s Response, or 400 when no `Request` can be built. */
+async function answeredFor(http: Http, { incoming, outgoing }: Taken, url: URL): Promise<Response> {
+  const asked = incomingRequestOf(incoming, url, closedSignalOf(outgoing));
+  return asked === undefined ? unreadableResponse() : await http(asked);
 }
 
 /** The URL of a request whose method and path a declared Endpoint has, or none. */
@@ -92,13 +97,4 @@ function servedUrlOf(endpoints: readonly Matchable[], incoming: IncomingMessage)
   }
   const methods = allowedMethodsOf(endpoints, { url: read.url.href });
   return methods.includes(incoming.method ?? '') ? read.url : undefined;
-}
-
-/** Writes the headers the app's earlier hooks set on the reply, which a hijacked reply no longer sends. */
-function setHeadersOfApp(outgoing: ServerResponse, reply: FastifyReply) {
-  for (const [name, value] of Object.entries(reply.getHeaders())) {
-    if (value !== undefined) {
-      outgoing.setHeader(name, value);
-    }
-  }
 }
