@@ -10,8 +10,8 @@ export type Frozen<Value> = Value extends object
   ? { readonly [Key in keyof Value]: Frozen<Value[Key]> }
   : Value;
 
-/** A request a fake answered with the invalid-input Rejection: the Issues it answered. */
-export type InvalidCall = { readonly issues: InvalidInputBody['issues'] };
+/** A request a fake answered with the invalid-input Rejection: the body it answered. */
+export type InvalidCall = InvalidInputBody;
 
 /** A request's place among its Endpoint's calls, kept from its arrival, filled once it is read. */
 export type CallSlot = { readonly fill: (reading: Reading) => void };
@@ -75,5 +75,5 @@ function inputOf(reading: InputReading): unknown {
 }
 
 function invalidCallOf(reading: InvalidReading): InvalidCall {
-  return frozenCopyOf({ issues: invalidInputBodyOf(reading.issues).issues }) as InvalidCall;
+  return frozenCopyOf(invalidInputBodyOf(reading.issues)) as InvalidCall;
 }

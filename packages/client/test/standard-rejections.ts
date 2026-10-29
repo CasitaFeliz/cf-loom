@@ -21,6 +21,7 @@ export const invalidInputBody = z.object({
       path: z.array(z.union([z.string(), z.number()])),
     }),
   ),
+  omittedIssues: z.int().min(0),
 });
 
 const defaults = {

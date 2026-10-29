@@ -182,6 +182,7 @@ describe('serve: Guards', () => {
               message: expect.any(String),
             },
           ],
+          omittedIssues: 0,
         },
       },
     });

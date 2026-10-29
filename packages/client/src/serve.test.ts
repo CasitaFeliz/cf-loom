@@ -541,3 +541,63 @@ describe('serve in the same process', () => {
     });
   });
 });
+
+describe('the invalid-input body, from the client unsent and from serve', () => {
+  const tagOrders = defineEndpoint({
+    name: 'tagOrders',
+    method: 'POST',
+    path: '/orders/tags',
+    visibility: 'public',
+    description: 'Tags orders by a key',
+    input: { body: z.record(z.string(), z.array(z.string())) },
+    success: { status: 204 },
+  });
+  const tagging = contractPackageOf({ tagOrders }, defaultStandards);
+  const tagger = defineService({
+    name: 'orders-service',
+    groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [tagOrders] })],
+  });
+  const http = serve(
+    tagger,
+    { endpoints: { tagOrders: handle(tagOrders, () => success(tagOrders)) }, guards: {} },
+    {},
+  );
+
+  /** The invalid-input body the client answers without sending, and the one serve answers. */
+  async function bodiesOf(body: Record<string, unknown[]>) {
+    const tags = client(defineDependency({ endpoints: [tagging.endpoints.tagOrders] }), {
+      baseUrl: 'http://orders.test',
+    });
+    const unsent = await tags.tagOrders({ body: body as Record<string, string[]> });
+    const answered = await http(
+      new Request('http://orders.test/orders/tags', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    );
+    const { rejection } = (await answered.json()) as { rejection: { body: unknown } };
+    return {
+      client: unsent.kind === 'rejection' && unsent.code === 'INVALID_INPUT' ? unsent.body : unsent,
+      serve: rejection.body,
+    };
+  }
+
+  test('an Input of 150 invalid items gets the same first 100 Issues and count from both', async () => {
+    const body = { k: Array.from({ length: 150 }, () => 1) };
+
+    const bodies = await bodiesOf(body);
+
+    expect(bodies.client).toEqual(bodies.serve);
+    expect(bodies.serve).toMatchObject({ omittedIssues: 50 });
+  });
+
+  test('an Input with a 20 kB record key over 1,000 invalid items gets the same Issues within 64 KiB from both', async () => {
+    const body = { ['k'.repeat(20_000)]: Array.from({ length: 1000 }, () => 1) };
+
+    const bodies = await bodiesOf(body);
+
+    expect(bodies.client).toEqual(bodies.serve);
+    expect(bodies.serve).toMatchObject({ omittedIssues: 997 });
+  });
+});

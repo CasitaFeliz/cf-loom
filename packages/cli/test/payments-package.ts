@@ -44,7 +44,7 @@ export const paymentsSource = `${[
     "in: openEnumReader(['body', 'headers', 'params', 'query'])",
     'message: z.string()',
     'path: z.array(z.union([z.string(), z.number()]))',
-  ].join(', ')} })) }),`,
+  ].join(', ')} })), omittedIssues: z.int().min(0) }),`,
   '  },',
   "  notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },",
   "  notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented' },",

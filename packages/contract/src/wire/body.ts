@@ -132,7 +132,7 @@ function joined(chunks: readonly Uint8Array[], length: number): Uint8Array {
   return bytes;
 }
 
-/** A body's UTF-8 JSON bytes, as a Message travels. */
+/** A value's UTF-8 JSON bytes, as a body travels. */
 export function jsonBytesOf(value: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
 }

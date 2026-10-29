@@ -52,13 +52,23 @@ const tagOrders = defineEndpoint({
   success: { status: 204 },
 });
 
+const tagOrdersByKey = defineEndpoint({
+  name: 'tagOrdersByKey',
+  method: 'POST',
+  path: '/orders/tags-by-key',
+  visibility: 'public',
+  description: 'Tags orders by a key',
+  input: { body: z.record(z.string(), z.array(z.string())) },
+  success: { status: 204 },
+});
+
 const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [createOrder, deleteOrder, nest, tagOrders],
+      endpoints: [createOrder, deleteOrder, nest, tagOrders, tagOrdersByKey],
     }),
   ],
 });
@@ -69,6 +79,7 @@ const handlers = {
     deleteOrder: handle(deleteOrder, () => success(deleteOrder)),
     nest: handle(nest, () => success(nest)),
     tagOrders: handle(tagOrders, () => success(tagOrders)),
+    tagOrdersByKey: handle(tagOrdersByKey, () => success(tagOrdersByKey)),
   },
   guards: {},
 };
@@ -88,6 +99,15 @@ function post(
 async function issuesOf(response: Response): Promise<unknown> {
   const answered = (await response.json()) as { rejection: { body: { issues: unknown } } };
   return answered.rejection.body.issues;
+}
+
+async function invalidBodyOf(
+  response: Response,
+): Promise<{ issues: { path: unknown[] }[]; omittedIssues: number }> {
+  const answered = (await response.json()) as {
+    rejection: { body: { issues: { path: unknown[] }[]; omittedIssues: number } };
+  };
+  return answered.rejection.body;
 }
 
 function malformed(message: string) {
@@ -112,7 +132,7 @@ describe('serve: the body', () => {
     ]);
   });
 
-  test('a body whose 300,000 items each break its schema is invalid input, one Issue per item', async () => {
+  test('a body whose 300,000 items each break its schema is answered with its first 100 Issues and counts the others', async () => {
     const items = JSON.stringify(Array.from({ length: 300_000 }, () => 1));
 
     const response = await http(
@@ -120,15 +140,40 @@ describe('serve: the body', () => {
     );
 
     expect(response.status).toBe(400);
-    const issues = (await issuesOf(response)) as { path: unknown[] }[];
-    expect(issues).toHaveLength(300_000);
-    expect(issues[0]).toEqual({
-      in: 'body',
-      path: [0],
-      code: 'invalid_type',
-      message: expect.any(String),
-    });
-    expect(issues[299_999]?.path).toEqual([299_999]);
+    const body = await invalidBodyOf(response);
+    expect(body.issues.map((issue) => issue.path)).toEqual(
+      Array.from({ length: 100 }, (_, index) => [index]),
+    );
+    expect(body.omittedIssues).toBe(299_900);
+  });
+
+  test('one 100 kB record key over 1,000 invalid items is answered within 64 KiB, every Issue counted, none listed', async () => {
+    const byKey = JSON.stringify({ ['k'.repeat(100_000)]: Array.from({ length: 1000 }, () => 1) });
+
+    const response = await http(
+      new Request('http://test/orders/tags-by-key', { method: 'POST', headers: json, body: byKey }),
+    );
+
+    const text = await response.text();
+    expect(new TextEncoder().encode(text).length).toBeLessThan(65_536);
+    expect(JSON.parse(text).rejection.body).toEqual({ issues: [], omittedIssues: 1000 });
+  });
+
+  test('a 20 kB record key over 1,000 invalid items lists the Issues that fit in 64 KiB and counts the others', async () => {
+    const key = 'k'.repeat(20_000);
+    const byKey = JSON.stringify({ [key]: Array.from({ length: 1000 }, () => 1) });
+
+    const response = await http(
+      new Request('http://test/orders/tags-by-key', { method: 'POST', headers: json, body: byKey }),
+    );
+
+    const body = await invalidBodyOf(response);
+    expect(body.issues.map((issue) => issue.path)).toEqual([
+      [key, 0],
+      [key, 1],
+      [key, 2],
+    ]);
+    expect(body.omittedIssues).toBe(997);
   });
 
   test('a content type with parameters still names JSON', async () => {
