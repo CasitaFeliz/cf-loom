@@ -337,6 +337,7 @@ describe('serve: a Rejection', () => {
           issues: [
             { in: 'params', path: ['orderId'], code: 'too_small', message: expect.any(String) },
           ],
+          omittedIssues: 0,
         },
       },
     });

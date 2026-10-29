@@ -771,6 +771,32 @@ describe('compatibilityReportOf, the invalid-input body a Service generates', ()
       }),
     ]);
   });
+
+  test('a later cf-loom adding the omitted count to it is Additive: Callers ignore a field they do not know', () => {
+    const invalidInput = 'INVALID_INPUT';
+    const generated = generatedCodeOf(invalidInput);
+    const baseline = aBaseline({
+      ...publishedAnswering(invalidInput),
+      codes: { [invalidInput]: withoutOmittedIssues(generated) },
+    });
+    const proposed = aProposed({
+      ...answering(invalidInput),
+      codes: { [invalidInput]: generated },
+    });
+
+    const changes = reportOf(baseline, proposed).changes;
+
+    expect(changes).toEqual([
+      expect.objectContaining({
+        site: codeSite(invalidInput, 'public'),
+        difference: expect.objectContaining({
+          shape: expect.objectContaining({ kind: 'field-added', required: true }),
+        }),
+        class: 'additive',
+        verdict: 'allowed',
+      }),
+    ]);
+  });
 });
 
 function generatedCodeOf(code: string): CodeSnapshot {
@@ -794,6 +820,16 @@ function generatedCodeOf(code: string): CodeSnapshot {
     throw new Error(`The fixture holds no ${code}`);
   }
   return generated;
+}
+
+function withoutOmittedIssues(code: CodeSnapshot): CodeSnapshot {
+  return JSON.parse(JSON.stringify(code), (key, value) =>
+    key === 'fields' && 'omittedIssues' in value ? withoutKey(value, 'omittedIssues') : value,
+  );
+}
+
+function withoutKey(fields: Record<string, unknown>, removed: string): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).filter(([key]) => key !== removed));
 }
 
 function withIssueCode(code: CodeSnapshot, added: string): CodeSnapshot {

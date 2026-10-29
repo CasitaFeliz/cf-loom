@@ -818,7 +818,7 @@ describe('cf-loom package: the files', () => {
           "in: loom.openEnumReader(['body', 'headers', 'params', 'query'])",
           'message: z.string()',
           'path: z.array(z.union([z.string(), z.number()]))',
-        ].join(', ')} })) }),`,
+        ].join(', ')} })), omittedIssues: z.int().min(0) }),`,
         '  },',
         '  notFound: {',
         "    code: 'NOT_FOUND',",

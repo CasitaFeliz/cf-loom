@@ -389,6 +389,7 @@ describe('a Rejection that declares headers', () => {
         issues: [
           { in: 'body', path: ['quantity'], code: 'invalid_type', message: expect.any(String) },
         ],
+        omittedIssues: 0,
       },
     });
   });
@@ -453,7 +454,7 @@ describe('Standard Rejections', () => {
     const valid = rejecting(400, {
       code: 'BAD_REQUEST',
       message: 'The request is invalid',
-      body: { issues: [issue] },
+      body: { issues: [issue], omittedIssues: 0 },
     });
     const broken = rejecting(400, {
       code: 'BAD_REQUEST',
@@ -469,12 +470,29 @@ describe('Standard Rejections', () => {
     ]);
   });
 
+  test('a Provider’s invalid-input body is read with the count of the Issues it omitted', async () => {
+    const issue = { in: 'body', path: ['lines', 0], code: 'invalid_type', message: 'An object' };
+    const orders = rejecting(400, {
+      code: 'BAD_REQUEST',
+      message: 'The request is invalid',
+      body: { issues: [issue], omittedIssues: 250 },
+    });
+
+    const outcome = await orders.editOrder(edit);
+
+    expect(outcome).toMatchObject({
+      kind: 'rejection',
+      code: 'BAD_REQUEST',
+      body: { issues: [issue], omittedIssues: 250 },
+    });
+  });
+
   test('an issue code or part a later cf-loom adds arrives as its Unknown case', async () => {
     const issue = { in: 'cookies', path: [], code: 'too_deep', message: 'Too deep' };
     const orders = rejecting(400, {
       code: 'BAD_REQUEST',
       message: 'The request is invalid',
-      body: { issues: [issue] },
+      body: { issues: [issue], omittedIssues: 0 },
     });
 
     const outcome = await orders.editOrder(edit);

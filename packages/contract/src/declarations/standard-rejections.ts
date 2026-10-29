@@ -111,4 +111,5 @@ export const invalidInputBody = z.object({
       message: z.string(),
     }),
   ),
+  omittedIssues: z.int().min(0),
 });

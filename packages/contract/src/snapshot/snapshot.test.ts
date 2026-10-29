@@ -664,7 +664,7 @@ describe('snapshotOf: a Service', () => {
     });
   });
 
-  test('the invalid-input Rejection carries cf-loom’s body, its issues, with in and code as Open Enums', () => {
+  test('the invalid-input Rejection carries cf-loom’s body, its issues, with in and code as Open Enums, and the count of those omitted', () => {
     const snapshot = serviceSnapshot();
     const issue = {
       type: 'object',
@@ -704,7 +704,10 @@ describe('snapshotOf: a Service', () => {
 
     expect(snapshot.codes['BAD_REQUEST']?.body).toEqual({
       type: 'object',
-      fields: { issues: { required: true, schema: { type: 'array', items: issue } } },
+      fields: {
+        issues: { required: true, schema: { type: 'array', items: issue } },
+        omittedIssues: { required: true, schema: { type: 'number', int: true, min: 0 } },
+      },
     });
   });
 
