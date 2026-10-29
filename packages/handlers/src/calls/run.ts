@@ -2,11 +2,10 @@ import type { Endpoint, Guard } from '@cf-loom/contract';
 import {
   type Checked,
   checkedAdmission,
-  checkedEndpointCall,
-  checkedGuardCall,
   checkedOutcome,
-  type EndpointGiven,
-  type GuardGiven,
+  type EndpointReceived,
+  type GuardReceived,
+  type HandledRequest,
   type Issue,
 } from '../checks/index.ts';
 import {
@@ -54,23 +53,33 @@ export type EndpointRun = Run<CheckedOutcome<Endpoint>>;
  */
 export type GuardRun = Run<CheckedAdmission<Guard>>;
 
+/** What every call carries past its check: the request and the Resources, passed on unchecked. */
+type RequestAndResources = { readonly request: HandledRequest; readonly resources: unknown };
+
 /**
- * Runs one call of an EndpointHandler: checks what it is given and what it builds.
- * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
+ * Runs one call of an EndpointHandler: checks what it is given with `check`, every part as a Direct
+ * call is given it or what `serve`'s reading left, then what it builds. It never throws: anything
+ * thrown, by the implementation or while checking, is `thrown`.
  */
-export function endpointRunOf(
+export function endpointRunOf<Given extends RequestAndResources>(
   written: Written<Endpoint>,
-  given: EndpointGiven,
+  given: Given,
+  check: (endpoint: Endpoint, given: Given) => Checked<EndpointReceived>,
 ): Promise<EndpointRun> {
-  return caught(() => endpointCallOf(written, given));
+  return caught(() => endpointCallOf(written, given, check));
 }
 
 /**
- * Runs one call of a GuardHandler: checks what it is given and what it admits.
- * It never throws: anything thrown, by the implementation or while checking, is `thrown`.
+ * Runs one call of a GuardHandler: checks what it is given with `check`, as an EndpointHandler's
+ * run does, then what it admits. It never throws: anything thrown, by the implementation or while
+ * checking, is `thrown`.
  */
-export function guardRunOf(written: Written<Guard>, given: GuardGiven): Promise<GuardRun> {
-  return caught(() => guardCallOf(written, given));
+export function guardRunOf<Given extends RequestAndResources>(
+  written: Written<Guard>,
+  given: Given,
+  check: (guard: Guard, given: Given) => Checked<GuardReceived>,
+): Promise<GuardRun> {
+  return caught(() => guardCallOf(written, given, check));
 }
 
 async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answer>> {
@@ -81,11 +90,12 @@ async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answ
   }
 }
 
-async function endpointCallOf(
+async function endpointCallOf<Given extends RequestAndResources>(
   { declaration: endpoint, implementation }: Written<Endpoint>,
-  given: EndpointGiven,
+  given: Given,
+  check: (endpoint: Endpoint, given: Given) => Checked<EndpointReceived>,
 ): Promise<EndpointRun> {
-  const checked = checkedGiven(() => checkedEndpointCall(endpoint, given));
+  const checked = checkedGiven(() => check(endpoint, given));
   if (checked.kind !== 'value') {
     return checked;
   }
@@ -99,11 +109,12 @@ async function endpointCallOf(
   return answeredRunOf(checkedOutcome(endpoint, returned.built));
 }
 
-async function guardCallOf(
+async function guardCallOf<Given extends RequestAndResources>(
   { declaration: guard, implementation }: Written<Guard>,
-  given: GuardGiven,
+  given: Given,
+  check: (guard: Guard, given: Given) => Checked<GuardReceived>,
 ): Promise<GuardRun> {
-  const checked = checkedGiven(() => checkedGuardCall(guard, given));
+  const checked = checkedGiven(() => check(guard, given));
   if (checked.kind !== 'value') {
     return checked;
   }
