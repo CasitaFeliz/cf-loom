@@ -634,6 +634,26 @@ describe('fakeProvider: requests', () => {
     expect(create).toThrow('A Dependency lists at least one Endpoint, so its fake has a Provider');
   });
 
+  test.each([
+    { position: 'first', endpoints: [getSummary, payments.endpoints.getPayment] },
+    { position: 'after a Provided one', endpoints: [payments.endpoints.getPayment, getSummary] },
+  ])(
+    'a Dependency listing an Endpoint no Contract Package exports $position, written through a cast, is refused when the fake is created, as the client refuses it',
+    ({ endpoints }) => {
+      const handWritten = defineDependency({ endpoints } as unknown as Parameters<
+        typeof defineDependency
+      >[0]);
+
+      const create = () => fakeProvider(handWritten);
+
+      expect(create).toThrow(
+        new Error(
+          'getSummary is no Endpoint a Contract Package exports, so it carries no exported Snapshot',
+        ),
+      );
+    },
+  );
+
   test('a baseUrl with a query is a bug, refused when the fake is created', () => {
     const create = () =>
       fakeProvider(paymentsDependency, { baseUrl: 'https://gateway.test/api?x=1' });

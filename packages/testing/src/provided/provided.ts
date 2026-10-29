@@ -66,10 +66,10 @@ export function fakedProviderOf(
   baseUrl: string | URL | undefined,
 ): FakedProvider {
   const { endpoints } = dependency;
+  const cuts = endpoints.map(cutOf);
   const { name, standardRejections } = listedProviderOf(dependency);
   const base = baseUrlOf(baseUrl ?? `https://${name}.test`);
   const declaredByCode = declaredByCodeOf(endpoints, standardRejections);
-  const cuts = endpoints.map(cutOf);
   const listed = cuts.map((cut) =>
     listedEndpointOf(cut, { name, standardRejections }, declaredByCode),
   );

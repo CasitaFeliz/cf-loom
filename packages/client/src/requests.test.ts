@@ -963,6 +963,16 @@ describe('an Endpoint’s exported Snapshot cut, read when the client is created
     return () => client(dependency, { baseUrl: 'http://orders.test' });
   }
 
+  test('a Dependency listing an Endpoint no Contract Package exports, written through a cast, is refused, naming it', () => {
+    const handWritten = searchOrders as unknown as typeof listed;
+
+    expect(creating(handWritten)).toThrow(
+      new Error(
+        'searchOrders is no Endpoint a Contract Package exports, so it carries no exported Snapshot',
+      ),
+    );
+  });
+
   test('a cut in a newer format is refused, naming the Provider', () => {
     const newer = carrying(listed, (cut) => {
       cut['format'] = 2;
