@@ -184,9 +184,10 @@ A PR is done when all of these hold; the main session checks them and lists them
 
 A done PR is squash-merged without asking once CI passed on its head, with
 [`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for the `check` job and for GitHub to judge the
-PR mergeable, refuses while the last CI run on `main` failed, and merges only the head it was given; the subject is the
-PR title with `(#<PR>)`, the branch is deleted and the issue closes. A timeout is reported apart from a failure and the
-script is run again. The user's standing approval covers pushing an issue's branch and this merge;
+PR mergeable, refuses while the last CI run on `main` failed, except for the PR that fixes it (run with `--fixes-main`),
+and merges only the head it was given; the subject is the PR title with `(#<PR>)`, the branch is deleted and the issue
+closes. A timeout is reported apart from a failure and the script is run again. A PR whose title changed after its
+last CI run is pushed again before the merge, so CI checks the title it merges under. The user's standing approval covers pushing an issue's branch and this merge;
 a force push waits for the user, and so does the merge after round 2 found a must-fix or a should-fix ([Fix](#4-fix)).
 A CI failure on `main` is fixed before the next merge.
 

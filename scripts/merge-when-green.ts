@@ -1,8 +1,9 @@
 /**
  * Merges a done PR once its CI passed on its head, as WORKFLOW.md's Merge says:
- * `node scripts/merge-when-green.ts <pr> <head sha>`. It waits for the `check` job on the head to finish and for
- * GitHub to judge the PR mergeable, refuses while the last CI run on `main` failed, then squash-merges with the PR
- * title and `(#<pr>)` as the subject, only if the head is still `<head sha>`. Exit 0 merged, 1 refused, 2 timed out.
+ * `node scripts/merge-when-green.ts <pr> <head sha> [--fixes-main]`. It waits for the `check` job on the head to finish
+ * and for GitHub to judge the PR mergeable, refuses while the last CI run on `main` failed (unless the PR is the one
+ * that fixes it, `--fixes-main`), then squash-merges with the PR title and `(#<pr>)` as the subject, only if the head is
+ * still `<head sha>`. Exit 0 merged, 1 refused, 2 timed out or `gh` failed; a run that exits 2 is run again.
  */
 import { execFileSync } from 'node:child_process';
 
@@ -47,10 +48,14 @@ function gh(args: readonly string[]): string {
   return execFileSync('gh', [...args], { encoding: 'utf8' }).trim();
 }
 
-function checkOf(sha: string): MergeState['check'] {
+/** The check run a PR's CI reports, and the one `main`'s, which runs it through the release workflow. */
+const prCheckName = 'check';
+const mainCheckName = 'checks / check';
+
+function checkOf(sha: string, name: string): MergeState['check'] {
   const runs = gh([
     'api',
-    `repos/${repository}/commits/${sha}/check-runs?check_name=check`,
+    `repos/${repository}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}`,
     '-q',
     '[.check_runs[] | .status + ":" + (.conclusion // "")] | join(",")',
   ]);
@@ -60,10 +65,10 @@ function checkOf(sha: string): MergeState['check'] {
   return runs.split(',').every((run) => run === 'completed:success') ? 'success' : 'failure';
 }
 
-function stateOf(pr: string, sha: string): MergeState {
+function stateOf(pr: string, sha: string, fixesMain: boolean): MergeState {
   const mainSha = gh(['api', `repos/${repository}/commits/main`, '-q', '.sha']);
   return {
-    check: checkOf(sha),
+    check: checkOf(sha, prCheckName),
     mergeable: gh([
       'pr',
       'view',
@@ -75,44 +80,57 @@ function stateOf(pr: string, sha: string): MergeState {
       '-q',
       '.mergeable',
     ]) as MergeState['mergeable'],
-    mainCheck: checkOf(mainSha),
+    mainCheck: fixesMain ? 'success' : checkOf(mainSha, mainCheckName),
   };
 }
 
+function merge(pr: string, sha: string, fixesMain: boolean): Promise<number> {
+  return (async () => {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      const step = stepOf(stateOf(pr, sha, fixesMain));
+      if (step.kind === 'refuse') {
+        process.stderr.write(`#${pr} not merged: ${step.reason}\n`);
+        return 1;
+      }
+      if (step.kind === 'merge') {
+        const title = gh(['pr', 'view', pr, '-R', repository, '--json', 'title', '-q', '.title']);
+        gh([
+          'pr',
+          'merge',
+          pr,
+          '-R',
+          repository,
+          '--squash',
+          '--delete-branch',
+          '--subject',
+          `${title} (#${pr})`,
+          '--match-head-commit',
+          sha,
+        ]);
+        process.stdout.write(`#${pr} merged\n`);
+        return 0;
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMilliseconds));
+    }
+    process.stderr.write(
+      `#${pr} not merged: timed out waiting for CI or mergeability; run it again\n`,
+    );
+    return 2;
+  })();
+}
+
 if (import.meta.main) {
-  const [pr, sha] = process.argv.slice(2);
-  if (pr === undefined || sha === undefined) {
-    process.stderr.write('usage: node scripts/merge-when-green.ts <pr> <head sha>\n');
+  const [pr, sha, flag] = process.argv.slice(2);
+  if (pr === undefined || sha === undefined || (flag !== undefined && flag !== '--fixes-main')) {
+    process.stderr.write(
+      'usage: node scripts/merge-when-green.ts <pr> <head sha> [--fixes-main]\n',
+    );
     process.exit(1);
   }
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const step = stepOf(stateOf(pr, sha));
-    if (step.kind === 'refuse') {
-      process.stderr.write(`#${pr} not merged: ${step.reason}\n`);
-      process.exit(1);
-    }
-    if (step.kind === 'merge') {
-      const title = gh(['pr', 'view', pr, '-R', repository, '--json', 'title', '-q', '.title']);
-      gh([
-        'pr',
-        'merge',
-        pr,
-        '-R',
-        repository,
-        '--squash',
-        '--delete-branch',
-        '--subject',
-        `${title} (#${pr})`,
-        '--match-head-commit',
-        sha,
-      ]);
-      process.stdout.write(`#${pr} merged\n`);
-      process.exit(0);
-    }
-    await new Promise((resolve) => setTimeout(resolve, pollMilliseconds));
+  try {
+    process.exit(await merge(pr, sha, flag === '--fixes-main'));
+  } catch (error) {
+    process.stderr.write(`#${pr} not merged: gh failed (${String(error)}); run it again\n`);
+    process.exit(2);
   }
-  process.stderr.write(
-    `#${pr} not merged: timed out waiting for CI or mergeability; run it again\n`,
-  );
-  process.exit(2);
 }
