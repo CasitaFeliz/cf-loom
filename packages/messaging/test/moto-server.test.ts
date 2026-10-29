@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: SQS names its headers, actions and fields in PascalCase, as they travel
 import { connect } from 'node:net';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aMotoServer, type MotoServer } from './moto-server.ts';
@@ -26,6 +27,13 @@ function sqs(server: MotoServer, action: string, body: object = {}): Promise<Res
     },
     body: JSON.stringify(body),
   });
+}
+
+async function queueUrls(server: MotoServer): Promise<readonly string[]> {
+  const listed = (await (await sqs(server, 'ListQueues')).json()) as {
+    readonly QueueUrls?: readonly string[];
+  };
+  return listed.QueueUrls ?? [];
 }
 
 describe('a test moto server', () => {
@@ -59,6 +67,17 @@ describe('a test moto server', () => {
 
     expect(new URL(server.url).hostname).toBe('127.0.0.1');
     expect(response.status).toBe(200);
+  });
+
+  test('reset empties the queues a test created', async () => {
+    const server = await aStartedServer();
+    await sqs(server, 'CreateQueue', { QueueName: 'orders' });
+    const queuesBefore = await queueUrls(server);
+
+    await server.reset();
+
+    expect(queuesBefore).toHaveLength(1);
+    await expect(queueUrls(server)).resolves.toEqual([]);
   });
 
   test('a stopped server leaves its port closed', async () => {

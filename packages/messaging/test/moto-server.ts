@@ -28,7 +28,7 @@ export async function aMotoServer(): Promise<MotoServer> {
   const server = start();
   try {
     const url = await urlOf(server);
-    return { url, reset: async () => undefined, stop: () => stop(server) };
+    return { url, reset: () => reset(url), stop: () => stop(server) };
   } catch (error) {
     await stop(server);
     throw error;
@@ -73,6 +73,13 @@ async function urlOf(server: Process): Promise<string> {
     }
   }
   throw new Error(`moto_server did not listen within ${startTimeoutMs} ms: ${server.stderr()}`);
+}
+
+async function reset(url: string): Promise<void> {
+  const response = await fetch(`${url}/moto-api/reset`, { method: 'POST' });
+  if (!response.ok) {
+    throw new Error(`moto_server did not reset: ${response.status} ${await response.text()}`);
+  }
 }
 
 async function stop(server: Process): Promise<void> {
