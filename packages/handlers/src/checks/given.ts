@@ -62,10 +62,10 @@ export type GuardRead = {
 };
 
 /** The Input and Context an EndpointHandler's implementation receives, checked. */
-export type EndpointArguments = { readonly input: ValuesByField; readonly context: ValuesByField };
+export type EndpointReceived = { readonly input: ValuesByField; readonly context: ValuesByField };
 
 /** The demands, Context and Qualifier a GuardHandler's implementation receives, checked. */
-export type GuardArguments = {
+export type GuardReceived = {
   readonly demands: ValuesByField;
   readonly context: ValuesByField;
   readonly qualifier: unknown;
@@ -75,7 +75,7 @@ export type GuardArguments = {
 export function checkedEndpointCall(
   endpoint: Endpoint,
   given: EndpointGiven,
-): Checked<EndpointArguments> {
+): Checked<EndpointReceived> {
   const schemaAt = (part: (typeof inputParts)[number]) => schemaOf(endpoint, part);
   return checkedAll({
     input: parsedPartsOf(inputParts, schemaAt, given.input),
@@ -84,16 +84,16 @@ export function checkedEndpointCall(
 }
 
 /** The Input and Context of one call `serve` read: the Input as its reading parsed it, the Context checked. */
-export function readEndpointCall(
+export function servedEndpointCall(
   endpoint: Endpoint,
   read: EndpointRead,
-): Checked<EndpointArguments> {
+): Checked<EndpointReceived> {
   const context = checkedContext(endpoint, read.context);
   return mapValue(context, (checked) => ({ input: read.input, context: checked }));
 }
 
 /** The demands, Context and Qualifier of one call of a GuardHandler, as its implementation receives them. */
-export function checkedGuardCall(guard: Guard, given: GuardGiven): Checked<GuardArguments> {
+export function checkedGuardCall(guard: Guard, given: GuardGiven): Checked<GuardReceived> {
   const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
   return checkedAll({
     demands: parsedPartsOf(demandParts, schemaAt, given.demands),
@@ -103,7 +103,7 @@ export function checkedGuardCall(guard: Guard, given: GuardGiven): Checked<Guard
 }
 
 /** The demands, Context and Qualifier of one call `serve` read: the demands as parsed, the rest checked. */
-export function readGuardCall(guard: Guard, read: GuardRead): Checked<GuardArguments> {
+export function servedGuardCall(guard: Guard, read: GuardRead): Checked<GuardReceived> {
   const checked = checkedAll({
     context: checkedContext(guard, read.context),
     qualifier: checkedQualifier(guard, read.qualifier),

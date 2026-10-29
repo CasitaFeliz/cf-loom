@@ -3,10 +3,9 @@ import {
   type Checked,
   checkedAdmission,
   checkedOutcome,
-  type EndpointArguments,
-  type EndpointGiven,
-  type GuardArguments,
-  type GuardGiven,
+  type EndpointReceived,
+  type GuardReceived,
+  type HandledRequest,
   type Issue,
 } from '../checks/index.ts';
 import {
@@ -54,15 +53,18 @@ export type EndpointRun = Run<CheckedOutcome<Endpoint>>;
  */
 export type GuardRun = Run<CheckedAdmission<Guard>>;
 
+/** What every call carries past its check: the request and the Resources, passed on unchecked. */
+type RequestAndResources = { readonly request: HandledRequest; readonly resources: unknown };
+
 /**
  * Runs one call of an EndpointHandler: checks what it is given with `check`, every part as a Direct
  * call is given it or what `serve`'s reading left, then what it builds. It never throws: anything
  * thrown, by the implementation or while checking, is `thrown`.
  */
-export function endpointRunOf(
+export function endpointRunOf<Given extends RequestAndResources>(
   written: Written<Endpoint>,
-  given: Pick<EndpointGiven, 'request' | 'resources'>,
-  check: () => Checked<EndpointArguments>,
+  given: Given,
+  check: (endpoint: Endpoint, given: Given) => Checked<EndpointReceived>,
 ): Promise<EndpointRun> {
   return caught(() => endpointCallOf(written, given, check));
 }
@@ -72,10 +74,10 @@ export function endpointRunOf(
  * run does, then what it admits. It never throws: anything thrown, by the implementation or while
  * checking, is `thrown`.
  */
-export function guardRunOf(
+export function guardRunOf<Given extends RequestAndResources>(
   written: Written<Guard>,
-  given: Pick<GuardGiven, 'request' | 'resources'>,
-  check: () => Checked<GuardArguments>,
+  given: Given,
+  check: (guard: Guard, given: Given) => Checked<GuardReceived>,
 ): Promise<GuardRun> {
   return caught(() => guardCallOf(written, given, check));
 }
@@ -88,16 +90,17 @@ async function caught<Answer>(run: () => Promise<Run<Answer>>): Promise<Run<Answ
   }
 }
 
-async function endpointCallOf(
+async function endpointCallOf<Given extends RequestAndResources>(
   { declaration: endpoint, implementation }: Written<Endpoint>,
-  { request, resources }: Pick<EndpointGiven, 'request' | 'resources'>,
-  check: () => Checked<EndpointArguments>,
+  given: Given,
+  check: (endpoint: Endpoint, given: Given) => Checked<EndpointReceived>,
 ): Promise<EndpointRun> {
-  const checked = checkedGiven(check);
+  const checked = checkedGiven(() => check(endpoint, given));
   if (checked.kind !== 'value') {
     return checked;
   }
   const { input, context } = checked.value;
+  const { request, resources } = given;
   const run = () => implementation(input, { context, request }, { resources });
   const returned = await returnedOf(endpoint, run, isOutcome);
   if (returned.kind === 'not-built') {
@@ -106,16 +109,17 @@ async function endpointCallOf(
   return answeredRunOf(checkedOutcome(endpoint, returned.built));
 }
 
-async function guardCallOf(
+async function guardCallOf<Given extends RequestAndResources>(
   { declaration: guard, implementation }: Written<Guard>,
-  { request, resources }: Pick<GuardGiven, 'request' | 'resources'>,
-  check: () => Checked<GuardArguments>,
+  given: Given,
+  check: (guard: Guard, given: Given) => Checked<GuardReceived>,
 ): Promise<GuardRun> {
-  const checked = checkedGiven(check);
+  const checked = checkedGiven(() => check(guard, given));
   if (checked.kind !== 'value') {
     return checked;
   }
   const { demands, context, qualifier } = checked.value;
+  const { request, resources } = given;
   const run = () => implementation(demands, { context, qualifier, request }, { resources });
   const returned = await returnedOf(guard, run, isAdmission);
   if (returned.kind === 'not-built') {

@@ -164,9 +164,7 @@ function endpointCallOf(written: Written<Endpoint>) {
   return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
     const request = requestOf(call);
     const given = { input, context: call.context, request, resources: last?.resources };
-    const run = await endpointRunOf(written, given, () =>
-      checkedEndpointCall(written.declaration, given),
-    );
+    const run = await endpointRunOf(written, given, checkedEndpointCall);
     return answerOf(written.declaration, run);
   };
 }
@@ -176,9 +174,7 @@ function guardCallOf(written: Written<Guard>) {
     const { context, qualifier } = call;
     const request = requestOf(call);
     const given = { demands, context, qualifier, request, resources: last?.resources };
-    const run = await guardRunOf(written, given, () =>
-      checkedGuardCall(written.declaration, given),
-    );
+    const run = await guardRunOf(written, given, checkedGuardCall);
     return answerOf(written.declaration, run);
   };
 }

@@ -13,8 +13,8 @@ import {
   checkedMessageBody,
   type EndpointRead,
   type GuardRead,
-  readEndpointCall,
-  readGuardCall,
+  servedEndpointCall,
+  servedGuardCall,
 } from '../checks/index.ts';
 import {
   type AnyHandler,
@@ -39,8 +39,7 @@ export function runEndpoint(
   handler: { readonly declaration: Endpoint },
   read: EndpointRead,
 ): Promise<EndpointRun> {
-  const written = writtenOf(handler, isEndpointWritten);
-  return endpointRunOf(written, read, () => readEndpointCall(written.declaration, read));
+  return endpointRunOf(writtenOf(handler, isEndpointWritten), read, servedEndpointCall);
 }
 
 /**
@@ -52,8 +51,7 @@ export function runGuard(
   handler: { readonly declaration: Guard },
   read: GuardRead,
 ): Promise<GuardRun> {
-  const written = writtenOf(handler, isGuardWritten);
-  return guardRunOf(written, read, () => readGuardCall(written.declaration, read));
+  return guardRunOf(writtenOf(handler, isGuardWritten), read, servedGuardCall);
 }
 
 /** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */
