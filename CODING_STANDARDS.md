@@ -291,7 +291,8 @@ key set is pinned by one type test in its package's `types.test.ts`; a test neve
 *Why:* such a test pins the thing the next change must delete.
 
 **C30. A test that bounds time asserts a ratio, never a clock.** It measures with the growth helpers
-(`growthOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`): growth between two sizes of each dimension the plan
+(`growthOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
+`tsconfig.test.json` to import it, as billing does `nats-server.ts`): growth between two sizes of each dimension the plan
 names, or a ratio to a reference doing the same work without the behavior under test. A correctness test gets the
 project's timeout, never one sized on an idle machine. A test file reads no clock: `performance.now()`, `Date.now()`,
 `process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors **(lint)**, and the helpers

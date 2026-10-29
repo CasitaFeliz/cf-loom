@@ -267,19 +267,21 @@ const oneSecond = 1_000_000_000;
 /** A little under the retry pause of one second, in milliseconds. */
 const beforeRetryPauseEnds = 900;
 
-/** After a pull that expires within half a second, and before that and a retry pause take together, in milliseconds. */
-const afterExpiryBeforePause = 1_200;
-
 /** A request for a Message a Durable consumer is pulled with: its subject and how long it waits in nanoseconds. */
 type RecordedPull = { readonly subject: string; readonly expires: number };
 
-/** The methods of a NATS connection that record each request for a Message a Durable consumer is pulled with. */
-function recordingPulls(pulls: RecordedPull[]): Replacing {
+/** The methods of a NATS connection that record each request for a Message a Durable consumer is pulled with, and tell `onRecorded` of each as it is recorded. */
+function recordingPulls(
+  pulls: RecordedPull[],
+  onRecorded: (pull: RecordedPull) => void = () => undefined,
+): Replacing {
   return (connection) => ({
     publish: (subject, data, options) => {
       if (subject.includes('.CONSUMER.MSG.NEXT.')) {
         const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
-        pulls.push({ subject, expires: JSON.parse(text).expires });
+        const pull = { subject, expires: JSON.parse(text).expires };
+        pulls.push(pull);
+        onRecorded(pull);
       }
       connection.publish(subject, data, options);
     },
@@ -1664,14 +1666,22 @@ describe('pulling over jetstream()', () => {
     const names = anOrders(prefix);
     await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
     const pulls: RecordedPull[] = [];
-    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
-    const received: Received[] = [];
     const ofNotify = () => pulls.filter(({ subject }) => subject.endsWith(names.notifyDurable));
+    const followedBeforePauseCouldEnd = Promise.withResolvers<boolean>();
+    const timeFirstPull = (pull: RecordedPull) => {
+      if (ofNotify()[0] === pull) {
+        const expiryAndMostOfPause = pull.expires / 1_000_000 + beforeRetryPauseEnds;
+        void sleep(expiryAndMostOfPause).then(() =>
+          followedBeforePauseCouldEnd.resolve(ofNotify().length >= 2),
+        );
+      }
+    };
+    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls, timeFirstPull) });
+    const received: Received[] = [];
 
     await orders.consume(handlersOf(received), {});
 
-    await sleep(afterExpiryBeforePause);
-    expect(ofNotify().length).toBeGreaterThanOrEqual(2);
+    expect(await followedBeforePauseCouldEnd.promise).toBe(true);
     expect(received).toEqual([]);
   }, 10_000);
 
