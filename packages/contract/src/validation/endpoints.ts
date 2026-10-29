@@ -1,8 +1,11 @@
 import type { Endpoint } from '../declarations/index.ts';
 import {
+  getBodySentence,
   isUtcInstant,
   lifecycles,
   methods,
+  noContentBodySentence,
+  successBodySentence,
   successStatuses,
   visibilities,
 } from '../declarations/index.ts';
@@ -89,10 +92,10 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
   if (success.status === 204) {
     return success.body === undefined
       ? []
-      : [failure(bodyAt, 'success-body', 'A 204 Success has no body')];
+      : [failure(bodyAt, 'success-body', noContentBodySentence)];
   }
   return success.body === undefined
-    ? [failure(bodyAt, 'success-body', `A ${success.status} Success has a body`)]
+    ? [failure(bodyAt, 'success-body', successBodySentence(success.status))]
     : [];
 }
 
@@ -100,6 +103,5 @@ function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly Declarat
   if (endpoint.method !== 'GET' || isMissing(endpoint.input?.body)) {
     return [];
   }
-  const message = 'A GET Endpoint takes no body';
-  return [failure(slotAt(at, 'input.body'), 'input-body', message)];
+  return [failure(slotAt(at, 'input.body'), 'input-body', getBodySentence)];
 }

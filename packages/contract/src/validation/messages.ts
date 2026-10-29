@@ -2,8 +2,8 @@ import {
   eventVisibilities,
   isMessageVersion,
   lifecycleOf,
-  messageBodyRefusal,
-  messageVersionRefusal,
+  messageBodySentence,
+  messageVersionSentence,
 } from '../declarations/index.ts';
 import { inFields, resolvedRefOf, type SchemaNode } from '../walker/index.ts';
 import {
@@ -80,7 +80,7 @@ export function messageBodyFailures(
     failure(
       slotAt(message.at, 'body'),
       'not-an-object-schema',
-      `${messageBodyRefusal}: ${identityOf(message)}`,
+      `${messageBodySentence}: ${identityOf(message)}`,
     ),
   );
 }
@@ -104,7 +104,7 @@ function versionFailures({ at, message }: LocatedMessage): readonly DeclarationF
   if (isWithoutValue(version) || isMessageVersion(version)) {
     return [];
   }
-  const text = `${messageVersionRefusal}: ${writtenTextOf(version)}`;
+  const text = `${messageVersionSentence}: ${writtenTextOf(version)}`;
   return [failure(inFields(at, 'version'), 'message-version', text)];
 }
 

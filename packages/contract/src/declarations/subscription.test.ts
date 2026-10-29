@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -45,6 +46,19 @@ describe('defineSubscription', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a reserved name’s type error is the line generate writes for it', () => {
+    const written = {
+      name: 'delete',
+      description: 'Notifies the customer of each order created',
+      event: orderCreatedV1,
+    } as const;
+    type Name = Parameters<typeof defineSubscription<typeof written>>[0]['name'];
+
+    expectTypeOf<Name>().toExtend<
+      Refusal<'A Subscription name is camelCase words and no reserved word: "delete"'>
+    >();
+  });
+
   test('a Subscription to something that is not an Event is a type error', () => {
     const chargeCardV1 = defineCommand({
       name: 'ChargeCard',
@@ -75,9 +89,9 @@ describe('defineSubscription', () => {
       }>
     >[0];
 
-    expectTypeOf<
-      Written['event']
-    >().toExtend<"A Subscription receives an Event; a Command's Message Version has its own Message Handler">();
+    expectTypeOf<Written['event']>().toExtend<
+      Refusal<"A Subscription receives an Event; a Command's Message Version has its own Message Handler">
+    >();
   });
 
   test('a Subscription to an Event keeps the Event’s exact type', () => {

@@ -10,6 +10,7 @@ import {
   notImplemented,
   type SuccessOf,
 } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const orderBody = z.object({ id: z.uuid() });
 const orderParams = z.object({ orderId: z.uuid() });
@@ -129,6 +130,15 @@ describe('defineEndpoint names', () => {
 
     expect(declareClass).not.toThrow();
     expect(declareHandle).not.toThrow();
+  });
+
+  test('a reserved name’s type error is the line generate writes for it', () => {
+    const written = { ...getOrder, name: 'delete' } as const;
+    type Name = Parameters<typeof defineEndpoint<typeof written>>[0]['name'];
+
+    expectTypeOf<Name>().toExtend<
+      Refusal<'An Endpoint name is camelCase words and no reserved word: "delete"'>
+    >();
   });
 
   test('a name typed as a string skips the rule', () => {
