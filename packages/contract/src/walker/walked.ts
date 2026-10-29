@@ -60,9 +60,9 @@ export type Composition = { readonly refusal: NotAllowed; readonly node: AllOfNo
 export type Reach = { readonly at: Reached; within: Memo | undefined };
 
 /**
- * A schema the walk entered once and answers from memory after: a def, a def that failed or a
- * member of a cycle no id names. Where the walk entered it, and every place it is reached, that
- * first place included; what was raised inside it sits under that first place.
+ * A schema the walk entered once and answers from memory after: a def, a schema with an id that
+ * failed or a member of a cycle no id names. Where the walk entered it, and every place it is
+ * reached, that first place included; what was raised inside it sits under that first place.
  */
 export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
 
