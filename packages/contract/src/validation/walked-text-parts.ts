@@ -27,7 +27,8 @@ export type WalkedTextParts =
 /**
  * Walks the text parts of every Endpoint, Guard and Rejection of a Contract once, and judges them
  * by every rule `generate` applies to text parts: what they hold, their names, the path's params,
- * an enum whose values travel as one text and one shape per header or query name.
+ * an enum whose values travel as one text, an enum value its part cannot carry and one shape per
+ * header or query name.
  */
 export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const declarations = declarationsOf(contract, {});
