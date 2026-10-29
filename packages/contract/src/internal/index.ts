@@ -210,6 +210,7 @@ export {
 } from '../validation/index.ts';
 export type {
   Catchalls,
+  Def,
   Defs,
   DefTypes,
   EnumNode,
@@ -232,6 +233,7 @@ export {
   byCodePoint,
   formatConstructorOf,
   isJsonValue,
+  isSchema,
   reachedDefsOf,
   refusalsIn,
   siteTextOf,
@@ -346,7 +348,6 @@ export {
   isListable,
   isPlainObject,
   isSameRejection,
-  isSchema,
   issueLineOf,
   messageIdentityOf,
   methodAndPathOf,

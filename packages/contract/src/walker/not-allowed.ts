@@ -86,6 +86,7 @@ export const refused = {
   },
   protoField: { construct: 'a field named __proto__ (zod drops it when parsing)' },
   unnamedCycle: { construct: 'a cycle without .meta({ id })', instead: '.meta({ id })' },
+  notZod4: { construct: 'a value that is no zod 4 schema (zod/v3 is not read)' },
   nodelessCycle: {
     construct: 'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
   },
@@ -123,6 +124,17 @@ export function refusedObjectNameField(name: string): Refused {
 /** A recursion id that is no camelCase name, so code could not name its def. */
 export function refusedNonCamelCaseId(id: string): Refused {
   return { construct: `.meta({ id: ${JSON.stringify(id)} })`, instead: 'a camelCase name' };
+}
+
+/**
+ * A cycle no id names whose schema lost the id it was given to a later call: zod keeps an id only
+ * on the schema `.meta({ id })` returns, so a `.describe()`, `.meta()` or check after it drops it.
+ */
+export function refusedDroppedId(id: string): Refused {
+  return {
+    construct: refused.unnamedCycle.construct,
+    instead: `.meta({ id: ${JSON.stringify(id)} }) last: zod drops it at any later call`,
+  };
 }
 
 /** A recursion id on a field's `.optional()` or `.nonoptional()`, which names no cycle. */

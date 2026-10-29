@@ -158,15 +158,38 @@ type SchemasUnder<Value> = Value extends core.$ZodType
 
 /**
  * The schema a field is judged by, as the walk reads a field: through its own `.optional()`, or
- * its `.nonoptional()` and the `.optional()` that undoes.
+ * its `.nonoptional()` and the `.optional()` that undoes; a value typed with no `_zod`, such as a
+ * zod/v3 schema, is judged as no zod 4 schema.
  */
 type FieldSchemaOf<Field> = Field extends unknown
-  ? DefOf<Field> extends { readonly type: 'optional'; readonly innerType: infer Inner }
+  ? Field extends WrapperOf<'optional', infer Inner>
     ? Inner
-    : DefOf<Field> extends { readonly type: 'nonoptional'; readonly innerType: infer Inner }
+    : Field extends WrapperOf<'nonoptional', infer Inner>
       ? RequiredOf<Inner>
-      : Field
+      : IsNoSchema<Field> extends true
+        ? NoZod4Schema
+        : Field
   : never;
+
+/** A schema whose def wraps the schema inside as `.optional()` or `.nonoptional()` does. */
+type WrapperOf<Kind extends string, Inner> = {
+  readonly _zod: { readonly def: { readonly type: Kind; readonly innerType: Inner } };
+};
+
+/** What the types read a value that is no zod 4 schema as: a def type of its own, refused by name. */
+type NoZod4Schema = { readonly _zod: { readonly def: { readonly type: 'notZod4' } } };
+
+/**
+ * Whether a type is of a value that has no `_zod`, as a zod/v3 schema: `any` and `unknown`, which a
+ * wide type holds, and `undefined`, which an optional slot adds, say nothing of one.
+ */
+type IsNoSchema<Value> = unknown extends Value
+  ? false
+  : [Value] extends [undefined]
+    ? false
+    : Value extends { readonly _zod: unknown }
+      ? false
+      : true;
 
 type RequiredOf<Inner> =
   DefOf<Inner> extends {
@@ -193,19 +216,21 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
     ? DefOf<Schema> extends { readonly type: infer Type extends string }
       ? IsOneLiteral<Type> extends false
         ? never
-        : Type extends DefType
-          ? [OwnRefusalKey<Schema, Type>] extends [never]
-            ? RefusedIn<ChildrenOf<Schema, DefOf<Schema>, Type>, Remaining[Depth]>
-            : OwnRefusalText<Schema, Type>
-          : never
+        : Type extends 'notZod4'
+          ? TextOf<'notZod4'>
+          : Type extends DefType
+            ? [OwnRefusalKey<Schema, Type>] extends [never]
+              ? RefusedIn<ChildrenOf<Schema, DefOf<Schema>, Type>, Remaining[Depth]>
+              : OwnRefusalText<Schema, Type>
+            : never
       : never
     : never;
 
 /**
  * What every schema a declaration holds must also satisfy: a zod type the Not allowed list refuses
- * by name, a pipe or codec, coercion or a catchall is a type error that words the construct as
- * `generate` does. A schema whose type says nothing, `z.json()` and what lies past ten schemas are
- * left to `generate`.
+ * by name, a pipe or codec, coercion, a catchall or a field that is no zod 4 schema is a type error
+ * that words the construct as `generate` does. A schema whose type says nothing, `z.json()` and
+ * what lies past ten schemas are left to `generate`.
  */
 export type SchemaRule<Schema> = [RefusedIn<Schema>] extends [never]
   ? unknown

@@ -18,10 +18,13 @@ export {
 } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
-export type { Catchalls, DefTypes, PipeRefusals } from './def-types.ts';
+export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
+export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
+export type { NodeEdit } from './held-node.ts';
+export { heldNodeOf, withoutNullable } from './held-node.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
@@ -72,5 +75,4 @@ export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from 
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema, Memo } from './walked.ts';
 export { failuresOf, refusalsIn } from './walked.ts';
-export { refNamed, withChild, withField, withoutNullable } from './with-child.ts';
 export { withinStack } from './within-stack.ts';
