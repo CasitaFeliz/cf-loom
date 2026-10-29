@@ -138,7 +138,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 and C29 |
 | Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22); the documents' use of the glossary's terms ([CLAUDE.md](CLAUDE.md#documents)) |
-| Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
+| Correctness | Bugs, the plan's edges and the ones it left out, growth at two sizes, probes, and the tests: C23–C26 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more
 fields: **Kind**, a slip or one instance of a class, with the other instances found; **Cause**, why the code came out
@@ -206,7 +206,8 @@ its cost for v1. Its findings, each verified by a second agent, become issues of
 An issue that changes only documents or configuration keeps the plan, the Definition of Ready, the fix loop, the
 Definition of Done and the merge, without the items that do not apply (a public API, a test list). The main session
 makes the change itself, since it holds the design context, and one `cf-doc-reviewer` agent reads the PR for
-fidelity, consistency across the documents, and links; a mechanical change (a rename, a find and replace) gets the
+fidelity, consistency across the documents, and links, and follows every procedure the PR adds or changes as a reader
+would; a mechanical change (a rename, a find and replace) gets the
 same reviewer on Sonnet. The main session fixes the findings, and the same reviewer reads the whole PR again each
 round, at most two rounds. The reviewer reads once the change passes locally.
 

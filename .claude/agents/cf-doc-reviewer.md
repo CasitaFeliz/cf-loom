@@ -16,7 +16,11 @@ plans.
 - Terms: the glossary's terms, as [CLAUDE.md](../../CLAUDE.md#documents) says; `pnpm check` covers the multi-word ones,
   the single words are yours.
 - Links and anchors resolve; code, commands and paths named exist.
-- Configuration and scripts work: run what the change adds.
+- Configuration and scripts work: run what the change adds. When the PR adds or changes steps a reader runs (Set up,
+  a shell recipe, a CI step, a hint a command prints), run them as written, from an empty project in the probe
+  directory against the built packages and a registry you start, on the passing and the failing path (and the run
+  after, when one gates on a human step), and quote the transcript. A step the procedure needs and does not state is
+  a finding.
 
 Write nothing in the worktree. Your final message is the findings, most severe first, each with severity, file:line,
 evidence and fix, then whether a second round is needed.
