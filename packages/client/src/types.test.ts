@@ -419,6 +419,18 @@ describe('a call’s Input and options, typed by what they declare', () => {
     expect(calling).toBeTypeOf('function');
   });
 
+  test('an optional parameter refuses a variable whose type is one object type holding a field it does not declare', () => {
+    const call: { readonly signal: AbortSignal; readonly signl: number } = {
+      signal: new AbortController().signal,
+      signl: 1,
+    };
+
+    // @ts-expect-error signl is not a declared field
+    const calling = () => replacing.putOrder(input, call);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
   test('client() given options of a union type, one member holding a field they do not declare, is a type error', () => {
     const options = eitherOf({ baseUrl, baseUri: baseUrl }, { baseUrl });
 

@@ -94,7 +94,7 @@ Both hooks may be async and are awaited before the response is returned; what on
 
 ## Types
 
-- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare, given as a literal or through a variable; a value whose shape the Contract gives is open (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
 - `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
 - `ServeOptions<Resources>`, `{ resources?, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes, always given, besides the Contract and the Handler map: the Resources its Handlers take, required exactly when some Handler takes any, and what is operational about serving; none of it is part of the Contract.
 - `BodyLimit`, `number | 'unlimited'`: what `maxBodyBytes` takes, a whole number of bytes from 0 or no limit.

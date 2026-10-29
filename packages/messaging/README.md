@@ -277,7 +277,7 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 
 ## Types
 
-- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare, given as a literal or through a variable; a value whose shape the Contract gives is open (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
 - `Messaging`, `{ publisher, sender, consume, close }`: one connection's messaging, what `messaging()` and `memory()` resolve to; `close` takes `CloseOptions`, `{ signal? }`.
 - `MessagingOptions`, `{ onServiceFault?, onBrokerTrouble? }`: what is operational about messaging and no part of the Contract.
 - `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes, always given, besides the Handler map: the Resources its Message Handlers take, required exactly when some Message Handler takes any.
