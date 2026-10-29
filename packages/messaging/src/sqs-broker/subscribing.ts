@@ -6,6 +6,7 @@ import {
   type SNSClient,
   SubscribeCommand,
 } from '@aws-sdk/client-sns';
+import { answeredWith } from './aws-errors.ts';
 import { type SubscriptionShape, subscriptionDifferencesOf } from './subscription-shape.ts';
 
 type Listed = { readonly arn: string; readonly protocol: string; readonly endpoint: string };
@@ -26,7 +27,7 @@ export function subscribingOn(sns: SNSClient): Subscribing {
   };
   return {
     subscribe: async (shape) => {
-      const listed = await listingOf(shape.TopicArn);
+      const listed = await listingOf(shape.topicArn);
       const found = listed.find((subscription) => isOfQueue(subscription, shape));
       if (found === undefined) {
         return await create(sns, shape);
@@ -38,7 +39,7 @@ export function subscribingOn(sns: SNSClient): Subscribing {
 }
 
 function isOfQueue(subscription: Listed, shape: SubscriptionShape): boolean {
-  return subscription.protocol === 'sqs' && subscription.endpoint === shape.Endpoint;
+  return subscription.protocol === 'sqs' && subscription.endpoint === shape.endpoint;
 }
 
 async function listAll(sns: SNSClient, topicArn: string): Promise<readonly Listed[]> {
@@ -49,12 +50,11 @@ async function listAll(sns: SNSClient, topicArn: string): Promise<readonly Liste
       new ListSubscriptionsByTopicCommand({ TopicArn: topicArn, NextToken: next }),
     );
     for (const subscription of page.Subscriptions ?? []) {
-      const {
-        SubscriptionArn: arn = '',
-        Protocol: protocol = '',
-        Endpoint: endpoint = '',
-      } = subscription;
-      subscriptions.push({ arn, protocol, endpoint });
+      subscriptions.push({
+        arn: answeredWith(subscription.SubscriptionArn, 'SubscriptionArn'),
+        protocol: answeredWith(subscription.Protocol, 'Protocol'),
+        endpoint: answeredWith(subscription.Endpoint, 'Endpoint'),
+      });
     }
     next = page.NextToken;
   } while (next !== undefined);
@@ -62,17 +62,16 @@ async function listAll(sns: SNSClient, topicArn: string): Promise<readonly Liste
 }
 
 async function create(sns: SNSClient, shape: SubscriptionShape): Promise<string> {
-  const { TopicArn, Endpoint, ...attributes } = shape;
   const subscribed = await sns.send(
     new SubscribeCommand({
-      TopicArn,
+      TopicArn: shape.topicArn,
       Protocol: 'sqs',
-      Endpoint,
-      Attributes: attributes,
+      Endpoint: shape.endpoint,
+      Attributes: { ...shape.attributes },
       ReturnSubscriptionArn: true,
     }),
   );
-  return subscribed.SubscriptionArn ?? '';
+  return answeredWith(subscribed.SubscriptionArn, 'SubscriptionArn');
 }
 
 async function restore(sns: SNSClient, arn: string, shape: SubscriptionShape): Promise<void> {
@@ -82,7 +81,7 @@ async function restore(sns: SNSClient, arn: string, shape: SubscriptionShape): P
       new SetSubscriptionAttributesCommand({
         SubscriptionArn: arn,
         AttributeName: attribute,
-        AttributeValue: shape[attribute],
+        AttributeValue: shape.attributes[attribute],
       }),
     );
   }

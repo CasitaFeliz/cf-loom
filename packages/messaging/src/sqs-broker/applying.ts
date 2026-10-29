@@ -1,10 +1,10 @@
 import type { BrokerPlan, Closed } from '@cf-loom/contract/internal';
+import { applyInOrder, throwIfRefused } from '../broker-applying/index.ts';
 import { type DefaultsFields, plannedOf } from '../broker-limits/index.ts';
-import type { Applied } from './applied.ts';
 import { accountLinesOf, placeOf, type SqsConnecting } from './connecting.ts';
 import { type Applier, applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { SqsBrokerLimits } from './limits.ts';
-import { durableConsumerLimits, type PlannedQueue } from './reading-limits.ts';
+import { durableConsumerLimits } from './reading-limits.ts';
 import { applyStream } from './stream-applying.ts';
 import { subscribingOn } from './subscribing.ts';
 
@@ -14,16 +14,27 @@ export async function applyBrokerPlan<const Given = unknown, const GivenLimits =
   plan: BrokerPlan,
   limits: Closed<GivenLimits, SqsBrokerLimits & DefaultsFields<GivenLimits, SqsBrokerLimits>>,
 ): Promise<void> {
-  const planned = checkedOf(connecting.account, plan, limits);
-  if (planned.kind === 'refused') {
-    throw new Error(planned.message);
+  const checked = checkedOf(connecting.account, plan, limits);
+  if (checked.kind === 'refused') {
+    throw new Error(checked.message);
   }
   const { sns, sqs } = connecting;
-  const applier = { sns, sqs, place: await placeOf(connecting), subscribing: subscribingOn(sns) };
-  const applied = await applyAll(applier, planned);
-  if (applied.kind === 'refused') {
-    throw new Error(applied.message, { cause: applied.cause });
-  }
+  const applier: Applier = {
+    sns,
+    sqs,
+    place: await placeOf(connecting),
+    subscribing: subscribingOn(sns),
+  };
+  const streams = Object.keys(checked.plan.streams);
+  throwIfRefused(
+    await applyInOrder(
+      { streams, durableConsumers: checked.durableConsumers },
+      {
+        stream: (name) => applyStream(sns, name),
+        durableConsumer: (planned) => applyDurableConsumer(applier, planned),
+      },
+    ),
+  );
 }
 
 /** The plan and limits read, or one message with a line for each place they or the account break their shape. */
@@ -37,25 +48,4 @@ function checkedOf(account: unknown, plan: unknown, limits: unknown) {
     return { kind: 'refused' as const, message: [...lines, planned.message].join('\n') };
   }
   return lines.length === 0 ? planned : { kind: 'refused' as const, message: lines.join('\n') };
-}
-
-type ToApply = {
-  readonly plan: BrokerPlan;
-  readonly durableConsumers: readonly PlannedQueue[];
-};
-
-async function applyAll(applier: Applier, { plan, durableConsumers }: ToApply): Promise<Applied> {
-  for (const name of Object.keys(plan.streams)) {
-    const applied = await applyStream(applier.sns, name);
-    if (applied.kind === 'refused') {
-      return applied;
-    }
-  }
-  for (const planned of durableConsumers) {
-    const applied = await applyDurableConsumer(applier, planned);
-    if (applied.kind === 'refused') {
-      return applied;
-    }
-  }
-  return { kind: 'applied' };
 }

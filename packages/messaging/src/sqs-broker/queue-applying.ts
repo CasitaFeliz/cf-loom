@@ -8,25 +8,31 @@ import {
   TagQueueCommand,
   UntagQueueCommand,
 } from '@aws-sdk/client-sqs';
-import { isAwsError } from './applied.ts';
+import { answeredWith, isAwsError } from './aws-errors.ts';
 
-/** A queue or dead-letter queue as the plan wants it: its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds. */
+/** A queue or dead-letter queue as the plan wants it: its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds and the queue's own ARN. */
 export type QueueToApply = {
   readonly name: string;
   readonly attributes: Readonly<Record<string, string>>;
   readonly tags: Readonly<Record<string, string>>;
   readonly untagged: readonly string[];
-  readonly policy?: (held: string | undefined) => string;
+  readonly policy?: (held: string | undefined, queueArn: string) => string;
 };
 
-/** Creates the queue with its attributes and tags, or sets them on the one that exists and keeps every other attribute and tag; answers its URL. */
-export async function applyQueue(sqs: SQSClient, queue: QueueToApply): Promise<string> {
-  const url = await urlOf(sqs, queue.name);
-  if (url === undefined) {
-    return await create(sqs, queue);
+/** A queue that exists: its URL, and its ARN as SQS gives it. */
+export type AppliedQueue = { readonly url: string; readonly arn: string };
+
+/** Creates the queue if it does not exist, then sets its attributes and tags and keeps every other attribute and tag. */
+export async function applyQueue(sqs: SQSClient, queue: QueueToApply): Promise<AppliedQueue> {
+  const url = (await urlOf(sqs, queue.name)) ?? (await create(sqs, queue.name));
+  const held = await heldOf(sqs, url);
+  const Attributes = withPolicy(queue, held);
+  await sqs.send(new SetQueueAttributesCommand({ QueueUrl: url, Attributes }));
+  await tagQueue(sqs, url, queue.tags);
+  if (queue.untagged.length > 0) {
+    await sqs.send(new UntagQueueCommand({ QueueUrl: url, TagKeys: [...queue.untagged] }));
   }
-  await update(sqs, url, queue);
-  return url;
+  return { url, arn: held.arn };
 }
 
 /** Adds tags to a queue, keeping the ones it has. */
@@ -50,35 +56,25 @@ async function urlOf(sqs: SQSClient, name: string): Promise<string | undefined> 
   }
 }
 
-async function create(sqs: SQSClient, queue: QueueToApply): Promise<string> {
-  const Attributes = withPolicy(queue, undefined);
-  const created = await sqs.send(
-    new CreateQueueCommand({ QueueName: queue.name, Attributes, tags: { ...queue.tags } }),
-  );
-  return created.QueueUrl ?? '';
+async function create(sqs: SQSClient, name: string): Promise<string> {
+  const created = await sqs.send(new CreateQueueCommand({ QueueName: name }));
+  return answeredWith(created.QueueUrl, 'QueueUrl');
 }
 
-async function update(sqs: SQSClient, url: string, queue: QueueToApply): Promise<void> {
-  const held = queue.policy === undefined ? undefined : await heldPolicyOf(sqs, url);
-  const Attributes = withPolicy(queue, held);
-  await sqs.send(new SetQueueAttributesCommand({ QueueUrl: url, Attributes }));
-  await tagQueue(sqs, url, queue.tags);
-  if (queue.untagged.length > 0) {
-    await sqs.send(new UntagQueueCommand({ QueueUrl: url, TagKeys: [...queue.untagged] }));
-  }
+type Held = { readonly arn: string; readonly policy: string | undefined };
+
+async function heldOf(sqs: SQSClient, url: string): Promise<Held> {
+  const read = await sqs.send(
+    new GetQueueAttributesCommand({ QueueUrl: url, AttributeNames: ['QueueArn', 'Policy'] }),
+  );
+  const attributes = read.Attributes ?? {};
+  return { arn: answeredWith(attributes['QueueArn'], 'QueueArn'), policy: attributes['Policy'] };
 }
 
 /** The queue's attributes with the policy that follows from the one it holds, in the same request. */
-function withPolicy(queue: QueueToApply, held: string | undefined): Record<string, string> {
+function withPolicy(queue: QueueToApply, held: Held): Record<string, string> {
   const policy = queue.policy;
   return policy === undefined
     ? { ...queue.attributes }
-    : { ...queue.attributes, Policy: policy(held) };
-}
-
-async function heldPolicyOf(sqs: SQSClient, url: string): Promise<string | undefined> {
-  const read = await sqs.send(
-    new GetQueueAttributesCommand({ QueueUrl: url, AttributeNames: ['Policy'] }),
-  );
-  return read.Attributes?.['Policy'];
+    : { ...queue.attributes, Policy: policy(held.policy, held.arn) };
 }

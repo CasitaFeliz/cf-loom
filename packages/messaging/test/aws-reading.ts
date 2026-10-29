@@ -19,10 +19,17 @@ function lastSegmentOf(text: string, separator: string): string {
   return text.slice(text.lastIndexOf(separator) + 1);
 }
 
-/** The names of the topics that exist, sorted. */
+/** The names of the topics that exist, sorted, every page of the listing. */
 export async function topicNamesOf(sns: SNSClient): Promise<string[]> {
-  const listed = await sns.send(new ListTopicsCommand({}));
-  const arns = (listed.Topics ?? []).map((topic) => topic.TopicArn ?? '');
+  const arns: string[] = [];
+  let next: string | undefined;
+  do {
+    const page = await sns.send(new ListTopicsCommand({ NextToken: next }));
+    for (const topic of page.Topics ?? []) {
+      arns.push(topic.TopicArn ?? '');
+    }
+    next = page.NextToken;
+  } while (next !== undefined);
   return arns.map((arn) => lastSegmentOf(arn, ':')).sort();
 }
 
@@ -55,17 +62,28 @@ export async function queueTagsOf(sqs: SQSClient, name: string): Promise<Record<
   return read.Tags ?? {};
 }
 
-/** The subscriptions of a topic: each one's ARN and the queue it delivers to. */
+/** The subscriptions of a topic, every page of the listing: each one's ARN and the queue it delivers to. */
 export async function subscriptionsOf(
   sns: SNSClient,
   topicArn: string,
 ): Promise<{ readonly arn: string; readonly endpoint: string; readonly protocol: string }[]> {
-  const listed = await sns.send(new ListSubscriptionsByTopicCommand({ TopicArn: topicArn }));
-  return (listed.Subscriptions ?? []).map((subscription) => ({
-    arn: subscription.SubscriptionArn ?? '',
-    endpoint: subscription.Endpoint ?? '',
-    protocol: subscription.Protocol ?? '',
-  }));
+  const subscriptions: { arn: string; endpoint: string; protocol: string }[] = [];
+  let next: string | undefined;
+  do {
+    const page = await sns.send(
+      new ListSubscriptionsByTopicCommand({ TopicArn: topicArn, NextToken: next }),
+    );
+    for (const subscription of page.Subscriptions ?? []) {
+      const {
+        SubscriptionArn: arn = '',
+        Endpoint: endpoint = '',
+        Protocol: protocol = '',
+      } = subscription;
+      subscriptions.push({ arn, endpoint, protocol });
+    }
+    next = page.NextToken;
+  } while (next !== undefined);
+  return subscriptions;
 }
 
 /** Every attribute SNS holds for a subscription. */

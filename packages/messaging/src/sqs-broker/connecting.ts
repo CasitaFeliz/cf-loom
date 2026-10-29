@@ -7,7 +7,7 @@ import { partition } from '@aws-sdk/core/client';
 export type SqsConnecting = {
   /** Its region is the environment's: every topic ARN cf-loom builds is in it, in the partition the AWS SDK gives that region. */
   readonly sns: SNSClient;
-  /** Of the same account and region as `sns`. */
+  /** Of the same account as `sns`; the ARN of each queue is the one SQS gives it. */
   readonly sqs: SQSClient;
   /** The 12-digit AWS account id the topics and queues are in. */
   readonly account: string;
@@ -29,11 +29,6 @@ export async function placeOf(connecting: SqsConnecting): Promise<Place> {
 /** The ARN of the SNS topic named `name` in the place. */
 export function topicArnOf(place: Place, name: string): string {
   return `arn:${place.partition}:sns:${place.region}:${place.account}:${name}`;
-}
-
-/** The ARN of the SQS queue named `name` in the place. */
-export function queueArnOf(place: Place, name: string): string {
-  return `arn:${place.partition}:sqs:${place.region}:${place.account}:${name}`;
 }
 
 /** The lines refusing an account that is not 12 digits, which only untyped code can pass; whether it is the clients' own is AWS's to answer. */

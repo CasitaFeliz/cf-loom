@@ -16,6 +16,7 @@ export function anAwsConnecting(
   url: string,
   place: {
     readonly region?: string;
+    readonly sqsRegion?: string;
     readonly account?: string;
     readonly sqsUrl?: string;
   } = {},
@@ -26,7 +27,11 @@ export function anAwsConnecting(
     maxAttempts: 1,
   };
   const sns = new SNSClient({ ...settings, endpoint: url });
-  const sqs = new SQSClient({ ...settings, endpoint: place.sqsUrl ?? url });
+  const sqs = new SQSClient({
+    ...settings,
+    region: place.sqsRegion ?? settings.region,
+    endpoint: place.sqsUrl ?? url,
+  });
   onTestFinished(() => {
     sns.destroy();
     sqs.destroy();
@@ -55,4 +60,28 @@ export async function aClosedUrl(): Promise<string> {
   await new Promise((resolve) => server.close(resolve));
   const port = typeof address === 'object' && address !== null ? address.port : 0;
   return `http://127.0.0.1:${port}`;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** Makes a client's answers to one kind of command pass through `alter` first, as an AWS that answered otherwise would. */
+export function alteringAnswers(
+  client: SNSClient | SQSClient,
+  commandName: string,
+  alter: (output: Record<string, unknown>) => void,
+): void {
+  const stack = (client as SNSClient).middlewareStack;
+  stack.add(
+    (next, context) => async (args) => {
+      const answered = await next(args);
+      const output: unknown = answered.output;
+      if (context.commandName === commandName && isRecord(output)) {
+        alter(output);
+      }
+      return answered;
+    },
+    { step: 'initialize', name: `alter-${commandName}` },
+  );
 }

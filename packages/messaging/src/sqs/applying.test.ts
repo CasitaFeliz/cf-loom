@@ -11,7 +11,12 @@ import {
   tagByHand,
   unsubscribe,
 } from '../../test/aws-arranging.ts';
-import { aClosedUrl, anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
+import {
+  aClosedUrl,
+  alteringAnswers,
+  anAwsConnecting,
+  countCommands,
+} from '../../test/aws-clients.ts';
 import {
   queueAttributesOf,
   queueNamesOf,
@@ -126,6 +131,11 @@ async function rejectionOf(applying: Promise<void>): Promise<Error> {
   throw new Error('applyBrokerPlan did not reject');
 }
 
+/** Ack waits whose backoff text is 36 of `10000s`, a space and `last`: 256 characters for `999s`, 257 for `9999s`. */
+function backoffOf(last: Duration): Duration[] {
+  return ['30s', ...Array.from({ length: 36 }, (): Duration => '10000s'), last];
+}
+
 function sqsArnOf(queue: string): string {
   return `arn:aws:sqs:eu-west-1:123456789012:${queue}`;
 }
@@ -159,7 +169,7 @@ describe('applyBrokerPlan', () => {
     });
   });
 
-  test('a list of ack waits gives the queue the first as its visibility timeout and the rest, as written, in its cf-loom:backoff tag; one wait gives it no backoff tag', async () => {
+  test('a list of ack waits gives the queue the first as its visibility timeout and the rest, as written, in its cf-loom:backoff tag', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url);
     const backoff: SqsBrokerLimits = {
@@ -170,15 +180,21 @@ describe('applyBrokerPlan', () => {
     };
 
     await applyBrokerPlan(connecting, orders.plan, backoff);
-    const withBackoff = await queueTagsOf(connecting.sqs, orders.chargeDurable);
-    const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
-    await moto.reset();
-    await applyBrokerPlan(connecting, orders.plan, testLimits);
-    const withoutBackoff = await queueTagsOf(connecting.sqs, orders.chargeDurable);
 
+    const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
     expect(attributes['VisibilityTimeout']).toBe('30');
-    expect(withBackoff['cf-loom:backoff']).toBe('1m 5m');
-    expect(Object.keys(withoutBackoff)).not.toContain('cf-loom:backoff');
+    expect(tags['cf-loom:backoff']).toBe('1m 5m');
+  });
+
+  test('one ack wait gives the queue no cf-loom:backoff tag', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(Object.keys(tags)).not.toContain('cf-loom:backoff');
   });
 
   test('each queue gets its _dlq dead-letter queue, tagged with its queue’s cf-loom:durable and cf-loom:service and no backoff, with deadLetterRetention, and a redrive policy of that many receives', async () => {
@@ -845,25 +861,31 @@ describe('applyBrokerPlan', () => {
     expect(await queueNamesOf(connecting.sqs)).toHaveLength(2);
   });
 
+  test('a backoff whose tag has exactly 256 characters is accepted', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, {
+      durableConsumerDefaults: {
+        ...testLimits.durableConsumerDefaults,
+        ackWait: backoffOf('999s'),
+      },
+    });
+
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(tags['cf-loom:backoff']).toHaveLength(256);
+  });
+
   test('a backoff whose tag would exceed 256 characters is refused, naming where that ackWait is in limits, creating nothing', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url);
-    const waits = (count: number): Duration[] => [
-      '30s',
-      ...Array.from({ length: count }, (): Duration => '10000s'),
-    ];
-    const fits = waits(36);
-    const exceeds = waits(37);
-    expect(fits.slice(1).join(' ')).toHaveLength(251);
-    expect(exceeds.slice(1).join(' ')).toHaveLength(258);
 
-    await applyBrokerPlan(connecting, orders.plan, {
-      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: fits },
-    });
-    await moto.reset();
     const error = await rejectionOf(
       applyBrokerPlan(connecting, orders.plan, {
-        durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: exceeds },
+        durableConsumerDefaults: {
+          ...testLimits.durableConsumerDefaults,
+          ackWait: backoffOf('9999s'),
+        },
       }),
     );
 
@@ -871,6 +893,29 @@ describe('applyBrokerPlan', () => {
     expect(error.message).toContain('at most 256 characters');
     expect(await topicNamesOf(connecting.sns)).toEqual([]);
   });
+
+  test.each(['59s', '1209601s'] as const)(
+    'a retention or dead-letter retention of %s, outside 1m to 14d by one second, is refused',
+    async (outside) => {
+      const orders = anOrders();
+      const connecting = anAwsConnecting(moto.url);
+      const limits: SqsBrokerLimits = {
+        durableConsumerDefaults: {
+          ...testLimits.durableConsumerDefaults,
+          retention: outside,
+          deadLetterRetention: outside,
+        },
+      };
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+      expect(error.message.split('\n').map((line) => line.split(' ')[0])).toEqual([
+        'limits.durableConsumerDefaults.retention',
+        'limits.durableConsumerDefaults.deadLetterRetention',
+      ]);
+      expect(await topicNamesOf(connecting.sns)).toEqual([]);
+    },
+  );
 
   test('an account that is not 12 digits is refused, creating nothing', async () => {
     const orders = anOrders();
@@ -971,6 +1016,111 @@ describe('applyBrokerPlan', () => {
     );
     expect(subscription?.endpoint).toBe(
       `arn:aws-us-gov:sqs:us-gov-west-1:123456789012:${orders.chargeDurable}`,
+    );
+  });
+
+  test('a Stream read by more than 100 Durable consumers, applied again, subscribes none again and keeps one subscription for each queue', async () => {
+    const names = Array.from({ length: 130 }, (_, index) => `long_consumer-${index}`);
+    const plan = aPlanOfDurables(names);
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, plan, testLimits);
+    const subscribes = countCommands(connecting.sns, 'SubscribeCommand');
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    const subscriptions = await subscriptionsOf(connecting.sns, snsArnOf('long'));
+    const endpoints = subscriptions.map(({ endpoint }) => endpoint);
+    expect(subscribes.sent()).toBe(0);
+    expect(new Set(endpoints)).toEqual(new Set(names.map(sqsArnOf)));
+    expect(endpoints).toHaveLength(130);
+  }, 60_000);
+
+  test('the Durable consumers of one topic share one listing of its subscriptions', async () => {
+    const plan = aPlanOfDurables(['long_first', 'long_second']);
+    const connecting = anAwsConnecting(moto.url);
+    const listings = countCommands(connecting.sns, 'ListSubscriptionsByTopicCommand');
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    expect(listings.sent()).toBe(1);
+  });
+
+  test('an account that is not 12 digits and a setting left unset are refused in one error, a line each', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { account: '1234' });
+    const limits: SqsBrokerLimits = { durableConsumerDefaults: { ackWait: '30s' } };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+    expect(error.message.split('\n')).toEqual([
+      "connecting.account '1234' is not a 12-digit AWS account id",
+      `The Durable consumer ${orders.chargeDurable} has no maxDeliver, retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+    ]);
+  });
+
+  test('the ARN of each queue is the one SQS gives it, whatever region the SNS client is in', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { region: 'eu-west-1', sqsRegion: 'us-east-1' });
+    const queueArn = `arn:aws:sqs:us-east-1:123456789012:${orders.chargeDurable}`;
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const queue = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const [subscription] = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
+    expect(JSON.parse(queue['RedrivePolicy'] ?? '{}').deadLetterTargetArn).toBe(`${queueArn}_dlq`);
+    expect(JSON.parse(queue['Policy'] ?? '{}').Statement[0].Resource).toBe(queueArn);
+    expect(subscription?.endpoint).toBe(queueArn);
+  });
+
+  test.each([
+    {
+      what: 'SQS answers a new queue without its URL',
+      client: 'sqs',
+      command: 'CreateQueueCommand',
+      field: 'QueueUrl',
+      alter: (output: Record<string, unknown>) => delete output['QueueUrl'],
+    },
+    {
+      what: 'SQS answers a queue without its ARN',
+      client: 'sqs',
+      command: 'GetQueueAttributesCommand',
+      field: 'QueueArn',
+      alter: (output: Record<string, unknown>) => (output['Attributes'] = {}),
+    },
+    {
+      what: 'SNS answers a new subscription without its ARN',
+      client: 'sns',
+      command: 'SubscribeCommand',
+      field: 'SubscriptionArn',
+      alter: (output: Record<string, unknown>) => delete output['SubscriptionArn'],
+    },
+  ] as const)(
+    'when $what, applyBrokerPlan rejects naming the Durable consumer and the field',
+    async ({ client, command, field, alter }) => {
+      const orders = anOrders();
+      const connecting = anAwsConnecting(moto.url);
+      alteringAnswers(connecting[client], command, alter);
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+      expect(error.message).toBe(
+        `The Durable consumer ${orders.chargeDurable} could not be applied: AWS answered no ${field}`,
+      );
+    },
+  );
+
+  test('when SNS lists a subscription without its endpoint, applyBrokerPlan rejects naming the Durable consumer and the field', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    alteringAnswers(connecting.sns, 'ListSubscriptionsByTopicCommand', (output) => {
+      output['Subscriptions'] = [{ SubscriptionArn: 'arn', Protocol: 'sqs' }];
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(
+      `The Durable consumer ${orders.chargeDurable} could not be applied: AWS answered no Endpoint`,
     );
   });
 });
