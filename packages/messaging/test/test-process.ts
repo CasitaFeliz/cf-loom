@@ -3,8 +3,8 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
  * How long a server may take to listen. The messaging project's test and hook timeouts are derived from it, so they
- * exceed it by the time a failed start takes to stop the server: a server that never listens fails its start, and
- * is stopped, before either timeout fires and leaves the process behind.
+ * exceed it by the longest a failed start takes to stop the server and a margin: a server that never listens fails
+ * its start, and is stopped, before either timeout fires and leaves the process behind.
  */
 export const startDeadlineMs = 10_000;
 /** How long a server may take to stop before it is killed. */
