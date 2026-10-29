@@ -193,7 +193,7 @@ for (const endpoint of endpoints) { const rejection = rejectionsByCode.get(endpo
 **C15. A name says the role, not the history.** No `new`, `old`, `legacy`, `fixed`, `real`, `actual` and no version
 suffix in a name: when the old thing is gone (C5), the name is free. A Message Version's name in code
 (`orderCreatedV2`) is the one exception, since its number is part of the Contract. A function that decides is named
-for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what it does (`writeSnapshot`, `applyPlan`).
+for what it answers (`isRejectionStatus`, `statusOf`), one that acts for what it does (`writeSnapshot`, `applyBrokerPlan`).
 *Why:* a name that refers to another version only means something while both exist.
 
 ## Types
