@@ -2050,12 +2050,36 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
       call: '.meta()',
       named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).meta({ description: 'A' }),
     },
+    {
+      call: '.describe() twice',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).describe('A').describe('B'),
+    },
   ])('an id a later $call dropped is named in the unnamed cycle’s line', ({ named }) => {
     expect(walkBody(cycleWith(named))).toEqual({
       located: [refused([droppedIdFailure('children[]', 'category')])],
       defs: {},
     });
   });
+
+  test.each([
+    {
+      what: 'not a camelCase name',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'tree_x' }).describe('A'),
+    },
+    {
+      what: 'not a string',
+      // @ts-expect-error zod types an id as a string
+      named: (schema: z.ZodObject) => schema.meta({ id: 5 }).describe('A'),
+    },
+  ])(
+    'an id a later call dropped that is $what is not named: the line says to write one',
+    ({ named }) => {
+      expect(walkBody(cycleWith(named))).toEqual({
+        located: [refused([{ at: 'children[]', ...unnamedCycle }])],
+        defs: {},
+      });
+    },
+  );
 
   test('an id a later check dropped is named in the unnamed cycle’s line', () => {
     const list: z.ZodType = z
@@ -2108,6 +2132,10 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
       kind: 'dropped',
       name: (schema: z.ZodType, index: number) => schema.meta({ id: `d${index}` }).describe('d'),
     },
+    {
+      kind: 'dropped-refused',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `d_${index}` }).describe('d'),
+    },
     { kind: 'none', name: (schema: z.ZodType) => schema },
   ] as const;
 
@@ -2129,6 +2157,25 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
     return schemas[0] as z.ZodType;
   }
 
+  function isDroppedOrNone(kind: Member['kind']): boolean {
+    return kind === 'none' || kind === 'dropped' || kind === 'dropped-refused';
+  }
+
+  /** What the unnamed-cycle line says to write: the id the first member that lost a valid one dropped, else any. */
+  function firstDroppedInstead(members: readonly Member[]): string {
+    const dropped = members.find(({ kind }) => kind === 'dropped');
+    return dropped === undefined
+      ? unnamedCycle.instead
+      : droppedIdFailure('', `d${dropped.index}`).instead;
+  }
+
+  function unnamedInsteadOf(location: { readonly kind: string } | undefined): string | undefined {
+    const failures = location !== undefined && 'failures' in location ? location.failures : [];
+    return (failures as readonly { construct: string; instead?: string }[]).find(
+      ({ construct }) => construct === unnamedCycle.construct,
+    )?.instead;
+  }
+
   test('a cycle gets at most one line about its id: each refused id its own, else one unnamed-cycle line', () => {
     const next = seededNext(377);
     const draws = Array.from({ length: 300 }, () => {
@@ -2145,13 +2192,18 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
       const constructs =
         location?.kind === 'not-allowed' ? location.failures.map(({ construct }) => construct) : [];
       const refusedIds = members.filter(({ kind }) => kind === 'refused' || kind === 'non-string');
-      const wroteAnId = members.some(({ kind }) => kind !== 'none' && kind !== 'dropped');
+      const wroteAnId = members.some(({ kind }) => !isDroppedOrNone(kind));
       const unnamedLines = constructs.filter((construct) => construct === unnamedCycle.construct);
 
       expect(unnamedLines.length, JSON.stringify(members)).toBe(wroteAnId ? 0 : 1);
       expect(constructs.length - unnamedLines.length, JSON.stringify(members)).toBe(
         refusedIds.length,
       );
+      if (!wroteAnId) {
+        expect(unnamedInsteadOf(location), JSON.stringify(members)).toBe(
+          firstDroppedInstead(members),
+        );
+      }
     }
   });
 });

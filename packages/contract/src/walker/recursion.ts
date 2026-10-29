@@ -94,9 +94,8 @@ function reportedOf(state: State, entering: Entering): Walked | undefined {
 
 /**
  * The schema met again inside itself: its `ref` if it wrote an id, a failure if no schema of the
- * cycle wrote one, else nothing, so the walk goes through it again up to one that has. An id the
- * walk refuses names the cycle all the same: the schema's own walk fails by that refusal alone,
- * so its `ref` is never written.
+ * cycle wrote one, else nothing, so the walk goes on to one that has. An id the walk refuses
+ * still names the cycle, whose schema then fails by that refusal alone.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
   const closingIndex = state.ancestors.findLastIndex(

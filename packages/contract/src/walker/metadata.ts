@@ -63,14 +63,15 @@ export function writtenIdOf(schema: core.$ZodType): string | undefined {
 }
 
 /**
- * The id a schema this one was cloned from held, nearest first: zod gives a clone its parent's
- * metadata but the id, so a `.describe()`, `.meta()` or check after `.meta({ id })` drops it.
+ * The id a schema this one was cloned from held, nearest first, when the walk accepts it: zod
+ * gives a clone its parent's metadata but the id, so a `.describe()`, `.meta()` or check after
+ * `.meta({ id })` drops it. An id the walk refuses is not worth naming, since it is refused again.
  */
 export function droppedIdOf(schema: core.$ZodType): string | undefined {
   for (let parent = schema._zod.parent; parent !== undefined; parent = parent._zod.parent) {
-    const id = globalRegistry.get(parent)?.['id'];
-    if (typeof id === 'string') {
-      return id;
+    const id = writtenIdOf(parent);
+    if (id !== undefined) {
+      return idRefusalOf(id) === undefined ? id : undefined;
     }
   }
   return undefined;

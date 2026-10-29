@@ -24,10 +24,7 @@ export function offCycle(state: State, ancestor: Ancestor, node: Walked): Walked
 
 /**
  * A schema with an id on a cycle is walked once: its def, or its failures, kept for every use,
- * each of which is a `ref` to it. An id the walk refuses names the cycle all the same: its schema
- * fails by that refusal, since its metadata is refused, and the failure is kept as any other. A
- * def is never nullable: `.nullable()` belongs to a use, so a schema that admits `null` is refused
- * as a def, through `z.lazy()` or an intersection included.
+ * each of which is a `ref` to it. A def is never nullable, since `.nullable()` belongs to a use.
  */
 export function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
   const written = writtenIdOf(ancestor.schema);
