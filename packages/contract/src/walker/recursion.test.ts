@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
+import { cpuMillisecondsOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -1455,12 +1456,13 @@ describe('walkSchemas: recursion', () => {
   test('a ring of 255 schemas walks fast', () => {
     const ring = aRingOf(255);
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, 1000);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(1000);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1584,11 +1586,14 @@ describe('walkSchemas: recursion', () => {
   });
 
   /**
-   * Reads each failure tree once, so the chain takes well under a second; read afresh for each id,
-   * the trees cost seconds, past this test's timeout. The walk's memory also grows with the square
-   * of a chain of ids, so the chain stays at 7,000.
+   * Reads each failure tree once, so the chain's walk takes about 0.4 s of CPU time; read afresh for
+   * each id, the trees cost over 6 s. The walk's memory also grows with the square of a chain of ids,
+   * so the chain stays at 7,000.
    */
-  const memoTimeout = 4_000;
+  const memoCpuMilliseconds = 2_000;
+
+  /** The chain is walked up to four times, which takes half a minute with the memo off. */
+  const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
     timeout: memoTimeout,
@@ -1597,14 +1602,17 @@ describe('walkSchemas: recursion', () => {
     for (let index = 0; index < 7_000; index++) {
       schema = z.object({ next: schema }).meta({ id: `link${index}` });
     }
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
 
-    const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, memoCpuMilliseconds);
 
     const constructs = constructsOf(walked).flat();
     const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
     expect(offCycle).toHaveLength(7_000);
     expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
     expect(constructs).toHaveLength(7_001);
+    expect(cpuMilliseconds).toBeLessThan(memoCpuMilliseconds);
   });
 
   test('a failing def met by many paths is reported once and walked once', () => {
@@ -1623,15 +1631,16 @@ describe('walkSchemas: recursion', () => {
       steps.push(z.object(shape).meta({ id: `step${index}` }));
     }
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, 1000);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(1000);
   });
 });
 
@@ -1679,8 +1688,11 @@ describe('reachedDefsOf', () => {
 /** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */
 const depth = 5_000;
 
-/** A deep test walks thousands of schemas, which takes seconds on a CI runner with shared cores. */
-const deepTimeout = 60_000;
+/**
+ * A deep test walks thousands of schemas, which takes up to 8 s while the project's files run in
+ * parallel, and several times that on a CI runner that several runs share.
+ */
+const deepTimeout = 240_000;
 
 /**
  * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies
