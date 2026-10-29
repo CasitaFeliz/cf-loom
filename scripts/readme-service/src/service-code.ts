@@ -39,6 +39,8 @@ const stored = {
   lockedAt: '2026-10-18T10:00:00Z',
 } as const;
 const sent: string[] = [];
+/** The orders whose ChargeCard v1 the Service handled, in the order it handled them. */
+export const charged: string[] = [];
 
 export const orders: Orders = {
   find: async (orderId, callerId) =>
@@ -58,6 +60,7 @@ export const notifications: Notifications & { readonly sent: readonly string[] }
 /** Puts what the Service's code kept back as it began, for a test's `beforeEach`. */
 export function resetServiceCode(): void {
   sent.length = 0;
+  charged.length = 0;
 }
 
 export async function ordersRepository(): Promise<Orders> {
