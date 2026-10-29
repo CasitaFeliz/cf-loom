@@ -4,11 +4,10 @@ import {
   childrenOf,
   type Defs,
   defsReachedOf,
-  refNamed,
+  heldNodeOf,
+  type NodeEdit,
   type SchemaNode,
   type Step,
-  withChild,
-  withField,
   withoutNullable,
 } from '../walker/index.ts';
 import type { BothDefs, Finding, NodePair } from './findings.ts';
@@ -54,7 +53,8 @@ type Put = (node: SchemaNode) => void;
 
 /**
  * One node being built on the walk's stack: the proposed node with a pair's findings applied, the
- * former node at hand for the fields it grafts, or a former node copied child by child.
+ * former node at hand for the fields it grafts, or a former node copied child by child. Its edits
+ * are applied once the frame completes, since a copy replaces children by the index they had.
  */
 type Frame =
   | {
@@ -62,13 +62,15 @@ type Frame =
       readonly former: SchemaNode;
       readonly findings: Iterator<Finding>;
       readonly owner: number | undefined;
-      node: SchemaNode;
+      readonly node: SchemaNode;
+      readonly edits: NodeEdit[];
       readonly put: Put;
     }
   | {
       readonly kind: 'copy';
       readonly children: Iterator<Child>;
-      node: SchemaNode;
+      readonly node: SchemaNode;
+      readonly edits: NodeEdit[];
       readonly put: Put;
     };
 
@@ -126,7 +128,7 @@ function stepGraft(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>): void {
   const next = frame.findings.next();
   if (next.done === true) {
     walk.frames.pop();
-    frame.put(frame.node);
+    frame.put(heldNodeOf(frame.node, frame.edits));
     return;
   }
   const finding = next.value;
@@ -136,7 +138,7 @@ function stepGraft(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>): void {
   }
   if (finding.kind === 'inside') {
     const put = (child: SchemaNode) => {
-      frame.node = withChild(frame.node, step, child);
+      frame.edits.push({ kind: 'child', step, node: child });
     };
     placePair(walk, finding.pair, { owner: frame.owner, put });
   } else if (finding.shape.kind === 'field-removed') {
@@ -156,7 +158,7 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
   walk.grafts = true;
   graftRecorded(walk.met, frame.owner);
   const put = (schema: SchemaNode) => {
-    frame.node = withField(frame.node, step.name, { ...field, schema });
+    frame.edits.push({ kind: 'field', name: step.name, field: { ...field, schema } });
   };
   put(field.schema);
   placeCopy(walk, field.schema, put);
@@ -177,8 +179,8 @@ function placePair(walk: Walk, pair: NodePair, place: Place): void {
     return;
   }
   const { index, name, isBuilt } = pairMet(walk.met, followed.key, place.owner);
-  const chain = { nullable: followed.pair.proposed.nullable === true };
-  place.put(name === undefined ? pair.proposed : refNamed(pair.proposed, name, chain));
+  const nullable = followed.pair.proposed.nullable === true;
+  place.put(name === undefined ? pair.proposed : renamedRef(pair.proposed, name, nullable));
   if (isBuilt) {
     pushGraft(walk, followed.pair, { owner: index, put: defPut(walk, name) });
   }
@@ -200,6 +202,7 @@ function pushGraft(walk: Walk, pair: NodePair, place: Place): void {
     findings: findingsOf(pair, walk.defs).values(),
     owner: place.owner,
     node: pair.proposed,
+    edits: [],
     put: place.put,
   });
 }
@@ -207,12 +210,13 @@ function pushGraft(walk: Walk, pair: NodePair, place: Place): void {
 /** A node only the former Input has, copied as it was, each def it reaches copied and named apart. */
 function placeCopy(walk: Walk, node: SchemaNode, put: Put): void {
   if (node.type !== 'ref') {
-    walk.frames.push({ kind: 'copy', children: childrenOf(node).values(), node, put });
+    const children = childrenOf(node).values();
+    walk.frames.push({ kind: 'copy', children, node, edits: [], put });
     return;
   }
   const resolved = followedRefOf(node, walk.defs.baseline);
   const { name, isBuilt } = copyMet(walk.met, resolved.name);
-  put(refNamed(node, name ?? resolved.name, resolved));
+  put(renamedRef(node, name ?? resolved.name, resolved.nullable));
   if (isBuilt) {
     placeCopy(walk, resolved.def, defPut(walk, name));
   }
@@ -222,13 +226,18 @@ function stepCopy(walk: Walk, frame: Extract<Frame, { kind: 'copy' }>): void {
   const next = frame.children.next();
   if (next.done === true) {
     walk.frames.pop();
-    frame.put(frame.node);
+    frame.put(heldNodeOf(frame.node, frame.edits));
     return;
   }
   const [step] = next.value.steps;
   if (step !== undefined) {
     placeCopy(walk, next.value.node, (child) => {
-      frame.node = withChild(frame.node, step, child);
+      frame.edits.push({ kind: 'child', step, node: child });
     });
   }
+}
+
+/** A `ref` renamed to the def the graft writes it to, nullable when a `ref` on the way to that def is. */
+function renamedRef(ref: SchemaNode, name: string, nullable: boolean): SchemaNode {
+  return heldNodeOf(ref, [{ kind: 'renamed', name, nullable }]);
 }
