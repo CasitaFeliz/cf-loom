@@ -185,14 +185,14 @@ describe('walkSchemas: a value that is no zod 4 schema', () => {
       schema: () =>
         z.discriminatedUnion('kind', [
           z.object({ kind: z.literal('a') }),
-          z.lazy(() => z3.object({ kind: z3.literal('b') })) as never,
+          z.lazy(() => z3.object({ kind: z3.literal('b') }) as never),
         ]),
       at: '<|1>',
     },
     {
       what: 'a discriminated union variant whose discriminator is a lazy of zod/v3',
       schema: () =>
-        z.discriminatedUnion('kind', [z.object({ kind: z.lazy(() => z3.literal('b')) as never })]),
+        z.discriminatedUnion('kind', [z.object({ kind: z.lazy(() => z3.literal('b') as never) })]),
       at: '<|0>.kind',
     },
     {
