@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
+import { seededNext } from '../../test/random-schemas.ts';
 import type { ReservedCode } from '../index.ts';
 import {
   allowedMethodsOf,
@@ -546,6 +547,7 @@ describe('the invalid-input body', () => {
         { in: 'headers', path: ['x-api-key'], code: 'required', message: 'Required' },
         { in: 'body', path: [], code: 'malformed', message: 'The body is not JSON' },
       ],
+      omittedIssues: 0,
     });
   });
 
@@ -578,6 +580,178 @@ describe('the invalid-input body', () => {
   });
 });
 
+describe('the invalid-input body of many or large Issues', () => {
+  test('it lists the first 100 Issues in the order they were read and counts the other one as omitted', () => {
+    const issues = Array.from({ length: 101 }, (_, index) => anIssue({ path: [index] }));
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues.map((issue) => issue.path)).toEqual(
+      Array.from({ length: 100 }, (_, index) => [index]),
+    );
+    expect(body.omittedIssues).toBe(1);
+  });
+
+  test('Issues whose JSON fills exactly 64 KiB are all listed', () => {
+    const issues = [anIssue({ path: [0] }), anIssueFilling(65_536, [anIssue({ path: [0] })])];
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues).toHaveLength(2);
+    expect(issuesBytesOf(body)).toBe(65_536);
+    expect(body.omittedIssues).toBe(0);
+  });
+
+  test('Issues whose JSON would take one byte more than 64 KiB leave the last one counted, not listed', () => {
+    const issues = [anIssue({ path: [0] }), anIssueFilling(65_537, [anIssue({ path: [0] })])];
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues).toHaveLength(1);
+    expect(body.omittedIssues).toBe(1);
+  });
+
+  test('an Issue that would take the issues past 64 KiB is counted, and so is every Issue after it, a short one included', () => {
+    const issues = [
+      anIssue({ path: [0] }),
+      anIssue({ path: ['k'.repeat(65_536)] }),
+      anIssue({ path: [2] }),
+    ];
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues.map((issue) => issue.path)).toEqual([[0]]);
+    expect(body.omittedIssues).toBe(2);
+  });
+
+  test('one Issue larger than 64 KiB alone lists none and counts it', () => {
+    const issues = [anIssue({ path: ['k'.repeat(70_000)] })];
+
+    const body = invalidInputBodyOf(issues);
+
+    expect(body.issues).toHaveLength(0);
+    expect(body.omittedIssues).toBe(1);
+  });
+
+  test('the size counts the UTF-8 bytes of the JSON as sent, multi-byte characters included', () => {
+    const fits = anIssueFilling(65_536, [], '€');
+    const passes = anIssue({ path: [`${fits.path[0]}€`] });
+
+    const bodies = [invalidInputBodyOf([fits]), invalidInputBodyOf([passes])];
+
+    expect(bodies.map((body) => body.omittedIssues)).toEqual([0, 1]);
+  });
+
+  test('the size counts a lone surrogate as the six-character escape it is sent as', () => {
+    const fits = anIssueFilling(65_536, [], '\ud800');
+    const passes = anIssue({ path: [`${fits.path[0]}\ud800`] });
+
+    const bodies = [invalidInputBodyOf([fits]), invalidInputBodyOf([passes])];
+
+    expect(bodies.map((body) => body.omittedIssues)).toEqual([0, 1]);
+  });
+
+  test.for([17, 2026, 4099, 65_537, 99_991, 271_828, 314_159, 1_000_003])(
+    'any number of Issues of any size, seed %i, lists the first that fit and counts the rest',
+    (seed) => {
+      const next = seededNext(seed);
+      const lists = Array.from({ length: 12 }, () => randomIssues(next));
+
+      const bounds = lists.map((issues) => boundsOf(invalidInputBodyOf(issues), issues));
+
+      expect(bounds).toEqual(lists.map(expectedBoundsOf));
+    },
+  );
+});
+
+type AnInputIssue = Parameters<typeof invalidInputBodyOf>[0][number];
+
+const inputPartValues = [
+  'input.params',
+  'input.query',
+  'input.headers',
+  'input.body',
+  'demands.query',
+  'demands.headers',
+] as const;
+
+const keyCharacters = ['k', 'é', '€', '😀', '\ud800', '"', '\\', '\n'];
+
+const keyLengthScales = [0, 100, 1_000, 40_000];
+
+function anIssue(overrides: Partial<AnInputIssue> = {}): AnInputIssue {
+  return { part: 'input.body', path: [], code: 'too_big', message: 'Too big', ...overrides };
+}
+
+function writtenOf(issue: AnInputIssue): unknown {
+  const { part, path, code, message } = issue;
+  return { in: part.split('.')[1], path, code, message };
+}
+
+function bytesOf(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length;
+}
+
+function issuesBytesOf(body: ReturnType<typeof invalidInputBodyOf>): number {
+  return bytesOf(body.issues);
+}
+
+function anIssueFilling(
+  bytes: number,
+  before: readonly AnInputIssue[],
+  character = 'k',
+): AnInputIssue {
+  const written = [...before.map(writtenOf), writtenOf(anIssue({ path: [''] }))];
+  const room = bytes - bytesOf(written);
+  const characterBytes = bytesOf(character) - 2;
+  const key = character.repeat(Math.floor(room / characterBytes));
+  return anIssue({ path: [`${key}${'k'.repeat(room % characterBytes)}`] });
+}
+
+function randomIssues(next: () => number): readonly AnInputIssue[] {
+  const count = Math.floor(next() * 301);
+  const longestKey = keyLengthScales[Math.floor(next() * keyLengthScales.length)] ?? 0;
+  return Array.from({ length: count }, () =>
+    anIssue({
+      part: inputPartValues[Math.floor(next() * inputPartValues.length)] ?? 'input.body',
+      path: [randomKey(next, longestKey), Math.floor(next() * 1000)],
+    }),
+  );
+}
+
+function randomKey(next: () => number, longestKey: number): string {
+  const length = Math.floor(next() ** 2 * longestKey);
+  const chunk = Array.from(
+    { length: 1 + Math.floor(next() * 8) },
+    () => keyCharacters[Math.floor(next() * keyCharacters.length)] ?? 'k',
+  ).join('');
+  return chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
+}
+
+function boundsOf(body: ReturnType<typeof invalidInputBodyOf>, issues: readonly AnInputIssue[]) {
+  const written = issues.map(writtenOf);
+  const listed = body.issues.length;
+  return {
+    listed,
+    omittedIssues: body.omittedIssues,
+    isPrefix: JSON.stringify(body.issues) === JSON.stringify(written.slice(0, listed)),
+    withinBytes: issuesBytesOf(body) <= 65_536,
+  };
+}
+
+function expectedBoundsOf(issues: readonly AnInputIssue[]) {
+  const sizes = issues.map((issue) => bytesOf(writtenOf(issue)));
+  let listed = 0;
+  let bytes = 2;
+  for (const size of sizes) {
+    const total = bytes + size + (listed > 0 ? 1 : 0);
+    if (listed === 100 || total > 65_536) break;
+    listed++;
+    bytes = total;
+  }
+  return { listed, omittedIssues: issues.length - listed, isPrefix: true, withinBytes: true };
+}
+
 describe('the invalid-input Rejection', () => {
   test('it answers the resolved code, status and message with cf-loom’s body', async () => {
     const standards = {
@@ -598,6 +772,7 @@ describe('the invalid-input Rejection', () => {
         message: 'The request is invalid',
         body: {
           issues: [{ in: 'query', path: ['page'], code: 'invalid_type', message: 'A number' }],
+          omittedIssues: 0,
         },
       },
     });
@@ -629,6 +804,7 @@ describe('the invalid-input Rejection of a Provider whose Standard Rejections ca
         message: 'The request is invalid',
         body: {
           issues: [{ in: 'body', path: ['amount'], code: 'too_small', message: 'At least 1' }],
+          omittedIssues: 0,
         },
       },
     });
