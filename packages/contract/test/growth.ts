@@ -29,6 +29,22 @@ export function growthOf(
   return smallest;
 }
 
+/**
+ * The CPU time of the thread, in milliseconds, that `call` takes: the smallest of up to three runs,
+ * which stop at the first under `bound`. A busy host stretches it far less than the clock, and only
+ * upward, so code that measures over `bound` on every run is slower than `bound`.
+ */
+export function cpuMillisecondsOf(call: () => unknown, bound: number): number {
+  let smallest = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < attempts && smallest >= bound; attempt++) {
+    const started = process.threadCpuUsage();
+    call();
+    const { user, system } = process.threadCpuUsage(started);
+    smallest = Math.min(smallest, (user + system) / 1000);
+  }
+  return smallest;
+}
+
 function measuredGrowth(prepare: (size: number) => () => unknown, sizes: Sizes): number {
   let fastestSmall = Number.POSITIVE_INFINITY;
   let fastestLarge = Number.POSITIVE_INFINITY;
