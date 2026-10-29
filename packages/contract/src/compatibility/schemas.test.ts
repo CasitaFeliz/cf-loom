@@ -14,6 +14,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
+  hashedTextOf,
   type NumberNode,
   type ObjectNode,
   type Path,
@@ -29,7 +30,6 @@ import {
   type StringNode,
   snapshotPathOf,
   type TaggedNode,
-  hashedTextOf,
   walkSchemas,
 } from '../internal/index.ts';
 
