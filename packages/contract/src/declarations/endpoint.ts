@@ -6,12 +6,22 @@ import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
+import type {
+  ExactParamsSentence,
+  getBodyRefusal,
+  ListedTwiceSentence,
+  noContentBodyRefusal,
+  noParamsRefusal,
+  RequiresEarlierSentence,
+  SuccessBodySentence,
+} from './refusals.ts';
 import type { Rejection } from './rejection.ts';
 import type {
   DeclaredFieldsRule,
   IsOneLiteral,
   JoinedNames,
   LiteralNames,
+  Refusal,
   RejectionsOnceRule,
   ReservedNameRule,
 } from './rules.ts';
@@ -64,7 +74,7 @@ type InputOfDeclaration<Declaration extends EndpointDeclaration> = NonNullable<
 type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declaration['path']
   ? unknown
   : [PathParams<Declaration['path']>] extends [never]
-    ? { readonly input?: { readonly params?: 'A path without :names takes no params' } }
+    ? { readonly input?: { readonly params?: Refusal<typeof noParamsRefusal> } }
     : {
         readonly input: {
           readonly params: ExactParamsRule<
@@ -74,8 +84,7 @@ type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declar
         };
       };
 
-type ExactParamsMessage<Names extends string> =
-  `params declares exactly the path's :names: ${JoinedNames<Names>}`;
+type ExactParamsMessage<Names extends string> = Refusal<ExactParamsSentence<JoinedNames<Names>>>;
 
 type ExactParamsRule<Params, Names extends string> =
   Params extends core.$ZodObject<infer Shape>
@@ -85,7 +94,7 @@ type ExactParamsRule<Params, Names extends string> =
     : ExactParamsMessage<Names>;
 
 type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'GET'
-  ? { readonly input?: { readonly body?: 'A GET Endpoint takes no body' } }
+  ? { readonly input?: { readonly body?: Refusal<typeof getBodyRefusal> } }
   : unknown;
 
 type SuccessBodyRule<Declaration extends EndpointDeclaration> =
@@ -95,12 +104,12 @@ type SuccessBodyRule<Declaration extends EndpointDeclaration> =
 
 type SuccessBodyOf<Declaration extends EndpointDeclaration> =
   Declaration['success']['status'] extends 204
-    ? { readonly success?: { readonly body?: 'A 204 Success has no body' } }
+    ? { readonly success?: { readonly body?: Refusal<typeof noContentBodyRefusal> } }
     : Declaration['success'] extends { readonly body: core.$ZodType }
       ? unknown
       : {
           readonly success: {
-            readonly body: `A ${Declaration['success']['status']} Success has a body`;
+            readonly body: Refusal<SuccessBodySentence<Declaration['success']['status']>>;
           };
         };
 
@@ -119,10 +128,9 @@ type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed ex
   ? Exclude<LiteralNames<Required['name']>, Earlier>
   : never;
 
-type RequiresEarlierMessage<
-  Name extends string,
-  Missing extends string,
-> = `${Name} requires ${JoinedNames<Missing>} earlier in guards`;
+type RequiresEarlierMessage<Name extends string, Missing extends string> = Refusal<
+  RequiresEarlierSentence<Name, JoinedNames<Missing>>
+>;
 
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
   infer First,
@@ -135,7 +143,7 @@ type ListedOrderRule<Listed, Rest, Earlier extends string> = Listed extends Guar
   ? string extends Listed['name']
     ? GuardOrderRule<Rest, Earlier>
     : Listed['name'] extends Earlier
-      ? `${Listed['name']} is listed twice`
+      ? Refusal<ListedTwiceSentence<Listed['name']>>
       : [MissingGuardNames<Listed, Earlier>] extends [never]
         ? GuardOrderRule<Rest, Earlier | Listed['name']>
         : RequiresEarlierMessage<Listed['name'], MissingGuardNames<Listed, Earlier>>
@@ -173,7 +181,7 @@ type EndpointRules<Declaration extends EndpointDeclaration> = ParamsRule<Declara
   GuardsRule<Declaration> &
   RejectionsRule<Declaration> &
   NoInfer<
-    ReservedNameRule<Declaration> &
+    ReservedNameRule<Declaration, 'endpoint'> &
       DeclaredFieldsRule<Declaration, EndpointDeclaration> &
       NestedFieldsRule<Declaration>
   >;

@@ -93,6 +93,44 @@ export {
   providedRejection,
   providerOf,
 } from './provided.ts';
+export type {
+  ExactParamsSentence,
+  HeaderCaseSentence,
+  ListedTwiceSentence,
+  NeedsQualifierSentence,
+  NotPublicEndpoint,
+  NotPublicSentence,
+  OneProviderSentence,
+  OwnProviderSentence,
+  RequiresEarlierSentence,
+  ReservedNameSentence,
+  SuccessBodySentence,
+  TakesNoQualifierSentence,
+  UndeclaredFieldSentence,
+} from './refusals.ts';
+export {
+  commandSubscribedRefusal,
+  exactParamsSentence,
+  getBodyRefusal,
+  groupListsRefusal,
+  guardDemandsRefusal,
+  headerCaseSentence,
+  listedTwiceSentence,
+  messageBodyRefusal,
+  messageVersionRefusal,
+  nameNouns,
+  needsQualifierSentence,
+  noContentBodyRefusal,
+  noParamsRefusal,
+  notPublicSentence,
+  oneProviderSentence,
+  ownProviderSentence,
+  requiresEarlierSentence,
+  reservedNameSentence,
+  successBodySentence,
+  takesNoQualifierSentence,
+  undeclaredFieldSentence,
+} from './refusals.ts';
 export type { Rejection } from './rejection.ts';
 export { defineRejection } from './rejection.ts';
 export type { ReservedCode } from './reserved-codes.ts';
@@ -107,7 +145,6 @@ export type {
 } from './roots.ts';
 export { defineApplication, defineService } from './roots.ts';
 export type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
-export { messageBodyRefusal, messageVersionRefusal } from './rules.ts';
 export type {
   IssueCode,
   ProvidedStandardRejections,
@@ -129,4 +166,4 @@ export {
   standardRejectionNames,
 } from './standard-rejections.ts';
 export type { Subscription } from './subscription.ts';
-export { commandSubscribedRefusal, defineSubscription } from './subscription.ts';
+export { defineSubscription } from './subscription.ts';

@@ -200,6 +200,32 @@ describe('defineGuard names', () => {
   });
 });
 
+describe('defineGuard demands', () => {
+  test('demands.body written as the refusal’s own text is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'signed',
+        description: 'A signed request',
+        // @ts-expect-error a Guard demands only headers and query
+        demands: { body: 'A Guard demands only headers and query' },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('demands.params written as the refusal’s own text is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'signed',
+        description: 'A signed request',
+        // @ts-expect-error a Guard demands only headers and query
+        demands: { params: 'A Guard demands only headers and query' },
+      });
+
+    expect(declare).not.toThrow();
+  });
+});
+
 describe('defineGuard fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>

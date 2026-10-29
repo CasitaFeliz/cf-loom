@@ -4,8 +4,10 @@ import {
   follows,
   isReserved,
   kebabCase,
+  nameNouns,
   pascalCase,
   type RootKind,
+  reservedNameSentence,
   upperSnakeCase,
   wordsOf,
 } from '../declarations/index.ts';
@@ -22,9 +24,9 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   const { events, commands, subscriptions } = declarations;
   const kebab = named(groups, (listed) => listed.group.name, 'A Group name');
   const camel = [
-    ...named(endpoints, (listed) => listed.endpoint.name, 'An Endpoint name'),
-    ...named(guards, (listed) => listed.guard.name, 'A Guard name'),
-    ...named(subscriptions, (listed) => listed.subscription.name, 'A Subscription name'),
+    ...named(endpoints, (listed) => listed.endpoint.name, nameNouns.endpoint),
+    ...named(guards, (listed) => listed.guard.name, nameNouns.guard),
+    ...named(subscriptions, (listed) => listed.subscription.name, nameNouns.subscription),
   ];
   const pascal = [
     ...named(events, (listed) => listed.event.name, 'A Message name'),
@@ -73,10 +75,19 @@ function grammarFailures(
   const breaking = named.filter(
     ({ value }) => typeof value === 'string' && !follows(grammar, value),
   );
-  return breaking.map(({ at, value, noun }) => {
-    const { rule, note } = toldOf(grammar, textOf(value));
-    return failure(at, 'name-grammar', `${noun} is ${rule}: ${writtenTextOf(value)}${note}`);
-  });
+  return breaking.map(({ at, value, noun }) =>
+    failure(at, 'name-grammar', grammarMessageOf(grammar, noun, value)),
+  );
+}
+
+/** What a name that breaks its grammar is told: a reserved word as the types tell it too. */
+function grammarMessageOf(grammar: CappedGrammar, noun: string, value: unknown): string {
+  const text = textOf(value);
+  if (brokenPartOf(grammar, text) === 'reserved') {
+    return `${reservedNameSentence(noun, text)}${hintFor(grammar, text)}`;
+  }
+  const { rule, note } = toldOf(grammar, text);
+  return `${noun} is ${rule}: ${writtenTextOf(value)}${note}`;
 }
 
 /** The rule a name breaks, and what follows the name as written. */
@@ -91,15 +102,14 @@ function brokenPartOf(grammar: CappedGrammar, text: string): 'pattern' | 'reserv
 }
 
 /**
- * What a name that does not follow its grammar is told, by the part it breaks: `kebab-case`, that
- * and no reserved word, or `at most 64 characters`, with the name to write instead or its length.
+ * What a name that does not follow its grammar's pattern or length is told: `kebab-case` or `at most
+ * 64 characters`, with the name to write instead or its length.
  */
 function toldOf(grammar: CappedGrammar, text: string): Told {
   switch (brokenPartOf(grammar, text)) {
     case 'pattern':
-      return { rule: grammar.name, note: hintFor(grammar, text) };
     case 'reserved':
-      return { rule: `${grammar.name} and no reserved word`, note: hintFor(grammar, text) };
+      return { rule: grammar.name, note: hintFor(grammar, text) };
     case 'length':
       return {
         rule: `at most ${grammar.maxLength} characters`,

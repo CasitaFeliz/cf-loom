@@ -188,8 +188,8 @@ describe('validateRoot: Subscriptions', () => {
     );
   });
 
-  test('a Subscription to a Provider’s Private Event fails even when the Provider bears the Service’s own name', () => {
-    const privateEvent = providedEvent('orders-service', {
+  test('a Subscription to an Event of the Service’s own Contract Package fails: a Provider is another Service', () => {
+    const ownEvent = providedEvent('orders-service', {
       name: 'PaymentRefunded',
       version: 1,
       visibility: 'private',
@@ -199,7 +199,7 @@ describe('validateRoot: Subscriptions', () => {
     const onRefunded = defineSubscription({
       name: 'onRefunded',
       description: 'Receives it',
-      event: privateEvent,
+      event: ownEvent,
     });
 
     const result = validateSubscriptions([onRefunded]);
@@ -208,7 +208,7 @@ describe('validateRoot: Subscriptions', () => {
       failed(
         'subscriptions.onRefunded event',
         'subscription-event',
-        "A Subscription receives another Service's Event only when it is Public or Internal: PaymentRefunded@1 is private",
+        'A Provider is another Service: orders-service is this Service',
       ),
     );
   });

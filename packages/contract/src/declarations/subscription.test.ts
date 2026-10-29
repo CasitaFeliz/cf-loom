@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { defineCommand, defineEvent, defineSubscription } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const body = z.object({ orderId: z.uuid() });
 
@@ -75,9 +76,9 @@ describe('defineSubscription', () => {
       }>
     >[0];
 
-    expectTypeOf<
-      Written['event']
-    >().toExtend<"A Subscription receives an Event; a Command's Message Version has its own Message Handler">();
+    expectTypeOf<Written['event']>().toExtend<
+      Refusal<"A Subscription receives an Event; a Command's Message Version has its own Message Handler">
+    >();
   });
 
   test('a Subscription to an Event keeps the Event’s exact type', () => {

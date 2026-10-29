@@ -2,6 +2,10 @@ import {
   type Endpoint,
   isEndpoint,
   isProvidedElement,
+  notPublicSentence,
+  oneProviderSentence,
+  ownProviderSentence,
+  type Provided,
   providerOf,
   type Root,
   reaches,
@@ -12,6 +16,7 @@ import {
   isEmptyField,
   type LocatedDependency,
   listOf,
+  textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
@@ -26,7 +31,7 @@ type Selected = { readonly at: Place; readonly endpoint: Endpoint };
  * Public ones only. What its list holds that is no Endpoint is the structure rule's.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const rootKind = declarations.root.kind;
+  const { root } = declarations;
   return declarations.dependencies.flatMap((located) => {
     if (isEmptyField(located.dependency.endpoints)) {
       return [
@@ -36,7 +41,7 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
     const selected = selectedOf(located);
     return [
       ...providerFailures(located.at, selected),
-      ...selected.flatMap((listed) => selectedFailures(listed, rootKind)),
+      ...selected.flatMap((listed) => selectedFailures(listed, root)),
       ...repeatedFailures(selected),
     ];
   });
@@ -63,7 +68,7 @@ function providerFailures(at: Place, selected: readonly Selected[]): readonly De
     return [];
   }
   const names = [...providers].sort(byCodePoint).join(', ');
-  const message = `A Dependency lists one Provider's Endpoints: ${names}`;
+  const message = oneProviderSentence(names);
   return [failure(at, 'dependency-selection', message)];
 }
 
@@ -71,15 +76,15 @@ function isName(provider: string | undefined): provider is string {
   return provider !== undefined;
 }
 
-function selectedFailures(
-  { at, endpoint }: Selected,
-  rootKind: Root['kind'],
-): readonly DeclarationFailure[] {
+function selectedFailures({ at, endpoint }: Selected, root: Root): readonly DeclarationFailure[] {
   if (!isProvidedElement(endpoint)) {
     const message = `${exportedRule}: ${endpoint.name} is no Provider's`;
     return [failure(at, 'dependency-selection', message)];
   }
-  const packageKind = rootKind === 'application' ? 'application' : 'service';
+  if (root.kind === 'service' && providerOf(endpoint) === textOf(root.name)) {
+    return [failure(at, 'dependency-selection', ownProviderSentence(textOf(root.name)))];
+  }
+  const packageKind = root.kind === 'application' ? 'application' : 'service';
   if (!reaches(packageKind, endpoint.visibility)) {
     return [unreachableEndpointFailure(at, endpoint)];
   }
@@ -87,12 +92,12 @@ function selectedFailures(
 }
 
 /** A Private Endpoint is nobody's to list; an Internal one is a Service's only, never an Application's. */
-function unreachableEndpointFailure(at: Place, endpoint: Endpoint): DeclarationFailure {
+function unreachableEndpointFailure(at: Place, endpoint: Provided<Endpoint>): DeclarationFailure {
   const { visibility } = endpoint;
   if (visibility === 'private') {
     return failure(at, 'dependency-selection', `${exportedRule}: ${labelOf(endpoint)} is private`);
   }
-  const message = `An Application depends on Public Endpoints only: ${labelOf(endpoint)} is ${visibility}`;
+  const message = notPublicSentence(providerOf(endpoint), endpoint.name, visibility);
   return failure(at, 'application-dependency', message);
 }
 

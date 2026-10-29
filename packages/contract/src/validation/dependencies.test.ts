@@ -196,6 +196,34 @@ describe('validateRoot: a Service’s Dependencies', () => {
     );
   });
 
+  test('an Endpoint of the Service’s own Contract Package in a Dependency fails, and is a type error', () => {
+    const ownEndpoint = providedEndpoint(
+      aProvider('orders-service'),
+      {
+        name: 'getOrder',
+        method: 'GET',
+        path: '/orders/:orderId',
+        visibility: 'public',
+        description: 'One order',
+        input: { params: z.object({ orderId: z.uuid() }) },
+        success: { status: 200, body: z.object({ total: z.int() }) },
+      },
+      undefined,
+    );
+    const ownDependency = defineDependency({ endpoints: [ownEndpoint] });
+
+    // @ts-expect-error a Provider is another Service
+    const contract = defineService({ name: 'orders-service', dependencies: [ownDependency] });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed(
+        '(root) dependencies[0].endpoints[0]',
+        'dependency-selection',
+        'A Provider is another Service: orders-service is this Service',
+      ),
+    );
+  });
+
   test('a Contract’s own Endpoint beside a Provider’s fails only at its place, never as a second Provider', () => {
     const paymentsDependency = dependencyAsWritten({ endpoints: [getPayment, getReceipt] });
     const contract = defineService({ name: 'orders-service', dependencies: [paymentsDependency] });
