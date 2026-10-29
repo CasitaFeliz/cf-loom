@@ -100,17 +100,3 @@ function differenceTextOf(
     ? `has no ${attribute}, not ${expected}`
     : `has ${attribute} ${held}, not ${expected}`;
 }
-
-/** How the topic and endpoint of an existing subscription differ from the shape's; none when it is the shape's. */
-export function subscriptionIdentityDifferencesOf(
-  held: Readonly<Record<string, string>>,
-  shape: SubscriptionShape,
-): readonly string[] {
-  const identity = [
-    ['TopicArn', shape.topicArn],
-    ['Endpoint', shape.endpoint],
-  ] as const;
-  return identity
-    .filter(([name, expected]) => held[name] !== expected)
-    .map(([name, expected]) => `has ${name} ${held[name] ?? 'unset'}, not ${expected}`);
-}
