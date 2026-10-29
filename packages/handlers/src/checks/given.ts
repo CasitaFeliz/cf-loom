@@ -34,7 +34,7 @@ export type GuardGiven = {
 };
 
 /** Parsed values by the field a Handler reads them under. */
-export type ValuesByField = Readonly<Record<string, unknown>>;
+type ValuesByField = Readonly<Record<string, unknown>>;
 
 /**
  * What `serve` gives one call of an EndpointHandler: its Input as the contract's reading parsed it,
