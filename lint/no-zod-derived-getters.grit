@@ -1,0 +1,11 @@
+language js
+
+JsStaticMemberExpression(object=$object, member=$member) as $read where {
+  $member <: r"^(?:propValues|values|optin|optout)$",
+  $object <: or {
+    `$_._zod`,
+    `$_?._zod`
+  },
+  $filename <: r".*/walker/.*",
+  register_diagnostic(span=$read, message="C1: read a child through the walker's one judgement (isSchema, defOf), never through a getter zod derives from the schemas it holds.", severity="error")
+}
