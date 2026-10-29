@@ -11,6 +11,7 @@ import {
   faultStatusOf,
   headerTextsOf,
   headerValuesOf,
+  invalidInputBody,
   invalidInputBodyOf,
   invalidInputResponseOf,
   isQueryText,
@@ -652,14 +653,14 @@ describe('the invalid-input body of many or large Issues', () => {
   });
 
   test.for([17, 2026, 4099, 65_537, 99_991, 271_828, 314_159, 1_000_003])(
-    'any number of Issues of any size, seed %i, lists the first that fit and counts the rest',
+    'any number of Issues of any size, seed %i, lists the first that fit, counts the rest and reads with cf-loom’s schema',
     (seed) => {
       const next = seededNext(seed);
       const lists = Array.from({ length: 12 }, () => randomIssues(next));
 
-      const bounds = lists.map((issues) => boundsOf(invalidInputBodyOf(issues), issues));
+      const invariants = lists.map((issues) => invariantsOf(invalidInputBodyOf(issues), issues));
 
-      expect(bounds).toEqual(lists.map(expectedBoundsOf));
+      expect(invariants).toEqual(lists.map(() => heldInvariants));
     },
   );
 });
@@ -728,29 +729,32 @@ function randomKey(next: () => number, longestKey: number): string {
   return chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
 }
 
-function boundsOf(body: ReturnType<typeof invalidInputBodyOf>, issues: readonly AnInputIssue[]) {
+/** Whether a body holds each invariant of the invalid-input body, for the Issues it was written from. */
+function invariantsOf(
+  body: ReturnType<typeof invalidInputBodyOf>,
+  issues: readonly AnInputIssue[],
+) {
   const written = issues.map(writtenOf);
   const listed = body.issues.length;
+  const withNext = [...body.issues, written[listed]];
   return {
-    listed,
-    omittedIssues: body.omittedIssues,
+    readsWithSchema: invalidInputBody.safeParse(body).success,
     isPrefix: JSON.stringify(body.issues) === JSON.stringify(written.slice(0, listed)),
+    withinCount: listed <= 100,
     withinBytes: issuesBytesOf(body) <= 65_536,
+    stopsAtFirstMisfit: listed === issues.length || listed === 100 || bytesOf(withNext) > 65_536,
+    countsTheRest: listed + body.omittedIssues === issues.length,
   };
 }
 
-function expectedBoundsOf(issues: readonly AnInputIssue[]) {
-  const sizes = issues.map((issue) => bytesOf(writtenOf(issue)));
-  let listed = 0;
-  let bytes = 2;
-  for (const size of sizes) {
-    const total = bytes + size + (listed > 0 ? 1 : 0);
-    if (listed === 100 || total > 65_536) break;
-    listed++;
-    bytes = total;
-  }
-  return { listed, omittedIssues: issues.length - listed, isPrefix: true, withinBytes: true };
-}
+const heldInvariants = {
+  readsWithSchema: true,
+  isPrefix: true,
+  withinCount: true,
+  withinBytes: true,
+  stopsAtFirstMisfit: true,
+  countsTheRest: true,
+};
 
 describe('the invalid-input Rejection', () => {
   test('it answers the resolved code, status and message with cf-loom’s body', async () => {

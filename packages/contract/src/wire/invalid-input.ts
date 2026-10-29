@@ -1,5 +1,6 @@
 import type { StandardRejections } from '../declarations/index.ts';
 import { type InputIn, type InputPart, type Issue, inOf } from '../written/index.ts';
+import { jsonBytesOf } from './body.ts';
 import { rejectionResponseOf } from './responses.ts';
 
 /** An Issue in a part of the request the Caller sent: the only kind the invalid-input body holds. */
@@ -26,14 +27,12 @@ const listedIssueBytes = 65_536;
  * `listedIssueBytes` of JSON; that one and every later one counted in `omittedIssues`.
  */
 export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputBody {
-  const encoder = new TextEncoder();
   const listed: ListedIssue[] = [];
-  let bytes = '[]'.length;
+  let bytes = '['.length;
   for (const { part, path, code, message } of issues) {
     if (listed.length === listedIssueLimit) break;
     const issue = { in: inOf(part), path, code, message };
-    const comma = listed.length > 0 ? 1 : 0;
-    const total = bytes + comma + encoder.encode(JSON.stringify(issue)).length;
+    const total = bytes + jsonBytesOf(issue).byteLength + 1;
     if (total > listedIssueBytes) break;
     listed.push(issue);
     bytes = total;

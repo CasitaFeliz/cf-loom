@@ -100,9 +100,7 @@ export const inputIns = ['params', 'query', 'headers', 'body'] as const;
 
 /**
  * The body of the invalid-input Rejection: always cf-loom's, whatever a Definitions Package
- * declares, so every Caller reads the issues one way. It lists the first issues within a fixed
- * count and size and counts the others in `omittedIssues` (see Rejections in the contract
- * README). An issue never carries the received value.
+ * declares, so every Caller reads the issues one way. An issue never carries the received value.
  */
 export const invalidInputBody = z.object({
   issues: z.array(

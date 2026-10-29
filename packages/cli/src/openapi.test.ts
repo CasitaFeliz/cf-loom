@@ -1230,9 +1230,10 @@ describe('cf-loom openapi: the responses', () => {
 
     expect(valueAt(issues, 'required')).toEqual(['issues', 'omittedIssues']);
     expect(valueAt(issues, 'properties', 'issues', 'type')).toBe('array');
-    expect(valueAt(issues, 'properties', 'omittedIssues')).toMatchObject({
+    expect(valueAt(issues, 'properties', 'omittedIssues')).toEqual({
       type: 'integer',
       minimum: 0,
+      maximum: safeMaximum,
     });
   });
 
