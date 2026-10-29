@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
 import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
+import { idOf, type Mix, type RandomGraph, randomGraph } from '../../test/random-graphs.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -24,6 +25,11 @@ import {
 /** The place of a schema walked on its own: the export of the name given, with no steps. */
 function placeAt(name: string) {
   return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+}
+
+/** The place of a schema walked in a declaration of its own. */
+function placeIn(name: string, declaration: unknown) {
+  return { site: { kind: 'export', name }, declaration, steps: [] } as const;
 }
 
 function walkBody(schema: core.$ZodType) {
@@ -1682,6 +1688,284 @@ describe('walkSchemas: recursion', () => {
       failures: [{ construct: 'z.date()' }],
     });
     expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+  });
+
+  describe('an id on a cycle whose way back runs through a schema answered from memory', () => {
+    const offCycleLine = /^\.meta\(\{ id: "[^"]+" \}\) on a schema that lies on no cycle$/;
+
+    /** The cycle of the issue: `bb` holds `dd` and `x2`, `dd` fails and holds `bb`, `x2` holds `dd`. */
+    function failingDefCycle() {
+      const dd: z.ZodType = z
+        .object({
+          at: z.date(),
+          get b() {
+            return z.array(bb);
+          },
+        })
+        .meta({ id: 'dd' });
+      const x2: z.ZodType = z
+        .object({
+          get d() {
+            return dd;
+          },
+        })
+        .meta({ id: 'x2' });
+      const bb: z.ZodType = z
+        .object({
+          get d() {
+            return dd;
+          },
+          get x() {
+            return x2;
+          },
+        })
+        .meta({ id: 'bb' });
+      return { bb, x2, dd };
+    }
+
+    test('is never told it lies on no cycle when that schema is a failing def', () => {
+      const { bb } = failingDefCycle();
+
+      const walked = walkBody(bb);
+
+      expect(walked.located).toEqual([refused([{ at: 'd.at', ...dateRefused }])]);
+    });
+
+    test('gets the same verdict whichever schema of the cycle the walk enters first', () => {
+      const cycle = failingDefCycle();
+
+      const constructs = [cycle.bb, cycle.x2, cycle.dd].map((schema) =>
+        constructsOf(walkSchemas([{ at: placeAt('body'), schema }], () => undefined)),
+      );
+
+      expect(constructs).toEqual([[['z.date()']], [['z.date()']], [['z.date()']]]);
+    });
+
+    test('is never told it lies on no cycle when that schema is a def a failure above it dropped', () => {
+      const rr: z.ZodType = z
+        .object({
+          get a() {
+            return aa;
+          },
+          get y() {
+            return z.array(yy);
+          },
+        })
+        .meta({ id: 'rr' });
+      const aa: z.ZodType = z
+        .object({
+          bad: z.date(),
+          get b() {
+            return bb;
+          },
+        })
+        .meta({ id: 'aa' });
+      const bb: z.ZodType = z
+        .object({
+          get a() {
+            return z.array(aa);
+          },
+          get r() {
+            return z.array(rr);
+          },
+        })
+        .meta({ id: 'bb' });
+      const yy: z.ZodType = z
+        .object({
+          get b() {
+            return bb;
+          },
+        })
+        .meta({ id: 'yy' });
+
+      const walked = walkBody(rr);
+
+      expect(walked.located).toEqual([refused([{ at: 'a.bad', ...dateRefused }])]);
+    });
+
+    test('is never told it lies on no cycle when that schema is on a cycle no id names', () => {
+      const unnamed: z.ZodType = z.object({
+        get self() {
+          return z.array(unnamed);
+        },
+        get back() {
+          return z.array(xx);
+        },
+      });
+      const yy: z.ZodType = z
+        .object({
+          get u() {
+            return z.array(unnamed);
+          },
+        })
+        .meta({ id: 'yy' });
+      const xx: z.ZodType = z
+        .object({
+          get u() {
+            return z.array(unnamed);
+          },
+          get y() {
+            return z.array(yy);
+          },
+        })
+        .meta({ id: 'xx' });
+
+      const walked = walkBody(xx);
+
+      expect(walked.located).toEqual([refused([{ at: 'u[].self[]', ...unnamedCycle }])]);
+    });
+
+    describe('walked afresh by a second declaration', () => {
+      /** `two` lies on a cycle through `held` and a schema with no id that holds itself. */
+      function cycleThrough(held: (inner: z.ZodObject) => z.ZodType) {
+        const loop: z.ZodType = z.object({
+          get a() {
+            return z.array(one);
+          },
+          get self() {
+            return z.array(loop);
+          },
+        });
+        const one: z.ZodType = held(
+          z.object({
+            get b() {
+              return z.array(two);
+            },
+          }),
+        );
+        const two: z.ZodType = z
+          .object({
+            get c() {
+              return z.array(loop);
+            },
+          })
+          .meta({ id: 'two' });
+        return two;
+      }
+
+      const helds = [
+        {
+          held: 'a nullable def',
+          named: (inner: z.ZodObject) => inner.nullable().meta({ id: 'one' }),
+        },
+        {
+          held: 'an id the walk refuses',
+          named: (inner: z.ZodObject) => inner.meta({ id: 'o_ne' }),
+        },
+      ];
+
+      test.each(helds)('is still judged on its cycle through $held', ({ named }) => {
+        const two = cycleThrough(named);
+
+        const walked = walkSchemas(
+          [
+            { at: placeIn('body', 'first'), schema: two },
+            { at: placeIn('success', 'second'), schema: two },
+          ],
+          () => undefined,
+        );
+
+        const [first, second] = constructsOf(walked);
+        expect(second).toEqual(first);
+        expect(first?.filter((construct) => offCycleLine.test(construct))).toEqual([]);
+      });
+    });
+
+    test('is never told it lies on no cycle when it is a second schema with a taken id', () => {
+      const first: z.ZodType = z
+        .object({
+          get e1() {
+            return z.array(second);
+          },
+        })
+        .meta({ id: 'shared' });
+      const second: z.ZodType = z
+        .object({
+          get e0() {
+            return z.array(first);
+          },
+        })
+        .meta({ id: 'shared' });
+
+      const walked = walkSchemas(
+        [
+          { at: placeAt('body'), schema: first },
+          { at: placeAt('success'), schema: first },
+        ],
+        () => undefined,
+      );
+
+      const constructs = constructsOf(walked).flat();
+      expect(constructs.filter((construct) => offCycleLine.test(construct))).toEqual([]);
+    });
+  });
+
+  describe('random graphs of schemas', () => {
+    const graphsPerMix = 2000;
+    const mixes: readonly Mix[] = ['mixed', 'ids', 'arrays'];
+    const offCycleId = /^\.meta\(\{ id: "([^"]+)" \}\) on a schema that lies on no cycle$/;
+
+    /** The graph walked from its two roots, in one declaration for an odd seed, in two for an even one. */
+    function walkedFromRoots(graph: RandomGraph, seed: number) {
+      const located = graph.roots.map((root, position) => ({
+        at: placeIn(`root${position}`, seed % 2 === 0 ? position : 0),
+        schema: graph.schemas[root]!,
+      }));
+      return walkSchemas(located, () => undefined);
+    }
+
+    /** The ids the walk told lie on no cycle. */
+    function offCycleIdsOf(walked: ReturnType<typeof walkSchemas>): Set<string> {
+      const ids = new Set<string>();
+      for (const construct of constructsOf(walked).flat()) {
+        const id = offCycleId.exec(construct)?.[1];
+        if (id !== undefined) {
+          ids.add(id);
+        }
+      }
+      return ids;
+    }
+
+    /** An id told off a cycle while every schema with it lies on one. */
+    function falselyToldOf(graph: RandomGraph, told: ReadonlySet<string>): string[] {
+      const indexes = graph.schemas.map((_, index) => index);
+      return [...told].filter((id) =>
+        indexes
+          .filter((index) => idOf(graph, index) === id)
+          .every((index) => graph.isOnCycle[index]),
+      );
+    }
+
+    /** A schema with an id the walk accepts, off every cycle and every cut, whose id was not told. */
+    function untoldOf(graph: RandomGraph, told: ReadonlySet<string>): string[] {
+      const untold: string[] = [];
+      for (const index of graph.reached) {
+        const id = idOf(graph, index);
+        const isJudged = !graph.isOnCycle[index] && !graph.reachesTooDeep[index];
+        const isAccepted = graph.namings[index] === 'id' || graph.namings[index] === 'nullableId';
+        if (isJudged && isAccepted && id !== undefined && !told.has(id)) {
+          untold.push(id);
+        }
+      }
+      return untold;
+    }
+
+    test.each(mixes)('an id is told it lies on no cycle exactly when it does: %s', (mix) => {
+      const wrong: string[] = [];
+
+      for (let seed = 1; seed <= graphsPerMix; seed++) {
+        const graph = randomGraph(seed, mix);
+        const told = offCycleIdsOf(walkedFromRoots(graph, seed));
+        for (const id of falselyToldOf(graph, told)) {
+          wrong.push(`seed ${seed}: ${id} told off a cycle`);
+        }
+        for (const id of untoldOf(graph, told)) {
+          wrong.push(`seed ${seed}: ${id} not told`);
+        }
+      }
+
+      expect(wrong).toEqual([]);
+    });
   });
 });
 
