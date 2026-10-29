@@ -20,27 +20,52 @@ export type Providers = {
 /** Where the scope's packages sit in the project, found by the compiler options and the aliases. */
 export const packagesAt = 'scope-packages';
 
+/** Where the blocks that a later block replaces are written, a folder for each README and each count of later blocks naming their path. */
+export const earlierAt = 'earlier-';
+
+const earlierRoot = /^earlier-[^/]+\//;
+
 /**
- * The project the blocks and the scope make. Of several files that name one path the scope's, then
- * the last block's, is that file: it extends the ones before it, which are written under other names.
+ * The project the blocks and the scope make. Of several blocks that name one path the last is that
+ * file; the ones before it are written together, so that those of one README that the same number
+ * of blocks replace import each other.
  */
 export function projectOf(blocks: readonly Block[], scope: Scope): Map<string, ProjectFile> {
   const project = new Map<string, ProjectFile>();
   for (const [path, source] of Object.entries(scope)) {
     project.set(path, { source });
   }
-  const last = new Map(blocks.map((block) => [block.path, block]));
-  for (const block of blocks) {
-    const taken = project.has(block.path) || last.get(block.path) !== block;
+  const generations = generationsOf(blocks);
+  for (const [index, block] of blocks.entries()) {
+    const generation = generations[index] ?? 0;
     const slug = block.readme.replaceAll(/\W+/g, '-');
-    const file = taken ? block.path.replace(/\.ts$/, `.${slug}-${block.line}.ts`) : block.path;
+    const file = generation === 0 ? block.path : `${earlierAt}${slug}-${generation}/${block.path}`;
     project.set(file, { source: block.source, block });
   }
   return project;
 }
 
-/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service. */
-function packageOf(path: string): string {
+/** How many blocks after each block name its path. */
+function generationsOf(blocks: readonly Block[]): number[] {
+  const later = new Map<string, number>();
+  const generations: number[] = [];
+  for (const block of blocks.toReversed()) {
+    const count = later.get(block.path) ?? 0;
+    later.set(block.path, count + 1);
+    generations.push(count);
+  }
+  return generations.toReversed();
+}
+
+/** The paths of the blocks that name one of the scope's files, as `README:line: …`. */
+export function pathsOfScope(blocks: readonly Block[], scope: Scope): string[] {
+  const held = blocks.filter((block) => Object.hasOwn(scope, block.path));
+  return held.map((block) => `${block.readme}:${block.line}: ${block.path} is a file of the scope`);
+}
+
+/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service; an earlier block's belongs where its path says. */
+function packageOf(file: string): string {
+  const path = file.replace(earlierRoot, '');
   const [folder = '', second] = path.split('/');
   if (folder === packagesAt) {
     return path;
@@ -54,13 +79,13 @@ export function declaredTwice(project: Project): string[] {
   for (const [path, file] of project) {
     for (const name of path.endsWith('.ts') ? exportedNames(file.source) : []) {
       const key = `${packageOf(path)} ${name}`;
-      const entry = exporters.get(key) ?? { name, blocks: [], scoped: [] };
+      const exporter = exporters.get(key) ?? { name, blocks: [], scoped: [] };
       if (file.block === undefined) {
-        entry.scoped.push(path);
+        exporter.scoped.push(path);
       } else {
-        entry.blocks.push(file.block);
+        exporter.blocks.push(file.block);
       }
-      exporters.set(key, entry);
+      exporters.set(key, exporter);
     }
   }
   const problems: string[] = [];

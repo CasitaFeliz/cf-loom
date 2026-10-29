@@ -36,7 +36,7 @@ const pathComment = /^\/\/\s+((?:[\w.-]+\/)+[\w.-]+\.ts)\b/;
  */
 export function blocksOf(readme: Readme): Blocks {
   const lines = readme.markdown.split(/\r?\n/);
-  const blocks: Block[] = [];
+  const candidates: Block[] = [];
   const problems: string[] = [];
   const snippetPath = snippetNamer(readme.path);
   let anchor = '';
@@ -54,14 +54,52 @@ export function blocksOf(readme: Readme): Blocks {
           row.startsWith(piece.indent) ? row.slice(piece.indent.length) : row,
         );
         for (const file of filesOf(dedented, piece.at + 2)) {
-          const named = file.path !== undefined;
           const path = file.path ?? snippetPath(anchor);
-          blocks.push({ readme: readme.path, line: file.line, path, named, source: file.source });
+          const named = file.path !== undefined;
+          candidates.push({
+            readme: readme.path,
+            line: file.line,
+            path,
+            named,
+            source: file.source,
+          });
         }
       }
     }
   }
+  const accepted = accepting(candidates);
+  return { blocks: accepted.blocks, problems: [...problems, ...accepted.problems] };
+}
+
+/** The files that can be written where they say, and why the others cannot. */
+function accepting(candidates: readonly Block[]): Blocks {
+  const blocks: Block[] = [];
+  const problems: string[] = [];
+  const snippetLines = new Map<string, number>();
+  for (const block of candidates) {
+    const refusal = refusalOf(block, snippetLines);
+    if (refusal !== undefined) {
+      problems.push(refusal);
+      continue;
+    }
+    blocks.push(block);
+    if (!block.named) {
+      snippetLines.set(block.path, block.line);
+    }
+  }
   return { blocks, problems };
+}
+
+/** Why a file cannot be written at its path: it leaves the Service, or an earlier snippet has its name. */
+function refusalOf(block: Block, snippetLines: ReadonlyMap<string, number>): string | undefined {
+  const where = `${block.readme}:${block.line}: ${block.path}`;
+  if (block.path.split('/').includes('..')) {
+    return `${where} leaves the Service`;
+  }
+  const first = block.named ? undefined : snippetLines.get(block.path);
+  return first === undefined
+    ? undefined
+    : `${where} is also the file of the snippet at line ${first}`;
 }
 
 /** The headings and TypeScript blocks of a README in order, other fenced blocks skipped whole. */

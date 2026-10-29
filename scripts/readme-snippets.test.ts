@@ -216,6 +216,99 @@ function fileOf(directory: string, path: string): string {
   return readFileSync(join(directory, path), 'utf8');
 }
 
+describe('blocks that name one path', () => {
+  test('the earlier blocks of a path are checked together, apart from the later ones', () => {
+    const readme = aReadme(
+      'FIXTURE.md',
+      ['// src/a.ts', 'export const first = 1;'].join('\n'),
+      ['// src/b.ts', "import { a } from './a.ts';", 'export const b = a;'].join('\n'),
+      ['// src/a.ts', 'export const a = 2;'].join('\n'),
+      ['// src/b.ts', "import { a } from './a.ts';", 'export const b = a;'].join('\n'),
+    );
+
+    const problems = snippetProblems([readme], {});
+
+    expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:12: error TS2305.*member 'a'/)]);
+  });
+
+  test('earlier blocks that agree with each other need not agree with the later ones', () => {
+    const readme = aReadme(
+      'FIXTURE.md',
+      ['// src/a.ts', 'export const first = 1;'].join('\n'),
+      ['// src/b.ts', "import { first } from './a.ts';", 'export const b = first;'].join('\n'),
+      ['// src/a.ts', 'export const a = 2;'].join('\n'),
+      ['// src/b.ts', "import { a } from './a.ts';", 'export const b = a;'].join('\n'),
+    );
+
+    const problems = snippetProblems([readme], {});
+
+    expect(problems).toEqual([]);
+  });
+
+  test('an earlier block takes the Service’s own files that no later block replaces', () => {
+    const readme = aReadme(
+      'FIXTURE.md',
+      [
+        '// src/main.ts',
+        "import { repository } from './repository.ts';",
+        'export const first = repository;',
+      ].join('\n'),
+      [
+        '// src/main.ts',
+        "import { repository } from './repository.ts';",
+        'export const last = repository;',
+      ].join('\n'),
+    );
+    const scope = { 'src/repository.ts': 'export const repository = 1;' };
+
+    const problems = snippetProblems([readme], scope);
+
+    expect(problems).toEqual([]);
+  });
+
+  test('a block that names a path the scope holds is reported', () => {
+    const readme = aReadme('FIXTURE.md', ['// src/a.ts', 'export default 2;'].join('\n'));
+    const scope = { 'src/a.ts': 'export default 1;' };
+
+    const problems = snippetProblems([readme], scope);
+
+    expect(problems).toEqual([
+      expect.stringMatching(/^FIXTURE\.md:4: src\/a\.ts is a file of the scope/),
+    ]);
+  });
+
+  test('a path comment that leaves the Service is reported and writes nothing outside it', () => {
+    const repository = aRepository({
+      handlers: aReadme('packages/handlers/README.md', '// ../escaped.ts\nexport const x = 1;')
+        .markdown,
+    });
+    const directory = join(repository, '.readme-service');
+
+    writeReadmeService(directory, repository);
+
+    expect(existsSync(join(repository, 'escaped.ts'))).toBe(false);
+    expect(
+      snippetProblems([aReadme('FIXTURE.md', '// ../escaped.ts\nexport const x = 1;')], {}),
+    ).toEqual([expect.stringMatching(/^FIXTURE\.md:4: .*\.\.\/escaped\.ts.*leaves the Service/)]);
+  });
+
+  test('two snippets that would be written to one file are reported', () => {
+    const markdown = [
+      '## Foo',
+      aReadme('X.md', 'const one = 1;').markdown,
+      aReadme('X.md', 'const two = 2;').markdown,
+      '## Foo 2',
+      aReadme('X.md', 'const three = 3;').markdown,
+    ].join('\n');
+
+    const problems = snippetProblems([{ path: 'packages/x/README.md', markdown }], {});
+
+    expect(problems).toEqual([
+      expect.stringMatching(/^packages\/x\/README\.md:\d+: snippets\/x-foo-2\.ts is also/),
+    ]);
+  });
+});
+
 describe('the README Service written out', () => {
   test('the README Service is written out without the packages being built', () => {
     const directory = serviceWrittenFrom(
