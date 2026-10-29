@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS names its headers, actions and fields in PascalCase, as they travel
 import { connect } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aMotoServer, type MotoServer } from './moto-server.ts';
 
@@ -28,6 +29,13 @@ function sqs(server: MotoServer, action: string, body: object = {}): Promise<Res
     body: JSON.stringify(body),
   });
 }
+
+/** The IPv4 addresses of the host's network interfaces other than loopback; none on a host without a network. */
+const externalAddresses = Object.values(networkInterfaces()).flatMap((addresses) =>
+  (addresses ?? [])
+    .filter((address) => address.family === 'IPv4' && !address.internal)
+    .map((address) => address.address),
+);
 
 async function queueUrls(server: MotoServer): Promise<readonly string[]> {
   const listed = (await (await sqs(server, 'ListQueues')).json()) as {
@@ -68,6 +76,24 @@ describe('a test moto server', () => {
     expect(new URL(server.url).hostname).toBe('127.0.0.1');
     expect(response.status).toBe(200);
   });
+
+  test.skipIf(externalAddresses.length === 0)(
+    'a started server does not answer on the other IPv4 addresses of the host (skipped on a host with none)',
+    async () => {
+      const server = await aStartedServer();
+      const { port } = new URL(server.url);
+
+      const answers = await Promise.all(
+        externalAddresses.map(async (address) => ({
+          address,
+          listening: await isListening(`http://${address}:${port}`),
+        })),
+      );
+
+      await expect(isListening(server.url)).resolves.toBe(true);
+      expect(answers.filter((answer) => answer.listening)).toEqual([]);
+    },
+  );
 
   test('reset empties the queues a test created', async () => {
     const server = await aStartedServer();
