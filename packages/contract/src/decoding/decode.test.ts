@@ -1017,6 +1017,11 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'format'],
       ],
       [
+        'a string format zod builds from a regex, which generate refuses',
+        { defs: { tree: { type: 'string', format: 'hex' } } },
+        ['defs', 'tree', 'format'],
+      ],
+      [
         'a literal node',
         { defs: { tree: { type: 'literal', value: 'a' } } },
         ['defs', 'tree', 'type'],
@@ -1106,7 +1111,7 @@ describe('decodeSnapshot', () => {
       ],
       [
         'an option of a string format that takes none',
-        { type: 'string', format: 'hex', formatOptions: { version: 4 } },
+        { type: 'string', format: 'email', formatOptions: { version: 4 } },
         'version',
       ],
       [
