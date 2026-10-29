@@ -57,8 +57,14 @@ export type Container<StreamReaders extends Readers, DurableConsumerReaders exte
   readonly durableConsumers?: Readonly<Record<string, ReadOf<DurableConsumerReaders>>> | undefined;
 };
 
+/** The container's keys of a Broker without per-Stream settings. */
+type DurableConsumerFields<DurableConsumerReaders extends Readers> = Pick<
+  Container<Readers, DurableConsumerReaders>,
+  'durableConsumerDefaults' | 'durableConsumers'
+>;
+
 /** The readers of the kinds an adapter's Broker has settings for; a Broker without per-Stream settings has no `stream`. */
-export type Kinds<StreamReaders extends Readers, DurableConsumerReaders extends Readers> = {
+export type KindReaders<StreamReaders extends Readers, DurableConsumerReaders extends Readers> = {
   readonly stream?: StreamReaders | undefined;
   readonly durableConsumer: DurableConsumerReaders;
 };
@@ -93,46 +99,38 @@ function entriesOf<Entry>(entries: Readonly<Record<string, Entry | undefined>>) 
 }
 
 /** One kind's strict settings, each optional, as `ReadOf` types them: zod cannot see the settings of readers it is given generically. */
-function kindOf<Reading extends Readers>(readers: Reading) {
-  const limits = z.strictObject(readers).partial();
-  const names = limits.keyof().options;
-  return limits.transform((read) => definedOf(names, read)) as z.ZodType<ReadOf<Reading>>;
+function settingsSchemaOf<Reading extends Readers>(readers: Reading) {
+  const settings = z.strictObject(readers).partial();
+  const names = settings.keyof().options;
+  return settings.transform((read) => definedOf(names, read)) as z.ZodType<ReadOf<Reading>>;
 }
 
-function perStreamOf<Reading extends Readers>(readers: Reading) {
-  const kind = kindOf(readers);
+/** The defaults of one kind's settings, and each name's own, as the container holds them under that kind's two keys. */
+function perKindOf<Reading extends Readers>(readers: Reading) {
+  const settings = settingsSchemaOf(readers);
   return {
-    defaults: { streamDefaults: kind.optional() },
-    entries: {
-      streams: z.record(z.string(), kind.optional()).transform(entriesOf).optional(),
-    },
-  };
-}
-
-function perDurableConsumerOf<Reading extends Readers>(readers: Reading) {
-  const kind = kindOf(readers);
-  return {
-    defaults: { durableConsumerDefaults: kind.optional() },
-    entries: {
-      durableConsumers: z.record(z.string(), kind.optional()).transform(entriesOf).optional(),
-    },
+    defaults: settings.optional(),
+    entries: z.record(z.string(), settings.optional()).transform(entriesOf).optional(),
   };
 }
 
 function containerOf<StreamReaders extends Readers, DurableConsumerReaders extends Readers>(
-  kinds: Kinds<StreamReaders, DurableConsumerReaders>,
+  kinds: KindReaders<StreamReaders, DurableConsumerReaders>,
 ) {
-  const perDurableConsumer = perDurableConsumerOf(kinds.durableConsumer);
+  const durableConsumer = perKindOf(kinds.durableConsumer);
   if (kinds.stream === undefined) {
-    return z.strictObject({ ...perDurableConsumer.defaults, ...perDurableConsumer.entries });
+    return z.strictObject({
+      durableConsumerDefaults: durableConsumer.defaults,
+      durableConsumers: durableConsumer.entries,
+    } satisfies Record<keyof DurableConsumerFields<DurableConsumerReaders>, z.ZodType>);
   }
-  const perStream = perStreamOf(kinds.stream);
+  const stream = perKindOf(kinds.stream);
   return z.strictObject({
-    ...perStream.defaults,
-    ...perDurableConsumer.defaults,
-    ...perStream.entries,
-    ...perDurableConsumer.entries,
-  });
+    streamDefaults: stream.defaults,
+    durableConsumerDefaults: durableConsumer.defaults,
+    streams: stream.entries,
+    durableConsumers: durableConsumer.entries,
+  } satisfies Record<keyof Container<StreamReaders, DurableConsumerReaders>, z.ZodType>);
 }
 
 /** Reads the limits an adapter's `applyBrokerPlan` took, which only a JSON file or untyped code can get wrong. */
@@ -140,7 +138,7 @@ export function readContainer<
   StreamReaders extends Readers,
   DurableConsumerReaders extends Readers,
 >(
-  kinds: Kinds<StreamReaders, DurableConsumerReaders>,
+  kinds: KindReaders<StreamReaders, DurableConsumerReaders>,
   limits: unknown,
   definer: string,
 ): ReadContainer<StreamReaders, DurableConsumerReaders> {

@@ -43,7 +43,7 @@ type Unset = { readonly name: string; readonly names: readonly [string, ...strin
 type Resolved<Planned> = { readonly planned: Planned[]; readonly unset: Unset[] };
 
 /** The defaults and each name's own settings of one kind, as the limits were read. */
-type Given<Reading extends Readers> = {
+type KindSettings<Reading extends Readers> = {
   readonly defaults: ReadOf<Reading> | undefined;
   readonly entries: Readonly<Record<string, ReadOf<Reading>>> | undefined;
 };
@@ -87,14 +87,14 @@ function unlistedNamesOf(
 /** Each name the plan lists, in plan order, with the settings its own limits over the defaults resolve to. */
 function resolvedOf<Reading extends Readers, Listed, Planned>(
   listed: Readonly<Record<string, Listed>>,
-  given: Given<Reading>,
-  kind: KindLimits<Reading, Listed, Planned>,
+  settings: KindSettings<Reading>,
+  kindLimits: KindLimits<Reading, Listed, Planned>,
 ): Resolved<Planned> {
   const planned: Planned[] = [];
   const unset: Unset[] = [];
   for (const [name, entry] of Object.entries(listed)) {
-    const limits = { ...given.defaults, ...given.entries?.[name] } as ReadOf<Reading>;
-    const resolution = kind.resolve(name, entry, limits);
+    const limits = { ...settings.defaults, ...settings.entries?.[name] } as ReadOf<Reading>;
+    const resolution = kindLimits.resolve(name, entry, limits);
     if (resolution.kind === 'planned') {
       planned.push(resolution.planned);
     } else {
@@ -111,16 +111,13 @@ function streamsOf<
 >(
   plan: BrokerPlan,
   limits: Container<StreamReaders, DurableConsumerReaders>,
-  kind: KindLimits<StreamReaders, BrokerPlanStream, StreamPlanned> | undefined,
+  stream: KindLimits<StreamReaders, BrokerPlanStream, StreamPlanned> | undefined,
 ): Resolved<StreamPlanned> {
-  if (kind === undefined) {
+  if (stream === undefined) {
     return { planned: [], unset: [] };
   }
-  return resolvedOf(
-    plan.streams,
-    { defaults: limits.streamDefaults, entries: limits.streams },
-    kind,
-  );
+  const settings = { defaults: limits.streamDefaults, entries: limits.streams };
+  return resolvedOf(plan.streams, settings, stream);
 }
 
 function durableConsumersOf<
@@ -130,10 +127,17 @@ function durableConsumersOf<
 >(
   plan: BrokerPlan,
   limits: Container<StreamReaders, DurableConsumerReaders>,
-  kind: KindLimits<DurableConsumerReaders, BrokerPlanDurableConsumer, DurableConsumerPlanned>,
+  durableConsumer: KindLimits<
+    DurableConsumerReaders,
+    BrokerPlanDurableConsumer,
+    DurableConsumerPlanned
+  >,
 ): Resolved<DurableConsumerPlanned> {
-  const given = { defaults: limits.durableConsumerDefaults, entries: limits.durableConsumers };
-  return resolvedOf(plan.durableConsumers, given, kind);
+  const settings = {
+    defaults: limits.durableConsumerDefaults,
+    entries: limits.durableConsumers,
+  };
+  return resolvedOf(plan.durableConsumers, settings, durableConsumer);
 }
 
 function unsetStreamLine({ name, names }: Unset): string {
@@ -146,11 +150,26 @@ function unsetDurableConsumerLine({ name, names }: Unset): string {
 }
 
 /**
- * The plan, and its Streams and Durable consumers with the settings their limits resolve to, or the one message that
- * refuses them: a value that is not the Broker plan `broker-plan --json` prints, limits that break their shape
- * (worded for `definer`, such as `BrokerLimits`), name what the plan does not list, or leave a setting unset. Without
- * a `stream` kind, the limits hold no per-Stream settings and `streams` is empty.
+ * What an adapter hands `plannedOf`: the `definer` its refusals word the limits for, such as `BrokerLimits`, and the
+ * readers and resolution of each kind its Broker has settings for, a `stream` kind only when its Broker has
+ * per-Stream settings.
  */
+export type AdapterLimits<
+  StreamReaders extends Readers,
+  DurableConsumerReaders extends Readers,
+  StreamPlanned,
+  DurableConsumerPlanned,
+> = {
+  readonly definer: string;
+  readonly stream?: KindLimits<StreamReaders, BrokerPlanStream, StreamPlanned>;
+  readonly durableConsumer: KindLimits<
+    DurableConsumerReaders,
+    BrokerPlanDurableConsumer,
+    DurableConsumerPlanned
+  >;
+};
+
+/** The plan's Streams and Durable consumers with the settings their limits resolve to, or the one message that refuses them. */
 export function plannedOf<
   StreamReaders extends Readers,
   DurableConsumerReaders extends Readers,
@@ -159,15 +178,12 @@ export function plannedOf<
 >(
   plan: unknown,
   limits: unknown,
-  adapter: {
-    readonly definer: string;
-    readonly stream?: KindLimits<StreamReaders, BrokerPlanStream, StreamPlanned>;
-    readonly durableConsumer: KindLimits<
-      DurableConsumerReaders,
-      BrokerPlanDurableConsumer,
-      DurableConsumerPlanned
-    >;
-  },
+  adapter: AdapterLimits<
+    StreamReaders,
+    DurableConsumerReaders,
+    StreamPlanned,
+    DurableConsumerPlanned
+  >,
 ):
   | {
       readonly kind: 'planned';

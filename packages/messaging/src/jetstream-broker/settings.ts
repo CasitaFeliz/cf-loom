@@ -33,11 +33,11 @@ export type ResolvedPlan = {
 const stream: KindLimits<typeof streamReaders, BrokerPlanStream, PlannedStream> = {
   readers: streamReaders,
   resolve: (name, listed, limits) => {
-    const every = everySetOf(limits, streamSettingNames);
-    if (every.kind === 'unset') {
-      return every;
+    const set = everySetOf(limits, streamSettingNames);
+    if (set.kind === 'unset') {
+      return set;
     }
-    const settings = streamConfigOf(every.limits);
+    const settings = streamConfigOf(set.limits);
     return { kind: 'planned', planned: { name, subjects: listed.subjects, settings } };
   },
 };
@@ -49,20 +49,16 @@ const durableConsumer: KindLimits<
 > = {
   readers: durableConsumerReaders,
   resolve: (name, listed, limits) => {
-    const every = everySetOf(limits, durableConsumerSettingNames);
-    if (every.kind === 'unset') {
-      return every;
+    const set = everySetOf(limits, durableConsumerSettingNames);
+    if (set.kind === 'unset') {
+      return set;
     }
-    const settings = durableConsumerConfigOf({ name, subject: listed.subject }, every.limits);
+    const settings = durableConsumerConfigOf({ name, subject: listed.subject }, set.limits);
     return { kind: 'planned', planned: { name, stream: listed.stream, settings } };
   },
 };
 
-/**
- * The settings of each stream and Durable consumer of the plan, from its own limits over the
- * defaults, in NATS's units; limits that break their shape, name what the plan does not list or
- * leave a setting unset are refused whole.
- */
+/** JetStream's limits, read and resolved by `plannedOf`. */
 export function checkedOf(plan: unknown, limits: unknown) {
   return plannedOf(plan, limits, { definer: 'BrokerLimits', stream, durableConsumer });
 }
