@@ -123,6 +123,19 @@ function streamsOf<
   );
 }
 
+function durableConsumersOf<
+  StreamReaders extends Readers,
+  DurableConsumerReaders extends Readers,
+  DurableConsumerPlanned,
+>(
+  plan: BrokerPlan,
+  limits: Container<StreamReaders, DurableConsumerReaders>,
+  kind: KindLimits<DurableConsumerReaders, BrokerPlanDurableConsumer, DurableConsumerPlanned>,
+): Resolved<DurableConsumerPlanned> {
+  const given = { defaults: limits.durableConsumerDefaults, entries: limits.durableConsumers };
+  return resolvedOf(plan.durableConsumers, given, kind);
+}
+
 function unsetStreamLine({ name, names }: Unset): string {
   return `The stream ${name} has no ${names.join(', ')} in limits.streams or limits.streamDefaults`;
 }
@@ -176,15 +189,7 @@ export function plannedOf<
     return { kind: 'refused', message: read.lines.join('\n') };
   }
   const streams = streamsOf(decoded.plan, read.limits, adapter.stream);
-  const durable = {
-    defaults: read.limits.durableConsumerDefaults,
-    entries: read.limits.durableConsumers,
-  };
-  const durableConsumers = resolvedOf(
-    decoded.plan.durableConsumers,
-    durable,
-    adapter.durableConsumer,
-  );
+  const durableConsumers = durableConsumersOf(decoded.plan, read.limits, adapter.durableConsumer);
   const lines = [
     ...unlistedLinesOf(decoded.plan, read.limits),
     ...streams.unset.map(unsetStreamLine),
