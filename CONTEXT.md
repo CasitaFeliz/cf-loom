@@ -87,7 +87,7 @@ What the Guards of an Endpoint provide to its EndpointHandler, and to the Guards
 _Avoid_: locals, principal, session
 
 **Outcome**:
-What an Endpoint answers and a Caller receives: exactly one of a Success, a Rejection or a Fault. A Handler builds it with a Rejection's declaration, headers and body; the Caller receives it with the Rejection's code, status and message resolved.
+What an Endpoint answers and a Caller receives: exactly one of a Success, a Rejection (an Unknown Rejection included) or a Fault. A Handler builds it with a Rejection's declaration, headers and body; the Caller receives it with the Rejection's code, status and message resolved.
 _Avoid_: result (taken by `Result<T, E>` libraries), response, reply
 
 **Success**:
@@ -95,7 +95,7 @@ What an Endpoint returns when it does what was asked: its declared status, heade
 _Avoid_: response, answer, data
 
 **Rejection**:
-A declared business decision not to do what was asked, which a Caller is expected to handle (for example `INSUFFICIENT_FUNDS`). Identified by its code; it has an HTTP status, header schemas, a body schema and a message. Codes are open: a Caller must handle codes it does not know.
+A declared business decision not to do what was asked, which a Caller is expected to handle (for example `INSUFFICIENT_FUNDS`). Identified by its code; it has an HTTP status, header schemas, a body schema and a message. Codes are open: a Caller must handle codes it does not know, and a Rejection with a code its Endpoint does not answer is an **Unknown Rejection**, which carries the code, status and message as received and a body nothing validated.
 _Avoid_: error, refusal, failure, exception
 
 **Standard Rejection**:
@@ -209,8 +209,20 @@ A Handler `generate` writes for an Endpoint, a Guard, a Command's Message Versio
 _Avoid_: placeholder, mock
 
 **Handler map**:
-The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name in code: an Endpoint's, a Guard's or a Subscription's name, a Command's Message Version's `chargeCardV1`; ending `satisfies HandlerMapOf` of the Contract, or typed `HandlerMapOf` of the Contract and the Service's Resources, so a missing or misplaced Handler is a type error; with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, drops one only once its file is gone, and deletes the map and the readers it wrote at a path the layout no longer names once it has written them where it does. The author only deletes a file or moves it off its path.
+The plain data the Handler map's file exports (`handlers.generated.ts` by default), which `generate` regenerates and `serve` and `consume` take: every Handler of a Service's Endpoints that are not Retired, of its Guards, of its Commands' Message Versions that are not Retired, and of its Subscriptions, keyed by name in code: an Endpoint's, a Guard's or a Subscription's name, a Command's Message Version's `chargeCardV1`; ending `satisfies HandlerMapOf` of the Contract, or typed `HandlerMapOf` of the Contract and the Service's Resources, so a missing or misplaced Handler is a type error; with the `readers` that pair each Command's Message Version and Subscription with the Reader its Handler reads. Its imports are the record of which Handler files are cf-loom's: `generate` moves one the layout places elsewhere, drops one only once its file is gone, and deletes the map and the Readers file it wrote at a path the layout no longer names once it has written them where it does. The author only deletes a file or moves it off its path.
 _Avoid_: registry, router
+
+**Pairing**:
+A Command's Message Version or a Subscription together with the Reader its Message Handler reads, as the Readers file holds it; `handle` takes it for a Message Handler, never the bare declaration.
+_Avoid_: wiring, mapping
+
+**Readers file**:
+The generated file, `readers.generated.ts` by default, that holds the Readers of a Service's own Events and Commands and the `readers` table of Pairings.
+_Avoid_: readers module
+
+**Direct call**:
+Calling a Handler that `handle()` returned as a function, as a test does: it runs the checks `serve` and `consume` run on what it is given and on the Outcome it returns.
+_Avoid_: unit call, manual call
 
 **Resources**:
 What a Service hands `serve` and `consume` once, at startup, for its Handlers to reach what lies outside the Contract: its repositories, the clients of its Providers, its EventPublisher and CommandSender. Each Handler takes the ones it needs.
@@ -232,6 +244,24 @@ _Avoid_: emitter, bus
 What a Service sends its Commands with.
 _Avoid_: dispatcher, bus
 
+### Testing
+
+**Fake Provider**:
+What `fakeProvider` builds from a Dependency to stand in for its Provider: it answers as scripted, checked against the Provider's Snapshot, so it can never answer what the Provider could not.
+_Avoid_: mock, test double
+
+**Script**:
+The Steps of one Endpoint of a Fake Provider: each `once` Step answers one request, in the order added, and the `otherwise` Step every request after them.
+_Avoid_: scenario, sequence
+
+**Step**:
+One scripted answer: the function a Fake Provider runs for a request of an Endpoint, given a builder typed by what a Caller of that Endpoint receives.
+_Avoid_: answer (alone), reply
+
+**Mistake**:
+A misuse of a Fake Provider in a test, such as a request no listed Endpoint matches, which throws `FakeProviderError` out of `fetch`, or a Step no request took, which `verify()` reports; `verify()` throws every Mistake again.
+_Avoid_: error (alone), failure
+
 ### Compatibility
 
 **Snapshot**:
@@ -246,7 +276,7 @@ _Avoid_: previous snapshot, reference
 An Endpoint's query and body as published, with the fields a version removed from them present as the Callers built before that version still send them, kept in the published Snapshot with the defs they reach; the Compatibility Check compares what the Endpoint declares with each. Rewritten onto the Endpoint's query and body at every publish; forgotten once it adds no field to them, or once the Endpoint is Retired.
 _Avoid_: previous Input, input history, old shape, removed Input (the body a Caller no longer sends is removed; a former Input is kept)
 
-**Reader schema**:
+**Reader schema** (a Reader, for short):
 A schema generated from a Snapshot for whoever reads the headers and body of a Success or a Rejection, or a Message body: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.
 _Avoid_: loose schema, consumer schema
 
@@ -259,19 +289,23 @@ Where a shape is read, which decides what makes a change to it Breaking: Input (
 _Avoid_: direction, side, context (that is a Guard's)
 
 **Compatibility Check**:
-The comparison of a Contract or a Definitions Package against its Baseline that classifies each difference as a Breaking, Additive or Neutral Change and gives it a Verdict; with no Baseline, its declared Snapshot is judged alone as the whole history, for the numbering of its Message Versions.
+The comparison of a Contract or a Definitions Package against its Baseline that classifies each Difference as a Breaking, Additive or Neutral Change and gives it a Verdict; with no Baseline, its declared Snapshot is judged alone as the whole history, for the numbering of its Message Versions.
 _Avoid_: diff, lint, compatibility review
 
+**Difference**:
+What differs between the Baseline and the proposed Snapshot at one site; the Compatibility Check gives it a class and a Verdict, and with them it is a Change.
+_Avoid_: delta
+
 **Breaking Change**:
-A difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing or renaming an export of a Definitions Package, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
+A Difference that can make an existing Consumer, or another Release of the same Service running side by side, fail at runtime. A Consumer's code that stops compiling after upgrading the Contract Package is not, by itself, a Breaking Change; the exceptions, renaming an Endpoint and removing or renaming an export of a Definitions Package, are in [The Compatibility Check](COMPATIBILITY.md#the-compatibility-check).
 _Avoid_: incompatible change, error
 
 **Additive Change**:
-A difference no existing Consumer or running Release can fail on, but that a Consumer can notice.
+A Difference no existing Consumer or running Release can fail on, but that a Consumer can notice.
 _Avoid_: non-breaking change, safe change
 
 **Neutral Change**:
-A difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
+A Difference that changes nothing a Consumer or another Release relies on or notices, such as a description.
 _Avoid_: patch change, cosmetic change
 
 **Verdict**:
@@ -289,5 +323,5 @@ _Avoid_: authorizer, reviewer, tech lead
 ### Lifecycle
 
 **Active**, **Deprecated**, **Retired**:
-The lifecycle of an Element. Deprecated is still declared and warns its Consumers. Retired no longer works and has no Handler, but stays recorded in every later Snapshot, as a **tombstone** once its declaration is deleted; removed Subscriptions are kept as tombstones too.
+The lifecycle of an Element. Deprecated is still declared and warns its Consumers; a Deprecated Command, which has none, is no longer sent and is only handled until what is queued drains. Retired no longer works and has no Handler, but stays recorded in every later Snapshot, as a **tombstone** once its declaration is deleted; removed Subscriptions are kept as tombstones too.
 _Avoid_: obsolete, removed (for an Element: Elements are Retired; Subscriptions and codes are removed), sunset

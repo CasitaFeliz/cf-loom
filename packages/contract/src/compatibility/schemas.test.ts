@@ -2315,9 +2315,6 @@ describe('compatibilityReportOf, shared schemas', () => {
 });
 
 describe('compatibilityReportOf, depth', () => {
-  /** A deep test compares thousands of defs, which takes seconds on a CI runner with shared cores. */
-  const deepTimeout = 60_000;
-
   /** `count` defs, each an object holding the next by `next`, the innermost holding `innermost` by `v`. */
   function aDefChainOf(count: number, innermost: SchemaNode): Defs {
     const entries: [string, SchemaNode][] = [];
@@ -2337,7 +2334,7 @@ describe('compatibilityReportOf, depth', () => {
     return [...steps, 'fields', 'v'];
   }
 
-  test('an unchanged Snapshot of 5,000 nested defs has no Change', { timeout: deepTimeout }, () => {
+  test('an unchanged Snapshot of 5,000 nested defs has no Change', () => {
     const defs = aDefChainOf(5_000, aBoolean);
 
     const report = reportOf(input, {
@@ -2352,7 +2349,6 @@ describe('compatibilityReportOf, depth', () => {
 
   test.for([1, 600, 5_000])(
     'a field changed in the innermost of %i nested defs is one Change, at its path',
-    { timeout: deepTimeout },
     (count) => {
       const report = reportOf(input, {
         from: aRef('def0'),
@@ -2368,9 +2364,7 @@ describe('compatibilityReportOf, depth', () => {
     },
   );
 
-  test('a ref through 20,000 alias defs is compared as the def it reaches', {
-    timeout: deepTimeout,
-  }, () => {
+  test('a ref through 20,000 alias defs is compared as the def it reaches', () => {
     const count = 20_000;
     const aliasesOf = (target: SchemaNode): Defs => {
       const entries: [string, SchemaNode][] = [['target', target]];
