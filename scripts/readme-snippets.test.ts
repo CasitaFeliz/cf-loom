@@ -244,11 +244,32 @@ describe('paths', () => {
   });
 
   test.each([
-    ['..', '// ../escaped.ts'],
-    ['.', '// ./src/a.ts'],
-  ])('a comment with a %s segment names no path, so its block is a snippet', (_, comment) => {
+    '../escaped.ts',
+    './src/a.ts',
+    'src/../escaped.ts',
+    'node_modules/.cache/escaped.ts',
+    'node_modules/src/escaped.ts',
+    'snippets/a.ts',
+    'test/a.ts',
+    'scope-packages/a.ts',
+    'a.ts',
+  ])('a path comment %s that is no path of a Service is a problem', (path) => {
+    const readme = aReadme('FIXTURE.md', `// ${path}\nexport const x = 1;`);
+
+    const problems = snippetProblems([readme], {});
+
+    expect(problems).toEqual([
+      `FIXTURE.md:4: ${path} is no path of a Service: src/… or <service>/src/…`,
+    ]);
+  });
+
+  test('a block whose path comment is no path of a Service is written nowhere', () => {
     const repository = aRepository({
-      handlers: aReadme('packages/handlers/README.md', `${comment}\nexport const x = 1;`).markdown,
+      handlers: aReadme(
+        'packages/handlers/README.md',
+        '// ../escaped.ts\nexport const x = 1;',
+        '// ./src/a.ts\nexport const a = 1;',
+      ).markdown,
     });
     const directory = join(repository, '.readme-service');
 
@@ -256,7 +277,22 @@ describe('paths', () => {
 
     expect(existsSync(join(repository, 'escaped.ts'))).toBe(false);
     expect(existsSync(join(directory, 'src/a.ts'))).toBe(false);
-    expect(fileOf(directory, 'snippets/handlers.ts')).toContain(comment);
+    expect(existsSync(join(directory, 'snippets'))).toBe(false);
+  });
+
+  test.each([
+    'src/a.ts',
+    'notes-service/src/contract/index.ts',
+    'definitions/src/definitions/guards/api-key.guard.ts',
+  ])('%s is a path of a Service', (path) => {
+    const repository = aRepository({
+      handlers: aReadme('packages/handlers/README.md', `// ${path}\nexport const x = 1;`).markdown,
+    });
+    const directory = join(repository, '.readme-service');
+
+    writeReadmeService(directory, repository);
+
+    expect(fileOf(directory, path)).toContain('export const x = 1;');
   });
 });
 

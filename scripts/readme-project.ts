@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import type { Block } from './readme-blocks.ts';
+import { type Block, serviceOf } from './readme-blocks.ts';
 import { declaredNames, exportedNames, mentionedNames, ownNames } from './readme-names.ts';
 
 /** The files of the Service the READMEs describe that no README block shows, by path. */
@@ -58,13 +58,9 @@ function claimOf(holder: Block | undefined): string {
     : `the snippet at ${at}: snippets are named by their heading, so one of the headings changes`;
 }
 
-/** The package a file belongs to: `<folder>/src/…` is that folder's, a scope package its own, else the Service. */
+/** The package a file belongs to: a scope package its own, a Service's file that Service's, else the Service. */
 function packageOf(path: string): string {
-  const [folder = '', second] = path.split('/');
-  if (folder === packagesAt) {
-    return path;
-  }
-  return second === 'src' ? folder : '';
+  return path.startsWith(`${packagesAt}/`) ? path : (serviceOf(path) ?? '');
 }
 
 /** A name a block and a scope file of one package both export: the scope holds what no block shows. */

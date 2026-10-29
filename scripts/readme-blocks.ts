@@ -28,12 +28,23 @@ const opening = /^(\s*)```(?:ts|typescript)(?:\s.*)?$/;
 const anyFence = /^\s*```/;
 const closing = /^\s*```\s*$/;
 const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/;
-const pathComment = /^\/\/\s+((?:(?!\.\.?\/)[\w.-]+\/)+[\w.-]+\.ts)\b/;
+const pathComment = /^\/\/\s+([\w./-]+\.ts)\b/;
+const servicePath = /^(?:(?!node_modules\/)([\w-]+)\/)?src\/(?:(?!\.\.?\/)[\w.-]+\/)*[\w.-]+\.ts$/;
+
+/**
+ * The Service a path is a file of, as Layout names its paths: `src/…` is the Service's own (`''`),
+ * `<service>/src/…` that Service's, with no `.` or `..` segment; any other path is no path of a
+ * Service.
+ */
+export function serviceOf(path: string): string | undefined {
+  const match = servicePath.exec(path);
+  return match === null ? undefined : (match[1] ?? '');
+}
 
 /**
  * Every file the TypeScript blocks of a README show. A path comment names a file, and starts
- * another when it follows a blank line; its path has no `.` or `..` segment. A file with none is
- * written under its nearest heading.
+ * another when it follows a blank line; a path that is no path of a Service is a problem, and its
+ * file is left out. A file with no path comment is written under its nearest heading.
  */
 export function blocksOf(readme: Readme): Blocks {
   const lines = readme.markdown.split(/\r?\n/);
@@ -55,20 +66,27 @@ export function blocksOf(readme: Readme): Blocks {
           row.startsWith(piece.indent) ? row.slice(piece.indent.length) : row,
         );
         for (const file of filesOf(dedented, piece.at + 2)) {
-          const path = file.path ?? snippetPath(anchor);
-          const named = file.path !== undefined;
-          blocks.push({
-            readme: readme.path,
-            line: file.line,
-            path,
-            named,
-            source: file.source,
-          });
+          const refusal = refusalOf(readme.path, file);
+          if (refusal !== undefined) {
+            problems.push(refusal);
+          } else {
+            const path = file.path ?? snippetPath(anchor);
+            const named = file.path !== undefined;
+            blocks.push({ readme: readme.path, line: file.line, path, named, source: file.source });
+          }
         }
       }
     }
   }
   return { blocks, problems };
+}
+
+/** Why a file of a block is left out: its path comment names no path of a Service. */
+function refusalOf(readme: string, file: CodeFile): string | undefined {
+  if (file.path === undefined || serviceOf(file.path) !== undefined) {
+    return undefined;
+  }
+  return `${readme}:${file.line}: ${file.path} is no path of a Service: src/… or <service>/src/…`;
 }
 
 /** The headings and TypeScript blocks of a README in order, other fenced blocks skipped whole. */
