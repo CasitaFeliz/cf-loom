@@ -627,8 +627,9 @@ describe('validateRoot: one schema per header or query name on an Endpoint', () 
 });
 
 describe('validateRoot: the values of a text part’s enum each have a text of their own', () => {
-  const shared = (noun: string, name: string, a: string, b: string) =>
-    `${noun}'s values each have a text of their own: ${name} has ${a} and ${b}`;
+  function shared(noun: string, name: string, values: readonly [string, string]) {
+    return `${noun}'s values each have a text of their own: ${name} has ${values[0]} and ${values[1]}`;
+  }
 
   test('a query enum of 1 and "1" fails, naming both in the Snapshot’s order', () => {
     const endpoint = defineEndpoint({
@@ -640,7 +641,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         `${endpointAt} input.query.v`,
         'shared-text',
-        shared('A query param', 'v', '"1"', '1'),
+        shared('A query param', 'v', ['"1"', '1']),
       ),
     );
   });
@@ -655,7 +656,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         `${endpointAt} input.headers.x-dry`,
         'shared-text',
-        shared('A header', 'x-dry', '"true"', 'true'),
+        shared('A header', 'x-dry', ['"true"', 'true']),
       ),
     );
   });
@@ -671,7 +672,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         'endpoints.GET /orders/{} (listOrders) input.params.orderId',
         'shared-text',
-        shared('A path param', 'orderId', '"1000000000000000000000"', '1e+21'),
+        shared('A path param', 'orderId', ['"1000000000000000000000"', '1e+21']),
       ),
     );
   });
@@ -686,7 +687,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         `${endpointAt} input.query.v`,
         'shared-text',
-        shared('A query param', 'v', '"2"', '2'),
+        shared('A query param', 'v', ['"2"', '2']),
       ),
     );
   });
@@ -698,7 +699,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         'codes.UNAUTHENTICATED headers.x-realm',
         'shared-text',
-        shared('A header', 'x-realm', '"1"', '1'),
+        shared('A header', 'x-realm', ['"1"', '1']),
       ),
     );
   });
@@ -714,7 +715,7 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       failed(
         'guards.signed demands.headers.x-version',
         'shared-text',
-        shared('A header', 'x-version', '"false"', 'false'),
+        shared('A header', 'x-version', ['"false"', 'false']),
       ),
     );
   });
@@ -730,8 +731,8 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
 
   /** The value a request's query `v=<text>` gives a query param `v` declared as an enum of these values. */
   function queryValueOf(values: readonly (string | number | boolean)[], text: string): unknown {
-    const v = { required: true, schema: { type: 'enum', values, open: false } } as const;
-    const nodes = { 'input.query': { type: 'object', fields: { v } } } as const;
+    const field = { required: true, schema: { type: 'enum', values, open: false } } as const;
+    const nodes = { 'input.query': { type: 'object', fields: { v: field } } } as const;
     const source = { params: {}, query: new URLSearchParams({ v: text }), headers: new Headers() };
     return textPartsOf(nodes, source).query?.['v'];
   }
