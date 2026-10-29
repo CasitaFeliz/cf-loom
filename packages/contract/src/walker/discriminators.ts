@@ -30,16 +30,19 @@ function refusalOf(option: unknown, key: string): Refused | undefined {
   if (variant.type !== 'object') {
     return isTaggedDef(variant) ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
   }
-  const field = fieldOf(variant, key);
-  const discriminator = defOf(innerOfLazy(field));
-  if (field !== undefined && discriminator === undefined) {
+  const discriminator = defOf(innerOfLazy(fieldOf(variant, key)));
+  if (hasField(variant, key) && discriminator === undefined) {
     return undefined;
   }
   return discriminator?.type === 'literal' ? undefined : refused.unliteralDiscriminator;
 }
 
+function hasField(variant: DefOfType<'object'>, key: string): boolean {
+  return Object.hasOwn(variant.shape, key);
+}
+
 function fieldOf(variant: DefOfType<'object'>, key: string): unknown {
-  return Object.hasOwn(variant.shape, key) ? variant.shape[key] : undefined;
+  return hasField(variant, key) ? variant.shape[key] : undefined;
 }
 
 /** The def types zod reads values through, for a variant and for a discriminator. */

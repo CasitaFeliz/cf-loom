@@ -36,6 +36,12 @@ type Slot = {
   readonly onlyDirect?: true;
   /** A value zod itself takes as "nothing here", so there is nothing to refuse. */
   readonly noneIs?: unknown;
+  /** What the slot itself refuses beside any child, its own lines. */
+  readonly alsoRefused?: readonly string[];
+  /** What the slot refuses beside a child that is a schema but not one it takes. */
+  readonly alsoRefusedAroundSchema?: readonly string[];
+  /** A slot reads through the child that is this one to what it holds, so judges it by that. */
+  readonly isReadThrough?: true;
 };
 
 const jsonOptions = [z.string(), z.number(), z.boolean(), z.null()] as const;
@@ -83,20 +89,42 @@ const slots: readonly Slot[] = [
     around: (child) => z.intersection(child, z.object({})),
     steps: [{ kind: 'index', index: 0 }],
   },
-  { name: 'a lazy’s result', around: (child) => z.lazy(() => child), steps: [] },
+  {
+    name: 'a lazy’s result',
+    around: (child) => z.lazy(() => child),
+    steps: [],
+    isReadThrough: true,
+  },
   {
     name: 'a pipe’s in',
     around: (child) => new z.ZodPipe({ type: 'pipe', in: child, out: z.string() }),
     steps: [],
+    alsoRefused: ['.pipe()'],
   },
   {
     name: 'a pipe’s out',
     around: (child) => new z.ZodPipe({ type: 'pipe', in: z.string(), out: child }),
     steps: [],
+    alsoRefused: ['.pipe()'],
   },
-  { name: 'a .readonly()', around: (child) => z.readonly(child), steps: [] },
-  { name: 'a set’s value', around: (child) => z.set(child), steps: [] },
-  { name: 'a map’s value', around: (child) => z.map(z.string(), child), steps: [valueAt] },
+  {
+    name: 'a .readonly()',
+    around: (child) => z.readonly(child),
+    steps: [],
+    alsoRefused: ['.readonly()'],
+  },
+  {
+    name: 'a set’s value',
+    around: (child) => z.set(child),
+    steps: [],
+    alsoRefused: ['z.set()'],
+  },
+  {
+    name: 'a map’s value',
+    around: (child) => z.map(z.string(), child),
+    steps: [valueAt],
+    alsoRefused: ['z.map()'],
+  },
   {
     name: 'a catchall',
     around: (child) => z.object({}).catchall(child),
@@ -119,6 +147,7 @@ const slots: readonly Slot[] = [
     name: 'a discriminated union’s discriminator',
     around: (child) => z.discriminatedUnion('k', [z.object({ k: child })]),
     steps: [optionAt(0), fieldAt('k')],
+    alsoRefusedAroundSchema: ['a discriminated union variant whose discriminator is not a literal'],
   },
   {
     name: 'a discriminated union’s variant',
@@ -136,16 +165,19 @@ const slots: readonly Slot[] = [
     name: 'a JSON-shaped union’s record key',
     around: (child) => z.union([...jsonOptions, z.array(z.string()), z.record(child, z.string())]),
     steps: [optionAt(5), keyAt],
+    alsoRefused: ['z.null()'],
   },
   {
     name: 'a JSON-shaped union’s array items',
     around: (child) => z.union([...jsonOptions, z.array(child), stringKeyed]),
     steps: [optionAt(4), itemsAt],
+    alsoRefused: ['z.null()'],
   },
   {
     name: 'a JSON-shaped union’s option',
     around: (child) => z.union([...jsonOptions, child, stringKeyed]),
     steps: [optionAt(4)],
+    alsoRefused: ['z.null()'],
   },
 ];
 
@@ -184,17 +216,42 @@ function isNothingHere(slot: Slot, bad: unknown): boolean {
   return Object.hasOwn(slot, 'noneIs') && slot.noneIs === bad;
 }
 
-/** What is wrong with the walk of a bad value at the end of these slots, none when all is well. */
+/**
+ * What is wrong with the walk of a bad value at the end of these slots, none when all is well: one
+ * line says it is no zod 4 schema, at its place, and the only others are the slots' own.
+ */
 function problemOf(nesting: Nesting, what: string, schema: unknown): string | undefined {
   const label = `${nesting.map(({ name }) => name).join(' > ')} :: ${what}`;
   const at = authorPathOf(nesting.flatMap(({ steps }) => steps)) ?? '';
+  const own = nesting.flatMap(linesOf);
   try {
     const failures = failuresOf(schema);
-    const refused = failures.some((failure) => failure.at === at && failure.construct === notZod4);
-    return refused ? undefined : `${label}: no refusal at ${at} in ${JSON.stringify(failures)}`;
+    const constructs = failures.map(({ construct }) => construct).toSorted();
+    const refusedAtItsPlace = failures.some(
+      (failure) => failure.at === at && failure.construct === notZod4,
+    );
+    const expected = [notZod4, ...own].toSorted();
+    const isAsExpected = refusedAtItsPlace && sameList(constructs, expected);
+    return isAsExpected
+      ? undefined
+      : `${label}: ${JSON.stringify(failures)}, not ${at}: ${expected}`;
   } catch (error) {
     return `${label}: threw ${String(error)}`;
   }
+}
+
+/** The lines a slot earns of its own: those beside any child, and, around a schema, those beside it. */
+function linesOf(slot: Slot, position: number, nesting: readonly Slot[]): readonly string[] {
+  const child = nesting[position + 1];
+  const aroundSchema = child !== undefined && child.isReadThrough !== true;
+  return [
+    ...(slot.alsoRefused ?? []),
+    ...(aroundSchema ? (slot.alsoRefusedAroundSchema ?? []) : []),
+  ];
+}
+
+function sameList(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 /** The walk of every bad value in a nesting of slots: its problem if it has one, else none. */
@@ -304,6 +361,20 @@ describe('walkSchemas: a union holding a value that is no zod 4 schema', () => {
     const payment = z.discriminatedUnion('kind', [z.object({ kind: z3.literal('card') as never })]);
 
     expect(sortedFailuresOf(payment)).toEqual([oneOf('<|0>.kind', notZod4)]);
+  });
+
+  test('a discriminator key holding undefined is refused at its field alone, as null is', () => {
+    const payment = z.discriminatedUnion('kind', [z.object({ kind: undefined as never })]);
+
+    expect(sortedFailuresOf(payment)).toEqual([oneOf('<|0>.kind', notZod4)]);
+  });
+
+  test('a variant without the discriminator key is not a literal', () => {
+    const payment = z.discriminatedUnion('kind', [
+      z.lazy(() => z.object({ other: z.string() })) as never,
+    ]);
+
+    expect(sortedFailuresOf(payment)).toEqual([oneOf('<|0>', noLiteral)]);
   });
 
   test('a nullable zod/v3 discriminator is refused at its field, beside the variant', () => {
