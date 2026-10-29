@@ -755,6 +755,8 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       'true',
       'false',
       '01',
+      '1000000000000000000000',
+      '0.0000001',
     ];
     const draws = Array.from({ length: 200 }, () => {
       const size = 1 + Math.floor(next() * 4);
