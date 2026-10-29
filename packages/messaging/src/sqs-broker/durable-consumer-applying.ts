@@ -11,7 +11,7 @@ import type { Subscribing } from './subscribing.ts';
 import { subscriptionShapeOf } from './subscription-shape.ts';
 import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from './tags.ts';
 
-/** What applying a Durable consumer works with: the SQS client, where the environment's topics and queues are, and the subscriptions made so far. */
+/** What applying works with: the SNS and SQS clients, where the environment's topics and queues are, and the subscriptions made so far. */
 export type Applier = {
   readonly sns: SNSClient;
   readonly sqs: SQSClient;
