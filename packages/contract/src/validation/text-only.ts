@@ -13,6 +13,7 @@ import {
   isTextValue,
   sharedTextOf,
   textOfValue,
+  textTravelsAs,
 } from '../wire/index.ts';
 import {
   attachedGuardsOf,
@@ -24,6 +25,7 @@ import {
   textOf,
   writtenTextOf,
 } from '../written/index.ts';
+import { listOf } from './closed-values.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { headerNameFailures } from './header-names.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
@@ -122,13 +124,11 @@ function sharedTextFailures(
   return [failure(at, 'shared-text', message)];
 }
 
-/** What each text part carries: the check the runtime sends by, and how a message words the text. */
-const carries: Readonly<
-  Record<TextIn, { readonly travelsAs: string; readonly can: (text: string) => boolean }>
-> = {
-  params: { travelsAs: 'a path segment', can: isSegmentText },
-  query: { travelsAs: 'a query value', can: isQueryText },
-  headers: { travelsAs: 'HTTP field text', can: isHeaderText },
+/** What each text part carries: the check the runtime sends by. */
+const isCarriedIn: Readonly<Record<TextIn, (text: string) => boolean>> = {
+  params: isSegmentText,
+  query: isQueryText,
+  headers: isHeaderText,
 };
 
 /**
@@ -140,23 +140,16 @@ function unsendableTextFailures(
   name: string,
   node: SchemaNode,
 ): readonly DeclarationFailure[] {
-  const { travelsAs, can } = carries[part];
   const unsendable =
     node.type === 'enum'
-      ? node.values.filter(isTextValue).filter((value) => !can(textOfValue(value)))
+      ? node.values.filter(isTextValue).filter((value) => !isCarriedIn[part](textOfValue(value)))
       : [];
   if (unsendable.length === 0) {
     return [];
   }
-  const message = `${nouns[part]}'s values each travel as ${travelsAs}: ${name} has ${allOf(unsendable)}`;
+  const values = listOf(unsendable.map(writtenTextOf), 'and');
+  const message = `${nouns[part]}'s values each travel as ${textTravelsAs[part]}: ${name} has ${values}`;
   return [failure(at, 'unsendable-text', message)];
-}
-
-/** Several values in one sentence, as written: `"a", "b" and "c"`. */
-function allOf(values: readonly unknown[]): string {
-  const written = values.map(writtenTextOf);
-  const last = written.at(-1);
-  return written.length < 2 ? written.join('') : `${written.slice(0, -1).join(', ')} and ${last}`;
 }
 
 function partConflicts(

@@ -791,8 +791,8 @@ describe('validateRoot: the values of a text part’s enum each travel in their 
 
   const words = {
     header: "A header's values each travel as HTTP field text",
-    param: "A path param's values each travel as a path segment",
-    query: "A query param's values each travel as a query value",
+    param: "A path param's values each travel as a URL segment",
+    query: "A query param's values each travel as URL text",
   } as const;
 
   function unsendable(part: keyof typeof words, name: string, values: string) {

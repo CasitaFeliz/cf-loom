@@ -8,6 +8,7 @@ import {
   notJsonContentType,
   readingOf,
   textOfValue,
+  textTravelsAs,
 } from '@cf-loom/contract/internal';
 
 /** An Input's parts as parsed, unknown keys stripped, by the field a Caller passes each under. */
@@ -118,7 +119,7 @@ function paramIssuesOf(params: Readonly<Record<string, unknown>>): readonly Inpu
     part: 'input.params',
     path: [name],
     code: 'invalid_format',
-    message: 'The path param cannot travel as a URL segment',
+    message: `The path param cannot travel as ${textTravelsAs.params}`,
   }));
 }
 
@@ -130,7 +131,7 @@ function queryIssuesOf(query: Readonly<Record<string, unknown>>): readonly Input
     part: 'input.query',
     path,
     code: 'invalid_format',
-    message: 'The query value cannot travel as URL text',
+    message: `The query value cannot travel as ${textTravelsAs.query}`,
   }));
 }
 

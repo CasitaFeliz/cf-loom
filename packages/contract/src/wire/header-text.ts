@@ -1,5 +1,6 @@
 import type { Issue } from '../written/index.ts';
 import { isTextValue, textOfValue } from './text.ts';
+import { textTravelsAs } from './text-travel.ts';
 
 /** The parts whose headers travel: an Input's, a Success's or a Rejection's. */
 type HeaderPart = 'success.headers' | 'input.headers' | 'headers';
@@ -54,6 +55,6 @@ function headerIssueOf<Part extends HeaderPart>(
   part: Part,
   name: string,
 ): Issue & { readonly part: Part } {
-  const message = 'The header value cannot travel as HTTP field text';
+  const message = `The header value cannot travel as ${textTravelsAs.headers}`;
   return { part, path: [name], code: 'invalid_format', message };
 }
