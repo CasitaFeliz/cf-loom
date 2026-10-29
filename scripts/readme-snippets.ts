@@ -13,6 +13,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
+import { contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
 import {
   completed,
   declaredTwice,
@@ -52,13 +53,15 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
 
 /**
  * Writes the Service the READMEs describe to `directory`: the blocks of the READMEs of
- * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows. It
- * replaces what the directory held and reads no built package.
+ * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows, then
+ * what `cf-loom generate` and `cf-loom package` write for its other Services, so it needs the CLI
+ * built. It replaces what the directory held.
  */
 export function writeReadmeService(directory: string, repository: string = root): void {
   const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
   rmSync(directory, { recursive: true, force: true });
   writeProject(directory, project, repository);
+  runCfLoom(directory, [...project.keys()], repository);
 }
 
 /**
@@ -119,12 +122,16 @@ export function readmeServiceAliases(
   );
 }
 
-/** The packages the scope stands for: a file under `scope-packages/` is the package of its path. */
+/**
+ * The packages the scope stands for, a file under `scope-packages/` the package of its path, and
+ * the Contract Packages `cf-loom package` writes there.
+ */
 function scopePackagesOf(paths: readonly string[]): [string, string][] {
   const prefix = `${packagesAt}/`;
-  return paths
+  const standing = paths
     .filter((path) => path.startsWith(prefix))
-    .map((path) => [path.slice(prefix.length).replace(/\.ts$/, ''), path]);
+    .map((path): [string, string] => [path.slice(prefix.length).replace(/\.ts$/, ''), path]);
+  return [...standing, ...contractPackagesOf(paths)];
 }
 
 function writeProject(directory: string, project: Project, repository: string): void {
