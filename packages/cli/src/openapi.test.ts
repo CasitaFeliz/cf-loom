@@ -1219,7 +1219,7 @@ describe('cf-loom openapi: the responses', () => {
     expect(responseBodyOf('/health', 'get', '501')).toEqual(refTo('NOT_IMPLEMENTED'));
   });
 
-  test('the invalid-input Rejection’s body is cf-loom’s body of Issues', () => {
+  test('the invalid-input Rejection’s body is cf-loom’s body of Issues and the count of those omitted, an integer from 0', () => {
     const issues = valueAt(
       componentOf('INVALID_INPUT'),
       'properties',
@@ -1228,8 +1228,12 @@ describe('cf-loom openapi: the responses', () => {
       'body',
     );
 
-    expect(valueAt(issues, 'required')).toEqual(['issues']);
+    expect(valueAt(issues, 'required')).toEqual(['issues', 'omittedIssues']);
     expect(valueAt(issues, 'properties', 'issues', 'type')).toBe('array');
+    expect(valueAt(issues, 'properties', 'omittedIssues')).toMatchObject({
+      type: 'integer',
+      minimum: 0,
+    });
   });
 
   test('every OpenAPI operation answers the Fault Envelope under 500', () => {
