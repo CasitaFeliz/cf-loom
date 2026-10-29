@@ -803,9 +803,7 @@ describe('walkSchemas: a schema’s walked shape does not depend on its annotati
     return Object.fromEntries(kept.map(([key, held]) => [key, withoutAnnotations(held)]));
   }
 
-  test('random trees walk to one shape with random annotations and without', {
-    timeout: 30_000,
-  }, () => {
+  test('random trees walk to one shape with random annotations and without', () => {
     const draws = Array.from({ length: 2000 }, (_, seed) => ({
       annotated: randomSchemas(seededNext(seed), randomAnnotations(seededNext(-seed))).schemaOf(3),
       plain: randomSchemas(seededNext(seed)).schemaOf(3),

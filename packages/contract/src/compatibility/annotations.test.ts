@@ -74,87 +74,132 @@ function nodesWithin(root: SchemaNode): readonly Annotated[] {
   return found;
 }
 
-const annotations = ['description', 'examples', 'origin'];
+/** The values an edit draws for each annotation, which is also the list of annotations. */
+const annotationValues: Record<string, readonly unknown[]> = {
+  description: ['x', 'y'],
+  examples: [['x'], ['y']],
+  origin: ['local', '@org/definitions@1.0.0#money'],
+};
+const annotations = Object.keys(annotationValues);
 
 function shapeTextOf(node: Annotated): string {
   return JSON.stringify(node, (key, value) => (annotations.includes(key) ? undefined : value));
 }
 
-/** One annotation edit on a copy of a walked node: add, drop or move a description or examples. */
+function pickFrom<Value>(values: readonly Value[], next: () => number): Value | undefined {
+  return values[Math.floor(next() * values.length)];
+}
+
+/** A copy of a walked node with an origin on some of its nodes, as a shared schema's uses have. */
+function withOrigins(node: SchemaNode, next: () => number): SchemaNode {
+  const copy = structuredClone(node);
+  for (const held of nodesWithin(copy)) {
+    if (next() < 0.3) {
+      held['origin'] = pickFrom(annotationValues['origin'] ?? [], next);
+    }
+  }
+  return copy;
+}
+
+/** One annotation edit on a copy of a walked node: add, drop or move a description, examples or origin. */
 function editedOf(node: SchemaNode, next: () => number): SchemaNode | undefined {
   const copy = structuredClone(node);
   const nodes = nodesWithin(copy);
-  const pick = <Value>(values: readonly Value[]) =>
-    values[Math.floor(next() * values.length)] as Value | undefined;
+  const annotation = pickFrom(annotations, next) ?? 'description';
   const roll = next();
   if (roll < 0.2) {
-    const target = pick(nodes);
-    if (target === undefined) return undefined;
-    target['description'] = pick(['x', 'y']);
+    const target = pickFrom(nodes, next);
+    if (target === undefined) {
+      return undefined;
+    }
+    target[annotation] = pickFrom(annotationValues[annotation] ?? [], next);
     return copy;
+  }
+  const holders = nodes.filter((held) => held[annotation] !== undefined);
+  const source = pickFrom(holders, next);
+  if (source === undefined) {
+    return undefined;
   }
   if (roll < 0.35) {
-    const target = pick(nodes.filter((held) => held['description'] !== undefined));
-    if (target === undefined) return undefined;
-    delete target['description'];
+    delete source[annotation];
     return copy;
   }
-  const annotation = roll < 0.85 ? 'description' : 'examples';
-  const source = pick(nodes.filter((held) => held[annotation] !== undefined));
-  const targets = nodes.filter(
-    (held) => held !== source && source !== undefined && shapeTextOf(held) === shapeTextOf(source),
+  const sameShape = nodes.filter(
+    (held) => held !== source && shapeTextOf(held) === shapeTextOf(source),
   );
-  const target = pick(targets);
-  if (source === undefined || target === undefined) return undefined;
+  const target = pickFrom(sameShape, next);
+  if (target === undefined) {
+    return undefined;
+  }
   target[annotation] = source[annotation];
   delete source[annotation];
   return copy;
 }
 
+type Edited = { readonly walked: SchemaNode; readonly edited: SchemaNode };
+
+/** Walked nodes, some with annotations, each beside a copy with one annotation added, dropped or moved. */
+function editedPairsOf(): readonly Edited[] {
+  const next = seededNext(328);
+  const { schemaOf } = randomSchemas(next);
+  const schemas = Array.from({ length: 4000 }, () =>
+    next() < 0.5 ? schemaOf(3) : equalLeavesOf(next),
+  );
+  return schemas.flatMap((schema) => {
+    const plain = walkedOf(schema);
+    const walked = plain === undefined ? undefined : withOrigins(plain, next);
+    const edited = walked === undefined ? undefined : editedOf(walked, next);
+    return walked === undefined || edited === undefined ? [] : [{ walked, edited }];
+  });
+}
+
+type Outcome = {
+  readonly isByteChange: boolean;
+  readonly reported: readonly string[] | { readonly thrown: string };
+  readonly decoded: string;
+};
+
+function changesBytes({ walked, edited }: Edited): boolean {
+  return hashedTextOf(ordersAnswering(walked)) !== hashedTextOf(ordersAnswering(edited));
+}
+
+/** What the Compatibility Check and a republish make of one edit. */
+function outcomeOf(pair: Edited): Outcome {
+  const { walked, edited } = pair;
+  const baseline = publishedSnapshotOf(undefined, ordersAnswering(walked), publishedAt('1.0.0'));
+  const proposed = ordersAnswering(edited);
+  const isByteChange = changesBytes(pair);
+  const republished = publishedSnapshotOf(baseline, proposed, publishedAt('1.0.1'));
+  const decoded = decodeSnapshot(canonicalTextOf(republished)).kind;
+  try {
+    const { changes } = compatibilityReportOf(baseline, proposed);
+    const reported = changes.map((change) =>
+      'shape' in change.difference ? `${change.difference.shape.kind} ${change.class}` : '',
+    );
+    return { isByteChange, reported, decoded };
+  } catch (e) {
+    return { isByteChange, reported: { thrown: String(e) }, decoded };
+  }
+}
+
+function isWrong({ isByteChange, reported, decoded }: Outcome): boolean {
+  if (!Array.isArray(reported)) {
+    return true;
+  }
+  const isNeutralOnly = reported.every((kind) => kind === 'annotation-changed neutral');
+  return reported.length > 0 !== isByteChange || !isNeutralOnly || decoded !== 'decoded';
+}
+
 describe('compatibilityReportOf, an annotation edit at any depth', () => {
-  test('is reported exactly when the bytes change, only as Neutral, and keeps the Snapshot decodable', {
-    timeout: 60_000,
-  }, () => {
-    const next = seededNext(328);
-    const { schemaOf } = randomSchemas(next);
-    const schemas = Array.from({ length: 4000 }, () =>
-      next() < 0.5 ? schemaOf(3) : equalLeavesOf(next),
-    );
-    const pairs = schemas.flatMap((schema) => {
-      const walked = walkedOf(schema);
-      const edited = walked === undefined ? undefined : editedOf(walked, next);
-      return walked === undefined || edited === undefined ? [] : [{ walked, edited }];
-    });
+  test('is drawn in volume: edits that change the bytes', () => {
+    const changing = editedPairsOf().filter(changesBytes);
 
-    const outcomes = pairs.map(({ walked, edited }) => {
-      const baseline = publishedSnapshotOf(
-        undefined,
-        ordersAnswering(walked),
-        publishedAt('1.0.0'),
-      );
-      const proposed = ordersAnswering(edited);
-      const isByteChange = hashedTextOf(ordersAnswering(walked)) !== hashedTextOf(proposed);
-      const republished = publishedSnapshotOf(baseline, proposed, publishedAt('1.0.1'));
-      const decoded = decodeSnapshot(canonicalTextOf(republished)).kind;
-      try {
-        const { changes } = compatibilityReportOf(baseline, proposed);
-        const kinds = changes.map((change) =>
-          'shape' in change.difference ? `${change.difference.shape.kind} ${change.class}` : '',
-        );
-        return { isByteChange, isReported: changes.length > 0, kinds, decoded };
-      } catch (e) {
-        return { isByteChange, thrown: String(e), decoded };
-      }
-    });
+    expect(changing.length).toBeGreaterThan(500);
+  });
 
-    const wrong = outcomes.filter(
-      (outcome) =>
-        !('isReported' in outcome) ||
-        outcome.isReported !== outcome.isByteChange ||
-        outcome.kinds.some((kind) => kind !== 'annotation-changed neutral') ||
-        outcome.decoded !== 'decoded',
-    );
-    expect(outcomes.filter(({ isByteChange }) => isByteChange).length).toBeGreaterThan(500);
+  test('is reported exactly when the bytes change, only as Neutral, and keeps the Snapshot decodable', () => {
+    const wrong = editedPairsOf().map(outcomeOf).filter(isWrong);
+
     expect(wrong).toEqual([]);
   });
 });

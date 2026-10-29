@@ -64,8 +64,7 @@ export function inShapeOrder(items: readonly SchemaNode[]): readonly SchemaNode[
       firstByShape.set(key, item);
     }
   }
-  const byKey = [...firstByShape.entries()].sort(([left], [right]) => byCodePoint(left, right));
-  return byKey.map(([, item]) => item);
+  return [...firstByShape.values()].sort(byShape);
 }
 
 function fieldShapes(fields: Readonly<Record<string, Field>>): Readonly<Record<string, Field>> {

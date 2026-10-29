@@ -1,16 +1,13 @@
-import { canonicalJson, childrenOf, type SchemaNode } from '../walker/index.ts';
+import { canonicalJson, childrenOf, neutralAnnotations, type SchemaNode } from '../walker/index.ts';
 import { type BothDefs, type Finding, found, type NodePair } from './findings.ts';
 
-const annotations = ['description', 'examples', 'origin'] as const;
-
-type Annotation = (typeof annotations)[number];
+type Annotation = (typeof neutralAnnotations)[number];
 
 /** The Neutral annotations two nodes differ in, in order: description, examples, then origin. */
-export function annotationFindingsOf({ baseline, proposed }: NodePair): readonly Finding[] {
-  const changed = annotations.filter(
-    (annotation) => canonicalJson(baseline[annotation]) !== canonicalJson(proposed[annotation]),
+export function annotationFindingsOf(pair: NodePair): readonly Finding[] {
+  return differingAnnotationsOf(pair).map((annotation) =>
+    found({ kind: 'annotation-changed', annotation }),
   );
-  return changed.map((annotation) => found({ kind: 'annotation-changed', annotation }));
 }
 
 /**
@@ -46,12 +43,12 @@ export function innerAnnotationFindingsOf(pair: NodePair, defs: BothDefs): reado
       pending.push(defPairOf(next.baseline.name, defs));
     }
   }
-  const inOrder = annotations.filter((annotation) => changed.has(annotation));
+  const inOrder = neutralAnnotations.filter((annotation) => changed.has(annotation));
   return inOrder.map((annotation) => found({ kind: 'annotation-changed', annotation }));
 }
 
 function differingAnnotationsOf({ baseline, proposed }: NodePair): readonly Annotation[] {
-  return annotations.filter(
+  return neutralAnnotations.filter(
     (annotation) => canonicalJson(baseline[annotation]) !== canonicalJson(proposed[annotation]),
   );
 }
