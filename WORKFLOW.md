@@ -138,7 +138,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 and C29 |
 | Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22); the documents' use of the glossary's terms ([CLAUDE.md](CLAUDE.md#documents)) |
-| Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
+| Correctness | Bugs, edge cases, probes, and the tests: C23–C26 and C30 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more
 fields: **Kind**, a slip or one instance of a class, with the other instances found; **Cause**, why the code came out
