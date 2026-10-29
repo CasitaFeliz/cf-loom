@@ -23,6 +23,14 @@ export type ProjectPackage =
 /** A package name npm accepts: lower-case, scoped or not, never a scope alone. */
 const packageNamePattern = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 
+/** The unscoped names npm reserves and refuses for any package. */
+const reservedNames: ReadonlySet<string> = new Set(['node_modules', 'favicon.ico']);
+
+/** Whether `name` is a lower-case package name npm accepts: scoped or not, never a scope alone nor a name npm reserves. */
+export function isPackageName(name: string): boolean {
+  return packageNamePattern.test(name) && !reservedNames.has(name);
+}
+
 /**
  * Reads the package.json of the project in `directory`: its name, which the Root's name and the
  * published package's name come from, and its `"type": "module"`, since the config and the
@@ -41,7 +49,7 @@ export function projectPackageOf(directory: string): ProjectPackage {
   if (typeof name !== 'string') {
     return failed('package.json names no package');
   }
-  if (!packageNamePattern.test(name)) {
+  if (!isPackageName(name)) {
     return failed(`package.json names no package npm accepts: ${name}`);
   }
   if (type !== 'module') {

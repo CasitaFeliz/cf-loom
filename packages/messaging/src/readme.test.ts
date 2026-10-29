@@ -69,7 +69,9 @@ function aBroker() {
         return { duplicate: false };
       },
       consume: async (given) => {
-        durableConsumers.push(...given);
+        for (const consumer of given) {
+          durableConsumers.push(consumer);
+        }
       },
       close: async () => undefined,
     }),

@@ -48,6 +48,26 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual(['C12@2', 'C12@3', 'C12@4']);
   });
 
+  it('report a spread into push, unshift or splice, optional calls included, but not a spread in an array literal or into another call (C29)', () => {
+    const lines = [
+      'const list = [1];',
+      'const more = [2, 3];',
+      'list.push(...more);',
+      'list?.push(1, ...more);',
+      'list.unshift(...more);',
+      'list?.unshift(...more);',
+      'list.splice(0, 0, ...more);',
+      'list?.splice(0, 0, ...more);',
+      'list.push(more[0]);',
+      'export const joined = [...list, ...more];',
+      'console.log(...more);',
+      'list.push({ ...more });',
+      'list.push([...more]);',
+    ];
+
+    expect(pluginReportsFor(lines)).toEqual(['C29@3', 'C29@4', 'C29@5', 'C29@6', 'C29@7', 'C29@8']);
+  });
+
   it('report a flatMap whose callback returns a conditional array, but not other flatMaps (C10)', () => {
     const lines = [
       'const counts = [1, 2];',

@@ -451,6 +451,17 @@ describe('serve: the options, typed by what they declare', () => {
     expect(served).toBeTypeOf('function');
   });
 
+  test('onAnswered and onServiceFault may be written as expressions that return a value', () => {
+    const heard: string[] = [];
+
+    const served = serve(contract, handlers, {
+      onAnswered: (answered) => heard.push(String(answered.status)),
+      onServiceFault: (fault) => heard.push(fault.kind),
+    });
+
+    expect(served).toBeTypeOf('function');
+  });
+
   test('resources are still required when a Handler takes them, given through a variable too', () => {
     const options = { maxBodyBytes: 1_024 };
     const mistyped = { resources: { clock: 'tick' } };

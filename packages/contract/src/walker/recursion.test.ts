@@ -284,6 +284,51 @@ describe('walkSchemas: recursion', () => {
         });
       },
     );
+
+    test('a nullable def refused after a def written for the group above it leaves that def open to the uses after it', () => {
+      const outer: z.ZodType = z
+        .object({
+          get first() {
+            return first;
+          },
+          get nullableDef() {
+            return nullableDef;
+          },
+          get later() {
+            return later;
+          },
+        })
+        .meta({ id: 'outer' });
+      const first: z.ZodType = z
+        .object({
+          get outer() {
+            return outer;
+          },
+        })
+        .meta({ id: 'first' });
+      const nullableDef: z.ZodType = z
+        .object({
+          get outer() {
+            return outer;
+          },
+        })
+        .nullable()
+        .meta({ id: 'refused' });
+      const later: z.ZodType = z
+        .object({
+          get first() {
+            return first;
+          },
+        })
+        .meta({ id: 'later' });
+
+      const written = walkBody(outer);
+
+      expect(written).toEqual({
+        located: [refused([{ at: 'nullableDef', ...nullableDefOf('refused') }])],
+        defs: {},
+      });
+    });
   });
 
   describe('a cycle through z.lazy(), unions and intersections alone', () => {

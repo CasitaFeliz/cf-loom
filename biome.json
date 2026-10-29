@@ -115,7 +115,7 @@
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
-      "includes": ["**/*.config.ts", "examples/**/*.handler.ts"],
+      "includes": ["**/*.config.ts", "examples/**/*.handler.ts", "scripts/readme-service/**/*.ts"],
       "linter": {
         "rules": {
           "style": {
@@ -153,6 +153,7 @@
     "./lint/no-flatmap-filter.grit",
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit",
+    "./lint/no-spread-push.grit",
     "./lint/no-zod-derived-getters.grit"
   ],
   "vcs": {

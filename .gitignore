@@ -6,3 +6,4 @@ coverage/
 .vitest/
 .claude/worktrees/
 .cf-loom/
+.readme-service/

@@ -437,7 +437,9 @@ function reachedDefsOf(graph: Graph): Readonly<Record<string, SchemaNode>> {
       continue;
     }
     reached.add(name);
-    pending.push(...namesIn(def));
+    for (const referenced of namesIn(def)) {
+      pending.push(referenced);
+    }
   }
   const names = [...reached].sort();
   return Object.fromEntries(names.map((name) => [name, all[name] as SchemaNode]));
@@ -521,24 +523,35 @@ function publishProblemsOf(
   return { published, problems };
 }
 
+/** What is wrong with the 7 versions of one seeded history, each problem named with the history. */
+function historyProblemsOf(graphs: ReturnType<typeof seededGraphs>, history: number): string[] {
+  const problems: string[] = [];
+  let graph = graphs.initial();
+  let baseline: PublishedServiceSnapshot | undefined;
+  for (let minor = 0; minor < 7; minor++) {
+    graph = minor === 0 ? graph : graphs.changed(graph);
+    try {
+      const step = publishProblemsOf(baseline, aServiceOf(graph), `1.${minor}.0`);
+      for (const problem of step.problems) {
+        problems.push(`history ${history}, ${problem}`);
+      }
+      baseline = step.published;
+    } catch (error) {
+      problems.push(`history ${history}, 1.${minor}.0: ${String(error)}`);
+      break;
+    }
+  }
+  return problems;
+}
+
 describe('compatibilityReportOf, every difference in a seeded def graph’s history is a Change', () => {
   test('150 histories of 7 versions, with alias defs in fields, arrays, records, tagged variants, a plain union’s option and a tuple’s rest', () => {
     const graphs = seededGraphs(1);
     const problems: string[] = [];
 
     for (let history = 0; history < 150; history++) {
-      let graph = graphs.initial();
-      let baseline: PublishedServiceSnapshot | undefined;
-      for (let minor = 0; minor < 7; minor++) {
-        graph = minor === 0 ? graph : graphs.changed(graph);
-        try {
-          const step = publishProblemsOf(baseline, aServiceOf(graph), `1.${minor}.0`);
-          problems.push(...step.problems.map((problem) => `history ${history}, ${problem}`));
-          baseline = step.published;
-        } catch (error) {
-          problems.push(`history ${history}, 1.${minor}.0: ${String(error)}`);
-          break;
-        }
+      for (const problem of historyProblemsOf(graphs, history)) {
+        problems.push(problem);
       }
     }
 
