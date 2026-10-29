@@ -12,9 +12,8 @@ The prompt gives the lens (or all three), the PR, the worktree and its head,
 the plan files (one per issue) and a probe directory.
 
 - Read the whole PR, not only the lines your lens names. Read for the design first (C27).
-- Correctness probes the behavior: probe each edge the plan lists, then the ones it left out (malformed, absent, wide
-  and deep, a name every object already has, a throw, rejection or hang from what the code calls, what the platform
-  does by default, and every other entry that reads the same kind of value). For code that reads a structure an author
+- Correctness probes the behavior: probe each edge the plan lists, then the ones it left out, from the list of
+  [1. Plan](../../WORKFLOW.md#1-plan) (inputs and invariants), and every other entry that reads the same kind of value. For code that reads a structure an author
   or a Caller sizes, time it with the growth helpers at two sizes along each dimension the plan names and one it does
   not. Fuzz where the input space allows. Then mutate the code in a copy under the probe directory to check that each
   new test fails when its behavior breaks: mutation checks the tests that exist, not the ones missing. Stop mutation

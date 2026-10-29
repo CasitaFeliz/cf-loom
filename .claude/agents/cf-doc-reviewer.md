@@ -17,7 +17,8 @@ plans.
   the single words are yours.
 - Links and anchors resolve; code, commands and paths named exist.
 - Configuration and scripts work: run what the change adds. When the PR adds or changes steps a reader runs (Set up,
-  a shell recipe, a CI step, a hint a command prints), run them as written, from an empty project in the probe
+  a shell recipe, a CI step, a hint a command prints), run them as written (an `npx` step through the project's
+  `node_modules/.bin`, since `npx` is denied), from an empty project in the probe
   directory against the built packages and a registry you start, on the passing and the failing path (and the run
   after, when one gates on a human step), and quote the transcript. A step the procedure needs and does not state is
   a finding.
