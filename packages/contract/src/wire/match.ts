@@ -70,7 +70,7 @@ function unmatchedOf<Matched extends Matchable>(
 /** The methods declared Endpoints take on a request's path, once each in code point order, as `Allow` lists them. */
 export function allowedMethodsOf(
   declared: readonly Matchable[],
-  request: Request,
+  request: { readonly url: string },
 ): readonly string[] {
   const texts = segmentTextsOf(new URL(request.url).pathname);
   return texts.every(isSegmentText) ? methodsOnPathOf(declared, texts) : [];
