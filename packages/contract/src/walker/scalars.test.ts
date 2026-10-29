@@ -48,6 +48,11 @@ function throwingProxy(): RegExp {
   return new Proxy(/^a$/, { ...traps, getOwnPropertyDescriptor: trap, defineProperty: trap });
 }
 
+/** A read a Proxy forwards to its RegExp, so the RegExp's own getters see the RegExp. */
+function forwardedRead(target: RegExp, key: PropertyKey): unknown {
+  return Reflect.get(target, key, target);
+}
+
 class OverridingRegExp extends RegExp {
   override test(): boolean {
     return true;
@@ -366,11 +371,36 @@ describe('walkSchemas: regexes zod tests', () => {
     ['a string', '^a$'],
     ['a Proxy around a RegExp', new Proxy(/^a$/, {})],
     ['a Proxy whose every trap throws', throwingProxy()],
+    ['a Proxy that forwards reads to a RegExp', new Proxy(/^a$/, { get: forwardedRead })],
     ['a frozen RegExp, whose lastIndex zod cannot reset', Object.freeze(/^a$/)],
   ])('.regex() given %s fails as no plain RegExp', (_name, regex) => {
     const schema = z.string().regex(regex as RegExp);
 
     expect(walkBody(schema)).toEqual(refusedAt('', plainRegex, plainRegexInstead));
+  });
+
+  test('judging a Proxy around a RegExp runs none of its traps', () => {
+    const trapsRun: string[] = [];
+    const recording = new Proxy(/^a$/, {
+      get: (target, key) => {
+        trapsRun.push(`get ${String(key)}`);
+        return forwardedRead(target, key);
+      },
+      getPrototypeOf: (target) => {
+        trapsRun.push('getPrototypeOf');
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys: (target) => {
+        trapsRun.push('ownKeys');
+        return Reflect.ownKeys(target);
+      },
+    });
+    const schema = z.string().regex(recording);
+    trapsRun.length = 0;
+
+    walkBody(schema);
+
+    expect(trapsRun).toEqual([]);
   });
 
   test('a zod/mini regex check with its own test fails as no plain RegExp', () => {
@@ -430,18 +460,20 @@ describe('walkSchemas: regexes zod tests', () => {
     }
   });
 
-  test.each<[string, unknown]>([
+  const notPlainRegexes: [string, unknown][] = [
     ['a regex with its own test', regexWithOwn('test', () => true)],
-    ['a regex-like object', { source: '^a\\.com$', flags: '', test: () => true }],
-    ['a string', '^a\\.com$'],
-  ])('z.url() given %s as hostname or protocol fails as no plain RegExp', (_name, regex) => {
-    const byHostname = z.url({ hostname: regex as RegExp });
-    const byProtocol = z.url({ protocol: regex as RegExp });
+    ['a regex-like object', { source: '^a$', flags: '', test: () => true }],
+    ['a string', '^a$'],
+  ];
 
-    expect([walkBody(byHostname), walkBody(byProtocol)]).toEqual([
-      refusedAt('', plainRegex, plainRegexInstead),
-      refusedAt('', plainRegex, plainRegexInstead),
-    ]);
+  test.each(
+    ['hostname', 'protocol'].flatMap((option) =>
+      notPlainRegexes.map(([name, regex]) => [option, name, regex] as const),
+    ),
+  )('z.url() given as %s %s fails as no plain RegExp', (option, _name, regex) => {
+    const schema = z.url({ [option]: regex });
+
+    expect(walkBody(schema)).toEqual(refusedAt('', plainRegex, plainRegexInstead));
   });
 
   test('z.url() given a plain hostname walks to it', () => {

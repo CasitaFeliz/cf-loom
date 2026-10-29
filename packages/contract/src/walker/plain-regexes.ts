@@ -11,7 +11,7 @@ const flagsGetter = prototypeGetterOf('flags');
  */
 export function plainRegexOf(value: unknown): Regex | undefined {
   const source = regExpSourceOf(value);
-  if (source === undefined || !hasNothingOfItsOwn(value as object)) {
+  if (source === undefined || !runsAsLiteral(value as object)) {
     return undefined;
   }
   return { source, flags: Reflect.apply(flagsGetter, value, []) };
@@ -30,7 +30,7 @@ function regExpSourceOf(value: unknown): string | undefined {
 }
 
 /** Whether a RegExp of this realm's kind runs as a literal: nothing of its own but a writable `lastIndex`. */
-function hasNothingOfItsOwn(regex: object): boolean {
+function runsAsLiteral(regex: object): boolean {
   if (Object.getPrototypeOf(regex) !== RegExp.prototype) {
     return false;
   }
