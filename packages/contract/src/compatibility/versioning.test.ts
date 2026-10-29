@@ -184,7 +184,7 @@ function aCode(status: number): CodeSnapshot {
   };
 }
 
-function aGuard(): GuardSnapshot {
+function aGuard(fields: Partial<GuardSnapshot> = {}): GuardSnapshot {
   return {
     origin: 'local',
     description: 'Authenticates the Caller',
@@ -193,6 +193,7 @@ function aGuard(): GuardSnapshot {
     demands: { headers: { type: 'object', fields: {} }, query: { type: 'object', fields: {} } },
     context: null,
     rejections: [],
+    ...fields,
   };
 }
 
@@ -423,14 +424,29 @@ describe('versionBumpOf', () => {
 
   test('a Breaking Change on a Definitions Package’s Guard bumps major', () => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
+    const demanding = aGuard({
+      demands: {
+        headers: { type: 'object', fields: {} },
+        query: {
+          type: 'object',
+          fields: { token: { required: true, schema: { type: 'string' } } },
+        },
+      },
+    });
 
-    const report = comparedReportOf(baseline, aDefinitions());
+    const report = comparedReportOf(
+      baseline,
+      aDefinitions({ guards: { authenticated: demanding } }),
+    );
 
     expect(versionBumpOf(report, unmoved)).toBe('major');
   });
 
-  test('an Additive Change on a Definitions Package’s code bumps minor', () => {
-    const proposed = aDefinitions({ codes: { [orderLocked]: aCode(409) } });
+  test('an Additive Change on a Definitions Package’s export bumps minor', () => {
+    const proposed = aDefinitions({
+      exports: { [orderLocked]: { kind: 'rejection', code: orderLocked } },
+      codes: { [orderLocked]: aCode(409) },
+    });
 
     const report = comparedReportOf(aBaselineDefinitions(), proposed);
 
