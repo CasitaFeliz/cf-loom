@@ -20,8 +20,8 @@ function walkedTo(node: SchemaNode) {
   return { located: [{ kind: 'walked', value: node }], defs: {} };
 }
 
-function refusedAt(at: string, construct: string) {
-  const failure = { kind: 'not-allowed', at, construct };
+function refusedAt(at: string, construct: string, instead?: string) {
+  const failure = { kind: 'not-allowed', at, construct, ...(instead && { instead }) };
   return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
@@ -65,15 +65,10 @@ describe('walkSchemas: strings', () => {
     ['z.cuid()', z.cuid(), 'cuid'],
     ['z.ipv4()', z.ipv4(), 'ipv4'],
     ['z.iso.date()', z.iso.date(), 'date'],
-    ['z.hex()', z.hex(), 'hex'],
-    ['z.hostname()', z.hostname(), 'hostname'],
-    ['z.hash()', z.hash('sha256'), 'sha256_hex'],
-    ['z.hash() with an encoding', z.hash('sha256', { enc: 'base64' }), 'sha256_base64'],
     ['z.mac()', z.mac(), 'mac'],
     ['z.mac() with the default delimiter', z.mac({ delimiter: ':' }), 'mac'],
     ['z.iso.datetime() with the default offset', z.iso.datetime({ offset: false }), 'datetime'],
     ['a zod/mini z.uuid()', zm.uuid(), 'uuid'],
-    ['a zod/mini z.hex()', zm.hex(), 'hex'],
   ])('%s is its format with no options', (_name, schema, format) => {
     expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
   });
@@ -97,39 +92,109 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each<[string, core.$ZodType, StringFormat]>([
-    ['z.hex()', z.hex(), 'hex'],
-    ['z.hostname()', z.hostname(), 'hostname'],
-    ['z.currencyCode()', z.currencyCode(), 'currency_code'],
-    ['z.hash()', z.hash('sha256'), 'sha256_hex'],
-  ])('%s walked by the built package is its format', (_name, schema, format) => {
-    const walked = built.walkSchemas([{ at: bodyAt, schema }], () => undefined);
+  test.each<[string, core.$ZodType, string, string]>([
+    ['z.hex()', z.hex(), 'z.hex()', 'hex'],
+    ['z.hostname()', z.hostname(), 'z.hostname()', 'hostname'],
+    ['z.currencyCode()', z.currencyCode(), 'z.currencyCode()', 'currencyCode'],
+    ['z.hash()', z.hash('sha256'), 'z.hash()', 'sha256_hex'],
+    ['z.hash() with an encoding', z.hash('md5', { enc: 'base64url' }), 'z.hash()', 'md5_base64url'],
+    ['zm.hex()', zm.hex(), 'z.hex()', 'hex'],
+    ['zm.hostname()', zm.hostname(), 'z.hostname()', 'hostname'],
+    ['zm.currencyCode()', zm.currencyCode(), 'z.currencyCode()', 'currencyCode'],
+    ['zm.hash()', zm.hash('sha256'), 'z.hash()', 'sha256_hex'],
+    [
+      'z.stringFormat() with zod’s own regex',
+      z.stringFormat('hex', z.regexes.hex),
+      'z.hex()',
+      'hex',
+    ],
+    ['z.stringFormat() with another regex', z.stringFormat('hex', /^[a-f]+$/), 'z.hex()', 'hex'],
+  ])(
+    '%s, whose check zod runs through a function, fails with its z.regexes pattern instead',
+    (_name, schema, call, regex) => {
+      const instead = `.regex(z.regexes.${regex})`;
 
-    expect(refusalsOf(walked)).toEqual(walkedTo({ type: 'string', format }));
-  });
+      expect(walkBody(schema)).toEqual(refusedAt('', call, instead));
+      expect(refusalsOf(built.walkSchemas([{ at: bodyAt, schema }], () => undefined))).toEqual(
+        refusedAt('', call, instead),
+      );
+    },
+  );
 
-  test.each<[string, core.$ZodType, StringFormat]>([
-    ['zm.hex()', zm.hex(), 'hex'],
-    ['zm.hostname()', zm.hostname(), 'hostname'],
-    ['zm.currencyCode()', zm.currencyCode(), 'currency_code'],
-    ['zm.hash()', zm.hash('sha256'), 'sha256_hex'],
-  ])('a zod/mini %s is its format', (_name, schema, format) => {
-    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format }));
-  });
+  test('a copy of zod’s hex check that tests another regex fails', () => {
+    const fnOrRegex = /^ff$/;
+    const hex = z.stringFormat('hex', (val) => fnOrRegex.test(val), {
+      pattern: z.regexes.hex,
+    } as object);
 
-  test('a regex-built format whose check is a function of the author fails, whatever its pattern', () => {
-    const zodPattern = { pattern: z.regexes.hex } as object;
-    const hex = z.stringFormat('hex', () => true, zodPattern);
-
-    expect(walkBody(hex)).toEqual(refusedAt('', 'z.stringFormat("hex")'));
+    expect(walkBody(hex)).toEqual(refusedAt('', 'z.hex()', '.regex(z.regexes.hex)'));
   });
 
   test.each<[string, core.$ZodType]>([
-    ['z.stringFormat() with zod’s own regex', z.stringFormat('hex', z.regexes.hex)],
-    ['a zod/mini z.stringFormat() with zod’s own regex', zm.stringFormat('hex', z.regexes.hex)],
-  ])('%s is the hex format', (_name, schema) => {
-    expect(walkBody(schema)).toEqual(walkedTo({ type: 'string', format: 'hex' }));
+    [
+      'with a function and a pattern beside it',
+      z.stringFormat('regex', (value) => value === 'secret', { pattern: /^.*$/ } as object),
+    ],
+    ['with a regex, which zod tests through a function', z.stringFormat('regex', /^a$/)],
+  ])('z.stringFormat("regex") %s fails', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(refusedAt('', 'z.stringFormat("regex")'));
   });
+
+  test.each<[string, core.$ZodType]>([
+    ['.regex()', z.string().regex(/^a$/)],
+    ['a zod/mini regex check', zm.string().check(zm.regex(/^a$/))],
+  ])('%s walks to its regex', (_name, schema) => {
+    expect(walkBody(schema)).toEqual(
+      walkedTo({ type: 'string', regex: { source: '^a$', flags: '' } }),
+    );
+  });
+
+  test('.regex(z.regexes.hex) walks to zod’s hex pattern', () => {
+    expect(walkBody(z.string().regex(z.regexes.hex))).toEqual(
+      walkedTo({ type: 'string', regex: { source: '^[0-9a-fA-F]*$', flags: '' } }),
+    );
+  });
+
+  /** Every format SNAPSHOT.md knows, so a format added to it is checked here too. */
+  const knownFormats: Record<StringFormat, true> = {
+    guid: true,
+    uuid: true,
+    email: true,
+    url: true,
+    emoji: true,
+    nanoid: true,
+    cuid: true,
+    cuid2: true,
+    ulid: true,
+    xid: true,
+    ksuid: true,
+    datetime: true,
+    date: true,
+    time: true,
+    duration: true,
+    ipv4: true,
+    ipv6: true,
+    mac: true,
+    cidrv4: true,
+    cidrv6: true,
+    base64: true,
+    base64url: true,
+    e164: true,
+    credit_card: true,
+    iban: true,
+    jwt: true,
+  };
+
+  test.each([...Object.keys(knownFormats), 'regex'])(
+    'a z.stringFormat("%s") whose check is a function fails, whatever pattern sits beside it',
+    (format) => {
+      const schema = z.stringFormat(format, () => true, { pattern: /^.*$/ } as object);
+
+      expect(walkBody(schema).located).toEqual([
+        { kind: 'not-allowed', failures: [expect.objectContaining({ at: '' })] },
+      ]);
+    },
+  );
 
   test('the built package walks a format like the source', () => {
     const placedAt = z.iso.datetime({ offset: true, precision: 3 });

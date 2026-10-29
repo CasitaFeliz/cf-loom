@@ -42,10 +42,15 @@ function stringConstraint(check: DeclaredCheck, at: Reached): Constraint<StringN
   if (def.check !== 'string_format') {
     return lengthConstraint(check, at);
   }
-  if (def.format === 'regex' && def.pattern !== undefined) {
+  if (def.format === 'regex' && def.pattern !== undefined && !isRunByFunction(def)) {
     return walked({ regex: regexOf(def.pattern) });
   }
   return formatOf(check, at);
+}
+
+/** Whether zod runs a format check through a function, as `z.stringFormat()` builds one. */
+function isRunByFunction(def: object): boolean {
+  return 'fn' in def && def.fn !== undefined;
 }
 
 function lengthConstraint(check: DeclaredCheck, at: Reached): Constraint<Bounds> {

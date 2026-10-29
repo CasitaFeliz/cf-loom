@@ -262,6 +262,7 @@ const shapes = [
   '  span: z.iso.duration(),',
   '  day: z.iso.date(),',
   '  v4: z.ipv4(),',
+  '  key: z.cuid2(),',
   '});',
   'export const echo = defineEndpoint({',
   "  name: 'echo',",
@@ -469,9 +470,13 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('a format JSON Schema does not name keeps its cf-loom name', () => {
+    expect(extra('key')).toEqual({ type: 'string', format: 'cuid2' });
+  });
+
+  test('a z.regexes pattern, which replaces a format zod builds from a regex, is a pattern', () => {
     expect([echoed('digest'), echoed('color')]).toEqual([
-      { type: 'string', format: 'sha256_hex' },
-      { type: 'string', format: 'hex' },
+      { type: 'string', pattern: '^[0-9a-fA-F]{64}$' },
+      { type: 'string', pattern: '^[0-9a-fA-F]*$' },
     ]);
   });
 

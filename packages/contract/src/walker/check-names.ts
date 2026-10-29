@@ -1,8 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: the keys are zod's ids of its check kinds and formats
 import type * as core from 'zod/v4/core';
 import type { CheckDef } from './check-defs.ts';
-import { formatConstructorsOf, isStringFormat } from './format-schemas.ts';
-import { isHashFormat } from './hash-formats.ts';
+import { formatConstructorsOf, isStringFormat, regexBuiltFormatOf } from './format-schemas.ts';
 import { type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 
 /** A check kind this walker was written for: every kind zod declares but those that set metadata. */
@@ -158,12 +157,15 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
   const { format } = check;
   const version = 'version' in check ? check.version : undefined;
   if (!isStringFormat(format)) {
-    return refusedStringFormat(format).construct;
+    const regexBuilt = regexBuiltFormatOf(format);
+    return regexBuilt === undefined
+      ? refusedStringFormat(format).construct
+      : `${regexBuilt.call}()`;
   }
   if (format === 'uuid' && version !== undefined) {
     return nameIn(uuidNames, version) ?? `z.uuid({ version: ${JSON.stringify(version)} })`;
   }
-  return isHashFormat(format) ? 'z.hash()' : orJoined(formatConstructorsOf(format).map(callOf));
+  return orJoined(formatConstructorsOf(format).map(callOf));
 }
 
 function callOf(call: string): string {
