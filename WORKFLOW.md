@@ -88,8 +88,8 @@ plan comment on the issue:
   ([C26](CODING_STANDARDS.md#tests));
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
-- the new terms it adds to [CONTEXT.md](CONTEXT.md), and every existing use of them in the documents, which the PR
-  spells as the entry does;
+- the new terms it adds to [CONTEXT.md](CONTEXT.md), and their existing uses in the documents, which the same PR
+  spells as [CLAUDE.md](CLAUDE.md#documents) says;
 - what the documents already settle that the issue relies on, kept apart from what is new;
 - the decisions the main session took itself, and the questions for the user ([Decisions](#decisions)).
 
