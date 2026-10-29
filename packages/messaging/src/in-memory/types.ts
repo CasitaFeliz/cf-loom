@@ -1,4 +1,5 @@
 import type { BodyOf, Command, Event, ServiceContract, Subscription } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import type { Settlement } from '../broker/index.ts';
 import type { Messaging } from '../messaging/index.ts';
 import type { GivenHeaders } from '../sending/index.ts';
@@ -34,10 +35,10 @@ export type MemoryMessaging<C extends ServiceContract> = Messaging<C> & {
    * Version's writer writes it and is written back through each Durable consumer's Reader. A Handler that
    * awaits it never settles.
    */
-  readonly deliver: <const M extends Event | Command>(
+  readonly deliver: <const M extends Event | Command, const Given = unknown>(
     message: M,
     body: BodyOf<M>,
-    meta?: DeliveryMeta,
+    meta?: Closed<Given, DeliveryMeta>,
   ) => Promise<Settlement>;
   /**
    * Delivers every pending Message again, each to the Durable consumer it is pending for alone, as attempt

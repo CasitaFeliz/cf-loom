@@ -1,11 +1,5 @@
 import type { BodyOf, Command, Event, ServiceContract } from '@cf-loom/contract';
-import type {
-  DeclaredFieldsRule,
-  GroupedOf,
-  IsOneLiteral,
-  LiveOf,
-  Refusal,
-} from '@cf-loom/contract/internal';
+import type { Closed, GroupedOf, IsOneLiteral, LiveOf, Refusal } from '@cf-loom/contract/internal';
 import type { GivenHeaders } from './checks.ts';
 
 /**
@@ -79,7 +73,7 @@ export type EventPublisher<C extends ServiceContract> = {
   readonly publish: <Name extends PublishedNameOf<C>, const Given = unknown>(
     name: Name,
     bodies: PublishedBodiesOf<C, Name>,
-    options: MessageOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessageOptions>>,
+    options: Closed<Given, MessageOptions>,
   ) => Promise<Published>;
 };
 
@@ -88,6 +82,6 @@ export type CommandSender<C extends ServiceContract> = {
   readonly send: <Name extends SentNameOf<C>, const Given = unknown>(
     name: Name,
     body: SentBodyOf<C, Name>,
-    options: MessageOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessageOptions>>,
+    options: Closed<Given, MessageOptions>,
   ) => Promise<Sent>;
 };

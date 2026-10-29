@@ -29,8 +29,8 @@ export {
 } from '../compatibility/index.ts';
 export type {
   AttachedGuardsOf,
+  Closed,
   CodeNameOf,
-  DeclaredFieldsRule,
   GivenShapeOf,
   GroupedField,
   GroupedOf,

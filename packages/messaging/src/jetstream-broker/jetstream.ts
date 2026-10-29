@@ -1,8 +1,4 @@
-import {
-  brokerPrefixRule,
-  type DeclaredFieldsRule,
-  isBrokerPrefix,
-} from '@cf-loom/contract/internal';
+import { brokerPrefixRule, type Closed, isBrokerPrefix } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
@@ -32,9 +28,7 @@ export type JetStreamBrokerOptions = JetStreamConnecting & {
 
 /** A Broker on NATS JetStream: each `messaging()` opens its own connection and starts only once the Service's Stream holds every subject it publishes and sends. */
 export function jetstream<const Given = unknown>(
-  options: JetStreamBrokerOptions &
-    Given &
-    NoInfer<DeclaredFieldsRule<Given, JetStreamBrokerOptions>>,
+  options: Closed<Given, JetStreamBrokerOptions>,
 ): Broker {
   const prefix = checkedPrefixOf(options.prefix);
   return {

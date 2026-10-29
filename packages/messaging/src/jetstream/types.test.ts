@@ -66,6 +66,48 @@ describe('jetstream() types', () => {
     expect(applying).toBeTypeOf('function');
   });
 
+  test('applyBrokerPlan refuses limits given through a variable with a field they do not declare', () => {
+    const given = {
+      streamDefaults: { maxAge: '7d' },
+      durableConsumerDefault: { maxDeliver: 5 },
+    } as const;
+
+    // @ts-expect-error durableConsumerDefault is not a declared field
+    const applying = () => applyBrokerPlan({ connect }, plan, given);
+
+    expect(applying).toBeTypeOf('function');
+  });
+
+  test('applyBrokerPlan refuses stream defaults given through a variable with a field they do not declare', () => {
+    const given = { streamDefaults: { replicas: 1, replica: 3 } } as const;
+
+    // @ts-expect-error replica is not a declared field
+    const applying = () => applyBrokerPlan({ connect }, plan, given);
+
+    expect(applying).toBeTypeOf('function');
+  });
+
+  test('applyBrokerPlan refuses Durable consumer defaults given through a variable with a field they do not declare', () => {
+    const given = { durableConsumerDefaults: { maxDeliver: 5, maxDelivery: 5 } } as const;
+
+    // @ts-expect-error maxDelivery is not a declared field
+    const applying = () => applyBrokerPlan({ connect }, plan, given);
+
+    expect(applying).toBeTypeOf('function');
+  });
+
+  test('applyBrokerPlan accepts limits given through a variable holding only declared fields', () => {
+    const given = {
+      streamDefaults: { maxAge: '7d', replicas: 3 },
+      durableConsumerDefaults: { maxDeliver: 5 },
+      streams: { 'orders-service': { replicas: 1 } },
+    } as const;
+
+    const applying = () => applyBrokerPlan({ connect }, plan, given);
+
+    expect(applying).toBeTypeOf('function');
+  });
+
   test('applyBrokerPlan accepts a connecting variable holding only declared fields', () => {
     const connecting = { connect, jetstream: { domain: 'hub' } };
 

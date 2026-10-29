@@ -1,3 +1,5 @@
+import type { Closed } from '@cf-loom/contract/internal';
+
 /** How the tools are configured for one Service; a project without `cf-loom.config.ts` takes every default. */
 export type Config = {
   /**
@@ -26,10 +28,20 @@ export type Layout = {
   readonly readers?: `src/${string}.generated.ts`;
 };
 
+/** `layout` in a configuration: no field a Layout does not declare. */
+type LayoutField<Given> = {
+  readonly layout?: Closed<
+    Given extends { readonly layout?: infer Written } ? Written : unknown,
+    Layout
+  >;
+};
+
 /**
  * Declares the configuration of `cf-loom.config.ts`, exported as `config`, so a misspelled field
  * is a type error where it is written.
  */
-export function defineConfig(config: Config): Config {
+export function defineConfig<const Given = unknown>(
+  config: Closed<Given, Config & LayoutField<Given>>,
+): Config {
   return config;
 }

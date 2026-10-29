@@ -155,6 +155,11 @@ const replacingDependency = defineDependency({ endpoints: [orders.endpoints.putO
 
 const baseUrl = 'http://orders.test';
 
+/** One of two values, typed as their union, as a variable whose type no literal narrows. */
+function eitherOf<First, Second>(first: First, second: Second): First | Second {
+  return Math.random() < 0.5 ? first : second;
+}
+
 describe('the client’s types', () => {
   test('has a method only for each Endpoint the Dependency lists', () => {
     const orders = client(ordersDependency, { baseUrl });
@@ -389,6 +394,84 @@ describe('the client’s options, typed by what they declare', () => {
     });
 
     expect(orders).toBeDefined();
+  });
+});
+
+describe('a call’s Input and options, typed by what they declare', () => {
+  const replacing = client(replacingDependency, { baseUrl });
+  const input = { params: { orderId: 'o-1' }, body: { total: 12 } };
+
+  test('a call’s options, an optional parameter, given through a variable whose type is one object type with a field they do not declare is a type error', () => {
+    const call = { signal: new AbortController().signal, signl: 1 };
+
+    // @ts-expect-error signl is not a declared field
+    const calling = () => replacing.putOrder(input, call);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s Input given through a variable with a part the Endpoint does not declare is a type error', () => {
+    const misspelled = { ...input, querry: { page: 1 } };
+
+    // @ts-expect-error querry is not a declared field
+    const calling = () => replacing.putOrder(misspelled);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('client() given options of a union type, one member holding a field they do not declare, is a type error', () => {
+    const options = eitherOf({ baseUrl, baseUri: baseUrl }, { baseUrl });
+
+    // @ts-expect-error baseUri is not a declared field
+    const clientOf = () => client(replacingDependency, options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('a call’s Input that may be left out, given through a variable with a part the Endpoint does not declare, is a type error', () => {
+    const listing = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': 'k', 'x-region': 'eu' },
+    });
+    const misspelled = { query: { page: 1 }, querry: { page: 2 } };
+
+    // @ts-expect-error querry is not a declared field
+    const calling = () => listing.listOrders(misspelled);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s options, where the Input may be left out, given through a variable with a field they do not declare, is a type error', () => {
+    const listing = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': 'k', 'x-region': 'eu' },
+    });
+    const call = { signal: new AbortController().signal, signl: 1 };
+
+    // @ts-expect-error signl is not a declared field
+    const calling = () => listing.listOrders(undefined, call);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s Input part holding more fields than the Endpoint declares type-checks', () => {
+    const wider = { params: { orderId: 'o-1', tenant: 't-1' }, body: { total: 12 } };
+
+    const calling = () => replacing.putOrder(wider);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a method written by hand without type parameters is still assignable to the Client’s method', () => {
+    const putOrder = (
+      given: CallInput<typeof orders.endpoints.putOrder>,
+      call?: CallOptions,
+    ): ReturnType<Client<typeof replacingDependency>['putOrder']> =>
+      replacing.putOrder(given, call);
+
+    const method: Client<typeof replacingDependency>['putOrder'] = putOrder;
+
+    expect(method).toBe(putOrder);
   });
 });
 

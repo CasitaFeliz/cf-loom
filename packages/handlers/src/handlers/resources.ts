@@ -1,4 +1,4 @@
-import type { Refusal } from '@cf-loom/contract/internal';
+import type { Closed, Refusal } from '@cf-loom/contract/internal';
 
 /** The Resources of a Handler that takes none: an empty object type, which a union of Resources never absorbs as it would `unknown`. */
 export type NoResources = Readonly<Record<never, never>>;
@@ -44,8 +44,9 @@ export type ResourcesField<Resources extends object> = keyof Resources extends n
   ? { readonly resources?: Resources }
   : { readonly resources: Resources };
 
-/** A last argument that may be left out when every field it holds is optional. */
-export type CallArgument<Call> = Partial<Call> extends Call ? [call?: Call] : [call: Call];
+/** A last argument that may be left out when every field it holds is optional, and holds no other field. */
+export type CallArgument<Given, Call> =
+  Partial<Call> extends Call ? [call?: Closed<Given, Call>] : [call: Closed<Given, Call>];
 
 type UnionToIntersection<Union> = (
   Union extends unknown

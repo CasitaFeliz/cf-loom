@@ -1074,7 +1074,7 @@ describe('what applyBrokerPlan refuses', () => {
     const limits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxBytes: undefined },
-    };
+    } as BrokerLimits;
 
     const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
 

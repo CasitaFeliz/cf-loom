@@ -2,6 +2,7 @@ import type { ReceivedRejection } from '@cf-loom/client';
 import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/internal';
 import type { Committed, ReservedCode } from '@cf-loom/contract';
 import {
+  type Closed,
   type GivenShapeOf,
   internalError,
   type RetryAfterGiven,
@@ -68,12 +69,15 @@ export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
   /** A code the Endpoint answers, with its body when it declares one, or `{ headers, body }` when it declares headers. */
   reject(...rejection: RejectionArguments<D, Name>): ScriptedAnswer;
   /** A code the Endpoint does not answer, as a later Provider might send it. */
-  unknownRejection(code: string, options?: UnknownRejectionOptions): ScriptedAnswer;
+  unknownRejection<const Given = unknown>(
+    code: string,
+    options?: Closed<Given, UnknownRejectionOptions>,
+  ): ScriptedAnswer;
   /**
    * A Fault the Provider sends: 503 when retryable, else 500, `Internal error` unless given a
    * message, and `Retry-After` when given `retryAfter`.
    */
-  fault(fault: ScriptedFault): ScriptedAnswer;
+  fault<const Given = unknown>(fault: Closed<Given, ScriptedFault>): ScriptedAnswer;
   /** A Reserved code, as cf-loom's runtime answers it, with its status, `committed` and message. */
   reserved(code: ReservedCode): ScriptedAnswer;
   noConnection(): ScriptedAnswer;

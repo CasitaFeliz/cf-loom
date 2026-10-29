@@ -1,4 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import { isPairing, type Pairing } from '../calls/index.ts';
 
 /** Each Command's Message Version and Subscription with its Reader, keyed as the Handler map keys their Handlers. */
@@ -10,7 +11,7 @@ export type Readers = {
 const tableKeys = ['commands', 'subscriptions'] as const;
 
 /** Pairs each Command's Message Version and Subscription with the Reader schema generated from the Snapshot, so its Handler reads a body as a Subscriber does; the readers file calls it. */
-export function readersOf<const Table extends Readers>(table: Table): Table {
+export function readersOf<const Table extends Readers>(table: Closed<Table, Readers>): Table {
   const refused = refusedKeyOf(table);
   if (refused !== undefined) {
     throw new Error(

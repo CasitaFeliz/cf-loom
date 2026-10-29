@@ -6,7 +6,7 @@ import type {
   ListedName,
 } from '@cf-loom/client/internal';
 import type { Http, InputOf } from '@cf-loom/contract';
-import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import type { Closed } from '@cf-loom/contract/internal';
 import { fakedProviderOf } from '../provided/index.ts';
 import type { Script } from '../scripting/index.ts';
 import type { Frozen, InvalidCall } from './calls.ts';
@@ -29,9 +29,7 @@ export type FakeClientOptions<
 export type FakeProvider<D extends AnyDependency> = {
   readonly fetch: Http;
   client<Configured extends ConfiguredName<D> = never, const Given = unknown>(
-    options?: FakeClientOptions<D, Configured> &
-      Given &
-      NoInfer<DeclaredFieldsRule<Given, FakeClientOptions<D, Configured>>>,
+    options?: Closed<Given, FakeClientOptions<D, Configured>>,
   ): Client<D, Configured>;
   on<Name extends ListedName<D>>(name: Name): Script<D, Name>;
   /** The requests the Endpoint read as valid, in the order they reached `fetch`, each a frozen copy of its parsed Input. */
@@ -52,6 +50,10 @@ export type FakeProvider<D extends AnyDependency> = {
  * Fakes the Provider of a Dependency, checked against the exported Snapshot cut each listed
  * Endpoint carries, so it answers only what that Provider could.
  */
+export function fakeProvider<const D extends AnyDependency, const Given = unknown>(
+  dependency: D,
+  options?: Closed<Given, FakeProviderOptions>,
+): FakeProvider<D>;
 export function fakeProvider<const D extends AnyDependency>(
   dependency: D,
   options: FakeProviderOptions = {},
