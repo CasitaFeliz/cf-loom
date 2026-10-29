@@ -1,7 +1,19 @@
 import type { ServiceSnapshot } from '@cf-loom/contract/internal';
 import { kebabCaseOf, messageIdentityOf } from '@cf-loom/contract/internal';
-import { configFile, filledPathOf, type ServiceLayout } from '../config/index.ts';
-import { contractFolder, insideContractOf, realPathOf } from '../loading/index.ts';
+import {
+  configFile,
+  filledPathOf,
+  type LayoutField,
+  pathRefusalOf,
+  type ServiceLayout,
+} from '../config/index.ts';
+import {
+  contractFolder,
+  type Region,
+  realPathOf,
+  regionOf,
+  sourceFolder,
+} from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
 import type { LocalParts } from './code-names.ts';
 import {
@@ -18,14 +30,15 @@ export type HandlerPath = {
 };
 
 /**
- * Where every Handler lives, or the line saying why one cannot be placed: its
- * path lies under `src/contract/`, or two share a path.
+ * Where every Handler lives, or the line saying why one cannot be placed: a file of the layout
+ * breaks the layout's rules once its variables are filled or through a link, or two Handlers
+ * share a path.
  */
 export type HandlerPaths =
   | { readonly kind: 'placed'; readonly paths: readonly HandlerPath[] }
   | { readonly kind: 'unplaced'; readonly line: string };
 
-/** The Handler path of every declaration the Handler map holds, so two never share one. */
+/** The Handler path of every declaration the Handler map holds, each meeting the layout's rules and no two sharing one. */
 export function handlerPathsOf(
   snapshot: ServiceSnapshot,
   layout: ServiceLayout,
@@ -35,7 +48,7 @@ export function handlerPathsOf(
     handled,
     path: pathOf(handled, layout),
   }));
-  const line = contractLineOf(paths, directory) ?? collidingLineOf(paths, directory);
+  const line = unplacedLineOf(paths, layout, directory) ?? collidingLineOf(paths, directory);
   return line === undefined ? { kind: 'placed', paths } : { kind: 'unplaced', line };
 }
 
@@ -63,15 +76,96 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
   }
 }
 
-/** The line naming the first declaration, in the map's order, whose Handler path, once filled, lies under `src/contract/`. */
-function contractLineOf(paths: readonly HandlerPath[], directory: string): string | undefined {
-  const isInside = insideContractOf(directory);
-  const placed = paths.find(({ path }) => isInside(realPathOf(directory, path)));
-  if (placed === undefined) {
-    return undefined;
+/** Why a path cannot hold a file of a field: a rule of the layout it breaks, or the limit a link leads it past. */
+export type PlacementRefusal =
+  | { readonly kind: 'rule'; readonly clause: string }
+  | { readonly kind: 'link'; readonly crossed: Exclude<Region, 'owned'> };
+
+/**
+ * Why a path cannot hold a file of a field, or none: the layout's rules for the field, then
+ * whether the path, links followed, lies where cf-loom places and records files. Placing and
+ * recording both ask it, so a path is one in neither or in both.
+ */
+export function placementRefusalOf(
+  directory: string,
+): (field: LayoutField, path: string) => PlacementRefusal | undefined {
+  const regionAt = regionOf(directory);
+  return (field, path) => {
+    const broken = pathRefusalOf(field, path);
+    if (broken !== undefined) {
+      return { kind: 'rule', clause: broken };
+    }
+    const region = regionAt(realPathOf(directory, path));
+    return region === 'owned' ? undefined : { kind: 'link', crossed: region };
+  };
+}
+
+/** What a line about a path ends its subject with, after `which`. */
+export function refusalClauseOf(refusal: PlacementRefusal): string {
+  switch (refusal.kind) {
+    case 'rule':
+      return refusal.clause;
+    case 'link':
+      return links[refusal.crossed].clause;
   }
-  const under = `${handledLabelOf(placed.handled)} is ${placed.path}, under ${contractFolder}/, which holds only the Contract`;
-  return `${under}: give it another path in the layout of ${configFile}`;
+}
+
+/** What a link refusal says of the limit a link leads past, and what an author puts in the link's place. */
+const links = {
+  'outside-source': {
+    clause: `a link leads out of ${sourceFolder}/`,
+    replacement: `a folder or file under ${sourceFolder}/`,
+  },
+  'inside-contract': {
+    clause: `a link leads into ${contractFolder}/`,
+    replacement: `a folder or file outside ${contractFolder}/`,
+  },
+} as const satisfies Record<
+  Exclude<Region, 'owned'>,
+  { readonly clause: string; readonly replacement: string }
+>;
+
+/** What the author does about a refusal in the layout's line. */
+function fixOf(refusal: PlacementRefusal): string {
+  const anotherPath = `give it another path in the layout of ${configFile}`;
+  switch (refusal.kind) {
+    case 'rule':
+      return anotherPath;
+    case 'link':
+      return `replace the link with ${links[refusal.crossed].replacement}, or ${anotherPath}`;
+  }
+}
+
+/** A file of the layout: the field that places it, what a line calls it, and its path once filled. */
+type PlacedFile = { readonly field: LayoutField; readonly subject: string; readonly path: string };
+
+/** The line naming the first file of the layout cf-loom could not place where it says: a Handler in the map's order, then the Handler map, then the readers. */
+function unplacedLineOf(
+  paths: readonly HandlerPath[],
+  layout: ServiceLayout,
+  directory: string,
+): string | undefined {
+  const refusalOf = placementRefusalOf(directory);
+  for (const { field, subject, path } of [...handlerFilesOf(paths), ...generatedFilesOf(layout)]) {
+    const refusal = refusalOf(field, path);
+    if (refusal !== undefined) {
+      return `${subject} is ${path}, which ${refusalClauseOf(refusal)}: ${fixOf(refusal)}`;
+    }
+  }
+  return undefined;
+}
+
+function handlerFilesOf(paths: readonly HandlerPath[]): readonly PlacedFile[] {
+  return paths.map(({ handled, path }) => ({
+    field: handled.kind,
+    subject: handledLabelOf(handled),
+    path,
+  }));
+}
+
+function generatedFilesOf(layout: ServiceLayout): readonly PlacedFile[] {
+  const fields = ['handlerMap', 'readers'] as const;
+  return fields.map((field) => ({ field, subject: `layout.${field}`, path: layout[field] }));
 }
 
 /** The line naming the first two declarations, in the map's order, whose Handlers share a path. */
