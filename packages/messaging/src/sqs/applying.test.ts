@@ -2,9 +2,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import {
   anAwsConnecting,
+  arrangeTopic,
+  publishOn,
   queueAttributesOf,
   queueNamesOf,
   queueTagsOf,
+  receivedFrom,
+  subscriptionAttributesOf,
+  subscriptionsOf,
   topicNamesOf,
 } from '../../test/aws-clients.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
@@ -58,8 +63,26 @@ function anOrders(prefix: string | null = null) {
   return { stream, created, charge, chargeDurable, plan };
 }
 
+/** Billing’s plan under a prefix: no stream, and one Durable consumer on Orders’ stream. */
+function aBilling(prefix: string | null = null) {
+  const orders = anOrders(prefix);
+  const durable = named(prefix, 'billing-service_draft-invoice-on-created');
+  const plan: BrokerPlan = {
+    prefix,
+    streams: {},
+    durableConsumers: {
+      [durable]: { service: 'billing-service', stream: orders.stream, subject: orders.created },
+    },
+  };
+  return { durable, plan, orders };
+}
+
 function sqsArnOf(queue: string): string {
   return `arn:aws:sqs:eu-west-1:123456789012:${queue}`;
+}
+
+function snsArnOf(topic: string): string {
+  return `arn:aws:sns:eu-west-1:123456789012:${topic}`;
 }
 
 describe('applyBrokerPlan', () => {
@@ -164,5 +187,108 @@ describe('applyBrokerPlan', () => {
     });
     expect(JSON.parse(attributes['RedrivePolicy'] ?? '{}').maxReceiveCount).toBe(9);
     expect(tags['cf-loom:backoff']).toBe('5m');
+  });
+
+  test('each queue is tagged cf-loom:subscription with the ARN of its subscription, whose attributes are the shape consume checks', async () => {
+    const orders = anOrders('staging');
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    const attributes = await subscriptionAttributesOf(
+      connecting.sns,
+      tags['cf-loom:subscription'] ?? '',
+    );
+    expect(attributes).toMatchObject({
+      RawMessageDelivery: 'true',
+      FilterPolicy: JSON.stringify({ 'cf-loom-subject': [orders.charge] }),
+      FilterPolicyScope: 'MessageAttributes',
+      TopicArn: snsArnOf(orders.stream),
+      Endpoint: sqsArnOf(orders.chargeDurable),
+    });
+  });
+
+  test('each queue is subscribed to its Stream’s topic with raw delivery and a filter on the plan’s subject', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const subscriptions = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
+    expect(subscriptions).toHaveLength(1);
+    expect(subscriptions[0]).toMatchObject({
+      protocol: 'sqs',
+      endpoint: sqsArnOf(orders.chargeDurable),
+    });
+    const attributes = await subscriptionAttributesOf(connecting.sns, subscriptions[0]?.arn ?? '');
+    expect(attributes['RawMessageDelivery']).toBe('true');
+    expect(JSON.parse(attributes['FilterPolicy'] ?? '{}')).toEqual({
+      'cf-loom-subject': [orders.charge],
+    });
+  });
+
+  test('a Message published on the topic with the plan’s subject in cf-loom-subject reaches the queue raw, and one with another subject does not', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    await publishOn(connecting.sns, snsArnOf(orders.stream), {
+      subject: orders.charge,
+      body: '{"orderId":"1"}',
+    });
+    await publishOn(connecting.sns, snsArnOf(orders.stream), {
+      subject: orders.created,
+      body: '{"orderId":"2"}',
+    });
+
+    expect(await receivedFrom(connecting.sqs, orders.chargeDurable)).toEqual([
+      { body: '{"orderId":"1"}', subject: orders.charge },
+    ]);
+  });
+
+  test('the queue’s policy lets its Stream’s topic send to it, in one statement named cf-loom-topic', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const policy = JSON.parse(attributes['Policy'] ?? '{}');
+    expect(policy.Statement).toEqual([
+      {
+        Sid: 'cf-loom-topic',
+        Effect: 'Allow',
+        Principal: { Service: 'sns.amazonaws.com' },
+        Action: 'sqs:SendMessage',
+        Resource: sqsArnOf(orders.chargeDurable),
+        Condition: { ArnEquals: { 'aws:SourceArn': snsArnOf(orders.stream) } },
+      },
+    ]);
+  });
+
+  test('a Durable consumer of a Provider’s Stream subscribes to the Provider’s existing topic', async () => {
+    const billing = aBilling();
+    const connecting = anAwsConnecting(moto.url);
+    const providerTopic = await arrangeTopic(connecting.sns, billing.orders.stream);
+
+    await applyBrokerPlan(connecting, billing.plan, testLimits);
+
+    const subscriptions = await subscriptionsOf(connecting.sns, providerTopic);
+    expect(subscriptions.map(({ endpoint }) => endpoint)).toEqual([sqsArnOf(billing.durable)]);
+    expect(await topicNamesOf(connecting.sns)).toEqual([billing.orders.stream]);
+  });
+
+  test('a Command’s Durable consumer reads the Service’s own topic as a Subscription’s does', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const [subscription] = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
+    const attributes = await subscriptionAttributesOf(connecting.sns, subscription?.arn ?? '');
+    expect(JSON.parse(attributes['FilterPolicy'] ?? '{}')).toEqual({
+      'cf-loom-subject': [orders.charge],
+    });
   });
 });

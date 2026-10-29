@@ -1,42 +1,62 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its attributes in PascalCase
+import type { SQSClient } from '@aws-sdk/client-sqs';
 import { type Applied, refusedBy } from './applied.ts';
-import { type Place, queueArnOf, type SqsConnecting } from './connecting.ts';
-import { applyQueue } from './queue-applying.ts';
+import { type Place, queueArnOf, topicArnOf } from './connecting.ts';
+import { applyQueue, tagQueue } from './queue-applying.ts';
 import { deadLetterQueueNameOf, queueNameOf } from './queue-names.ts';
+import { applyQueuePolicy } from './queue-policy.ts';
 import type { PlannedQueue } from './reading-limits.ts';
-import { backoffTag, deadLetterQueueTagsOf, queueTagsOf } from './tags.ts';
+import type { Subscribing } from './subscribing.ts';
+import { subscriptionShapeOf } from './subscription-shape.ts';
+import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from './tags.ts';
 
-/** Creates the Durable consumer's dead-letter queue and queue, or updates the ones that exist. */
+/** What applying a Durable consumer works with: the SQS client, where the environment's topics and queues are, and the subscriptions made so far. */
+export type Applier = {
+  readonly sqs: SQSClient;
+  readonly place: Place;
+  readonly subscribing: Subscribing;
+};
+
+/** Creates the Durable consumer's dead-letter queue and queue, or updates the ones that exist, and subscribes the queue to its Stream's topic. */
 export async function applyDurableConsumer(
-  connecting: Pick<SqsConnecting, 'sqs'>,
-  place: Place,
+  applier: Applier,
   planned: PlannedQueue,
 ): Promise<Applied> {
   try {
-    await createOrUpdate(connecting, place, planned);
+    await createOrUpdate(applier, planned);
     return { kind: 'applied' };
   } catch (error) {
     return refusedBy(`The Durable consumer ${planned.name}`, error);
   }
 }
 
-async function createOrUpdate(
-  { sqs }: Pick<SqsConnecting, 'sqs'>,
-  place: Place,
-  planned: PlannedQueue,
-): Promise<void> {
-  const deadLetterName = deadLetterQueueNameOf(planned.name);
+async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<void> {
+  const { sqs, place } = applier;
+  await applyDeadLetterQueue(sqs, planned);
+  const url = await applyMainQueue(applier, planned);
+  const queueArn = queueArnOf(place, queueNameOf(planned.name));
+  const topicArn = topicArnOf(place, planned.stream);
+  await applyQueuePolicy(sqs, url, { queueArn, topicArn });
+  const shape = subscriptionShapeOf({ topicArn, queueArn, subject: planned.subject });
+  const subscription = await applier.subscribing.subscribe(shape);
+  await tagQueue(sqs, url, { [subscriptionTag]: subscription });
+}
+
+async function applyDeadLetterQueue(sqs: SQSClient, planned: PlannedQueue): Promise<void> {
   await applyQueue(sqs, {
-    name: deadLetterName,
+    name: deadLetterQueueNameOf(planned.name),
     attributes: { MessageRetentionPeriod: String(planned.deadLetterRetention) },
     tags: deadLetterQueueTagsOf(planned),
     untagged: [],
   });
+}
+
+async function applyMainQueue({ sqs, place }: Applier, planned: PlannedQueue): Promise<string> {
   const redrive = {
-    deadLetterTargetArn: queueArnOf(place, deadLetterName),
+    deadLetterTargetArn: queueArnOf(place, deadLetterQueueNameOf(planned.name)),
     maxReceiveCount: planned.maxDeliver,
   };
-  await applyQueue(sqs, {
+  return await applyQueue(sqs, {
     name: queueNameOf(planned.name),
     attributes: {
       VisibilityTimeout: String(planned.visibilityTimeout),

@@ -6,6 +6,7 @@ import { applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { SqsBrokerLimits } from './limits.ts';
 import { durableConsumerLimits, type PlannedQueue } from './reading-limits.ts';
 import { applyStream } from './stream-applying.ts';
+import { subscribingOn } from './subscribing.ts';
 
 /** Applies a Service's Broker plan on SNS/SQS under the Broker prefix the plan names; the organization calls it, `messaging()` never does. */
 export async function applyBrokerPlan<const Given = unknown, const GivenLimits = unknown>(
@@ -43,8 +44,9 @@ async function applyAll(
       return applied;
     }
   }
+  const applier = { sqs: connecting.sqs, place, subscribing: subscribingOn(connecting.sns) };
   for (const planned of durableConsumers) {
-    const applied = await applyDurableConsumer(connecting, place, planned);
+    const applied = await applyDurableConsumer(applier, planned);
     if (applied.kind === 'refused') {
       return applied;
     }

@@ -1,12 +1,21 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
-import { ListTopicsCommand, SNSClient } from '@aws-sdk/client-sns';
+import {
+  CreateTopicCommand,
+  GetSubscriptionAttributesCommand,
+  ListSubscriptionsByTopicCommand,
+  ListTopicsCommand,
+  PublishCommand,
+  SNSClient,
+} from '@aws-sdk/client-sns';
 import {
   GetQueueAttributesCommand,
   GetQueueUrlCommand,
   ListQueuesCommand,
   ListQueueTagsCommand,
+  ReceiveMessageCommand,
   SQSClient,
 } from '@aws-sdk/client-sqs';
+import { snsSubjectAttribute } from '@cf-loom/contract/internal';
 import { onTestFinished } from 'vitest';
 import type { SqsConnecting } from '../src/sqs/index.ts';
 
@@ -74,4 +83,70 @@ export async function queueTagsOf(sqs: SQSClient, name: string): Promise<Record<
   const QueueUrl = await queueUrlOf(sqs, name);
   const read = await sqs.send(new ListQueueTagsCommand({ QueueUrl }));
   return read.Tags ?? {};
+}
+
+/** The subscriptions of a topic: each one's ARN and the queue it delivers to. */
+export async function subscriptionsOf(
+  sns: SNSClient,
+  topicArn: string,
+): Promise<{ readonly arn: string; readonly endpoint: string; readonly protocol: string }[]> {
+  const listed = await sns.send(new ListSubscriptionsByTopicCommand({ TopicArn: topicArn }));
+  return (listed.Subscriptions ?? []).map((subscription) => ({
+    arn: subscription.SubscriptionArn ?? '',
+    endpoint: subscription.Endpoint ?? '',
+    protocol: subscription.Protocol ?? '',
+  }));
+}
+
+/** Every attribute SNS holds for a subscription. */
+export async function subscriptionAttributesOf(
+  sns: SNSClient,
+  subscriptionArn: string,
+): Promise<Record<string, string>> {
+  const read = await sns.send(
+    new GetSubscriptionAttributesCommand({ SubscriptionArn: subscriptionArn }),
+  );
+  return read.Attributes ?? {};
+}
+
+/** Creates a topic as the organization's tooling would, and answers its ARN. */
+export async function arrangeTopic(sns: SNSClient, name: string): Promise<string> {
+  const created = await sns.send(new CreateTopicCommand({ Name: name }));
+  return created.TopicArn ?? '';
+}
+
+/** Publishes a body on a topic with the subject in the `cf-loom-subject` attribute, as the adapter will. */
+export async function publishOn(
+  sns: SNSClient,
+  topicArn: string,
+  message: { readonly subject: string; readonly body: string },
+): Promise<void> {
+  await sns.send(
+    new PublishCommand({
+      TopicArn: topicArn,
+      Message: message.body,
+      MessageAttributes: {
+        [snsSubjectAttribute]: { DataType: 'String', StringValue: message.subject },
+      },
+    }),
+  );
+}
+
+/** The bodies waiting in the queue named `name`, and the subject each carries. */
+export async function receivedFrom(
+  sqs: SQSClient,
+  name: string,
+): Promise<{ readonly body: string; readonly subject: string | undefined }[]> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  const received = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl,
+      MaxNumberOfMessages: 10,
+      MessageAttributeNames: ['All'],
+    }),
+  );
+  return (received.Messages ?? []).map((message) => ({
+    body: message.Body ?? '',
+    subject: message.MessageAttributes?.[snsSubjectAttribute]?.StringValue,
+  }));
 }
