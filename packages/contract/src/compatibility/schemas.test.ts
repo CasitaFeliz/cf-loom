@@ -14,6 +14,7 @@ import {
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
+  hashedTextOf,
   type NumberNode,
   type ObjectNode,
   type Path,
@@ -838,8 +839,7 @@ describe('compatibilityReportOf, unions', () => {
   test.each(
     casesOf([
       {
-        change:
-          'an intersection whose items differ only in descriptions, whatever order they sort in',
+        change: 'an intersection whose items differ only in descriptions',
         from: {
           type: 'allOf',
           items: [
@@ -850,8 +850,8 @@ describe('compatibilityReportOf, unions', () => {
         to: {
           type: 'allOf',
           items: [
-            { type: 'string', description: 'a' },
             { type: 'number', description: 'z' },
+            { type: 'string', description: 'a' },
           ],
         },
         found: [found(annotationChanged('description'), neutralEverywhere)],
@@ -2386,4 +2386,64 @@ describe('compatibilityReportOf, depth', () => {
       changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
     ]);
   });
+});
+
+describe('compatibilityReportOf, an inner annotation moved between nodes of one shape', () => {
+  const described: StringNode = { type: 'string', description: 'a' };
+  const describedChanged = [found(annotationChanged('description'), neutralEverywhere)];
+  const fieldsAndY = (x: SchemaNode, y: SchemaNode) => anObject({ x: required(x), y: required(y) });
+
+  test.each(
+    casesOf([
+      {
+        change: 'a description moved between two string items of a tuple',
+        from: aTuple([described, aString]),
+        to: aTuple([aString, described]),
+        found: describedChanged,
+      },
+      {
+        change: 'a description moved between two string options of a plain union',
+        from: plainUnion(described, aString),
+        to: plainUnion(aString, described),
+        found: describedChanged,
+      },
+      {
+        change: 'a description moved from inside an array in a tuple’s first item to its second',
+        from: aTuple([anArray(described), aString]),
+        to: aTuple([anArray(aString), described]),
+        found: describedChanged,
+      },
+      {
+        change: 'a description moved between two fields of a def that two union options reach',
+        from: plainUnion(aRef('d'), anArray(aRef('d'))),
+        to: plainUnion(aRef('d'), anArray(aRef('d'))),
+        fromDefs: { d: fieldsAndY(described, aString) },
+        toDefs: { d: fieldsAndY(aString, described) },
+        found: describedChanged,
+      },
+      {
+        change: 'a description moved between two fields of a def that one union option reaches',
+        from: plainUnion(aRef('d'), aNumber),
+        to: plainUnion(aRef('d'), aNumber),
+        fromDefs: { d: fieldsAndY(described, aString) },
+        toDefs: { d: fieldsAndY(aString, described) },
+        found: describedChanged,
+      },
+    ]),
+  )('$change is $outcome in $place', expectRow);
+
+  test.each(places)(
+    'an intersection of two described strings and one of a string with itself are no Change in $name',
+    (place) => {
+      const from = walkedOf(z.string().describe('a').and(z.string().describe('b')));
+      const to = walkedOf(z.string().describe('a').and(z.string().describe('a')));
+
+      const report = reportOf(place, { from, to });
+
+      expect(report).toEqual({ changes: [] });
+      expect(hashedTextOf(place.proposed(to, noDefs))).toBe(
+        hashedTextOf(place.proposed(from, noDefs)),
+      );
+    },
+  );
 });

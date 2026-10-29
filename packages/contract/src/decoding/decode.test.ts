@@ -1017,6 +1017,11 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'format'],
       ],
       [
+        'a string format zod builds from a regex, which generate refuses',
+        { defs: { tree: { type: 'string', format: 'hex' } } },
+        ['defs', 'tree', 'format'],
+      ],
+      [
         'a literal node',
         { defs: { tree: { type: 'literal', value: 'a' } } },
         ['defs', 'tree', 'type'],
@@ -1106,7 +1111,7 @@ describe('decodeSnapshot', () => {
       ],
       [
         'an option of a string format that takes none',
-        { type: 'string', format: 'hex', formatOptions: { version: 4 } },
+        { type: 'string', format: 'email', formatOptions: { version: 4 } },
         'version',
       ],
       [
@@ -2377,6 +2382,28 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ defs: { a: node } });
 
       expect(result).toEqual(malformedAt(['defs', 'a', key]));
+    });
+
+    test('allOf items in the order of their canonical JSON but not of their shapes are malformed', () => {
+      const regex = { type: 'string', regex: { source: '^a', flags: '' }, description: 'a' };
+      const items = [regex, { type: 'string', max: 8 }];
+
+      const result = serviceWith({ defs: { a: { type: 'allOf', items } } });
+
+      expect(result).toEqual(
+        malformedAt(['defs', 'a', 'items'], 'is not in canonical order, each item once'),
+      );
+    });
+
+    test('an allOf holding two items of one shape with different descriptions is malformed', () => {
+      const items = [
+        { type: 'string', description: 'a' },
+        { type: 'string', description: 'b' },
+      ];
+
+      const result = serviceWith({ defs: { a: { type: 'allOf', items } } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', 'items']));
     });
 
     test('a union’s options in any order decode', () => {
