@@ -138,4 +138,19 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@5']);
     expect(pluginReportsFor(lines)).toEqual([]);
   });
+
+  it('also report such a getter destructured from `_zod` or read from a cast of it, not an alias (C1)', () => {
+    const lines = [
+      'declare const schema: { readonly _zod: Record<string, unknown> };',
+      'export const { propValues } = schema._zod;',
+      'export const { values: renamed } = schema?._zod;',
+      'export const { def: kept, optin } = schema._zod;',
+      'export const { def } = schema._zod;',
+      'export const cast = (schema._zod as { optout: unknown }).optout;',
+      'const internals = schema._zod;',
+      'export const alias = internals.values;',
+    ];
+
+    expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
+  });
 });

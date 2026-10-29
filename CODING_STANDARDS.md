@@ -307,8 +307,9 @@ naming conventions) apply as well.
 The GritQL plugins in `lint/` add, as errors: a `flatMap` whose callback returns a conditional array (C10), `reduce`
 and `reduceRight` (C12), a single-letter name outside a lambda of one expression, an import or a `catch` (C14), a
 `boolean` parameter, by type or by default, of an exported function or arrow function (C17), and, under `walker/`, a
-read of a getter zod derives from the schemas a schema holds (`_zod.propValues`, `values`, `optin`, `optout`), which
-reaches what the walk has not judged (C1). `scripts/check-tsdoc.ts`
+read of a getter zod derives from the schemas a schema holds (`_zod.propValues`, `values`, `optin`, `optout`), as a
+member read, a destructuring or a cast of `_zod` (a name bound to `_zod` is out of reach), which reaches what the walk
+has not judged (C1). `scripts/check-tsdoc.ts`
 fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run
 it. `scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout);
 `pnpm check` and CI run it.
