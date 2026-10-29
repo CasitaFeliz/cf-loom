@@ -2,7 +2,7 @@ import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
 import { refusedCheck } from './check-names.ts';
 import { formatOptionsOf } from './format-options.ts';
 import { isStringFormat, regexBuiltFormatOf, type StringFormat } from './format-schemas.ts';
-import type { StringNode } from './nodes.ts';
+import type { Regex, StringNode } from './nodes.ts';
 import {
   notAllowed,
   type Refused,
@@ -29,11 +29,9 @@ function isKnownFormat(def: FormatDef): def is KnownFormatDef {
 }
 
 /**
- * The `format` and `formatOptions` a string format check declares: only a format zod builds
- * itself from options, checked as zod checks it, with the options that differ from zod's default.
- * A check zod runs through a function is refused, whatever pattern sits beside it, since no
- * reading of a function proves what it tests: `z.stringFormat()`, and the formats zod builds from
- * a regex, which `.regex()` with that regex replaces.
+ * What a string format check declares as data, a `regex` or a known `format` with its
+ * `formatOptions`; a check that runs a function is refused, since no reading of a function proves
+ * what it tests.
  */
 export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<StringNode>> {
   const def = check.def as unknown as FormatDef;
@@ -43,18 +41,25 @@ export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<Stri
   if (def.fn !== undefined) {
     return notAllowed(at, functionFormatRefusalOf(def.format));
   }
+  if (def.format === 'regex' && def.pattern !== undefined) {
+    return walked({ regex: regexOf(def.pattern) });
+  }
   if (!isKnownFormat(def)) {
     return notAllowed(at, refusedCheck(check.def));
   }
   return builtFormatOf(check, def, at);
 }
 
-/** A format check that runs a function: a format zod builds from a regex by its call, else by its name. */
+function regexOf(pattern: RegExp): Regex {
+  return { source: pattern.source, flags: pattern.flags };
+}
+
+/** A format check that runs a function: a format zod builds from a regex by its spellings, else by its name. */
 function functionFormatRefusalOf(format: string): Refused {
   const regexBuilt = regexBuiltFormatOf(format);
   return regexBuilt === undefined
     ? refusedStringFormat(format)
-    : refusedRegexBuiltFormat(regexBuilt.call, regexBuilt.regex);
+    : refusedRegexBuiltFormat(format, regexBuilt.call, regexBuilt.regexName);
 }
 
 /** A format zod builds from its options: the pattern must be the one zod builds for them. */

@@ -25,6 +25,10 @@ function refusedAt(at: string, construct: string, instead?: string) {
   return { located: [{ kind: 'not-allowed', failures: [failure] }], defs: {} };
 }
 
+const hexSpellings = 'z.hex() or z.stringFormat("hex")';
+const sha256Spellings = 'z.hash() or z.stringFormat("sha256_hex")';
+const currencySpellings = 'z.currencyCode() or z.stringFormat("currency_code")';
+
 describe('walkSchemas: strings', () => {
   test('a string is a string node', () => {
     expect(walkBody(z.string())).toEqual(walkedTo({ type: 'string' }));
@@ -92,43 +96,85 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each<{ name: string; schema: core.$ZodType; refusal: string }>([
-    { name: 'z.hex()', schema: z.hex(), refusal: 'z.hex() hex' },
-    { name: 'z.hostname()', schema: z.hostname(), refusal: 'z.hostname() hostname' },
+  test.each<{ name: string; schema: core.$ZodType; construct: string; regexName: string }>([
+    { name: 'z.hex()', schema: z.hex(), construct: hexSpellings, regexName: 'hex' },
+    {
+      name: 'z.hostname()',
+      schema: z.hostname(),
+      construct: 'z.hostname() or z.stringFormat("hostname")',
+      regexName: 'hostname',
+    },
     {
       name: 'z.currencyCode()',
       schema: z.currencyCode(),
-      refusal: 'z.currencyCode() currencyCode',
+      construct: currencySpellings,
+      regexName: 'currencyCode',
     },
-    { name: 'z.hash()', schema: z.hash('sha256'), refusal: 'z.hash() sha256_hex' },
+    {
+      name: 'z.hash()',
+      schema: z.hash('sha256'),
+      construct: sha256Spellings,
+      regexName: 'sha256_hex',
+    },
     {
       name: 'z.hash() with an encoding',
       schema: z.hash('md5', { enc: 'base64url' }),
-      refusal: 'z.hash() md5_base64url',
+      construct: 'z.hash() or z.stringFormat("md5_base64url")',
+      regexName: 'md5_base64url',
     },
-    { name: 'zm.hex()', schema: zm.hex(), refusal: 'z.hex() hex' },
-    { name: 'zm.hostname()', schema: zm.hostname(), refusal: 'z.hostname() hostname' },
+    { name: 'zm.hex()', schema: zm.hex(), construct: hexSpellings, regexName: 'hex' },
+    {
+      name: 'zm.hostname()',
+      schema: zm.hostname(),
+      construct: 'z.hostname() or z.stringFormat("hostname")',
+      regexName: 'hostname',
+    },
     {
       name: 'zm.currencyCode()',
       schema: zm.currencyCode(),
-      refusal: 'z.currencyCode() currencyCode',
+      construct: currencySpellings,
+      regexName: 'currencyCode',
     },
-    { name: 'zm.hash()', schema: zm.hash('sha256'), refusal: 'z.hash() sha256_hex' },
+    {
+      name: 'zm.hash()',
+      schema: zm.hash('sha256'),
+      construct: sha256Spellings,
+      regexName: 'sha256_hex',
+    },
     {
       name: 'z.stringFormat() with zod’s own regex',
       schema: z.stringFormat('hex', z.regexes.hex),
-      refusal: 'z.hex() hex',
+      construct: hexSpellings,
+      regexName: 'hex',
     },
     {
       name: 'z.stringFormat() with another regex',
       schema: z.stringFormat('hex', /^[a-f]+$/),
-      refusal: 'z.hex() hex',
+      construct: hexSpellings,
+      regexName: 'hex',
+    },
+    {
+      name: 'z.stringFormat() with a function',
+      schema: z.stringFormat('hex', (value) => value === 'secret'),
+      construct: hexSpellings,
+      regexName: 'hex',
+    },
+    {
+      name: 'z.stringFormat() of a hash name with a function',
+      schema: z.stringFormat('sha256_hex', () => true),
+      construct: sha256Spellings,
+      regexName: 'sha256_hex',
+    },
+    {
+      name: 'z.stringFormat() of a currency code with a function',
+      schema: z.stringFormat('currency_code', () => true),
+      construct: currencySpellings,
+      regexName: 'currencyCode',
     },
   ])(
     '$name, whose check zod runs through a function, fails with its z.regexes pattern instead',
-    ({ schema, refusal }) => {
-      const [call = '', regex = ''] = refusal.split(' ');
-      const refused = refusedAt('', call, `.regex(z.regexes.${regex})`);
+    ({ schema, construct, regexName }) => {
+      const refused = refusedAt('', construct, `.regex(z.regexes.${regexName})`);
 
       expect(walkBody(schema)).toEqual(refused);
       expect(refusalsOf(built.walkSchemas([{ at: bodyAt, schema }], () => undefined))).toEqual(
@@ -143,7 +189,7 @@ describe('walkSchemas: strings', () => {
       pattern: z.regexes.hex,
     } as object);
 
-    expect(walkBody(hex)).toEqual(refusedAt('', 'z.hex()', '.regex(z.regexes.hex)'));
+    expect(walkBody(hex)).toEqual(refusedAt('', hexSpellings, '.regex(z.regexes.hex)'));
   });
 
   test.each<[string, core.$ZodType]>([
@@ -207,9 +253,7 @@ describe('walkSchemas: strings', () => {
     (format) => {
       const schema = z.stringFormat(format, () => true, { pattern: /^.*$/ } as object);
 
-      expect(walkBody(schema).located).toEqual([
-        { kind: 'not-allowed', failures: [expect.objectContaining({ at: '' })] },
-      ]);
+      expect(walkBody(schema)).toEqual(refusedAt('', `z.stringFormat(${JSON.stringify(format)})`));
     },
   );
 

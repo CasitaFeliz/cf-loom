@@ -59,7 +59,7 @@ export function isStringFormat(value: unknown): value is StringFormat {
 }
 
 /** A format zod builds from a regex and checks through a function: the call that builds it, and its regex in `z.regexes`. */
-export type RegexBuiltFormat = { readonly call: string; readonly regex: string };
+export type RegexBuiltFormat = { readonly call: string; readonly regexName: string };
 
 const hashAlgorithms = ['md5', 'sha1', 'sha256', 'sha384', 'sha512'] as const;
 const hashEncodings = ['hex', 'base64', 'base64url'] as const;
@@ -69,13 +69,13 @@ const hashEncodings = ['hex', 'base64', 'base64url'] as const;
  * function, so the walk refuses them and names the `z.regexes` pattern that `.regex()` takes.
  */
 const regexBuiltFormats: ReadonlyMap<string, RegexBuiltFormat> = new Map([
-  ['hex', { call: 'z.hex', regex: 'hex' }],
-  ['hostname', { call: 'z.hostname', regex: 'hostname' }],
-  ['currency_code', { call: 'z.currencyCode', regex: 'currencyCode' }],
+  ['hex', { call: 'z.hex', regexName: 'hex' }],
+  ['hostname', { call: 'z.hostname', regexName: 'hostname' }],
+  ['currency_code', { call: 'z.currencyCode', regexName: 'currencyCode' }],
   ...hashAlgorithms.flatMap((algorithm) =>
     hashEncodings.map((encoding): [string, RegexBuiltFormat] => {
       const name = `${algorithm}_${encoding}`;
-      return [name, { call: 'z.hash', regex: name }];
+      return [name, { call: 'z.hash', regexName: name }];
     }),
   ),
 ]);

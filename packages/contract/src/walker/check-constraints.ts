@@ -1,6 +1,6 @@
 import type { DeclaredCheck } from './check-defs.ts';
 import { refusedCheck } from './check-names.ts';
-import type { NumberNode, Regex, SchemaNode, StringNode } from './nodes.ts';
+import type { NumberNode, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed } from './not-allowed.ts';
 import { formatOf } from './string-formats.ts';
 import { type Reached, type Walked, walked } from './walked.ts';
@@ -39,18 +39,7 @@ export function constraintOfType(type: SchemaNode['type'] | undefined): Constrai
 
 function stringConstraint(check: DeclaredCheck, at: Reached): Constraint<StringNode> {
   const { def } = check;
-  if (def.check !== 'string_format') {
-    return lengthConstraint(check, at);
-  }
-  if (def.format === 'regex' && def.pattern !== undefined && !isRunByFunction(def)) {
-    return walked({ regex: regexOf(def.pattern) });
-  }
-  return formatOf(check, at);
-}
-
-/** Whether zod runs a format check through a function, as `z.stringFormat()` builds one. */
-function isRunByFunction(def: object): boolean {
-  return 'fn' in def && def.fn !== undefined;
+  return def.check === 'string_format' ? formatOf(check, at) : lengthConstraint(check, at);
 }
 
 function lengthConstraint(check: DeclaredCheck, at: Reached): Constraint<Bounds> {
@@ -128,8 +117,4 @@ function refusedHere(check: DeclaredCheck, at: Reached): Constraint<never> {
     }
   }
   return notAllowed(at, refusedCheck(check.def));
-}
-
-function regexOf(pattern: RegExp): Regex {
-  return { source: pattern.source, flags: pattern.flags };
 }

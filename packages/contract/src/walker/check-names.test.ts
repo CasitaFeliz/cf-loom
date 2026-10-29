@@ -298,6 +298,13 @@ describe('a refused zod check', () => {
       z.stringFormat('constructor', () => true),
       'z.stringFormat("constructor")',
     ],
+    ['z.hex()', z.hex(), 'z.hex() or z.stringFormat("hex")'],
+    ['z.hash()', z.hash('sha256'), 'z.hash() or z.stringFormat("sha256_hex")'],
+    [
+      'z.stringFormat() of a regex-built name with a function',
+      z.stringFormat('hostname', () => true),
+      'z.hostname() or z.stringFormat("hostname")',
+    ],
   ])('%s reads the same on a boolean as on a string', (_name, check, construct) => {
     expect(constructsOf(onBoolean(check))).toEqual([construct]);
     expect(constructsOf(checked(z.string(), check))).toEqual([construct]);
@@ -314,6 +321,21 @@ describe('a refused zod check', () => {
   ])('a uuid %s is named by the call that builds it', (_name, check, construct) => {
     expect(constructsOf(onBoolean(check))).toEqual([construct]);
   });
+
+  test.each<NodeName>(['string', 'boolean'])(
+    'a hex format check with no function is named by its format on a %s',
+    (nodeName) => {
+      const handBuilt = new core.$ZodCheckStringFormat({
+        check: 'string_format',
+        format: 'hex',
+        pattern: z.regexes.hex,
+      });
+
+      expect(constructsOf(checked(zodFlavor.nodes()[nodeName], handBuilt))).toEqual([
+        'z.stringFormat("hex")',
+      ]);
+    },
+  );
 
   test.each(flavors)(
     'z.properties() is refused as z.properties() on every node ($name)',
