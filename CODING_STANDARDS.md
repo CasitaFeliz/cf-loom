@@ -273,9 +273,9 @@ agree with it, or it is read against nothing.
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
 status of a command. It imports no private module and asserts no call order of mocks. A README test imports the
 README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
-them. A type test that a call is refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and
-`pnpm check` verifies that the line below fails with that code **(check)**; a bare `@ts-expect-error` is met by any error
-and proves nothing. *Why:* a test of the mechanics fails on every refactor and passes on every bug.
+them. *Why:* a test of the mechanics fails on every refactor and passes on every bug. A type test that a call is
+refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and `pnpm check` verifies that the line
+below fails with that code **(check)**: a bare `@ts-expect-error` is met by any error, so it proves nothing.
 
 **C24. A test's name states the behavior in plain English.** `"an optional path param fails generate"`, not
 `"handles params"` or `"walk returns not-allowed"`. The `describe` names the seam; the `test` reads as a sentence
