@@ -7,6 +7,7 @@ import {
   defineSubscription,
   openEnum,
 } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import {
   type HandledBy,
   type HandlerMapOf,
@@ -399,8 +400,8 @@ describe('publish and send types', () => {
   });
 
   test('close takes an optional signal and nothing else', () => {
-    expectTypeOf<Parameters<Messaging<typeof contract>['close']>>().toExtend<
-      [options?: CloseOptions | undefined]
+    expectTypeOf<Parameters<Messaging<typeof contract>['close']>>().toEqualTypeOf<
+      [options?: Closed<unknown, CloseOptions> | undefined]
     >();
     expectTypeOf<Messaging<typeof contract>['close']>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<CloseOptions>().toEqualTypeOf<{ readonly signal?: AbortSignal | undefined }>();

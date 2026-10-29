@@ -349,7 +349,7 @@ describe('fakeProvider: types', () => {
       .on('getPayment')
       // @ts-expect-error messge is not a declared field
       .once((r) => r.fault(misspelled))
-      // @ts-expect-error kind is not a declared field: a Handler's Fault is not what r.fault takes
+      // @ts-expect-error kind and cause are not declared fields: a Handler's Fault is not what r.fault takes
       .otherwise((r) => r.fault(built));
 
     expect(payments.calls('getPayment')).toEqual([]);

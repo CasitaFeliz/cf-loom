@@ -11,6 +11,7 @@ import {
   providedEvent,
   type Subscription,
 } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -144,7 +145,9 @@ describe('memory types', () => {
       inMemory.deliver(notifyOnCreated, {});
 
     expectTypeOf(inMemory.deliver).parameter(0).toEqualTypeOf<Event | Command>();
-    expectTypeOf(inMemory.deliver).parameter(2).toExtend<DeliveryMeta | undefined>();
+    expectTypeOf(inMemory.deliver)
+      .parameter(2)
+      .toEqualTypeOf<Closed<unknown, DeliveryMeta> | undefined>();
     expectTypeOf(inMemory.deliver).returns.resolves.toEqualTypeOf<
       'acked' | 'pending' | 'ended' | 'handed-back'
     >();
