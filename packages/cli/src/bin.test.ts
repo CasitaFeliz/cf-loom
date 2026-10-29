@@ -6800,6 +6800,11 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ['peerDependencies', 'npm:shared.tar.gz'],
     ['peerDependencies', 'npm:.shared'],
     ['peerDependencies', 'npm:@org/.shared'],
+    ['peerDependencies', 'npm:-shared'],
+    ['peerDependencies', 'npm:_shared'],
+    ['peerDependencies', 'npm:sha red'],
+    ['peerDependencies', 'npm:@org/shared#'],
+    ['peerDependencies', 'npm:@org/sh ared@^1.0.0'],
   ] as const)(
     'a Definitions Package whose %s list the range %s fails dry-run, as no registry install resolves it',
     async ([field, range], { lab }) => {
@@ -6813,6 +6818,28 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
       expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    ['a scoped name that ends as a tarball', 'npm:@org/shared.tgz'],
+    ['a scoped name that ends as a tar', 'npm:@org/shared.tar@^1.0.0'],
+    ['a legacy name in upper case', 'npm:JSONStream@^1.0.0'],
+    ['a name that starts with an underscore', 'npm:@org/_shared'],
+  ] as const)(
+    'a Definitions Package depending on an npm: alias of %s (%s) fails dry-run, though npm resolves it, as its name is no package name cf-loom accepts',
+    async ([, range], { lab }) => {
+      const project = await aGeneratedProject(
+        lab,
+        aBuiltDefinitions({ dependencies: { left: range } }),
+      );
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+      const lists = `package.json lists left in dependencies as ${range}`;
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      const refused = `${lists}, which npm cannot install from the registry\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
     },
   );
 

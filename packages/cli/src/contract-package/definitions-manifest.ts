@@ -1,4 +1,5 @@
 import type { PeerRanges, PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
+import { isPackageName } from '../loading/index.ts';
 import { cfLoomOf, manifestFileOf, type Packaging } from './manifest.ts';
 import type { PackageFile } from './modules.ts';
 import { packagePaths } from './paths.ts';
@@ -20,8 +21,8 @@ const tarballName = /\.(?:tgz|tar\.gz|tar)$/i;
 /** The start of an `npm:` alias, which npm reads case-insensitively. */
 const aliasPrefix = /^npm:/i;
 
-/** An `npm:` alias that names a registry package, capturing its name without a scope and the spec after the `@` that follows the name. */
-const aliasedPackage = /^npm:(?:@[^@/\\:]+\/)?([^@/\\:]+)(?:@(.*))?$/i;
+/** An `npm:` alias, capturing the name it aliases, scope included, and the spec after the `@` that follows the name. */
+const aliasedPackage = /^npm:((?:@[^@]*\/)?[^@]*)(?:@(.*))?$/i;
 
 /** A dependency a package.json lists under a field. */
 type Listed = { readonly field: string; readonly name: string; readonly range: string };
@@ -116,18 +117,20 @@ function uninstallableIn(
 }
 
 /**
- * Whether npm resolves a dependency's range from the registry: a semver range, a dist-tag, or an
- * `npm:` alias of one. Without a semver parser, a malformed range or tag reads as a valid one.
+ * Whether a dependency's range is one cf-loom keeps as resolved from the registry: a version, a
+ * version range or a dist-tag, or an `npm:` alias of one whose name is a package name npm accepts
+ * for a new package, which refuses some aliases npm resolves. Without a semver parser, a malformed
+ * range or tag reads as a valid one.
  */
 function isRegistryRange(range: string): boolean {
   if (!aliasPrefix.test(range)) {
     return isRegistryText(range);
   }
-  const alias = aliasedPackage.exec(range);
-  return alias !== null && isRegistryText(alias[1] ?? '') && isRegistryText(alias[2] ?? '');
+  const [, name = '', spec = ''] = aliasedPackage.exec(range) ?? [];
+  return isPackageName(name) && !tarballName.test(name) && isRegistryText(spec);
 }
 
-/** Whether npm reads a spec, or the name of an alias, as neither a path, a URL, a protocol nor a tarball. */
+/** Whether npm reads a spec as neither a path, a URL, a protocol nor a tarball. */
 function isRegistryText(text: string): boolean {
   return !notRegistryText.test(text) && !tarballName.test(text);
 }

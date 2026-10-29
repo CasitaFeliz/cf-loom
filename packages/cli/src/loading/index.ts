@@ -24,7 +24,7 @@ export { newerFormatTextOf } from './newer-format.ts';
 export type { ResolvedPackages } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';
-export { packageJsonNameOf, projectPackageOf } from './project-package.ts';
+export { isPackageName, packageJsonNameOf, projectPackageOf } from './project-package.ts';
 export { publishedNameOf } from './published-name.ts';
 export { realPathOf } from './real-path.ts';
 export type { LoadedRoot } from './root.ts';
