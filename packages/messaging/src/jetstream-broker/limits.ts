@@ -1,3 +1,5 @@
+import type { Duration, LimitsOf } from '../broker-limits/index.ts';
+
 /** The retentions NATS has, written once for the type of a stream's limits and for reading them. */
 export const retentions = ['limits', 'interest', 'workqueue'] as const;
 
@@ -6,9 +8,6 @@ export const storages = ['file', 'memory'] as const;
 
 /** The deliver policies a Durable consumer's limits may name, written once for their type and for reading them. */
 export const deliverPolicies = ['all', 'new', 'last', 'last_per_subject'] as const;
-
-/** A length of time as limits write it: a whole number from 1 and one unit, `500ms`, `30s`, `2m`, `1h` or `7d`. */
-export type Duration = `${number}${'ms' | 's' | 'm' | 'h' | 'd'}`;
 
 /** A stream's settings cf-loom has no opinion on, which the organization chooses. */
 export type StreamLimits = {
@@ -36,15 +35,5 @@ export type DurableConsumerLimits = {
   readonly maxAckPending: number | 'unlimited';
 };
 
-/** Some of a stream's or Durable consumer's settings, each possibly `undefined`, which leaves it unset like a missing key. */
-type Some<Limits> = { readonly [Name in keyof Limits]?: Limits[Name] | undefined };
-
 /** Every setting of the plan's streams and Durable consumers, keyed by the names the plan prints, with defaults for whatever one does not set. */
-export type BrokerLimits = {
-  readonly streamDefaults?: Some<StreamLimits> | undefined;
-  readonly durableConsumerDefaults?: Some<DurableConsumerLimits> | undefined;
-  readonly streams?: Readonly<Record<string, Some<StreamLimits> | undefined>> | undefined;
-  readonly durableConsumers?:
-    | Readonly<Record<string, Some<DurableConsumerLimits> | undefined>>
-    | undefined;
-};
+export type BrokerLimits = LimitsOf<StreamLimits, DurableConsumerLimits>;

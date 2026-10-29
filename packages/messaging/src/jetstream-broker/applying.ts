@@ -1,31 +1,20 @@
-import { type BrokerPlan, type Closed, decodeBrokerPlan } from '@cf-loom/contract/internal';
+import type { BrokerPlan, Closed } from '@cf-loom/contract/internal';
 import type { JetStreamManager } from '@nats-io/jetstream';
+import type { DefaultsFields } from '../broker-limits/index.ts';
 import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
 import { applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { JetStreamConnecting } from './jetstream.ts';
 import type { BrokerLimits } from './limits.ts';
-import { type ResolvedPlan, settingsOf } from './settings.ts';
+import { checkedOf, type ResolvedPlan } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
 import { managerOf } from './stream-check.ts';
-
-/** The limits' defaults: each holds no setting its limits do not declare. */
-type DefaultsFields<Given> = {
-  readonly [Field in 'streamDefaults' | 'durableConsumerDefaults']?:
-    | Closed<
-        Given extends { readonly [Name in Field]?: infer Defaults } ? Defaults : unknown,
-        NonNullable<BrokerLimits[Field]>
-      >
-    | undefined;
-};
-
-type Checked = ResolvedPlan | { readonly kind: 'refused'; readonly message: string };
 
 /** Applies a Service's broker plan under the Broker prefix the plan names; the organization calls it, `messaging()` never does. */
 export async function applyBrokerPlan<const Given = unknown, const GivenLimits = unknown>(
   connecting: Closed<Given, JetStreamConnecting>,
   plan: BrokerPlan,
-  limits: Closed<GivenLimits, BrokerLimits & DefaultsFields<GivenLimits>>,
+  limits: Closed<GivenLimits, BrokerLimits & DefaultsFields<GivenLimits, BrokerLimits>>,
 ): Promise<void> {
   const checked = checkedOf(plan, limits);
   if (checked.kind === 'refused') {
@@ -35,19 +24,6 @@ export async function applyBrokerPlan<const Given = unknown, const GivenLimits =
   if (applied.kind === 'refused') {
     throw new Error(applied.message, { cause: applied.cause });
   }
-}
-
-function checkedOf(plan: unknown, limits: unknown): Checked {
-  const decoded = decodeBrokerPlan(plan);
-  if (decoded.kind === 'malformed') {
-    const shape =
-      'The value is not the Broker plan of the document cf-loom broker-plan --json prints';
-    return { kind: 'refused', message: `${shape}: ${decoded.reason}` };
-  }
-  const settings = settingsOf(decoded.plan, limits);
-  return settings.kind === 'refused'
-    ? { kind: 'refused', message: settings.lines.join('\n') }
-    : settings;
 }
 
 async function appliedOn(

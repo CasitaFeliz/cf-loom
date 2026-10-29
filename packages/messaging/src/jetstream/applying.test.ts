@@ -1012,6 +1012,26 @@ describe('what applyBrokerPlan refuses', () => {
       { durableConsumerDefaults: { ackWait: [] } },
       'limits.durableConsumerDefaults.ackWait [] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them',
     ],
+    [
+      'a list of ack waits in which one is no duration',
+      { durableConsumerDefaults: { ackWait: ['30s', '0s'] } },
+      "limits.durableConsumerDefaults.ackWait [ '30s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+    ],
+    [
+      'a setting broken under each of the four keys, written in reverse, in the order streamDefaults, durableConsumerDefaults, streams, durableConsumers',
+      {
+        durableConsumers: { charge: { ackWait: '0s' } },
+        streams: { orders: { replicas: 0 } },
+        durableConsumerDefaults: { maxDeliver: 'many' },
+        streamDefaults: { retention: 'forever' },
+      },
+      [
+        "limits.streamDefaults.retention 'forever' is not one of limits, interest or workqueue",
+        "limits.durableConsumerDefaults.maxDeliver 'many' is not a whole number from 1, or 'unlimited'",
+        'limits.streams.orders.replicas 0 is not a whole number from 1',
+        "limits.durableConsumers.charge.ackWait '0s' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+      ].join('\n'),
+    ],
     ['limits that are no object', 'unlimited', 'limits is not an object'],
   ])(
     'applyBrokerPlan refuses %s, naming where it is, without calling connect',
