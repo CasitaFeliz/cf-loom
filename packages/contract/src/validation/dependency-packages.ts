@@ -1,6 +1,6 @@
 import { isEndpoint, isProvidedElement, providerOf } from '../declarations/index.ts';
 import type { Place } from '../walker/index.ts';
-import { type Declarations, listOf } from '../written/index.ts';
+import { type Declarations, isOwnProvided, listOf } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 import { lackOf, originAmong, type Provenance, packageLabelOf } from './provenance.ts';
 import type { ImportedContractPackage } from './validate.ts';
@@ -15,14 +15,18 @@ export type UsedProvider = {
   readonly holders: readonly Place[];
 };
 
-/** Every Provider whose Elements a Root's Dependencies and Subscriptions hold, in the order first met. */
+/**
+ * Every Provider whose Elements a Root's Dependencies and Subscriptions hold, in the order first
+ * met; the Service itself is none, since it installs no Contract Package of its own.
+ */
 export function usedProvidersOf({
+  root,
   dependencies,
   subscriptions,
-}: Pick<Declarations, 'dependencies' | 'subscriptions'>): readonly UsedProvider[] {
+}: Pick<Declarations, 'root' | 'dependencies' | 'subscriptions'>): readonly UsedProvider[] {
   const used = new Map<string, { elements: unknown[]; holders: Place[] }>();
   const hold = (at: Place, element: unknown) => {
-    if (!isProvidedElement(element)) {
+    if (!isProvidedElement(element) || isOwnProvided(root, element)) {
       return;
     }
     const name = providerOf(element);

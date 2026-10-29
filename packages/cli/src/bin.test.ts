@@ -4056,7 +4056,7 @@ describe.concurrent('cf-loom check', () => {
   );
 
   test.for(['codes', 'guards', 'exports'] as const)(
-    'a Baseline whose %s hold a name with a line break, exported, is written as JSON, so each Change stays on one line',
+    'a Baseline whose %s hold a name with a line break, exported, is one Change at its export, written as JSON on one line',
     async (section, { lab }) => {
       const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
       const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
@@ -4076,12 +4076,9 @@ describe.concurrent('cf-loom check', () => {
       const { ran } = await checkedAgainst(lab, { project, served });
 
       const approval = 'Breaking, needs a Breaking Change Approval';
-      const removed = [...new Set(['exports', section])].map(
-        (holder) => `${holder}."odd\\nname" removed: ${approval}`,
-      );
       expect(ran.stdout.split('\n')).toEqual([
         'Checked against @org/definitions@1.0.0',
-        ...removed,
+        `exports."odd\\nname" removed: ${approval}`,
         'Would publish @org/definitions@2.0.0 (major)',
         '',
       ]);

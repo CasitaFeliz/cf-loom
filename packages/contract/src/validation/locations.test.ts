@@ -290,6 +290,23 @@ describe('failure lines: a Snapshot nested too deep', () => {
     });
   });
 
+  test.for([
+    { what: 'an array', wide: () => Array.from({ length: 300_000 }, () => ({})) },
+    {
+      what: 'a map',
+      wide: () => Object.fromEntries(Array.from({ length: 300_000 }, (_, i) => [`k${i}`, {}])),
+    },
+  ])(
+    'a json example holding $what of 300,000 objects is no nesting failure, however wide it is',
+    ({ wide }) => {
+      const body: SchemaNode = { type: 'json', examples: [wide()] };
+
+      const failure = nestingFailureOf(service({ defs: { wide: body } }));
+
+      expect(failure).toBeUndefined();
+    },
+  );
+
   test('an Application holds no schema, so nothing nests too deep in it', () => {
     const application: ApplicationSnapshot = {
       format: 1,

@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import * as zm from 'zod/mini';
+import { z as z3 } from 'zod/v3';
 import type * as core from 'zod/v4/core';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -182,6 +183,34 @@ describe('schema types in every declaration', () => {
 
     expect(declare).not.toThrow();
     expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.bigint()'>>();
+  });
+
+  test('a zod/v3 schema in a Rejection’s body is a type error naming it, and generate refuses it at its field', () => {
+    const written = {
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'The order can no longer be changed',
+      body: z.object({ version: z3.string() }),
+    } as const;
+    type Slot = Parameters<typeof defineRejection<typeof written>>[0]['body'];
+
+    // @ts-expect-error cf-loom reads zod 4 schemas
+    const rejection = defineRejection(written);
+    const endpoint = defineEndpoint({ ...createOrder, rejections: [rejection] });
+
+    expectTypeOf<Slot>().toExtend<
+      Refusal<'not allowed: a value that is no zod 4 schema (zod/v3 is not read)'>
+    >();
+    expect(failuresOfEndpoint(endpoint)).toEqual([
+      expect.objectContaining({
+        kind: 'not-allowed',
+        construct: 'a value that is no zod 4 schema (zod/v3 is not read)',
+        steps: [
+          { kind: 'part', name: 'body' },
+          { kind: 'field', name: 'version' },
+        ],
+      }),
+    ]);
   });
 
   test('a z.coerce in a Guard’s demanded query is a type error naming it', () => {
@@ -447,6 +476,10 @@ const refusedInsideRows = {
     {
       name: 'z.date()',
       schema: z.object({ f: z.object({ at: z.date().optional().nonoptional() }) }),
+    },
+    {
+      name: 'a value that is no zod 4 schema (zod/v3 is not read)',
+      schema: z.object({ f: z.object({ at: z3.string() }) }),
     },
   ],
   'array.element': [{ name: 'z.date()', schema: z.object({ f: z.array(z.date()) }) }],
@@ -791,6 +824,28 @@ describe('what the types leave to generate', () => {
     const event = defineEvent({ ...base, body: z.object({ typed, untyped }) });
 
     expect(event.kind).toBe('event');
+  });
+
+  test('a field typed unknown is not read as a value that is no zod 4 schema', () => {
+    const shape: { readonly open: unknown } = { open: z.string() };
+
+    const endpoint = defineEndpoint({
+      ...listOrders,
+      success: { status: 200, body: z.object(shape) },
+    });
+
+    expect(endpoint.kind).toBe('endpoint');
+  });
+
+  test('a field that may be absent is not read as a value that is no zod 4 schema', () => {
+    const shape: { readonly maybe?: z.ZodString | undefined } = {};
+
+    const endpoint = defineEndpoint({
+      ...listOrders,
+      success: { status: 200, body: z.object(shape) },
+    });
+
+    expect(endpoint.kind).toBe('endpoint');
   });
 
   test('a schema typed by a type parameter compiles in a generic function’s declaration', () => {

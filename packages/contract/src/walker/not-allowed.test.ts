@@ -184,10 +184,9 @@ describe('walkSchemas: the Not allowed list', () => {
     ],
     [
       'z.stringFormat() of a known name with a check',
-      z.stringFormat('hex', () => true),
-      'z.stringFormat("hex")',
+      z.stringFormat('email', () => true),
+      'z.stringFormat("email")',
     ],
-    ['a regex-built format with its own regex', z.stringFormat('hex', /^[a-f]+$/), customPattern],
     ['z.url({ normalize })', z.url({ normalize: true }), 'z.url({ normalize })'],
     ['z.int32()', z.int32(), 'z.int32()'],
     ['z.uint32()', z.uint32(), 'z.uint32()'],
@@ -808,7 +807,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       },
     );
 
-    test('a cycle whose only id is refused is one no id names, so a use of it refuses a length check', () => {
+    test('a cycle whose only id is refused is named by it, so a use of it refuses a length check', () => {
       const treeOf = (id: string) => {
         const tree: z.ZodType = z.array(z.lazy(() => tree)).meta({ id });
         return tree;
@@ -820,13 +819,11 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       expect(refusalsOf(refusedId)).toEqual(
         refusedAll([
           failureAt('', '.meta({ id: "Tree" })', 'a camelCase name'),
-          failureAt('[]', unnamedCycle, '.meta({ id })'),
           failureAt('', minLengthName),
         ]),
       );
       expect(constructsOf(refusedId)).toEqual([
         '.meta({ id: "Tree" })',
-        unnamedCycle,
         ...constructsOf(walkBodyRaw(useOf(treeOf('tree')))),
       ]);
     });

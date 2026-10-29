@@ -1,6 +1,7 @@
 import type { $ZodType } from 'zod/v4/core';
 import {
   failuresOf,
+  isSchema,
   type LocatedSchema,
   type NotAllowed,
   type ObjectNode,
@@ -17,7 +18,6 @@ import {
   endpointParts,
   guardParts,
   isObjectPart,
-  isSchema,
   type LocatedCode,
   type LocatedEndpoint,
   type LocatedGuard,

@@ -1,16 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { publishedBy, schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Difference,
+  decodeSnapshot,
   type Field,
   type GuardSnapshot,
   type ObjectNode,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
+  publishedSnapshotOf,
   type RemovedCode,
   type SchemaNode,
   type Step,
@@ -159,32 +162,58 @@ function codeSite(code: string): ChangeSite {
   return { kind: 'code', code, visibility: 'public' };
 }
 
+function exportSite(name: string): ChangeSite {
+  return { kind: 'export', name, visibility: 'public' };
+}
+
+/** The exports naming a Guard, each under the Guard's own name. */
+function guardExports(...guards: readonly string[]): DefinitionsSnapshot['exports'] {
+  return Object.fromEntries(guards.map((guard) => [guard, { kind: 'guard', guard }]));
+}
+
+/** The exports naming a Rejection, each under its code. */
+function rejectionExports(...codes: readonly string[]): DefinitionsSnapshot['exports'] {
+  return Object.fromEntries(codes.map((code) => [code, { kind: 'rejection', code }]));
+}
+
 describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
-  test('adding a Guard is Additive', () => {
-    const proposed = aDefinitions({ guards: { authenticated: aGuard() } });
+  test('adding an exported Guard is one Additive Change, at its export', () => {
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard() },
+    });
 
     const changes = changesOf(aBaselineDefinitions(), proposed);
 
-    expect(changes).toEqual([additive(guardSite, { kind: 'added' })]);
+    expect(changes).toEqual([additive(exportSite('authenticated'), { kind: 'added' })]);
   });
 
-  test('removing a Guard is Breaking and needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
+  test('removing an exported Guard is one Breaking Change, at its export', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard() },
+    });
 
     const changes = changesOf(baseline, aDefinitions());
 
-    expect(changes).toEqual([breaking(guardSite, { kind: 'removed' })]);
+    expect(changes).toEqual([breaking(exportSite('authenticated'), { kind: 'removed' })]);
   });
 
-  test('renaming a Guard is a removal plus an addition', () => {
-    const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
-    const proposed = aDefinitions({ guards: { signedIn: aGuard() } });
+  test('renaming an exported Guard is a removal plus an addition, at its exports', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard() },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('signedIn'),
+      guards: { signedIn: aGuard() },
+    });
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      breaking(guardSite, { kind: 'removed' }),
-      additive({ kind: 'guard', name: 'signedIn', visibility: 'public' }, { kind: 'added' }),
+      breaking(exportSite('authenticated'), { kind: 'removed' }),
+      additive(exportSite('signedIn'), { kind: 'added' }),
     ]);
   });
 
@@ -294,39 +323,119 @@ describe('compatibilityReportOf, a Definitions Package’s Guards', () => {
     ]);
   });
 
-  test('removing a Guard whose Rejection is declared nowhere else is Breaking on the Guard and on its code', () => {
+  test('removing an exported Guard and the code only it answers is one Breaking Change, at its export', () => {
     const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
       guards: { authenticated: aGuard({ rejections: [unauthenticated] }) },
       codes: { [unauthenticated]: aCode({ status: 401 }) },
     });
 
     const changes = changesOf(baseline, aDefinitions());
 
+    expect(changes).toEqual([breaking(exportSite('authenticated'), { kind: 'removed' })]);
+  });
+
+  test('removing a code no export names, which a kept Guard answered, is only that Guard’s Additive rejection-removed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard({ rejections: [unauthenticated] }) },
+      codes: { [unauthenticated]: aCode({ status: 401 }) },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard() },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
     expect(changes).toEqual([
-      breaking(guardSite, { kind: 'removed' }),
-      breaking(codeSite(unauthenticated), { kind: 'removed' }),
+      additive(guardSite, { kind: 'rejection-removed', code: unauthenticated }),
     ]);
   });
 });
 
+describe('compatibilityReportOf, a Guard no export names, listed by a kept Guard', () => {
+  const session = 'session';
+  const demandingKey = aGuard({
+    demands: { headers: anOpenObject({ 'x-key': required(aString) }), query: anOpenObject() },
+  });
+  const listingNothing = aGuard();
+  const listingSession = aGuard({ guards: [session] });
+
+  test('adding it is only the listing Guard’s Neutral guards-changed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingNothing },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingSession, [session]: demandingKey },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'guards-changed' })]);
+  });
+
+  test('removing it is only the listing Guard’s Neutral guards-changed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingSession, [session]: demandingKey },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: listingNothing },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'guards-changed' })]);
+  });
+});
+
 describe('compatibilityReportOf, a Definitions Package’s codes', () => {
-  test('adding a Rejection is Additive', () => {
-    const proposed = aDefinitions({ codes: { [orderLocked]: aCode() } });
+  test('adding an exported Rejection is one Additive Change, at its export', () => {
+    const proposed = aDefinitions({
+      exports: rejectionExports(orderLocked),
+      codes: { [orderLocked]: aCode() },
+    });
 
     const changes = changesOf(aBaselineDefinitions(), proposed);
 
-    expect(changes).toEqual([additive(codeSite(orderLocked), { kind: 'added' })]);
+    expect(changes).toEqual([additive(exportSite(orderLocked), { kind: 'added' })]);
   });
 
-  test('removing a Rejection is Breaking and needs an Approval', () => {
-    const baseline = aBaselineDefinitions({ codes: { [orderLocked]: aCode() } });
+  test('removing an exported Rejection is one Breaking Change, at its export', () => {
+    const baseline = aBaselineDefinitions({
+      exports: rejectionExports(orderLocked),
+      codes: { [orderLocked]: aCode() },
+    });
 
     const changes = changesOf(baseline, aDefinitions());
 
-    expect(changes).toEqual([breaking(codeSite(orderLocked), { kind: 'removed' })]);
+    expect(changes).toEqual([breaking(exportSite(orderLocked), { kind: 'removed' })]);
   });
 
-  test('the code a Standard Rejection resolved to, gone, gives no Change, and its new code is added', () => {
+  test('removing an exported Rejection a kept Guard answers is one Breaking Change at its export, and the Guard’s Additive rejection-removed', () => {
+    const baseline = aBaselineDefinitions({
+      exports: { ...guardExports('authenticated'), ...rejectionExports(unauthenticated) },
+      guards: { authenticated: aGuard({ rejections: [unauthenticated] }) },
+      codes: { [unauthenticated]: aCode({ status: 401 }) },
+    });
+    const proposed = aDefinitions({
+      exports: guardExports('authenticated'),
+      guards: { authenticated: aGuard() },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([
+      breaking(exportSite(unauthenticated), { kind: 'removed' }),
+      additive(guardSite, { kind: 'rejection-removed', code: unauthenticated }),
+    ]);
+  });
+
+  test('the code a Standard Rejection resolved to, gone, and its new code give the Standard Rejection’s Change alone', () => {
     const baseline = aBaselineDefinitions({
       codes: { [notFound]: aCode({ origin: 'standard', status: 404 }) },
     });
@@ -338,7 +447,6 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      additive(codeSite(orderGone), { kind: 'added' }),
       neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
     ]);
   });
@@ -364,18 +472,33 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     expect(report).toEqual({ changes: [] });
   });
 
-  test('a removed code declared again is added and compared with what it last had', () => {
+  test('a removed code declared again through an export is added there and compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
       codes: { [orderLocked]: aRemovedCode({ status: 409 }) },
     });
-    const proposed = aDefinitions({ codes: { [orderLocked]: aCode({ status: 422 }) } });
+    const proposed = aDefinitions({
+      exports: rejectionExports(orderLocked),
+      codes: { [orderLocked]: aCode({ status: 422 }) },
+    });
 
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      additive(codeSite(orderLocked), { kind: 'added' }),
+      additive(exportSite(orderLocked), { kind: 'added' }),
       breaking(codeSite(orderLocked), { kind: 'status-changed', from: 409, to: 422 }),
     ]);
+  });
+
+  test('a removed code declared again as it last was is one Additive Change, at its export', () => {
+    const baseline = aBaselineDefinitions({ codes: { [orderLocked]: aRemovedCode() } });
+    const proposed = aDefinitions({
+      exports: rejectionExports(orderLocked),
+      codes: { [orderLocked]: aCode() },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([additive(exportSite(orderLocked), { kind: 'added' })]);
   });
 
   describe('a removed code whose body reaches a recursive def, declared again', () => {
@@ -412,7 +535,6 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       });
 
       expect(changes).toEqual([
-        additive(codeSite(orderLocked), { kind: 'added' }),
         breaking(codeSite(orderLocked), {
           kind: 'schema',
           position: 'success',
@@ -426,18 +548,18 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       ]);
     });
 
-    test('with the def it was removed with is only added, though the Snapshot’s def of that name has since grown a field', () => {
+    test('with the def it was removed with gives no Change at its code, though the Snapshot’s def of that name has since grown a field', () => {
       const changes = declaredAgain({
         removedWith: treeWith('label'),
         since: treeWith('label', 'note'),
         now: treeWith('label'),
       });
 
-      expect(changes).toEqual([additive(codeSite(orderLocked), { kind: 'added' })]);
+      expect(changes).toEqual([]);
     });
   });
 
-  test('a Standard Rejection resolving to a code a user Rejection once used is added and compared with what it last had', () => {
+  test('a Standard Rejection resolving to a code a user Rejection once used is compared with what it last had', () => {
     const baseline = aBaselineDefinitions({
       codes: {
         [notFound]: aCode({ origin: 'standard', status: 404 }),
@@ -452,7 +574,6 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     const changes = changesOf(baseline, proposed);
 
     expect(changes).toEqual([
-      additive(codeSite(orderGone), { kind: 'added' }),
       breaking(codeSite(orderGone), { kind: 'status-changed', from: 409, to: 404 }),
       neutral(codeSite(orderGone), { kind: 'origin-changed', from: 'local', to: 'standard' }),
       neutral(standardSite, { kind: 'code-changed', from: notFound, to: orderGone }),
@@ -479,14 +600,19 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
     ]);
   });
 
-  test('a Definitions Package’s Changes come: shared schemas, then Guards, then codes by code in code point order', () => {
-    const proposed = aDefinitions({
-      exports: schemaExports({ money: anOpenObject() }),
+  test('a Definitions Package’s Changes come: exports, then Guards, then codes by code in code point order', () => {
+    const baseline = aBaselineDefinitions({
       guards: { authenticated: aGuard() },
       codes: { [orderLocked]: aCode(), [orderGone]: aCode() },
     });
+    const query = anOpenObject({ page: optional(aString) });
+    const proposed = aDefinitions({
+      exports: schemaExports({ money: anOpenObject() }),
+      guards: { authenticated: aGuard({ demands: { ...aGuard().demands, query } }) },
+      codes: { [orderLocked]: aCode({ status: 422 }), [orderGone]: aCode({ status: 422 }) },
+    });
 
-    const changes = changesOf(aBaselineDefinitions(), proposed);
+    const changes = changesOf(baseline, proposed);
 
     expect(changes.map(({ site }) => [site.kind, placeOf(site)])).toEqual([
       ['export', 'money'],
@@ -495,4 +621,58 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
       ['code', orderLocked],
     ]);
   });
+});
+
+describe('compatibilityReportOf, one removal from a Definitions Package', () => {
+  const declared: DefinitionsSnapshot = JSON.parse(
+    readFileSync(
+      new URL('../../../../examples/org-definitions/contract.snapshot.json', import.meta.url),
+      'utf8',
+    ),
+  );
+
+  function decodedOf(snapshot: DefinitionsSnapshot) {
+    return decodeSnapshot(JSON.stringify({ ...snapshot, ...publishedAt('4.2.0') }));
+  }
+
+  const unusedName = /^is a (def|Guard|code) (no|nothing)\b/;
+
+  /**
+   * The declared Snapshot without one export and whatever only that export used, as `generate`
+   * would write it: each def, Guard or code the decoder refuses as unused is left out in turn, and
+   * any other refusal is reported whole.
+   */
+  function withoutExport(name: string): DefinitionsSnapshot {
+    const { [name]: _removed, ...exports } = declared.exports;
+    let held: Record<string, unknown> = { ...declared, exports };
+    for (let decoded = decodedOf(held as DefinitionsSnapshot); decoded.kind !== 'decoded'; ) {
+      const [part, key] = decoded.kind === 'malformed' ? decoded.at : [];
+      const container = typeof part === 'string' ? held[part] : undefined;
+      const isUnused = decoded.kind === 'malformed' && unusedName.test(decoded.reason);
+      if (
+        !isUnused ||
+        typeof key !== 'string' ||
+        typeof container !== 'object' ||
+        container === null
+      ) {
+        throw new Error(`Expected an unused name: ${JSON.stringify(decoded)}`);
+      }
+      const { [key]: _unused, ...kept } = container as Record<string, unknown>;
+      held = { ...held, [part as string]: kept };
+      decoded = decodedOf(held as DefinitionsSnapshot);
+    }
+    return held as DefinitionsSnapshot;
+  }
+
+  test.each(Object.keys(declared.exports))(
+    'removing the export %s, and what only it used, is one removed Change, at the export',
+    (name) => {
+      const published = publishedSnapshotOf(undefined, declared, publishedAt('4.2.0'));
+
+      const { changes } = compatibilityReportOf(published, withoutExport(name));
+
+      const removals = changes.filter(({ difference }) => difference.kind === 'removed');
+      expect(removals).toEqual([breaking(exportSite(name), { kind: 'removed' })]);
+    },
+  );
 });

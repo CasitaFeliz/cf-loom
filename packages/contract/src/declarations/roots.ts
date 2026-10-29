@@ -2,7 +2,9 @@ import type { Definitions } from './definitions.ts';
 import type { Dependency } from './dependency.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
-import type { DeclaredFieldsRule, JoinedNames } from './rules.ts';
+import type { ProviderNameOf } from './provided.ts';
+import type { NotPublicEndpoint, NotPublicSentence, OwnProviderSentence } from './refusals.ts';
+import type { DeclaredFieldsRule, JoinedNames, LiteralNames, Refusal } from './rules.ts';
 
 /**
  * What a Service's Root lists: its Groups, which list its Elements and Subscriptions, and its
@@ -28,19 +30,28 @@ type ApplicationContractDeclaration = {
   readonly dependencies?: readonly Dependency[];
 };
 
-/** Each Endpoint that is not Public out of the Dependencies an Application lists, as `getThing is internal`. */
-type NonPublicOf<Dependencies> = Dependencies extends readonly (infer Listed)[]
+/** The Endpoints the Dependencies of a declaration list. */
+type ListedEndpointsOf<Dependencies> = Dependencies extends readonly (infer Listed)[]
   ? Listed extends { readonly endpoints?: readonly (infer Selected)[] }
+    ? Selected
+    : never
+  : never;
+
+/**
+ * Each Endpoint that is not Public out of the Dependencies an Application lists, as
+ * `payments-service's getPayment is internal`.
+ */
+type NonPublicOf<Dependencies> =
+  ListedEndpointsOf<Dependencies> extends infer Selected
     ? Selected extends {
         readonly visibility: infer Visibility extends string;
         readonly name: infer Name extends string;
       }
       ? Visibility extends 'public'
         ? never
-        : `${Name} is ${Visibility}`
+        : NotPublicEndpoint<ProviderNameOf<Selected> & string, Name, Visibility>
       : never
-    : never
-  : never;
+    : never;
 
 /** What an Application must also satisfy: it depends on Public Endpoints only, as it runs outside the network. */
 type PublicOnlyRule<Declaration extends ApplicationContractDeclaration> = [
@@ -48,7 +59,9 @@ type PublicOnlyRule<Declaration extends ApplicationContractDeclaration> = [
 ] extends [never]
   ? unknown
   : {
-      readonly dependencies: `An Application depends on Public Endpoints only: ${JoinedNames<NonPublicOf<Declaration['dependencies']>>}`;
+      readonly dependencies: Refusal<
+        NotPublicSentence<JoinedNames<NonPublicOf<Declaration['dependencies']>>>
+      >;
     };
 
 /** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */
@@ -65,9 +78,35 @@ export type Root = Contract | Definitions;
 /** The kind of a Root, which its Snapshot's `kind` repeats and `cf-loom init` takes. */
 export type RootKind = Root['kind'];
 
+/** The Providers of the Endpoints a Service's Dependencies list and of the Events its Subscriptions receive. */
+type ProvidersOf<Declaration extends ServiceContractDeclaration> = LiteralNames<
+  | ProviderNameOf<ListedEndpointsOf<Declaration['dependencies']>>
+  | ProviderNameOf<SubscribedEventOf<Declaration['groups']>>
+>;
+
+/** The Events the Subscriptions of a declaration's Groups receive. */
+type SubscribedEventOf<Groups> = Groups extends readonly (infer Listed)[]
+  ? Listed extends { readonly subscriptions?: readonly (infer Subscribed)[] }
+    ? Subscribed extends { readonly event: infer Received }
+      ? Received
+      : never
+    : never
+  : never;
+
+/**
+ * What a Service must also satisfy: a Provider is another Service, so it depends on and subscribes
+ * through no Element of its own Contract Package.
+ */
+type OtherProvidersRule<Declaration extends ServiceContractDeclaration> =
+  Declaration['name'] extends ProvidersOf<Declaration>
+    ? { readonly name: Refusal<OwnProviderSentence<Declaration['name']>> }
+    : unknown;
+
 /** Declares a Service's Contract from everything it offers, keeps and requires. */
 export function defineService<const Declaration extends ServiceContractDeclaration>(
-  declaration: Declaration & NoInfer<DeclaredFieldsRule<Declaration, ServiceContractDeclaration>>,
+  declaration: Declaration &
+    OtherProvidersRule<Declaration> &
+    NoInfer<DeclaredFieldsRule<Declaration, ServiceContractDeclaration>>,
 ): ServiceContract<Declaration> {
   return freezeDeclaration('service', declaration);
 }

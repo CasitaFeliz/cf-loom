@@ -29,10 +29,16 @@ export {
   subjectOf,
   transportHeaderFitOf,
 } from './broker.ts';
+export type {
+  BrokerNeeds,
+  NeededDurableConsumer,
+  RoutedMessage,
+  RoutedSubscription,
+} from './broker-needs.ts';
+export { brokerNeedsOf } from './broker-needs.ts';
 export { jsonContentType, jsonMediaType } from './content-type.ts';
 export {
   deprecatedAtOfHeader,
-  deprecationHeader,
   deprecationHeaderOf,
   withDeprecation,
 } from './deprecation.ts';
@@ -77,7 +83,7 @@ export {
   sendableRetryAfterOf,
   successResponseOf,
 } from './responses.ts';
-export { isTextValue, textOfValue } from './text.ts';
+export { isTextValue, sharedTextOf, textOfValue } from './text.ts';
 export type { TextAcceptance } from './text-acceptance.ts';
 export { textAcceptanceOf } from './text-acceptance.ts';
 export type { TextSource } from './text-parts.ts';

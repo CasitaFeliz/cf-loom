@@ -12,17 +12,20 @@ import {
 /**
  * The package a test's Root sits in: named as the Root is, or `@org/definitions` for a
  * Definitions Package, with no Definitions Package installed, every Provider whose Elements its
- * Dependencies and Subscriptions hold installed as a Contract Package at 1.0.0 exporting them, and
- * a Root file that exports nothing else, unless the test gives otherwise.
+ * Dependencies and Subscriptions hold installed as a Contract Package at 1.0.0 exporting them, a
+ * Service's own never, since it does not install its own Contract Package, and a Root file that
+ * exports nothing else, unless the test gives otherwise.
  */
 export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): RootPackage {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const kind = typeof root === 'object' && root !== null ? Reflect.get(root, 'kind') : undefined;
+  const own = kind === 'service' ? name : undefined;
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
     packages: [],
-    contractPackages: providersOf(root).map(([provider, elements]) =>
-      anInstalledContract(provider, elements),
-    ),
+    contractPackages: providersOf(root)
+      .filter(([provider]) => provider !== own)
+      .map(([provider, elements]) => anInstalledContract(provider, elements)),
     rootExports: {},
     ...given,
   };

@@ -1,6 +1,11 @@
 import type { z } from 'zod';
 import { carriedCutOf, type Endpoint, providerOf } from '../declarations/index.ts';
-import { type ExportedCut, type SnapshotFormat, snapshotFormatOf } from '../snapshot/index.ts';
+import {
+  type ExportedCut,
+  nestingProblemOf,
+  type SnapshotFormat,
+  snapshotFormatOf,
+} from '../snapshot/index.ts';
 import { problemLineOf, readWith } from '../validation/index.ts';
 import { exportedCut } from './exported-structure.ts';
 import { formatDefiner } from './texts.ts';
@@ -15,8 +20,8 @@ const decodedByCarried = new WeakMap<object, ExportedCut>();
 
 /**
  * The exported Snapshot cut to a Provided Endpoint, which it carries, read by the format it names,
- * once per cut; a format this cf-loom does not read, or a cut its format does not describe, throws
- * rather than being read as far as it goes.
+ * once per cut; a format this cf-loom does not read, a cut nested past the levels a Snapshot holds,
+ * or a cut its format does not describe, throws rather than being read as far as it goes.
  */
 export function providedSnapshotOf(endpoint: Endpoint): ExportedCut {
   const provider = providerOf(endpoint);
@@ -49,6 +54,10 @@ function decodedFrom(provider: string, carried: unknown): ExportedCut {
     case 'malformed':
       throw new Error(`${exported} is malformed: ${problemLineOf(named)}`);
     case 'known': {
+      const tooDeep = nestingProblemOf(carried);
+      if (tooDeep !== undefined) {
+        throw new Error(`${exported} is malformed: ${problemLineOf(tooDeep)}`);
+      }
       const structured = readWith(structures[named.format], carried, formatDefiner);
       if (structured.kind === 'refused') {
         throw new Error(`${exported} is malformed: ${problemLineOf(structured.problems[0])}`);

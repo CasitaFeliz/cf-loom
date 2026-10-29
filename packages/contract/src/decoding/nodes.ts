@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   byCanonicalJson,
+  byShape,
   emptyConstraintOf,
   formatOptionKeysOf,
   isFormatOptionValue,
@@ -103,7 +104,7 @@ const nodes = [
       'holds no variant',
     ),
   }),
-  node('allOf', { items: inCanonicalOrder(child, byCanonicalJson) }),
+  node('allOf', { items: inCanonicalOrder(child, byShape) }),
   node('json', {}),
   refNode,
 ] as const;

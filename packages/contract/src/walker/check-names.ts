@@ -1,8 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: the keys are zod's ids of its check kinds and formats
 import type * as core from 'zod/v4/core';
 import type { CheckDef } from './check-defs.ts';
-import { formatConstructorsOf, isStringFormat } from './format-schemas.ts';
-import { isHashFormat } from './hash-formats.ts';
+import { formatConstructorsOf, isStringFormat, type RegexBuiltFormat } from './format-schemas.ts';
 import { type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 
 /** A check kind this walker was written for: every kind zod declares but those that set metadata. */
@@ -163,7 +162,16 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
   if (format === 'uuid' && version !== undefined) {
     return nameIn(uuidNames, version) ?? `z.uuid({ version: ${JSON.stringify(version)} })`;
   }
-  return isHashFormat(format) ? 'z.hash()' : orJoined(formatConstructorsOf(format).map(callOf));
+  return orJoined(formatConstructorsOf(format).map(callOf));
+}
+
+/**
+ * A format zod builds from a regex and checks through a function, named by every spelling that
+ * builds it: the same regex in `.regex()` is a check zod runs from data.
+ */
+export function refusedRegexBuiltFormat(format: string, built: RegexBuiltFormat): Refused {
+  const spellings = [...built.calls.map(callOf), refusedStringFormat(format).construct];
+  return { construct: orJoined(spellings), instead: `.regex(z.regexes.${built.regexName})` };
 }
 
 function callOf(call: string): string {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
+import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -33,7 +34,13 @@ function walkedTo(value: unknown) {
   return { kind: 'walked', value };
 }
 
-function refused(failures: readonly { readonly at: string; readonly construct: string }[]) {
+function refused(
+  failures: readonly {
+    readonly at: string;
+    readonly construct: string;
+    readonly instead?: string;
+  }[],
+) {
   const named = failures.map((failure) => ({ kind: 'not-allowed', ...failure }));
   return { kind: 'not-allowed', failures: named };
 }
@@ -1452,15 +1459,19 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
+  /** The CPU time a walk of the ring stays under. */
+  const ringCpuMilliseconds = 1000;
+
   test('a ring of 255 schemas walks fast', () => {
     const ring = aRingOf(255);
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, ringCpuMilliseconds);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(ringCpuMilliseconds);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1583,29 +1594,67 @@ describe('walkSchemas: recursion', () => {
     );
   });
 
+  /** A chain of `count` ids around `inner`, each holding the next. */
+  function aChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      schema = z.object({ next: schema }).meta({ id: `link${index}` });
+    }
+    return schema;
+  }
+
+  /** A chain of `count` ids around `inner`, each holding the next and itself, so on a cycle of its own. */
+  function aLoopedChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      const next = schema;
+      const link: z.ZodType = z
+        .object({
+          next,
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      schema = link;
+    }
+    return schema;
+  }
+
   /**
-   * Reads each failure tree once, so the chain takes well under a second; read afresh for each id,
-   * the trees cost seconds, past this test's timeout. The walk's memory also grows with the square
-   * of a chain of ids, so the chain stays at 7,000.
+   * How many times longer the chain's walk may take than a walk of as many ids, each on a cycle of
+   * its own, that refuses nothing: under 1 when the walk reads each failure tree once, and many times
+   * over 3 when it reads the trees afresh for each id. The walk's memory grows with the square of a
+   * chain of ids, so the chain stays at 7,000.
    */
-  const memoTimeout = 4_000;
+  const memoCpuRatio = 3;
+
+  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
+  const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
     timeout: memoTimeout,
   }, () => {
-    let schema = arraysAround(250, z.bigint());
-    for (let index = 0; index < 7_000; index++) {
-      schema = z.object({ next: schema }).meta({ id: `link${index}` });
-    }
+    const schema = aChainOf(7_000, arraysAround(250, z.bigint()));
+    const looped = aLoopedChainOf(7_000, arraysAround(250, z.string()));
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walkLooped = () =>
+      walkSchemas([{ at: placeAt('body'), schema: looped }], () => undefined);
 
-    const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walked = walk();
+    walkLooped();
+    const cpuRatio = cpuRatioOf(walk, walkLooped, memoCpuRatio);
 
     const constructs = constructsOf(walked).flat();
     const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
     expect(offCycle).toHaveLength(7_000);
     expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
     expect(constructs).toHaveLength(7_001);
+    expect(cpuRatio).toBeLessThan(memoCpuRatio);
   });
+
+  /** The CPU time a walk stays under when it walks the failing def once, not once per path. */
+  const manyPathsCpuMilliseconds = 1000;
 
   test('a failing def met by many paths is reported once and walked once', () => {
     const count = 26;
@@ -1623,15 +1672,16 @@ describe('walkSchemas: recursion', () => {
       steps.push(z.object(shape).meta({ id: `step${index}` }));
     }
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
   });
 });
 
@@ -1679,8 +1729,11 @@ describe('reachedDefsOf', () => {
 /** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */
 const depth = 5_000;
 
-/** A deep test walks thousands of schemas, which takes seconds on a CI runner with shared cores. */
-const deepTimeout = 60_000;
+/**
+ * A deep test walks thousands of schemas, which takes up to 8 s while the project's files run in
+ * parallel, and several times that on a CI runner that several runs share.
+ */
+const deepTimeout = 240_000;
 
 /**
  * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies
@@ -1982,5 +2035,222 @@ describe('walkSchemas: depth', () => {
         },
       ],
     });
+  });
+});
+
+describe('walkSchemas: the id a cycle’s schema wrote', () => {
+  function cycleWith(named: (schema: z.ZodObject) => z.ZodType): z.ZodType {
+    const node: z.ZodType = named(
+      z.object({
+        get children() {
+          return z.array(node);
+        },
+      }),
+    );
+    return node;
+  }
+
+  function droppedIdFailure(at: string, id: string) {
+    return {
+      at,
+      construct: 'a cycle without .meta({ id })',
+      instead: `.meta({ id: ${JSON.stringify(id)} }) last: zod drops it at any later call`,
+    };
+  }
+
+  test('an id that is no camelCase name gives its grammar line alone', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'tree_x' })));
+
+    expect(walked).toEqual({
+      located: [
+        refused([{ at: '', construct: '.meta({ id: "tree_x" })', instead: 'a camelCase name' }]),
+      ],
+      defs: {},
+    });
+  });
+
+  test('another key refused beside an id gives that key’s line alone', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'tree', title: 'x' })));
+
+    expect(walked).toEqual({
+      located: [refused([{ at: '', construct: '.meta({ title })' }])],
+      defs: {},
+    });
+  });
+
+  test('an id that is not a string gives its line alone', () => {
+    // @ts-expect-error zod types an id as a string
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 5 })));
+
+    expect(walked).toEqual({
+      located: [refused([{ at: '', construct: '.meta({ id }) that is not a string' }])],
+      defs: {},
+    });
+  });
+
+  test.each([
+    {
+      call: '.describe()',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).describe('A'),
+    },
+    {
+      call: '.meta()',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).meta({ description: 'A' }),
+    },
+    {
+      call: '.describe() twice',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).describe('A').describe('B'),
+    },
+  ])('an id a later $call dropped is named in the unnamed cycle’s line', ({ named }) => {
+    expect(walkBody(cycleWith(named))).toEqual({
+      located: [refused([droppedIdFailure('children[]', 'category')])],
+      defs: {},
+    });
+  });
+
+  test.each([
+    {
+      what: 'not a camelCase name',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'tree_x' }).describe('A'),
+    },
+    {
+      what: 'not a string',
+      // @ts-expect-error zod types an id as a string
+      named: (schema: z.ZodObject) => schema.meta({ id: 5 }).describe('A'),
+    },
+  ])(
+    'an id a later call dropped that is $what is not named: the line says to write one',
+    ({ named }) => {
+      expect(walkBody(cycleWith(named))).toEqual({
+        located: [refused([{ at: 'children[]', ...unnamedCycle }])],
+        defs: {},
+      });
+    },
+  );
+
+  test('an id a later check dropped is named in the unnamed cycle’s line', () => {
+    const list: z.ZodType = z
+      .array(z.lazy(() => list))
+      .meta({ id: 'list' })
+      .min(1);
+
+    expect(walkBody(list)).toEqual({
+      located: [refused([droppedIdFailure('[]', 'list')])],
+      defs: {},
+    });
+  });
+
+  test('a .describe() before the id walks to a ref', () => {
+    const walked = walkBody(cycleWith((schema) => schema.describe('A').meta({ id: 'category' })));
+
+    expect(walked).toEqual({
+      located: [walkedTo({ type: 'ref', name: 'category' })],
+      defs: {
+        category: {
+          type: 'object',
+          description: 'A',
+          fields: {
+            children: {
+              required: true,
+              schema: { type: 'array', items: { type: 'ref', name: 'category' } },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  test('getURL, camelCase as The Root states, is an id', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'getURL' })));
+
+    expect(walked.located).toEqual([walkedTo({ type: 'ref', name: 'getURL' })]);
+  });
+
+  /** The ids a member of a cycle may write, and the line each gives when it is refused. */
+  const writtenIds = [
+    { kind: 'valid', name: (schema: z.ZodType, index: number) => schema.meta({ id: `m${index}` }) },
+    {
+      kind: 'refused',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `m_${index}` }),
+    },
+    // @ts-expect-error zod types an id as a string
+    { kind: 'non-string', name: (schema: z.ZodType) => schema.meta({ id: 5 }) },
+    {
+      kind: 'dropped',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `d${index}` }).describe('d'),
+    },
+    {
+      kind: 'dropped-refused',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `d_${index}` }).describe('d'),
+    },
+    { kind: 'none', name: (schema: z.ZodType) => schema },
+  ] as const;
+
+  type Member = { readonly kind: (typeof writtenIds)[number]['kind']; readonly index: number };
+
+  /** A cycle of objects, each holding the next under `next` and the first closing it. */
+  function cycleOf(members: readonly Member[]): z.ZodType {
+    const schemas: z.ZodType[] = [];
+    for (const { kind, index } of members) {
+      const following = (index + 1) % members.length;
+      const object = z.object({
+        get next() {
+          return schemas[following] as z.ZodType;
+        },
+      });
+      const written = writtenIds.find((id) => id.kind === kind);
+      schemas.push(written === undefined ? object : written.name(object, index));
+    }
+    return schemas[0] as z.ZodType;
+  }
+
+  function isDroppedOrNone(kind: Member['kind']): boolean {
+    return kind === 'none' || kind === 'dropped' || kind === 'dropped-refused';
+  }
+
+  /** What the unnamed-cycle line says to write: the valid id the first member dropped, else any. */
+  function firstDroppedInstead(members: readonly Member[]): string {
+    const dropped = members.find(({ kind }) => kind === 'dropped');
+    return dropped === undefined
+      ? unnamedCycle.instead
+      : droppedIdFailure('', `d${dropped.index}`).instead;
+  }
+
+  function unnamedInsteadOf(location: { readonly kind: string } | undefined): string | undefined {
+    const failures = location !== undefined && 'failures' in location ? location.failures : [];
+    return (failures as readonly { construct: string; instead?: string }[]).find(
+      ({ construct }) => construct === unnamedCycle.construct,
+    )?.instead;
+  }
+
+  test('a cycle gets at most one line about its id: each refused id its own, else one unnamed-cycle line', () => {
+    const next = seededNext(377);
+    const draws = Array.from({ length: 300 }, () => {
+      const length = 1 + Math.floor(next() * 4);
+      return Array.from({ length }, (_, index) => ({
+        kind: writtenIds[Math.floor(next() * writtenIds.length)]?.kind ?? 'none',
+        index,
+      }));
+    });
+
+    for (const members of draws) {
+      const walked = walkBody(cycleOf(members));
+      const [location] = walked.located;
+      const constructs =
+        location?.kind === 'not-allowed' ? location.failures.map(({ construct }) => construct) : [];
+      const refusedIds = members.filter(({ kind }) => kind === 'refused' || kind === 'non-string');
+      const wroteAnId = members.some(({ kind }) => !isDroppedOrNone(kind));
+      const unnamedLines = constructs.filter((construct) => construct === unnamedCycle.construct);
+
+      expect(unnamedLines.length, JSON.stringify(members)).toBe(wroteAnId ? 0 : 1);
+      expect(constructs.length - unnamedLines.length, JSON.stringify(members)).toBe(
+        refusedIds.length,
+      );
+      if (!wroteAnId) {
+        expect(unnamedInsteadOf(location), JSON.stringify(members)).toBe(
+          firstDroppedInstead(members),
+        );
+      }
+    }
   });
 });
