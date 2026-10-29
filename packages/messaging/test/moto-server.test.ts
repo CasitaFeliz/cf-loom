@@ -1,6 +1,8 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS names its headers, actions and fields in PascalCase, as they travel
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
-import { networkInterfaces } from 'node:os';
+import { networkInterfaces, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aMotoServer, type MotoServer } from './moto-server.ts';
 
@@ -46,6 +48,17 @@ async function queueUrls(server: MotoServer): Promise<readonly string[]> {
 
 describe('a test moto server', () => {
   const started: MotoServer[] = [];
+  const directories: string[] = [];
+
+  /** Puts a `moto_server` that runs this Node script alone on PATH, to start a server that fails the way a real one may. */
+  async function stubMotoServer(script: string): Promise<void> {
+    const directory = await mkdtemp(join(tmpdir(), 'cf-loom-moto-stub-'));
+    directories.push(directory);
+    const executable = join(directory, 'moto_server');
+    await writeFile(executable, `#!${process.execPath}\n${script}`);
+    await chmod(executable, 0o755);
+    vi.stubEnv('PATH', directory);
+  }
 
   async function aStartedServer(): Promise<MotoServer> {
     const server = await aMotoServer();
@@ -56,6 +69,9 @@ describe('a test moto server', () => {
   afterEach(async () => {
     vi.unstubAllEnvs();
     await Promise.all(started.splice(0).map((server) => server.stop()));
+    await Promise.all(
+      directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
+    );
   });
 
   test('starting one without moto_server on PATH fails naming moto_server and where its pinned requirements are', async () => {
@@ -65,6 +81,16 @@ describe('a test moto server', () => {
 
     await expect(starting).rejects.toThrow(
       'moto_server is not on PATH: install moto from packages/messaging/test/moto-requirements.txt (see CLAUDE.md)',
+    );
+  });
+
+  test('a server that exits before it listens fails the start naming what it wrote on stderr', async () => {
+    await stubMotoServer("process.stderr.write('cannot bind the port\\n'); process.exit(3);");
+
+    const starting = aMotoServer();
+
+    await expect(starting).rejects.toThrow(
+      'moto_server exited before it listened: cannot bind the port',
     );
   });
 
@@ -104,6 +130,24 @@ describe('a test moto server', () => {
 
     expect(queuesBefore).toHaveLength(1);
     await expect(queueUrls(server)).resolves.toEqual([]);
+  });
+
+  test('reset fails naming the answer when the server refuses it', async () => {
+    await stubMotoServer(`
+      const { createServer } = require('node:http');
+      const server = createServer((request, response) => {
+        response.statusCode = 500;
+        response.end('state is stuck');
+      });
+      server.listen(0, '127.0.0.1', () => {
+        process.stderr.write(\` * Running on http://127.0.0.1:\${server.address().port}\\n\`);
+      });
+    `);
+    const server = await aStartedServer();
+
+    const resetting = server.reset();
+
+    await expect(resetting).rejects.toThrow('moto_server did not reset: 500 state is stuck');
   });
 
   test('a stopped server leaves its port closed', async () => {
