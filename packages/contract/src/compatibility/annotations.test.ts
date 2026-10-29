@@ -69,7 +69,10 @@ function nodesWithin(root: SchemaNode): readonly Annotated[] {
     const variants = Object.values((held['variants'] ?? {}) as Record<string, unknown>);
     const listed = [held['items'], held['options']].flat().filter((child) => child !== undefined);
     const single = [held['value'], held['rest']].filter((child) => child !== undefined);
-    pending.push(...fields.map(({ schema }) => schema), ...variants, ...listed, ...single);
+    const children = [...fields.map(({ schema }) => schema), ...variants, ...listed, ...single];
+    for (const child of children) {
+      pending.push(child);
+    }
   }
   return found;
 }

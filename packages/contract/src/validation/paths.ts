@@ -102,9 +102,13 @@ function pathProblemsOf(path: string): readonly PathProblem[] {
   }
   const segments = segmentsOf(path);
   for (const segment of segments) {
-    problems.push(...segmentProblems(segment, path));
+    for (const problem of segmentProblems(segment, path)) {
+      problems.push(problem);
+    }
   }
-  problems.push(...duplicateParamProblems(segments));
+  for (const problem of duplicateParamProblems(segments)) {
+    problems.push(problem);
+  }
   return problems;
 }
 

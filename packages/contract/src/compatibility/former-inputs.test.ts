@@ -1218,7 +1218,9 @@ function allowedChainsOf(
     const later = steps.slice(first + 1);
     const breaking = later.findIndex(isBreakingPublish);
     const allowed = breaking === -1 ? later : later.slice(0, breaking);
-    chains.push(...allowed.map((to) => [from, to] as const));
+    for (const to of allowed) {
+      chains.push([from, to]);
+    }
   }
   return chains;
 }

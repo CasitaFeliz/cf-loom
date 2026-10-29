@@ -142,5 +142,8 @@ function closeGroup(state: State, ancestor: Ancestor): void {
     return;
   }
   const remaining = state.openDefs.filter((def) => def.index < ancestor.index);
-  state.openDefs.splice(0, state.openDefs.length, ...remaining);
+  state.openDefs.length = 0;
+  for (const def of remaining) {
+    state.openDefs.push(def);
+  }
 }

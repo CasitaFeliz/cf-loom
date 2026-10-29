@@ -26,10 +26,23 @@ function constructsOf(schema: core.$ZodType): readonly string[] {
   const constructs: string[] = [];
   for (const { walked } of walkSchemas([{ at: bodyAt, schema }], () => undefined).located) {
     if (walked.kind === 'not-allowed') {
-      constructs.push(...refusalsIn(walked.tree).map((failure) => failure.construct));
+      for (const failure of refusalsIn(walked.tree)) {
+        constructs.push(failure.construct);
+      }
     }
   }
   return constructs;
+}
+
+/** A problem labelled for each construct a walk of the schema raises with no name, or one for the crash. */
+function namelessConstructProblems(label: string, schema: () => core.$ZodType): string[] {
+  try {
+    return constructsOf(schema())
+      .filter((construct) => construct === '')
+      .map(() => label);
+  } catch (error) {
+    return [`${label}: ${String(error)}`];
+  }
 }
 
 /** What names a spelling: the function or method followed by its call, after a `.` or a space. */
@@ -191,11 +204,9 @@ describe('a refused zod check', () => {
 
     for (const { name, check } of checks) {
       for (const [nodeName, node] of Object.entries(flavor.nodes())) {
-        try {
-          const constructs = constructsOf(checked(node, check));
-          problems.push(...constructs.filter((c) => c === '').map(() => `${name} on ${nodeName}`));
-        } catch (error) {
-          problems.push(`${name} on ${nodeName}: ${String(error)}`);
+        const label = `${name} on ${nodeName}`;
+        for (const problem of namelessConstructProblems(label, () => checked(node, check))) {
+          problems.push(problem);
         }
       }
     }
