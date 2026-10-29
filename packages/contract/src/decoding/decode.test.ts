@@ -3386,7 +3386,7 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_
   ])(
     'a Snapshot holding $what of 300,000 objects where its format holds one decodes',
     ({ wide }) => {
-      const published = aService({ defs: { a: { type: 'json', examples: [wide()] } } });
+      const published = aServiceUsing({ a: { type: 'json', examples: [wide()] } });
 
       const result = decodeSnapshot(JSON.stringify(published));
 
@@ -3411,7 +3411,7 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_
     const schema = z.json().meta({ examples: [items] });
     const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
     const node = located?.walked.kind === 'walked' ? located.walked.value : stringNode;
-    const published = aService({ defs: { a: node } });
+    const published = aServiceUsing({ a: node });
 
     const result = roundTrip(published);
 
