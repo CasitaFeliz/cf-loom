@@ -1,19 +1,12 @@
-import {
-  decodeSnapshot,
-  type PeerRanges,
-  type PublishedSnapshot,
-  problemLineOf,
-  type Snapshot,
-} from '@cf-loom/contract/internal';
+import type { PeerRanges, PublishedSnapshot, Snapshot } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
-import { newerFormatTextOf } from '../loading/index.ts';
 import { type Choice, choiceOf, unlistedAgainstOf } from './against.ts';
 import { type Found, foundIn } from './found-version.ts';
 import type { NpmPlace } from './npm.ts';
 import { versionsOf } from './package-versions.ts';
-import { snapshotTextOf } from './tarball.ts';
+import { downloadedSnapshotOf } from './tarball.ts';
 import { type UnknownPackage, unknownPackageOf } from './unknown-package.ts';
-import type { BaselineSource, Listing } from './versions.ts';
+import type { Listing } from './versions.ts';
 
 /** A package that lists versions, none of which cf-loom published. */
 export type NonePublished = { readonly kind: 'none-published' };
@@ -110,45 +103,17 @@ async function baselineAmong(
 /** The Baseline's `snapshot.json`, read from its tarball and checked against the version, with its peer ranges. */
 async function baselineRead(
   npm: NpmPlace,
-  { source, metadata }: Found,
+  { expected, metadata }: Found,
   { listing, chosen }: Pick<Baseline, 'chosen'> & { readonly listing: Listing },
 ): Promise<ReadBaseline> {
-  const text = await snapshotTextOf(npm, { spec: source.spec, digests: metadata.digests });
-  if (text.kind === 'failed') {
-    return text;
-  }
-  const snapshot = snapshotFrom(source, text.text);
-  if (snapshot.kind === 'failed') {
-    return snapshot;
+  const downloaded = await downloadedSnapshotOf(npm, {
+    expected,
+    digests: metadata.digests,
+  });
+  if (downloaded.kind === 'failed') {
+    return downloaded;
   }
   const { peers } = metadata;
-  const baseline = { kind: 'baseline', snapshot: snapshot.snapshot, peers, chosen } as const;
+  const baseline = { kind: 'baseline', snapshot: downloaded.snapshot, peers, chosen } as const;
   return { kind: 'read', listing, baseline };
-}
-
-function snapshotFrom(
-  source: BaselineSource,
-  text: string,
-): { readonly kind: 'snapshot'; readonly snapshot: PublishedSnapshot } | Failed {
-  const { spec, version, declared } = source;
-  const decoded = decodeSnapshot(text);
-  switch (decoded.kind) {
-    case 'no-json':
-      return failed(`${spec}'s snapshot.json is no JSON (${decoded.reason})`);
-    case 'newer-format':
-      return failed(newerFormatTextOf(`${spec}'s snapshot.json`, decoded.format));
-    case 'malformed':
-      return failed(`${spec}'s snapshot.json is malformed: ${problemLineOf(decoded)}`);
-    case 'decoded': {
-      const { snapshot } = decoded;
-      const isBaseline =
-        snapshot.name === declared.name &&
-        snapshot.kind === declared.kind &&
-        snapshot.version === version;
-      const found = `${snapshot.name}@${snapshot.version} (${snapshot.kind})`;
-      return isBaseline
-        ? { kind: 'snapshot', snapshot }
-        : failed(`${spec}'s snapshot.json is ${found}, not ${spec}`);
-    }
-  }
 }

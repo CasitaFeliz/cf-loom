@@ -1,52 +1,41 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
-import { gunzipSync } from 'node:zlib';
-import { ownOf } from '@cf-loom/contract/internal';
+import { join } from 'node:path';
 import { type Failed, failed } from '../child-process/index.ts';
-import { jsonFromNpm, type NpmPlace } from './npm.ts';
-import { fileNamed } from './tar-entries.ts';
+import type { NpmPlace } from './npm.ts';
+import {
+  type PackedTarball,
+  type PublishedIn,
+  packedTarballOf,
+  publishedSnapshotIn,
+  unreadable,
+} from './published-tarball.ts';
+import type { ExpectedSnapshot } from './versions.ts';
 
-const maxTarballBytes = 64 * 1024 * 1024;
-const snapshotFile = 'snapshot.json';
-
-/** The text of the `snapshot.json` inside a package's tarball. */
-export type SnapshotText = { readonly kind: 'text'; readonly text: string };
-
-/** The tarball of a package version: its spec, and the sha512 digests it must hash to. */
-export type Tarball = { readonly spec: string; readonly digests: readonly string[] };
-
-type Done<Value> = { readonly kind: 'done'; readonly value: Value };
-
-type Unreadable = { readonly kind: 'unreadable'; readonly reason: string };
+/** A version of a package in the registry: the Snapshot its tarball must hold, and the sha512 digests it must hash to. */
+export type Download = { readonly expected: ExpectedSnapshot; readonly digests: readonly string[] };
 
 /**
  * Downloads a package's tarball with `npm pack`, requires its bytes to hash to one of the sha512
- * digests `npm view` listed, and reads its single `snapshot.json` as strict UTF-8; the folder it
- * packs into is removed on a best-effort basis.
+ * digests `npm view` listed, and reads its published Snapshot; the folder it packs into is
+ * removed on a best-effort basis.
  */
-export async function snapshotTextOf(
-  place: NpmPlace,
-  tarball: Tarball,
-): Promise<SnapshotText | Failed> {
-  const { spec } = tarball;
-  const made = await attempt(() => mkdtemp(join(tmpdir(), 'cf-loom-baseline-')));
-  if (made.kind === 'unreadable') {
-    return unreadable(spec, made.reason);
-  }
+export async function downloadedSnapshotOf(
+  npm: NpmPlace,
+  download: Download,
+): Promise<PublishedIn | Failed> {
+  const { spec } = download.expected;
+  let folder: string;
   try {
-    return await textPacked(place, tarball, made.value);
-  } finally {
-    await removeFolderBestEffort(made.value);
-  }
-}
-
-async function attempt<Value>(step: () => Promise<Value>): Promise<Done<Value> | Unreadable> {
-  try {
-    return { kind: 'done', value: await step() };
+    folder = await mkdtemp(join(tmpdir(), 'cf-loom-baseline-'));
   } catch (e) {
-    return { kind: 'unreadable', reason: e instanceof Error ? e.message : String(e) };
+    return unreadable(spec, e instanceof Error ? e.message : String(e));
+  }
+  try {
+    return await snapshotPacked(npm, download, folder);
+  } finally {
+    await removeFolderBestEffort(folder);
   }
 }
 
@@ -55,104 +44,22 @@ async function removeFolderBestEffort(folder: string): Promise<void> {
   await rm(folder, { recursive: true, force: true }).catch(() => undefined);
 }
 
-async function textPacked(
-  place: NpmPlace,
-  { spec, digests }: Tarball,
+async function snapshotPacked(
+  npm: NpmPlace,
+  { expected, digests }: Download,
   folder: string,
-): Promise<SnapshotText | Failed> {
-  const packed = await packedInto(place, spec, folder);
+): Promise<PublishedIn | Failed> {
+  const { spec } = expected;
+  const packed = await packedTarballOf(npm, { spec, target: spec }, folder);
   if (packed.kind === 'failed') {
     return packed;
   }
-  const read = await tarballAt(packed.file);
-  if (read.kind === 'unreadable') {
-    return unreadable(spec, read.reason);
-  }
-  const digest = createHash('sha512').update(read.value).digest('base64');
-  if (!digests.includes(digest)) {
+  if (!digests.includes(sha512Of(packed))) {
     return failed(`${spec}'s tarball does not match the sha512 integrity npm view lists`);
   }
-  return textIn(spec, read.value);
+  return publishedSnapshotIn(packed.bytes, expected);
 }
 
-async function packedInto(
-  place: NpmPlace,
-  spec: string,
-  folder: string,
-): Promise<{ readonly kind: 'packed'; readonly file: string } | Failed> {
-  const label = `npm pack ${spec}`;
-  const args = ['pack', spec, '--pack-destination', folder];
-  const run = await jsonFromNpm(place, { label, args });
-  switch (run.kind) {
-    case 'json': {
-      const filename = filenameOf(run.value);
-      return filename === undefined
-        ? failed(`${label} printed no tarball`)
-        : { kind: 'packed', file: join(folder, filename) };
-    }
-    case 'refused':
-      return failed(run.message);
-    case 'failed':
-      return run;
-  }
-}
-
-function filenameOf(printed: unknown): string | undefined {
-  const [first] = Array.isArray(printed) ? printed : [];
-  const filename = ownOf(first, 'filename');
-  return typeof filename === 'string' && filename !== '' && basename(filename) === filename
-    ? filename
-    : undefined;
-}
-
-async function tarballAt(file: string): Promise<Done<Buffer> | Unreadable> {
-  const size = await attempt(async () => (await stat(file)).size);
-  if (size.kind === 'unreadable') {
-    return size;
-  }
-  if (size.value > maxTarballBytes) {
-    return { kind: 'unreadable', reason: 'is larger than 64 MiB' };
-  }
-  return await attempt(() => readFile(file));
-}
-
-function textIn(spec: string, tarball: Buffer): SnapshotText | Failed {
-  const archive = gunzipped(tarball);
-  if (archive.kind === 'failed') {
-    return unreadable(spec, archive.reason);
-  }
-  const found = fileNamed(archive.bytes, snapshotFile);
-  switch (found.kind) {
-    case 'broken':
-      return unreadable(spec, found.reason);
-    case 'missing':
-      return failed(`${spec} has no ${snapshotFile}`);
-    case 'repeated':
-      return failed(`${spec} has more than one ${snapshotFile}`);
-    case 'found':
-      return utf8Of(spec, found.contents);
-  }
-}
-
-function gunzipped(
-  tarball: Buffer,
-): { kind: 'gunzipped'; bytes: Buffer } | { kind: 'failed'; reason: string } {
-  try {
-    return { kind: 'gunzipped', bytes: gunzipSync(tarball, { maxOutputLength: maxTarballBytes }) };
-  } catch (e) {
-    const isTooLarge = e instanceof RangeError;
-    return { kind: 'failed', reason: isTooLarge ? 'is larger than 64 MiB unpacked' : 'is no gzip' };
-  }
-}
-
-function utf8Of(spec: string, bytes: Buffer): SnapshotText | Failed {
-  try {
-    return { kind: 'text', text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
-  } catch {
-    return failed(`${spec}'s ${snapshotFile} is no UTF-8 text`);
-  }
-}
-
-function unreadable(spec: string, reason: string): Failed {
-  return failed(`${spec}'s tarball cannot be read: ${reason}`);
+function sha512Of({ bytes }: PackedTarball): string {
+  return createHash('sha512').update(bytes).digest('base64');
 }

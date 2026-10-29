@@ -15,11 +15,13 @@ import {
 import type { InstalledPackage } from '../loading/index.ts';
 import type { BuiltProject, Project } from '../project/index.ts';
 import {
+  expectedSnapshotOf,
   type Listing,
   type NpmPlace,
-  type Publishing,
+  type Packing,
+  packedForPublish,
   packedPathsOf,
-  publishFolder,
+  publishTarball,
   unchangedSince,
 } from '../registry/index.ts';
 import type { DistTag } from '../versioning/index.ts';
@@ -72,11 +74,12 @@ type Build =
   | { readonly kind: 'by-author'; readonly entry: EntryToCheck }
   | { readonly kind: 'none' };
 
-/** A staged folder, as it is built or checked, as it is published, and as the package was listed before the Check. */
+/** A staged folder, as it is built or checked, as it is packed, the dist-tag it is published with, and as the package was listed before the Check. */
 type StagedPackage = {
   readonly mode: PublishMode;
   readonly build: Build;
-  readonly publishing: Publishing;
+  readonly packing: Packing;
+  readonly tag: DistTag;
   readonly listing: Listing;
 };
 
@@ -114,37 +117,47 @@ function stagedPackageOf(
   staged: InstalledPackage,
   { mode, project, declared, published, tag, listing }: ToPublish,
 ): StagedPackage {
-  const { packageName, folder } = staged;
+  const { packageName, folder, staging } = staged;
   const { version } = published;
-  const publishing = { folder, packageName, version, tag };
+  const declaring = { packageName, declared: { kind: published.kind, name: published.name } };
+  const expected = expectedSnapshotOf(version, declaring);
+  const { spec } = expected;
+  const packing = { folder, into: staging, expected };
   switch (published.kind) {
     case 'service': {
       const rootPath = join(project.directory, project.rootFile);
-      const building = { folder, rootPath, spec: `${packageName}@${version}` };
-      return { mode, build: { kind: 'with-tsc', building }, publishing, listing };
+      const building = { folder, rootPath, spec };
+      return { mode, build: { kind: 'with-tsc', building }, packing, tag, listing };
     }
     case 'application':
-      return { mode, build: { kind: 'none' }, publishing, listing };
+      return { mode, build: { kind: 'none' }, packing, tag, listing };
     case 'definitions': {
       const entry = { project, staged, declared };
-      return { mode, build: { kind: 'by-author', entry }, publishing, listing };
+      return { mode, build: { kind: 'by-author', entry }, packing, tag, listing };
     }
   }
 }
 
 async function builtAndPublished(
   npm: NpmPlace,
-  { mode, build, publishing, listing }: StagedPackage,
+  { mode, build, packing, tag, listing }: StagedPackage,
 ): Promise<PublishedPackage['put']> {
   const built = await builtAs(build);
   if (built.kind === 'failed') {
     return built;
   }
+  const packed = await packedForPublish(npm, packing);
+  if (packed.kind === 'failed') {
+    return packed;
+  }
   if (mode === 'dry-run') {
     return { kind: 'built' };
   }
   const unchanged = await unchangedSince(npm, listing);
-  return unchanged.kind === 'failed' ? unchanged : await publishFolder(npm, publishing);
+  if (unchanged.kind === 'failed') {
+    return unchanged;
+  }
+  return await publishTarball(npm, { file: packed.file, spec: packing.expected.spec, tag });
 }
 
 async function builtAs(build: Build): Promise<Built> {
