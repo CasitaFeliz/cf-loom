@@ -8,7 +8,7 @@ export const meta = {
 
 const LENSES = {
   design: 'design, C1–C21 and C29',
-  fidelity: 'fidelity, C22: the code against the plans and the documents',
+  fidelity: 'fidelity, C22: the code against the plans and the documents, and the glossary terms in the documents',
   correctness: 'correctness, C23–C26: bugs, edge cases, probes and the tests',
 };
 

@@ -68,10 +68,10 @@ function aConnect() {
 }
 
 const notHeld = (stream: string, subjects: readonly string[]) =>
-  `The stream ${stream} does not hold ${subjects.join(', ')}: apply the Service's broker plan`;
+  `The stream ${stream} does not hold ${subjects.join(', ')}: apply the Service's Broker plan`;
 
 const absent = (stream: string) =>
-  `The stream ${stream} does not exist: apply the Service's broker plan`;
+  `The stream ${stream} does not exist: apply the Service's Broker plan`;
 
 describe('jetstream()', () => {
   test.each(['stag_ing', 'a.b', 'Staging', '', 'a'.repeat(65)])(

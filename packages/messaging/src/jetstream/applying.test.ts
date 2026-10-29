@@ -906,7 +906,7 @@ describe('what applyBrokerPlan refuses', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, errorsDocument, testLimits));
 
     expect(error.message).toBe(
-      'The broker plan is not the plan of the document cf-loom broker-plan --json prints: prefix is missing',
+      'The value is not the Broker plan of the document cf-loom broker-plan --json prints: prefix is missing',
     );
     expect(service.opened).toHaveLength(0);
   });

@@ -208,7 +208,7 @@ function aWhile(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 300));
 }
 
-const apply = "apply the Service's broker plan";
+const apply = "apply the Service's Broker plan";
 
 afterEach(() => {
   vi.restoreAllMocks();
