@@ -1,4 +1,4 @@
-import type { Duration } from '../broker-limits/index.ts';
+import type { Duration, LimitsOf } from '../broker-limits/index.ts';
 
 /** The retentions NATS has, written once for the type of a stream's limits and for reading them. */
 export const retentions = ['limits', 'interest', 'workqueue'] as const;
@@ -35,15 +35,5 @@ export type DurableConsumerLimits = {
   readonly maxAckPending: number | 'unlimited';
 };
 
-/** Some of a stream's or Durable consumer's settings, each possibly `undefined`, which leaves it unset like a missing key. */
-type Some<Limits> = { readonly [Name in keyof Limits]?: Limits[Name] | undefined };
-
 /** Every setting of the plan's streams and Durable consumers, keyed by the names the plan prints, with defaults for whatever one does not set. */
-export type BrokerLimits = {
-  readonly streamDefaults?: Some<StreamLimits> | undefined;
-  readonly durableConsumerDefaults?: Some<DurableConsumerLimits> | undefined;
-  readonly streams?: Readonly<Record<string, Some<StreamLimits> | undefined>> | undefined;
-  readonly durableConsumers?:
-    | Readonly<Record<string, Some<DurableConsumerLimits> | undefined>>
-    | undefined;
-};
+export type BrokerLimits = LimitsOf<StreamLimits, DurableConsumerLimits>;
