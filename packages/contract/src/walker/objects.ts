@@ -1,10 +1,11 @@
 import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
 import { catchallRefusalKeyOf } from './def-types.ts';
+import { heldNodeOf } from './held-node.ts';
 import { inside } from './location.ts';
 import type { Field, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
-import { inShapeOrder, shapeKey } from './shapes.ts';
+import { shapeKey } from './shapes.ts';
 import { fieldStep, indexStep, keyStep, valueStep } from './steps.ts';
 import {
   allWalked,
@@ -114,7 +115,7 @@ export function* walkIntersection(
   if (leftNode?.type === 'object' && rightNode?.type === 'object') {
     return mergedObjects(leftNode, rightNode, at);
   }
-  return walked({ type: 'allOf', items: inShapeOrder(items.value) });
+  return walked(heldNodeOf({ type: 'allOf', items: items.value }, []));
 }
 
 /** What a catchall declares, which a Contract never does, worded as `catchalls` reads its def type. */

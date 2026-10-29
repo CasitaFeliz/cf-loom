@@ -52,21 +52,6 @@ export function byShape(left: SchemaNode, right: SchemaNode): number {
   return byCodePoint(shapeKey(left), shapeKey(right));
 }
 
-/**
- * An intersection's items as a Snapshot holds them: each shape once, the first declared kept with
- * its annotations, in shape order, so no annotation decides an item's place or whether two are one.
- */
-export function inShapeOrder(items: readonly SchemaNode[]): readonly SchemaNode[] {
-  const firstByShape = new Map<string, SchemaNode>();
-  for (const item of items) {
-    const key = shapeKey(item);
-    if (!firstByShape.has(key)) {
-      firstByShape.set(key, item);
-    }
-  }
-  return [...firstByShape.values()].sort(byShape);
-}
-
 function fieldShapes(fields: Readonly<Record<string, Field>>): Readonly<Record<string, Field>> {
   const shaped = Object.entries(fields).map(([name, field]) => [
     name,

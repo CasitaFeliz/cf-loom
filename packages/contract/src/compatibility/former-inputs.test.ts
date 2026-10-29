@@ -184,6 +184,12 @@ function anEntry(removedIn: string, body: Fields, defs: Defs = {}): FormerInput 
   };
 }
 
+/** The schema a field has in the first former Input's body. */
+function removedFieldOf(published: PublishedServiceSnapshot, name: string): SchemaNode | undefined {
+  const body = published.formerInputs[0]?.input.body;
+  return body?.type === 'object' ? body.fields[name]?.schema : undefined;
+}
+
 function formerInputsAfter(...versions: readonly ServiceSnapshot[]): readonly FormerInput[] {
   return publishedThrough(...versions).formerInputs;
 }
@@ -902,6 +908,56 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     ]).toEqual([['n~1', 'n~2'], 'decoded', published.formerInputs]);
   });
 
+  test('a removed field whose allOf names a def the publish names apart keeps the items in shape order, and the Snapshot decodes', () => {
+    const intersection: SchemaNode = { type: 'allOf', items: [ref('a'), ref('ab')] };
+    const baseline = aService({
+      body: { id, f: required(intersection) },
+      defs: { a: anObject({ x: optional(ref('a')) }), ab: anObject({ y: optional(ref('ab')) }) },
+    });
+    const proposed = aService({
+      body: { id, g: optional(ref('a')) },
+      defs: { a: anObject({ z: optional(ref('a')) }) },
+    });
+
+    const published = publishedThrough(baseline, proposed);
+
+    expect([
+      removedFieldOf(published, 'f'),
+      decodeSnapshot(canonicalTextOf(published)).kind,
+    ]).toEqual([{ type: 'allOf', items: [ref('ab'), ref('a~1')] }, 'decoded']);
+  });
+
+  test('a removed field whose allOf names two alias defs of one def holds that def once, and the Snapshot decodes', () => {
+    const intersection: SchemaNode = { type: 'allOf', items: [ref('p'), ref('q')] };
+    const baseline = aService({
+      body: { id, f: required(intersection) },
+      defs: { n: anObject({ v: optional(ref('n')) }), p: ref('n'), q: ref('n') },
+    });
+
+    const published = publishedThrough(baseline, aService({ body: { id } }));
+
+    expect([
+      removedFieldOf(published, 'f'),
+      decodeSnapshot(canonicalTextOf(published)).kind,
+    ]).toEqual([{ type: 'allOf', items: [ref('n')] }, 'decoded']);
+  });
+
+  test('a removed field whose allOf names defs the publish does not declare keeps the items as declared, and the Snapshot decodes', () => {
+    const intersection: SchemaNode = { type: 'allOf', items: [ref('a'), ref('ab')] };
+    const defs = {
+      a: anObject({ x: optional(ref('a')) }),
+      ab: anObject({ y: optional(ref('ab')) }),
+    };
+    const baseline = aService({ body: { id, f: required(intersection) }, defs });
+
+    const published = publishedThrough(baseline, aService({ body: { id } }));
+
+    expect([
+      removedFieldOf(published, 'f'),
+      decodeSnapshot(canonicalTextOf(published)).kind,
+    ]).toEqual([intersection, 'decoded']);
+  });
+
   test('a copied def keeps its name apart after the Snapshot frees it, so a plain union naming the def again is Breaking against it', () => {
     const former = anObject({ k: optional(aString) });
     const other = anObject({ z: optional(aNumber) });
@@ -1004,7 +1060,7 @@ function aGeneratedLeaf(next: () => number): SchemaNode | undefined {
 function aGeneratedSchema(next: () => number): SchemaNode {
   const leaf = aGeneratedLeaf(next);
   const inner: Fields = leaf === undefined ? {} : { inner: optional(leaf) };
-  switch (Math.floor(next() * 5)) {
+  switch (Math.floor(next() * 6)) {
     case 0:
       return leaf ?? aNumber;
     case 1:
@@ -1013,9 +1069,37 @@ function aGeneratedSchema(next: () => number): SchemaNode {
       return { type: 'array', items: anObject({ id, ...inner }) };
     case 3:
       return ref('tree');
+    case 4:
+      return aGeneratedAllOf(next);
     default:
       return ref('leaf');
   }
+}
+
+function nullableRef(name: string): SchemaNode {
+  return { type: 'ref', name, nullable: true };
+}
+
+/** Items an `allOf` may hold, listed in shape order, so any of its subsequences is held as a Snapshot holds it. */
+const allOfItems: readonly SchemaNode[] = [
+  anObject({ inner: optional(ref('leaf')) }),
+  { type: 'array', items: ref('sprig') },
+  { type: 'array', items: ref('tree') },
+  ref('leaf'),
+  nullableRef('leafy'),
+  ref('leafy'),
+  ref('sprig'),
+  nullableRef('tree'),
+  ref('tree'),
+  ref('twig'),
+  { type: 'union', options: [ref('twig'), aNumber] },
+];
+
+/** An `allOf` of two or more of `allOfItems`; `leaf` is a prefix of `leafy`, so naming `leaf` apart as `leaf~1` reorders them. */
+function aGeneratedAllOf(next: () => number): SchemaNode {
+  const drawn = allOfItems.filter(() => next() < 0.35);
+  const items = drawn.length >= 2 ? drawn : [ref('leaf'), ref('leafy')];
+  return { type: 'allOf', items };
 }
 
 /** A generated field's state: absent, or optional or required with a drawn schema. */
@@ -1046,19 +1130,41 @@ function generatedFieldsOf(next: () => number, before: Fields | undefined): Fiel
   return fields;
 }
 
-/** A generated version of `POST /orders`, its `tree` def drawn with or without a label, and the `leaf` def it reaches with or without `c`. */
-function aGeneratedService(next: () => number, fields: Fields): ServiceSnapshot {
-  const { [generatedParam]: page, ...body } = fields;
+/** The `tree` def drawn with or without a label, and the `leaf` def it reaches with or without `c`. */
+function aGeneratedTreeAndLeaf(next: () => number): { tree: SchemaNode; leaf: SchemaNode } {
   const label = next() < 0.5 ? { label: optional(next() < 0.5 ? aNumber : aString) } : {};
   const tree = anObject({ ...label, child: optional(ref('tree')), leaf: optional(ref('leaf')) });
   const drawn = next() < 0.5 ? { c: optional(next() < 0.5 ? aNumber : aString) } : {};
-  const leaf = anObject({ ...drawn, d: optional(aString) });
-  const usesTree = JSON.stringify(body).includes('"tree"');
-  const usesLeaf = usesTree || JSON.stringify(body).includes('"leaf"');
+  return { tree, leaf: anObject({ ...drawn, d: optional(aString) }) };
+}
+
+/** The defs a generated body reaches, with the alias `sprig` leading to `tree` or to the alias `twig`. */
+function aGeneratedDefs(next: () => number, body: Fields): Defs {
+  const { tree, leaf } = aGeneratedTreeAndLeaf(next);
+  const sprigLeadsTo = next() < 0.5 ? 'tree' : 'twig';
+  const text = JSON.stringify(body);
+  const reaches = (name: string) => text.includes(`"${name}"`);
+  const usesSprig = reaches('sprig');
+  const usesTwig = reaches('twig') || (usesSprig && sprigLeadsTo === 'twig');
+  const usesTree = usesTwig || usesSprig || reaches('tree');
+  const usesLeafy = reaches('leafy');
+  const usesLeaf = usesTree || usesLeafy || reaches('leaf');
+  return {
+    ...(usesTree ? { tree } : {}),
+    ...(usesLeaf ? { leaf } : {}),
+    ...(usesLeafy ? { leafy: anObject({ e: optional(ref('leaf')) }) } : {}),
+    ...(usesTwig ? { twig: ref('tree') } : {}),
+    ...(usesSprig ? { sprig: ref(sprigLeadsTo) } : {}),
+  };
+}
+
+/** A generated version of `POST /orders`, with the defs its body reaches. */
+function aGeneratedService(next: () => number, fields: Fields): ServiceSnapshot {
+  const { [generatedParam]: page, ...body } = fields;
   return aService({
     body: { id, ...body },
     query: page === undefined ? {} : { [generatedParam]: page },
-    defs: { ...(usesTree ? { tree } : {}), ...(usesLeaf ? { leaf } : {}) },
+    defs: aGeneratedDefs(next, body),
   });
 }
 
