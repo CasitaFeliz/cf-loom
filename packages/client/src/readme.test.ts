@@ -127,7 +127,7 @@ async function readmeExample(answer: () => Response) {
     case 'unknown-rejection':
       throw new Error(`${outcome.code}: ${outcome.message}`);
     case 'fault':
-      if (outcome.committed === 'no' && outcome.retryable) return null; // see Retrying
+      if (outcome.committed === 'no' && outcome.retryable) return null; // a Caller retries here, as Retrying shows
       throw new Error(`payments-service failed: ${outcome.source}`);
   }
 }

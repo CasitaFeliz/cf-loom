@@ -24,7 +24,7 @@ switch (outcome.kind) {
   case 'unknown-rejection':
     throw new Error(`${outcome.code}: ${outcome.message}`);
   case 'fault':
-    if (outcome.committed === 'no' && outcome.retryable) return null;   // retried as Retrying shows
+    if (outcome.committed === 'no' && outcome.retryable) return null;   // a Caller retries here, as Retrying shows
     throw new Error(`payments-service failed: ${outcome.source}`);
 }
 ```
@@ -70,7 +70,7 @@ Without a key, a call that timed out after the request was sent is never retried
 
 The Faults the client infers from what it met are in the table in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http), and hold wherever `fetch` runs. A 429 and a timeout before the request was sent are `committed: 'no'`, `retryable: true`, so both rules retry them; a 503 and a timeout after it was sent are `committed: 'unknown'`, `retryable: true`, so only a call with a key retries them. What differs is the `TypeError` `fetch` throws for a network failure. Node's carries a `cause.code`: a refused connection is `no-connection`, retried by both rules, and a lost one `connection-lost`, retried only with a key. A browser's is a bare `TypeError`, `connection-failed`: `committed: 'unknown'`, `retryable: false`, so neither rule retries it until `inferFault` relaxes it (see [In a browser](#in-a-browser-applications)). `retryAfter` is the `Retry-After` header as received, a string of whole seconds or an HTTP date.
 
-The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the examples leave out their imports and the Service's Resources type, as [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) says):
+The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the examples leave out their imports, and the Service's Resources has a `payments` Resource with `byKey` and `create`):
 
 ```ts
 // definitions/src/definitions/guards/idempotency-key.guard.ts
