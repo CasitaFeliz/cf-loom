@@ -24,7 +24,10 @@ Work in this order, and do not propose a fix before step 3:
 5. Offer two or three fixes at the level of the cause. For each: the symptoms and open issues it removes, its cost, a
    sketch of what it changes in the public API, and what it deletes (C28). Keeping the local fix is an option only
    with an argument why the cause is not worth fixing.
-6. Recommend one, with the strongest argument against it.
+6. Recommend one, with the strongest argument against it. Prototype it in the probe directory and run on it the
+   reproductions, every instance found, the existing tests of the files it changes, and, when it changes a walk, a
+   fold or a stored format, a depth and size probe at two sizes against main. List under **Unverified** only what the
+   prototype could not run, and say which of those the recommendation rests on.
 
 Write nothing in the worktree. Your final message is:
 

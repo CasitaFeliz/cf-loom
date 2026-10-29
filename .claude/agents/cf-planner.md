@@ -16,8 +16,9 @@ depend on this one. Write the plan file with every item of section 1, in this or
 - For each shared rule the plan adds, name the issues that will consume it, so it lands where they can reuse it.
 - Check every claim against the documents and the code, with file and line. What they settle goes under "Already
   settled", never under questions.
-- Treat a rule whose only job is keeping two sources in step, a config option, a safeguard or a second name for an
-  existing concept as a sign the design is wrong: redesign, or list it as a Root-cause check to run.
+- Treat a rule whose only job is keeping two sources in step, a config option, a safeguard, a second name for an
+  existing concept, or a copy of something cf-loom already decides or derives (in a type, a fake or root tooling, a v1
+  cut included) as a sign the design is wrong: redesign, or list it as a Root-cause check to run before the approval.
 - Decide what [Decisions](../../WORKFLOW.md#decisions) lets the main session decide, and list it. Ask at most about
   five questions, each as Decisions says, with the scenario and the facts it rests on, verified or not.
 
