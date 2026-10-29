@@ -5,13 +5,13 @@ import type { Entered } from './recursion-state.ts';
 import { type FailureTree, isFailureTree, type Walked } from './walked.ts';
 
 /**
- * The schemas a walk answers from memory, each kept with its group and its verdict on a cycle for
- * the whole walk and its answer for as long as that is kept, and whether a failure holds a schema
- * refused for its depth.
+ * Every schema a walk entered, kept for the whole walk so a closed group is final, and the answer
+ * of each it answers from memory, kept for the walk or the declaration.
  */
 export type Remembered = {
+  readonly enter: (entered: Entered) => void;
   readonly remember: (entered: Entered, answer: Walked) => void;
-  /** The schema as the walk last remembered it, its answer gone once forgotten. */
+  /** The schema as the walk last entered it, with its verdict and any answer still kept. */
   readonly enteredOf: (schema: core.$ZodType) => Entered | undefined;
   /** Forgets the answers each declaration walks afresh, and returns their schemas. */
   readonly forgetInDeclaration: () => readonly core.$ZodType[];
@@ -36,6 +36,9 @@ export function startRemembered(): Remembered {
     holdsUnnamedCycle: holdingReaderOf(isUnnamedCycle),
   };
   return {
+    enter: (entered) => {
+      state.enteredBySchema.set(entered.schema, entered);
+    },
     remember: (entered, answer) => remember(state, entered, answer),
     enteredOf: (schema) => state.enteredBySchema.get(schema),
     forgetInDeclaration: () => forgetInDeclaration(state),
@@ -49,12 +52,8 @@ export function startRemembered(): Remembered {
  */
 function remember(state: State, entered: Entered, answer: Walked): void {
   entered.answer = answer;
-  state.enteredBySchema.set(entered.schema, entered);
-  const isKeptInDeclaration = answer.kind === 'not-allowed' && state.holdsUnnamedCycle(answer.tree);
-  if (isKeptInDeclaration) {
+  if (answer.kind === 'not-allowed' && state.holdsUnnamedCycle(answer.tree)) {
     state.keptInDeclaration.add(entered);
-  } else {
-    state.keptInDeclaration.delete(entered);
   }
 }
 

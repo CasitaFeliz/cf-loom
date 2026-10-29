@@ -12,7 +12,10 @@ export type Mix = 'mixed' | 'ids' | 'arrays';
 
 const holdings = ['array', 'lazy', 'union', 'intersection', 'optional', 'getter'] as const;
 
-/** How a schema holds another: in an array, a `z.lazy()`, a union, an intersection, or a getter. */
+/**
+ * How a schema holds another: in an array, a `z.lazy()`, a union, an intersection, an `.optional()`
+ * field, or a getter.
+ */
 type Holding = (typeof holdings)[number];
 
 /** What one schema of a random graph is drawn with. */

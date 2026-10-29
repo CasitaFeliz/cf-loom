@@ -8,16 +8,15 @@ import type { ReachedSchema, Walked } from './walked.ts';
 export type Entering = ReachedSchema & { readonly id: string | undefined };
 
 /**
- * A schema the walk entered, numbered in walk order, with the lowest number it reaches back to,
- * whether a schema reached it back, and whether the strongly connected group it belongs to is
- * still being walked: until then, a schema that reaches it reaches that group. Whether the walk
- * judged it on a cycle, and what it answers it with from memory while it does.
+ * A schema the walk entered: its place in the search for strongly connected groups and, once
+ * judged, its verdict on a cycle and its answer from memory.
  */
 export type Entered = Entering & {
   readonly index: number;
   low: number;
-  reached: boolean;
-  open: boolean;
+  isReached: boolean;
+  /** While its group is still being walked, a schema that reaches it reaches that group. */
+  isOpen: boolean;
   isOnCycle: boolean;
   answer: Walked | undefined;
 };

@@ -12,10 +12,9 @@ import { type Entered, isRemembered, type State } from './recursion-state.ts';
 import { type Failed, failed, refusedBeside, type Walked, walked } from './walked.ts';
 
 /**
- * An id names a cycle: on a schema that lies on none it is refused, beside any other failure. A
- * walk that refused a schema inside for its depth did not see all it reaches, so it does not judge.
- * Off a cycle, a schema reaches nothing on the path above it, so its walk does not depend on where
- * it is met: its failure, refused or unjudged, answers every later use.
+ * An id names a cycle, so on a schema that lies on none it is refused, unless the walk refused a
+ * schema inside for its depth and did not see all it reaches. Off a cycle, the failure does not
+ * depend on where the schema is met, so it answers every later use.
  */
 export function offCycle(state: State, entered: Entered, node: Walked): Walked {
   if (entered.id === undefined) {

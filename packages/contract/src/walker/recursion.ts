@@ -11,11 +11,8 @@ import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
 /**
  * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
  * strongly connected group of schemas is written once under `defs` and is a `ref` wherever it
- * is used, whichever schema the walk enters the group at. A schema the walk answers from memory
- * keeps the group it belongs to, so answering it counts as an edge to that group. A schema with an
- * id is walked once: its def, or its failure, answers every later use; a failure that holds a
- * cycle no id names, once per declaration. A schema entered more than 256 schemas below its root,
- * as written, is refused there and not entered.
+ * is used, whichever schema the walk enters the group at. A schema with an id the walk accepts is
+ * walked once, and one entered more than 256 schemas below its root, as written, is refused there.
  */
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walking) => Walking;
@@ -56,7 +53,7 @@ function* within(state: State, entering: Entering, walk: () => Walking): Walking
   const node = isTooDeep ? notAllowed(entering.at, refused.writtenTooDeep) : yield* walk();
   state.ancestors.pop();
   reachBack(state, entered.low);
-  entered.isOnCycle ||= entered.reached || entered.low < entered.index;
+  entered.isOnCycle ||= entered.isReached || entered.low < entered.index;
   const result = entered.isOnCycle
     ? writeDef(state, entered, node)
     : offCycle(state, entered, node);
@@ -70,7 +67,7 @@ function* within(state: State, entering: Entering, walk: () => Walking): Walking
   return result;
 }
 
-/** A schema entered on the path and in an open group, judged on a cycle if an earlier walk of it was. */
+/** A schema entered on the path and in an open group, on a cycle if any earlier walk of it judged so. */
 function enter(state: State, entering: Entering): Entered {
   const index = state.count++;
   const isOnCycle = state.remembered.enteredOf(entering.schema)?.isOnCycle === true;
@@ -78,11 +75,12 @@ function enter(state: State, entering: Entering): Entered {
     ...entering,
     index,
     low: index,
-    reached: false,
-    open: true,
+    isReached: false,
+    isOpen: true,
     isOnCycle,
     answer: undefined,
   };
+  state.remembered.enter(entered);
   state.ancestors.push(entered);
   state.open.push(entered);
   return entered;
@@ -95,7 +93,7 @@ function rememberedOf(state: State, entering: Entering): Walked | undefined {
   if (entered === undefined || answer === undefined) {
     return undefined;
   }
-  if (entered.open) {
+  if (entered.isOpen) {
     reachBackTo(state, entered);
   }
   state.memos.reached(entering.schema, entering.at);
@@ -161,7 +159,7 @@ function reachBack(state: State, low: number): void {
 
 /** The schema being walked now reaches back to one whose group is still open. */
 function reachBackTo(state: State, reached: Entered): void {
-  reached.reached = true;
+  reached.isReached = true;
   reachBack(state, reached.index);
 }
 
@@ -171,7 +169,7 @@ function closeGroup(state: State, entered: Entered): void {
     return;
   }
   for (let member = state.open.pop(); member !== undefined; member = state.open.pop()) {
-    member.open = false;
+    member.isOpen = false;
     if (member === entered) {
       return;
     }

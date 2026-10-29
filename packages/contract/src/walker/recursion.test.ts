@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
-import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
+import { cpuMillisecondsOf, cpuRatioOf, growthOf } from '../../test/growth.ts';
 import {
   idOf,
   type Mix,
@@ -1968,7 +1968,7 @@ describe('walkSchemas: recursion', () => {
       for (const index of graph.reached) {
         const id = idOf(graph, index);
         const isJudged = !graph.isOnCycle[index] && !graph.reachesTooDeep[index];
-        const isAccepted = graph.namings[index] === 'id' || graph.namings[index] === 'nullableId';
+        const isAccepted = acceptedIds.includes(graph.namings[index] ?? 'none');
         if (isJudged && isAccepted && id !== undefined && !told.has(id)) {
           untold.push(id);
         }
@@ -2034,33 +2034,48 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    function cpuMillisecondsOfBody(schema: z.ZodType) {
-      const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
-      return cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
+    /**
+     * How many times longer a fan twice as long takes: about 2 when each id is walked once, and
+     * 2 to the power of the half length when each use walks it again.
+     */
+    const walkedOnceGrowth = 8;
+
+    /** A fan walked again at every use takes seconds a run, and `growthOf` runs it up to nine times. */
+    const fanTimeout = 240_000;
+
+    function growthOfFans(
+      count: number,
+      extra: (self: () => z.ZodType) => Record<string, z.ZodType>,
+    ) {
+      const walkOf = (size: number) => {
+        const schema = aFanOf(size, extra);
+        return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+      };
+      return growthOf(walkOf, { small: count / 2, large: count }, walkedOnceGrowth);
     }
 
-    test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', () => {
-      const fan = aFanOf(18, () => ({}));
+    test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', {
+      timeout: fanTimeout,
+    }, () => {
+      const growth = growthOfFans(18, () => ({}));
 
-      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
-
-      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+      expect(growth).toBeLessThan(walkedOnceGrowth);
     });
 
-    test('a fan of 11 defs each cut for its depth, each holding the next twice, walks each once', () => {
-      const fan = aFanOf(11, cutBack);
+    test('a fan of 10 defs each cut for its depth, each holding the next twice, walks each once', {
+      timeout: fanTimeout,
+    }, () => {
+      const growth = growthOfFans(10, cutBack);
 
-      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
-
-      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+      expect(growth).toBeLessThan(walkedOnceGrowth);
     });
 
-    test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', () => {
-      const fan = aFanOf(18, () => ({ unnamed: anUnnamedCycle() }));
+    test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', {
+      timeout: fanTimeout,
+    }, () => {
+      const growth = growthOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
 
-      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
-
-      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+      expect(growth).toBeLessThan(walkedOnceGrowth);
     });
 
     test('a def cut for its depth used at two locations is the failure walked at the first, at both', () => {
