@@ -88,7 +88,8 @@ plan comment on the issue:
   ([C26](CODING_STANDARDS.md#tests));
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
-- the new terms it adds to [CONTEXT.md](CONTEXT.md);
+- the new terms it adds to [CONTEXT.md](CONTEXT.md), and every existing use of them in the documents, which the PR
+  spells as the entry does;
 - what the documents already settle that the issue relies on, kept apart from what is new;
 - the decisions the main session took itself, and the questions for the user ([Decisions](#decisions)).
 
@@ -136,7 +137,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | Lens | Checks |
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 and C29 |
-| Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22) |
+| Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22); the documents' use of the glossary's terms ([CLAUDE.md](CLAUDE.md#documents)) |
 | Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more

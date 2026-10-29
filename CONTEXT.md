@@ -153,7 +153,7 @@ The Broker's named, persistent position of one Subscription, or of one Command's
 _Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:
-An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the plan; it is no part of a Contract or a Snapshot.
+An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the Broker plan; it is no part of a Contract or a Snapshot.
 _Avoid_: namespace, environment, prefix (alone)
 
 **Broker message id**:
@@ -226,15 +226,15 @@ _Avoid_: unit call, manual call
 
 **Resources**:
 What a Service hands `serve` and `consume` once, at startup, for its Handlers to reach what lies outside the Contract: its repositories, the clients of its Providers, its EventPublisher and CommandSender. Each Handler takes the ones it needs.
-_Avoid_: dependencies (a Dependency is declared in a Contract), adapters (a broker or host adapter), context (what Guards provide), environment, container; and a REST resource, which a Contract calls an Endpoint
+_Avoid_: dependencies (a Dependency is declared in a Contract), adapters (a Broker or host adapter), context (what Guards provide), environment, container; and a REST resource, which a Contract calls an Endpoint
 
 **Issue**:
 One way a value broke its part of the Contract: the part and path, cf-loom's code and a message, never the received value.
 _Avoid_: error, violation
 
-**Plan**:
-A desired state the tooling derives from Contracts for infrastructure it does not manage: the broker plan, the Streams and Durable consumers a Service needs on the Broker. The organization decides how to apply it.
-_Avoid_: manifest, deployment config
+**Broker plan**:
+The Streams and Durable consumers a Service needs on the Broker: a desired state the tooling derives from Contracts for infrastructure it does not manage. The organization decides how to apply it.
+_Avoid_: plan (alone), manifest, deployment config
 
 **EventPublisher**:
 What a Service publishes its Events with.
@@ -274,7 +274,7 @@ _Avoid_: previous snapshot, reference
 
 **Former Input**:
 An Endpoint's query and body as published, with the fields a version removed from them present as the Callers built before that version still send them, kept in the published Snapshot with the defs they reach; the Compatibility Check compares what the Endpoint declares with each. Rewritten onto the Endpoint's query and body at every publish; forgotten once it adds no field to them, or once the Endpoint is Retired.
-_Avoid_: previous Input, input history, old shape, removed Input (the body a Caller no longer sends is removed; a former Input is kept)
+_Avoid_: previous Input, input history, old shape, removed Input (the body a Caller no longer sends is removed; a Former Input is kept)
 
 **Reader schema** (a Reader, for short):
 A schema generated from a Snapshot for whoever reads the headers and body of a Success or a Rejection, or a Message body: every object in it open and every Open Enum with its Unknown case, so it admits what any later compatible version may send.

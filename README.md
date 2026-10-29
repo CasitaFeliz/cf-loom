@@ -1,6 +1,6 @@
 # cf-loom
 
-Organization-agnostic tooling for service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools, and in `examples/` fictional Services and the Definitions Package they share, used as end-to-end tests; never a real Service's Contract.
+Organization-agnostic tooling for Service Contracts: HTTP Endpoints and messaging, written in TypeScript with zod. This repository holds the tools, and in `examples/` fictional Services and the Definitions Package they share, used as end-to-end tests; never a real Service's Contract.
 
 Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for changing a Contract are in [COMPATIBILITY.md](COMPATIBILITY.md), how the pieces fit in [ARCHITECTURE.md](ARCHITECTURE.md), and the Snapshot format in [SNAPSHOT.md](SNAPSHOT.md). How each package is used is in its README, below.
 
@@ -14,7 +14,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The server's adapter for `node:http` |
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
-| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a broker plan |
+| [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a Broker plan |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
@@ -25,7 +25,7 @@ Each package's README lists what it exports. How the packages relate to each oth
 
 ## A first Service
 
-Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through `memory()` in their tests; billing's `over-nats.test.ts` applies the plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' Message Handler for `ChargeCard` handle.
+Two fictional Services in `examples/` follow these steps, from their declarations to `cf-loom package`, and their tests run with cf-loom's own: [`orders-service`](examples/orders-service), a Provider with a Guard, Rejections, an Open Enum and a Private Endpoint, which publishes the Internal Event `OrderCreated`, handles it through a Subscription of its own and sends the Command `ChargeCard`; and [`billing-service`](examples/billing-service), a Service with one Endpoint and one Subscription, whose Handlers sit with its own code in its Group's folder, `src/billing/`, and its generated files in `src/generated/` through `layout`, that depends on orders-service through its generated Contract Package, calls it with `client`, receives its `OrderCreated`, and fakes it in its tests with `fakeProvider`. Both run their Messages over NATS JetStream in `main.ts`, which reads `NATS_URL` and `BROKER_PREFIX`, and through `memory()` in their tests; billing's `over-nats.test.ts` applies the Broker plans `cf-loom broker-plan --json` prints, orders' first, to a nats-server of its own, starts both `main.ts` and places an order over HTTP, which billing's Subscription and orders' Message Handler for `ChargeCard` handle.
 
 ### Layout
 
@@ -143,15 +143,15 @@ Put `.cf-loom/` in `.gitignore`.
 
 ### Generate
 
-`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the readers, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). Which files a formatter must leave byte for byte, and the LF line endings that the `.gitattributes` `init` writes keeps, are described under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
+`cf-loom generate` writes the Stub of every missing Handler, regenerates the Handler map and the Readers file, and writes `contract.snapshot.json` (see [Stubs and the Handler map](packages/handlers/README.md#stubs-and-the-handler-map) and [Where it lives](SNAPSHOT.md#where-it-lives) in SNAPSHOT.md). Which files a formatter must leave byte for byte, and the LF line endings that the `.gitattributes` `init` writes keeps, are described under [What the commands print and write](packages/cli/README.md#what-the-commands-print-and-write) in the CLI README.
 
 ### Implement
 
-Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the pairing its Stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
+Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](packages/handlers/README.md#endpointhandler) or a [GuardHandler](packages/handlers/README.md#guardhandler) with `@cf-loom/handlers`, taking its Endpoint or Guard; a [Message Handler](packages/messaging/README.md#message-handlers) the same way, taking the Pairing its Stub takes from `readers` (`handle(readers.commands.chargeCardV1, …)`). What a Handler reaches outside the Contract, its EventPublisher and CommandSender (see [Connecting](packages/messaging/README.md#connecting)), a client of another Service built with `client` from its Contract Package (see [Consuming a Contract](packages/client/README.md#consuming-a-contract)) or its database, it takes as Resources, which `src/main.ts` builds and hands `serve` and `consume` (see [Resources](packages/handlers/README.md#resources)).
 
-### Apply the broker plan
+### Apply the Broker plan
 
-A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's plan before its Subscribers' (the limits are the organization's: see [Applying the plan](packages/messaging/README.md#applying-the-plan) in the messaging README for them, for the prefix and for what applying never removes):
+A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the Broker plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's Broker plan before its Subscribers' (the limits are the organization's: see [Applying the Broker plan](packages/messaging/README.md#applying-the-broker-plan) in the messaging README for them, for the prefix and for what applying never removes):
 
 ```ts
 // scripts/apply-broker-plan.ts
@@ -171,7 +171,7 @@ await applyBrokerPlan({ connect: () => connect({ servers }) }, plan, limits);
 
 ### Serve
 
-`src/main.ts` connects messaging with the broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
+`src/main.ts` connects messaging with the Broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
 
 ### Test
 
