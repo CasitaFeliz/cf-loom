@@ -6844,6 +6844,77 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(putRequestsOf(reading)).toEqual([]);
   });
 
+  test.for([
+    ['dependencies', 'portal:../shared'],
+    ['dependencies', 'jsr:@org/shared'],
+    ['dependencies', 'patch:left@1.0.0#./left.patch'],
+    ['dependencies', '../shared'],
+    ['dependencies', './shared'],
+    ['dependencies', '/opt/shared'],
+    ['dependencies', '~/shared'],
+    ['dependencies', '.shared'],
+    ['dependencies', 'shared\\lib'],
+    ['dependencies', 'shared.tgz'],
+    ['dependencies', 'shared.TGZ'],
+    ['dependencies', 'shared.tar.gz'],
+    ['dependencies', 'git+file:///opt/shared'],
+    ['dependencies', 'git+https://example.org/org/shared.git'],
+    ['optionalDependencies', 'git+ssh://git@example.org/org/shared.git#v2'],
+    ['optionalDependencies', 'github:org/shared#v2'],
+    ['optionalDependencies', 'org/shared'],
+    ['optionalDependencies', 'https://example.org/shared-1.0.0.tgz'],
+    ['peerDependencies', 'npm:@org/shared@workspace:*'],
+    ['peerDependencies', 'npm:shared@file:../shared'],
+    ['peerDependencies', 'npm:org/shared'],
+    ['peerDependencies', 'NPM:shared@file:../shared'],
+    ['peerDependencies', 'npm:shared.tgz'],
+    ['peerDependencies', 'npm:shared.tar.gz'],
+    ['peerDependencies', 'npm:.shared'],
+    ['peerDependencies', 'npm:@org/.shared'],
+  ] as const)(
+    'a Definitions Package whose %s list the range %s fails dry-run, as no registry install resolves it',
+    async ([field, range], { lab }) => {
+      const project = await aGeneratedProject(lab, aBuiltDefinitions({ [field]: { left: range } }));
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+      const lists = `package.json lists left in ${field} as ${range}`;
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      const refused = `${lists}, which npm cannot install from the registry\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
+      expect(putRequestsOf(registry)).toEqual([]);
+      expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    ['an exact version', '1.2.3'],
+    ['a caret', '^1.2.3'],
+    ['a tilde', '~1.2.3'],
+    ['a comparator range', '>=1.2.0 <2.0.0 || 3.x'],
+    ['any version', '*'],
+    ['a dist-tag', 'next'],
+    ['an npm: alias of a package', 'npm:@org/shared'],
+    ['an npm: alias of a caret', 'npm:@org/shared@^1.0.0'],
+    ['an npm: alias of a dist-tag', 'npm:shared@beta'],
+    ['an npm: alias in upper case', 'NPM:shared@^1.0.0'],
+  ] as const)(
+    'a Definitions Package depending on %s (%s) is published as it lists it',
+    async ([, range], { lab }) => {
+      const project = await aGeneratedProject(
+        lab,
+        aBuiltDefinitions({ dependencies: { left: range } }),
+      );
+
+      const { ran } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+      const would =
+        'Would publish @org/definitions@1.0.0 (first version): --dry-run stopped before npm publish';
+      expect(ran.stdout.split('\n').at(-2)).toBe(would);
+      expect(ran.status).toBe(0);
+    },
+  );
+
   test('a Definitions Package’s own lifecycle scripts do not run', async ({ lab }) => {
     const scripts = {
       prepack: 'exit 1',
