@@ -1730,7 +1730,7 @@ describe('cf-loom generate: a configured layout', () => {
       status: 3,
       stdout: '',
       stderr:
-        'endpoints.createOrder is src/shared/orders/create-order.handler.ts, which a link leads out of src/ or into src/contract/: give it another path in the layout of cf-loom.config.ts\n',
+        `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outsideSrcClause}: ${replaceLinkFix}\n`,
     });
   });
 
@@ -5107,6 +5107,12 @@ describe('cf-loom generate and verify: a Handler path the layout fills meets the
       layout: "{ command: 'src/x.{group}.v{version}.handler.ts' }",
       placed: 'commands.ChargeCard@1 is src/x.d.v1.handler.ts',
     },
+    {
+      name: 'a Group named d filling a Subscription’s path',
+      files: withRoot(aMessagingService(), paymentsNamed('d')),
+      layout: "{ subscription: 'src/{name}.{group}.handler.ts' }",
+      placed: 'subscriptions.auditCreated is src/audit-created.d.handler.ts',
+    },
   ])(
     '$name fills a declaration file’s name and fails generate and verify with exit 3',
     ({ files, layout, placed }) => {
@@ -5146,6 +5152,8 @@ function refusedImportLine(
 }
 
 const outsideSrcClause = 'a link leads out of src/ or into src/contract/';
+const replaceLinkFix =
+  'replace the link with a folder or file under src/, or give it another path in the layout of cf-loom.config.ts';
 const beneathSrcClause = 'must be under src/ and outside src/contract/';
 
 describe('cf-loom generate and verify: only a Handler path cf-loom could have placed is recorded', () => {
@@ -5246,6 +5254,29 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
     expect(read(outside, 'get-order.handler.ts')).toBe(implemented);
   });
 
+  test('a recorded Handler import through a link into src/contract/ fails generate and verify with exit 1, and nothing moves', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const implemented = read(project, 'src/endpoints/orders/get-order.handler.ts');
+    symlinkSync(join(project, 'src/contract/endpoints'), join(project, 'src/shared'), 'dir');
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text.replace('./endpoints/orders/get-order.handler.ts', './shared/get-order.handler.ts'),
+    );
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line = refusedImportLine(
+      'src/handlers.generated.ts',
+      { label: 'endpoints.getOrder', at: 'src/shared/get-order.handler.ts' },
+      outsideSrcClause,
+    );
+    expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toContain(line);
+    expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(implemented);
+  });
+
   test.skipIf(isRoot)(
     'a folder under src/ linked out of the project is never read for the record, and its generated files stay (skipped as root)',
     () => {
@@ -5318,7 +5349,7 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
       const generated = cfLoom(project, 'generate');
       const verified = cfLoom(project, 'verify');
 
-      const stderr = `${line}: give it another path in the layout of cf-loom.config.ts\n`;
+      const stderr = `${line}: ${replaceLinkFix}\n`;
       expect(generated).toEqual({ status: 3, stdout: '', stderr });
       expect(verified).toEqual({ status: 3, stdout: '', stderr });
       expect(treeOf(outside, '.')).toEqual(before);
