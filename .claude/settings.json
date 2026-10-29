@@ -3,9 +3,21 @@
     "PreToolUse": [
       {
         "hooks": [
-          { "command": "node \"$CLAUDE_PROJECT_DIR/scripts/one-question.ts\"", "type": "command" }
+          {
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/one-question.ts\"",
+            "type": "command"
+          }
         ],
         "matcher": "AskUserQuestion"
+      },
+      {
+        "hooks": [
+          {
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/shared-state-commands.ts\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       }
     ]
   },
