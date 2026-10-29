@@ -275,6 +275,7 @@ describe('serve: matching a request to an Endpoint', () => {
                 message: expect.any(String),
               },
             ],
+            omittedIssues: 0,
           },
         },
       },
