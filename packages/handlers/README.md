@@ -172,6 +172,7 @@ Which test runner, mocking library, fixtures or end-to-end tools a Service uses 
 
 ## Types
 
+- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare, given as a literal or through a variable; a value whose shape the Contract gives is open (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - `Outcome<typeof getOrder>`, what an EndpointHandler builds: `success(…)`, one of the Endpoint's Rejections with its headers and body (its own, its Guards', not found when listed and not implemented; never invalid input, which the runtime answers), or a Fault; `CheckedOutcome<typeof getOrder>`, what its direct call returns, the Success with its status, a Rejection as built with its headers and body parsed, or a Fault.
 - `Admission<typeof apiKey>`, what a GuardHandler builds: `admit(…)` with the Context its Guard provides, one of the Guard's Rejections, or a Fault; `CheckedAdmission<typeof apiKey>`, what its direct call returns, a Rejection as built.
 - `isRejectionOf(outcome, rejection)`, whether a direct call's answer is that Rejection, a Standard one included, narrowing it with its headers and body typed and its `rejection` to that declaration.

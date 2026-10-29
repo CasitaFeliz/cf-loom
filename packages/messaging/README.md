@@ -277,11 +277,12 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 
 ## Types
 
+- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare, given as a literal or through a variable; a value whose shape the Contract gives is open (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - `Messaging`, `{ publisher, sender, consume, close }`: one connection's messaging, what `messaging()` and `memory()` resolve to; `close` takes `CloseOptions`, `{ signal? }`.
-- `MessagingOptions`, `{ onServiceFault?, onBrokerTrouble? }`: what is operational about messaging and no part of the Contract. A field it does not declare is a type error, given as a literal or through a variable, in `messaging()` and in `memory()` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
-- `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes, always given, besides the Handler map: the Resources its Message Handlers take, required exactly when some Message Handler takes any. A field it does not declare is a type error, given as a literal or through a variable, and a function that wraps `consume` types its parameters as the concrete types (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `MessagingOptions`, `{ onServiceFault?, onBrokerTrouble? }`: what is operational about messaging and no part of the Contract.
+- `ConsumeOptions<Resources>`, `{ resources }`: what `consume` takes, always given, besides the Handler map: the Resources its Message Handlers take, required exactly when some Message Handler takes any.
 - `EventPublisher` and `CommandSender`: `publish` and `send`, typed by the Contract's Events and Commands, each body typed by its Message Version, `BodyOf<typeof orderCreatedV2>` for that one (see [Types](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#types) in the contract README).
-- `MessageOptions`, `{ factId, headers? }`: what a `publish` or `send` call carries besides its bodies. A field it does not declare is a type error, given as a literal or through a variable (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `MessageOptions`, `{ factId, headers? }`: what a `publish` or `send` call carries besides its bodies.
 - `Published`, `{ factId, duplicates }`, and `Sent`, `{ factId, duplicate }`: what `publish` and `send` resolve to.
 - `ConsumedFault`: what `onServiceFault` receives, with `declaration`, the Subscription or the Command's Message Version, `name`, the declaration's name (`ChargeCard@1` for a Command), and the Delivery's `deliveryCount` and `lastAttempt`: `invalid-body`, `returned` or `thrown`.
 - `BrokerTrouble`: what `onBrokerTrouble` receives, with `declaration`, `name`, the declaration's name (`ChargeCard@1` for a Command), and the unprefixed `durable` and `stream`: `pull-failed` with its `cause`, or `recovered`.
