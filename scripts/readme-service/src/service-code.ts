@@ -1,4 +1,4 @@
-import { type Client, client } from '@cf-loom/client';
+import { client, type ReceivedOutcome } from '@cf-loom/client';
 import type { MessageMeta } from '@cf-loom/handlers';
 import { type Broker, messaging, type OutgoingMessage } from '@cf-loom/messaging';
 import type { BrokerLimits, BrokerPlan, JetStreamConnecting } from '@cf-loom/messaging/jetstream';
@@ -45,7 +45,7 @@ export const charged: string[] = [];
 /** Each Message the Service handed its Broker, in the order it handed them. */
 export const published: OutgoingMessage[] = [];
 /** Each Outcome of getPayment the settlePayment Handler received, in the order it received them. */
-export const received: Awaited<ReturnType<Client<typeof paymentsDependency>['getPayment']>>[] = [];
+export const received: ReceivedOutcome<typeof paymentsDependency, 'getPayment'>[] = [];
 
 export const orders: Orders = {
   find: async (orderId, callerId) =>

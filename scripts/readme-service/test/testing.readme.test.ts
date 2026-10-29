@@ -26,7 +26,7 @@ describe('the testing README’s fakeProvider example', () => {
 });
 
 describe('the testing README’s verify example', () => {
-  test('it verifies a fake whose steps were all taken', async () => {
+  test('the verify example’s Handler takes the Fake Provider’s one Step, and verify throws nothing', async () => {
     const verified = await import('../snippets/testing-faking-providers-2.ts');
 
     expect(verified.payments.calls('getPayment')).toHaveLength(1);

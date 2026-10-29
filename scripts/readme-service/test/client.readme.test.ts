@@ -18,7 +18,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** A payments-service fake whose createPayment answers 503 with `retryAfter`, then its Success. */
+/** A payments-service Fake Provider whose createPayment answers 503 with `Retry-After`, then its Success. */
 function busyOnce(retryAfter: string) {
   const provider = fakeProvider(paymentsDependency, { baseUrl });
   provider
@@ -48,6 +48,28 @@ describe('the client README’s Consuming a Contract', () => {
       {},
     ]);
   });
+
+  test('amountOf throws for another Rejection, an Unknown Rejection and a Fault that may have happened', async () => {
+    const provider = fakeProvider(paymentsDependency, { baseUrl });
+    provider
+      .on('getPayment')
+      .once((r) => r.reject('NOT_IMPLEMENTED'))
+      .once((r) => r.unknownRejection('CARD_EXPIRED'))
+      .once((r) => r.reset());
+    vi.stubGlobal('fetch', provider.fetch);
+
+    const answered = [
+      await amountOf('pay-1').catch(String),
+      await amountOf('pay-2').catch(String),
+      await amountOf('pay-3').catch(String),
+    ];
+
+    expect(answered).toEqual([
+      'Error: Not implemented yet',
+      'Error: CARD_EXPIRED: CARD_EXPIRED',
+      'Error: payments-service failed: connection-lost',
+    ]);
+  });
 });
 
 describe('the client README’s Retrying', () => {
@@ -71,6 +93,62 @@ describe('the client README’s Retrying', () => {
     expect(outcome).toEqual({ kind: 'success', status: 201, body: { id: 'p-1', amount: 1200 } });
     expect(keys).toEqual([keys[0], keys[0]]);
     expect([...stored.values()]).toEqual([{ id: 'p-1', amount: 1200 }]);
+  });
+
+  test('pay stores each payment under its own idempotency key', async () => {
+    vi.stubGlobal('fetch', serve(paymentsContract, paymentsHandlers, { resources }));
+
+    await pay(1200);
+    await pay(800);
+
+    expect([...stored.values()]).toEqual([
+      { id: 'p-1', amount: 1200 },
+      { id: 'p-2', amount: 800 },
+    ]);
+  });
+
+  test('pay stops after three attempts', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const provider = fakeProvider(paymentsDependency, { baseUrl });
+    provider.on('createPayment').otherwise((r) => r.status(503));
+    vi.stubGlobal('fetch', provider.fetch);
+
+    const paying = pay(1200);
+    await vi.runAllTimersAsync();
+    const outcome = await paying;
+
+    expect(outcome).toMatchObject({ kind: 'fault', status: 503 });
+    expect(provider.calls('createPayment')).toHaveLength(3);
+  });
+
+  test('pay does not retry a Fault that is not retryable', async () => {
+    const provider = fakeProvider(paymentsDependency, { baseUrl });
+    provider.on('createPayment').otherwise((r) => r.status(502));
+    vi.stubGlobal('fetch', provider.fetch);
+
+    const outcome = await pay(1200);
+
+    expect(outcome).toMatchObject({ kind: 'fault', status: 502, retryable: false });
+    expect(provider.calls('createPayment')).toHaveLength(1);
+  });
+
+  test('pay waits one second when the Fault carries no Retry-After', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const provider = fakeProvider(paymentsDependency, { baseUrl });
+    provider
+      .on('createPayment')
+      .once((r) => r.status(503))
+      .otherwise((r, { body }) => r.success({ id: 'p-1', amount: body.amount }));
+    vi.stubGlobal('fetch', provider.fetch);
+
+    const paying = pay(1200);
+    await vi.advanceTimersByTimeAsync(999);
+    const callsBefore = provider.calls('createPayment').length;
+    await vi.advanceTimersByTimeAsync(1);
+    const outcome = await paying;
+
+    expect(callsBefore).toBe(1);
+    expect(outcome).toMatchObject({ kind: 'success', status: 201 });
   });
 
   test('pay waits the seconds Retry-After gives before it retries', async () => {

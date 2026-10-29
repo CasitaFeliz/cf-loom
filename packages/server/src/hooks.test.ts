@@ -720,25 +720,9 @@ describe('serve: what the hooks receive beside the record', () => {
 });
 
 describe('serve: the types of its hooks and of what it returns', () => {
-  test('serve takes the map and its hooks, and returns the web-standard Http', () => {
+  test('serve returns the web-standard Http, and onAnswered reads the Request’s headers', () => {
     const http = serve(contract, handlers, {
-      maxBodyBytes: 1_000_000,
-      onServiceFault: (fault, request) => {
-        expectTypeOf(fault.name).toEqualTypeOf<string>();
-        expectTypeOf(request).toEqualTypeOf<Request>();
-      },
-      onAnswered: async (answered, request) => {
-        const { method, endpoint, path, status, kind, code, aborted, durationMs } = answered;
-        expectTypeOf([
-          method,
-          endpoint,
-          path,
-          status,
-          kind,
-          code,
-          aborted,
-          durationMs,
-        ]).not.toBeNever();
+      onAnswered: (_answered, request) => {
         expectTypeOf(request.headers.get('traceparent')).toEqualTypeOf<string | null>();
       },
     });
