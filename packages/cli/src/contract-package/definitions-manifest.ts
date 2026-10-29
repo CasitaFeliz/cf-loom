@@ -11,17 +11,17 @@ export type DefinitionsManifest =
 /** The fields of a package.json whose dependencies npm installs with the package. */
 const installedFields = ['dependencies', 'optionalDependencies', 'peerDependencies'] as const;
 
-/** A spec npm reads as a path, a URL or a protocol: it holds `:`, `/` or `\`, or starts with a dot. */
-const notRegistrySpec = /[:/\\]|^\./;
+/** What npm reads as a path, a URL or a protocol: text that holds `:`, `/` or `\`, or starts with a dot. */
+const notRegistryText = /[:/\\]|^\./;
 
-/** A spec npm reads as a file: it ends as a tarball's name does. */
+/** What npm reads as a file: text that ends as a tarball's name does. */
 const tarballName = /\.(?:tgz|tar\.gz|tar)$/i;
 
 /** The start of an `npm:` alias, which npm reads case-insensitively. */
 const aliasPrefix = /^npm:/i;
 
-/** An `npm:` alias that names a registry package, capturing the spec after the `@` that follows the name. */
-const aliasedPackage = /^npm:(?:@[^@/\\:]+\/)?[^@/\\:]+(?:@(.*))?$/i;
+/** An `npm:` alias that names a registry package, capturing its name without a scope and the spec after the `@` that follows the name. */
+const aliasedPackage = /^npm:(?:@[^@/\\:]+\/)?([^@/\\:]+)(?:@(.*))?$/i;
 
 /** A dependency a package.json lists under a field. */
 type Listed = { readonly field: string; readonly name: string; readonly range: string };
@@ -121,12 +121,13 @@ function uninstallableIn(
  */
 function isRegistryRange(range: string): boolean {
   if (!aliasPrefix.test(range)) {
-    return isVersionOrTag(range);
+    return isRegistryText(range);
   }
   const alias = aliasedPackage.exec(range);
-  return alias !== null && isVersionOrTag(alias[1] ?? '');
+  return alias !== null && isRegistryText(alias[1] ?? '') && isRegistryText(alias[2] ?? '');
 }
 
-function isVersionOrTag(spec: string): boolean {
-  return !notRegistrySpec.test(spec) && !tarballName.test(spec);
+/** Whether npm reads a spec, or the name of an alias, as neither a path, a URL, a protocol nor a tarball. */
+function isRegistryText(text: string): boolean {
+  return !notRegistryText.test(text) && !tarballName.test(text);
 }
