@@ -7,6 +7,7 @@ export {
   handlerPathsOf,
   placementRefusalOf,
   recordedLabelOf,
+  refusalClauseOf,
 } from './handler-paths.ts';
 export type { MessageExports } from './readers.ts';
 export { pairingTargetOf, readersTextOf } from './readers.ts';

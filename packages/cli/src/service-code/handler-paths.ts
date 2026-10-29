@@ -7,7 +7,13 @@ import {
   pathRefusalOf,
   type ServiceLayout,
 } from '../config/index.ts';
-import { ownedFolderOf, realPathOf } from '../loading/index.ts';
+import {
+  contractFolder,
+  type Region,
+  realPathOf,
+  regionOf,
+  sourceFolder,
+} from '../loading/index.ts';
 import { messageFileNameOf } from '../source-text/index.ts';
 import type { LocalParts } from './code-names.ts';
 import {
@@ -70,25 +76,65 @@ function pathOf(handled: Handled, layout: ServiceLayout): string {
   }
 }
 
+/** Why a path cannot hold a file of a field: a rule of the layout it breaks, or the limit a link leads it past. */
+export type PlacementRefusal =
+  | { readonly kind: 'rule'; readonly clause: string }
+  | { readonly kind: 'link'; readonly crossed: Exclude<Region, 'owned'> };
+
 /**
- * Why a path cannot hold a file of a field, as the clause a line about it ends with, or none: the
- * layout's rules for the field, then whether the path, links followed, lies where cf-loom places
- * and records files. Placing and recording both ask it, so a path is one in neither or in both.
+ * Why a path cannot hold a file of a field, or none: the layout's rules for the field, then
+ * whether the path, links followed, lies where cf-loom places and records files. Placing and
+ * recording both ask it, so a path is one in neither or in both.
  */
 export function placementRefusalOf(
   directory: string,
-): (field: LayoutField, path: string) => string | undefined {
-  const isOwned = ownedFolderOf(directory);
+): (field: LayoutField, path: string) => PlacementRefusal | undefined {
+  const regionAt = regionOf(directory);
   return (field, path) => {
     const broken = pathRefusalOf(field, path);
     if (broken !== undefined) {
-      return broken;
+      return { kind: 'rule', clause: broken };
     }
-    return isOwned(realPathOf(directory, path)) ? undefined : linkRefusal;
+    const region = regionAt(realPathOf(directory, path));
+    return region === 'owned' ? undefined : { kind: 'link', crossed: region };
   };
 }
 
-const linkRefusal = 'a link leads out of src/ or into src/contract/';
+/** What a line about a path ends its subject with, after `which`. */
+export function refusalClauseOf(refusal: PlacementRefusal): string {
+  switch (refusal.kind) {
+    case 'rule':
+      return refusal.clause;
+    case 'link':
+      return links[refusal.crossed].clause;
+  }
+}
+
+/** What a link refusal says of the limit a link leads past, and what an author puts in the link's place. */
+const links = {
+  'outside-source': {
+    clause: `a link leads out of ${sourceFolder}/`,
+    replacement: `a folder or file under ${sourceFolder}/`,
+  },
+  'inside-contract': {
+    clause: `a link leads into ${contractFolder}/`,
+    replacement: `a folder or file outside ${contractFolder}/`,
+  },
+} as const satisfies Record<
+  Exclude<Region, 'owned'>,
+  { readonly clause: string; readonly replacement: string }
+>;
+
+/** What the author does about a refusal in the layout's line. */
+function fixOf(refusal: PlacementRefusal): string {
+  const anotherPath = `give it another path in the layout of ${configFile}`;
+  switch (refusal.kind) {
+    case 'rule':
+      return anotherPath;
+    case 'link':
+      return `replace the link with ${links[refusal.crossed].replacement}, or ${anotherPath}`;
+  }
+}
 
 /** A file of the layout: the field that places it, what a line calls it, and its path once filled. */
 type PlacedFile = { readonly field: LayoutField; readonly subject: string; readonly path: string };
@@ -101,14 +147,9 @@ function unplacedLineOf(
 ): string | undefined {
   const refusalOf = placementRefusalOf(directory);
   for (const { field, subject, path } of [...handlerFilesOf(paths), ...generatedFilesOf(layout)]) {
-    const clause = refusalOf(field, path);
-    if (clause !== undefined) {
-      const anotherPath = `give it another path in the layout of ${configFile}`;
-      const fix =
-        clause === linkRefusal
-          ? `replace the link with a folder or file under src/, or ${anotherPath}`
-          : anotherPath;
-      return `${subject} is ${path}, which ${clause}: ${fix}`;
+    const refusal = refusalOf(field, path);
+    if (refusal !== undefined) {
+      return `${subject} is ${path}, which ${refusalClauseOf(refusal)}: ${fixOf(refusal)}`;
     }
   }
   return undefined;

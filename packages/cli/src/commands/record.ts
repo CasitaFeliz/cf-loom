@@ -2,19 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { byCodePoint } from '@cf-loom/contract/internal';
 import { generatedEnding } from '../config/index.ts';
-import {
-  filesUnder,
-  oneLineOf,
-  ownedFolderOf,
-  realPathOf,
-  sourceFolder,
-} from '../loading/index.ts';
+import { filesUnder, oneLineOf, realPathOf, regionOf, sourceFolder } from '../loading/index.ts';
 import {
   type HandlerPath,
   placementRefusalOf,
   type RecordedHandler,
   recordedHandlersOf,
   recordedLabelOf,
+  refusalClauseOf,
 } from '../service-code/index.ts';
 import { isWrittenBy } from '../source-text/index.ts';
 import type { PlacedService } from './handler-files.ts';
@@ -73,7 +68,8 @@ export function recordOf(service: PlacedService): RecordRead {
 
 /** The files `generate` wrote under `src/`, outside what a link leads out of it and outside `src/contract/`. */
 function writtenFilesIn(directory: string): WrittenFiles {
-  const isOwned = ownedFolderOf(directory);
+  const regionAt = regionOf(directory);
+  const isOwned = (realPath: string) => regionAt(realPath) === 'owned';
   const found = filesUnder(directory, sourceFolder, {
     keeps: (path) => path.endsWith(generatedEnding) && isOwned(realPathOf(directory, path)),
     skips: (realFolder) => !isOwned(realFolder),
@@ -90,11 +86,11 @@ function recordedIn(
   const accepted: RecordedHandler[] = [];
   const refused: PathLine[] = [];
   for (const handler of files.flatMap(({ path, text }) => recordedHandlersOf(path, text))) {
-    const clause = refusalOf(handler.kind, handler.path);
-    if (clause === undefined) {
+    const refusal = refusalOf(handler.kind, handler.path);
+    if (refusal === undefined) {
       accepted.push(handler);
     } else {
-      refused.push(refusedLineOf(handler, clause));
+      refused.push(refusedLineOf(handler, refusalClauseOf(refusal)));
     }
   }
   const byFile = new Map(

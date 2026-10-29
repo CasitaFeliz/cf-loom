@@ -4,12 +4,13 @@ export type {
   ExportedValue,
   ExportsOf,
   FileExport,
+  Region,
 } from './exported.ts';
 export {
   contractExportsOf,
   contractFolder,
   isUnderContract,
-  ownedFolderOf,
+  regionOf,
   sourceFolder,
 } from './exported.ts';
 export type { FileFilter, FilesUnder } from './files-under.ts';

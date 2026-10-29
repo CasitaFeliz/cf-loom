@@ -16,13 +16,25 @@ export function isUnderContract(path: string): boolean {
 }
 
 /**
- * Whether a real path lies where cf-loom places and records Handlers and generated files: under
- * the project's real `src/` and outside its real `src/contract/`, whichever link led to it.
+ * Where a real path lies as to the project's `src/`: `owned` where cf-loom places and records
+ * Handlers and generated files, under `src/` and outside `src/contract/`, `outside-source`, or
+ * `inside-contract`.
  */
-export function ownedFolderOf(directory: string): (realPath: string) => boolean {
-  const owned = realPathOf(directory, sourceFolder);
+export type Region = 'owned' | 'outside-source' | 'inside-contract';
+
+/**
+ * Where a real path lies, whichever link led to it. A path that breaks both limits is
+ * `outside-source`.
+ */
+export function regionOf(directory: string): (realPath: string) => Region {
+  const source = realPathOf(directory, sourceFolder);
   const contract = realPathOf(directory, contractFolder);
-  return (realPath) => isWithin(realPath, owned) && !isWithin(realPath, contract);
+  return (realPath) => {
+    if (!isWithin(realPath, source)) {
+      return 'outside-source';
+    }
+    return isWithin(realPath, contract) ? 'inside-contract' : 'owned';
+  };
 }
 
 function isWithin(path: string, folder: string): boolean {
