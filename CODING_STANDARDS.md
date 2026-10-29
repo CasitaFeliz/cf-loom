@@ -119,8 +119,11 @@ const businessCodes = resolved.filter(isBusinessRejection);
 nested through defs, lazies or wrappers, of Snapshot nodes through `ref`s, of failure trees or of nested JSON keeps
 the parts it has still to read in an array and loops over it, as `leadsBackWithNoNode` and `refusalsIn` do; a walk that
 must return to a part after reading what it holds keeps one frame per part on that array, as the walker's driver
-does. *Why:* the call stack is a few thousand frames, set by Node rather than by any rule of the Contract, so a read
-that recurses fails a Contract the documents allow, at a depth that shifts with the shape and with the field order.
+does. Nor does it pass a list read from a file or a request, or an author's value such as an example or an enum, as the
+arguments of one call: a call's arguments sit on the same stack. It adds a list to another item by item, never as a
+spread argument of `push`, `unshift` or `splice` **(lint)**. *Why:* the call stack is a few thousand frames, set by
+Node rather than by any rule of the Contract, so a read that recurses fails a Contract the documents allow, at a depth
+that shifts with the shape and with the field order.
 
 ```ts
 // bad
@@ -305,12 +308,15 @@ count toward either cap; tests and generated files are exempt from both. The for
 naming conventions) apply as well.
 
 The GritQL plugins in `lint/` add, as errors: a `flatMap` whose callback returns a conditional array (C10), `reduce`
-and `reduceRight` (C12), a single-letter name outside a lambda of one expression, an import or a `catch` (C14), and a
-`boolean` parameter, by type or by default, of an exported function or arrow function (C17). `scripts/check-tsdoc.ts`
-fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run
-it. `scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout);
-`pnpm check` and CI run it.
+and `reduceRight` (C12), a single-letter name outside a lambda of one expression, an import or a `catch` (C14), a
+`boolean` parameter, by type or by default, of an exported function or arrow function (C17), under `walker/`, a read of
+a getter zod derives from the schemas a schema holds (`_zod.propValues`, `values`, `optin`, `optout`), as a member
+read, a destructuring or a cast of `_zod` (a name bound to `_zod` is out of reach), which reaches what the walk has not
+judged (C1), and a spread argument of `push`, `unshift` or `splice` (C29). `scripts/check-tsdoc.ts` fails on an
+exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run it.
+`scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout); `pnpm check`
+and CI run it.
 
 The rest stays judgment, and C27 is where it is exercised: the vague words of C14, every name of C15, a boolean
-parameter of a function that is not exported or is exported through an `export { … }` list (C17), and whether a doc
-comment says why (C20).
+parameter of a function that is not exported or is exported through an `export { … }` list (C17), whether a doc
+comment says why (C20), and a list spread into the arguments of any other call (C29).

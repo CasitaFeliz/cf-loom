@@ -1,11 +1,10 @@
-import { byCanonicalJson, canonicalJson } from './canonical-json.ts';
+import { byCodePoint, canonicalJson } from './canonical-json.ts';
 import { type Field, neutralAnnotations, type SchemaNode } from './nodes.ts';
 
 /**
  * A node's shape alone: what two declarations of one header, query param or code must agree on.
- * `description`, `examples` and `origin` are Neutral, so they are left out at every depth, and
- * the items of an `allOf` are in the order of their shapes, which a Neutral annotation cannot
- * change; a union's options stay in declared order, which is part of its shape.
+ * `description`, `examples` and `origin` are Neutral, so they are left out at every depth; the
+ * items of an `allOf` and a union's options keep the order the node holds them in.
  */
 export function shapeOf(node: SchemaNode): SchemaNode {
   const own = withoutNeutral(node);
@@ -23,7 +22,7 @@ export function shapeOf(node: SchemaNode): SchemaNode {
     case 'union':
       return { ...own, options: own.options.map(shapeOf) };
     case 'allOf':
-      return { ...own, items: inShapeOrder(own.items) };
+      return { ...own, items: own.items.map(shapeOf) };
     case 'tagged':
       return { ...own, variants: variantShapes(own.variants) };
     case 'string':
@@ -48,8 +47,9 @@ export function shapeKey(node: SchemaNode): string {
   return canonicalJson(shapeOf(node));
 }
 
-function inShapeOrder(nodes: readonly SchemaNode[]): readonly SchemaNode[] {
-  return nodes.map(shapeOf).sort(byCanonicalJson);
+/** Orders nodes by their shapes, as a Snapshot orders an `allOf`'s items. */
+export function byShape(left: SchemaNode, right: SchemaNode): number {
+  return byCodePoint(shapeKey(left), shapeKey(right));
 }
 
 function fieldShapes(fields: Readonly<Record<string, Field>>): Readonly<Record<string, Field>> {

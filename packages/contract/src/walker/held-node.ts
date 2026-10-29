@@ -8,13 +8,60 @@ import type {
   StringNode,
   TupleNode,
 } from './nodes.ts';
+import { byShape, shapeKey } from './shapes.ts';
 import type { Step } from './steps.ts';
+
+/** A change to a node: a child replaced at its step, a field put under its name, or a `ref` renamed. */
+export type NodeEdit =
+  | { readonly kind: 'child'; readonly step: Step; readonly node: SchemaNode }
+  | { readonly kind: 'field'; readonly name: string; readonly field: Field }
+  | { readonly kind: 'renamed'; readonly name: string; readonly nullable: boolean };
+
+/**
+ * A node as a Snapshot holds it: the edits applied in order, each `child` at the step the node had
+ * before any edit, then an `allOf`'s items in shape order, each shape once, the first kept with its
+ * annotations. Its children are taken as already held, since every builder builds from the leaves
+ * up. An edit the node has no place for is a bug of the caller.
+ */
+export function heldNodeOf(node: SchemaNode, edits: readonly NodeEdit[]): SchemaNode {
+  let edited = node;
+  for (const edit of edits) {
+    edited = editedBy(edited, edit);
+  }
+  return edited.type === 'allOf' ? { ...edited, items: inShapeOrder(edited.items) } : edited;
+}
+
+function editedBy(node: SchemaNode, edit: NodeEdit): SchemaNode {
+  switch (edit.kind) {
+    case 'child':
+      return withChild(node, edit.step, edit.node);
+    case 'field':
+      return withField(node, edit.name, edit.field);
+    case 'renamed':
+      return refNamed(node, edit);
+  }
+}
+
+/**
+ * An intersection's items as a Snapshot holds them: each shape once, the first declared kept with
+ * its annotations, in shape order, so no annotation decides an item's place or whether two are one.
+ */
+function inShapeOrder(items: readonly SchemaNode[]): readonly SchemaNode[] {
+  const firstByShape = new Map<string, SchemaNode>();
+  for (const item of items) {
+    const key = shapeKey(item);
+    if (!firstByShape.has(key)) {
+      firstByShape.set(key, item);
+    }
+  }
+  return [...firstByShape.values()].sort(byShape);
+}
 
 /**
  * A node with the child at one step replaced: the inverse of `childrenOf` for one child. A step
  * the node has no child at, or a child its place cannot hold, is a bug of the caller.
  */
-export function withChild(node: SchemaNode, step: Step, child: SchemaNode): SchemaNode {
+function withChild(node: SchemaNode, step: Step, child: SchemaNode): SchemaNode {
   const replaced = replacedAt(node, step, child);
   if (replaced === undefined) {
     throw new Error(`A ${node.type} has no place for a ${child.type} at ${step.kind}: a bug.`);
@@ -94,7 +141,7 @@ function isVariant(node: SchemaNode): node is ObjectNode | RefNode {
 }
 
 /** A node with a field put at a name of its, whether it held one there or not: an object's only. */
-export function withField(node: SchemaNode, name: string, field: Field): SchemaNode {
+function withField(node: SchemaNode, name: string, field: Field): SchemaNode {
   if (node.type !== 'object') {
     throw new Error(`A ${node.type} has no fields: a bug.`);
   }
@@ -102,13 +149,15 @@ export function withField(node: SchemaNode, name: string, field: Field): SchemaN
 }
 
 /** A `ref` renamed, with its own annotations, nullable when the chain of defs it followed is. */
-export function refNamed(
-  ref: SchemaNode,
-  name: string,
-  chain: { readonly nullable: boolean },
+function refNamed(
+  node: SchemaNode,
+  chain: { readonly name: string; readonly nullable: boolean },
 ): SchemaNode {
-  const { nullable: _nullable, ...annotations } = ref;
-  const named = { ...annotations, type: 'ref', name } as const;
+  if (node.type !== 'ref') {
+    throw new Error(`A ${node.type} is no \`ref\` to rename: a bug.`);
+  }
+  const { nullable: _nullable, ...annotations } = node;
+  const named = { ...annotations, name: chain.name } as const;
   return chain.nullable ? { ...named, nullable: true } : named;
 }
 

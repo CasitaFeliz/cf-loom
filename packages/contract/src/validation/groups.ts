@@ -1,4 +1,9 @@
-import { type Group, type GroupedField, providerOf } from '../declarations/index.ts';
+import {
+  type Group,
+  type GroupedField,
+  groupListsSentence,
+  providerOf,
+} from '../declarations/index.ts';
 import {
   type Declarations,
   groupedFields,
@@ -53,8 +58,7 @@ function listsNothing({ group }: LocatedGroup): boolean {
 }
 
 function emptyGroupFailure(at: LocatedGroup['at']): DeclarationFailure {
-  const message = 'A Group lists at least one Endpoint, Event, Command or Subscription';
-  return failure(at, 'empty-group', message);
+  return failure(at, 'empty-group', groupListsSentence);
 }
 
 /** Each listing of a declaration after its first, in a Group's order, names the Group that listed it first. */

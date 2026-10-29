@@ -50,7 +50,7 @@ function hookThrewLineOf(source: string, hook: HookName): string {
  * is answered, so it never escapes.
  */
 export async function hookFailureOf<Given>(
-  hook: (given: Given) => void | Promise<void>,
+  hook: (given: Given) => unknown,
   given: Given,
   called: { readonly source: string; readonly hook: HookName },
 ): Promise<string | undefined> {

@@ -1,8 +1,10 @@
 import {
-  commandSubscribedRefusal,
+  commandSubscribedSentence,
   isCommand,
   isEvent,
   isLive,
+  ownProviderSentence,
+  providerOf,
   type Root,
   reaches,
 } from '../declarations/index.ts';
@@ -10,6 +12,7 @@ import { inFields } from '../walker/index.ts';
 import {
   type Declarations,
   eventSourceOf,
+  isOwnProvided,
   isWithoutValue,
   type LocatedSubscription,
   messageIdentityOf,
@@ -39,10 +42,13 @@ function eventFailures(
     return [];
   }
   if (isCommand(event)) {
-    return [failure(eventAt, 'not-a-declaration', commandSubscribedRefusal)];
+    return [failure(eventAt, 'not-a-declaration', commandSubscribedSentence)];
   }
   if (!isEvent(event)) {
     return [failure(eventAt, 'not-a-declaration', 'event is not an Event')];
+  }
+  if (isOwnProvided(root, event)) {
+    return [failure(eventAt, 'subscription-event', ownProviderSentence(textOf(providerOf(event))))];
   }
   const identity = messageIdentityOf(event.name, event.version);
   const source = eventSourceOf(root, event);

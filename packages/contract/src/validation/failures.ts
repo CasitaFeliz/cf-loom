@@ -32,6 +32,7 @@ export type Rule =
   | 'not-an-object-schema'
   | 'nullable-text'
   | 'not-text'
+  | 'shared-text'
   | 'header-names'
   | 'input-conflict'
   | 'guard-demands'

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summaryOf } from '../../test/failures.ts';
+import { randomAnnotations, randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineCommand,
@@ -128,6 +129,18 @@ describe('walkSchemas: objects', () => {
         fields: { note: { required: false, schema: text } },
       }),
     );
+  });
+
+  test('a field declared with .exactOptional() is optional, as .optional() writes it', () => {
+    const exact = z.object({ note: z.string().exactOptional() });
+    const zodMiniExact = zm.object({ note: zm.exactOptional(zm.string()) });
+    const optional = walkedTo({
+      type: 'object',
+      fields: { note: { required: false, schema: text } },
+    });
+
+    expect(walkBody(exact)).toEqual(optional);
+    expect(walkBody(zodMiniExact)).toEqual(optional);
   });
 });
 
@@ -283,6 +296,28 @@ describe('walkSchemas: intersections', () => {
     );
   });
 
+  test('an intersection of two strings that differ by their descriptions alone holds the left one', () => {
+    const intersection = z.string().describe('b').and(z.string().describe('a'));
+
+    expect(walkBody(intersection)).toEqual(
+      walkedTo({ type: 'allOf', items: [{ type: 'string', description: 'b' }] }),
+    );
+  });
+
+  test('an intersection’s items are in the order of their shapes, whatever their descriptions', () => {
+    const intersection = z.string().max(8).describe('z').and(z.string().regex(/^a/).describe('a'));
+
+    expect(walkBody(intersection)).toEqual(
+      walkedTo({
+        type: 'allOf',
+        items: [
+          { type: 'string', max: 8, description: 'z' },
+          { type: 'string', regex: { source: '^a', flags: '' }, description: 'a' },
+        ],
+      }),
+    );
+  });
+
   test('any other intersection is allOf', () => {
     const bounded = z.intersection(z.string().min(1), z.string().max(10));
 
@@ -406,15 +441,6 @@ describe('walkSchemas: a field named what every object already has', () => {
     expect(refusals).toBeGreaterThan(30);
   });
 });
-
-/** A seeded generator of the same sequence every run, so a failing draw can be replayed. */
-function seededNext(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 2 ** 32;
-  };
-}
 
 /** A name every object has, one that differs from it by a letter's case or an extra character, or a random string. */
 function aFieldName(next: () => number, alphabet: string): string {
@@ -761,4 +787,34 @@ describe('validateRoot: a field named what every object already has fails wherev
       ]);
     },
   );
+});
+
+describe('walkSchemas: a schema’s walked shape does not depend on its annotations', () => {
+  /** A walked value with every description, example and origin left out, at every depth. */
+  function withoutAnnotations(value: unknown): unknown {
+    if (typeof value !== 'object' || value === null) {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(withoutAnnotations);
+    }
+    const annotations = ['description', 'examples', 'origin'];
+    const kept = Object.entries(value).filter(([key]) => !annotations.includes(key));
+    return Object.fromEntries(kept.map(([key, held]) => [key, withoutAnnotations(held)]));
+  }
+
+  test('random trees walk to one shape with random annotations and without', () => {
+    const draws = Array.from({ length: 2000 }, (_, seed) => ({
+      annotated: randomSchemas(seededNext(seed), randomAnnotations(seededNext(-seed))).schemaOf(3),
+      plain: randomSchemas(seededNext(seed)).schemaOf(3),
+    }));
+
+    const differing = draws.filter(
+      ({ annotated, plain }) =>
+        JSON.stringify(withoutAnnotations(walkBody(annotated))) !==
+        JSON.stringify(withoutAnnotations(walkBody(plain))),
+    );
+
+    expect(differing.map(({ plain }) => walkBody(plain))).toEqual([]);
+  });
 });

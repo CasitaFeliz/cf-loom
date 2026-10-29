@@ -33,5 +33,4 @@ export type {
   ValidatedProvider,
   ValidatedSubscription,
 } from './validated.ts';
-export type { TextPartNodes } from './walked-text-parts.ts';
 export { walkedTextPartsOf } from './walked-text-parts.ts';

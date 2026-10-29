@@ -1,4 +1,4 @@
-import { isDeclaration } from '../declarations/index.ts';
+import { isDeclaration, undeclaredFieldSentence } from '../declarations/index.ts';
 import { fieldStep, indexStep, inFields, inside, type Place, placeOf } from '../walker/index.ts';
 import {
   type Declarations,
@@ -145,7 +145,7 @@ function written(at: Place, value: unknown, fields: KnownFields): Written {
 function undeclaredFailures({ at, value, fields }: Readable): readonly DeclarationFailure[] {
   const undeclared = Object.keys(value).filter((field) => !Object.hasOwn(fields.declared, field));
   return undeclared.map((field) =>
-    failure(inFields(at, field), 'undeclared-field', `${field} is not a declared field`),
+    failure(inFields(at, field), 'undeclared-field', undeclaredFieldSentence(field)),
   );
 }
 

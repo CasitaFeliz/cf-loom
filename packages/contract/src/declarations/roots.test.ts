@@ -15,6 +15,7 @@ import {
   providedEndpoint,
   providedEvent,
 } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const getPayment = defineEndpoint({
   name: 'getPayment',
@@ -145,7 +146,7 @@ describe('defineApplication', () => {
     expect(declare).not.toThrow();
   });
 
-  test('an Application depending on an Internal Endpoint is refused with the Endpoint’s name', () => {
+  test('an Application depending on an Internal Endpoint is refused as generate words it', () => {
     const internalDependency = defineDependency({
       endpoints: [payments.endpoints.refundPayment],
     });
@@ -156,9 +157,9 @@ describe('defineApplication', () => {
       }>
     >[0];
 
-    expectTypeOf<
-      Written['dependencies']
-    >().toExtend<'An Application depends on Public Endpoints only: refundPayment is internal'>();
+    expectTypeOf<Written['dependencies']>().toExtend<
+      Refusal<"An Application depends on Public Endpoints only: payments-service's refundPayment is internal">
+    >();
   });
 
   test('an Application may list no Dependencies, which means it depends on nothing', () => {

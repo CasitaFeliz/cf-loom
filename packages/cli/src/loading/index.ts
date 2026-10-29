@@ -4,12 +4,14 @@ export type {
   ExportedValue,
   ExportsOf,
   FileExport,
+  Region,
 } from './exported.ts';
 export {
   contractExportsOf,
   contractFolder,
-  insideContractOf,
   isUnderContract,
+  regionOf,
+  sourceFolder,
 } from './exported.ts';
 export type { FileFilter, FilesUnder } from './files-under.ts';
 export { filesUnder } from './files-under.ts';
@@ -24,7 +26,7 @@ export { newerFormatTextOf } from './newer-format.ts';
 export type { ResolvedPackages } from './packages.ts';
 export { resolvePackages } from './packages.ts';
 export type { PackageName, ProjectPackage } from './project-package.ts';
-export { packageJsonNameOf, projectPackageOf } from './project-package.ts';
+export { isPackageName, packageJsonNameOf, projectPackageOf } from './project-package.ts';
 export { publishedNameOf } from './published-name.ts';
 export { realPathOf } from './real-path.ts';
 export type { LoadedRoot } from './root.ts';

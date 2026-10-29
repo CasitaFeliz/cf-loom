@@ -1,10 +1,5 @@
-import {
-  formatConstructorOf,
-  hashPartsOf,
-  isHashFormat,
-  type StringFormat,
-} from '@cf-loom/contract/internal';
-import { jsonLiteralOf, keyOf, stringLiteralOf } from '../source-text/index.ts';
+import { formatConstructorOf, type StringFormat } from '@cf-loom/contract/internal';
+import { jsonLiteralOf, keyOf } from '../source-text/index.ts';
 
 /**
  * The zod call that builds a format with the options the Snapshot records, so the generated
@@ -14,10 +9,6 @@ export function formatCallOf(
   format: StringFormat,
   options: Readonly<Record<string, unknown>> | undefined,
 ): string {
-  if (isHashFormat(format)) {
-    const { algorithm, encoding } = hashPartsOf(format);
-    return `z.hash(${stringLiteralOf(algorithm)}, { enc: ${stringLiteralOf(encoding)} })`;
-  }
   const call = formatConstructorOf(format);
   return options === undefined ? `${call}()` : `${call}(${optionsTextOf(options)})`;
 }

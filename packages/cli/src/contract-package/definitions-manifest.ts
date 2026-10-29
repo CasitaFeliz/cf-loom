@@ -1,4 +1,5 @@
 import type { PeerRanges, PublishedDefinitionsSnapshot } from '@cf-loom/contract/internal';
+import { isPackageName } from '../loading/index.ts';
 import { cfLoomOf, manifestFileOf, type Packaging } from './manifest.ts';
 import type { PackageFile } from './modules.ts';
 import { packagePaths } from './paths.ts';
@@ -20,8 +21,8 @@ const tarballName = /\.(?:tgz|tar\.gz|tar)$/i;
 /** The start of an `npm:` alias, which npm reads case-insensitively. */
 const aliasPrefix = /^npm:/i;
 
-/** An `npm:` alias that names a registry package, capturing its name without a scope and the spec after the `@` that follows the name. */
-const aliasedPackage = /^npm:(?:@[^@/\\:]+\/)?([^@/\\:]+)(?:@(.*))?$/i;
+/** An `npm:` alias, capturing the name it aliases, scope included, and the spec after the `@` that follows the name. */
+const aliasedPackage = /^npm:((?:@[^@]*\/)?[^@]*)(?:@(.*))?$/i;
 
 /** A dependency a package.json lists under a field. */
 type Listed = { readonly field: string; readonly name: string; readonly range: string };
@@ -29,8 +30,8 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 /**
  * A Definitions Package's own package.json as published: its version, its peers with `zod` and
  * `@cf-loom/contract` set to the ranges the CLI declares, and `cfLoom`, `snapshot.json`
- * in its `files` and no `publishConfig.tag`; refused when it depends on a range npm does not
- * resolve from the registry, a peer read after those two are set.
+ * in its `files` and no `publishConfig.tag`; refused when it depends on a range that is no
+ * registry range cf-loom keeps, a peer read after those two are set.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
@@ -49,7 +50,9 @@ export function definitionsManifestOf(
   if (uninstallable !== undefined) {
     const { field, name: dependency, range } = uninstallable;
     const lists = `package.json lists ${dependency} in ${field} as ${range}`;
-    return unpublishable(`${lists}, which npm cannot install from the registry`);
+    return unpublishable(
+      `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)`,
+    );
   }
   return { kind: 'manifest', file: manifestFileOf(manifest) };
 }
@@ -116,18 +119,20 @@ function uninstallableIn(
 }
 
 /**
- * Whether npm resolves a dependency's range from the registry: a semver range, a dist-tag, or an
- * `npm:` alias of one. Without a semver parser, a malformed range or tag reads as a valid one.
+ * Whether a dependency's range is one cf-loom keeps as resolved from the registry: a version, a
+ * version range or a dist-tag, or an `npm:` alias of one whose name is a lower-case package name
+ * npm accepts, which refuses some aliases npm resolves. Without a semver parser, a malformed range
+ * or tag reads as a valid one.
  */
 function isRegistryRange(range: string): boolean {
   if (!aliasPrefix.test(range)) {
     return isRegistryText(range);
   }
-  const alias = aliasedPackage.exec(range);
-  return alias !== null && isRegistryText(alias[1] ?? '') && isRegistryText(alias[2] ?? '');
+  const [, name = '', spec = ''] = aliasedPackage.exec(range) ?? [];
+  return isPackageName(name) && !tarballName.test(name) && isRegistryText(spec);
 }
 
-/** Whether npm reads a spec, or the name of an alias, as neither a path, a URL, a protocol nor a tarball. */
+/** Whether npm reads a spec as neither a path, a URL, a protocol nor a tarball. */
 function isRegistryText(text: string): boolean {
   return !notRegistryText.test(text) && !tarballName.test(text);
 }

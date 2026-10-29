@@ -1,6 +1,15 @@
 import type * as core from 'zod/v4/core';
 import type { SchemaRule } from '../walker/index.ts';
 import type { GroupedField } from './grouped.ts';
+import type {
+  groupListsSentence,
+  ListedTwiceSentence,
+  messageBodySentence,
+  messageVersionSentence,
+  nameNouns,
+  ReservedNameSentence,
+  UndeclaredFieldSentence,
+} from './refusals.ts';
 import type { ReservedName } from './reserved-names.ts';
 
 /** A type no value has, whose only key is the sentence a type error reads. */
@@ -8,24 +17,27 @@ export type Refusal<Message extends string> = { readonly [Text in Message]: neve
 
 /** What a declaration must also satisfy: each field it holds is one its kind declares. */
 export type DeclaredFieldsRule<Declaration, Shape> = {
-  readonly [Field in Exclude<
-    keyof Declaration,
-    keyof Shape
-  >]: Refusal<`${Field & string} is not a declared field`>;
+  readonly [Field in Exclude<keyof Declaration, keyof Shape>]: Refusal<
+    UndeclaredFieldSentence<Field & string>
+  >;
 };
 
 /** What an Endpoint, Guard or Subscription must also satisfy: its name is no reserved name. */
-export type ReservedNameRule<Declaration extends { readonly name: string }> =
-  Declaration['name'] extends ReservedName
-    ? { readonly name: Refusal<`A name is no reserved word: ${Declaration['name']}`> }
-    : unknown;
+export type ReservedNameRule<
+  Declaration extends { readonly name: string },
+  Kind extends keyof typeof nameNouns,
+> = Declaration['name'] extends ReservedName
+  ? {
+      readonly name: Refusal<ReservedNameSentence<(typeof nameNouns)[Kind], Declaration['name']>>;
+    }
+  : unknown;
 
 /** What a Group must also satisfy: it lists at least one Endpoint, Event, Command or Subscription. */
 export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, GroupedField>] extends [
   never,
 ]
   ? {
-      readonly [Field in GroupedField]: Refusal<'A Group lists at least one Endpoint, Event, Command or Subscription'>;
+      readonly [Field in GroupedField]: Refusal<typeof groupListsSentence>;
     }
   : unknown;
 
@@ -81,7 +93,7 @@ type OnceKeyOf<Listed> =
 type ListedOnceRule<Key extends string, Rest, Earlier extends string> = [Key] extends [never]
   ? RejectionsOnceRule<Rest, Earlier>
   : Key extends Earlier
-    ? `${Key} is listed twice`
+    ? Refusal<ListedTwiceSentence<Key>>
     : RejectionsOnceRule<Rest, Earlier | Key>;
 
 /** What a list of Rejections must also satisfy: each code once, a Standard Rejection by its name. */
@@ -91,9 +103,6 @@ export type RejectionsOnceRule<
 > = Rejections extends readonly [infer First, ...infer Rest]
   ? ListedOnceRule<OnceKeyOf<First>, Rest, Earlier>
   : unknown;
-
-/** Why a Message body is refused, as the types and `generate` both say it. */
-export const messageBodyRefusal = 'A Message body is an object of its fields';
 
 /** A body schema a Message can grow with: an object, or a schema `generate` reads through to one. */
 type GrowableBody = core.$ZodObject | core.$ZodIntersection | core.$ZodLazy;
@@ -106,7 +115,7 @@ type ObjectBodyRule<Declaration extends { readonly body: core.$ZodType }> =
   IsOneLiteral<Declaration['body']['_zod']['def']['type']> extends true
     ? Declaration['body'] extends GrowableBody
       ? unknown
-      : { readonly body: Refusal<typeof messageBodyRefusal> }
+      : { readonly body: Refusal<typeof messageBodySentence> }
     : unknown;
 
 /**
@@ -118,10 +127,6 @@ export type MessageBodyRule<Declaration extends { readonly body: core.$ZodType }
   unknown extends SchemaRule<Declaration['body']>
     ? ObjectBodyRule<Declaration>
     : { readonly body: SchemaRule<Declaration['body']> };
-
-/** Why a Message version is refused, as the types and `generate` both say it. */
-export const messageVersionRefusal =
-  'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER';
 
 /** Whether a literal number's text is not a whole number from 1 written without an exponent. */
 type IsNotWholeFromOne<Version extends number> = `${Version}` extends
@@ -143,6 +148,6 @@ export type VersionRule<Declaration extends { readonly version: number }> =
     ? unknown
     : IsOneLiteral<Declaration['version']> extends true
       ? IsNotWholeFromOne<Declaration['version']> extends true
-        ? { readonly version: Refusal<typeof messageVersionRefusal> }
+        ? { readonly version: Refusal<typeof messageVersionSentence> }
         : unknown
-      : { readonly version: Refusal<typeof messageVersionRefusal> };
+      : { readonly version: Refusal<typeof messageVersionSentence> };

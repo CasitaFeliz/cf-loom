@@ -29,6 +29,44 @@ export function growthOf(
   return smallest;
 }
 
+/**
+ * The CPU time of the thread, in milliseconds, that `call` takes: the smallest of up to three runs,
+ * which stop at the first under `bound`. A busy host stretches it far less than the clock, and only
+ * upward, so code that measures over `bound` on every run is slower than `bound`.
+ */
+export function cpuMillisecondsOf(call: () => unknown, bound: number): number {
+  let smallest = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < attempts && smallest >= bound; attempt++) {
+    smallest = Math.min(smallest, cpuMillisecondsOfRun(call));
+  }
+  return smallest;
+}
+
+/**
+ * How many times longer `call` takes than `reference`, in CPU time of the thread: the fastest run of
+ * each over up to three interleaved runs of both, which stop at the first ratio under `bound`. A
+ * slower host stretches the ratio far less than it stretches either run, so it holds where an
+ * absolute bound does not.
+ */
+export function cpuRatioOf(call: () => unknown, reference: () => unknown, bound: number): number {
+  let fastestCall = Number.POSITIVE_INFINITY;
+  let fastestReference = Number.POSITIVE_INFINITY;
+  let ratio = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < attempts && ratio >= bound; attempt++) {
+    fastestReference = Math.min(fastestReference, cpuMillisecondsOfRun(reference));
+    fastestCall = Math.min(fastestCall, cpuMillisecondsOfRun(call));
+    ratio = fastestCall / fastestReference;
+  }
+  return ratio;
+}
+
+function cpuMillisecondsOfRun(call: () => unknown): number {
+  const started = process.threadCpuUsage();
+  call();
+  const { user, system } = process.threadCpuUsage(started);
+  return (user + system) / 1000;
+}
+
 function measuredGrowth(prepare: (size: number) => () => unknown, sizes: Sizes): number {
   let fastestSmall = Number.POSITIVE_INFINITY;
   let fastestLarge = Number.POSITIVE_INFINITY;

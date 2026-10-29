@@ -50,7 +50,31 @@ export function metadataOf(schema: core.$ZodType, at: Reached): Walked<Metadata>
 
 /** Whether the schema's own `.meta()` holds an id, which names a schema on a cycle. */
 export function hasOwnId(schema: core.$ZodType): boolean {
-  return ownMetaOf(schema)['id'] !== undefined;
+  return writtenIdOf(schema) !== undefined;
+}
+
+/**
+ * The id the schema's own `.meta()` holds, as text, whether the walk accepts it or refuses it:
+ * the author named the schema either way.
+ */
+export function writtenIdOf(schema: core.$ZodType): string | undefined {
+  const id = ownMetaOf(schema)['id'];
+  return id === undefined ? undefined : String(id);
+}
+
+/**
+ * The id a schema this one was cloned from held, nearest first, when the walk accepts it: zod
+ * gives a clone its parent's metadata but the id, so a `.describe()`, `.meta()` or check after
+ * `.meta({ id })` drops it. An id the walk refuses is not worth naming, since it is refused again.
+ */
+export function droppedIdOf(schema: core.$ZodType): string | undefined {
+  for (let parent = schema._zod.parent; parent !== undefined; parent = parent._zod.parent) {
+    const id = writtenIdOf(parent);
+    if (id !== undefined) {
+      return idRefusalOf(id) === undefined ? id : undefined;
+    }
+  }
+  return undefined;
 }
 
 /**

@@ -400,6 +400,21 @@ describe('cf-loom init', () => {
     expect(existsSync(join(project, 'src/contract/index.ts'))).toBe(false);
   });
 
+  test.each(['node_modules', 'favicon.ico'])(
+    'init definitions refuses a package.json named %s, a name npm reserves',
+    (name) => {
+      const project = aProject({ 'package.json': JSON.stringify({ name, type: 'module' }) });
+
+      const ran = cfLoom(project, 'init', 'definitions');
+
+      expect(ran).toEqual({
+        status: 3,
+        stdout: '',
+        stderr: `package.json names no package npm accepts: ${name}\n`,
+      });
+    },
+  );
+
   test.each([
     ['service', 'orders-service'],
     ['application', 'orders-service'],
@@ -4042,7 +4057,7 @@ describe.concurrent('cf-loom check', () => {
   );
 
   test.for(['codes', 'guards', 'exports'] as const)(
-    'a Baseline whose %s hold a name with a line break, exported, is written as JSON, so each Change stays on one line',
+    'a Baseline whose %s hold a name with a line break, exported, is one Change at its export, written as JSON on one line',
     async (section, { lab }) => {
       const project = await aGeneratedProject(lab, aDefinitionsRootOfEverySite);
       const snapshot = JSON.parse(read(project, 'contract.snapshot.json'));
@@ -4062,12 +4077,9 @@ describe.concurrent('cf-loom check', () => {
       const { ran } = await checkedAgainst(lab, { project, served });
 
       const approval = 'Breaking, needs a Breaking Change Approval';
-      const removed = [...new Set(['exports', section])].map(
-        (holder) => `${holder}."odd\\nname" removed: ${approval}`,
-      );
       expect(ran.stdout.split('\n')).toEqual([
         'Checked against @org/definitions@1.0.0',
-        ...removed,
+        `exports."odd\\nname" removed: ${approval}`,
         'Would publish @org/definitions@2.0.0 (major)',
         '',
       ]);
@@ -6711,52 +6723,52 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     [
       'lists a workspace: range in dependencies',
       { dependencies: { '@org/shared': 'workspace:*' } },
-      'package.json lists @org/shared in dependencies as workspace:*, which npm cannot install from the registry',
+      'package.json lists @org/shared in dependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in dependencies',
       { dependencies: { left: 'catalog:' } },
-      'package.json lists left in dependencies as catalog:, which npm cannot install from the registry',
+      'package.json lists left in dependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a workspace: range in optionalDependencies',
       { optionalDependencies: { '@org/shared': 'workspace:^' } },
-      'package.json lists @org/shared in optionalDependencies as workspace:^, which npm cannot install from the registry',
+      'package.json lists @org/shared in optionalDependencies as workspace:^, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in optionalDependencies',
       { optionalDependencies: { left: 'catalog:' } },
-      'package.json lists left in optionalDependencies as catalog:, which npm cannot install from the registry',
+      'package.json lists left in optionalDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a file: range in dependencies',
       { dependencies: { '@org/shared': 'file:../shared' } },
-      'package.json lists @org/shared in dependencies as file:../shared, which npm cannot install from the registry',
+      'package.json lists @org/shared in dependencies as file:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a link: range in dependencies',
       { dependencies: { '@org/shared': 'link:../shared' } },
-      'package.json lists @org/shared in dependencies as link:../shared, which npm cannot install from the registry',
+      'package.json lists @org/shared in dependencies as link:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a file: range in optionalDependencies',
       { optionalDependencies: { left: 'file:./vendor/left.tgz' } },
-      'package.json lists left in optionalDependencies as file:./vendor/left.tgz, which npm cannot install from the registry',
+      'package.json lists left in optionalDependencies as file:./vendor/left.tgz, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a link: range in optionalDependencies',
       { optionalDependencies: { left: 'link:./vendor/left' } },
-      'package.json lists left in optionalDependencies as link:./vendor/left, which npm cannot install from the registry',
+      'package.json lists left in optionalDependencies as link:./vendor/left, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a workspace: range in peerDependencies',
       { peerDependencies: { '@org/shared': 'workspace:*' } },
-      'package.json lists @org/shared in peerDependencies as workspace:*, which npm cannot install from the registry',
+      'package.json lists @org/shared in peerDependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in peerDependencies',
       { peerDependencies: { left: 'catalog:' } },
-      'package.json lists left in peerDependencies as catalog:, which npm cannot install from the registry',
+      'package.json lists left in peerDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
   ] as const)(
     'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
@@ -6871,6 +6883,13 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ['peerDependencies', 'npm:shared.tar.gz'],
     ['peerDependencies', 'npm:.shared'],
     ['peerDependencies', 'npm:@org/.shared'],
+    ['peerDependencies', 'npm:-shared'],
+    ['peerDependencies', 'npm:_shared'],
+    ['peerDependencies', 'npm:sha red'],
+    ['peerDependencies', 'npm:@org/shared#'],
+    ['peerDependencies', 'npm:@org/sh ared@^1.0.0'],
+    ['peerDependencies', 'npm:node_modules@1'],
+    ['peerDependencies', 'npm:favicon.ico@^1.0.0'],
   ] as const)(
     'a Definitions Package whose %s list the range %s fails dry-run, as no registry install resolves it',
     async ([field, range], { lab }) => {
@@ -6880,10 +6899,32 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
       const lists = `package.json lists left in ${field} as ${range}`;
       const checked = `${neverPublished(registry, '@org/definitions')}\n`;
-      const refused = `${lists}, which npm cannot install from the registry\n`;
+      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)\n`;
       expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
+    },
+  );
+
+  test.for([
+    ['a scoped name that ends as a tarball', 'npm:@org/shared.tgz'],
+    ['a scoped name that ends as a tar', 'npm:@org/shared.tar@^1.0.0'],
+    ['a legacy name in upper case', 'npm:JSONStream@^1.0.0'],
+    ['a name that starts with an underscore', 'npm:@org/_shared'],
+  ] as const)(
+    'a Definitions Package depending on an npm: alias of %s (%s) fails dry-run, though npm resolves it, as its name is no package name cf-loom accepts',
+    async ([, range], { lab }) => {
+      const project = await aGeneratedProject(
+        lab,
+        aBuiltDefinitions({ dependencies: { left: range } }),
+      );
+
+      const { ran, registry } = await publishedAgainst(lab, { project, served: {} }, '--dry-run');
+
+      const lists = `package.json lists left in dependencies as ${range}`;
+      const checked = `${neverPublished(registry, '@org/definitions')}\n`;
+      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)\n`;
+      expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
     },
   );
 

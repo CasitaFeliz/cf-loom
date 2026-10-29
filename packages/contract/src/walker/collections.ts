@@ -1,4 +1,4 @@
-import type * as core from 'zod/v4/core';
+import type { DefOfType } from './def-types.ts';
 import { inside } from './location.ts';
 import type { SchemaNode } from './nodes.ts';
 import { indexStep, itemsStep, restStep } from './steps.ts';
@@ -14,7 +14,7 @@ import {
 } from './walked.ts';
 
 /** An array of one item schema, before its length checks. */
-export function* walkArray(def: core.$ZodArrayDef, at: Reached, walker: Walker): Walking {
+export function* walkArray(def: DefOfType<'array'>, at: Reached, walker: Walker): Walking {
   const items = yield* walker.schema(def.element, inside(at, itemsStep));
   if (items.kind === 'not-allowed') {
     return failed(items.tree, { type: 'array' });
@@ -23,7 +23,7 @@ export function* walkArray(def: core.$ZodArrayDef, at: Reached, walker: Walker):
 }
 
 /** A tuple, its items in their declared order, and the schema of any further items as `rest`. */
-export function* walkTuple(def: core.$ZodTupleDef, at: Reached, walker: Walker): Walking {
+export function* walkTuple(def: DefOfType<'tuple'>, at: Reached, walker: Walker): Walking {
   const walkedItems: Walked[] = [];
   for (const [index, item] of def.items.entries()) {
     walkedItems.push(yield* walker.schema(item, inside(at, indexStep(index))));

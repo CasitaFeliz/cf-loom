@@ -1,4 +1,5 @@
 import { leadsBackWithNoNode } from './children.ts';
+import { writtenIdOf } from './metadata.ts';
 import type { RefNode } from './nodes.ts';
 import {
   notAllowed,
@@ -23,31 +24,31 @@ export function offCycle(state: State, ancestor: Ancestor, node: Walked): Walked
 
 /**
  * A schema with an id on a cycle is walked once: its def, or its failures, kept for every use,
- * each of which is a `ref` to it. A def is never nullable: `.nullable()` belongs to a use, so a
- * schema that admits `null` is refused as a def, through `z.lazy()` or an intersection included.
+ * each of which is a `ref` to it. A def is never nullable, since `.nullable()` belongs to a use.
  */
 export function writeDef(state: State, ancestor: Ancestor, node: Walked): Walked {
-  if (ancestor.id === undefined) {
+  const written = writtenIdOf(ancestor.schema);
+  if (written === undefined) {
     return isRemembered(state, ancestor.schema) ? withoutOutline(node) : node;
   }
-  const ref: RefNode = { type: 'ref', name: ancestor.id };
+  const ref: RefNode = { type: 'ref', name: written };
   if (node.kind === 'not-allowed') {
     return dropOpenGroup(state, ancestor, failed(node.tree, ref));
   }
-  const owner = state.schemaById.get(ancestor.id);
+  const owner = state.schemaById.get(written);
   if (owner !== undefined && owner !== ancestor.schema) {
-    return notAllowed(ancestor.at, refusedDuplicateId(ancestor.id));
+    return notAllowed(ancestor.at, refusedDuplicateId(written));
   }
-  state.schemaById.set(ancestor.id, ancestor.schema);
-  if (leadsBackWithNoNode(ancestor.id, node.value, state.defById)) {
+  state.schemaById.set(written, ancestor.schema);
+  if (leadsBackWithNoNode(written, node.value, state.defById)) {
     return dropOpenGroup(state, ancestor, notAllowed(ancestor.at, refused.nodelessCycle, ref));
   }
   if (node.value.nullable === true) {
-    const refusal = notAllowed(ancestor.at, refusedNullableDef(ancestor.id), ref);
+    const refusal = notAllowed(ancestor.at, refusedNullableDef(written), ref);
     return dropOpenGroup(state, ancestor, refusal);
   }
-  state.nameBySchema.set(ancestor.schema, ancestor.id);
-  state.defById.set(ancestor.id, node.value);
+  state.nameBySchema.set(ancestor.schema, written);
+  state.defById.set(written, node.value);
   state.openDefs.push({ schema: ancestor.schema, index: ancestor.index, low: ancestor.low });
   return walked(ref);
 }
@@ -69,7 +70,10 @@ function dropOpenGroup(state: State, ancestor: Ancestor, failure: Failed): Walke
     state.reported.report(schema, failure);
   }
   const remaining = state.openDefs.filter((def) => def.index <= ancestor.index);
-  state.openDefs.splice(0, state.openDefs.length, ...remaining);
+  state.openDefs.length = 0;
+  for (const def of remaining) {
+    state.openDefs.push(def);
+  }
   return failure;
 }
 

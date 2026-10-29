@@ -1,7 +1,13 @@
 import {
   type Endpoint,
+  endpointLabel,
   isEndpoint,
   isProvidedElement,
+  listedTwiceSentence,
+  notPublicSentence,
+  oneProviderSentence,
+  ownProviderSentence,
+  type Provided,
   providerOf,
   type Root,
   reaches,
@@ -10,6 +16,7 @@ import { byCodePoint, fieldStep, indexStep, inside, type Place } from '../walker
 import {
   type Declarations,
   isEmptyField,
+  isOwnProvided,
   type LocatedDependency,
   listOf,
 } from '../written/index.ts';
@@ -26,7 +33,7 @@ type Selected = { readonly at: Place; readonly endpoint: Endpoint };
  * Public ones only. What its list holds that is no Endpoint is the structure rule's.
  */
 export function dependencyFailures(declarations: Declarations): readonly DeclarationFailure[] {
-  const rootKind = declarations.root.kind;
+  const { root } = declarations;
   return declarations.dependencies.flatMap((located) => {
     if (isEmptyField(located.dependency.endpoints)) {
       return [
@@ -35,8 +42,8 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
     }
     const selected = selectedOf(located);
     return [
-      ...providerFailures(located.at, selected),
-      ...selected.flatMap((listed) => selectedFailures(listed, rootKind)),
+      ...providerFailures(located.at, selected, root),
+      ...selected.flatMap((listed) => selectedFailures(listed, root)),
       ...repeatedFailures(selected),
     ];
   });
@@ -56,14 +63,22 @@ function isSelected(listed: {
   return isEndpoint(listed.endpoint);
 }
 
-/** The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL. */
-function providerFailures(at: Place, selected: readonly Selected[]): readonly DeclarationFailure[] {
-  const providers = new Set(selected.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
+/**
+ * The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL.
+ * The Service itself is no Provider, so an Endpoint of its own Contract Package is not one.
+ */
+function providerFailures(
+  at: Place,
+  selected: readonly Selected[],
+  root: Root,
+): readonly DeclarationFailure[] {
+  const others = selected.filter(({ endpoint }) => !isOwnProvided(root, endpoint));
+  const providers = new Set(others.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
   if (providers.size < 2) {
     return [];
   }
   const names = [...providers].sort(byCodePoint).join(', ');
-  const message = `A Dependency lists one Provider's Endpoints: ${names}`;
+  const message = oneProviderSentence(names);
   return [failure(at, 'dependency-selection', message)];
 }
 
@@ -71,15 +86,15 @@ function isName(provider: string | undefined): provider is string {
   return provider !== undefined;
 }
 
-function selectedFailures(
-  { at, endpoint }: Selected,
-  rootKind: Root['kind'],
-): readonly DeclarationFailure[] {
+function selectedFailures({ at, endpoint }: Selected, root: Root): readonly DeclarationFailure[] {
   if (!isProvidedElement(endpoint)) {
     const message = `${exportedRule}: ${endpoint.name} is no Provider's`;
     return [failure(at, 'dependency-selection', message)];
   }
-  const packageKind = rootKind === 'application' ? 'application' : 'service';
+  if (isOwnProvided(root, endpoint)) {
+    return [failure(at, 'dependency-selection', ownProviderSentence(providerOf(endpoint)))];
+  }
+  const packageKind = root.kind === 'application' ? 'application' : 'service';
   if (!reaches(packageKind, endpoint.visibility)) {
     return [unreachableEndpointFailure(at, endpoint)];
   }
@@ -87,12 +102,12 @@ function selectedFailures(
 }
 
 /** A Private Endpoint is nobody's to list; an Internal one is a Service's only, never an Application's. */
-function unreachableEndpointFailure(at: Place, endpoint: Endpoint): DeclarationFailure {
+function unreachableEndpointFailure(at: Place, endpoint: Provided<Endpoint>): DeclarationFailure {
   const { visibility } = endpoint;
   if (visibility === 'private') {
     return failure(at, 'dependency-selection', `${exportedRule}: ${labelOf(endpoint)} is private`);
   }
-  const message = `An Application depends on Public Endpoints only: ${labelOf(endpoint)} is ${visibility}`;
+  const message = notPublicSentence(providerOf(endpoint), endpoint.name, visibility);
   return failure(at, 'application-dependency', message);
 }
 
@@ -102,7 +117,7 @@ function repeatedFailures(selected: readonly Selected[]): readonly DeclarationFa
   const failures: DeclarationFailure[] = [];
   for (const { at, endpoint } of selected) {
     if (seen.has(endpoint)) {
-      const message = `A Dependency lists each Endpoint once: ${labelOf(endpoint)} is listed twice`;
+      const message = `A Dependency lists each Endpoint once: ${listedTwiceSentence(labelOf(endpoint))}`;
       failures.push(failure(at, 'dependency-selection', message));
     }
     seen.add(endpoint);
@@ -113,5 +128,5 @@ function repeatedFailures(selected: readonly Selected[]): readonly DeclarationFa
 /** An Endpoint as a Dependency's failure names it: with its Provider, when one marks it. */
 function labelOf(endpoint: Endpoint): string {
   const provider = providerOf(endpoint);
-  return provider === undefined ? endpoint.name : `${provider}'s ${endpoint.name}`;
+  return provider === undefined ? endpoint.name : endpointLabel(provider, endpoint.name);
 }

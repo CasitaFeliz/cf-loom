@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { growthOf } from '../../test/growth.ts';
+import { cpuMillisecondsOf, growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
@@ -67,8 +67,11 @@ const unionIsRefused =
  */
 const linearGrowth = 24;
 
-/** A growth test builds and times its shape up to three times over, which a loaded runner may stretch. */
-const growthTimeout = 60_000;
+/**
+ * A growth test builds and times its shape up to three times over, which takes up to 11 s while the
+ * project's files run in parallel, and several times that on a CI runner that several runs share.
+ */
+const growthTimeout = 240_000;
 
 /** A recursive def holding a date, as a function so each test has a schema of its own. */
 function dateTree() {
@@ -303,6 +306,8 @@ describe('failure lines: defs that hold defs', () => {
 
   const levels = 24;
   const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
+  /** The CPU time telling the 2^24 paths stays under when it walks each def once. */
+  const pathsCpuMilliseconds = 2000;
 
   test.for([
     ['a valid union', () => z.union([z.string(), z.number()]), []],
@@ -316,12 +321,13 @@ describe('failure lines: defs that hold defs', () => {
     '%s in the last of 24 defs, each holding the next twice, is told once, quickly',
     ([, leaf, told]) => {
       const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(levels, leaf()) });
-      const started = performance.now();
+      const tell = () => linesOf(serviceWith([endpoint]));
 
-      const lines = linesOf(serviceWith([endpoint]));
+      const lines = tell();
+      const cpuMilliseconds = cpuMillisecondsOf(tell, pathsCpuMilliseconds);
 
       expect(lines).toEqual(told);
-      expect(performance.now() - started).toBeLessThan(2000);
+      expect(cpuMilliseconds).toBeLessThan(pathsCpuMilliseconds);
     },
   );
 });

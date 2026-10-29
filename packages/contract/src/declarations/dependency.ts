@@ -1,6 +1,13 @@
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { ProvidedEndpoint, ProviderNameOf } from './provided.ts';
-import type { DeclaredFieldsRule, IsOneLiteral, JoinedNames, LiteralNames } from './rules.ts';
+import type { OneProviderSentence } from './refusals.ts';
+import type {
+  DeclaredFieldsRule,
+  IsOneLiteral,
+  JoinedNames,
+  LiteralNames,
+  Refusal,
+} from './rules.ts';
 
 /** What an author writes to declare a Dependency: the Endpoints its owner calls, one or more, all one Provider's. */
 type DependencyDeclaration = {
@@ -28,7 +35,9 @@ type OneProviderRule<Declaration extends DependencyDeclaration> = [
   : IsOneLiteral<ListedProvidersOf<Declaration>> extends true
     ? unknown
     : {
-        readonly endpoints: `A Dependency lists one Provider's Endpoints: ${JoinedNames<ListedProvidersOf<Declaration>>}`;
+        readonly endpoints: Refusal<
+          OneProviderSentence<JoinedNames<ListedProvidersOf<Declaration>>>
+        >;
       };
 
 /** Declares the Endpoints a Contract calls of one Provider, so its client reaches no more. */

@@ -15,6 +15,7 @@ import {
   type Rejection,
   type RejectionsOf,
 } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -194,6 +195,41 @@ describe('defineGuard names', () => {
         // @ts-expect-error toString is a name every object already has
         name: 'toString',
         description: 'A Guard',
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('a reserved name’s type error is the line generate writes for it', () => {
+    const written = { name: 'delete', description: 'A Guard' } as const;
+    type Name = Parameters<typeof defineGuard<typeof written>>[0]['name'];
+
+    expectTypeOf<Name>().toExtend<
+      Refusal<'A Guard name is camelCase words and no reserved word: "delete"'>
+    >();
+  });
+});
+
+describe('defineGuard demands', () => {
+  test('demands.body written as the refusal’s own text is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'signed',
+        description: 'A signed request',
+        // @ts-expect-error a Guard demands only headers and query
+        demands: { body: 'A Guard demands only headers and query' },
+      });
+
+    expect(declare).not.toThrow();
+  });
+
+  test('demands.params written as the refusal’s own text is a type error', () => {
+    const declare = () =>
+      defineGuard({
+        name: 'signed',
+        description: 'A signed request',
+        // @ts-expect-error a Guard demands only headers and query
+        demands: { params: 'A Guard demands only headers and query' },
       });
 
     expect(declare).not.toThrow();

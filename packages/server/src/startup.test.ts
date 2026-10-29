@@ -282,6 +282,33 @@ describe('serve: what it checks before the first request', () => {
     expect(serving).toThrow(' input-conflict: ');
   });
 
+  test('a query param whose enum values share a text throws, as generate words it', () => {
+    const versioned = defineEndpoint({
+      name: 'versioned',
+      method: 'GET',
+      path: '/versioned',
+      visibility: 'public',
+      description: 'By version',
+      input: { query: z.object({ v: z.literal([1, '1']) }) },
+      success: { status: 204 },
+    });
+    const withVersioned = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [versioned] })],
+    });
+
+    const serving = () =>
+      serve(
+        withVersioned,
+        { endpoints: { versioned: handle(versioned, () => success()) }, guards: {} },
+        {},
+      );
+
+    expect(serving).toThrow(
+      ' shared-text: A query param\'s values each have a text of their own: v has "1" and 1',
+    );
+  });
+
   test('a Handler the map only inherits is no Handler', () => {
     const inheriting: typeof handlers.endpoints = Object.create(handlers.endpoints);
     const inherited = { ...handlers, endpoints: inheriting };

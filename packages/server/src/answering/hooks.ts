@@ -35,9 +35,9 @@ export type AnsweredRequest = {
   readonly kind: 'success' | 'rejection' | 'fault';
   /** The code sent: a Rejection's, as the Root resolved it, or a Reserved code; none for a Success or a Fault the Service produced. */
   readonly code?: string;
-  /** Whether the Caller went away before `serve` had its answer: the request's signal when the record is built. */
+  /** Whether the request's signal had aborted when the record was built, after `onServiceFault`, as when the Caller went away. */
   readonly aborted: boolean;
-  /** How long the request took, in milliseconds. */
+  /** How long the request took, in milliseconds, until the record was built, `onServiceFault` included. */
   readonly durationMs: number;
 } & (
   | {
@@ -61,7 +61,7 @@ export type AnsweredRequest = {
 
 /**
  * The record `onAnswered` receives: the method, and the matched Endpoint's name and path, and
- * whether the request's signal aborted before its answer.
+ * whether the request's signal had aborted when the record was built.
  */
 export function answeredRequestOf(
   request: Request,
@@ -80,8 +80,8 @@ function recordedMethodOf(method: string): Method | 'HEAD' | '_OTHER' {
   return isMethod(method) || method === 'HEAD' ? method : '_OTHER';
 }
 
-/** A hook of `serve`: it receives what it hears of, and the Request it came from. */
-export type ServeHook<Heard> = (heard: Heard, request: Request) => void | Promise<void>;
+/** Called with what `serve` heard and the Request it came from; what it returns is awaited, then ignored. */
+export type ServeHook<Heard> = (heard: Heard, request: Request) => unknown;
 
 /** Hands a Service's Fault and its Request to its hook, or the Fault to the console without one; a hook that fails is logged. */
 export async function reportServedFault(

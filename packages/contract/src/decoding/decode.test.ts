@@ -1017,6 +1017,11 @@ describe('decodeSnapshot', () => {
         ['defs', 'tree', 'format'],
       ],
       [
+        'a string format zod builds from a regex, which generate refuses',
+        { defs: { tree: { type: 'string', format: 'hex' } } },
+        ['defs', 'tree', 'format'],
+      ],
+      [
         'a literal node',
         { defs: { tree: { type: 'literal', value: 'a' } } },
         ['defs', 'tree', 'type'],
@@ -1106,7 +1111,7 @@ describe('decodeSnapshot', () => {
       ],
       [
         'an option of a string format that takes none',
-        { type: 'string', format: 'hex', formatOptions: { version: 4 } },
+        { type: 'string', format: 'email', formatOptions: { version: 4 } },
         'version',
       ],
       [
@@ -2379,6 +2384,28 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(malformedAt(['defs', 'a', key]));
     });
 
+    test('allOf items in the order of their canonical JSON but not of their shapes are malformed', () => {
+      const regex = { type: 'string', regex: { source: '^a', flags: '' }, description: 'a' };
+      const items = [regex, { type: 'string', max: 8 }];
+
+      const result = serviceWith({ defs: { a: { type: 'allOf', items } } });
+
+      expect(result).toEqual(
+        malformedAt(['defs', 'a', 'items'], 'is not in canonical order, each item once'),
+      );
+    });
+
+    test('an allOf holding two items of one shape with different descriptions is malformed', () => {
+      const items = [
+        { type: 'string', description: 'a' },
+        { type: 'string', description: 'b' },
+      ];
+
+      const result = serviceWith({ defs: { a: { type: 'allOf', items } } });
+
+      expect(result).toEqual(malformedAt(['defs', 'a', 'items']));
+    });
+
     test('a union’s options in any order decode', () => {
       const node = { type: 'union', options: [{ type: 'string' }, { type: 'boolean' }] };
       const reversed = { type: 'union', options: [{ type: 'boolean' }, { type: 'string' }] };
@@ -2467,7 +2494,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
     });
 
-    test('a Snapshot nested past 256 levels is malformed at its deepest path, before its structure is read', () => {
+    test('a Snapshot nested past 256 levels is malformed at the first level past the limit, before its structure is read', () => {
       const depth = 300;
       const nested =
         '{"type":"array","items":'.repeat(depth) + '{"type":"nothing"}' + '}'.repeat(depth);
@@ -3330,9 +3357,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
   }
 
-  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', {
-    timeout: 30_000,
-  }, () => {
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', () => {
     const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
     const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
     const { schemaOf } = randomSchemas(seededNext(2231));
@@ -3373,4 +3398,90 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
       expect(new Set(kinds)).toEqual(new Set(['malformed']));
     },
   );
+});
+
+describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
+  const width = 300_000;
+  const wideArray = () => Array.from({ length: width }, () => ({}));
+  const wideMap = () => Object.fromEntries(Array.from({ length: width }, (_, i) => [`k${i}`, {}]));
+
+  test.each([
+    { what: 'an array', wide: wideArray },
+    { what: 'a map', wide: wideMap },
+  ])(
+    'a Snapshot holding $what of 300,000 objects where its format holds one decodes',
+    ({ wide }) => {
+      const published = aServiceUsing({ a: { type: 'json', examples: [wide()] } });
+
+      const result = decodeSnapshot(JSON.stringify(published));
+
+      expect(result.kind).toBe('decoded');
+    },
+  );
+
+  test.each([
+    { what: 'an array', wide: wideArray },
+    { what: 'a map', wide: wideMap },
+  ])(
+    'a Snapshot holding $what of 300,000 objects at a key its format does not define is malformed there',
+    ({ wide }) => {
+      const result = decodedFrom({ ...aService(), extra: wide() });
+
+      expect(result).toEqual(malformedAt(['extra'], 'is a key its format does not define'));
+    },
+  );
+
+  test('a published Snapshot whose json body example holds 150,000 items, as generate wrote it, decodes back', () => {
+    const items = Array.from({ length: 150_000 }, (_, i) => ({ i }));
+    const schema = z.json().meta({ examples: [items] });
+    const [located] = walkSchemas([{ at: aPlace('a'), schema }], () => undefined).located;
+    const node = located?.walked.kind === 'walked' ? located.walked.value : stringNode;
+    const published = aServiceUsing({ a: node });
+
+    const result = roundTrip(published);
+
+    expect(node.type).toBe('json');
+    expect(result).toEqual({ kind: 'decoded', snapshot: published });
+  });
+
+  /**
+   * The text of a Snapshot whose Endpoint uses two defs: `wide`, a json node with an example of
+   * `width` objects, and `deep`, `levels` array nodes one inside the other. Built as text, since
+   * `JSON.stringify` does not hold nesting that deep.
+   */
+  function textOfWideAndDeep(width: number, levels: number): string {
+    const examples = [Array.from({ length: width }, () => ({}))];
+    const wide = JSON.stringify({ type: 'json', examples });
+    const deep =
+      '{"type":"array","items":'.repeat(levels) + '{"type":"string"}' + '}'.repeat(levels);
+    return JSON.stringify(aServiceUsing({ wide: stringNode, deep: stringNode }))
+      .replace('"wide":{"type":"string"}', () => `"wide":${wide}`)
+      .replace('"deep":{"type":"string"}', () => `"deep":${deep}`);
+  }
+
+  test('a Snapshot holding a def of 300,000 examples and a def nested within the limit decodes', () => {
+    const text = textOfWideAndDeep(300_000, 100);
+
+    const result = decodeSnapshot(text);
+
+    expect(result.kind).toBe('decoded');
+  });
+
+  test('random wide and deep Snapshots are decoded within the limit and refused past it, never a throw', () => {
+    const next = seededNext(340);
+    const draws = Array.from({ length: 10 }, (_, draw) => {
+      const refused = draw % 2 === 1;
+      const levels = refused ? 300 + Math.floor(next() * 20_000) : 1 + Math.floor(next() * 250);
+      return { refused, width: Math.floor(next() * 300_000), levels };
+    });
+
+    const results = draws.map(({ width, levels }) => {
+      const result = decodeSnapshot(textOfWideAndDeep(width, levels));
+      return result.kind === 'decoded' ? 'decoded' : result;
+    });
+
+    const at = ['defs', 'deep', ...Array<string>(254).fill('items')];
+    const refusal = malformedAt(at, 'nests deeper than 256 levels');
+    expect(results).toEqual(draws.map(({ refused }) => (refused ? refusal : 'decoded')));
+  });
 });

@@ -3,6 +3,7 @@ import {
   isRejectionStatus,
   isReservedCode,
   isStandardRejection,
+  listedTwiceSentence,
 } from '../declarations/index.ts';
 import { fieldStep, indexStep, inFields, inside, type Place } from '../walker/index.ts';
 import {
@@ -59,7 +60,7 @@ function listedOnceFailures(at: Place, rejections: unknown): readonly Declaratio
     failure(
       inside(at, fieldStep('rejections'), indexStep(index)),
       'rejection-once',
-      `${key} is listed twice`,
+      listedTwiceSentence(key),
     ),
   );
 }

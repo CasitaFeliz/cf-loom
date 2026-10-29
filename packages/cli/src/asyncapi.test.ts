@@ -69,7 +69,9 @@ function refsOf(value: unknown): readonly string[] {
     if (key === '$ref' && typeof found === 'string') {
       refs.push(found);
     } else {
-      refs.push(...refsOf(found));
+      for (const ref of refsOf(found)) {
+        refs.push(ref);
+      }
     }
   }
   return refs;
@@ -383,7 +385,10 @@ describe('cf-loom asyncapi: the payloads', () => {
   test('a message’s payload is the JSON Schema of the Event’s body', () => {
     expect(payloadOf('OrderCreated@2')).toEqual({
       type: 'object',
-      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      properties: {
+        orderId: { type: 'string', format: 'uuid' },
+        total: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      },
       required: ['orderId', 'total'],
     });
   });
@@ -433,7 +438,10 @@ describe('cf-loom asyncapi: the payloads', () => {
   test('an Active Message Version’s payload is not marked deprecated', () => {
     expect(payloadOf('OrderCreated@2')).toStrictEqual({
       type: 'object',
-      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      properties: {
+        orderId: { type: 'string', format: 'uuid' },
+        total: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      },
       required: ['orderId', 'total'],
     });
   });
