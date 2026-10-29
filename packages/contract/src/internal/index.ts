@@ -56,7 +56,6 @@ export {
   groupListsSentence,
   guardDemandsSentence,
   headerCaseSentence,
-  invalidInputBody,
   isCommand,
   isDefinitions,
   isEndpoint,

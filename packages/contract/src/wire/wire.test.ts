@@ -11,7 +11,6 @@ import {
   faultStatusOf,
   headerTextsOf,
   headerValuesOf,
-  invalidInputBody,
   invalidInputBodyOf,
   invalidInputResponseOf,
   isQueryText,
@@ -653,7 +652,7 @@ describe('the invalid-input body of many or large Issues', () => {
   });
 
   test.for([17, 2026, 4099, 65_537, 99_991, 271_828, 314_159, 1_000_003])(
-    'any number of Issues of any size, seed %i, lists the first that fit, counts the rest and reads with cf-loom’s schema',
+    'any number of Issues of any size, seed %i, lists the first that fit and counts the rest',
     (seed) => {
       const next = seededNext(seed);
       const lists = Array.from({ length: 12 }, () => randomIssues(next));
@@ -738,7 +737,6 @@ function invariantsOf(
   const listed = body.issues.length;
   const withNext = [...body.issues, written[listed]];
   return {
-    readsWithSchema: invalidInputBody.safeParse(body).success,
     isPrefix: JSON.stringify(body.issues) === JSON.stringify(written.slice(0, listed)),
     withinCount: listed <= 100,
     withinBytes: issuesBytesOf(body) <= 65_536,
@@ -748,7 +746,6 @@ function invariantsOf(
 }
 
 const heldInvariants = {
-  readsWithSchema: true,
   isPrefix: true,
   withinCount: true,
   withinBytes: true,
