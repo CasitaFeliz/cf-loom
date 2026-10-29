@@ -1,4 +1,5 @@
 import type { Endpoint, Http, InputOf } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import type { ReceivedOutcome } from '../decoding/index.ts';
 import type {
   AnyDependency,
@@ -123,8 +124,14 @@ type Method<
   Input = CallInput<Target, Extract<Configured, InputHeaderName<Target>>>,
 > =
   Readonly<Record<never, never>> extends Input
-    ? (input?: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>
-    : (input: Input, call?: CallOptions) => Promise<ReceivedOutcome<D, Name>>;
+    ? <const Given = unknown, const GivenCall = unknown>(
+        input?: Closed<Given, Input>,
+        call?: Closed<GivenCall, CallOptions>,
+      ) => Promise<ReceivedOutcome<D, Name>>
+    : <const Given = unknown, const GivenCall = unknown>(
+        input: Closed<Given, Input>,
+        call?: Closed<GivenCall, CallOptions>,
+      ) => Promise<ReceivedOutcome<D, Name>>;
 
 /** One method per Endpoint a Dependency lists, named after it; `Configured` names the headers `client()` gives. */
 export type Client<D extends AnyDependency, Configured extends ConfiguredName<D> = never> = {

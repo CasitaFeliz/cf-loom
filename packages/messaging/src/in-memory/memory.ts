@@ -1,12 +1,12 @@
 import type { ServiceContract } from '@cf-loom/contract';
-import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import type { Closed } from '@cf-loom/contract/internal';
 import { connectedMessaging, type MessagingOptions } from '../messaging/index.ts';
 import { serviceVersionsOf, subjectsOf } from '../subjects/index.ts';
 import { injectedAttemptsOf } from './attempts.ts';
 import { MemoryConnection } from './connection.ts';
 import { Deliveries } from './deliveries.ts';
 import { recordedOf } from './recorded.ts';
-import type { MemoryMessaging } from './types.ts';
+import type { DeliveryMeta, MemoryMessaging } from './types.ts';
 
 /**
  * Runs a Contract's messaging in memory, for tests: no Broker, Messages delivered one at a time in
@@ -16,7 +16,7 @@ import type { MemoryMessaging } from './types.ts';
  */
 export function memory<const C extends ServiceContract, const Given = unknown>(
   contract: C,
-  options?: MessagingOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessagingOptions>>,
+  options?: Closed<Given, MessagingOptions>,
 ): Promise<MemoryMessaging<C>>;
 export async function memory(
   contract: ServiceContract,
@@ -33,7 +33,7 @@ export async function memory(
       return connection.messages();
     },
     messagesOf: (message) => recordedOf(connection.messages(), versions, message),
-    deliver: async (message, body, meta = {}) => {
+    deliver: async (message, body, meta: DeliveryMeta = {}) => {
       connection.assertOpen();
       const attempts = injectedAttemptsOf(connection.durableConsumers(), { message, body, meta });
       return await deliveries.lineUpAndWait(attempts);

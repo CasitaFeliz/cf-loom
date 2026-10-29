@@ -96,8 +96,9 @@ Both hooks may be async and are awaited before the response is returned; what on
 
 ## Types
 
+- An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
 - `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
-- `ServeOptions<Resources>`, `{ resources?, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes, always given, besides the Contract and the Handler map: the Resources its Handlers take, required exactly when some Handler takes any, and what is operational about serving; none of it is part of the Contract. A field it does not declare is a type error, given as a literal or through a variable, and a function that wraps `serve` types its parameters as the concrete types (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `ServeOptions<Resources>`, `{ resources?, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes, always given, besides the Contract and the Handler map: the Resources its Handlers take, required exactly when some Handler takes any, and what is operational about serving; none of it is part of the Contract.
 - `BodyLimit`, `number | 'unlimited'`: what `maxBodyBytes` takes, a whole number of bytes from 0 or no limit.
 - `ServedFault`: what `onServiceFault` receives first, beside the `Request`, `{ declaration, name, guard? }` and `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
 - `AnsweredRequest`, `{ method, endpoint?, path?, status, kind, code?, aborted, durationMs }`: what `onAnswered` receives first, beside the `Request`.

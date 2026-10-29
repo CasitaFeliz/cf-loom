@@ -1,8 +1,4 @@
-import {
-  type BrokerPlan,
-  type DeclaredFieldsRule,
-  decodeBrokerPlan,
-} from '@cf-loom/contract/internal';
+import { type BrokerPlan, type Closed, decodeBrokerPlan } from '@cf-loom/contract/internal';
 import type { JetStreamManager } from '@nats-io/jetstream';
 import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
@@ -13,13 +9,23 @@ import { type ResolvedPlan, settingsOf } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
 import { managerOf } from './stream-check.ts';
 
+/** The limits' defaults: each holds no setting its limits do not declare. */
+type DefaultsFields<Given> = {
+  readonly [Field in 'streamDefaults' | 'durableConsumerDefaults']?:
+    | Closed<
+        Given extends { readonly [Name in Field]?: infer Defaults } ? Defaults : unknown,
+        NonNullable<BrokerLimits[Field]>
+      >
+    | undefined;
+};
+
 type Checked = ResolvedPlan | { readonly kind: 'refused'; readonly message: string };
 
 /** Applies a Service's broker plan under the Broker prefix the plan names; the organization calls it, `messaging()` never does. */
-export async function applyBrokerPlan<const Given = unknown>(
-  connecting: JetStreamConnecting & Given & NoInfer<DeclaredFieldsRule<Given, JetStreamConnecting>>,
+export async function applyBrokerPlan<const Given = unknown, const GivenLimits = unknown>(
+  connecting: Closed<Given, JetStreamConnecting>,
   plan: BrokerPlan,
-  limits: BrokerLimits,
+  limits: Closed<GivenLimits, BrokerLimits & DefaultsFields<GivenLimits>>,
 ): Promise<void> {
   const checked = checkedOf(plan, limits);
   if (checked.kind === 'refused') {

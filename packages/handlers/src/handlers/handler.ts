@@ -9,6 +9,7 @@ import type {
   RequiredContextOf,
   Subscription,
 } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { HandledRequest } from '../checks/index.ts';
 import type { Admission, CheckedAdmission, CheckedOutcome, Outcome } from '../outcomes/index.ts';
@@ -55,8 +56,13 @@ type ContextField<Context> = keyof Context extends never
   ? { readonly context?: Context }
   : { readonly context: Context };
 
-/** `request` in a direct call: each field left out is a signal never aborted, or empty headers. */
-type DirectRequestField = { readonly request?: Partial<HandledRequest> };
+/** `request` in a Direct call: each field left out is a signal never aborted, or empty headers; no other field. */
+type DirectRequestField<Given> = {
+  readonly request?: Closed<
+    Given extends { readonly request?: infer Request } ? Request : unknown,
+    Partial<HandledRequest>
+  >;
+};
 
 /** What an EndpointHandler's implementation returns, given the Input, the Context and request, and last the Resources it takes, `Needs<'orders'>`; may be async. */
 export type EndpointImplementation<
@@ -79,10 +85,13 @@ export type GuardImplementation<
 ) => Admission<Target> | Promise<Admission<Target>>;
 
 /** The Handler of one Endpoint: calling it runs the Contract's checks and answers what `serve` would. */
-export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = ((
+export type EndpointHandler<Target extends Endpoint, Resources extends object = NoResources> = (<
+  const Given = unknown,
+  const GivenLast = unknown,
+>(
   input: InputOf<Target>,
-  call: ContextField<ContextOf<Target>> & DirectRequestField,
-  ...last: CallArgument<ResourcesField<Resources>>
+  call: Closed<Given, ContextField<ContextOf<Target>> & DirectRequestField<Given>>,
+  ...last: CallArgument<GivenLast, ResourcesField<Resources>>
 ) => Promise<CheckedOutcome<Target>>) &
   HandledBy<Target, Resources>;
 
@@ -100,9 +109,15 @@ export type HandlerMap = {
 };
 
 /** The Handler of one Guard: calling it validates what it is given and answers what `serve` would. */
-export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = ((
+export type GuardHandler<Target extends Guard, Resources extends object = NoResources> = (<
+  const Given = unknown,
+  const GivenLast = unknown,
+>(
   demands: DemandsOf<Target>,
-  call: ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField,
-  ...last: CallArgument<ResourcesField<Resources>>
+  call: Closed<
+    Given,
+    ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField<Given>
+  >,
+  ...last: CallArgument<GivenLast, ResourcesField<Resources>>
 ) => Promise<CheckedAdmission<Target>>) &
   HandledBy<Target, Resources>;

@@ -11,6 +11,7 @@ import {
   providedEvent,
   type Subscription,
 } from '@cf-loom/contract';
+import type { Closed } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -144,7 +145,9 @@ describe('memory types', () => {
       inMemory.deliver(notifyOnCreated, {});
 
     expectTypeOf(inMemory.deliver).parameter(0).toEqualTypeOf<Event | Command>();
-    expectTypeOf(inMemory.deliver).parameter(2).toEqualTypeOf<DeliveryMeta | undefined>();
+    expectTypeOf(inMemory.deliver)
+      .parameter(2)
+      .toEqualTypeOf<Closed<unknown, DeliveryMeta> | undefined>();
     expectTypeOf(inMemory.deliver).returns.resolves.toEqualTypeOf<
       'acked' | 'pending' | 'ended' | 'handed-back'
     >();
@@ -159,6 +162,15 @@ describe('memory types', () => {
     expectTypeOf(inMemory.deliver<typeof orderCreatedV1>)
       .parameter(1)
       .toEqualTypeOf<{ orderId: string }>();
+    expect(delivering).toBeTypeOf('function');
+  });
+
+  test('deliver given meta through a variable with a field it does not declare is a type error', () => {
+    const meta = { factId: 'f-1', header: { traceparent: '00-abc-def-01' } };
+
+    // @ts-expect-error header is not a declared field
+    const delivering = () => inMemory.deliver(orderCreatedV1, { orderId: 'o-1' }, meta);
+
     expect(delivering).toBeTypeOf('function');
   });
 
