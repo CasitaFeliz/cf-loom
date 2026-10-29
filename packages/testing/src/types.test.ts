@@ -13,6 +13,7 @@ import {
   openEnumReader,
 } from '@cf-loom/contract';
 import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { fault } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
@@ -337,6 +338,42 @@ describe('fakeProvider: types', () => {
       .otherwise((r) => r.reserved('RETIRED'));
 
     expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.fault given through a variable with a field it does not declare is a type error, a Handler’s built Fault included', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const misspelled = { committed: 'no', retryable: true, messge: 'Busy' } as const;
+    const built = fault({ committed: 'no', retryable: true });
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error messge is not a declared field
+      .once((r) => r.fault(misspelled))
+      // @ts-expect-error kind is not a declared field: a Handler's Fault is not what r.fault takes
+      .otherwise((r) => r.fault(built));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('r.unknownRejection given options through a variable with a field they do not declare is a type error', () => {
+    const payments = fakeProvider(paymentsDependency);
+    const options = { message: 'The card expired', headrs: { 'x-trace': 't-1' } };
+
+    payments
+      .on('getPayment')
+      // @ts-expect-error headrs is not a declared field
+      .otherwise((r) => r.unknownRejection('CARD_EXPIRED', options));
+
+    expect(payments.calls('getPayment')).toEqual([]);
+  });
+
+  test('fakeProvider given options through a variable with a field they do not declare is a type error', () => {
+    const options = { baseUrl: 'https://payments.test', baseUri: 'https://payments.test' };
+
+    // @ts-expect-error baseUri is not a declared field
+    const faking = () => fakeProvider(paymentsDependency, options);
+
+    expect(faking).toBeTypeOf('function');
   });
 
   test('r.reserved takes only a Reserved code', () => {
