@@ -90,12 +90,14 @@ function pickFrom<Value>(values: readonly Value[], next: () => number): Value | 
   return values[Math.floor(next() * values.length)];
 }
 
-/** A copy of a walked node with an origin on some of its nodes, as a shared schema's uses have. */
-function withOrigins(node: SchemaNode, next: () => number): SchemaNode {
+/** A copy of a walked node with each annotation on some of its nodes, as a schema's uses have. */
+function withAnnotations(node: SchemaNode, next: () => number): SchemaNode {
   const copy = structuredClone(node);
   for (const held of nodesWithin(copy)) {
-    if (next() < 0.3) {
-      held['origin'] = pickFrom(annotationValues['origin'] ?? [], next);
+    for (const annotation of annotations) {
+      if (next() < 0.3) {
+        held[annotation] = pickFrom(annotationValues[annotation] ?? [], next);
+      }
     }
   }
   return copy;
@@ -147,7 +149,7 @@ function editedPairsOf(): readonly Edited[] {
   );
   return schemas.flatMap((schema) => {
     const plain = walkedOf(schema);
-    const walked = plain === undefined ? undefined : withOrigins(plain, next);
+    const walked = plain === undefined ? undefined : withAnnotations(plain, next);
     const edited = walked === undefined ? undefined : editedOf(walked, next);
     return walked === undefined || edited === undefined ? [] : [{ walked, edited }];
   });
