@@ -24,6 +24,7 @@ A Service with messaging connects it first, hands its EventPublisher and Command
 
 ```ts
 // src/main.ts
+import { client } from '@cf-loom/client';
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
 import { connect } from '@nats-io/transport-node';
@@ -39,6 +40,7 @@ const running = await messaging(contract, jetstream({
 const resources = {      // the Service's own
   orders: await ordersRepository(),
   callers: await mongoCallers(),
+  payments: client(paymentsDependency, { baseUrl }),
   notifications: await mongoNotifications(),
   publisher: running.publisher,
   sender: running.sender,

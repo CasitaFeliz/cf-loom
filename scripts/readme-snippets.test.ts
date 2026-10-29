@@ -159,7 +159,9 @@ afterEach(() => {
 
 /** A repository with `packages/contract/src/index.ts` and no built package, to write a Service from. */
 function aRepository(
-  readmes: Partial<Record<'contract' | 'handlers' | 'messaging' | 'server', string>>,
+  readmes: Partial<
+    Record<'contract' | 'handlers' | 'messaging' | 'server' | 'client' | 'testing', string>
+  >,
   scope: Record<string, string> = {},
 ): string {
   const repository = mkdtempSync(join(tmpdir(), 'readme-repository-'));
@@ -167,7 +169,7 @@ function aRepository(
   const files: Record<string, string> = {
     'packages/contract/src/index.ts': "export { defineGuard } from './declarations/index.ts';\n",
     ...Object.fromEntries(
-      ['contract', 'handlers', 'messaging', 'server'].map((name) => [
+      ['contract', 'handlers', 'messaging', 'server', 'client', 'testing'].map((name) => [
         `packages/${name}/README.md`,
         readmes[name as 'contract'] ?? `# ${name}\n`,
       ]),
@@ -392,7 +394,7 @@ describe('the READMEs', () => {
     expect(existsSync(join(root, '.readme-service', 'tsconfig.json'))).toBe(true);
   });
 
-  test('every TypeScript block of the contract, handlers, messaging and server READMEs type-checks', () => {
+  test('every TypeScript block of the contract, handlers, messaging, server, client and testing READMEs type-checks', () => {
     const problems = readmeServiceProblems(join(root, '.readme-service'));
 
     expect(problems).toEqual([]);

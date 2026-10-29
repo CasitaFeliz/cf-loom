@@ -1,6 +1,6 @@
-import { client } from '@cf-loom/client';
+import { type Client, client } from '@cf-loom/client';
 import type { MessageMeta } from '@cf-loom/handlers';
-import { type Broker, messaging } from '@cf-loom/messaging';
+import { type Broker, messaging, type OutgoingMessage } from '@cf-loom/messaging';
 import type { BrokerLimits, BrokerPlan, JetStreamConnecting } from '@cf-loom/messaging/jetstream';
 import { paymentsDependency } from './contract/dependencies/payments-service.dependency.ts';
 import { contract } from './contract/index.ts';
@@ -29,6 +29,7 @@ export type Notifications = { send(paymentId: string): Promise<void> };
 
 export const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
 export const baseUrl = 'http://payments.test';
+export const settings = { paymentsKey: 'k-pay' };
 
 const stored = {
   id: ORDER_ID,
@@ -41,6 +42,10 @@ const stored = {
 const sent: string[] = [];
 /** The orders whose ChargeCard v1 the Service handled, in the order it handled them. */
 export const charged: string[] = [];
+/** Each Message the Service handed its Broker, in the order it handed them. */
+export const published: OutgoingMessage[] = [];
+/** Each Outcome of getPayment the settlePayment Handler received, in the order it received them. */
+export const received: Awaited<ReturnType<Client<typeof paymentsDependency>['getPayment']>>[] = [];
 
 export const orders: Orders = {
   find: async (orderId, callerId) =>
@@ -61,6 +66,8 @@ export const notifications: Notifications & { readonly sent: readonly string[] }
 export function resetServiceCode(): void {
   sent.length = 0;
   charged.length = 0;
+  published.length = 0;
+  received.length = 0;
 }
 
 export async function ordersRepository(): Promise<Orders> {
@@ -84,7 +91,10 @@ export function preflight(_request: Request): Response {
 
 export const broker: Broker = {
   connect: async () => ({
-    publish: async () => ({ duplicate: false }),
+    publish: async (message) => {
+      published.push(message);
+      return { duplicate: false };
+    },
     consume: async () => undefined,
     close: async () => undefined,
   }),

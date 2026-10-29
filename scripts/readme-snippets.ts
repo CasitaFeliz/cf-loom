@@ -26,7 +26,7 @@ import {
 type Compiled = { readonly failed: boolean; readonly lines: string[] };
 
 const root = join(import.meta.dirname, '..');
-const packagesWithReadmes = ['contract', 'handlers', 'messaging', 'server'];
+const packagesWithReadmes = ['contract', 'handlers', 'messaging', 'server', 'client', 'testing'];
 const scopeAt = 'scripts/readme-service';
 const diagnostic = /^(.+?)\((\d+),\d+\): (error TS\d+: .*)$/;
 

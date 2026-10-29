@@ -9,7 +9,7 @@ Each fake is checked against the Provider's Snapshot, as each Endpoint of its Co
 ```ts
 import { fakeProvider } from '@cf-loom/testing';
 import { paymentsDependency } from '../src/contract/dependencies/payments-service.dependency.ts';
-import settlePaymentHandler from '../src/endpoints/payments/settle-payment.handler.ts';
+import settlePaymentHandler from '../src/endpoints/orders/settle-payment.handler.ts';
 
 const payments = fakeProvider(paymentsDependency);
 payments.on('getPayment')
@@ -43,6 +43,10 @@ The Handler is called directly (see [Testing a Service's own code](https://githu
 - **Mistakes in the test.** A mistake throws `FakeProviderError`, out of `fetch`, and the fake records it. The client passes it through unchanged (see [fetch and inferFault](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#fetch-and-inferfault) in the client README), but the code under test may catch it like any error: a directly called EndpointHandler answers it as a Fault, as it answers any throw. `payments.verify()`, called at the end of a test or in `afterEach`, throws every mistake recorded so far, one a step made after its request was aborted included, and each Endpoint's `once` steps no request took (`getPayment: 1 once step left unused`): the one error, or an `AggregateError` of them, and again on every call. Its message names the Provider and the Endpoint when the request reached one, and what went wrong, then each Issue on its own line, as the contract writes an issue (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), never the value. It is a mistake to call an Endpoint never scripted, or one with no step left and no `otherwise`; to script a value that breaks the readers, or one for a part the Endpoint or the code declares none of, a body on a 204 or on a code without one, or headers on a code without any, which lists `Expected no value` at that part; a header that cannot travel as text, or anything that throws while it is read; to give `r.reject` a code the Endpoint does not answer; to give `r.fault` a `committed`, `retryable` or `message` a Caller would not read as a Fault's, or a `retryAfter` `fault()` refuses; to give `r.reserved` anything but a Reserved code; to give `r.unknownRejection` a message that is no string, a code the Endpoint answers, a Reserved code or one that is no `UPPER_SNAKE_CASE` of at most 64 characters, which no Contract can declare, a body or headers that break the reader of a code the listed Endpoints declare, headers for a code they do not declare, or any other body that is no JSON value; to give `r.status` anything but an integer from 200 to 599 other than the Success's status, or headers that cannot be sent; to return from a step anything its `r` did not build, or to throw from one, what it threw kept as `cause`; and to send a request whose path lies outside the base URL's path, matches no Endpoint the Dependency lists, with that method or any, the methods its path takes named, or is won by one the Dependency does not list.
 
   ```ts
+  import { fakeProvider } from '@cf-loom/testing';
+  import { paymentsDependency } from '../src/contract/dependencies/payments-service.dependency.ts';
+  import settlePaymentHandler from '../src/endpoints/orders/settle-payment.handler.ts';
+
   const payments = fakeProvider(paymentsDependency);
   payments.on('getPayment').once((r, { params }) => r.success({ id: params.paymentId, amount: 1200 }));
   const resources = { payments: payments.client({ headers: { 'x-api-key': 'k' } }) };

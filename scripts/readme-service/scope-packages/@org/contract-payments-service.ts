@@ -1,49 +1,32 @@
-import {
-  defineEndpoint,
-  defineGroup,
-  defineService,
-  openEnumReader,
-  providedEndpoint,
-  providedEvent,
-} from '@cf-loom/contract';
+import { type Endpoint, openEnumReader, providedEndpoint, providedEvent } from '@cf-loom/contract';
 import { exportedCutOf, identityOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { apiKey, definitions, idempotencyKey } from '@org/definitions';
 import { z } from 'zod';
+import { createPayment } from '../../payments-service/src/contract/endpoints/payments/create-payment.endpoint.ts';
+import { getPayment } from '../../payments-service/src/contract/endpoints/payments/get-payment.endpoint.ts';
+import { contract } from '../../payments-service/src/contract/index.ts';
 
-const payments = {
+const provider = {
   name: 'payments-service',
   standardRejections: {
     invalidInput: {
-      code: 'BAD_REQUEST',
-      status: 400,
-      message: 'The request is invalid',
+      ...definitions.standardRejections.invalidInput,
       body: z.object({ issues: z.array(z.object({ message: z.string() })) }),
     },
-    notFound: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
-    notImplemented: { code: 'NOT_IMPLEMENTED', status: 501, message: 'Not implemented yet' },
+    notFound: definitions.standardRejections.notFound,
+    notImplemented: definitions.standardRejections.notImplemented,
   },
 } as const;
 
-const getPayment = defineEndpoint({
-  name: 'getPayment',
-  method: 'GET',
-  path: '/payments/:paymentId',
-  visibility: 'public',
-  description: 'One payment by id',
-  input: { params: z.object({ paymentId: z.string() }) },
-  success: { status: 200, body: z.object({ paymentId: z.string() }) },
-});
-
 /** The Snapshot the Provider exports, from which its Contract Package cuts each Endpoint. */
 function exportedSnapshot() {
-  const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] });
-  const root = defineService({ name: payments.name, groups: [group] });
   const rootPackage = {
-    packageName: payments.name,
+    packageName: provider.name,
     packages: [],
     contractPackages: [],
     rootExports: {},
   };
-  const validated = validateRoot(root, rootPackage);
+  const validated = validateRoot(contract, rootPackage);
   if (validated.kind !== 'valid') {
     throw new Error(`The payments Contract is invalid: ${JSON.stringify(validated.failures)}`);
   }
@@ -53,12 +36,41 @@ function exportedSnapshot() {
   }
   return snapshot;
 }
+const snapshot = exportedSnapshot();
 
-const cut = exportedCutOf(exportedSnapshot(), identityOf(getPayment.method, getPayment.path));
+type DeclaredHeaders<Declared extends Endpoint> = Declared['input'] extends {
+  readonly headers: z.ZodObject<infer Shape>;
+}
+  ? Shape
+  : Record<never, never>;
 
-export const getPaymentEndpoint = providedEndpoint(payments, getPayment, cut);
+/**
+ * The Endpoint as its Contract Package exports it: its Input's headers merged with the headers its
+ * Guard demands, as `cf-loom package` merges them, and its exported Snapshot cut.
+ */
+function provided<const Declared extends Endpoint, const Demanded extends z.ZodRawShape>(
+  endpoint: Declared,
+  demanded: z.ZodObject<Demanded>,
+) {
+  const declared =
+    endpoint.input?.headers instanceof z.ZodObject ? endpoint.input.headers.shape : {};
+  const headers = z.object({ ...declared, ...demanded.shape }) as z.ZodObject<
+    Omit<DeclaredHeaders<Declared>, keyof Demanded> & Demanded
+  >;
+  const input = { ...endpoint.input, headers } as Omit<
+    NonNullable<Declared['input']>,
+    'headers'
+  > & {
+    readonly headers: typeof headers;
+  };
+  const cut = exportedCutOf(snapshot, identityOf(endpoint.method, endpoint.path));
+  return providedEndpoint(provider, { ...endpoint, input }, cut);
+}
 
-export const paymentSettledEventV1 = providedEvent(payments.name, {
+export const getPaymentEndpoint = provided(getPayment, apiKey.demands.headers);
+export const createPaymentEndpoint = provided(createPayment, idempotencyKey.demands.headers);
+
+export const paymentSettledEventV1 = providedEvent(provider.name, {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
