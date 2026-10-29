@@ -146,7 +146,7 @@ async function rawFor(url: string, text: string, ms: number) {
 }
 
 function statusLinesOf(received: string): string[] {
-  return received.match(/^HTTP\/1\.1 \d+ .+$/gm) ?? [];
+  return received.match(/HTTP\/1\.1 \d+ [^\r\n]+/g) ?? [];
 }
 
 function statusLineOf(received: string): string {
@@ -353,6 +353,51 @@ describe('nodeHttp', () => {
     expect(statusLineOf(answer)).toBe('HTTP/1.1 200 OK');
     expect(answer.toLowerCase()).toContain('content-type: application/json');
     expect(bodyOf(answer)).toBe('');
+  });
+
+  test('a Success is sent in one piece with its content-length, never chunked', async () => {
+    const url = await listening();
+
+    const answer = await raw(
+      url,
+      'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+
+    const [head = ''] = answer.split('\r\n\r\n');
+    expect(head).toMatch(/^content-length: 12$/im);
+    expect(head).not.toMatch(/^transfer-encoding:/im);
+    expect(bodyOf(answer)).toBe('{"id":"o-1"}');
+  });
+
+  test('a body that streams is written as it streams, its first chunk reaching the Caller before its last is produced', async () => {
+    const { promise: firstReceived, resolve: received } = Promise.withResolvers<void>();
+    const encoder = new TextEncoder();
+    const streaming: Http = async () => {
+      let produced = 0;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          produced += 1;
+          if (produced === 1) {
+            controller.enqueue(encoder.encode('first;'));
+            return;
+          }
+          await firstReceived;
+          controller.enqueue(encoder.encode('last'));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+    const url = await listening(nodeHttp(streaming));
+
+    const response = await fetch(`${url}/stream`);
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    const first = await reader.read();
+    received();
+    const last = await reader.read();
+
+    const decoder = new TextDecoder();
+    expect([decoder.decode(first.value), decoder.decode(last.value)]).toEqual(['first;', 'last']);
   });
 
   test('a GET reaches serve with no body, a DELETE with the body it carries', async () => {
@@ -583,6 +628,7 @@ describe('nodeHttp', () => {
 
     const answer = await raw(url, first + second);
 
+    console.log(JSON.stringify(answer));
     expect(statusLinesOf(answer)).toEqual(['HTTP/1.1 404 Not Found', 'HTTP/1.1 200 OK']);
   });
 
