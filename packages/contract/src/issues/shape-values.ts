@@ -65,7 +65,9 @@ function checkedSidesOf(shape: ReadShape, fields: ShapeFields, check: PartCheck)
     const { part, schema } = shape[side];
     const checked = check(part, schema, { value: fields[side] });
     if (checked.kind === 'issues') {
-      issues.push(...checked.issues);
+      for (const issue of checked.issues) {
+        issues.push(issue);
+      }
     } else if (schema !== undefined) {
       values[side] = checked.value;
     }

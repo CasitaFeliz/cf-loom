@@ -243,6 +243,40 @@ describe('a Success body nested past the stack', () => {
   });
 });
 
+describe('a Success body of many Issues', () => {
+  const listTags = defineEndpoint({
+    name: 'listTags',
+    method: 'GET',
+    path: '/tags',
+    visibility: 'public',
+    description: 'The tags',
+    success: { status: 200, body: z.array(z.string()) },
+  });
+  const tagsPackage = contractPackageOf({ listTags }, defaultStandards);
+  const tagging = defineDependency({ endpoints: [tagsPackage.endpoints.listTags] });
+
+  test('a body whose 300,000 items each break its schema is INVALID_OUTCOME, not a throw', async () => {
+    const wide = JSON.stringify(Array.from({ length: 300_000 }, () => 1));
+    const tags = client(tagging, {
+      baseUrl: 'http://orders.test',
+      fetch: async () =>
+        new Response(wide, { status: 200, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const outcome = await tags.listTags();
+
+    expect(outcome).toMatchObject({
+      kind: 'fault',
+      source: 'invalid-outcome',
+      code: 'INVALID_OUTCOME',
+      committed: 'yes',
+    });
+    const issues = outcome.kind === 'fault' ? (outcome.issues ?? []) : [];
+    expect(issues).toHaveLength(300_000);
+    expect(issues[299_999]).toMatchObject({ part: 'success.body', path: [299_999] });
+  });
+});
+
 describe('a Success status that carries no JSON', () => {
   const statusFault = {
     kind: 'fault',

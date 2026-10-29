@@ -111,7 +111,9 @@ function aBroker(failing: { readonly connect?: Error; readonly consumes?: number
           if (recorded.consumes <= (failing.consumes ?? 0)) {
             throw new Error('no such Durable consumer');
           }
-          recorded.durableConsumers.push(...durableConsumers);
+          for (const consumer of durableConsumers) {
+            recorded.durableConsumers.push(consumer);
+          }
         },
         close: async () => {
           recorded.closes += 1;
@@ -166,7 +168,9 @@ function aLoggingBroker(held: {
         return { duplicate: false };
       },
       consume: async (given) => {
-        durableConsumers.push(...given);
+        for (const consumer of given) {
+          durableConsumers.push(consumer);
+        }
         log.push('consume');
         await held.consume;
         log.push('consumed');

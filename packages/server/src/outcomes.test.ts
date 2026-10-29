@@ -481,3 +481,41 @@ describe('serve: a Fault', () => {
     ]);
   });
 });
+
+describe('serve: a Success body of many Issues', () => {
+  const listTags = defineEndpoint({
+    name: 'listTags',
+    method: 'GET',
+    path: '/tags',
+    visibility: 'public',
+    description: 'The tags',
+    success: { status: 200, body: z.array(z.string()) },
+  });
+  const tagging = defineService({
+    name: 'tags-service',
+    groups: [defineGroup({ name: 'tags', description: 'Tags', endpoints: [listTags] })],
+  });
+
+  test('a Success whose 300,000 body items each break its schema is an invalid outcome, not the Handler’s throw', async () => {
+    const faults: ServedFault[] = [];
+    const wide = Array.from({ length: 300_000 }, () => 1) as unknown as string[];
+    const http = serve(
+      tagging,
+      { endpoints: { listTags: handle(listTags, () => success(wide)) }, guards: {} },
+      {
+        onServiceFault: (fault) => {
+          faults.push(fault);
+        },
+      },
+    );
+
+    const response = await http(new Request('http://test/tags'));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ fault: { code: 'INVALID_OUTCOME' } });
+    expect(faults).toMatchObject([{ kind: 'invalid-outcome', name: 'listTags' }]);
+    const reported = faults[0] as { issues: readonly Issue[] };
+    expect(reported.issues).toHaveLength(300_000);
+    expect(reported.issues[299_999]?.path).toEqual([299_999]);
+  });
+});

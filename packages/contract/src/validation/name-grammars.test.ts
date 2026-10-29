@@ -33,7 +33,9 @@ function stringsUpTo(parts: readonly string[], length: number): readonly string[
   const all: string[] = [];
   for (let size = 1; size <= length; size += 1) {
     current = current.flatMap((prefix) => parts.map((part) => `${prefix}${part}`));
-    all.push(...current);
+    for (const text of current) {
+      all.push(text);
+    }
   }
   return all;
 }
