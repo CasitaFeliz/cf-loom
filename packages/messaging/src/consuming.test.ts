@@ -11,6 +11,7 @@ import {
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { planOf } from '../test/streams.ts';
 import {
   type Broker,
   type ConsumedFault,
@@ -288,6 +289,17 @@ describe('consume', () => {
         durable: 'orders-service_notify-on-settled',
       },
     ]);
+  });
+
+  test('the Durable consumers consume gives the broker are those the Contract’s broker plan holds', async () => {
+    const { durableConsumers } = await consuming();
+
+    const consumed = durableConsumers.map(({ durable, stream, subject }) => [
+      durable,
+      { service: 'orders-service', stream, subject },
+    ]);
+
+    expect(Object.fromEntries(consumed)).toEqual(planOf(contract, null).durableConsumers);
   });
 
   test('a Subscription to a Provider’s Event consumes from that Provider’s stream and subject, with no Dependency', async () => {

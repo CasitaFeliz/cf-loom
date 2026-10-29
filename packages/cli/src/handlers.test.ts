@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 
@@ -1729,8 +1729,24 @@ describe('cf-loom generate: a configured layout', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr:
-        'endpoints.createOrder is src/shared/orders/create-order.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${intoContractClause}: ${replaceLinkIntoFix}\n`,
+    });
+  });
+
+  test('a Handler path whose link leaves src/ and lands in the Contract’s folder is refused as leaving src/', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    renameSync(join(project, 'src/contract'), join(project, 'contract'));
+    symlinkSync(join(project, 'contract'), join(project, 'src/contract'), 'dir');
+    symlinkSync(join(project, 'contract/endpoints'), join(project, 'src/shared'), 'dir');
+    write(project, withLayout({}, "{ endpoint: 'src/shared/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outOfSrcClause}: ${replaceLinkOutFix}\n`,
     });
   });
 
@@ -3987,12 +4003,12 @@ describe('cf-loom generate: linked folders and other runs', () => {
     );
   });
 
-  test('a Handler behind a linked folder is moved from the path the map imported it from', () => {
+  test('a Handler behind a linked folder inside src/ is moved from the path the map imported it from', () => {
     const project = aProject(aService());
     cfLoom(project, 'generate');
     const text = implement(project, 'src/endpoints/orders/get-order.handler.ts', 'get');
-    renameSync(join(project, 'src/endpoints/orders'), join(project, 'elsewhere-orders'));
-    symlinkSync(join(project, 'elsewhere-orders'), join(project, 'src/endpoints/orders'), 'dir');
+    renameSync(join(project, 'src/endpoints/orders'), join(project, 'src/archive-orders'));
+    symlinkSync(join(project, 'src/archive-orders'), join(project, 'src/endpoints/orders'), 'dir');
     write(project, withLayout({}, "{ endpoint: 'src/http/{group}/{name}.handler.ts' }"));
 
     const ran = cfLoom(project, 'generate');
@@ -4123,7 +4139,7 @@ describe('cf-loom generate and verify: what the file system holds', () => {
   test('a dangling link at a Handler path is no file', () => {
     const project = aProject(aService());
     mkdirSync(join(project, 'src/guards'), { recursive: true });
-    symlinkSync(join(project, 'nowhere'), join(project, 'src/guards/api-key.handler.ts'));
+    symlinkSync(join(project, 'src/nowhere'), join(project, 'src/guards/api-key.handler.ts'));
 
     const generated = cfLoom(project, 'generate');
     const verified = cfLoom(project, 'verify');
@@ -4293,7 +4309,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
       expect(ran).toEqual({
         status: 3,
         stdout: '',
-        stderr: `${placed}, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n`,
+        stderr: `${placed}, which must be under src/ and outside src/contract/: give it another path in the layout of cf-loom.config.ts\n`,
       });
       expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
       expect(handlerFiles(project)).toEqual([]);
@@ -4312,7 +4328,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
       status: 3,
       stdout: '',
       stderr:
-        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, which must be under src/ and outside src/contract/: give it another path in the layout of cf-loom.config.ts\n',
     });
   });
 
@@ -4408,7 +4424,7 @@ describe('cf-loom generate and verify: Message Handlers follow their Group', () 
       status: 3,
       stdout: '',
       stderr:
-        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, under src/contract/, which holds only the Contract: give it another path in the layout of cf-loom.config.ts\n',
+        'subscriptions.auditCreated is src/contract/audit-created.handler.ts, which must be under src/ and outside src/contract/: give it another path in the layout of cf-loom.config.ts\n',
     });
   });
 
@@ -5033,3 +5049,329 @@ function anEndpointWithItsGuard(): Readonly<Record<string, string>> {
     'src/contract/index.ts': aRoot({ a: './endpoints/orders/a.endpoint.ts' }),
   };
 }
+
+/** A Service with the Endpoint `name` in the Group `orders`, and nothing else. */
+function aServiceWithEndpoint(name: string): Readonly<Record<string, string>> {
+  const file = `src/contract/endpoints/orders/${name}.endpoint.ts`;
+  return {
+    'package.json': manifest,
+    'cf-loom.config.ts': config,
+    [file]: anEndpoint({ name, path: `/${name}` }),
+    'src/contract/index.ts': aRoot({ [name]: `./endpoints/orders/${name}.endpoint.ts` }),
+  };
+}
+
+/** A Service whose Endpoint `a` attaches the Guard `d`. */
+function aServiceWithGuardNamedD(): Readonly<Record<string, string>> {
+  return {
+    'package.json': manifest,
+    'cf-loom.config.ts': config,
+    'src/contract/guards/d.guard.ts': aGuardNamed('d'),
+    'src/contract/endpoints/orders/a.endpoint.ts': anEndpoint({
+      name: 'a',
+      path: '/a',
+      guards: '[guardD]',
+      imports: [importOf('{ d as guardD }', '../../guards/d.guard.ts')],
+    }),
+    'src/contract/index.ts': aRoot({ a: './endpoints/orders/a.endpoint.ts' }),
+  };
+}
+
+/** `aMessagingService()` with its Subscription `notifyOnSettled` named `d`. */
+function aMessagingServiceWithSubscriptionNamedD(): Readonly<Record<string, string>> {
+  const service = aMessagingService();
+  const renamed = (path: string) => (service[path] ?? '').replaceAll('notifyOnSettled', 'd');
+  return {
+    ...service,
+    'src/contract/subscriptions.ts': renamed('src/contract/subscriptions.ts'),
+    'src/contract/index.ts': renamed('src/contract/index.ts'),
+  };
+}
+
+const declarationClause =
+  'has a file name holding .d., which TypeScript reads as a declaration file';
+
+describe('cf-loom generate and verify: a Handler path the layout fills meets the layout’s rules', () => {
+  test.for([
+    {
+      name: 'an Endpoint named d',
+      files: aServiceWithEndpoint('d'),
+      layout: "{ endpoint: 'src/h.{name}.handler.ts' }",
+      placed: 'endpoints.d is src/h.d.handler.ts',
+    },
+    {
+      name: 'a Group named d filling an Endpoint’s path',
+      files: withRoot(aServiceWithEndpoint('a'), (root) => root.replace("'orders'", "'d'")),
+      layout: "{ endpoint: 'src/{name}.{group}.handler.ts' }",
+      placed: 'endpoints.a is src/a.d.handler.ts',
+    },
+    {
+      name: 'a Guard named d',
+      files: aServiceWithGuardNamedD(),
+      layout: "{ guard: 'src/h.{name}.handler.ts' }",
+      placed: 'guards.d is src/h.d.handler.ts',
+    },
+    {
+      name: 'a Subscription named d',
+      files: aMessagingServiceWithSubscriptionNamedD(),
+      layout: "{ subscription: 'src/h.{name}.handler.ts' }",
+      placed: 'subscriptions.d is src/h.d.handler.ts',
+    },
+    {
+      name: 'a Group named d filling a Command’s path',
+      files: withRoot(aMessagingService(), paymentsNamed('d')),
+      layout: "{ command: 'src/x.{group}.v{version}.handler.ts' }",
+      placed: 'commands.ChargeCard@1 is src/x.d.v1.handler.ts',
+    },
+    {
+      name: 'a Group named d filling a Subscription’s path',
+      files: withRoot(aMessagingService(), paymentsNamed('d')),
+      layout: "{ subscription: 'src/{name}.{group}.handler.ts' }",
+      placed: 'subscriptions.auditCreated is src/audit-created.d.handler.ts',
+    },
+  ])(
+    '$name fills a declaration file’s name and fails generate and verify with exit 3',
+    ({ files, layout, placed }) => {
+      const project = aProject(withLayout(files, layout));
+
+      const generated = cfLoom(project, 'generate');
+      const verified = cfLoom(project, 'verify');
+
+      const line = `${placed}, which ${declarationClause}: give it another path in the layout of cf-loom.config.ts\n`;
+      expect(generated).toEqual({ status: 3, stdout: '', stderr: line });
+      expect(verified).toEqual({ status: 3, stdout: '', stderr: line });
+      expect(existsSync(join(project, 'contract.snapshot.json'))).toBe(false);
+      expect(handlerFiles(project)).toEqual([]);
+    },
+  );
+});
+
+/** A folder beside the project that a link could reach, holding a generated file and a Handler that are not the project's. */
+function anOutsideFolder(): string {
+  const outside = mkdtempSync(join(tmpdir(), 'cf-loom-outside-'));
+  projects.push(outside);
+  write(outside, {
+    'old.generated.ts': `${header}\nexport {};\n`,
+    'other.handler.ts': "export default 'outside';\n",
+  });
+  return outside;
+}
+
+/** What `generate` says of a recorded Handler it cannot take for its own, and what to do about it. */
+function refusedImportLine(
+  from: string,
+  { label, at }: { readonly label: string; readonly at: string },
+  clause: string,
+): string {
+  const fix = `fix the import, or delete ${from} if it is no Handler map`;
+  return `${from} records the Handler of ${label} at ${at}, which ${clause}: ${fix}\n`;
+}
+
+const outOfSrcClause = 'a link leads out of src/';
+const intoContractClause = 'a link leads into src/contract/';
+const replaceLinkOutFix =
+  'replace the link with a folder or file under src/, or give it another path in the layout of cf-loom.config.ts';
+const replaceLinkIntoFix =
+  'replace the link with a folder or file outside src/contract/, or give it another path in the layout of cf-loom.config.ts';
+const beneathSrcClause = 'must be under src/ and outside src/contract/';
+
+describe('cf-loom generate and verify: only a Handler path cf-loom could have placed is recorded', () => {
+  test('a generated file importing the Root as a Handler fails generate and verify with exit 1 and moves nothing', () => {
+    const project = aProject(aServiceWithEndpoint('health'));
+    cfLoom(project, 'generate');
+    rmSync(join(project, 'src/endpoints/orders/health.handler.ts'));
+    write(project, {
+      'src/x.generated.ts': lines([
+        header,
+        importOf('healthEndpointHandler', './contract/index.ts'),
+      ]),
+    });
+    const before = treeOf(project, 'src');
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line = refusedImportLine(
+      'src/x.generated.ts',
+      { label: 'endpoints.health', at: 'src/contract/index.ts' },
+      beneathSrcClause,
+    );
+    expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toContain(line);
+    expect(treeOf(project, 'src')).toEqual(before);
+  });
+
+  test('a Handler map importing a file outside the project fails generate and verify with exit 1 and moves nothing', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const outside = join(dirname(project), `${basename(project)}-outside.handler.ts`);
+    projects.push(outside);
+    writeFileSync(outside, "export default 'outside';\n");
+    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text.replace(
+        './endpoints/orders/get-order.handler.ts',
+        `../../${basename(project)}-outside.handler.ts`,
+      ),
+    );
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line = refusedImportLine(
+      'src/handlers.generated.ts',
+      { label: 'endpoints.getOrder', at: `../${basename(project)}-outside.handler.ts` },
+      beneathSrcClause,
+    );
+    expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toContain(line);
+    expect(readFileSync(outside, 'utf8')).toBe("export default 'outside';\n");
+  });
+
+  test('a Handler map importing a file that does not end .handler.ts fails generate with exit 1', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text.replace('./endpoints/orders/get-order.handler.ts', './endpoints/orders/get-order.ts'),
+    );
+
+    const ran = cfLoom(project, 'generate');
+
+    const line = refusedImportLine(
+      'src/handlers.generated.ts',
+      { label: 'endpoints.getOrder', at: 'src/endpoints/orders/get-order.ts' },
+      'must end with .handler.ts',
+    );
+    expect(ran).toEqual({ status: 1, stdout: '', stderr: line });
+  });
+
+  test('a Handler map importing a Handler behind a folder link out of src/ fails generate and verify with exit 1', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const outside = anOutsideFolder();
+    const implemented = "export default 'get';\n";
+    write(outside, { 'get-order.handler.ts': implemented });
+    rmSync(join(project, 'src/endpoints/orders/get-order.handler.ts'));
+    symlinkSync(outside, join(project, 'src/shared'), 'dir');
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text.replace('./endpoints/orders/get-order.handler.ts', './shared/get-order.handler.ts'),
+    );
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line = refusedImportLine(
+      'src/handlers.generated.ts',
+      { label: 'endpoints.getOrder', at: 'src/shared/get-order.handler.ts' },
+      outOfSrcClause,
+    );
+    expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toContain(line);
+    expect(read(outside, 'get-order.handler.ts')).toBe(implemented);
+  });
+
+  test('a recorded Handler import through a link into src/contract/ fails generate and verify with exit 1, and nothing moves', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const implemented = read(project, 'src/endpoints/orders/get-order.handler.ts');
+    symlinkSync(join(project, 'src/contract/endpoints'), join(project, 'src/shared'), 'dir');
+    edit(project, 'src/handlers.generated.ts', (text) =>
+      text.replace('./endpoints/orders/get-order.handler.ts', './shared/get-order.handler.ts'),
+    );
+
+    const generated = cfLoom(project, 'generate');
+    const verified = cfLoom(project, 'verify');
+
+    const line = refusedImportLine(
+      'src/handlers.generated.ts',
+      { label: 'endpoints.getOrder', at: 'src/shared/get-order.handler.ts' },
+      intoContractClause,
+    );
+    expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
+    expect(verified.status).toBe(1);
+    expect(verified.stderr).toContain(line);
+    expect(read(project, 'src/endpoints/orders/get-order.handler.ts')).toBe(implemented);
+  });
+
+  test.skipIf(isRoot)(
+    'a folder under src/ linked out of the project is never read for the record, and its generated files stay (skipped as root)',
+    () => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      const outside = anOutsideFolder();
+      write(outside, { 'locked/inside.generated.ts': `${header}\nexport {};\n` });
+      symlinkSync(outside, join(project, 'src/gen'), 'dir');
+      const before = treeOf(outside, '.');
+      chmodSync(join(outside, 'locked'), 0o000);
+
+      let generated: ReturnType<typeof cfLoom>;
+      let verified: ReturnType<typeof cfLoom>;
+      try {
+        generated = cfLoom(project, 'generate');
+        verified = cfLoom(project, 'verify');
+      } finally {
+        chmodSync(join(outside, 'locked'), 0o755);
+      }
+
+      const written = lines([
+        'Wrote contract.snapshot.json',
+        'Wrote src/handlers.generated.ts',
+        'Wrote src/readers.generated.ts',
+      ]);
+      expect(generated).toEqual({ status: 0, stdout: written, stderr: '' });
+      expect(verified).toMatchObject({ status: 0, stderr: '' });
+      expect(treeOf(outside, '.')).toEqual(before);
+    },
+  );
+
+  test('a generated file linked from outside the project is never read for the record or deleted', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    const outside = anOutsideFolder();
+    symlinkSync(join(outside, 'old.generated.ts'), join(project, 'src/old.generated.ts'));
+    const before = treeOf(outside, '.');
+
+    const generated = cfLoom(project, 'generate');
+
+    expect(generated).toMatchObject({ status: 0, stderr: '' });
+    expect(generated.stdout).not.toContain('Deleted');
+    expect(treeOf(outside, '.')).toEqual(before);
+  });
+
+  test.for([
+    {
+      name: 'a Handler path',
+      layout: () => "{ endpoint: 'src/shared/{name}.handler.ts' }",
+      line: `endpoints.createOrder is src/shared/create-order.handler.ts, which ${outOfSrcClause}`,
+    },
+    {
+      name: 'the Handler map’s path',
+      layout: () => "{ handlerMap: 'src/shared/handlers.generated.ts' }",
+      line: `layout.handlerMap is src/shared/handlers.generated.ts, which ${outOfSrcClause}`,
+    },
+    {
+      name: 'the readers’ path',
+      layout: () => "{ readers: 'src/shared/readers.generated.ts' }",
+      line: `layout.readers is src/shared/readers.generated.ts, which ${outOfSrcClause}`,
+    },
+  ])(
+    '$name that a folder link carries out of src/ fails generate and verify with exit 3 and writes nothing outside',
+    ({ layout, line }) => {
+      const outside = anOutsideFolder();
+      const project = aProject(withLayout(aService(), layout()));
+      symlinkSync(outside, join(project, 'src/shared'), 'dir');
+      const before = treeOf(outside, '.');
+
+      const generated = cfLoom(project, 'generate');
+      const verified = cfLoom(project, 'verify');
+
+      const stderr = `${line}: ${replaceLinkOutFix}\n`;
+      expect(generated).toEqual({ status: 3, stdout: '', stderr });
+      expect(verified).toEqual({ status: 3, stdout: '', stderr });
+      expect(treeOf(outside, '.')).toEqual(before);
+    },
+  );
+});

@@ -3330,9 +3330,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
     return [...twice, ...reversed].map((json) => decodeSnapshot(JSON.stringify(json)).kind);
   }
 
-  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', {
-    timeout: 30_000,
-  }, () => {
+  test('random schemas a Snapshot holds decode to the same bytes, and nothing else in order', () => {
     const file = new URL('orders-service/contract.snapshot.json', examplesDirectory);
     const committed: ServiceSnapshot = JSON.parse(readFileSync(file, 'utf8'));
     const { schemaOf } = randomSchemas(seededNext(2231));

@@ -35,7 +35,7 @@ export type StringNode = Annotations & {
   readonly max?: number;
 };
 
-/** A number, with the bounds and steps declared; `int` implies no safe-integer bounds. */
+/** A number, with the bounds and steps declared; `int` is a safe integer, which the node writes no bounds for. */
 export type NumberNode = Annotations & {
   readonly type: 'number';
   readonly int?: true;
