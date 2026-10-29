@@ -17,8 +17,8 @@ export type BrokerTrouble = HandlerFaultBase<Subscription | Command> & {
   readonly stream: string;
 } & ({ readonly kind: 'pull-failed'; readonly cause: unknown } | { readonly kind: 'recovered' });
 
-/** The Service's `onBrokerTrouble`, which may be async and is awaited. */
-export type BrokerTroubleHook = (trouble: BrokerTrouble) => void | Promise<void>;
+/** Called with each trouble report; what it returns is awaited, then ignored. */
+export type BrokerTroubleHook = (trouble: BrokerTrouble) => unknown;
 
 /** Tells the Service of a `BrokerTrouble`; resolves once told, never rejecting. */
 export type TroubleTell = (trouble: BrokerTrouble) => Promise<void>;

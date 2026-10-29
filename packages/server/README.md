@@ -4,16 +4,16 @@
 
 ## Serving
 
-A Service without messaging serves HTTP alone:
+A Service without messaging, `notes-service` here, serves HTTP alone:
 
 ```ts
-// src/main.ts
+// notes-service/src/main.ts
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 
-const resources = { orders: await ordersRepository() };   // the Service's own
+const resources = { notes: await notesRepository() };   // the Service's own
 const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });   // (Request) => Promise<Response>
 const server = nodeHttp(http).listen(3000);
 
@@ -38,6 +38,8 @@ const running = await messaging(contract, jetstream({
 }));
 const resources = {      // the Service's own
   orders: await ordersRepository(),
+  callers: await mongoCallers(),
+  notifications: await mongoNotifications(),
   publisher: running.publisher,
   sender: running.sender,
 };
@@ -67,6 +69,9 @@ The Faults `serve` answers with a Reserved code and no Handler (see [Reserved co
 `serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onAnswered` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, `Access-Control-Expose-Headers` among them (see [In a browser](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#in-a-browser-applications) in the client README), and any `Set-Cookie`, which no Contract declares since a browser never exposes it; the Service adds both by wrapping the handler `serve` returns.
 
 ```ts
+import { serve } from '@cf-loom/server';
+import handlers from '../src/handlers.generated.ts';
+
 const notOurs = new Response(null, { status: 404 });
 const http = serve(contract, handlers, {
   resources,

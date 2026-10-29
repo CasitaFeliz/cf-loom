@@ -27,8 +27,8 @@ export type ConsumedFault = HandlerFaultBase<Command | Subscription> & {
   readonly lastAttempt: boolean;
 } & ({ readonly kind: 'invalid-body'; readonly issues: readonly Issue[] } | HandlerFailure);
 
-/** The Service's `onServiceFault`, which may be async and is awaited. */
-export type ServiceFaultHook = (fault: ConsumedFault) => void | Promise<void>;
+/** Called with each Fault a Message Handler produced; what it returns is awaited, then ignored. */
+export type ServiceFaultHook = (fault: ConsumedFault) => unknown;
 
 /** Tells of a fault and never rejects: it answers the `onServiceFault threw` line when the hook failed. */
 export type Report = (fault: ConsumedFault) => Promise<string | undefined>;
