@@ -31,9 +31,13 @@ export function closedValueFailures(
   return [failure(at, rule, `${noun} is ${oneOf(allowed)}: ${writtenTextOf(value)}`)];
 }
 
+/** Several names in one sentence, closed by a word: `200, 201 or 204`, `"a", "b" and "c"`. */
+export function joinedOf(names: readonly string[], closing: 'and' | 'or'): string {
+  const last = names.at(-1);
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} ${closing} ${last}`;
+}
+
 /** Several allowed values in one sentence: `200, 201 or 204`. */
 export function oneOf(allowed: readonly unknown[]): string {
-  const names = allowed.map(String);
-  const last = names.at(-1);
-  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} or ${last}`;
+  return joinedOf(allowed.map(String), 'or');
 }

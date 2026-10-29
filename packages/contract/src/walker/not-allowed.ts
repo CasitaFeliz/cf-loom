@@ -40,6 +40,10 @@ export const refused = {
   recordKey: { construct: 'a z.record() key that is not a string' },
   conditionalCheck: { construct: 'a conditional check' },
   customPattern: { construct: 'a format with a custom pattern' },
+  plainRegex: {
+    construct: 'a regex that is no plain RegExp',
+    instead: 'a RegExp literal or new RegExp(), with nothing set on it',
+  },
   urlNormalize: { construct: 'z.url({ normalize })' },
   readonly: { construct: '.readonly()' },
   numericEnum: { construct: 'numeric z.enum() values' },

@@ -554,7 +554,7 @@ describe('Input that cannot be sent', () => {
     expect(calls()).toBe(0);
   });
 
-  test('a param and a query text that cannot travel are answered with a header that cannot', async () => {
+  test('a param, a query text and a header that cannot travel are answered, each naming what it cannot travel as', async () => {
     const { orders } = unsent();
 
     const outcome = await orders.searchOrders({
@@ -566,9 +566,17 @@ describe('Input that cannot be sent', () => {
     expect(outcome).toMatchObject({
       body: {
         issues: [
-          { in: 'params', path: ['shopId'] },
-          { in: 'query', path: ['ids', 0] },
-          { in: 'headers', path: ['x-trace'] },
+          {
+            in: 'params',
+            path: ['shopId'],
+            message: 'The path param cannot travel as a URL segment',
+          },
+          { in: 'query', path: ['ids', 0], message: 'The query value cannot travel as URL text' },
+          {
+            in: 'headers',
+            path: ['x-trace'],
+            message: 'The header value cannot travel as HTTP field text',
+          },
         ],
       },
     });

@@ -309,6 +309,33 @@ describe('serve: what it checks before the first request', () => {
     );
   });
 
+  test('a header literal that cannot travel throws, as generate words it', () => {
+    const versioned = defineEndpoint({
+      name: 'versioned',
+      method: 'GET',
+      path: '/versioned',
+      visibility: 'public',
+      description: 'By version',
+      input: { headers: z.object({ 'x-version': z.literal([' 1', 'é\n']) }) },
+      success: { status: 204 },
+    });
+    const withVersioned = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [versioned] })],
+    });
+
+    const serving = () =>
+      serve(
+        withVersioned,
+        { endpoints: { versioned: handle(versioned, () => success()) }, guards: {} },
+        {},
+      );
+
+    expect(serving).toThrow(
+      ' unsendable-text: A header\'s values each travel as HTTP field text: x-version has " 1" and "é\\n"',
+    );
+  });
+
   test('a Handler the map only inherits is no Handler', () => {
     const inheriting: typeof handlers.endpoints = Object.create(handlers.endpoints);
     const inherited = { ...handlers, endpoints: inheriting };
