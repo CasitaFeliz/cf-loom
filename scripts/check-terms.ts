@@ -4,9 +4,10 @@ import { join, relative } from 'node:path';
 const boldPhrase = /\*\*([^*\n]+)\*\*/g;
 const multiWordTerm = /^[A-Z]\S*( \S+)+$/;
 const fencedBlock = /^([ \t]*)(```|~~~)[\s\S]*?^\1\2.*$/gm;
-const codeSpan = /`[^`\n]*`/g;
+const codeSpan = /(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])*?(?<!`)\1(?!`)/g;
 const linkDestination = /\]\([^)\n]*\)/g;
 const bareUrl = /https?:\/\/\S+/g;
+const wordBreak = '(?:[ \\t]+|[ \\t]*\\r?\\n[ \\t]*)';
 const root = join(import.meta.dirname, '..');
 
 /** A prose use of a glossary term that CONTEXT.md spells otherwise. */
@@ -14,8 +15,8 @@ export type TermMisspelling = {
   readonly line: number;
   /** The words as the document writes them, such as `direct calls`. */
   readonly written: string;
-  /** The term as CONTEXT.md spells it, such as `Direct call`. */
-  readonly term: string;
+  /** The words as CONTEXT.md spells them, with the ending the document writes, such as `Direct calls`. */
+  readonly spelled: string;
 };
 
 /** The glossary's terms of two words or more: each bold phrase of CONTEXT.md that starts with a capital letter. */
@@ -24,7 +25,7 @@ export function multiWordTerms(glossary: string): string[] {
   return [...new Set(phrases.filter((phrase) => multiWordTerm.test(phrase)))];
 }
 
-/** `markdown` with code, fenced blocks and link destinations replaced by spaces, so every line keeps its number. */
+/** `markdown` with code, fenced blocks, link destinations and bare URLs replaced by spaces, so every line keeps its number. */
 function proseOf(markdown: string): string {
   const blankedOut = (match: string): string => match.replace(/[^\n]/g, ' ');
   let prose = markdown;
@@ -41,8 +42,8 @@ function escaped(text: string): string {
 /** The pattern of a use of any term or its plural, longest term first so that Breaking Change Approval is not read as Breaking Change. */
 function usesOf(terms: readonly string[]): RegExp {
   const longestFirst = [...terms].sort((left, right) => right.length - left.length);
-  const spaced = longestFirst.map((term) => term.split(' ').map(escaped).join('\\s+'));
-  return new RegExp(`(?<![\\w-])(${spaced.join('|')})(s|es)?(?![\\w-])`, 'gi');
+  const spaced = longestFirst.map((term) => term.split(' ').map(escaped).join(wordBreak));
+  return new RegExp(`(?<![A-Za-z0-9-])(${spaced.join('|')})(s|es)?(?![A-Za-z0-9-])`, 'gi');
 }
 
 function lineOf(text: string, index: number): number {
@@ -50,8 +51,8 @@ function lineOf(text: string, index: number): number {
 }
 
 /**
- * Each use in the prose of `markdown`, even across a line break, of a term or its plural that is spelled
- * otherwise than in `terms`.
+ * Each use in the prose of `markdown` of a term or its plural, its words separated by at most one line break,
+ * that is spelled otherwise than in `terms`.
  */
 export function misspelledTerms(markdown: string, terms: readonly string[]): TermMisspelling[] {
   const prose = proseOf(markdown);
@@ -61,15 +62,18 @@ export function misspelledTerms(markdown: string, terms: readonly string[]): Ter
     const words = head.replace(/\s+/g, ' ');
     const term = spelledOut.get(words.toLowerCase());
     if (term !== undefined && words !== term) {
-      misspellings.push({ line: lineOf(prose, index), term, written: words + ending });
+      misspellings.push({
+        line: lineOf(prose, index),
+        written: words + ending,
+        spelled: term + ending,
+      });
     }
   }
   return misspellings;
 }
 
-function messageOf({ term, written }: TermMisspelling): string {
-  const ending = written.slice(term.length);
-  return `terms: write "${term}${ending}", not "${written}".`;
+function messageOf({ spelled, written }: TermMisspelling): string {
+  return `terms: write "${spelled}", not "${written}".`;
 }
 
 /** The documents CLAUDE.md lists: the root ones and each package's README.md and ARCHITECTURE.md. */

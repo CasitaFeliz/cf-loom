@@ -123,7 +123,7 @@ describe('misspelledTerms', () => {
 
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
-    expect(misspellings).toEqual([{ line: 2, written: 'direct call', term: 'Direct call' }]);
+    expect(misspellings).toEqual([{ line: 2, written: 'direct call', spelled: 'Direct call' }]);
   });
 
   it('reports a plural written in lower case and a half-capitalized term', () => {
@@ -136,9 +136,9 @@ describe('misspelledTerms', () => {
     ]);
 
     expect(misspellings).toEqual([
-      { line: 1, written: 'direct calls', term: 'Direct call' },
-      { line: 2, written: 'Breaking change', term: 'Breaking Change' },
-      { line: 3, written: 'broker prefixes', term: 'Broker prefix' },
+      { line: 1, written: 'direct calls', spelled: 'Direct calls' },
+      { line: 2, written: 'Breaking change', spelled: 'Breaking Change' },
+      { line: 3, written: 'broker prefixes', spelled: 'Broker prefixes' },
     ]);
   });
 
@@ -148,26 +148,117 @@ describe('misspelledTerms', () => {
 
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
-    expect(misspellings).toEqual([{ line: 1, written: 'direct call', term: 'Direct call' }]);
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
   });
 
-  it('does not report a term inside code, a fenced block, a tilde fence, an indented fence or a link destination', () => {
-    const markdown = [
-      'A `direct call` in a span.',
-      '```ts',
-      '// a direct call',
-      '```',
-      '~~~',
-      'a direct call',
-      '~~~',
-      '- an item:',
-      '',
-      '  ```ts',
-      '  a direct call',
-      '  ```',
-      '',
-      'See [the doc](https://example.com/direct call.md) and https://example.com/direct-call/direct call',
-    ].join('\n');
+  it('does not join the words of a term across a blank line', () => {
+    const markdown = 'The fake\n\nProvider answers.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Fake Provider']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('reports a term in an emphasis, whose underscores are no part of a word', () => {
+    const markdown = 'An _direct call_ here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('does not report a term inside a code span', () => {
+    const markdown = 'A `direct call` in a span.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not report a term inside a code span that wraps over a line break', () => {
+    const markdown = 'A `a direct\ncall` here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('reports a term after a code span that wraps over a line break', () => {
+    const markdown = 'A `wrapped\nspan` and a direct call and `x`.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 2, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('does not report a term inside a double-backtick span that holds a backtick', () => {
+    const markdown = 'A `` a direct call ` b `` here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not pair a backtick with one in another paragraph', () => {
+    const markdown = 'A stray ` and a direct call.\n\nAnother stray ` here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('does not report a term inside a fenced block', () => {
+    const markdown = ['```ts', '// a direct call', '```'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not report a term inside a tilde fence', () => {
+    const markdown = ['~~~', 'a direct call', '~~~'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not report a term inside an indented fence', () => {
+    const markdown = ['- an item:', '', '  ```ts', '  a direct call', '  ```'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('closes a fence only with a fence of the same indent', () => {
+    const markdown = ['- an item:', '', '  ```ts', '  one', '```', 'a direct call', '  ```'].join(
+      '\n',
+    );
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('reports a term in the prose between two fenced blocks', () => {
+    const markdown = ['```ts', 'one', '```', 'a direct call', '```ts', 'two', '```'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 4, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('does not report a term inside a link destination', () => {
+    const markdown = 'See [the doc](./a direct call.md) here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not read a term that begins at the end of a bare URL', () => {
+    const markdown = 'See https://example.com/a/direct call here.\n';
 
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
@@ -180,15 +271,23 @@ describe('misspelledTerms', () => {
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
     expect(misspellings).toEqual([
-      { line: 1, written: 'direct call', term: 'Direct call' },
-      { line: 3, written: 'direct call', term: 'Direct call' },
+      { line: 1, written: 'direct call', spelled: 'Direct call' },
+      { line: 3, written: 'direct call', spelled: 'Direct call' },
     ]);
   });
 
-  it('does not match a hyphenated name or a longer word', () => {
-    const markdown = 'A direct-call, a non-breaking change, direct callers, a misdirect call.\n';
+  it('does not match a term inside a hyphenated name', () => {
+    const markdown = 'A direct-call, a non-breaking change, a direct call-site.\n';
 
     const misspellings = misspelledTerms(markdown, ['Direct call', 'Breaking Change']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not match a term inside a longer word', () => {
+    const markdown = 'Some direct callers, a misdirect call.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
 
     expect(misspellings).toEqual([]);
   });
@@ -200,7 +299,7 @@ describe('misspelledTerms', () => {
     const misspellings = misspelledTerms(markdown, ['Breaking Change', 'Breaking Change Approval']);
 
     expect(misspellings).toEqual([
-      { line: 1, written: 'breaking change approval', term: 'Breaking Change Approval' },
+      { line: 1, written: 'breaking change approval', spelled: 'Breaking Change Approval' },
     ]);
   });
 
@@ -209,15 +308,21 @@ describe('misspelledTerms', () => {
 
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
-    expect(misspellings).toEqual([{ line: 5, written: 'direct call', term: 'Direct call' }]);
+    expect(misspellings).toEqual([{ line: 5, written: 'direct call', spelled: 'Direct call' }]);
   });
 
   it('reports each wrong spelling of every multi-word term of the glossary, and accepts its right ones', () => {
     const terms = termsOf(readFileSync(glossaryPath, 'utf8'));
     const wrong = terms.flatMap((term) => {
-      const forms = new Set([term.toLowerCase(), titleCaseOf(term)]);
-      forms.delete(term);
-      return [...forms, ...[...forms].map(pluralOf)].map((written) => ({ term, written }));
+      const forms = [...new Set([term.toLowerCase(), titleCaseOf(term)])].filter(
+        (form) => form !== term,
+      );
+      const singular = forms.map((written) => ({ written, spelled: term }));
+      const plural = forms.map((written) => ({
+        written: pluralOf(written),
+        spelled: pluralOf(term),
+      }));
+      return [...singular, ...plural];
     });
     const right = terms.flatMap((term) => [term, pluralOf(term), `${term}'s`]);
     const markdown = [...wrong.map(({ written }) => written), ...right]
