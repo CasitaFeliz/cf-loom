@@ -808,7 +808,7 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       },
     );
 
-    test('a cycle whose only id is refused is one no id names, so a use of it refuses a length check', () => {
+    test('a cycle whose only id is refused is named by it, so a use of it refuses a length check', () => {
       const treeOf = (id: string) => {
         const tree: z.ZodType = z.array(z.lazy(() => tree)).meta({ id });
         return tree;
@@ -820,13 +820,11 @@ describe('walkSchemas: the checks of a failed node are judged by the node it was
       expect(refusalsOf(refusedId)).toEqual(
         refusedAll([
           failureAt('', '.meta({ id: "Tree" })', 'a camelCase name'),
-          failureAt('[]', unnamedCycle, '.meta({ id })'),
           failureAt('', minLengthName),
         ]),
       );
       expect(constructsOf(refusedId)).toEqual([
         '.meta({ id: "Tree" })',
-        unnamedCycle,
         ...constructsOf(walkBodyRaw(useOf(treeOf('tree')))),
       ]);
     });

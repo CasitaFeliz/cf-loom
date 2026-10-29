@@ -1,7 +1,8 @@
 import { offCycle, writeDef } from './cycle-defs.ts';
 import { startMemos } from './memos.ts';
+import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
-import { notAllowed, refused } from './not-allowed.ts';
+import { notAllowed, type Refused, refused, refusedDroppedId } from './not-allowed.ts';
 import { type Ancestor, type Entering, isRemembered, type State } from './recursion-state.ts';
 import { startReported } from './reported.ts';
 import { type Composition, type Memo, type Walked, type Walking, walked } from './walked.ts';
@@ -92,8 +93,10 @@ function reportedOf(state: State, entering: Entering): Walked | undefined {
 }
 
 /**
- * The schema met again inside itself: its `ref` if it has an id, a failure if no schema of the
- * cycle has one, else nothing, so the walk goes through it again up to one that has.
+ * The schema met again inside itself: its `ref` if it wrote an id, a failure if no schema of the
+ * cycle wrote one, else nothing, so the walk goes through it again up to one that has. An id the
+ * walk refuses names the cycle all the same: the schema's own walk fails by that refusal alone,
+ * so its `ref` is never written.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
   const closingIndex = state.ancestors.findLastIndex(
@@ -106,20 +109,32 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   closing.reached = true;
   reachBack(state, closing.index);
   const cycle = state.ancestors.slice(closingIndex);
-  if (entering.id !== undefined) {
+  const id = writtenIdOf(entering.schema);
+  if (id !== undefined) {
     state.memos.reached(entering.schema, entering.at);
-    return walked({ type: 'ref', name: entering.id });
+    return walked({ type: 'ref', name: id });
   }
-  if (cycle.some((member) => member.id !== undefined)) {
+  if (cycle.some((member) => hasOwnId(member.schema))) {
     return undefined;
   }
-  const failure = notAllowed(entering.at, refused.unnamedCycle);
+  const failure = notAllowed(entering.at, unnamedCycleRefusalOf(cycle));
   for (const ancestor of cycle) {
     state.reported.report(ancestor.schema, failure);
   }
   state.memos.raised(failure.tree);
   state.memos.reached(entering.schema, entering.at);
   return failure;
+}
+
+/** A cycle no id names is refused, naming the id a later call dropped from one of its schemas. */
+function unnamedCycleRefusalOf(cycle: readonly Ancestor[]): Refused {
+  for (const member of cycle) {
+    const dropped = droppedIdOf(member.schema);
+    if (dropped !== undefined) {
+      return refusedDroppedId(dropped);
+    }
+  }
+  return refused.unnamedCycle;
 }
 
 function forgetUnnamedCycles(state: State): void {

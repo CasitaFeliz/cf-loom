@@ -33,7 +33,13 @@ function walkedTo(value: unknown) {
   return { kind: 'walked', value };
 }
 
-function refused(failures: readonly { readonly at: string; readonly construct: string }[]) {
+function refused(
+  failures: readonly {
+    readonly at: string;
+    readonly construct: string;
+    readonly instead?: string;
+  }[],
+) {
   const named = failures.map((failure) => ({ kind: 'not-allowed', ...failure }));
   return { kind: 'not-allowed', failures: named };
 }
@@ -1982,5 +1988,170 @@ describe('walkSchemas: depth', () => {
         },
       ],
     });
+  });
+});
+
+describe('walkSchemas: the id a cycle’s schema wrote', () => {
+  function cycleWith(named: (schema: z.ZodObject) => z.ZodType): z.ZodType {
+    const node: z.ZodType = named(
+      z.object({
+        get children() {
+          return z.array(node);
+        },
+      }),
+    );
+    return node;
+  }
+
+  function droppedIdFailure(at: string, id: string) {
+    return {
+      at,
+      construct: 'a cycle without .meta({ id })',
+      instead: `.meta({ id: ${JSON.stringify(id)} }) last: zod drops it at any later call`,
+    };
+  }
+
+  test('an id that is no camelCase name gives its grammar line alone', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'tree_x' })));
+
+    expect(walked).toEqual({
+      located: [
+        refused([{ at: '', construct: '.meta({ id: "tree_x" })', instead: 'a camelCase name' }]),
+      ],
+      defs: {},
+    });
+  });
+
+  test('another key refused beside an id gives that key’s line alone', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'tree', title: 'x' })));
+
+    expect(walked).toEqual({
+      located: [refused([{ at: '', construct: '.meta({ title })' }])],
+      defs: {},
+    });
+  });
+
+  test('an id that is not a string gives its line alone', () => {
+    // @ts-expect-error zod types an id as a string
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 5 })));
+
+    expect(walked).toEqual({
+      located: [refused([{ at: '', construct: '.meta({ id }) that is not a string' }])],
+      defs: {},
+    });
+  });
+
+  test.each([
+    {
+      call: '.describe()',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).describe('A'),
+    },
+    {
+      call: '.meta()',
+      named: (schema: z.ZodObject) => schema.meta({ id: 'category' }).meta({ description: 'A' }),
+    },
+  ])('an id a later $call dropped is named in the unnamed cycle’s line', ({ named }) => {
+    expect(walkBody(cycleWith(named))).toEqual({
+      located: [refused([droppedIdFailure('children[]', 'category')])],
+      defs: {},
+    });
+  });
+
+  test('an id a later check dropped is named in the unnamed cycle’s line', () => {
+    const list: z.ZodType = z
+      .array(z.lazy(() => list))
+      .meta({ id: 'list' })
+      .min(1);
+
+    expect(walkBody(list)).toEqual({
+      located: [refused([droppedIdFailure('[]', 'list')])],
+      defs: {},
+    });
+  });
+
+  test('a .describe() before the id walks to a ref', () => {
+    const walked = walkBody(cycleWith((schema) => schema.describe('A').meta({ id: 'category' })));
+
+    expect(walked).toEqual({
+      located: [walkedTo({ type: 'ref', name: 'category' })],
+      defs: {
+        category: {
+          type: 'object',
+          description: 'A',
+          fields: {
+            children: {
+              required: true,
+              schema: { type: 'array', items: { type: 'ref', name: 'category' } },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  test('getURL, camelCase as The Root states, is an id', () => {
+    const walked = walkBody(cycleWith((schema) => schema.meta({ id: 'getURL' })));
+
+    expect(walked.located).toEqual([walkedTo({ type: 'ref', name: 'getURL' })]);
+  });
+
+  /** The ids a member of a cycle may write, and the line each gives when it is refused. */
+  const writtenIds = [
+    { kind: 'valid', name: (schema: z.ZodType, index: number) => schema.meta({ id: `m${index}` }) },
+    {
+      kind: 'refused',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `m_${index}` }),
+    },
+    // @ts-expect-error zod types an id as a string
+    { kind: 'non-string', name: (schema: z.ZodType) => schema.meta({ id: 5 }) },
+    {
+      kind: 'dropped',
+      name: (schema: z.ZodType, index: number) => schema.meta({ id: `d${index}` }).describe('d'),
+    },
+    { kind: 'none', name: (schema: z.ZodType) => schema },
+  ] as const;
+
+  type Member = { readonly kind: (typeof writtenIds)[number]['kind']; readonly index: number };
+
+  /** A cycle of objects, each holding the next under `next` and the first closing it. */
+  function cycleOf(members: readonly Member[]): z.ZodType {
+    const schemas: z.ZodType[] = [];
+    for (const { kind, index } of members) {
+      const following = (index + 1) % members.length;
+      const object = z.object({
+        get next() {
+          return schemas[following] as z.ZodType;
+        },
+      });
+      const written = writtenIds.find((id) => id.kind === kind);
+      schemas.push(written === undefined ? object : written.name(object, index));
+    }
+    return schemas[0] as z.ZodType;
+  }
+
+  test('a cycle gets at most one line about its id: each refused id its own, else one unnamed-cycle line', () => {
+    const next = seededNext(377);
+    const draws = Array.from({ length: 300 }, () => {
+      const length = 1 + Math.floor(next() * 4);
+      return Array.from({ length }, (_, index) => ({
+        kind: writtenIds[Math.floor(next() * writtenIds.length)]?.kind ?? 'none',
+        index,
+      }));
+    });
+
+    for (const members of draws) {
+      const walked = walkBody(cycleOf(members));
+      const [location] = walked.located;
+      const constructs =
+        location?.kind === 'not-allowed' ? location.failures.map(({ construct }) => construct) : [];
+      const refusedIds = members.filter(({ kind }) => kind === 'refused' || kind === 'non-string');
+      const wroteAnId = members.some(({ kind }) => kind !== 'none' && kind !== 'dropped');
+      const unnamedLines = constructs.filter((construct) => construct === unnamedCycle.construct);
+
+      expect(unnamedLines.length, JSON.stringify(members)).toBe(wroteAnId ? 0 : 1);
+      expect(constructs.length - unnamedLines.length, JSON.stringify(members)).toBe(
+        refusedIds.length,
+      );
+    }
   });
 });
