@@ -94,6 +94,26 @@ Both hooks may be async and are awaited before the response is returned; what on
 
 `@cf-loom/server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. A target in origin form (`/orders/o-1`) or absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept) is routed on its path and query, and a path that starts with `//` is a path, never a host. The adapter answers two kinds of request itself, as Node already answers a malformed request before any listener runs, so `onAnswered` sees neither: a target in any other form (`*`, `host:port`, another scheme, credentials), one a web-standard `Request` cannot be built from, or a `Host` header that is missing or is more than a host and an optional port, gets 400; a method a web-standard `Request` refuses (`CONNECT`, `TRACE`, `TRACK`) gets `NO_SUCH_ENDPOINT` (404), since no Endpoint can have it. A request's body is streamed to `serve` for every method but `GET` and `HEAD`, and a response to `HEAD` carries no body. A response sent before `serve` read the request's whole body, such as `NO_SUCH_ENDPOINT`, a Guard's Rejection or `BODY_TOO_LARGE`, carries `connection: close`, and the connection closes after it, so a body `serve` did not read never stalls the next request; the Caller reconnects for its next request. A Caller that disconnects before its response is written aborts the request's signal, which its Handlers received (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README); a response that fails while it is written destroys the socket. A handler that rejects is answered 500 with the Fault Envelope, `committed: 'unknown'`, and logged as `nodeListener: the handler rejected`.
 
+## Compiling schemas
+
+zod can compile a schema to a faster parser the first time the schema parses. Whether a Service uses it is the organization's choice: cf-loom compiles nothing, turns nothing on and has no setting for it, so `serve`, `consume` and `client` parse with zod's regular parser until the process asks zod to compile.
+
+`import 'zod/compile'` asks, through zod's global configuration, and reaches every schema built after it in the process, cf-loom's own included. A schema built before it is never compiled, so it goes first among the imports of the Service's entry point, or the process starts with a flag that loads it before any module:
+
+```ts
+import 'zod/compile';
+import { serve } from '@cf-loom/server';
+```
+
+```sh
+node --import zod/compile src/main.ts
+```
+
+- **One import reaches every parse.** The Input `serve` reads, the Success and Rejection bodies it checks before it sends them, the Message bodies `consume` reads with their Reader schemas and the Outcomes `client` reads with theirs. Nothing is set per Endpoint or per Message.
+- **The Issues are the same.** zod documents that a compiled schema gives the results of the regular parser, and that invalid input falls back to the regular parser, so an invalid-input Rejection is the one it was. A Service should run its own tests with the import in place before relying on it.
+- **Valid input is faster, invalid input is not.** In a benchmark of `serve` from `Request` to `Response`, and of a Delivery from its bytes to the Handler's return, with a Handler that does nothing and a body of about twenty fields and ten items, valid input took about half the time, a saving of microseconds to tens of microseconds, and invalid input about as long. A Handler's own work, such as a database call, does not shorten. Measure with the Service's own bodies.
+- **What zod cannot compile stays regular.** A schema that is recursive, or holds a recursive one, keeps zod's regular parser, with the same results (see [Recursion](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#recursion) in the contract README). A host that forbids building code from strings gets the regular parser for every schema, with the same results: Node's `--disallow-code-generation-from-strings` is one such host, and a browser page whose Content-Security-Policy omits `unsafe-eval` is another.
+
 ## Types
 
 - An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
