@@ -191,7 +191,7 @@ describe('walkSchemas: numbers', () => {
     expect(walkBody(z.number().multipleOf(5))).toEqual(walkedTo({ type: 'number', multipleOf: 5 }));
   });
 
-  test('z.int() is int and implies no safe-integer bounds', () => {
+  test('z.int() is int and writes no safe-integer bounds', () => {
     expect(walkBody(z.int())).toEqual(walkedTo({ type: 'number', int: true }));
   });
 
