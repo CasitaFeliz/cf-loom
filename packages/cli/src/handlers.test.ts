@@ -1729,8 +1729,7 @@ describe('cf-loom generate: a configured layout', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr:
-        `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outsideSrcClause}: ${replaceLinkFix}\n`,
+      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outsideSrcClause}: ${replaceLinkFix}\n`,
     });
   });
 
