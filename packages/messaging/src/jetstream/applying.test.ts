@@ -1,11 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import {
-  defineCommand,
-  defineEvent,
-  defineGroup,
-  defineService,
-  defineSubscription,
-} from '@cf-loom/contract';
+import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
 import { handle, readersOf } from '@cf-loom/handlers';
 import {
   type ConsumerConfig,
@@ -16,6 +10,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
 import {
   arrangeDurableConsumer,
@@ -23,7 +18,7 @@ import {
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangeStream, planOf, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
+import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
 import {
   applyBrokerPlan,
@@ -172,42 +167,6 @@ function chargeHandlers() {
     commands: { chargeCardV1: handle(readers.commands.chargeCardV1, async () => undefined) },
     subscriptions: {},
     readers,
-  };
-}
-
-/** A Service whose names have 64 characters, a Subscription's with the most capitals, its Command at the largest Message Version. */
-function aServiceOfLongestNames() {
-  const kebab = 'a'.repeat(64);
-  const subscribed = `aa${'Bb'.repeat(31)}`;
-  const pascal = (initial: string) => `${initial}${'a'.repeat(63)}`;
-  const created = defineEvent({
-    name: pascal('A'),
-    version: 1,
-    visibility: 'internal',
-    description: 'An order was created',
-    body: orderBody,
-  });
-  const charge = defineCommand({
-    name: pascal('B'),
-    version: Number.MAX_SAFE_INTEGER,
-    description: 'Charges the order’s card',
-    body: orderBody,
-  });
-  const onCreated = defineSubscription({
-    name: subscribed,
-    description: 'Receives the order created',
-    event: created,
-  });
-  const group = defineGroup({
-    name: kebab,
-    description: 'Messages',
-    events: [created],
-    commands: [charge],
-    subscriptions: [onCreated],
-  });
-  return {
-    contract: defineService({ name: kebab, groups: [group] }),
-    prefix: 'p'.repeat(64),
   };
 }
 

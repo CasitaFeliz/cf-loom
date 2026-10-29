@@ -21,6 +21,9 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@aws-sdk/client-sns": "catalog:",
+    "@aws-sdk/client-sqs": "catalog:",
+    "@aws-sdk/core": "catalog:",
     "@cf-loom/cli": "workspace:*",
     "@cf-loom/testing": "workspace:*",
     "@types/node": "catalog:"

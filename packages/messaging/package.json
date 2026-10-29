@@ -21,6 +21,10 @@
     "./jetstream": {
       "types": "./dist/jetstream/index.d.ts",
       "default": "./dist/jetstream/index.js"
+    },
+    "./sqs": {
+      "types": "./dist/sqs/index.d.ts",
+      "default": "./dist/sqs/index.js"
     }
   },
   "files": [
@@ -29,6 +33,9 @@
     "!src/**/*.test.ts"
   ],
   "devDependencies": {
+    "@aws-sdk/client-sns": "catalog:",
+    "@aws-sdk/client-sqs": "catalog:",
+    "@aws-sdk/core": "catalog:",
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
     "@nats-io/jetstream": "catalog:",
@@ -37,6 +44,9 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
+    "@aws-sdk/client-sns": "catalog:",
+    "@aws-sdk/client-sqs": "catalog:",
+    "@aws-sdk/core": "catalog:",
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
     "@nats-io/jetstream": "catalog:",
@@ -44,6 +54,15 @@
     "zod": "catalog:"
   },
   "peerDependenciesMeta": {
+    "@aws-sdk/client-sns": {
+      "optional": true
+    },
+    "@aws-sdk/client-sqs": {
+      "optional": true
+    },
+    "@aws-sdk/core": {
+      "optional": true
+    },
     "@nats-io/jetstream": {
       "optional": true
     },

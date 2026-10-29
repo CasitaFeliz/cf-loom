@@ -3,6 +3,9 @@ packages:
   - examples/*
 
 catalog:
+  '@aws-sdk/client-sns': ^3.1152.0
+  '@aws-sdk/client-sqs': ^3.1152.0
+  '@aws-sdk/core': ^3.978.3
   '@biomejs/biome': ^2.5.15
   '@changesets/cli': ^3.0.3
   '@nats-io/jetstream': ^3.4.0

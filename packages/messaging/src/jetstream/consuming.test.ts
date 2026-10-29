@@ -15,6 +15,7 @@ import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-c
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { planOf } from '../../test/broker-plans.ts';
 import { withMethods } from '../../test/connections.ts';
 import {
   arrangeDurableConsumer,
@@ -24,7 +25,7 @@ import {
 } from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
+import { arrangePlanOf, dropStream } from '../../test/streams.ts';
 import {
   type Broker,
   type BrokerTrouble,

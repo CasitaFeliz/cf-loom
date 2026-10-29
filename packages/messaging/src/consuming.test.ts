@@ -11,7 +11,7 @@ import {
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { planOf } from '../test/streams.ts';
+import { planOf } from '../test/broker-plans.ts';
 import {
   type Broker,
   type ConsumedFault,
