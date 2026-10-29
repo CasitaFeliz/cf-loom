@@ -1,63 +1,70 @@
 import type * as core from 'zod/v4/core';
 import type { NotAllowed } from './nodes.ts';
 import { isUnnamedCycle, isWrittenTooDeep } from './not-allowed.ts';
-import { type Failed, type FailureTree, isFailureTree } from './walked.ts';
+import type { Entered } from './recursion-state.ts';
+import { type FailureTree, isFailureTree, type Walked } from './walked.ts';
 
 /**
- * Two facts of a walk's failures: the failing schemas it answers from memory, each for as long as
- * it is kept, and whether a failure holds a schema refused for its depth.
+ * Every schema a walk entered, kept for the whole walk so a closed group is final, and the answer
+ * of each it answers from memory, kept for the walk or the declaration.
  */
-export type Reported = {
-  readonly report: (schema: core.$ZodType, failure: Failed) => void;
-  readonly failureOf: (schema: core.$ZodType) => Failed | undefined;
-  /** Forgets the failures each declaration walks afresh, and returns their schemas. */
+export type Remembered = {
+  readonly enter: (entered: Entered) => void;
+  readonly remember: (entered: Entered, answer: Walked) => void;
+  /** The schema as the walk last entered it, with its verdict and any answer still kept. */
+  readonly enteredOf: (schema: core.$ZodType) => Entered | undefined;
+  /** Forgets the answers each declaration walks afresh, and returns their schemas. */
   readonly forgetInDeclaration: () => readonly core.$ZodType[];
   /** Whether a failure holds a schema refused for its depth, so its walk did not see all it reaches. */
   readonly holdsWrittenTooDeep: (tree: FailureTree) => boolean;
 };
 
 type State = {
-  readonly reportedBySchema: Map<core.$ZodType, Failed>;
-  readonly reportedInDeclaration: Map<core.$ZodType, Failed>;
+  readonly enteredBySchema: Map<core.$ZodType, Entered>;
+  readonly keptInDeclaration: Set<Entered>;
   readonly holdsUnnamedCycle: (tree: FailureTree) => boolean;
 };
 
 /**
- * The failures of one walk, which tells once for each failure tree whether it holds a cycle no id
- * names, and whether it holds a schema refused for its depth.
+ * The schemas one walk remembers, which tells once for each failure tree whether it holds a cycle
+ * no id names, and whether it holds a schema refused for its depth.
  */
-export function startReported(): Reported {
+export function startRemembered(): Remembered {
   const state: State = {
-    reportedBySchema: new Map(),
-    reportedInDeclaration: new Map(),
+    enteredBySchema: new Map(),
+    keptInDeclaration: new Set(),
     holdsUnnamedCycle: holdingReaderOf(isUnnamedCycle),
   };
   return {
-    report: (schema, failure) => report(state, schema, failure),
-    failureOf: (schema) =>
-      state.reportedBySchema.get(schema) ?? state.reportedInDeclaration.get(schema),
+    enter: (entered) => {
+      state.enteredBySchema.set(entered.schema, entered);
+    },
+    remember: (entered, answer) => remember(state, entered, answer),
+    enteredOf: (schema) => state.enteredBySchema.get(schema),
     forgetInDeclaration: () => forgetInDeclaration(state),
     holdsWrittenTooDeep: holdingReaderOf(isWrittenTooDeep),
   };
 }
 
 /**
- * A failure is kept for the walk, or for the declaration when it holds a cycle no id names, which
- * each declaration walks afresh. A schema is in one of them only: one without an id is reported only
- * for its cycle no id names, always into the declaration map, and one with an id once, when its
- * def fails, answering from memory until the declaration map is cleared before any re-walk.
+ * An answer is kept for the walk, or for the declaration when it is a failure that holds a cycle
+ * no id names, which each declaration walks afresh.
  */
-function report(state: State, schema: core.$ZodType, failure: Failed): void {
-  const kept = state.holdsUnnamedCycle(failure.tree)
-    ? state.reportedInDeclaration
-    : state.reportedBySchema;
-  kept.set(schema, failure);
+function remember(state: State, entered: Entered, answer: Walked): void {
+  entered.answer = answer;
+  if (answer.kind === 'not-allowed' && state.holdsUnnamedCycle(answer.tree)) {
+    state.keptInDeclaration.add(entered);
+  }
 }
 
+/** The record stays, so a schema walked afresh keeps the verdict its first walk gave it. */
 function forgetInDeclaration(state: State): readonly core.$ZodType[] {
-  const forgotten = [...state.reportedInDeclaration.keys()];
-  state.reportedInDeclaration.clear();
-  return forgotten;
+  const forgotten = [...state.keptInDeclaration];
+  state.keptInDeclaration.clear();
+  for (const entered of forgotten) {
+    entered.answer = undefined;
+  }
+  return forgotten.map((entered) => entered.schema);
 }
 
 /**

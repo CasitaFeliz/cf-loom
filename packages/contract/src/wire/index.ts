@@ -88,4 +88,5 @@ export type { TextAcceptance } from './text-acceptance.ts';
 export { textAcceptanceOf } from './text-acceptance.ts';
 export type { TextSource } from './text-parts.ts';
 export { headerValuesOf, textPartsOf } from './text-parts.ts';
+export { textTravel } from './text-travel.ts';
 export { isQueryText, isSegmentText, segmentOf } from './url-text.ts';

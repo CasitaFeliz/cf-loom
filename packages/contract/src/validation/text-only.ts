@@ -1,9 +1,4 @@
 import {
-  headerCaseSentence,
-  isReservedRequestHeaderName,
-  isReservedResponseHeaderName,
-} from '../declarations/index.ts';
-import {
   inFields,
   type ObjectNode,
   type Place,
@@ -11,20 +6,20 @@ import {
   type SchemaNode,
   shapeKey,
 } from '../walker/index.ts';
-import { sharedTextOf } from '../wire/index.ts';
+import { isTextValue, sharedTextOf, textOfValue, textTravel } from '../wire/index.ts';
 import {
   attachedGuardsOf,
-  isInputPart,
   isObjectPart,
   type LocatedEndpoint,
-  type ObjectPart,
   partFieldOf,
   slotAt,
   type TextIn,
   textOf,
   writtenTextOf,
 } from '../written/index.ts';
+import { joinedOf } from './closed-values.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
+import { headerNameFailures } from './header-names.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
 
 /** What one Endpoint or Guard declares for a header or query name. */
@@ -81,42 +76,6 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   ]);
 }
 
-/** A lower-case RFC 9110 token: the only header names a Contract declares. */
-const lowerCaseToken = /^[!#$%&'*+\-.^_`|~0-9a-z]+$/;
-
-function headerNameFailures(
-  { at, part, textIn }: { readonly at: Place; readonly part: ObjectPart; readonly textIn: TextIn },
-  name: string,
-): readonly DeclarationFailure[] {
-  if (textIn !== 'headers') {
-    return [];
-  }
-  const message = headerNameMessageOf(name, part);
-  return message === undefined ? [] : [failure(inFields(at, name), 'header-names', message)];
-}
-
-/** What is wrong with a header name: its case, its characters, or a name another party owns in its direction. */
-function headerNameMessageOf(name: string, part: ObjectPart): string | undefined {
-  if (name !== name.toLowerCase()) {
-    return headerCaseSentence(name);
-  }
-  if (!lowerCaseToken.test(name)) {
-    return `A header name is an RFC 9110 token: ${name}`;
-  }
-  return reservedHeaderMessageOf(name, part);
-}
-
-function reservedHeaderMessageOf(name: string, part: ObjectPart): string | undefined {
-  if (isInputPart(part)) {
-    return isReservedRequestHeaderName(name)
-      ? `A request header the Fetch standard keeps for the user agent, or cf-loom owns, is reserved: ${name}`
-      : undefined;
-  }
-  return isReservedResponseHeaderName(name)
-    ? `A response header the host or cf-loom owns, or a browser hides, is reserved: ${name}`
-    : undefined;
-}
-
 function fieldFailures(
   { at, part }: { readonly at: Place; readonly part: TextIn },
   name: string,
@@ -128,7 +87,11 @@ function fieldFailures(
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
   }
   if (textTypes.includes(items.type)) {
-    return sharedTextFailures({ at: fieldAt, part }, name, items);
+    const place = { at: fieldAt, part };
+    return [
+      ...sharedTextFailures(place, name, items),
+      ...unsendableTextFailures(place, name, items),
+    ];
   }
   const lists = part === 'query' ? ', or a list of those' : '';
   const message = `${nouns[part]} travels as text: a string, number, boolean, literal or enum${lists}: ${name}`;
@@ -151,6 +114,28 @@ function sharedTextFailures(
   const [first, second] = shared.map(writtenTextOf);
   const message = `${nouns[part]}'s values each have a text of their own: ${name} has ${first} and ${second}`;
   return [failure(at, 'shared-text', message)];
+}
+
+/**
+ * A text part's enum holding a value whose text its part cannot carry: no Caller can send it and
+ * no Outcome holding it is ever valid.
+ */
+function unsendableTextFailures(
+  { at, part }: { readonly at: Place; readonly part: TextIn },
+  name: string,
+  node: SchemaNode,
+): readonly DeclarationFailure[] {
+  const { isCarried, travelsAs } = textTravel[part];
+  const unsendable =
+    node.type === 'enum'
+      ? node.values.filter(isTextValue).filter((value) => !isCarried(textOfValue(value)))
+      : [];
+  if (unsendable.length === 0) {
+    return [];
+  }
+  const values = joinedOf(unsendable.map(writtenTextOf), 'and');
+  const message = `${nouns[part]}'s values each travel as ${travelsAs}: ${name} has ${values}`;
+  return [failure(at, 'unsendable-text', message)];
 }
 
 function partConflicts(
