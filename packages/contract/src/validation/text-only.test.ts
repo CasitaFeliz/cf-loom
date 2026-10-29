@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { summarized } from '../../test/failures.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
   defineEndpoint,
@@ -12,7 +13,7 @@ import {
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { type Root, validateRoot } from '../internal/index.ts';
+import { type Root, textOfValue, textPartsOf, validateRoot } from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
@@ -622,5 +623,154 @@ describe('validateRoot: one schema per header or query name on an Endpoint', () 
         'A query param has one schema across an Endpoint and its Guards: tenant differs between userToken and tenant',
       ),
     );
+  });
+});
+
+describe('validateRoot: the values of a text part’s enum each have a text of their own', () => {
+  const shared = (noun: string, name: string, a: string, b: string) =>
+    `${noun}'s values each have a text of their own: ${name} has ${a} and ${b}`;
+
+  test('a query enum of 1 and "1" fails, naming both in the Snapshot’s order', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ v: z.literal([1, '1']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.v`,
+        'shared-text',
+        shared('A query param', 'v', '"1"', '1'),
+      ),
+    );
+  });
+
+  test('a header enum of true and "true" fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-dry': z.literal([true, 'true']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-dry`,
+        'shared-text',
+        shared('A header', 'x-dry', '"true"', 'true'),
+      ),
+    );
+  });
+
+  test('a path param enum of 1e21 and its plain decimal text fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:orderId',
+      input: { params: z.object({ orderId: z.literal([1e21, '1000000000000000000000']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        'endpoints.GET /orders/{} (listOrders) input.params.orderId',
+        'shared-text',
+        shared('A path param', 'orderId', '"1000000000000000000000"', '1e+21'),
+      ),
+    );
+  });
+
+  test('a query list whose items are such an enum fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ v: z.array(z.literal([2, '2'])) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.v`,
+        'shared-text',
+        shared('A query param', 'v', '"2"', '2'),
+      ),
+    );
+  });
+
+  test('a Rejection header with such an enum fails', () => {
+    const rejection = aRejectionWith(headersOf({ 'x-realm': z.literal([1, '1']) }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        'codes.UNAUTHENTICATED headers.x-realm',
+        'shared-text',
+        shared('A header', 'x-realm', '"1"', '1'),
+      ),
+    );
+  });
+
+  test('a Guard’s demanded header with such an enum fails', () => {
+    const signed = defineGuard({
+      name: 'signed',
+      description: 'A signed request',
+      demands: { headers: z.object({ 'x-version': z.literal([false, 'false']) }) },
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
+      failed(
+        'guards.signed demands.headers.x-version',
+        'shared-text',
+        shared('A header', 'x-version', '"false"', 'false'),
+      ),
+    );
+  });
+
+  test('an enum of 1 and "01" validates', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ v: z.literal([1, '01']) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  /** The value a request's query `v=<text>` gives a query param `v` declared as an enum of these values. */
+  function queryValueOf(values: readonly (string | number | boolean)[], text: string): unknown {
+    const v = { required: true, schema: { type: 'enum', values, open: false } } as const;
+    const nodes = { 'input.query': { type: 'object', fields: { v } } } as const;
+    const source = { params: {}, query: new URLSearchParams({ v: text }), headers: new Headers() };
+    return textPartsOf(nodes, source).query?.['v'];
+  }
+
+  test('generate accepts exactly the query enums each of whose values reads back as itself', () => {
+    const next = seededNext(352);
+    const pool = [
+      0,
+      1,
+      -1,
+      1.5,
+      1e21,
+      1e-7,
+      true,
+      false,
+      '0',
+      '1',
+      '-1',
+      '1.5',
+      'true',
+      'false',
+      '01',
+    ];
+    const draws = Array.from({ length: 200 }, () => {
+      const size = 1 + Math.floor(next() * 4);
+      const values = Array.from({ length: size }, () => pool[Math.floor(next() * pool.length)]);
+      return [...new Set(values)] as [string | number | boolean, ...(string | number | boolean)[]];
+    });
+
+    for (const values of draws) {
+      const endpoint = defineEndpoint({
+        ...listing,
+        input: { query: z.object({ v: z.literal(values) }) },
+      });
+      const readsBack = values.every((value) => queryValueOf(values, textOfValue(value)) === value);
+
+      expect(validateEndpoint(endpoint).kind, JSON.stringify(values)).toBe(
+        readsBack ? 'valid' : 'invalid',
+      );
+    }
   });
 });
