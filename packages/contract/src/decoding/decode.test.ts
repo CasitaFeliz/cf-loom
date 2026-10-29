@@ -3418,4 +3418,43 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_
     expect(node.type).toBe('json');
     expect(result).toEqual({ kind: 'decoded', snapshot: published });
   });
+
+  /**
+   * The text of a Snapshot whose Endpoint uses two defs: `wide`, a json node with an example of
+   * `width` objects, and `deep`, `levels` array nodes one inside the other. Built as text, since
+   * `JSON.stringify` does not hold nesting that deep.
+   */
+  function textOfWideAndDeep(width: number, levels: number): string {
+    const examples = [Array.from({ length: width }, () => ({}))];
+    const wide = JSON.stringify({ type: 'json', examples });
+    const deep =
+      '{"type":"array","items":'.repeat(levels) + '{"type":"string"}' + '}'.repeat(levels);
+    return JSON.stringify(aServiceUsing({ wide: stringNode, deep: stringNode }))
+      .replace('"wide":{"type":"string"}', () => `"wide":${wide}`)
+      .replace('"deep":{"type":"string"}', () => `"deep":${deep}`);
+  }
+
+  test('a Snapshot holding a def of 300,000 examples and a def nested within the limit decodes', () => {
+    const text = textOfWideAndDeep(300_000, 100);
+
+    const result = decodeSnapshot(text);
+
+    expect(result.kind).toBe('decoded');
+  });
+
+  test('random wide and deep Snapshots are refused at the first level past the limit, never a throw', () => {
+    const next = seededNext(340);
+    const draws = Array.from({ length: 8 }, () => ({
+      width: Math.floor(next() * 300_000),
+      levels: 300 + Math.floor(next() * 20_000),
+    }));
+
+    const results = draws.map(({ width, levels }) =>
+      decodeSnapshot(textOfWideAndDeep(width, levels)),
+    );
+
+    const at = ['defs', 'deep', ...Array<string>(254).fill('items')];
+    const refusal = malformedAt(at, 'nests deeper than 256 levels');
+    expect(results).toEqual(draws.map(() => refusal));
+  });
 });

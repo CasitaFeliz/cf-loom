@@ -101,8 +101,9 @@ function tooDeepPathOf(json: unknown): Path | undefined {
 }
 
 /**
- * Where a JSON value nests past the levels a Snapshot holds, as the decoders refuse it: its deepest
- * path and `nests deeper than 256 levels`; `undefined` when it nests no deeper.
+ * Where a JSON value nests past the levels a Snapshot holds, as the decoders refuse it: the path of
+ * the first container nested past them and `nests deeper than 256 levels`; `undefined` when it
+ * nests no deeper.
  */
 export function nestingProblemOf(json: unknown): Problem | undefined {
   const at = tooDeepPathOf(json);

@@ -5,7 +5,6 @@ import { aProvider } from '../../test/providers.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { providedEndpoint } from '../index.ts';
 import {
-  decodeSnapshot,
   exportedCutOf,
   exportedSnapshotOf,
   providedSnapshotOf,
@@ -309,25 +308,45 @@ describe('providedSnapshotOf', () => {
   });
 });
 
-/** An array of arrays, `levels` deep counting the outermost, of strings, built without recursion. */
-function nestedArrays(levels: number): object {
+/** A schema of `containers` array nodes one inside the other, the innermost holding strings. */
+function containersDeep(containers: number): object {
   let nested: object = { type: 'string' };
-  for (let level = 1; level < levels; level++) {
+  for (let level = 1; level < containers; level++) {
     nested = { type: 'array', items: nested };
   }
   return nested;
 }
 
-describe('providedSnapshotOf refuses a cut nested past the levels a Snapshot holds', () => {
-  /** The exported cut with a def nesting `levels` levels below the cut, which is level 1. */
-  function nestedCut(levels: number) {
+/** A `json` schema holding one example that is an array of `width` objects. */
+function wideNode(width: number): object {
+  return { type: 'json', examples: [Array.from({ length: width }, () => ({}))] };
+}
+
+describe('providedSnapshotOf reads a cut as wide and as deep as a Snapshot holds', () => {
+  /** The exported cut with the defs written over those it has. */
+  function withDefs(defs: object) {
     return changed((copy) => {
-      copy['defs'] = { ...(copy['defs'] as object), deep: nestedArrays(levels - 2) };
+      copy['defs'] = { ...(copy['defs'] as object), ...defs };
     });
   }
 
+  /** The exported cut with a def nesting `levels` levels below the cut, which is level 1. */
+  function nestedCut(levels: number) {
+    return withDefs({ deep: containersDeep(levels - 2) });
+  }
+
+  /** What a decoder does with a cut: reads it, refuses it as malformed, or anything else it throws. */
+  function outcomeOf(read: () => unknown): string {
+    try {
+      read();
+      return 'read';
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  }
+
   test.each([257, 20_000])(
-    'a cut nested %i levels is refused as malformed at its deepest path',
+    'a cut nested %i levels is refused as malformed at the first level past the limit',
     (levels) => {
       const read = () => providedSnapshotOf(nestedCut(levels));
 
@@ -341,67 +360,31 @@ describe('providedSnapshotOf refuses a cut nested past the levels a Snapshot hol
   test('a cut nested exactly 256 levels is read', () => {
     const read = providedSnapshotOf(nestedCut(256));
 
-    expect(read.defs['deep']).toStrictEqual(nestedArrays(254));
+    expect(read.defs['deep']).toStrictEqual(containersDeep(254));
   });
-});
 
-describe('the Snapshot decoders never throw for a value JSON.parse returns', () => {
-  /** JSON text `depth` containers deep, maps and arrays by turn, holding `width` objects at its bottom. */
-  function wideAndDeep(width: number, depth: number): string {
-    const opening: string[] = [];
-    for (let level = 1; level < depth; level++) {
-      opening.push(level % 2 === 0 ? '[' : '{"a":');
-    }
-    const closing = opening.map((open) => (open === '[' ? ']' : '}')).reverse();
-    const bottom = `[${Array<string>(width).fill('{}').join(',')}]`;
-    return `${opening.join('')}${bottom}${closing.join('')}`;
-  }
+  test('a cut holding a json example of 300,000 objects is read', { timeout: 60_000 }, () => {
+    const read = providedSnapshotOf(withDefs({ wide: wideNode(300_000) }));
 
-  /** What a decoder does with a value: reads it, refuses it as malformed, or anything else it throws. */
-  function outcomeOf(read: () => unknown): string {
-    try {
-      read();
-      return 'read';
-    } catch (e) {
-      return e instanceof Error && e.message.includes(' is malformed: ') ? 'malformed' : String(e);
-    }
-  }
+    expect(read.defs['wide']).toStrictEqual(wideNode(300_000));
+  });
 
-  test('random wide and deep values are decoded or refused, through decodeSnapshot and providedSnapshotOf', {
+  test('random wide and deep cuts are refused at the limit, never a throw', {
     timeout: 60_000,
   }, () => {
-    const next = seededNext(340);
-    const drawn = Array.from({ length: 8 }, () => ({
+    const next = seededNext(343);
+    const draws = Array.from({ length: 8 }, () => ({
       width: Math.floor(next() * 300_000),
-      depth: 1 + Math.floor(next() * 20_000),
+      levels: 300 + Math.floor(next() * 20_000),
     }));
-    const values = [{ width: 300_000, depth: 1 }, { width: 0, depth: 20_000 }, ...drawn].map(
-      ({ width, depth }) => wideAndDeep(width, depth),
-    );
-
-    const decoded = values.map((value) => {
-      const text = JSON.stringify({ ...orders, kind: 'service' }).replace(
-        /}$/,
-        `,"extra":${value}}`,
-      );
-      return outcomeOf(() => {
-        const result = decodeSnapshot(text);
-        if (result.kind !== 'malformed' && result.kind !== 'decoded') {
-          throw new Error(result.kind);
-        }
-      });
-    });
-    const provided = values.map((value) =>
+    const outcomes = draws.map(({ width, levels }) =>
       outcomeOf(() =>
-        providedSnapshotOf(
-          changed((copy) => {
-            copy['defs'] = { deep: JSON.parse(value) };
-          }),
-        ),
+        providedSnapshotOf(withDefs({ a: wideNode(width), b: containersDeep(levels) })),
       ),
     );
 
-    expect(new Set(decoded)).toEqual(new Set(['read']));
-    expect(new Set(provided)).toEqual(new Set(['malformed']));
+    const at = ['defs', 'b', ...Array<string>(254).fill('items')].join('.');
+    const refusal = `orders-service's exported Snapshot is malformed: ${at} nests deeper than 256 levels`;
+    expect(new Set(outcomes)).toEqual(new Set([refusal]));
   });
 });
