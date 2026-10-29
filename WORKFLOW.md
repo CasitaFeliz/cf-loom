@@ -197,9 +197,17 @@ changes, a short recheck reads the merge before it merges.
 
 ## Milestone sweep
 
-When a milestone's last issue merges, a sweep reads the whole repository, not a diff: every rule and fact in one
-place (C1), duplication across packages, every document against the code, and whether each feature is still worth
-its cost for v1. Its findings, each verified by a second agent, become issues of the next milestone.
+The main session starts a sweep, without being asked, when a milestone's last issue merges, once about 30 issues have
+merged since the last sweep, and before each release candidate. The sweep reads the whole repository, not a diff, one
+agent per feature and lens: every rule and fact in one place (C1), duplication across packages, every document against
+the code, whether each feature is still worth its cost for v1, and correctness at the edges, with the list of
+[1. Plan](#1-plan), on the platforms the packages run on (a browser for `contract` and `client`, a real Broker for
+messaging).
+
+Before it proposes a finding, the sweep sorts it against the plan comments of the closed issues in its area and the
+open issues: new, incomplete (naming the issue that left it), decided (naming the decision), or already filed. It
+proposes the new and the incomplete; the decided go to the user in one list, to reopen or not. A second agent verifies
+each proposed finding, and only then does it become an issue of the next milestone.
 
 ## Documentation and chore issues
 
