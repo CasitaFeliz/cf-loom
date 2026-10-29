@@ -22,13 +22,13 @@ type Written =
   | { readonly kind: 'unnamed'; readonly line: string };
 
 /**
- * The Service a command that prints a document works on, from the committed Snapshot, which must be
- * what `generate` would write, so the document describes the reviewed file; an Application or a
- * Definitions Package stops it with the line `noDocumentLineOf` words for the Root.
+ * The Service a command that prints what the committed Snapshot gives works on, from that Snapshot,
+ * which must be what `generate` would write, so the output describes the reviewed file; an
+ * Application or a Definitions Package stops it with the line `noOutputLineOf` words for the Root.
  */
 export async function committedServiceOf(
   run: Run,
-  noDocumentLineOf: (root: string) => string,
+  noOutputLineOf: (root: string) => string,
 ): Promise<CommittedService | Stopped> {
   const built = await builtOf(run.cwd);
   if (built.kind !== 'built') {
@@ -37,9 +37,9 @@ export async function committedServiceOf(
   const { snapshot } = built;
   switch (snapshot.kind) {
     case 'application':
-      return { kind: 'stopped', exit: toolingError(noDocumentLineOf('An Application')) };
+      return { kind: 'stopped', exit: toolingError(noOutputLineOf('An Application')) };
     case 'definitions':
-      return { kind: 'stopped', exit: toolingError(noDocumentLineOf('A Definitions Package')) };
+      return { kind: 'stopped', exit: toolingError(noOutputLineOf('A Definitions Package')) };
     case 'service': {
       const stop = committedStopOf(built);
       return stop === undefined ? { kind: 'service', snapshot } : { kind: 'stopped', exit: stop };
