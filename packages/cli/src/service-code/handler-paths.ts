@@ -103,7 +103,11 @@ function unplacedLineOf(
   for (const { field, subject, path } of [...handlerFilesOf(paths), ...generatedFilesOf(layout)]) {
     const clause = refusalOf(field, path);
     if (clause !== undefined) {
-      const fix = `give it another path in the layout of ${configFile}`;
+      const anotherPath = `give it another path in the layout of ${configFile}`;
+      const fix =
+        clause === linkRefusal
+          ? `replace the link with a folder or file under src/, or ${anotherPath}`
+          : anotherPath;
       return `${subject} is ${path}, which ${clause}: ${fix}`;
     }
   }
