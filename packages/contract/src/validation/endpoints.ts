@@ -1,10 +1,10 @@
 import type { Endpoint } from '../declarations/index.ts';
 import {
-  getBodyRefusal,
+  getBodySentence,
   isUtcInstant,
   lifecycles,
   methods,
-  noContentBodyRefusal,
+  noContentBodySentence,
   successBodySentence,
   successStatuses,
   visibilities,
@@ -92,7 +92,7 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
   if (success.status === 204) {
     return success.body === undefined
       ? []
-      : [failure(bodyAt, 'success-body', noContentBodyRefusal)];
+      : [failure(bodyAt, 'success-body', noContentBodySentence)];
   }
   return success.body === undefined
     ? [failure(bodyAt, 'success-body', successBodySentence(success.status))]
@@ -103,5 +103,5 @@ function inputBodyFailures({ at, endpoint }: LocatedEndpoint): readonly Declarat
   if (endpoint.method !== 'GET' || isMissing(endpoint.input?.body)) {
     return [];
   }
-  return [failure(slotAt(at, 'input.body'), 'input-body', getBodyRefusal)];
+  return [failure(slotAt(at, 'input.body'), 'input-body', getBodySentence)];
 }

@@ -15,6 +15,7 @@ import {
   type Rejection,
   type RejectionsOf,
 } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -197,6 +198,15 @@ describe('defineGuard names', () => {
       });
 
     expect(declare).not.toThrow();
+  });
+
+  test('a reserved name’s type error is the line generate writes for it', () => {
+    const written = { name: 'delete', description: 'A Guard' } as const;
+    type Name = Parameters<typeof defineGuard<typeof written>>[0]['name'];
+
+    expectTypeOf<Name>().toExtend<
+      Refusal<'A Guard name is camelCase words and no reserved word: "delete"'>
+    >();
   });
 });
 

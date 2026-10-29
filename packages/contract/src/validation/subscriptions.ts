@@ -1,10 +1,9 @@
 import {
-  commandSubscribedRefusal,
+  commandSubscribedSentence,
   isCommand,
   isEvent,
   isLive,
   ownProviderSentence,
-  providerOf,
   type Root,
   reaches,
 } from '../declarations/index.ts';
@@ -41,7 +40,7 @@ function eventFailures(
     return [];
   }
   if (isCommand(event)) {
-    return [failure(eventAt, 'not-a-declaration', commandSubscribedRefusal)];
+    return [failure(eventAt, 'not-a-declaration', commandSubscribedSentence)];
   }
   if (!isEvent(event)) {
     return [failure(eventAt, 'not-a-declaration', 'event is not an Event')];
@@ -49,11 +48,11 @@ function eventFailures(
   const identity = messageIdentityOf(event.name, event.version);
   const source = eventSourceOf(root, event);
   if (source === undefined) {
-    const message =
-      root.kind === 'service' && providerOf(event) === textOf(root.name)
-        ? ownProviderSentence(textOf(root.name))
-        : `A Subscription's Event is the Service's own or one another Service's Contract Package exports: ${identity}`;
+    const message = `A Subscription's Event is the Service's own or one another Service's Contract Package exports: ${identity}`;
     return [failure(eventAt, 'subscription-event', message)];
+  }
+  if (source.kind === 'own-provider') {
+    return [failure(eventAt, 'subscription-event', ownProviderSentence(source.service))];
   }
   if (source.kind === 'provided' && !reaches('service', event.visibility)) {
     const message = `A Subscription receives another Service's Event only when it is Public or Internal: ${identity} is ${event.visibility}`;

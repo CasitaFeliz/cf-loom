@@ -8,10 +8,10 @@ import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
 import type { PathParams } from './path-params.ts';
 import type {
   ExactParamsSentence,
-  getBodyRefusal,
+  getBodySentence,
   ListedTwiceSentence,
-  noContentBodyRefusal,
-  noParamsRefusal,
+  noContentBodySentence,
+  noParamsSentence,
   RequiresEarlierSentence,
   SuccessBodySentence,
 } from './refusals.ts';
@@ -74,7 +74,7 @@ type InputOfDeclaration<Declaration extends EndpointDeclaration> = NonNullable<
 type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declaration['path']
   ? unknown
   : [PathParams<Declaration['path']>] extends [never]
-    ? { readonly input?: { readonly params?: Refusal<typeof noParamsRefusal> } }
+    ? { readonly input?: { readonly params?: Refusal<typeof noParamsSentence> } }
     : {
         readonly input: {
           readonly params: ExactParamsRule<
@@ -94,7 +94,7 @@ type ExactParamsRule<Params, Names extends string> =
     : ExactParamsMessage<Names>;
 
 type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'GET'
-  ? { readonly input?: { readonly body?: Refusal<typeof getBodyRefusal> } }
+  ? { readonly input?: { readonly body?: Refusal<typeof getBodySentence> } }
   : unknown;
 
 type SuccessBodyRule<Declaration extends EndpointDeclaration> =
@@ -104,7 +104,7 @@ type SuccessBodyRule<Declaration extends EndpointDeclaration> =
 
 type SuccessBodyOf<Declaration extends EndpointDeclaration> =
   Declaration['success']['status'] extends 204
-    ? { readonly success?: { readonly body?: Refusal<typeof noContentBodyRefusal> } }
+    ? { readonly success?: { readonly body?: Refusal<typeof noContentBodySentence> } }
     : Declaration['success'] extends { readonly body: core.$ZodType }
       ? unknown
       : {

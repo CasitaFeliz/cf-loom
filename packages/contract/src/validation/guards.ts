@@ -1,7 +1,7 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
 import {
-  guardDemandsRefusal,
+  guardDemandsSentence,
   isDeclaration,
   isGuard,
   listedTwiceSentence,
@@ -52,7 +52,7 @@ export function guardFailures({ at, guard }: LocatedGuard): readonly Declaration
   }
   const refused = (['params', 'body'] as const).filter((part) => demands[part] !== undefined);
   return refused.map((part) =>
-    failure(inFields(at, 'demands', part), 'guard-demands', guardDemandsRefusal),
+    failure(inFields(at, 'demands', part), 'guard-demands', guardDemandsSentence),
   );
 }
 

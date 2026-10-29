@@ -2,10 +2,10 @@ import type * as core from 'zod/v4/core';
 import type { SchemaRule } from '../walker/index.ts';
 import type { GroupedField } from './grouped.ts';
 import type {
-  groupListsRefusal,
+  groupListsSentence,
   ListedTwiceSentence,
-  messageBodyRefusal,
-  messageVersionRefusal,
+  messageBodySentence,
+  messageVersionSentence,
   nameNouns,
   ReservedNameSentence,
   UndeclaredFieldSentence,
@@ -37,7 +37,7 @@ export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, Groupe
   never,
 ]
   ? {
-      readonly [Field in GroupedField]: Refusal<typeof groupListsRefusal>;
+      readonly [Field in GroupedField]: Refusal<typeof groupListsSentence>;
     }
   : unknown;
 
@@ -115,7 +115,7 @@ type ObjectBodyRule<Declaration extends { readonly body: core.$ZodType }> =
   IsOneLiteral<Declaration['body']['_zod']['def']['type']> extends true
     ? Declaration['body'] extends GrowableBody
       ? unknown
-      : { readonly body: Refusal<typeof messageBodyRefusal> }
+      : { readonly body: Refusal<typeof messageBodySentence> }
     : unknown;
 
 /**
@@ -148,6 +148,6 @@ export type VersionRule<Declaration extends { readonly version: number }> =
     ? unknown
     : IsOneLiteral<Declaration['version']> extends true
       ? IsNotWholeFromOne<Declaration['version']> extends true
-        ? { readonly version: Refusal<typeof messageVersionRefusal> }
+        ? { readonly version: Refusal<typeof messageVersionSentence> }
         : unknown
-      : { readonly version: Refusal<typeof messageVersionRefusal> };
+      : { readonly version: Refusal<typeof messageVersionSentence> };

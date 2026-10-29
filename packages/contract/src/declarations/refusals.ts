@@ -6,30 +6,30 @@
  */
 
 /** Why a Guard declares `params` or `body` in its demands. */
-export const guardDemandsRefusal = 'A Guard demands only headers and query';
+export const guardDemandsSentence = 'A Guard demands only headers and query';
 
 /** Why a Group lists nothing. */
-export const groupListsRefusal =
+export const groupListsSentence =
   'A Group lists at least one Endpoint, Event, Command or Subscription';
 
 /** Why an Endpoint whose path has no `:names` declares params. */
-export const noParamsRefusal = 'A path without :names takes no params';
+export const noParamsSentence = 'A path without :names takes no params';
 
 /** Why a GET Endpoint declares an Input body. */
-export const getBodyRefusal = 'A GET Endpoint takes no body';
+export const getBodySentence = 'A GET Endpoint takes no body';
 
 /** Why a 204 Success declares a body. */
-export const noContentBodyRefusal = 'A 204 Success has no body';
+export const noContentBodySentence = 'A 204 Success has no body';
 
 /** Why a Message body is refused; `generate` names the Message Version after it. */
-export const messageBodyRefusal = 'A Message body is an object of its fields';
+export const messageBodySentence = 'A Message body is an object of its fields';
 
 /** Why a Message version is refused; `generate` names the version after it. */
-export const messageVersionRefusal =
+export const messageVersionSentence =
   'A Message version is one whole number from 1 to Number.MAX_SAFE_INTEGER';
 
 /** Why a Subscription never receives a Command. */
-export const commandSubscribedRefusal =
+export const commandSubscribedSentence =
   "A Subscription receives an Event; a Command's Message Version has its own Message Handler";
 
 /** A field its declaration's kind does not declare. */
@@ -49,7 +49,10 @@ export const nameNouns = {
   subscription: 'A Subscription name',
 } as const;
 
-/** An Endpoint, Guard or Subscription name that is a reserved word. */
+/**
+ * An Endpoint, Guard or Subscription name that is a reserved word. Its `camelCase words` is the
+ * `name` of the `elementName` grammar, which a type cannot read.
+ */
 export type ReservedNameSentence<
   Noun extends string,
   Name extends string,
@@ -63,7 +66,7 @@ export function reservedNameSentence<Noun extends string, Name extends string>(
   return `${noun} is camelCase words and no reserved word: "${name}"`;
 }
 
-/** A Rejection or a Guard listed a second time. */
+/** A Rejection, a Guard or an Endpoint listed a second time. */
 export type ListedTwiceSentence<Name extends string> = `${Name} is listed twice`;
 
 /** Writes `ListedTwiceSentence`. */
@@ -150,12 +153,23 @@ export function headerCaseSentence<Names extends string>(names: Names): HeaderCa
 export type NotPublicSentence<Endpoints extends string> =
   `An Application depends on Public Endpoints only: ${Endpoints}`;
 
+/** An Endpoint as a sentence names it, by its Provider: `payments-service's getPayment`. */
+export type EndpointLabel<Provider extends string, Name extends string> = `${Provider}'s ${Name}`;
+
+/** Writes `EndpointLabel`. */
+export function endpointLabel<Provider extends string, Name extends string>(
+  provider: Provider,
+  name: Name,
+): EndpointLabel<Provider, Name> {
+  return `${provider}'s ${name}`;
+}
+
 /** One Endpoint of `NotPublicSentence`: `payments-service's getPayment is internal`. */
 export type NotPublicEndpoint<
   Provider extends string,
   Name extends string,
   Visibility extends string,
-> = `${Provider}'s ${Name} is ${Visibility}`;
+> = `${EndpointLabel<Provider, Name>} is ${Visibility}`;
 
 /** Writes `NotPublicSentence` for one Endpoint. */
 export function notPublicSentence<
@@ -167,7 +181,7 @@ export function notPublicSentence<
   name: Name,
   visibility: Visibility,
 ): NotPublicSentence<NotPublicEndpoint<Provider, Name, Visibility>> {
-  return `An Application depends on Public Endpoints only: ${provider}'s ${name} is ${visibility}`;
+  return `An Application depends on Public Endpoints only: ${endpointLabel(provider, name)} is ${visibility}`;
 }
 
 /** A Dependency or Subscription on an Element of the Service's own Contract Package. */

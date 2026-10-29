@@ -1,7 +1,9 @@
 import {
   type Endpoint,
+  endpointLabel,
   isEndpoint,
   isProvidedElement,
+  listedTwiceSentence,
   notPublicSentence,
   oneProviderSentence,
   ownProviderSentence,
@@ -14,9 +16,9 @@ import { byCodePoint, fieldStep, indexStep, inside, type Place } from '../walker
 import {
   type Declarations,
   isEmptyField,
+  isOwnProvided,
   type LocatedDependency,
   listOf,
-  textOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
@@ -40,7 +42,7 @@ export function dependencyFailures(declarations: Declarations): readonly Declara
     }
     const selected = selectedOf(located);
     return [
-      ...providerFailures(located.at, selected),
+      ...providerFailures(located.at, selected, root),
       ...selected.flatMap((listed) => selectedFailures(listed, root)),
       ...repeatedFailures(selected),
     ];
@@ -61,9 +63,17 @@ function isSelected(listed: {
   return isEndpoint(listed.endpoint);
 }
 
-/** The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL. */
-function providerFailures(at: Place, selected: readonly Selected[]): readonly DeclarationFailure[] {
-  const providers = new Set(selected.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
+/**
+ * The Providers a Dependency's Endpoints name, when more than one: one client calls one base URL.
+ * The Service itself is no Provider, so an Endpoint of its own Contract Package is not one.
+ */
+function providerFailures(
+  at: Place,
+  selected: readonly Selected[],
+  root: Root,
+): readonly DeclarationFailure[] {
+  const others = selected.filter(({ endpoint }) => !isOwnProvided(root, endpoint));
+  const providers = new Set(others.map(({ endpoint }) => providerOf(endpoint)).filter(isName));
   if (providers.size < 2) {
     return [];
   }
@@ -81,8 +91,8 @@ function selectedFailures({ at, endpoint }: Selected, root: Root): readonly Decl
     const message = `${exportedRule}: ${endpoint.name} is no Provider's`;
     return [failure(at, 'dependency-selection', message)];
   }
-  if (root.kind === 'service' && providerOf(endpoint) === textOf(root.name)) {
-    return [failure(at, 'dependency-selection', ownProviderSentence(textOf(root.name)))];
+  if (isOwnProvided(root, endpoint)) {
+    return [failure(at, 'dependency-selection', ownProviderSentence(providerOf(endpoint)))];
   }
   const packageKind = root.kind === 'application' ? 'application' : 'service';
   if (!reaches(packageKind, endpoint.visibility)) {
@@ -107,7 +117,7 @@ function repeatedFailures(selected: readonly Selected[]): readonly DeclarationFa
   const failures: DeclarationFailure[] = [];
   for (const { at, endpoint } of selected) {
     if (seen.has(endpoint)) {
-      const message = `A Dependency lists each Endpoint once: ${labelOf(endpoint)} is listed twice`;
+      const message = `A Dependency lists each Endpoint once: ${listedTwiceSentence(labelOf(endpoint))}`;
       failures.push(failure(at, 'dependency-selection', message));
     }
     seen.add(endpoint);
@@ -118,5 +128,5 @@ function repeatedFailures(selected: readonly Selected[]): readonly DeclarationFa
 /** An Endpoint as a Dependency's failure names it: with its Provider, when one marks it. */
 function labelOf(endpoint: Endpoint): string {
   const provider = providerOf(endpoint);
-  return provider === undefined ? endpoint.name : `${provider}'s ${endpoint.name}`;
+  return provider === undefined ? endpoint.name : endpointLabel(provider, endpoint.name);
 }

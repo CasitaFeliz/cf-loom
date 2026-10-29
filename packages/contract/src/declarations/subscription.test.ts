@@ -46,6 +46,19 @@ describe('defineSubscription', () => {
     expect(declare).not.toThrow();
   });
 
+  test('a reserved name’s type error is the line generate writes for it', () => {
+    const written = {
+      name: 'delete',
+      description: 'Notifies the customer of each order created',
+      event: orderCreatedV1,
+    } as const;
+    type Name = Parameters<typeof defineSubscription<typeof written>>[0]['name'];
+
+    expectTypeOf<Name>().toExtend<
+      Refusal<'A Subscription name is camelCase words and no reserved word: "delete"'>
+    >();
+  });
+
   test('a Subscription to something that is not an Event is a type error', () => {
     const chargeCardV1 = defineCommand({
       name: 'ChargeCard',

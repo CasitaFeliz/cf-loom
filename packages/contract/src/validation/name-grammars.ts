@@ -83,7 +83,7 @@ function grammarFailures(
 /** What a name that breaks its grammar is told: a reserved word as the types tell it too. */
 function grammarMessageOf(grammar: CappedGrammar, noun: string, value: unknown): string {
   const text = textOf(value);
-  if (brokenPartOf(grammar, text) === 'reserved') {
+  if (isReserved(grammar, text)) {
     return `${reservedNameSentence(noun, text)}${hintFor(grammar, text)}`;
   }
   const { rule, note } = toldOf(grammar, text);
@@ -93,29 +93,18 @@ function grammarMessageOf(grammar: CappedGrammar, noun: string, value: unknown):
 /** The rule a name breaks, and what follows the name as written. */
 type Told = { readonly rule: string; readonly note: string };
 
-/** The part of its grammar a name breaks, its length when its pattern and words hold. */
-function brokenPartOf(grammar: CappedGrammar, text: string): 'pattern' | 'reserved' | 'length' {
-  if (isReserved(grammar, text)) {
-    return 'reserved';
-  }
-  return grammar.pattern.test(text) ? 'length' : 'pattern';
-}
-
 /**
  * What a name that does not follow its grammar's pattern or length is told: `kebab-case` or `at most
  * 64 characters`, with the name to write instead or its length.
  */
 function toldOf(grammar: CappedGrammar, text: string): Told {
-  switch (brokenPartOf(grammar, text)) {
-    case 'pattern':
-    case 'reserved':
-      return { rule: grammar.name, note: hintFor(grammar, text) };
-    case 'length':
-      return {
-        rule: `at most ${grammar.maxLength} characters`,
-        note: ` (${text.length} characters)`,
-      };
+  if (!grammar.pattern.test(text)) {
+    return { rule: grammar.name, note: hintFor(grammar, text) };
   }
+  return {
+    rule: `at most ${grammar.maxLength} characters`,
+    note: ` (${text.length} characters)`,
+  };
 }
 
 /** The name to write instead, when re-spelling its capitals as words yields one the grammar accepts. */

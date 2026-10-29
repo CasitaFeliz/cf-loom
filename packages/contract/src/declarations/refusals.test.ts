@@ -19,7 +19,7 @@ import type { Root } from '../internal/index.ts';
 import * as internal from '../internal/index.ts';
 
 /** Every sentence the types and `generate` share, by the name `./internal` exports it under. */
-type SentenceName = Extract<keyof typeof internal, `${string}Refusal` | `${string}Sentence`>;
+type SentenceName = Extract<keyof typeof internal, `${string}Sentence`>;
 
 /** A Root `generate` refuses with one shared sentence, and that sentence for the names it holds. */
 type Row = { readonly root: () => Root; readonly sentence: string };
@@ -79,7 +79,7 @@ function providedBy(provider: string, name: string, visibility: 'public' | 'inte
 }
 
 const rows: Record<SentenceName, Row> = {
-  guardDemandsRefusal: {
+  guardDemandsSentence: {
     root: () => {
       const signed = defineGuard({
         name: 'signed',
@@ -88,54 +88,59 @@ const rows: Record<SentenceName, Row> = {
       } as never);
       return serviceOf(defineEndpoint({ ...listOrders, guards: [signed] } as never));
     },
-    sentence: internal.guardDemandsRefusal,
+    sentence: internal.guardDemandsSentence,
   },
-  groupListsRefusal: {
+  groupListsSentence: {
     root: () =>
       defineService({
         name: 'orders-service',
         groups: [defineGroup({ name: 'orders', description: 'Orders' } as never)],
       }),
-    sentence: internal.groupListsRefusal,
+    sentence: internal.groupListsSentence,
   },
-  noParamsRefusal: {
+  noParamsSentence: {
     root: () =>
       serviceOf(
         defineEndpoint({ ...listOrders, input: { params: z.object({ id: z.uuid() }) } } as never),
       ),
-    sentence: internal.noParamsRefusal,
+    sentence: internal.noParamsSentence,
   },
-  getBodyRefusal: {
+  getBodySentence: {
     root: () =>
       serviceOf(defineEndpoint({ ...listOrders, input: { body: z.object({}) } } as never)),
-    sentence: internal.getBodyRefusal,
+    sentence: internal.getBodySentence,
   },
-  noContentBodyRefusal: {
+  noContentBodySentence: {
     root: () =>
       serviceOf(
         defineEndpoint({ ...listOrders, success: { status: 204, body: z.object({}) } } as never),
       ),
-    sentence: internal.noContentBodyRefusal,
+    sentence: internal.noContentBodySentence,
   },
-  messageBodyRefusal: {
+  messageBodySentence: {
     root: () => {
       const event = defineEvent({ ...orderPaid, body: z.string() } as never);
       const group = defineGroup({ name: 'orders', description: 'Orders', events: [event] });
       return defineService({ name: 'orders-service', groups: [group] });
     },
-    sentence: `${internal.messageBodyRefusal}: OrderPaid@1`,
+    sentence: `${internal.messageBodySentence}: OrderPaid@1`,
   },
-  messageVersionRefusal: {
+  messageVersionSentence: {
     root: () => {
       const event = defineEvent({ ...orderPaid, version: 0 } as never);
       const group = defineGroup({ name: 'orders', description: 'Orders', events: [event] });
       return defineService({ name: 'orders-service', groups: [group] });
     },
-    sentence: `${internal.messageVersionRefusal}: 0`,
+    sentence: `${internal.messageVersionSentence}: 0`,
   },
-  commandSubscribedRefusal: {
+  commandSubscribedSentence: {
     root: () => {
-      const command = defineCommand({ ...orderPaid, name: 'PayOrder' } as never);
+      const command = defineCommand({
+        name: 'PayOrder',
+        version: 1,
+        description: 'Pays an order',
+        body: z.object({ orderId: z.uuid() }),
+      });
       const subscription = defineSubscription({
         name: 'onPay',
         description: 'Pays',
@@ -149,7 +154,7 @@ const rows: Record<SentenceName, Row> = {
       } as never);
       return defineService({ name: 'orders-service', groups: [group] });
     },
-    sentence: internal.commandSubscribedRefusal,
+    sentence: internal.commandSubscribedSentence,
   },
   undeclaredFieldSentence: {
     root: () => serviceOf(defineEndpoint({ ...listOrders, audience: 'all' } as never)),
@@ -246,7 +251,15 @@ describe('the refusal sentences the types and generate share', () => {
   test.each(Object.entries(rows))(
     'generate writes %s as its sentence',
     (_name, { root, sentence }) => {
-      expect(messagesOf(root())).toContain(sentence);
+      expect(messagesOf(root())).toEqual([sentence]);
     },
   );
+});
+
+describe('an Endpoint as the sentences name it', () => {
+  test('is its Provider and its name, written once for every sentence that names one', () => {
+    const label = internal.endpointLabel('payments-service', 'getPayment');
+
+    expect(label).toBe("payments-service's getPayment");
+  });
 });

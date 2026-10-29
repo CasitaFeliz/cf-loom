@@ -2,7 +2,7 @@ import type { Command } from './command.ts';
 import type { Lifecycle } from './element.ts';
 import type { Event } from './event.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
-import type { commandSubscribedRefusal } from './refusals.ts';
+import type { commandSubscribedSentence } from './refusals.ts';
 import type { DeclaredFieldsRule, Refusal, ReservedNameRule } from './rules.ts';
 
 /** What an author writes to declare a Subscription: its name, what it is for, and an Event that still works. */
@@ -20,7 +20,7 @@ type WrittenSubscription = Omit<SubscriptionDeclaration, 'event'> & {
 /** What a Subscription must also satisfy: it receives an Event, never a Command. */
 type SubscribedEventRule<Declaration extends WrittenSubscription> =
   Declaration['event'] extends Command
-    ? { readonly event: Refusal<typeof commandSubscribedRefusal> }
+    ? { readonly event: Refusal<typeof commandSubscribedSentence> }
     : unknown;
 
 /** A declared Subscription, kept with its Event itself, the Event its Handler's Reader reads. */

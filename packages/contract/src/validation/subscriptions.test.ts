@@ -188,7 +188,7 @@ describe('validateRoot: Subscriptions', () => {
     );
   });
 
-  test('a Subscription to an Event of the Service’s own Contract Package fails: a Provider is another Service', () => {
+  test('a Subscription to an Event of the Service’s own Contract Package fails, and is a type error', () => {
     const ownEvent = providedEvent('orders-service', {
       name: 'PaymentRefunded',
       version: 1,
@@ -201,10 +201,16 @@ describe('validateRoot: Subscriptions', () => {
       description: 'Receives it',
       event: ownEvent,
     });
+    const group = defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      subscriptions: [onRefunded],
+    });
 
-    const result = validateSubscriptions([onRefunded]);
+    // @ts-expect-error a Provider is another Service
+    const contract = defineService({ name: 'orders-service', groups: [group] });
 
-    expect(result).toEqual(
+    expect(summarized(validateRoot(contract, aRootPackage(contract)))).toEqual(
       failed(
         'subscriptions.onRefunded event',
         'subscription-event',

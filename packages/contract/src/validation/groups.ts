@@ -1,7 +1,7 @@
 import {
   type Group,
   type GroupedField,
-  groupListsRefusal,
+  groupListsSentence,
   providerOf,
 } from '../declarations/index.ts';
 import {
@@ -58,7 +58,7 @@ function listsNothing({ group }: LocatedGroup): boolean {
 }
 
 function emptyGroupFailure(at: LocatedGroup['at']): DeclarationFailure {
-  return failure(at, 'empty-group', groupListsRefusal);
+  return failure(at, 'empty-group', groupListsSentence);
 }
 
 /** Each listing of a declaration after its first, in a Group's order, names the Group that listed it first. */

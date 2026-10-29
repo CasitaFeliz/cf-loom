@@ -2,11 +2,11 @@ import type * as core from 'zod/v4/core';
 import type { SchemaRule } from '../walker/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { HeaderNamesRule } from './http.ts';
-import type { guardDemandsRefusal } from './refusals.ts';
+import type { guardDemandsSentence } from './refusals.ts';
 import type { Rejection } from './rejection.ts';
 import type { DeclaredFieldsRule, Refusal, RejectionsOnceRule, ReservedNameRule } from './rules.ts';
 
-type GuardDemandsRefusal = Refusal<typeof guardDemandsRefusal>;
+type GuardDemandsRefusal = Refusal<typeof guardDemandsSentence>;
 
 /** What a Guard may demand from a request: headers and query params, never the body or the path. */
 type Demands = {
