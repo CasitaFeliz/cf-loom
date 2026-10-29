@@ -58,6 +58,7 @@ export type { Member, Members } from './members.ts';
 export { memberGuardsOf, membersOf } from './members.ts';
 export type { EventSource } from './messaging.ts';
 export { eventServiceOf, eventSourceOf } from './messaging.ts';
+export { isOwnProvided } from './own-provider.ts';
 export type { PackageNameParts } from './package-names.ts';
 export { packageNamePartsOf } from './package-names.ts';
 export type {

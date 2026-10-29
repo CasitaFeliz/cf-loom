@@ -92,6 +92,21 @@ const listPayments = providedEndpoint(
   undefined,
 );
 
+/** An Endpoint of the Service's own Contract Package, which no Dependency of the Service lists. */
+const getOrder = providedEndpoint(
+  aProvider('orders-service'),
+  {
+    name: 'getOrder',
+    method: 'GET',
+    path: '/orders/:orderId',
+    visibility: 'public',
+    description: 'One order',
+    input: { params: z.object({ orderId: z.uuid() }) },
+    success: { status: 200, body: z.object({ total: z.int() }) },
+  },
+  undefined,
+);
+
 const getReceipt = defineEndpoint({
   name: 'getReceipt',
   method: 'GET',
@@ -192,6 +207,34 @@ describe('validateRoot: a Service’s Dependencies', () => {
         '(root) dependencies[0].endpoints[0]',
         'dependency-selection',
         "A Dependency lists Endpoints a Provider's Contract Package exports: getReceipt is no Provider's",
+      ),
+    );
+  });
+
+  test('an Endpoint of the Service’s own Contract Package in a Dependency fails, and is a type error', () => {
+    const ownDependency = defineDependency({ endpoints: [getOrder] });
+
+    // @ts-expect-error a Provider is another Service
+    const contract = defineService({ name: 'orders-service', dependencies: [ownDependency] });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed(
+        '(root) dependencies[0].endpoints[0]',
+        'dependency-selection',
+        'A Provider is another Service: orders-service is this Service',
+      ),
+    );
+  });
+
+  test('an Endpoint of the Service’s own Contract Package beside a Provider’s fails only at its place, never as a second Provider', () => {
+    const mixedDependency = dependencyAsWritten({ endpoints: [getPayment, getOrder] });
+    const contract = defineService({ name: 'orders-service', dependencies: [mixedDependency] });
+
+    expect(validateInPackage(contract)).toEqual(
+      failed(
+        '(root) dependencies[0].endpoints[1]',
+        'dependency-selection',
+        'A Provider is another Service: orders-service is this Service',
       ),
     );
   });

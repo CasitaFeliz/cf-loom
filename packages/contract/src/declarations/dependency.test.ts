@@ -8,6 +8,7 @@ import {
   providedEndpoint,
   providedEvent,
 } from '../index.ts';
+import type { Refusal } from '../internal/index.ts';
 
 const getPayment = providedEndpoint(
   aProvider('payments-service'),
@@ -87,9 +88,9 @@ describe('defineDependency', () => {
       }>
     >[0];
 
-    expectTypeOf<
-      Written['endpoints']
-    >().toExtend<"A Dependency lists one Provider's Endpoints: payments-service, refunds-service">();
+    expectTypeOf<Written['endpoints']>().toExtend<
+      Refusal<"A Dependency lists one Provider's Endpoints: payments-service, refunds-service">
+    >();
     // @ts-expect-error a Dependency calls one Provider
     const declare = () => defineDependency({ endpoints: [getPayment, getRefund] });
     expect(declare).not.toThrow();

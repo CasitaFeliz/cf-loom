@@ -1,4 +1,9 @@
-import { camelCase, follows } from '../declarations/index.ts';
+import {
+  camelCase,
+  exactParamsSentence,
+  follows,
+  noParamsSentence,
+} from '../declarations/index.ts';
 import { inFields, type ObjectNode, type Place } from '../walker/index.ts';
 import {
   isPlainObject,
@@ -48,11 +53,9 @@ export function paramsFailures(
   const paramsAt = slotAt(at, 'input.params');
   const names = [...new Set(paramNamesOf(endpoint.path))];
   if (names.length === 0) {
-    return declared
-      ? [failure(paramsAt, 'exact-params', 'A path without :names takes no params')]
-      : [];
+    return declared ? [failure(paramsAt, 'exact-params', noParamsSentence)] : [];
   }
-  const exact = `params declares exactly the path's :names: ${names.join(', ')}`;
+  const exact = exactParamsSentence(names.join(', '));
   if (params === undefined) {
     return [failure(paramsAt, 'exact-params', exact)];
   }
