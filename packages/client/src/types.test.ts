@@ -392,6 +392,49 @@ describe('the client’s options, typed by what they declare', () => {
   });
 });
 
+describe('a call’s Input and options, typed by what they declare', () => {
+  const replacing = client(replacingDependency, { baseUrl });
+  const input = { params: { orderId: 'o-1' }, body: { total: 12 } };
+
+  test('a call’s options given through a variable with a field they do not declare is a type error', () => {
+    const call = { signal: new AbortController().signal, signl: 1 };
+
+    // @ts-expect-error signl is not a declared field
+    const calling = () => replacing.putOrder(input, call);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s Input given through a variable with a part the Endpoint does not declare is a type error', () => {
+    const misspelled = { ...input, querry: { page: 1 } };
+
+    // @ts-expect-error querry is not a declared field
+    const calling = () => replacing.putOrder(misspelled);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s Input part holding more fields than the Endpoint declares type-checks', () => {
+    const wider = { params: { orderId: 'o-1', tenant: 't-1' }, body: { total: 12 } };
+
+    const calling = () => replacing.putOrder(wider);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a method written by hand without type parameters is still assignable to the Client’s method', () => {
+    const putOrder = (
+      given: CallInput<typeof orders.endpoints.putOrder>,
+      call?: CallOptions,
+    ): ReturnType<Client<typeof replacingDependency>['putOrder']> =>
+      replacing.putOrder(given, call);
+
+    const method: Client<typeof replacingDependency>['putOrder'] = putOrder;
+
+    expect(method).toBe(putOrder);
+  });
+});
+
 describe('Http', () => {
   test('the global fetch is an Http, and a function of a URL and an init is not', () => {
     expectTypeOf<typeof globalThis.fetch>().toExtend<Http>();

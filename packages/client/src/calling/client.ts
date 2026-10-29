@@ -1,5 +1,5 @@
 import type { Http } from '@cf-loom/contract';
-import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import type { Closed } from '@cf-loom/contract/internal';
 import { type AnyDependency, calledEndpointOf } from '../endpoints/index.ts';
 import { baseUrlOf } from '../request/index.ts';
 import { type Calling, methodOf } from './call.ts';
@@ -16,12 +16,7 @@ export function client<
   const D extends AnyDependency,
   Configured extends ConfiguredName<D> = never,
   const Given = unknown,
->(
-  dependency: D,
-  options: ClientOptions<D, Configured> &
-    Given &
-    NoInfer<DeclaredFieldsRule<Given, ClientOptions<D, Configured>>>,
-): Client<D, Configured> {
+>(dependency: D, options: Closed<Given, ClientOptions<D, Configured>>): Client<D, Configured> {
   const calling: Calling = {
     base: baseUrlOf(options.baseUrl),
     fetch: options.fetch ?? globalFetch,
