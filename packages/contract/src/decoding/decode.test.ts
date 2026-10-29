@@ -2467,7 +2467,7 @@ describe('decodeSnapshot', () => {
       expect(elementOf(result)).toEqual(['endpoints', 'GET /orders/{}']);
     });
 
-    test('a Snapshot nested past 256 levels is malformed at its deepest path, before its structure is read', () => {
+    test('a Snapshot nested past 256 levels is malformed at the first level past the limit, before its structure is read', () => {
       const depth = 300;
       const nested =
         '{"type":"array","items":'.repeat(depth) + '{"type":"nothing"}' + '}'.repeat(depth);
@@ -3373,7 +3373,7 @@ describe('decodeSnapshot reads what publish writes, and nothing else in order', 
   );
 });
 
-describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_000 }, () => {
+describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
   const width = 300_000;
   const wideArray = () => Array.from({ length: width }, () => ({}));
   const wideMap = () => Object.fromEntries(Array.from({ length: width }, (_, i) => [`k${i}`, {}]));
@@ -3440,19 +3440,21 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', { timeout: 60_
     expect(result.kind).toBe('decoded');
   });
 
-  test('random wide and deep Snapshots are refused at the first level past the limit, never a throw', () => {
+  test('random wide and deep Snapshots are decoded within the limit and refused past it, never a throw', () => {
     const next = seededNext(340);
-    const draws = Array.from({ length: 8 }, () => ({
-      width: Math.floor(next() * 300_000),
-      levels: 300 + Math.floor(next() * 20_000),
-    }));
+    const draws = Array.from({ length: 10 }, (_, draw) => {
+      const refused = draw % 2 === 1;
+      const levels = refused ? 300 + Math.floor(next() * 20_000) : 1 + Math.floor(next() * 250);
+      return { refused, width: Math.floor(next() * 300_000), levels };
+    });
 
-    const results = draws.map(({ width, levels }) =>
-      decodeSnapshot(textOfWideAndDeep(width, levels)),
-    );
+    const results = draws.map(({ width, levels }) => {
+      const result = decodeSnapshot(textOfWideAndDeep(width, levels));
+      return result.kind === 'decoded' ? 'decoded' : result;
+    });
 
     const at = ['defs', 'deep', ...Array<string>(254).fill('items')];
     const refusal = malformedAt(at, 'nests deeper than 256 levels');
-    expect(results).toEqual(draws.map(() => refusal));
+    expect(results).toEqual(draws.map(({ refused }) => (refused ? refusal : 'decoded')));
   });
 });

@@ -363,20 +363,20 @@ describe('providedSnapshotOf reads a cut as wide and as deep as a Snapshot holds
     expect(read.defs['deep']).toStrictEqual(containersDeep(254));
   });
 
-  test('a cut holding a json example of 300,000 objects is read', { timeout: 60_000 }, () => {
+  test('a cut holding a json example of 300,000 objects is read', () => {
     const read = providedSnapshotOf(withDefs({ wide: wideNode(300_000) }));
 
     expect(read.defs['wide']).toStrictEqual(wideNode(300_000));
   });
 
-  test('random wide and deep cuts are refused at the limit, never a throw', {
-    timeout: 60_000,
-  }, () => {
+  test('random wide and deep cuts are read within the limit and refused past it, never a throw', () => {
     const next = seededNext(343);
-    const draws = Array.from({ length: 8 }, () => ({
-      width: Math.floor(next() * 300_000),
-      levels: 300 + Math.floor(next() * 20_000),
-    }));
+    const draws = Array.from({ length: 10 }, (_, draw) => {
+      const refused = draw % 2 === 1;
+      const levels = refused ? 300 + Math.floor(next() * 20_000) : 1 + Math.floor(next() * 250);
+      return { refused, width: Math.floor(next() * 300_000), levels };
+    });
+
     const outcomes = draws.map(({ width, levels }) =>
       outcomeOf(() =>
         providedSnapshotOf(withDefs({ a: wideNode(width), b: containersDeep(levels) })),
@@ -385,6 +385,6 @@ describe('providedSnapshotOf reads a cut as wide and as deep as a Snapshot holds
 
     const at = ['defs', 'b', ...Array<string>(254).fill('items')].join('.');
     const refusal = `orders-service's exported Snapshot is malformed: ${at} nests deeper than 256 levels`;
-    expect(new Set(outcomes)).toEqual(new Set([refusal]));
+    expect(outcomes).toEqual(draws.map(({ refused }) => (refused ? refusal : 'read')));
   });
 });

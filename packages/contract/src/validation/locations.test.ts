@@ -298,7 +298,6 @@ describe('failure lines: a Snapshot nested too deep', () => {
     },
   ])(
     'a json example holding $what of 300,000 objects is no nesting failure, however wide it is',
-    { timeout: 60_000 },
     ({ wide }) => {
       const body: SchemaNode = { type: 'json', examples: [wide()] };
 
