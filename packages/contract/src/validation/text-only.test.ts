@@ -13,7 +13,15 @@ import {
   type Endpoint,
   openEnum,
 } from '../index.ts';
-import { type Root, textOfValue, textPartsOf, validateRoot } from '../internal/index.ts';
+import {
+  headerTextsOf,
+  isQueryText,
+  isSegmentText,
+  type Root,
+  textOfValue,
+  textPartsOf,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** Validates a Root as the package it names: its package.json named as the Root is. */
 function validateInPackage(root: Root) {
@@ -774,6 +782,288 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
       expect(validateEndpoint(endpoint).kind, JSON.stringify(values)).toBe(
         readsBack ? 'valid' : 'invalid',
       );
+    }
+  });
+});
+
+describe('validateRoot: the values of a text part’s enum each travel in their part', () => {
+  const ordersAt = 'endpoints.GET /orders/{} (listOrders)';
+
+  const words = {
+    header: "A header's values each travel as HTTP field text",
+    param: "A path param's values each travel as a path segment",
+    query: "A query param's values each travel as a query value",
+  } as const;
+
+  function unsendable(part: keyof typeof words, name: string, values: string) {
+    return `${words[part]}: ${name} has ${values}`;
+  }
+
+  test('an Input header literal of " 1" and "é\\n" fails, naming both', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.literal([' 1', 'é\n']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" 1" and "é\\n"'),
+      ),
+    );
+  });
+
+  test('a header enum of a value with a tab or space inside, visible ASCII, "é", "ÿ" and the empty text validates', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.literal(['a b', 'a\tb', 'v1, ~!', 'é', 'ÿ', '']) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  test('a header value beyond U+00FF fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.enum(['€', 'a']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '"€"'),
+      ),
+    );
+  });
+
+  test('a Success header literal holding a line feed fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      success: { ...listing.success, headers: z.object({ 'x-s': z.literal('a\n') }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} success.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '"a\\n"'),
+      ),
+    );
+  });
+
+  test('a Rejection header literal with a leading space fails', () => {
+    const rejection = aRejectionWith(headersOf({ 'x-realm': z.literal(' x') }));
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        'codes.UNAUTHENTICATED headers.x-realm',
+        'unsendable-text',
+        unsendable('header', 'x-realm', '" x"'),
+      ),
+    );
+  });
+
+  test('a Guard’s demanded header literal that cannot travel fails', () => {
+    const signed = defineGuard({
+      name: 'signed',
+      description: 'A signed request',
+      demands: { headers: z.object({ 'x-version': z.literal('\n') }) },
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
+      failed(
+        'guards.signed demands.headers.x-version',
+        'unsendable-text',
+        unsendable('header', 'x-version', '"\\n"'),
+      ),
+    );
+  });
+
+  test('an Open Enum header value that cannot travel fails as a closed one does', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': openEnum(['a\n', 'b']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '"a\\n"'),
+      ),
+    );
+  });
+
+  test('a header enum of numbers and booleans validates', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.literal([0, -1.5, 1e21, true, false]) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  test('a header string with a regex no field text matches validates, since its values are not closed', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.string().regex(/^\n$/) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  test('a field with two values sharing a text and one that cannot travel fails with both rules’ lines', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.literal([1, '1', ' x']) }) },
+    });
+
+    const validated = validateEndpoint(endpoint);
+
+    expect(validated).toMatchObject({
+      failures: [
+        { rule: 'shared-text', message: expect.stringContaining('x-s has ') },
+        { rule: 'unsendable-text', message: unsendable('header', 'x-s', '" x"') },
+      ],
+    });
+  });
+
+  test('a path param literal of "", "." and ".." fails, naming all three', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:id',
+      input: { params: z.object({ id: z.literal(['', '.', '..']) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${ordersAt} input.params.id`,
+        'unsendable-text',
+        unsendable('param', 'id', '"", "." and ".."'),
+      ),
+    );
+  });
+
+  test('a path param literal holding a lone surrogate fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:id',
+      input: { params: z.object({ id: z.literal('\uD800') }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${ordersAt} input.params.id`,
+        'unsendable-text',
+        unsendable('param', 'id', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('a query literal holding a lone surrogate fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ q: z.literal('\uD800') }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.q`,
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('a query list whose item enum holds a lone surrogate fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ q: z.array(z.literal(['a', '\uD800'])) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.q`,
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('a path param literal of "a/b", "%" and "é" validates, since each is percent-encoded', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:id',
+      input: { params: z.object({ id: z.literal(['a/b', '%', 'é']) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  /** The text a part's field holds: the edge texts and their pairs, where each part's rule bites. */
+  const edgeTexts = [
+    '',
+    ' ',
+    '\t',
+    'a',
+    'a b',
+    'a\tb',
+    'é',
+    'ÿ',
+    'Ā',
+    '€',
+    '\n',
+    '\r',
+    '\u007f',
+    '.',
+    '..',
+    '\uD800',
+    '😀',
+  ];
+
+  /** Whether the runtime would refuse this text in the part, by the check it sends by. */
+  const runtimeRefuses = {
+    headers: (value: string) => headerTextsOf('input.headers', { 'x-s': value }).kind === 'issues',
+    params: (value: string) => !isSegmentText(value),
+    query: (value: string) => !isQueryText(value),
+  } as const;
+
+  function endpointHolding(part: keyof typeof runtimeRefuses, values: [string, ...string[]]) {
+    const enumeration = z.literal(values);
+    switch (part) {
+      case 'headers':
+        return defineEndpoint({ ...listing, input: { headers: z.object({ 'x-s': enumeration }) } });
+      case 'query':
+        return defineEndpoint({ ...listing, input: { query: z.object({ 'x-s': enumeration }) } });
+      case 'params':
+        return defineEndpoint({
+          ...listing,
+          path: '/orders/:xS',
+          input: { params: z.object({ xS: enumeration }) },
+        });
+    }
+  }
+
+  test('generate refuses a text part’s enum exactly when one of its values fails the part’s runtime check', () => {
+    const next = seededNext(455);
+    const edge = () => edgeTexts[Math.floor(next() * edgeTexts.length)] as string;
+    const drawn = Array.from({ length: 150 }, () => {
+      const size = 1 + Math.floor(next() * 3);
+      const values = Array.from({ length: size }, () => `${edge()}${edge()}`);
+      return [...new Set(values)] as [string, ...string[]];
+    });
+
+    for (const values of drawn) {
+      for (const part of ['headers', 'params', 'query'] as const) {
+        const validated = validateEndpoint(endpointHolding(part, values));
+        const rules = validated.kind === 'valid' ? [] : validated.failures.map((one) => one.rule);
+
+        expect(rules, `${part} ${JSON.stringify(values)}`).toEqual(
+          values.some(runtimeRefuses[part]) ? ['unsendable-text'] : [],
+        );
+      }
     }
   });
 });

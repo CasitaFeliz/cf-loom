@@ -51,7 +51,7 @@ export {
   reservedCodeFaults,
   travelingFaultOf,
 } from './envelopes.ts';
-export { headerTextsOf } from './header-text.ts';
+export { headerTextsOf, isHeaderText } from './header-text.ts';
 export type { Http } from './http.ts';
 export { kebabCaseOf } from './identifiers.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';

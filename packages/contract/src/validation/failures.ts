@@ -33,6 +33,7 @@ export type Rule =
   | 'nullable-text'
   | 'not-text'
   | 'shared-text'
+  | 'unsendable-text'
   | 'header-names'
   | 'input-conflict'
   | 'guard-demands'
