@@ -199,6 +199,38 @@ describe('misspelledTerms', () => {
     expect(misspellings).toEqual([]);
   });
 
+  it('does not open a code span in the middle of a run of backticks', () => {
+    const markdown = 'A ``x` direct call `y` z.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('opens a code span at a whole run of backticks, never at a part of it', () => {
+    const markdown = 'A `` direct call `.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('does not close a code span in the middle of a run of backticks', () => {
+    const markdown = 'A `x``direct call`` z.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('closes a code span only at a whole run of backticks', () => {
+    const markdown = 'A ` direct call ``.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
   it('does not pair a backtick with one in another paragraph', () => {
     const markdown = 'A stray ` and a direct call.\n\nAnother stray ` here.\n';
 
@@ -263,6 +295,14 @@ describe('misspelledTerms', () => {
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
     expect(misspellings).toEqual([]);
+  });
+
+  it('reports a term in parentheses in prose', () => {
+    const markdown = 'A Handler (a direct call) here.\n';
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
   });
 
   it('reports a term in link text and in a heading', () => {
