@@ -1,5 +1,5 @@
 import type { ServiceContract } from '@cf-loom/contract';
-import type { DeclaredFieldsRule } from '@cf-loom/contract/internal';
+import type { Closed } from '@cf-loom/contract/internal';
 import type { Broker, BrokerConnection } from '../broker/index.ts';
 import { durableConsumerOf } from '../consuming/index.ts';
 import { serviceStreamOf, subjectsOf } from '../subjects/index.ts';
@@ -10,7 +10,7 @@ import type { CoreConnection } from './life.ts';
 export function messaging<const C extends ServiceContract, const Given = unknown>(
   contract: C,
   broker: Broker,
-  options?: MessagingOptions & Given & NoInfer<DeclaredFieldsRule<Given, MessagingOptions>>,
+  options?: Closed<Given, MessagingOptions>,
 ): Promise<Messaging<C>>;
 export async function messaging(
   contract: ServiceContract,

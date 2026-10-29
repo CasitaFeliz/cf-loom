@@ -398,10 +398,11 @@ describe('publish and send types', () => {
     expect(options.onServiceFault).toBeTypeOf('function');
   });
 
-  test('close takes an optional signal', () => {
-    expectTypeOf<Messaging<typeof contract>['close']>().toEqualTypeOf<
-      (options?: CloseOptions) => Promise<void>
+  test('close takes an optional signal and nothing else', () => {
+    expectTypeOf<Parameters<Messaging<typeof contract>['close']>>().toExtend<
+      [options?: CloseOptions | undefined]
     >();
+    expectTypeOf<Messaging<typeof contract>['close']>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<CloseOptions>().toEqualTypeOf<{ readonly signal?: AbortSignal | undefined }>();
   });
 
@@ -549,6 +550,16 @@ describe('publish and send types', () => {
 });
 
 describe('the options, typed by what they declare', () => {
+  test('close given options through a variable with a field they do not declare is a type error', async () => {
+    const opened = await messaging(contract, broker);
+    const options = { signal: new AbortController().signal, timeoutMs: 1_000 };
+
+    // @ts-expect-error timeoutMs is not a declared field
+    const closing = () => opened.close(options);
+
+    expect(closing).toBeTypeOf('function');
+  });
+
   test('messaging() refuses an options variable holding a declared hook and a misspelled one', () => {
     const options = { onServiceFault: () => undefined, onBrokerTrubble: () => undefined };
 
