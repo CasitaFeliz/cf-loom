@@ -155,6 +155,11 @@ const replacingDependency = defineDependency({ endpoints: [orders.endpoints.putO
 
 const baseUrl = 'http://orders.test';
 
+/** One of two values, typed as their union, as a variable whose type no literal narrows. */
+function eitherOf<First, Second>(first: First, second: Second): First | Second {
+  return Math.random() < 0.5 ? first : second;
+}
+
 describe('the client’s types', () => {
   test('has a method only for each Endpoint the Dependency lists', () => {
     const orders = client(ordersDependency, { baseUrl });
@@ -410,6 +415,41 @@ describe('a call’s Input and options, typed by what they declare', () => {
 
     // @ts-expect-error querry is not a declared field
     const calling = () => replacing.putOrder(misspelled);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('client() given options of a union type, one member holding a field they do not declare, is a type error', () => {
+    const options = eitherOf({ baseUrl, baseUri: baseUrl }, { baseUrl });
+
+    // @ts-expect-error baseUri is not a declared field
+    const clientOf = () => client(replacingDependency, options);
+
+    expect(clientOf).toBeTypeOf('function');
+  });
+
+  test('a call’s Input that may be left out, given through a variable with a part the Endpoint does not declare, is a type error', () => {
+    const listing = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': 'k', 'x-region': 'eu' },
+    });
+    const misspelled = { query: { page: 1 }, querry: { page: 2 } };
+
+    // @ts-expect-error querry is not a declared field
+    const calling = () => listing.listOrders(misspelled);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a call’s options, where the Input may be left out, given through a variable with a field they do not declare, is a type error', () => {
+    const listing = client(ordersDependency, {
+      baseUrl,
+      headers: { 'x-api-key': 'k', 'x-region': 'eu' },
+    });
+    const call = { signal: new AbortController().signal, signl: 1 };
+
+    // @ts-expect-error signl is not a declared field
+    const calling = () => listing.listOrders(undefined, call);
 
     expect(calling).toBeTypeOf('function');
   });

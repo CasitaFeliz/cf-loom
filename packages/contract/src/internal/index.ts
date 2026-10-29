@@ -31,7 +31,6 @@ export type {
   AttachedGuardsOf,
   Closed,
   CodeNameOf,
-  DeclaredFieldsRule,
   GivenShapeOf,
   GroupedField,
   GroupedOf,

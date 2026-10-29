@@ -15,12 +15,18 @@ import type { ReservedName } from './reserved-names.ts';
 /** A type no value has, whose only key is the sentence a type error reads. */
 export type Refusal<Message extends string> = { readonly [Text in Message]: never };
 
-/** What a declaration must also satisfy: each field it holds is one its kind declares. */
+/**
+ * What a declaration must also satisfy: each field it holds is one its kind declares, in every
+ * member when it is a union.
+ */
 export type DeclaredFieldsRule<Declaration, Shape> = {
-  readonly [Field in Exclude<keyof Declaration, keyof Shape>]: Refusal<
+  readonly [Field in Exclude<KeysOfEach<Declaration>, keyof Shape>]: Refusal<
     UndeclaredFieldSentence<Field & string>
   >;
 };
+
+/** Every key any member of a union holds, where `keyof` keeps only the keys all members share. */
+type KeysOfEach<Union> = Union extends unknown ? keyof Union : never;
 
 /**
  * A parameter whose shape cf-loom gives, an options object or what `fault()` is given: `Shape`, and

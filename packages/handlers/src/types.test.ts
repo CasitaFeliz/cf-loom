@@ -92,6 +92,11 @@ const readers = readersOf({
   subscriptions: {},
 });
 
+/** One of two values, typed as their union, as a variable whose type no literal narrows. */
+function eitherOf<First, Second>(first: First, second: Second): First | Second {
+  return Math.random() < 0.5 ? first : second;
+}
+
 const orders = defineService({
   name: 'orders-service',
   groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
@@ -259,6 +264,38 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     expect([building, buildingLate]).toHaveLength(2);
   });
 
+  test('fault given a retryAfter and a misspelled field through a variable is a type error', () => {
+    const given = { committed: 'no', retryable: true, retryAfter: 30, messge: 'Busy' } as const;
+
+    // @ts-expect-error messge is not a declared field
+    const building = () => fault(given);
+
+    expect(building).toBeTypeOf('function');
+  });
+
+  test('fault given a variable of a union type, one member holding a field it does not declare, is a type error', () => {
+    const given = eitherOf(
+      { committed: 'no', retryable: false, extra: 1 } as const,
+      { committed: 'yes', retryable: false } as const,
+    );
+
+    // @ts-expect-error extra is not a declared field
+    const building = () => fault(given);
+
+    expect(building).toBeTypeOf('function');
+  });
+
+  test('fault given a variable of a union type whose members hold only declared fields type-checks', () => {
+    const given = eitherOf(
+      { committed: 'no', retryable: false, message: 'Declined' } as const,
+      { committed: 'yes', retryable: false } as const,
+    );
+
+    const built = fault(given);
+
+    expect(built).toMatchObject({ kind: 'fault', retryable: false });
+  });
+
   test('fault given through a variable with only declared fields type-checks, message and cause included', () => {
     const given = {
       committed: 'no',
@@ -315,6 +352,43 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     expect([callingWithRequest, callingWithCall]).toHaveLength(2);
   });
 
+  test('a GuardHandler’s Direct call given its request through a variable with a field it does not declare is a type error', () => {
+    const request = { signal: new AbortController().signal, headrs: new Headers() };
+
+    // @ts-expect-error headrs is not a declared field
+    const calling = () => permissionHandler({}, { context, qualifier: ['orders:read'], request });
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a GuardHandler’s Direct call given its last argument through a variable with a field beside resources is a type error', () => {
+    const callersHandler = handle(
+      permission,
+      (_demands, _call, { resources }: WithResources<{ readonly callers: string }>) =>
+        resources.callers === '' ? admit() : admit(),
+    );
+    const last = { resources: { callers: 'c-1' }, resourcs: { callers: 'c-2' } };
+
+    // @ts-expect-error resourcs is not a declared field
+    const calling = () => callersHandler({}, { context, qualifier: ['orders:read'] }, last);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
+  test('a Message Handler’s Direct call given its last argument through a variable with a field beside resources is a type error', () => {
+    const chargingHandler = handle(
+      readers.commands.chargeCardV1,
+      (_body, _meta, { resources }: WithResources<{ readonly cards: string }>) =>
+        resources.cards === '' ? undefined : undefined,
+    );
+    const last = { resources: { cards: 'k-1' }, resourcs: { cards: 'k-2' } };
+
+    // @ts-expect-error resourcs is not a declared field
+    const calling = () => chargingHandler({ orderId: 'o-1' }, {}, last);
+
+    expect(calling).toBeTypeOf('function');
+  });
+
   test('a Direct call’s last argument given through a variable with a field beside resources is a type error', () => {
     const ordersHandler = handle(
       getOrder,
@@ -340,5 +414,23 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     const outcome = await ordersHandler(input, { context }, last);
 
     expect(outcome).toMatchObject({ kind: 'success', body: { orderId: 'o-1' } });
+  });
+});
+
+describe('readersOf refuses a field its table does not declare', () => {
+  test('a table given through a variable with a field beside commands and subscriptions is a type error', () => {
+    const table = { commands: {}, subscriptions: {}, subscriptons: {} };
+
+    // @ts-expect-error subscriptons is not a declared field
+    const building = () => readersOf(table);
+
+    expect(building).toBeTypeOf('function');
+  });
+
+  test('a table written as a literal with a field beside commands and subscriptions is a type error', () => {
+    // @ts-expect-error subscriptons is not a declared field
+    const building = () => readersOf({ commands: {}, subscriptions: {}, subscriptons: {} });
+
+    expect(building).toBeTypeOf('function');
   });
 });
