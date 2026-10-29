@@ -21,7 +21,6 @@ import {
   type MessageImplementation,
   type ReceivedBodyOf,
   readersOf,
-  success,
   type WithResources,
 } from '../index.ts';
 
@@ -473,7 +472,10 @@ describe("what a Message Handler's direct call answers", () => {
   });
 
   test("a Subscription's Message Handler that returns something other than a Fault throws a TypeError naming no Fault", async () => {
-    const notifyOnSettledHandler = handle(notifyOnSettledReader, () => success() as never);
+    const notifyOnSettledHandler = handle(
+      notifyOnSettledReader,
+      () => ({ kind: 'success', value: undefined }) as never,
+    );
 
     const call = notifyOnSettledHandler(body, meta);
 
@@ -483,7 +485,10 @@ describe("what a Message Handler's direct call answers", () => {
   });
 
   test('a Handler that returns something other than a Fault throws a TypeError naming what came back', async () => {
-    const chargeCardHandler = handle(chargeCard, () => success() as never);
+    const chargeCardHandler = handle(
+      chargeCard,
+      () => ({ kind: 'success', value: undefined }) as never,
+    );
 
     const call = chargeCardHandler(body, meta);
 

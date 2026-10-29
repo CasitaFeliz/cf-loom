@@ -225,7 +225,7 @@ type Resources = {
 type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, Key>>;
 
 const idempotencyKeyHandler = handle(idempotencyKey, ({ headers }) =>
-  admit({ key: headers['idempotency-key'] }),
+  admit(idempotencyKey, { key: headers['idempotency-key'] }),
 );
 
 const createPaymentHandler = handle(
@@ -233,9 +233,9 @@ const createPaymentHandler = handle(
   async ({ body }, { context }, { resources: { payments } }: Needs<'payments'>) => {
     const { key } = context.idempotencyKey;
     const done = await payments.byKey(key);
-    if (done) return success(done);
+    if (done) return success(createPayment, done);
     const payment = await payments.create(key, body.amount);
-    return success(payment);
+    return success(createPayment, payment);
   },
 );
 

@@ -85,7 +85,7 @@ const getOrderHandler = handle(
     const name = taken.orders.find(params.orderId);
     return name === undefined
       ? reject(notFound)
-      : success({ name, callerId: context.apiKey.callerId });
+      : success(getOrder, { name, callerId: context.apiKey.callerId });
   },
 );
 
@@ -94,7 +94,7 @@ const apiKeyHandler = handle(
   ({ headers }, _call, { resources: taken }: Needs<'callers'>) => {
     seen.push(taken);
     const callerId = taken.callers.byKey(headers['x-api-key']);
-    return callerId === undefined ? reject(unauthenticated) : admit({ callerId });
+    return callerId === undefined ? reject(unauthenticated) : admit(apiKey, { callerId });
   },
 );
 
@@ -110,7 +110,7 @@ const chargeCardHandler = handle(
   },
 );
 
-const healthHandler = handle(health, () => success());
+const healthHandler = handle(health, () => success(health));
 
 const handlers = {
   endpoints: { getOrder: getOrderHandler, health: healthHandler },
@@ -179,7 +179,7 @@ describe('serve: Resources', () => {
   test('takes no options when no Handler of the map takes Resources', () => {
     const bare = {
       endpoints: { getOrder: handle.stub(getOrder), health: healthHandler },
-      guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
+      guards: { apiKey: handle(apiKey, () => admit(apiKey, { callerId: 'c-1' })) },
     };
 
     const served = [serve(contract, bare, {}), serve(contract, bare, { maxBodyBytes: 1 })];
@@ -201,7 +201,7 @@ describe('serve: Resources', () => {
   test('a test that replaces a Handler by spreading the map needs only what the rest take', async () => {
     const replaced = {
       ...handlers,
-      guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-9' })) },
+      guards: { apiKey: handle(apiKey, () => admit(apiKey, { callerId: 'c-9' })) },
     };
     const needed = { orders };
     const http = serve(contract, replaced, { resources: needed });
@@ -217,7 +217,7 @@ describe('serve: the request an EndpointHandler receives', () => {
     const received: Headers[] = [];
     const healthy = handle(health, (_input, { request }) => {
       received.push(request.headers);
-      return success();
+      return success(health);
     });
     const http = serve(
       contract,
@@ -238,7 +238,7 @@ describe('serve: the request an EndpointHandler receives', () => {
     const healthy = handle(health, (_input, { request }) => {
       received.push(request.signal);
       controller.abort();
-      return success();
+      return success(health);
     });
     const http = serve(
       contract,

@@ -75,11 +75,14 @@ const archiveOrder = defineEndpoint({
 
 const handlers = {
   endpoints: {
-    getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId, extra: true })),
-    getSummary: handle(getSummary, () => success({ count: 3 })),
-    getInvoice: handle(getInvoice, () => success()),
-    getItem: handle(getItem, () => success()),
-    getRoot: handle(getRoot, () => success({ root: true })),
+    getOrder: handle(getOrder, ({ params }) => {
+      const order = { id: params.orderId, extra: true };
+      return success(getOrder, order);
+    }),
+    getSummary: handle(getSummary, () => success(getSummary, { count: 3 })),
+    getInvoice: handle(getInvoice, () => success(getInvoice)),
+    getItem: handle(getItem, () => success(getItem)),
+    getRoot: handle(getRoot, () => success(getRoot, { root: true })),
   },
   guards: {},
 };

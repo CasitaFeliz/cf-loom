@@ -115,7 +115,7 @@ describe('runEndpoint', () => {
   });
 
   test('an Outcome that breaks the Contract is invalid-outcome with its issues', async () => {
-    const brokenHandler = handle(getOrder, () => success({ id: 'nope' }));
+    const brokenHandler = handle(getOrder, () => success(getOrder, { id: 'nope' }));
     const call = {
       input: { params: { orderId: ORDER_ID } },
       context: getContext,
@@ -146,10 +146,10 @@ describe('runEndpoint', () => {
 });
 
 describe('runGuard', () => {
-  const permissionHandler = handle(permission, () => admit());
+  const permissionHandler = handle(permission, () => admit(permission));
 
   test('demands, a Context and a Qualifier that break the Contract are invalid-call', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
     const call = {
       demands: {},
       context: { apiKey: {} },
@@ -176,7 +176,7 @@ describe('runGuard', () => {
   });
 
   test('an admitted Context that breaks the Contract is invalid-outcome', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 7 }) as never);
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 7 } as never));
     const call = {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
@@ -235,8 +235,8 @@ describe('a run of a Handler that throws or returns no Outcome', () => {
     });
   });
 
-  test('a Guard returning success() is thrown, not a throw of the run', async () => {
-    const apiKeyHandler = handle(apiKey, () => success() as never);
+  test('a Guard returning success(endpoint) is thrown, not a throw of the run', async () => {
+    const apiKeyHandler = handle(apiKey, () => success(getOrder, { id: ORDER_ID }) as never);
     const call = {
       demands: { headers: { 'x-api-key': 'k' } },
       context: {},
@@ -355,7 +355,7 @@ describe('isStub', () => {
 describe('mappedHandlerOf, by the declaration a Handler was written for', () => {
   test('a Handler is found for its own declaration, not another, and a plain function never', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
     const lookalike = Object.assign(() => undefined, { declaration: getOrder });
 
     const written = [
@@ -480,7 +480,7 @@ describe('a run given a value nested past the stack', () => {
   }
 
   test('runEndpoint is invalid-call at the root of the part, never thrown', async () => {
-    const nestHandler = handle(nest, () => success());
+    const nestHandler = handle(nest, () => success(nest));
 
     const run = await runEndpoint(nestHandler, {
       input: { body: nestedTo(5000) },

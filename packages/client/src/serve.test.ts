@@ -192,20 +192,22 @@ const handlers = {
         return reject(orderLocked, { lockedAt: '2026-10-18T10:00:00Z' });
       }
       if (params.orderId === 'broken') {
-        return success({
+        return success(getOrder, {
           headers: { 'x-stage': 'packed', 'x-count': -0.5 },
           body: { id: 'x', by: 'y' },
         });
       }
       const headers = { 'x-stage': 'shipped', 'x-count': 2 } as const;
-      return success({ headers, body: { id: params.orderId, by: key.callerId } });
+      return success(getOrder, { headers, body: { id: params.orderId, by: key.callerId } });
     }),
-    createOrder: handle(createOrder, ({ body }) => success(body)),
+    createOrder: handle(createOrder, ({ body }) => success(createOrder, body)),
     cancelOrder: handle(cancelOrder, () =>
       fault({ committed: 'no', retryable: true, retryAfter: 7 }),
     ),
   },
-  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
+  guards: {
+    apiKey: handle(apiKey, ({ headers }) => admit(apiKey, { callerId: headers['x-api-key'] })),
+  },
 };
 
 const server = nodeHttp(

@@ -324,7 +324,7 @@ describe('what a call sends', () => {
     const handlers = {
       endpoints: {
         priceOrder: handle(priceOrder, ({ params, query, headers }) =>
-          success({
+          success(priceOrder, {
             amount: params.amount,
             ratio: query.ratio,
             scale: headers['x-scale'],
@@ -865,8 +865,10 @@ describe('every header and query param the Provider reads reaches the request, w
     const http = serve(
       provider,
       {
-        endpoints: { readKeyed: handle(headerOnlyGuardDemands, () => success()) },
-        guards: { keyed: handle(keyedByHeader, () => admit()) },
+        endpoints: {
+          readKeyed: handle(headerOnlyGuardDemands, () => success(headerOnlyGuardDemands)),
+        },
+        guards: { keyed: handle(keyedByHeader, () => admit(keyedByHeader)) },
       },
       {},
     );
@@ -896,7 +898,7 @@ describe('a number literal in exponent form, end to end against serve', () => {
   test('travels as plain decimal both ways and reads back as its literal', async () => {
     const handlers = {
       endpoints: {
-        echoLarge: handle(echoLarge, () => success({ headers: { 'x-small': 1.5e-7 } })),
+        echoLarge: handle(echoLarge, () => success(echoLarge, { headers: { 'x-small': 1.5e-7 } })),
       },
       guards: {},
     };

@@ -97,7 +97,7 @@ const settlePaymentHandler = handle(
         break;
       }
     }
-    return success({ outcomes });
+    return success(settlePayment, { outcomes });
   },
 );
 

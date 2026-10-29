@@ -31,6 +31,7 @@ export type {
   AttachedGuardsOf,
   Closed,
   CodeNameOf,
+  GivenArgumentsOf,
   GivenShapeOf,
   GroupedField,
   GroupedOf,

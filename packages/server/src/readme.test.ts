@@ -59,9 +59,9 @@ const handlers = {
     getOrder: handle(
       getOrder,
       ({ params }, { context }, { resources: { orders } }: WithResources<Resources>) =>
-        success({ id: orders.nameOf(params.orderId), callerId: context.apiKey.callerId }),
+        success(getOrder, { id: orders.nameOf(params.orderId), callerId: context.apiKey.callerId }),
     ),
-    noteOrder: handle(noteOrder, ({ body }) => success({ text: body.text })),
+    noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, { text: body.text })),
   },
   guards: { apiKey: handle(apiKey, () => reject(notFound) as never) },
   commands: {},
@@ -78,7 +78,7 @@ describe('the READMEs', () => {
         ...handlers,
         guards: {
           ...handlers.guards,
-          apiKey: handle(apiKey, async () => admit({ callerId: 'c-1' })),
+          apiKey: handle(apiKey, async () => admit(apiKey, { callerId: 'c-1' })),
         },
       },
       { resources },
@@ -150,7 +150,9 @@ describe('the READMEs', () => {
       groups: [defineGroup({ name: 'notes', description: 'Notes', endpoints: [noteOrder] })],
     });
     const noteHandlers = {
-      endpoints: { noteOrder: handle(noteOrder, ({ body }) => success({ text: body.text })) },
+      endpoints: {
+        noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, { text: body.text })),
+      },
       guards: {},
       commands: {},
       subscriptions: {},

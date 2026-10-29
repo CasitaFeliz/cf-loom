@@ -8,5 +8,5 @@ export default handle(apiKey, async ({ headers }) => {
   const callerId = callerIdOf(headers['x-api-key']);
   if (callerId === undefined)
     return reject(unauthenticated, { headers: { 'www-authenticate': challenge } });
-  return admit({ callerId });
+  return admit(apiKey, { callerId });
 });

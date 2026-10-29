@@ -119,6 +119,16 @@ export type GivenShapeOf<Received> = Received extends { readonly headers: infer 
     ? Body
     : undefined;
 
+/**
+ * What a builder takes after its declaration: nothing where it declares no value, optional where it
+ * admits `undefined`.
+ */
+export type GivenArgumentsOf<Value> = [Value] extends [undefined]
+  ? []
+  : undefined extends Value
+    ? [given?: Value]
+    : [given: Value];
+
 /** What a Success is built from, by whoever writes one for an Endpoint. */
 export type SuccessValueOf<Target extends Endpoint> = GivenShapeOf<
   ReceivedShapeOf<Target['success']>

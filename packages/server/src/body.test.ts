@@ -65,10 +65,10 @@ const contract = defineService({
 
 const handlers = {
   endpoints: {
-    createOrder: handle(createOrder, ({ body }) => success(body)),
-    deleteOrder: handle(deleteOrder, () => success()),
-    nest: handle(nest, () => success()),
-    tagOrders: handle(tagOrders, () => success()),
+    createOrder: handle(createOrder, ({ body }) => success(createOrder, body)),
+    deleteOrder: handle(deleteOrder, () => success(deleteOrder)),
+    nest: handle(nest, () => success(nest)),
+    tagOrders: handle(tagOrders, () => success(tagOrders)),
   },
   guards: {},
 };
@@ -338,7 +338,7 @@ describe('serve: maxBodyBytes', () => {
     const ran: string[] = [];
     const nestHandler = handle(nest, () => {
       ran.push('nest');
-      return success();
+      return success(nest);
     });
     const watched = serve(
       contract,

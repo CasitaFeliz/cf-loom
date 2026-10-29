@@ -115,33 +115,36 @@ const userTokenHandler = handle(userToken, ({ headers }) => {
   if (headers.authorization !== 'Bearer u-1') {
     return reject(unauthenticated, { headers: { 'www-authenticate': challenge } });
   }
-  return admit({ userId: 'u-1' });
+  return admit(userToken, { userId: 'u-1' });
 });
 
 const permissionHandler = handle(
   permission,
   (_demands, { context: { userToken: user }, qualifier }) => {
     calls.push('permission');
-    return admit({ granted: [user.userId, ...qualifier] });
+    return admit(permission, { granted: [user.userId, ...qualifier] });
   },
 );
 
 const updateOrderHandler = handle(updateOrder, (_input, { context }) => {
   calls.push('updateOrder');
-  return success({ by: context.userToken.userId, granted: context.permission.granted });
+  return success(updateOrder, {
+    by: context.userToken.userId,
+    granted: context.permission.granted,
+  });
 });
 
 const handlers = {
   endpoints: {
     updateOrder: updateOrderHandler,
     misattached: handle.stub(misattached),
-    addNote: handle(addNote, () => success()),
-    listOrders: handle(listOrders, () => success()),
+    addNote: handle(addNote, () => success(addNote)),
+    listOrders: handle(listOrders, () => success(listOrders)),
   },
   guards: {
     userToken: userTokenHandler,
     permission: permissionHandler,
-    tenant: handle(tenant, () => admit()),
+    tenant: handle(tenant, () => admit(tenant)),
   },
 };
 
@@ -370,7 +373,7 @@ describe('serve: Guards', () => {
     const received: HandledRequest[] = [];
     const reading = handle(userToken, (_demands, { request }) => {
       received.push(request);
-      return admit({ userId: 'u-1' });
+      return admit(userToken, { userId: 'u-1' });
     });
     const served = { ...handlers, guards: { ...handlers.guards, userToken: reading } };
     const headers = { authorization: 'Bearer u-1', 'x-request-id': 'r-7' };
@@ -439,7 +442,7 @@ describe('serve: Guards', () => {
 
   test('an admit() that breaks the Guard’s context is INVALID_OUTCOME, the Guard named to onServiceFault', async () => {
     const faults: ServedFault[] = [];
-    const broken = handle(userToken, () => admit({ userId: 7 } as never));
+    const broken = handle(userToken, () => admit(userToken, { userId: 7 } as never));
     const http = serve(
       contract,
       { ...handlers, guards: { ...handlers.guards, userToken: broken } },

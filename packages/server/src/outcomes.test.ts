@@ -90,8 +90,8 @@ function serveWith(implementation: EndpointImplementation<typeof getOrder>) {
     {
       endpoints: {
         getOrder: handle(getOrder, implementation),
-        updateOrder: handle(updateOrder, () => success()),
-        orderTotal: handle(orderTotal, () => success({ headers: { 'x-total': 3 } })),
+        updateOrder: handle(updateOrder, () => success(updateOrder)),
+        orderTotal: handle(orderTotal, () => success(orderTotal, { headers: { 'x-total': 3 } })),
       },
       guards: {},
     },
@@ -108,8 +108,9 @@ const getRequest = new Request('http://test/orders/o-1');
 
 describe('serve: a Success', () => {
   test('sends its declared headers as text with the parsed body', async () => {
+    const orderWithExtra = { ...order, extra: true };
     const { http } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag: 'v1' }, body: { ...order, extra: true } }),
+      success(getOrder, { headers: { 'x-total': 3, etag: 'v1' }, body: orderWithExtra }),
     );
 
     const response = await http(getRequest.clone());
@@ -121,7 +122,7 @@ describe('serve: a Success', () => {
 
   test('a header value with a tab inside, or U+00FF, travels', async () => {
     const { http } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag: 'v\t\u00ff' }, body: order }),
+      success(getOrder, { headers: { 'x-total': 3, etag: 'v\t\u00ff' }, body: order }),
     );
 
     const response = await http(getRequest.clone());
@@ -132,7 +133,7 @@ describe('serve: a Success', () => {
 
   test('an optional header the Handler gives as undefined is not sent', async () => {
     const { http } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag: undefined }, body: order }),
+      success(getOrder, { headers: { 'x-total': 3, etag: undefined }, body: order }),
     );
 
     const response = await http(getRequest.clone());
@@ -142,7 +143,7 @@ describe('serve: a Success', () => {
   });
 
   test('an optional header the Handler leaves out is not sent', async () => {
-    const { http } = serveWith(() => success({ headers: { 'x-total': 3 }, body: order }));
+    const { http } = serveWith(() => success(getOrder, { headers: { 'x-total': 3 }, body: order }));
 
     const response = await http(getRequest.clone());
 
@@ -161,7 +162,7 @@ describe('serve: a Success', () => {
     ['with a leading space', ' v1'],
   ])('a header value %s cannot travel, so it is INVALID_OUTCOME', async (_case, etag) => {
     const { http, faults } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag }, body: order }),
+      success(getOrder, { headers: { 'x-total': 3, etag }, body: order }),
     );
 
     const response = await http(getRequest.clone());
@@ -230,7 +231,8 @@ describe('a direct call and serve agree', () => {
   ])(
     'a Success header value %s: serve answers INVALID_OUTCOME with the Issues the direct call throws',
     async (_case, etag) => {
-      const implementation = () => success({ headers: { 'x-total': 3, etag }, body: order });
+      const implementation = () =>
+        success(getOrder, { headers: { 'x-total': 3, etag }, body: order });
       const { http, faults } = serveWith(implementation);
 
       const thrown = await issuesThrownBy(() => handle(getOrder, implementation)(getInput, {}));
@@ -280,7 +282,7 @@ describe('serve: a Success body that is JSON null', () => {
     const http = serve(
       withNote,
       {
-        endpoints: { findNote: handle(findNote, () => success(null)) },
+        endpoints: { findNote: handle(findNote, () => success(findNote, null)) },
         guards: {},
       },
       {},
@@ -323,7 +325,7 @@ describe('serve: a Rejection', () => {
 
   test('the invalid-input Rejection is the Root’s, its issues with no received value', async () => {
     const { http } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag: 'v1' }, body: order }),
+      success(getOrder, { headers: { 'x-total': 3, etag: 'v1' }, body: order }),
     );
 
     const response = await http(new Request('http://test/orders/zz'));
@@ -455,7 +457,7 @@ describe('serve: a Fault', () => {
 
   test('an Outcome that breaks a constraint is INVALID_OUTCOME, its issues to the Service only', async () => {
     const { http, faults } = serveWith(() =>
-      success({ headers: { 'x-total': 3, etag: 'v1' }, body: { id: 'o-1', total: -1 } }),
+      success(getOrder, { headers: { 'x-total': 3, etag: 'v1' }, body: { id: 'o-1', total: -1 } }),
     );
 
     const response = await http(getRequest.clone());
@@ -501,7 +503,7 @@ describe('serve: a Success body of many Issues', () => {
     const wide = Array.from({ length: 300_000 }, () => 1) as unknown as string[];
     const http = serve(
       tagging,
-      { endpoints: { listTags: handle(listTags, () => success(wide)) }, guards: {} },
+      { endpoints: { listTags: handle(listTags, () => success(listTags, wide)) }, guards: {} },
       {
         onServiceFault: (fault) => {
           faults.push(fault);

@@ -8,5 +8,5 @@ export default handle(getOrder, async ({ params }) => {
   const order = seededOrderOf(params.orderId);
   if (order === undefined) return reject(notFound);
   if (order.lockedAt !== undefined) return reject(orderLocked, { lockedAt: order.lockedAt });
-  return success(order);
+  return success(getOrder, order);
 });

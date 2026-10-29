@@ -12,6 +12,6 @@ export default handle(
       { factId: `${orderId}:created` },
     );
     await sender.send('ChargeCard', { orderId }, { factId: `${orderId}:charge` });
-    return success({ id: orderId });
+    return success(createOrder, { id: orderId });
   },
 );

@@ -12,7 +12,7 @@ export default handle(
     const invoicing = await invoiceFor(orders, body.orderId);
     switch (invoicing.kind) {
       case 'invoice':
-        return success(invoicing.invoice);
+        return success(createInvoice, invoicing.invoice);
       case 'not-found':
         return reject(notFound);
       case 'locked':

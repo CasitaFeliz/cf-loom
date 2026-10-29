@@ -65,10 +65,10 @@ const contract = defineService({
 
 const handlers = {
   endpoints: {
-    getOrder: handle(getOrder, () => success()),
-    findOrder: handle(findOrder, () => success()),
+    getOrder: handle(getOrder, () => success(getOrder)),
+    findOrder: handle(findOrder, () => success(findOrder)),
   },
-  guards: { apiKey: handle(apiKey, () => admit()) },
+  guards: { apiKey: handle(apiKey, () => admit(apiKey)) },
 };
 
 describe('serve: what it checks before the first request', () => {
@@ -139,7 +139,7 @@ describe('serve: what it checks before the first request', () => {
     });
     const copied = {
       ...handlers,
-      endpoints: { ...handlers.endpoints, findOrder: handle(copy, () => success()) },
+      endpoints: { ...handlers.endpoints, findOrder: handle(copy, () => success(copy)) },
     };
 
     const serving = () => serve(contract, copied, {});
@@ -212,7 +212,7 @@ describe('serve: what it checks before the first request', () => {
       serve(
         withOdd,
         {
-          endpoints: { odd: handle(odd, () => success()) },
+          endpoints: { odd: handle(odd, () => success(odd)) },
           guards: {},
         },
         {},
@@ -243,7 +243,7 @@ describe('serve: what it checks before the first request', () => {
     });
 
     const serving = () =>
-      serve(withOdd, { endpoints: { odd: handle(odd, () => success()) }, guards: {} }, {});
+      serve(withOdd, { endpoints: { odd: handle(odd, () => success(odd)) }, guards: {} }, {});
 
     expect(serving).toThrow(' header-names: ');
   });
@@ -273,8 +273,8 @@ describe('serve: what it checks before the first request', () => {
       serve(
         withListed,
         {
-          endpoints: { listed: handle(listed, () => success()) },
-          guards: { tenant: handle(tenant, () => admit()) },
+          endpoints: { listed: handle(listed, () => success(listed)) },
+          guards: { tenant: handle(tenant, () => admit(tenant)) },
         },
         {},
       );
@@ -300,7 +300,7 @@ describe('serve: what it checks before the first request', () => {
     const serving = () =>
       serve(
         withVersioned,
-        { endpoints: { versioned: handle(versioned, () => success()) }, guards: {} },
+        { endpoints: { versioned: handle(versioned, () => success(versioned)) }, guards: {} },
         {},
       );
 
@@ -327,7 +327,7 @@ describe('serve: what it checks before the first request', () => {
     const serving = () =>
       serve(
         withVersioned,
-        { endpoints: { versioned: handle(versioned, () => success()) }, guards: {} },
+        { endpoints: { versioned: handle(versioned, () => success(versioned)) }, guards: {} },
         {},
       );
 
@@ -348,7 +348,7 @@ describe('serve: what it checks before the first request', () => {
   });
 
   test('a GuardHandler written for another Guard throws, naming the Guard', () => {
-    const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit()) } };
+    const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit(legacyKey)) } };
 
     // @ts-expect-error apiKey holds the Handler of legacyKey
     const serving = () => serve(contract, swapped, {});
@@ -375,7 +375,7 @@ describe('serve: what it checks before the first request', () => {
       serve(
         withLookup,
         {
-          endpoints: { lookup: handle(lookup, () => success()) },
+          endpoints: { lookup: handle(lookup, () => success(lookup)) },
           guards: {},
         },
         {},
@@ -403,7 +403,7 @@ describe('serve: what it checks before the first request', () => {
       serve(
         withSince,
         {
-          endpoints: { since: handle(since, () => success()) },
+          endpoints: { since: handle(since, () => success(since)) },
           guards: {},
         },
         {},
@@ -431,7 +431,7 @@ describe('serve: what it checks before the first request', () => {
       serve(
         withLookup,
         {
-          endpoints: { lookup: handle(lookup, () => success()) },
+          endpoints: { lookup: handle(lookup, () => success(lookup)) },
           guards: {},
         },
         {},

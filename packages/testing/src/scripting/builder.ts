@@ -3,23 +3,13 @@ import type { AnyDependency, ListedEndpoint, ListedName } from '@cf-loom/client/
 import type { Committed, ReservedCode } from '@cf-loom/contract';
 import {
   type Closed,
+  type GivenArgumentsOf,
   type GivenShapeOf,
   internalError,
   type RetryAfterGiven,
   type SuccessValueOf,
 } from '@cf-loom/contract/internal';
 import { type ScriptedAnswer, scriptedAnswerOf } from './answers.ts';
-
-/**
- * What `r.success` takes: what a Success of the Endpoint is built from, as a Caller reads it; nothing
- * where it declares neither headers nor a body.
- */
-type SuccessArguments<D extends AnyDependency, Name extends ListedName<D>> =
-  SuccessValueOf<ListedEndpoint<D, Name>> extends infer Value
-    ? [Value] extends [undefined]
-      ? []
-      : [success: Value]
-    : never;
 
 /**
  * What `r.reject` takes: each code the Endpoint answers paired with what that code declares, its
@@ -31,13 +21,6 @@ type RejectionArguments<D extends AnyDependency, Name extends ListedName<D>> =
       ? [code: Code, ...GivenArgumentsOf<GivenShapeOf<Received>>]
       : never
     : never;
-
-/** What follows the code: nothing where the code declares neither side, optional where it admits `undefined`. */
-type GivenArgumentsOf<Value> = [Value] extends [undefined]
-  ? []
-  : undefined extends Value
-    ? [given?: Value]
-    : [given: Value];
 
 /**
  * What `r.unknownRejection` takes beside its code: the message its Envelope carries, and its
@@ -65,7 +48,7 @@ export type ScriptedFault = RetryAfterGiven & {
  * Fault from, a network failure or a status.
  */
 export type StepBuilder<D extends AnyDependency, Name extends ListedName<D>> = {
-  success(...success: SuccessArguments<D, Name>): ScriptedAnswer;
+  success(...success: GivenArgumentsOf<SuccessValueOf<ListedEndpoint<D, Name>>>): ScriptedAnswer;
   /** A code the Endpoint answers, with its body when it declares one, or `{ headers, body }` when it declares headers. */
   reject(...rejection: RejectionArguments<D, Name>): ScriptedAnswer;
   /** A code the Endpoint does not answer, as a later Provider might send it. */

@@ -1,4 +1,4 @@
-import { defineGuard, defineRejection, notImplemented } from '@cf-loom/contract';
+import { defineGuard, defineRejection, type Guard, notImplemented } from '@cf-loom/contract';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
@@ -14,6 +14,9 @@ import {
   reject,
   type WithResources,
 } from '../index.ts';
+
+/** `admit` as a JavaScript Handler calls it, its Context unchecked, to reach the runtime's own check. */
+const admitUnchecked = admit as (guard: Guard, context?: unknown) => never;
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -86,7 +89,7 @@ describe('a GuardHandler’s second argument', () => {
     const received: unknown[] = [];
     const permissionHandler = handle(permission, (_demands, { context, qualifier }) => {
       received.push(context, qualifier);
-      return admit();
+      return admit(permission);
     });
 
     await permissionHandler({}, { context: userContext, qualifier: ['orders:edit'] });
@@ -122,7 +125,7 @@ describe('a GuardHandler’s direct call', () => {
     const received: unknown[] = [];
     const apiKeyHandler = handle(apiKey, (demands, { context }) => {
       received.push(demands, context);
-      return admit({ callerId: 'c-1' });
+      return admit(apiKey, { callerId: 'c-1' });
     });
 
     await apiKeyHandler({ headers: { 'x-api-key': 'key-1', other: 'x' } } as never, {});
@@ -137,7 +140,7 @@ describe('a GuardHandler’s direct call', () => {
       permission,
       (_demands, { context, qualifier }, { resources: taken }: WithResources<Held>) => {
         received.push(context, qualifier, taken);
-        return admit();
+        return admit(permission);
       },
     );
 
@@ -160,7 +163,7 @@ describe('a GuardHandler’s direct call', () => {
       apiKey,
       (_demands, _call, { resources: taken }: WithResources<Keyed>) => {
         received.push(taken);
-        return admit({ callerId: taken.callers.byKey() });
+        return admit(apiKey, { callerId: taken.callers.byKey() });
       },
     );
 
@@ -172,7 +175,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('demands that break a schema throw InvalidCallError', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
 
     const issues = await issuesOf(() => apiKeyHandler({ headers: { 'x-api-key': 'k' } }, {}));
 
@@ -187,7 +190,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Context of a listed Guard that breaks its schema throws InvalidCallError', async () => {
-    const permissionHandler = handle(permission, () => admit());
+    const permissionHandler = handle(permission, () => admit(permission));
 
     const issues = await issuesOf(() =>
       permissionHandler({}, { context: { userToken: {} } as never, qualifier: ['orders:edit'] }),
@@ -204,7 +207,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Qualifier that breaks its schema throws InvalidCallError', async () => {
-    const permissionHandler = handle(permission, () => admit());
+    const permissionHandler = handle(permission, () => admit(permission));
 
     const issues = await issuesOf(() =>
       permissionHandler({}, { context: userContext, qualifier: [] as never }),
@@ -215,24 +218,25 @@ describe('a GuardHandler’s direct call', () => {
     ]);
   });
 
-  test('admit(context) resolves to the request admitted with the parsed Context', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1', extra: true }));
+  test('admit(guard, context) resolves to the request admitted with the parsed Context', async () => {
+    const caller = { callerId: 'c-1', extra: true };
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, caller));
 
     const admission = await apiKeyHandler(apiKeyDemands, {});
 
     expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
   });
 
-  test('admit() admits for a Guard without a context', async () => {
-    const internalOnlyHandler = handle(internalOnly, () => admit());
+  test('admit(guard) admits for a Guard without a context', async () => {
+    const internalOnlyHandler = handle(internalOnly, () => admit(internalOnly));
 
     const admission = await internalOnlyHandler({}, {});
 
     expect(admission).toEqual({ kind: 'admitted', context: undefined });
   });
 
-  test('an admit() that breaks the Guard’s context schema throws InvalidOutcomeError', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit() as never);
+  test('an admit(guard) that breaks the Guard’s context schema throws InvalidOutcomeError', async () => {
+    const apiKeyHandler = handle(apiKey, () => admitUnchecked(apiKey));
 
     const issues = await issuesOf(() => apiKeyHandler(apiKeyDemands, {}));
 
@@ -242,7 +246,9 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Context admitted by a Guard without a context schema throws InvalidOutcomeError', async () => {
-    const internalOnlyHandler = handle(internalOnly, () => admit({ callerId: 'c-1' }) as never);
+    const internalOnlyHandler = handle(internalOnly, () =>
+      admitUnchecked(internalOnly, { callerId: 'c-1' }),
+    );
 
     const issues = await issuesOf(() => internalOnlyHandler({}, {}));
 
@@ -341,8 +347,8 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Guard that declares a Qualifier, called without it, is a type error', () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
-    const permissionHandler = handle(permission, () => admit());
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
+    const permissionHandler = handle(permission, () => admit(permission));
 
     const call = () => [
       apiKeyHandler(apiKeyDemands, {}),
@@ -377,7 +383,7 @@ describe('a GuardHandler’s direct call', () => {
     const received: unknown[] = [];
     const regionalHandler = handle(regional, (_demands, { context, qualifier }) => {
       received.push(context, qualifier);
-      return admit();
+      return admit(regional);
     });
     const context = { userToken: { userId: 'u-1', extra: true } } as never;
 
@@ -387,7 +393,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Qualifier given to a Guard that declares none throws InvalidCallError', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit({ callerId: 'c-1' }));
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
 
     const issues = await issuesOf(() =>
       Reflect.apply(apiKeyHandler, undefined, [apiKeyDemands, { qualifier: ['orders:edit'] }]),
@@ -398,12 +404,12 @@ describe('a GuardHandler’s direct call', () => {
     ]);
   });
 
-  test('admit() without the Context its Guard provides, or with a wrong one, is a type error', () => {
+  test('admit(guard) without the Context its Guard provides, or with a wrong one, is a type error', () => {
     const write = () => [
       // @ts-expect-error apiKey provides a Context
-      handle(apiKey, () => admit()),
+      handle(apiKey, () => admit(apiKey)),
       // @ts-expect-error callerId is a string
-      handle(apiKey, () => admit({ callerId: 7 })),
+      handle(apiKey, () => admit(apiKey, { callerId: 7 })),
     ];
 
     expect(write).not.toThrow();

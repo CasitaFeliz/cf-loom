@@ -80,8 +80,9 @@ function checkedFault(built: Fault): Checked<Fault> {
 type CheckedSuccess = Extract<CheckedOutcome<Endpoint>, { readonly kind: 'success' }>;
 
 /**
- * The value a Handler gave `success()`, read by its Endpoint's shape and sendable: the body, or
- * `{ headers, body }` when the Endpoint declares headers; only the parts it declares come back.
+ * The value a Handler gave `success()` after its Endpoint, read by that Endpoint's shape and
+ * sendable: the body, or `{ headers, body }` when the Endpoint declares headers; only the parts it
+ * declares come back.
  */
 function checkedSuccess(
   endpoint: Endpoint,
