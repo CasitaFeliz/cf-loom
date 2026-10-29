@@ -5246,21 +5246,36 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
     expect(read(outside, 'get-order.handler.ts')).toBe(implemented);
   });
 
-  test('a folder under src/ linked out of the project is never read for the record, and its generated files stay', () => {
-    const project = aProject(aService());
-    cfLoom(project, 'generate');
-    const outside = anOutsideFolder();
-    symlinkSync(outside, join(project, 'src/gen'), 'dir');
-    const before = treeOf(outside, '.');
+  test.skipIf(isRoot)(
+    'a folder under src/ linked out of the project is never read for the record, and its generated files stay (skipped as root)',
+    () => {
+      const project = aProject(aService());
+      cfLoom(project, 'generate');
+      const outside = anOutsideFolder();
+      write(outside, { 'locked/inside.generated.ts': `${header}\nexport {};\n` });
+      symlinkSync(outside, join(project, 'src/gen'), 'dir');
+      const before = treeOf(outside, '.');
+      chmodSync(join(outside, 'locked'), 0o000);
 
-    const generated = cfLoom(project, 'generate');
-    const verified = cfLoom(project, 'verify');
+      let generated: ReturnType<typeof cfLoom>;
+      let verified: ReturnType<typeof cfLoom>;
+      try {
+        generated = cfLoom(project, 'generate');
+        verified = cfLoom(project, 'verify');
+      } finally {
+        chmodSync(join(outside, 'locked'), 0o755);
+      }
 
-    expect(generated).toMatchObject({ status: 0, stderr: '' });
-    expect(generated.stdout).not.toContain('Deleted');
-    expect(verified).toMatchObject({ status: 0, stderr: '' });
-    expect(treeOf(outside, '.')).toEqual(before);
-  });
+      const written = lines([
+        'Wrote contract.snapshot.json',
+        'Wrote src/handlers.generated.ts',
+        'Wrote src/readers.generated.ts',
+      ]);
+      expect(generated).toEqual({ status: 0, stdout: written, stderr: '' });
+      expect(verified).toMatchObject({ status: 0, stderr: '' });
+      expect(treeOf(outside, '.')).toEqual(before);
+    },
+  );
 
   test('a generated file linked from outside the project is never read for the record or deleted', () => {
     const project = aProject(aService());
