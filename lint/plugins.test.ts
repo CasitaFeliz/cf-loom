@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -13,14 +13,15 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
-/** Each `C<n>@<line>` the repository's GritQL plugins report for one source file. */
-function pluginReportsFor(lines: readonly string[]): string[] {
+/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given. */
+function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[] {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {
-    writeFileSync(join(directory, 'probe.ts'), `${lines.join('\n')}\n`);
+    mkdirSync(dirname(join(directory, file)), { recursive: true });
+    writeFileSync(join(directory, file), `${lines.join('\n')}\n`);
     const biome = spawnSync(
       join(root, 'node_modules/.bin/biome'),
-      ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, 'probe.ts'],
+      ['lint', '--reporter=json', '--vcs-enabled=false', `--config-path=${root}`, file],
       { cwd: directory, encoding: 'utf8' },
     );
     const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
@@ -140,5 +141,36 @@ describe('lint plugins', () => {
     ];
 
     expect(pluginReportsFor(lines)).toEqual(['C14@11', 'C14@14', 'C14@19']);
+  });
+
+  it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", () => {
+    const lines = [
+      'declare const schema: { readonly _zod: Record<string, unknown> };',
+      'export const propValues = schema._zod.propValues;',
+      'export const values = schema?._zod.values;',
+      'export const optin = schema._zod?.optin;',
+      'export const optout = schema._zod.optout;',
+      'export const def = schema._zod.def;',
+      'export const literals = (schema._zod.def as { values: unknown }).values;',
+      'export const iterator = [1].values();',
+    ];
+
+    expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@5']);
+    expect(pluginReportsFor(lines)).toEqual([]);
+  });
+
+  it('also report such a getter destructured from `_zod` or read from a cast of it, not an alias (C1)', () => {
+    const lines = [
+      'declare const schema: { readonly _zod: Record<string, unknown> };',
+      'export const { propValues } = schema._zod;',
+      'export const { values: renamed } = schema?._zod;',
+      'export const { def: kept, optin } = schema._zod;',
+      'export const { def } = schema._zod;',
+      'export const cast = (schema._zod as { optout: unknown }).optout;',
+      'const internals = schema._zod;',
+      'export const alias = internals.values;',
+    ];
+
+    expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
   });
 });

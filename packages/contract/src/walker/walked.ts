@@ -32,19 +32,23 @@ export type Walked<Value = SchemaNode> =
   | Failed;
 
 /**
- * Where the walk is: a place, the schema being walked there and the nearest origin of a
- * Definitions Package around it, which a refusal there tells.
+ * Where the walk is: a place, the value being walked there, a schema unless it is the refusal of a
+ * value that is none, and the nearest origin of a Definitions Package around it, which a refusal
+ * there tells.
  */
 export type Reached = Place & {
-  readonly schema: core.$ZodType;
+  readonly schema: unknown;
   readonly origin: Origin | undefined;
 };
 
 /** A place under a schema being walked, which passes its origin down to the schema entered there. */
 export type Under = Place & { readonly origin?: Origin | undefined };
 
-/** A schema the walk enters and the place it enters it at. */
+/** A schema the walk entered and the place it entered it at. */
 export type ReachedSchema = { readonly at: Reached; readonly schema: core.$ZodType };
+
+/** A value a schema holds where zod types a schema, which the walk judges when it enters it. */
+export type ReachedChild = { readonly at: Reached; readonly schema: unknown };
 
 /**
  * An `allOf` or a `union` node a walk built, and the refusal it is where it was built if the defs,
@@ -63,7 +67,7 @@ export type Reach = { readonly at: Reached; within: Memo | undefined };
 export type Memo = { readonly at: Reached; readonly reaches: Reach[] };
 
 /** A schema the walk enters, and where: the driver walks it as a frame of its own. */
-export type Visit = { readonly schema: core.$ZodType; readonly at: Under };
+export type Visit = { readonly schema: unknown; readonly at: Under };
 
 /**
  * A walk in progress: it yields each schema it enters for the driver to walk, receives that
@@ -76,10 +80,10 @@ export type Walking<Value = SchemaNode> = Generator<Visit, Walked<Value>, Walked
  * `Visit`; a walk never delegates into another schema's walk, which would grow the call stack.
  */
 export type Walker = {
-  readonly schema: (schema: core.$ZodType, at: Under) => Walking;
-  readonly field: (schema: core.$ZodType, at: Under) => Walking<Field>;
+  readonly schema: (schema: unknown, at: Under) => Walking;
+  readonly field: (schema: unknown, at: Under) => Walking<Field>;
   /** The place a schema is entered at, which a refusal raised at the schema tells. */
-  readonly reach: (schema: core.$ZodType, at: Under) => Reached;
+  readonly reach: (schema: unknown, at: Under) => Reached;
 };
 
 /** A walked value, as the walk of a schema returns it. */

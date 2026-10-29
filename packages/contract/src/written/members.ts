@@ -1,7 +1,6 @@
 import type * as core from 'zod/v4/core';
 import { type Guard, isGuard, isRejection, type Rejection } from '../declarations/index.ts';
-import { byCodePoint } from '../walker/index.ts';
-import { isSchema } from './parts.ts';
+import { byCodePoint, isSchema } from '../walker/index.ts';
 
 /** One export of a Definitions Package's Root file that it shares: a Guard, a Rejection or a zod schema, under its export name. */
 export type Member =

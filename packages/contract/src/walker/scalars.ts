@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { isJsonPrimitive } from './canonical-json.ts';
 import { enumOf } from './choices.ts';
+import { type Def, type DefOfType, defOf } from './def-types.ts';
 import { innerOfLazy } from './lazy.ts';
 import type { JsonPrimitive } from './nodes.ts';
 import { notAllowed, refused } from './not-allowed.ts';
@@ -22,23 +23,21 @@ export function walkLiteral(def: core.$ZodLiteralDef<core.util.Literal>, at: Rea
  * Whether a union is the one `z.json()` builds, read by mirroring zod's own construction: the
  * union of string, number, boolean, null, and an array and a string-keyed record of itself.
  */
-export function isJsonUnion(union: core.$ZodUnion): boolean {
-  const def = union._zod.def;
-  const kinds = def.options.map((option) => option._zod.def.type);
-  if (kinds.join() !== 'string,number,boolean,null,array,record') {
+export function isJsonUnion(union: core.$ZodType, def: DefOfType<'union'>): boolean {
+  const options = def.options.map(defOf);
+  if (options.map((option) => option?.type).join() !== 'string,number,boolean,null,array,record') {
     return false;
   }
-  const [string, number, , , array, record] = def.options.map((option) => option._zod.def);
-  const element = (array as core.$ZodArrayDef | undefined)?.element;
-  const recordDef = record as core.$ZodRecordDef | undefined;
+  const [string, number, , , array, record] = options;
+  if (array?.type !== 'array' || record?.type !== 'record') {
+    return false;
+  }
   return (
     isPlain(string) &&
     isPlain(number) &&
-    isPlain(recordDef?.keyType._zod.def) &&
-    element !== undefined &&
-    innerOfLazy(element) === union &&
-    recordDef !== undefined &&
-    innerOfLazy(recordDef.valueType) === union
+    isPlain(defOf(record.keyType)) &&
+    innerOfLazy(array.element) === union &&
+    innerOfLazy(record.valueType) === union
   );
 }
 
@@ -58,7 +57,7 @@ function jsonValueOf(value: core.util.Literal, at: Reached): Walked<JsonPrimitiv
   return notAllowed(at, refused.literalNull);
 }
 
-function isPlain(def: core.$ZodTypeDef | undefined): boolean {
+function isPlain(def: Def | undefined): boolean {
   const unchecked = def?.checks === undefined || def.checks.length === 0;
   return unchecked && def !== undefined && !('check' in def) && !('coerce' in def && def.coerce);
 }

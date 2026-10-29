@@ -1,6 +1,5 @@
-import type * as core from 'zod/v4/core';
 import { prototypeNames } from '../declarations/index.ts';
-import { catchallRefusalKeyOf } from './def-types.ts';
+import { catchallRefusalKeyOf, type DefOfType, defOf } from './def-types.ts';
 import { heldNodeOf } from './held-node.ts';
 import { inside } from './location.ts';
 import type { Field, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
@@ -13,7 +12,7 @@ import {
   failuresOf,
   type Outline,
   type Reached,
-  type ReachedSchema,
+  type ReachedChild,
   type Walked,
   type Walker,
   type Walking,
@@ -26,7 +25,7 @@ const protoKey = '__proto__';
 const inheritedKeys: ReadonlySet<string> = new Set(prototypeNames);
 
 /** An object: a Contract declares no strict object, and a catchall is refused. */
-export function* walkObject(def: core.$ZodObjectDef, at: Reached, walker: Walker): Walking {
+export function* walkObject(def: DefOfType<'object'>, at: Reached, walker: Walker): Walking {
   const catchall = catchallRefusalOf(def);
   const refusals = catchall === undefined ? [] : [notAllowed(at, catchall)];
   const fieldEntries: Walked<[string, Field]>[] = [];
@@ -45,7 +44,7 @@ export function* walkObject(def: core.$ZodObjectDef, at: Reached, walker: Walker
 /** A field walked by its name, or refused beside what lies inside it when zod cannot read the name. */
 function* walkNamedField(
   key: string,
-  field: ReachedSchema,
+  field: ReachedChild,
   walker: Walker,
 ): Walking<[string, Field]> {
   const refusal = fieldNameRefusalOf(key);
@@ -66,7 +65,7 @@ function fieldNameRefusalOf(key: string): Refused | undefined {
 /** A field zod cannot read by its name, refused beside what lies inside its schema. */
 function* refusedNameFailure(
   refusal: Refused,
-  { at, schema }: ReachedSchema,
+  { at, schema }: ReachedChild,
   walker: Walker,
 ): Walking<never> {
   return failed(failuresOf([notAllowed(at, refusal), yield* walker.field(schema, at)]));
@@ -76,7 +75,7 @@ function* refusedNameFailure(
  * A `record` for a string key, partial or not; a record keyed by an enum or literal is a strict
  * object, which a Contract never declares.
  */
-export function* walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker): Walking {
+export function* walkRecord(def: DefOfType<'record'>, at: Reached, walker: Walker): Walking {
   const key = yield* walker.schema(def.keyType, inside(at, keyStep));
   const value = yield* walker.schema(def.valueType, inside(at, valueStep));
   const record: Outline = { type: 'record' };
@@ -101,7 +100,7 @@ export function* walkRecord(def: core.$ZodRecordDef, at: Reached, walker: Walker
  * otherwise; any other intersection is `allOf`.
  */
 export function* walkIntersection(
-  def: core.$ZodIntersectionDef,
+  def: DefOfType<'intersection'>,
   at: Reached,
   walker: Walker,
 ): Walking {
@@ -118,10 +117,16 @@ export function* walkIntersection(
   return walked(heldNodeOf({ type: 'allOf', items: items.value }, []));
 }
 
-/** What a catchall declares, which a Contract never does, worded as `catchalls` reads its def type. */
-function catchallRefusalOf(def: core.$ZodObjectDef): Refused | undefined {
-  const catchall = def.catchall?._zod.def.type;
-  return catchall === undefined ? undefined : refused[catchallRefusalKeyOf(catchall)];
+/**
+ * What a catchall declares, which a Contract never does, worded as `catchalls` reads its def type;
+ * a catchall that is no zod 4 schema is refused as that.
+ */
+function catchallRefusalOf(def: DefOfType<'object'>): Refused | undefined {
+  if (def.catchall === undefined) {
+    return undefined;
+  }
+  const catchall = defOf(def.catchall);
+  return catchall === undefined ? refused.notZod4 : refused[catchallRefusalKeyOf(catchall.type)];
 }
 
 /** A walked key that can key a `record`, or why it cannot: only a string, not nullable, can. */

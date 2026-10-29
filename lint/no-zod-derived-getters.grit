@@ -1,0 +1,28 @@
+language js
+
+pattern zod_internals() {
+  or {
+    `$_._zod`,
+    `$_?._zod`,
+    JsParenthesizedExpression(expression=TsAsExpression(expression=or {
+      `$_._zod`,
+      `$_?._zod`
+    }))
+  }
+}
+
+or {
+  JsStaticMemberExpression(object=zod_internals(), member=$member) as $read where {
+    $member <: r"^(?:propValues|values|optin|optout)$",
+    $filename <: r".*/walker/.*",
+    register_diagnostic(span=$read, message="C1: read a child through the walker's one judgement (isSchema, defOf), never through a getter zod derives from the schemas it holds.", severity="error")
+  },
+  JsVariableDeclarator(id=JsObjectBindingPattern(), initializer=JsInitializerClause(expression=zod_internals())) as $read where {
+    $read <: contains or {
+      JsObjectBindingPatternShorthandProperty(identifier=JsIdentifierBinding() as $name),
+      JsObjectBindingPatternProperty(member=JsLiteralMemberName() as $name)
+    } where { $name <: r"^(?:propValues|values|optin|optout)$" },
+    $filename <: r".*/walker/.*",
+    register_diagnostic(span=$read, message="C1: read a child through the walker's one judgement (isSchema, defOf), never through a getter zod derives from the schemas it holds.", severity="error")
+  }
+}
