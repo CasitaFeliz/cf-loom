@@ -1,7 +1,8 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open/index.ts';
 import { canonicalJson, inCanonicalJsonOrder, isJsonPrimitive } from './canonical-json.ts';
-import { innerOfLazy } from './lazy.ts';
+import type { DefOfType, TaggedDef } from './def-types.ts';
+import { type Discriminator, discriminatorOf } from './discriminators.ts';
 import { inside } from './location.ts';
 import type {
   EnumNode,
@@ -11,7 +12,7 @@ import type {
   SchemaNode,
   TaggedNode,
 } from './nodes.ts';
-import { notAllowed, type Refused, refused } from './not-allowed.ts';
+import { notAllowed, refused } from './not-allowed.ts';
 import { optionStep, type Step, variantStep } from './steps.ts';
 import {
   allWalked,
@@ -19,7 +20,7 @@ import {
   failuresOf,
   type Outline,
   type Reached,
-  type ReachedSchema,
+  type ReachedChild,
   type Walked,
   type Walker,
   type Walking,
@@ -41,8 +42,7 @@ export function walkEnum(schema: core.$ZodEnum, at: Reached): Walked {
 }
 
 /** An `enum` for a union of literals, else a `union` of its options in declared order. */
-export function* walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker): Walking {
-  const def = schema._zod.def;
+export function* walkUnion(def: DefOfType<'union'>, at: Reached, walker: Walker): Walking {
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyUnion, { type: 'union' });
   }
@@ -61,25 +61,23 @@ export function* walkUnion(schema: core.$ZodUnion, at: Reached, walker: Walker):
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
-export function* walkTagged(
-  schema: core.$ZodDiscriminatedUnion,
-  at: Reached,
-  walker: Walker,
-): Walking {
-  const def = schema._zod.def;
+export function* walkTagged(def: TaggedDef, at: Reached, walker: Walker): Walking {
   const tagged: Outline = { type: 'tagged' };
   if (def.options.length === 0) {
     return notAllowed(at, refused.emptyDiscriminatedUnion, tagged);
   }
-  const duplicate = hasDuplicateValue(def)
+  const read = def.options.map((option) => ({
+    option,
+    discriminator: discriminatorOf(option, def.discriminator),
+  }));
+  const duplicate = hasDuplicateValue(read.map(({ discriminator }) => discriminator))
     ? [notAllowed(at, refused.duplicateDiscriminatorValue)]
     : [];
   const walkedVariants: Walked<[string, TaggedNode['variants'][string]]>[] = [];
-  for (const [index, option] of def.options.entries()) {
-    const values = option._zod.propValues?.[def.discriminator];
-    const step = variantStepOf(def.discriminator, values, index);
-    const variant = { schema: option, at: walker.reach(option, inside(at, step)), values };
-    walkedVariants.push(yield* walkVariant(variant, def.discriminator, walker));
+  for (const [index, { option, discriminator }] of read.entries()) {
+    const step = variantStepOf(def.discriminator, discriminator.values, index);
+    const variant = { schema: option, at: walker.reach(option, inside(at, step)), discriminator };
+    walkedVariants.push(yield* walkVariant(variant, walker));
   }
   const variants = allWalked(walkedVariants);
   if (variants.kind === 'not-allowed' || duplicate.length > 0) {
@@ -92,29 +90,27 @@ export function* walkTagged(
   });
 }
 
-/** A variant of a discriminated union where it sits, and the discriminator values zod reads from it. */
-type Variant = ReachedSchema & { readonly values: ReadonlySet<unknown> | undefined };
+/** A variant of a discriminated union where it sits, and what it says of its discriminator. */
+type Variant = ReachedChild & { readonly discriminator: Discriminator };
 
 /** A variant keyed by its discriminator value, or refused beside what it holds when it cannot be. */
 function* walkVariant(
-  { schema, at, values }: Variant,
-  discriminator: string,
+  { schema, at, discriminator }: Variant,
   walker: Walker,
 ): Walking<[string, TaggedNode['variants'][string]]> {
   const variant = yield* walker.schema(schema, at);
-  const refusal = variantRefusalOf(schema, discriminator);
-  if (refusal !== undefined) {
-    return failed(failuresOf([notAllowed(at, refusal), variant]));
+  if (discriminator.refusal !== undefined) {
+    return failed(failuresOf([notAllowed(at, discriminator.refusal), variant]));
   }
-  return taggedVariant(variant, values, at);
+  return taggedVariant(variant, discriminator.values, at);
 }
 
 /**
  * Whether two variants share a discriminator value, as zod reads each variant's values: judged
  * before the variants are walked, so it is told beside what they refuse.
  */
-function hasDuplicateValue({ options, discriminator }: core.$ZodDiscriminatedUnionDef): boolean {
-  const values = options.map((option) => [...(option._zod.propValues?.[discriminator] ?? [])]);
+function hasDuplicateValue(discriminators: readonly Discriminator[]): boolean {
+  const values = discriminators.map(({ values }) => [...(values ?? [])]);
   const keys = values.filter(isOneValue).map(([value]) => canonicalJson(value));
   return new Set(keys).size !== keys.length;
 }
@@ -161,18 +157,6 @@ function taggedVariant(
     return notAllowed(at, refused.severalDiscriminatorValues);
   }
   return walked([canonicalJson(literals[0]), node]);
-}
-
-/** A variant must be an object whose discriminator is a literal; a discriminated union in its place is named. */
-function variantRefusalOf(option: core.$ZodType, discriminator: string): Refused | undefined {
-  const def = innerOfLazy(option)._zod.def;
-  if (def.type !== 'object') {
-    return 'discriminator' in def ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
-  }
-  const { shape } = def as core.$ZodObjectDef;
-  const field = Object.hasOwn(shape, discriminator) ? shape[discriminator] : undefined;
-  const isLiteral = field !== undefined && innerOfLazy(field)._zod.def.type === 'literal';
-  return isLiteral ? undefined : refused.unliteralDiscriminator;
 }
 
 function isTaggable(node: SchemaNode): node is ObjectNode | RefNode {
