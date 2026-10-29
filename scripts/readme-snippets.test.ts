@@ -1,10 +1,19 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { Readme } from './readme-blocks.ts';
 import { readmeServiceProblems, snippetProblems, writeReadmeService } from './readme-snippets.ts';
 
+const root = join(import.meta.dirname, '..');
 const fence = '```';
 
 function aReadme(path: string, ...blocks: string[]): Readme {
@@ -184,6 +193,11 @@ function aRepository(
     ),
   };
   mkdirSync(join(repository, 'scripts/readme-service'), { recursive: true });
+  mkdirSync(join(repository, 'examples/billing-service'), { recursive: true });
+  symlinkSync(
+    join(root, 'examples/billing-service/node_modules'),
+    join(repository, 'examples/billing-service/node_modules'),
+  );
   for (const [path, source] of Object.entries(files)) {
     mkdirSync(dirname(join(repository, path)), { recursive: true });
     writeFileSync(join(repository, path), source);
@@ -278,16 +292,33 @@ describe('the README Service written out', () => {
 });
 
 describe('the READMEs', () => {
+  test('Vitest writes the README Service when it loads its configuration', () => {
+    expect(existsSync(join(root, '.readme-service', 'tsconfig.json'))).toBe(true);
+  });
+
   test('every TypeScript block of the contract, handlers, messaging and server READMEs type-checks', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'readme-service-'));
-    try {
-      writeReadmeService(directory);
+    const problems = readmeServiceProblems(join(root, '.readme-service'));
 
-      const problems = readmeServiceProblems(directory);
+    expect(problems).toEqual([]);
+  });
 
-      expect(problems).toEqual([]);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+  test('the check reports a block at its README line and leaves the folder it compiles as it is', () => {
+    const repository = aRepository(
+      {
+        handlers: aReadme('packages/handlers/README.md', "const quantity: number = 'three';")
+          .markdown,
+      },
+      {},
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+    writeFileSync(join(directory, 'kept.txt'), 'kept');
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toEqual([
+      expect.stringMatching(/^packages\/handlers\/README\.md:4: error TS2322/),
+    ]);
+    expect(readFileSync(join(directory, 'kept.txt'), 'utf8')).toBe('kept');
   });
 });

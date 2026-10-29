@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -65,6 +66,11 @@ export function writeReadmeService(directory: string, repository: string = root)
  * compiles `directory` where it is and never writes to it.
  */
 export function readmeServiceProblems(directory: string, repository: string = root): string[] {
+  if (!existsSync(join(directory, 'tsconfig.json'))) {
+    throw new Error(
+      `The README Service is not written out: ${directory} is written when Vitest loads vitest.config.ts`,
+    );
+  }
   const { problems, project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
   return [...problems, ...problemsOf(compile(directory), project)];
 }
@@ -103,6 +109,25 @@ function contractNames(repository: string): string[] {
   return names.filter((name) => /^\w+$/.test(name));
 }
 
+/** The scope's packages by name, as the files of `directory` that stand for them. */
+export function readmeServiceAliases(
+  directory: string,
+  repository: string = root,
+): Record<string, string> {
+  const paths = Object.keys(scopeOf(repository));
+  return Object.fromEntries(
+    scopePackagesOf(paths).map(([name, path]) => [name, join(directory, path)]),
+  );
+}
+
+/** The packages the scope stands for: a file under `scope-packages/` is the package of its path. */
+function scopePackagesOf(paths: readonly string[]): [string, string][] {
+  const prefix = `${packagesAt}/`;
+  return paths
+    .filter((path) => path.startsWith(prefix))
+    .map((path) => [path.slice(prefix.length).replace(/\.ts$/, ''), path]);
+}
+
 function writeProject(directory: string, project: Project, repository: string): void {
   const providers = providersOf(project, contractNames(repository));
   mkdirSync(directory, { recursive: true });
@@ -120,9 +145,7 @@ function writeProject(directory: string, project: Project, repository: string): 
 
 /** The compiler options the root README recommends, with the scope's packages found where they sit. */
 function tsconfigOf(project: Project) {
-  const entries = [...project.keys()]
-    .filter((path) => path.startsWith(`${packagesAt}/`))
-    .map((path) => [path.slice(packagesAt.length + 1).replace(/\.ts$/, ''), [`./${path}`]]);
+  const entries = scopePackagesOf([...project.keys()]).map(([name, path]) => [name, [`./${path}`]]);
   return {
     compilerOptions: {
       allowImportingTsExtensions: true,
