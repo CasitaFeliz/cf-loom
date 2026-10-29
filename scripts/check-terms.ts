@@ -38,7 +38,7 @@ function escaped(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Every term, longest first so that a term is not read as the shorter one it starts with, as a pattern. */
+/** The pattern of a use of any term or its plural, longest term first so that Breaking Change Approval is not read as Breaking Change. */
 function usesOf(terms: readonly string[]): RegExp {
   const longestFirst = [...terms].sort((left, right) => right.length - left.length);
   const spaced = longestFirst.map((term) => term.split(' ').map(escaped).join('\\s+'));
