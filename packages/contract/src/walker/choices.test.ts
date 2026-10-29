@@ -298,6 +298,22 @@ describe('walkSchemas: discriminated unions', () => {
     });
   });
 
+  test('a discriminated union that is a variant of itself through a lazy is told, not looped on', () => {
+    const payment: z.ZodType = z.discriminatedUnion('type', [
+      z.object({ type: z.literal('card') }),
+      z.lazy(() => payment) as never,
+    ]);
+
+    const walked = walkBody(payment);
+
+    expect(walked.located[0]).toMatchObject({
+      kind: 'not-allowed',
+      failures: expect.arrayContaining([
+        expect.objectContaining({ construct: 'a discriminated union as a variant of another' }),
+      ]),
+    });
+  });
+
   test('a discriminated union as a variant of another fails', () => {
     const nested = z.discriminatedUnion('kind', [
       z.object({ type: z.literal('wallet'), kind: z.literal('crypto') }),
