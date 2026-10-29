@@ -6,6 +6,7 @@ import type {
   JetStreamBrokerLimits,
   JetStreamConnecting,
 } from '@cf-loom/messaging/jetstream';
+import type { SqsBrokerLimits, SqsConnecting } from '@cf-loom/messaging/sqs';
 import { paymentsDependency } from './contract/dependencies/payments-service.dependency.ts';
 import { contract } from './contract/index.ts';
 import type { Resources } from './resources.ts';
@@ -122,6 +123,8 @@ export const limits: JetStreamBrokerLimits = {};
 export const connecting: JetStreamConnecting = {
   connect: () => Promise.reject(new Error('The README Service has no NATS to connect to')),
 };
+export const sqsLimits: SqsBrokerLimits = {};
+export const sqsConnecting = {} as SqsConnecting;
 
 export const total: Money = { amount: 1200, currency: 'EUR' };
 export const orderId = ORDER_ID;

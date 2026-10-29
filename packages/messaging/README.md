@@ -1,6 +1,6 @@
 # @cf-loom/messaging
 
-`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError` and `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream`, `applyBrokerPlan` and their types, `JetStreamBrokerOptions`, `JetStreamConnecting`, `BrokerPlan` and `JetStreamBrokerLimits` among them, and `@cf-loom/messaging/memory` `memory`, which runs a Contract's messaging in memory for tests, and its types (see [In memory](#in-memory)). What the Broker must hold, and how the adapter applies it, is in [The Broker plan](#the-broker-plan), [Applying the Broker plan](#applying-the-broker-plan) and [Leftover Durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError` and `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream`, `applyBrokerPlan` and their types, `JetStreamBrokerOptions`, `JetStreamConnecting`, `BrokerPlan` and `JetStreamBrokerLimits` among them, `@cf-loom/messaging/sqs` the `applyBrokerPlan` for Amazon SNS and SQS and its types, `SqsConnecting` and `SqsBrokerLimits` among them, and `@cf-loom/messaging/memory` `memory`, which runs a Contract's messaging in memory for tests, and its types (see [In memory](#in-memory)). What the Broker must hold, and how the adapter applies it, is in [The Broker plan](#the-broker-plan), [Applying the Broker plan](#applying-the-broker-plan) and [Leftover Durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
@@ -244,7 +244,9 @@ The Service's NATS permissions must allow the subjects of `messaging()` and `con
 
 ## Applying the Broker plan
 
-Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything.
+Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream` or from `@cf-loom/messaging/sqs`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything.
+
+### On JetStream
 
 ```ts
 import { execFileSync } from 'node:child_process';
@@ -271,9 +273,55 @@ await applyBrokerPlan(connecting, plan, {
 
 `applyBrokerPlan` only creates Streams and Durable consumers, adds subjects and updates limits; it never removes anything, so applying a newer Broker plan never takes away what an older Release still running consumes: applying is safe before the new Release deploys and while the old one runs. A Stream gets each subject of the Broker plan it does not hold yet, NATS deciding as for `messaging()`'s check, so a Stream made with a wildcard gets none; a Durable consumer is a pull consumer with explicit acknowledgements, filtered on the Broker plan's subject, that delivers whole Messages and has no priority groups, its filter set through `filter_subject`, so one filtered through `filter_subjects` is changed to it; on a Stream or Durable consumer that exists, a NATS setting `limits` has no name for, such as `max_bytes`, stays as it is. `applyBrokerPlan` creates the Broker plan's Streams before its Durable consumers, each in the Broker plan's order, and stops at the first it cannot apply, keeping what it created or updated: a Durable consumer whose Stream does not exist yet, naming the Stream, or one NATS refuses, such as a Stream whose storage or a Durable consumer whose deliver policy or ack policy would change, or a push consumer that would become a pull consumer, which NATS never does, naming the Stream or Durable consumer, with NATS's error as `cause`; a Provider's Broker plan is applied before its Subscribers', and when two Services subscribe to each other's Events, applying the first again after the second completes it. A Release fails fast when the Broker plan was not applied: `messaging()` checks that the Service's Stream exists and holds every subject it publishes or sends, and a Service that publishes and sends nothing has none to check, `consume` that the Durable consumer of every Subscription and Command Version whose Handler it pulls exists, as a pull consumer with explicit acknowledgements, filtered on its subject, that delivers whole Messages and has no priority groups, and each fails with an error naming what is missing. `applyBrokerPlan` opens its own connection and drains it when it ends; the NATS subjects it uses, which the NATS permissions of whoever applies it must allow, are in [NATS permissions](#nats-permissions).
 
+### On SNS/SQS
+
+`applyBrokerPlan` from `@cf-loom/messaging/sqs` applies the Broker plan on Amazon SNS and SQS, in one account and one region, through the organization's own clients, which cf-loom never destroys:
+
+```ts
+import { execFileSync } from 'node:child_process';
+import { SNSClient } from '@aws-sdk/client-sns';
+import { SQSClient } from '@aws-sdk/client-sqs';
+import { applyBrokerPlan } from '@cf-loom/messaging/sqs';
+
+const { plan } = JSON.parse(execFileSync('npx', ['cf-loom', 'broker-plan', '--json'], { encoding: 'utf8' }));
+const region = process.env.AWS_REGION;
+const sqsConnecting = { sns: new SNSClient({ region }), sqs: new SQSClient({ region }), account: '123456789012' };
+await applyBrokerPlan(sqsConnecting, plan, sqsLimits);   // creates and updates, never removes
+```
+
+- **The connecting object**, `{ sns, sqs, account }`: an `SNSClient` and an `SQSClient` of the same account and region, and the 12-digit account id. The region of `sns` is the environment's, and every ARN cf-loom builds is in it, in the partition the AWS SDK gives that region (`aws`, `aws-us-gov` or `aws-cn`). `@aws-sdk/client-sns`, `@aws-sdk/client-sqs` and `@aws-sdk/core` are optional peer dependencies, installed where `@cf-loom/messaging/sqs` is used. Whether `account` is the clients' own is AWS's to answer: a Durable consumer whose Stream's topic is not found in it is refused with the topic's ARN.
+- **The mapping.** A Stream is one standard SNS topic named as the Broker plan prints the Stream, so a Subscriber finds its Provider's topic from the Contract Package alone. A Durable consumer is one standard SQS queue, subscribed to its Stream's topic with raw delivery and a filter on `cf-loom-subject`, the Message's prefixed subject, in its message attributes; the queue's policy lets that topic send to it, in one statement, `cf-loom-topic`, and every other statement of the policy stays. Each queue has a dead-letter queue and a redrive policy.
+- **Standard only.** SNS/SQS deduplicates nothing, so a retried publish delivers again; a Handler recognizes a fact it already handled by its Fact id, as it must anyway. There are no FIFO topics or queues, no cross-account subscription (the Provider's topic policy is the organization's), and cf-loom sets no other attribute of a topic or queue, such as encryption, `MaximumMessageSize` or `DelaySeconds`: one that exists keeps what it holds.
+- **The limits** are `ackWait`, `maxDeliver`, `retention` and `deadLetterRetention` for each Durable consumer, keyed by the names the Broker plan prints, with `durableConsumerDefaults` for whatever one does not set. A standard topic has no setting cf-loom names, so `streamDefaults` and `streams` are refused, and every setting is required.
+
+```ts
+import { applyBrokerPlan } from '@cf-loom/messaging/sqs';
+
+await applyBrokerPlan(sqsConnecting, plan, {
+  durableConsumerDefaults: { ackWait: ['30s', '1m', '5m'], maxDeliver: 5, retention: '4d', deadLetterRetention: '14d' },
+  durableConsumers: { 'orders-service_notify-on-settled': { ackWait: '2m' } },
+});
+```
+
+- **Durations** are the whole numbers and units of JetStream's (`30s`, `2m`, `7d`), in whole seconds: `1000ms` is one second and `1500ms` is refused. `ackWait` is one duration, or one for each delivery, the last repeating, each under 12h; the first is the queue's visibility timeout, and the entries after it, as written (`1m 5m`), are its `cf-loom:backoff` tag, at most 256 characters, absent when there is one wait. `retention` and `deadLetterRetention` are from 1m to 14d; the dead-letter queue counts from when the Message was first sent, since a standard queue keeps a Message's enqueue timestamp when it moves it, so `deadLetterRetention` should exceed `retention`. `maxDeliver` is a whole number from 1 to 1000 and never `'unlimited'`: SQS caps deliveries only through a dead-letter queue, so every queue has one and a redrive policy of that many receives.
+- **Before any call to AWS**, `applyBrokerPlan` refuses a Broker plan of another shape, a setting left unset, a setting `limits` does not have, a name the Broker plan does not list, a value outside the ranges above, a backoff whose tag would exceed 256 characters, and an `account` that is not 12 digits, naming each, so it creates nothing. It then creates the Broker plan's topics before its Durable consumers, each in the Broker plan's order, and stops at the first it cannot apply, keeping what it created: a Durable consumer whose Stream's topic does not exist yet, naming the Stream and the topic's ARN (a Provider's Broker plan is applied before its Subscribers'), or a call AWS refuses, naming the Stream or Durable consumer, with the client's error as `cause`.
+- **The names.** A Durable consumer's queue is named as the Durable consumer when that has at most 76 characters, else its first 63, `-` and the first 12 hex digits of its SHA-256; its dead-letter queue is that name with `_dlq`. Every name fits the 80 characters SQS allows, and none is another's as long as every Service of the account runs with a Broker prefix or none does (see [Leftover Durable consumers](#leftover-durable-consumers)). Each queue is tagged `cf-loom:durable`, the Durable consumer's full name, `cf-loom:service`, the Service's name, `cf-loom:backoff` when it has one and `cf-loom:subscription`, the ARN of its subscription, so the subscription is found without listing the topic's; a dead-letter queue is tagged `cf-loom:durable` and `cf-loom:service` with its queue's values.
+- **What it never removes**: a topic, queue, dead-letter queue, subscription, policy statement or tag of an earlier Broker plan or of the organization stays, and a queue that exists gets cf-loom's attributes and tags beside the ones it has. The one thing applying takes away is the `cf-loom:backoff` tag of a queue whose `ackWait` became one wait. An existing subscription is read, and the attributes that differ from raw delivery and the filter on `cf-loom-subject` are set again.
+- **Quotas**: a topic holds 200 filter policies and an account 10,000, and each Durable consumer of a Stream is one; tagging is limited to 30 requests a second for the account, which the AWS SDK's retries absorb.
+
+#### AWS permissions
+
+The permissions of whoever applies the Broker plan must allow `applyBrokerPlan`; the Service's own are those of `messaging()` and `consume` on SNS/SQS.
+
+| Operation | IAM actions | Needed by |
+| --- | --- | --- |
+| `applyBrokerPlan` | `sns:CreateTopic`, `sns:GetTopicAttributes`, `sns:Subscribe`, `sns:ListSubscriptionsByTopic`, `sns:GetSubscriptionAttributes`, `sns:SetSubscriptionAttributes`; `sqs:CreateQueue`, `sqs:GetQueueUrl`, `sqs:GetQueueAttributes`, `sqs:SetQueueAttributes`, `sqs:TagQueue` (to tag a queue at its creation too), `sqs:UntagQueue` | Whoever applies the Broker plan |
+
 ## Leftover Durable consumers
 
 cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md), so `<prefix>_<service>_` names one Service of one environment; on a Broker where one Service runs with a Broker prefix, every Service runs with one, or a Service named as a Broker prefix would read that environment's Durable consumers as its own. A Service's Durable consumers are all named `[<prefix>_]<service>_…`, on its own Stream or on its Providers' (see [The Broker plan](#the-broker-plan)), so those a removed Subscription or a Retired Command Version left behind are the ones under that name that the Service's Broker plan does not list. The organization finds and deletes them with its own tooling, once no running Release consumes them and, for a Command Version, once its Durable consumer is drained (see the deploy rule in [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md). Rolling back to a Release that consumed a deleted one needs that Release's Broker plan applied again.
+
+On SNS/SQS the leftovers are found by the same rule: the queues whose `cf-loom:durable` tag starts with `[<prefix>_]<service>_` and that the Service's Broker plan does not list, with their subscriptions and dead-letter queues; the `cf-loom:service` tag only narrows the search. A dead-letter queue carries its queue's `cf-loom:durable`, so the rule finds it beside its queue, and it is left over only with its Durable consumer. The organization finds and deletes them with its own tooling.
 
 ## Types
 
@@ -305,3 +353,4 @@ cf-loom never removes a Durable consumer. A Broker prefix holds no `_` (see [Ove
 - `JetStreamBrokerOptions`, `{ connect, prefix?, jetstream? }`: what `jetstream()` takes, a `JetStreamConnecting` and the Broker prefix, and what it returns is a `Broker`.
 - `BrokerPlan`, `{ prefix, streams, durableConsumers }`, with `BrokerPlanStream`, `{ service, subjects }`, and `BrokerPlanDurableConsumer`, `{ service, stream, subject }`: the `plan` of the document `cf-loom broker-plan --json` prints.
 - `JetStreamBrokerLimits`, `{ streamDefaults?, durableConsumerDefaults?, streams?, durableConsumers? }`, with `JetStreamStreamLimits`, `{ retention, maxAge, duplicateWindow, replicas, storage }`, `JetStreamDurableConsumerLimits`, `{ deliverPolicy, ackWait, maxDeliver, maxAckPending }`, and `Duration`: what `applyBrokerPlan` takes besides the Broker plan.
+- `SqsConnecting`, `{ sns, sqs, account }`: the organization's SNS and SQS clients of one account and region, and the account's id; `SqsBrokerLimits`, `{ durableConsumerDefaults?, durableConsumers? }`, with `SqsDurableConsumerLimits`, `{ ackWait, maxDeliver, retention, deadLetterRetention }`: what the `applyBrokerPlan` of `@cf-loom/messaging/sqs` takes besides the Broker plan.
