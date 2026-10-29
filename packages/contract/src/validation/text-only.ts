@@ -1,4 +1,5 @@
 import {
+  headerCaseSentence,
   isReservedRequestHeaderName,
   isReservedResponseHeaderName,
 } from '../declarations/index.ts';
@@ -97,7 +98,7 @@ function headerNameFailures(
 /** What is wrong with a header name: its case, its characters, or a name another party owns in its direction. */
 function headerNameMessageOf(name: string, part: ObjectPart): string | undefined {
   if (name !== name.toLowerCase()) {
-    return `Header names are lower-case: ${name}`;
+    return headerCaseSentence(name);
   }
   if (!lowerCaseToken.test(name)) {
     return `A header name is an RFC 9110 token: ${name}`;

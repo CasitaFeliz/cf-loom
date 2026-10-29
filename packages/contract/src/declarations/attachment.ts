@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import type { Guard, IsWidenedGuard, QualifiedGuard } from './guard.ts';
-import type { DeclaredFieldsRule } from './rules.ts';
+import type { NeedsQualifierSentence, TakesNoQualifierSentence } from './refusals.ts';
+import type { DeclaredFieldsRule, Refusal } from './rules.ts';
 
 /** A Guard as an Endpoint lists it with its Qualifier, for a Guard that declares a `qualifier`. */
 export type QualifiedAttachment = {
@@ -54,7 +55,7 @@ type QualifierFieldsRule<Written, Accepted> = Written extends readonly unknown[]
     : unknown;
 
 type BareRule<Listed extends Guard> = Listed extends QualifiedGuard
-  ? `${Listed['name']} needs a qualifier: { guard, qualifier }`
+  ? Refusal<NeedsQualifierSentence<Listed['name']>>
   : unknown;
 
 type QualifierValueRule<Listed extends QualifiedAttachment, Qualified extends QualifiedGuard> = {
@@ -66,7 +67,7 @@ type QualifierValueRule<Listed extends QualifiedAttachment, Qualified extends Qu
 type QualifiedAttachmentRule<Listed extends QualifiedAttachment> =
   Listed['guard'] extends QualifiedGuard
     ? QualifierValueRule<Listed, Listed['guard']>
-    : `${Listed['guard']['name']} takes no qualifier`;
+    : Refusal<TakesNoQualifierSentence<Listed['guard']['name']>>;
 
 type ListedRule<Listed> = Listed extends QualifiedAttachment
   ? QualifiedAttachmentRule<Listed>

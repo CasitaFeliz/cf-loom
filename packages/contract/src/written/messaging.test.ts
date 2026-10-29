@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { pingedV1 } from '../../test/ping-package.ts';
-import { defineEvent, defineGroup, defineService } from '../index.ts';
+import { defineEvent, defineGroup, defineService, providedEvent } from '../index.ts';
 import { eventServiceOf } from '../internal/index.ts';
 
 const orderShippedV1 = defineEvent({
@@ -37,5 +37,20 @@ describe('eventServiceOf', () => {
     const service = eventServiceOf(contract, orderShippedV1);
 
     expect(service).toBe('billing-service');
+  });
+
+  test('an Event of the Contract’s own Contract Package has no Service, since a Provider is another Service', () => {
+    const ownProvided = providedEvent('billing-service', {
+      name: 'OrderShipped',
+      version: 1,
+      visibility: 'internal',
+      description: 'An order was shipped',
+      body: z.object({ orderId: z.uuid() }),
+    });
+    const contract = aContractListing([orderShippedV1]);
+
+    const service = eventServiceOf(contract, ownProvided);
+
+    expect(service).toBeUndefined();
   });
 });

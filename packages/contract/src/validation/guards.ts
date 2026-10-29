@@ -1,6 +1,14 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
-import { isDeclaration, isGuard } from '../declarations/index.ts';
+import {
+  guardDemandsSentence,
+  isDeclaration,
+  isGuard,
+  listedTwiceSentence,
+  needsQualifierSentence,
+  requiresEarlierSentence,
+  takesNoQualifierSentence,
+} from '../declarations/index.ts';
 import {
   fieldStep,
   indexStep,
@@ -44,11 +52,7 @@ export function guardFailures({ at, guard }: LocatedGuard): readonly Declaration
   }
   const refused = (['params', 'body'] as const).filter((part) => demands[part] !== undefined);
   return refused.map((part) =>
-    failure(
-      inFields(at, 'demands', part),
-      'guard-demands',
-      'A Guard demands only headers and query',
-    ),
+    failure(inFields(at, 'demands', part), 'guard-demands', guardDemandsSentence),
   );
 }
 
@@ -134,11 +138,11 @@ function shapeFailures({ at, attachment, guard }: Attached): readonly Declaratio
     return [];
   }
   if (isGuard(attachment) && declaresQualifier) {
-    const message = `${textOf(guard.name)} needs a qualifier: { guard, qualifier }`;
+    const message = needsQualifierSentence(textOf(guard.name));
     return [failure(at, 'attachment-needs-qualifier', message)];
   }
   if (!isGuard(attachment) && !declaresQualifier) {
-    const message = `${textOf(guard.name)} takes no qualifier`;
+    const message = takesNoQualifierSentence(textOf(guard.name));
     return [failure(at, 'attachment-takes-no-qualifier', message)];
   }
   return [];
@@ -149,7 +153,7 @@ function orderFailures(
   earlier: readonly string[],
 ): readonly DeclarationFailure[] {
   if (earlier.includes(textOf(guard.name))) {
-    return [failure(at, 'guard-once', `${textOf(guard.name)} is listed twice`)];
+    return [failure(at, 'guard-once', listedTwiceSentence(textOf(guard.name)))];
   }
   const required = listOf(guard.guards)
     .filter(isGuard)
@@ -158,7 +162,7 @@ function orderFailures(
   if (missing.length === 0) {
     return [];
   }
-  const message = `${textOf(guard.name)} requires ${missing.join(', ')} earlier in guards`;
+  const message = requiresEarlierSentence(textOf(guard.name), missing.join(', '));
   return [failure(at, 'guard-order', message)];
 }
 
