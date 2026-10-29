@@ -2,7 +2,13 @@ export { handlerLocalOf, pairingNameOf } from './code-names.ts';
 export type { DeclarationHandled, Handled, MessageHandled } from './handled.ts';
 export { retiredHandledOf } from './handled.ts';
 export type { HandlerPath, HandlerPaths } from './handler-paths.ts';
-export { handledLabelOf, handlerPathsOf, recordedLabelOf } from './handler-paths.ts';
+export {
+  handledLabelOf,
+  handlerPathsOf,
+  placementRefusalOf,
+  recordedLabelOf,
+  refusalClauseOf,
+} from './handler-paths.ts';
 export type { MessageExports } from './readers.ts';
 export { pairingTargetOf, readersTextOf } from './readers.ts';
 export type { RecordedHandler } from './recorded-handlers.ts';
