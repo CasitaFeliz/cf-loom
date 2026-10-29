@@ -115,7 +115,7 @@
       "includes": ["**/*.json", "!**/package.json"]
     },
     {
-      "includes": ["**/*.config.ts", "examples/**/*.handler.ts"],
+      "includes": ["**/*.config.ts", "examples/**/*.handler.ts", "scripts/readme-service/**/*.ts"],
       "linter": {
         "rules": {
           "style": {

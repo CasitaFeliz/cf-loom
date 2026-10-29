@@ -44,7 +44,17 @@ Without an `onServiceFault`, they go to the console, one line per issue after `<
 
 ### onBrokerTrouble
 
-`messaging(contract, broker, { onBrokerTrouble })`, which may be async, receives a `BrokerTrouble` when a Durable consumer stops being pulled from, once, with its `declaration`, `name`, the declaration's name (`ChargeCard@1` for a Command), `durable`, `stream` and the `cause` (`pull-failed`), and once when its pulls are answered again (`recovered`); `durable` and `stream` are unprefixed, as `connect` gives them. A connection closed for good is `pull-failed` with no `recovered` after, and reconnecting, through the Service's own `connect` and a new `messaging()`, is the Service's. Without it, each goes to the console as one line, `<name> <durable> <stream>: pulls are failing` with its cause, or `<name> <durable> <stream>: pulls are answered again`; an `onBrokerTrouble` that throws or rejects is logged as `<name> <durable> <stream>: onBrokerTrouble threw`. A readiness probe needs only the hook, `onBrokerTrouble: (t) => t.kind === 'pull-failed' ? failing.add(t.name) : failing.delete(t.name)`; what the Service does is the organization's.
+`messaging(contract, broker, { onBrokerTrouble })`, which may be async, receives a `BrokerTrouble` when a Durable consumer stops being pulled from, once, with its `declaration`, `name`, the declaration's name (`ChargeCard@1` for a Command), `durable`, `stream` and the `cause` (`pull-failed`), and once when its pulls are answered again (`recovered`); `durable` and `stream` are unprefixed, as `connect` gives them. A connection closed for good is `pull-failed` with no `recovered` after, and reconnecting, through the Service's own `connect` and a new `messaging()`, is the Service's. Without it, each goes to the console as one line, `<name> <durable> <stream>: pulls are failing` with its cause, or `<name> <durable> <stream>: pulls are answered again`; an `onBrokerTrouble` that throws or rejects is logged as `<name> <durable> <stream>: onBrokerTrouble threw`. A readiness probe needs only the hook, whatever it returns, which `messaging` awaits and ignores; what the Service does is the organization's:
+
+```ts
+import { messaging } from '@cf-loom/messaging';
+
+const failing = new Set<string>();
+const running = await messaging(contract, broker, {
+  onBrokerTrouble: (trouble) =>
+    trouble.kind === 'pull-failed' ? failing.add(trouble.name) : failing.delete(trouble.name),
+});
+```
 
 ## Publishing and sending
 
@@ -71,6 +81,7 @@ Each Message is sent with its Broker message id (`event.OrderCreated.v2:o-1:crea
 
 ```ts
 // src/subscriptions/orders/notify-on-settled.handler.ts
+import { handle } from '@cf-loom/handlers';
 import { readers } from '../../readers.generated.ts';
 
 export default handle(
@@ -107,15 +118,16 @@ Messages are validated with the generated Reader schemas (see [The Contract Pack
 
 ```ts
 import { memory } from '@cf-loom/messaging/memory';
+import { paymentSettledEventV1 } from '@org/contract-payments-service';
 import { contract } from '../src/contract/index.ts';
 import handlers from '../src/handlers.generated.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 
 const running = await memory(contract);
-const resources = { publisher: running.publisher, sender: running.sender };
+const resources = { publisher: running.publisher, sender: running.sender, notifications };
 await running.consume(handlers, { resources });
 
-await createOrderHandler({ body: newOrder }, { apiKey: { callerId: 'c-1' } }, { resources });
+await createOrderHandler({ body: newOrder }, { context: { apiKey: { callerId: 'c-1' } } }, { resources });
 await running.settled();   // OrderCreated v2 and v1 published, ChargeCard v1 sent and handled
 running.messages;          // each with its subject, body, Fact id, Broker message id and Transport headers
 running.messagesOf(orderCreatedV1);   // those of one Message Version, each body typed by it
@@ -247,6 +259,8 @@ await applyBrokerPlan(connecting, plan, limits);   // creates and updates, never
 `plan` is the JSON above, the `plan` of the document `cf-loom broker-plan --json` prints; `applyBrokerPlan` refuses one of another shape, and creates every name as the plan prints it, under the plan's `prefix`, the one `cf-loom broker-plan --prefix` was given and the Service's `jetstream({ prefix })` must be given too. `limits` holds every setting cf-loom has no opinion on, keyed by the names the plan prints: for each Stream `retention` (`limits`, `interest` or `workqueue`), `maxAge`, `duplicateWindow`, `replicas` and `storage` (`file` or `memory`); for each Durable consumer `deliverPolicy` (`all`, `new`, `last` or `last_per_subject`), `ackWait`, `maxDeliver` and `maxAckPending`; `streamDefaults` and `durableConsumerDefaults` fill in whatever a Stream or Durable consumer does not set. A duration is a whole number from 1 and one unit, `ms`, `s`, `m`, `h` or `d` (`500ms`, `30s`, `2m`, `7d`), one NATS can hold exactly: its nanoseconds fit 64 bits and a JavaScript number, so `365d` is fine and `106752d` is not; `maxAge`, `maxDeliver` and `maxAckPending` also take `'unlimited'`; `replicas`, `maxDeliver` and `maxAckPending` are otherwise whole numbers from 1. `ackWait` is one duration, or one for each Delivery, the last repeating, which NATS calls a backoff. An `undefined` value for one of these settings, or an `undefined` entry for a Stream or Durable consumer, means the same as leaving it out. Before it connects, `applyBrokerPlan` refuses a setting left unset, a setting `limits` does not have, a Stream or Durable consumer name the plan does not list, and a value that is none of these, naming each, so it creates and changes nothing. For example:
 
 ```ts
+import { applyBrokerPlan } from '@cf-loom/messaging/jetstream';
+
 await applyBrokerPlan(connecting, plan, {
   streamDefaults:   { retention: 'limits', maxAge: '7d', duplicateWindow: '2m', replicas: 3, storage: 'file' },
   durableConsumerDefaults: { deliverPolicy: 'all', ackWait: ['30s', '1m', '5m'], maxDeliver: 5, maxAckPending: 100 },

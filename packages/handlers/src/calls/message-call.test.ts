@@ -1,4 +1,5 @@
 import {
+  type BodyOf,
   defineCommand,
   defineEvent,
   defineSubscription,
@@ -10,11 +11,15 @@ import { brokerMessageIdOf } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type DirectMeta,
   type Fault,
   fault,
   handle,
   InvalidCallError,
   type MessageFault,
+  type MessageHandler,
+  type MessageImplementation,
+  type ReceivedBodyOf,
   readersOf,
   success,
   type WithResources,
@@ -505,5 +510,39 @@ describe('a Message Handler stub', () => {
     const call = stub({ orderId: 'nope', status: 'paid' }, meta);
 
     await expect(call).rejects.toBeInstanceOf(InvalidCallError);
+  });
+});
+
+describe('the body and meta a Message Handler takes', () => {
+  type Charge = typeof chargeCard;
+  type Paid = typeof notifyOnPaidReader;
+  type Received = {
+    orderId: string;
+    status: 'pending' | 'paid' | { unknown: string };
+  };
+
+  test("ReceivedBodyOf a Subscription's pairing has the Unknown case its own Event's writer type lacks", () => {
+    expectTypeOf<ReceivedBodyOf<Paid>>().toEqualTypeOf<Received>();
+    expectTypeOf<ReceivedBodyOf<Paid>>().not.toEqualTypeOf<BodyOf<typeof orderPaidV1>>();
+    expectTypeOf<BodyOf<typeof orderPaidV1>>().toExtend<ReceivedBodyOf<Paid>>();
+  });
+
+  test("a Message Handler's implementation and Handler take ReceivedBodyOf their pairing, a Command's and a Subscription's", () => {
+    expectTypeOf<Parameters<MessageImplementation<Charge>>[0]>().toEqualTypeOf<
+      ReceivedBodyOf<Charge>
+    >();
+    expectTypeOf<Parameters<MessageHandler<Charge>>[0]>().toEqualTypeOf<ReceivedBodyOf<Charge>>();
+    expectTypeOf<Parameters<MessageImplementation<Paid>>[0]>().toEqualTypeOf<
+      ReceivedBodyOf<Paid>
+    >();
+    expectTypeOf<Parameters<MessageHandler<Paid>>[0]>().toEqualTypeOf<ReceivedBodyOf<Paid>>();
+  });
+
+  test('a direct call takes its meta as a DirectMeta, which may be left out', () => {
+    const notifyOnPaidHandler = handle(notifyOnPaidReader, () => undefined);
+
+    expectTypeOf<Parameters<typeof notifyOnPaidHandler>[1]>().toEqualTypeOf<
+      DirectMeta | undefined
+    >();
   });
 });
