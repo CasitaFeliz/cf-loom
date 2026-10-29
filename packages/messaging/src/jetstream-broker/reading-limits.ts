@@ -9,10 +9,10 @@ import {
   readAs,
 } from '../broker-limits/index.ts';
 import {
-  type DurableConsumerLimits,
   deliverPolicies,
+  type JetStreamDurableConsumerLimits,
+  type JetStreamStreamLimits,
   retentions,
-  type StreamLimits,
   storages,
 } from './limits.ts';
 
@@ -43,7 +43,7 @@ export const streamReaders = {
   duplicateWindow: readAs(durationText, nanosOf),
   replicas: readAs('a whole number from 1', countOf),
   storage: choice(storages),
-} satisfies Record<keyof StreamLimits, z.ZodType>;
+} satisfies Record<keyof JetStreamStreamLimits, z.ZodType>;
 
 /** The readers of a Durable consumer's settings, which read each in NATS's units. */
 export const durableConsumerReaders = {
@@ -51,7 +51,7 @@ export const durableConsumerReaders = {
   ackWait: readAs(`${durationText}, or a list of them`, oneOrListOf(nanosOf)),
   maxDeliver: unlimitedCount,
   maxAckPending: unlimitedCount,
-} satisfies Record<keyof DurableConsumerLimits, z.ZodType>;
+} satisfies Record<keyof JetStreamDurableConsumerLimits, z.ZodType>;
 
 /** The name of each setting of a Stream's limits. */
 export const streamSettingNames = z.strictObject(streamReaders).keyof().options;

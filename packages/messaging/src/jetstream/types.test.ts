@@ -3,21 +3,21 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import type { Broker } from '../index.ts';
 import {
   applyBrokerPlan,
-  type BrokerLimits,
   type BrokerPlan,
   type BrokerPlanDurableConsumer,
   type BrokerPlanStream,
-  type DurableConsumerLimits,
+  type JetStreamBrokerLimits,
   type JetStreamBrokerOptions,
   type JetStreamConnecting,
+  type JetStreamDurableConsumerLimits,
+  type JetStreamStreamLimits,
   jetstream,
-  type StreamLimits,
 } from './index.ts';
 
 const connect = (): Promise<NatsConnection> => Promise.reject(new Error('no NATS in this test'));
 
 const plan = {} as BrokerPlan;
-const limits = {} as BrokerLimits;
+const limits = {} as JetStreamBrokerLimits;
 
 describe('jetstream() types', () => {
   test('jetstream() returns a Broker, with no apply', () => {
@@ -142,20 +142,20 @@ describe('the records a JetStream broker takes and plans', () => {
     >();
   });
 
-  test('BrokerLimits hold the Stream and Durable consumer defaults and overrides, and no more', () => {
-    expectTypeOf<keyof BrokerLimits>().toEqualTypeOf<
+  test('JetStreamBrokerLimits hold the Stream and Durable consumer defaults and overrides, and no more', () => {
+    expectTypeOf<keyof JetStreamBrokerLimits>().toEqualTypeOf<
       'streamDefaults' | 'streams' | 'durableConsumerDefaults' | 'durableConsumers'
     >();
   });
 
-  test('StreamLimits hold the retention, storage, replicas, age and duplicate window, and no more', () => {
-    expectTypeOf<keyof StreamLimits>().toEqualTypeOf<
+  test('JetStreamStreamLimits hold the retention, storage, replicas, age and duplicate window, and no more', () => {
+    expectTypeOf<keyof JetStreamStreamLimits>().toEqualTypeOf<
       'retention' | 'storage' | 'replicas' | 'maxAge' | 'duplicateWindow'
     >();
   });
 
-  test('DurableConsumerLimits hold the ack wait, delivery policy, redelivery and pending limits, and no more', () => {
-    expectTypeOf<keyof DurableConsumerLimits>().toEqualTypeOf<
+  test('JetStreamDurableConsumerLimits hold the ack wait, delivery policy, redelivery and pending limits, and no more', () => {
+    expectTypeOf<keyof JetStreamDurableConsumerLimits>().toEqualTypeOf<
       'ackWait' | 'deliverPolicy' | 'maxDeliver' | 'maxAckPending'
     >();
   });

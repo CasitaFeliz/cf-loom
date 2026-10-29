@@ -1,7 +1,11 @@
 import { client, type ReceivedOutcome } from '@cf-loom/client';
 import type { MessageMeta } from '@cf-loom/handlers';
 import { type Broker, messaging, type OutgoingMessage } from '@cf-loom/messaging';
-import type { BrokerLimits, BrokerPlan, JetStreamConnecting } from '@cf-loom/messaging/jetstream';
+import type {
+  BrokerPlan,
+  JetStreamBrokerLimits,
+  JetStreamConnecting,
+} from '@cf-loom/messaging/jetstream';
 import { paymentsDependency } from './contract/dependencies/payments-service.dependency.ts';
 import { contract } from './contract/index.ts';
 import type { Resources } from './resources.ts';
@@ -114,7 +118,7 @@ export const resources: Resources = {
 };
 
 export const plan: BrokerPlan = { prefix: null, streams: {}, durableConsumers: {} };
-export const limits: BrokerLimits = {};
+export const limits: JetStreamBrokerLimits = {};
 export const connecting: JetStreamConnecting = {
   connect: () => Promise.reject(new Error('The README Service has no NATS to connect to')),
 };

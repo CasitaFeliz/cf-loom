@@ -25,7 +25,12 @@ import {
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, planOf, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
-import { applyBrokerPlan, type BrokerLimits, type BrokerPlan, jetstream } from './index.ts';
+import {
+  applyBrokerPlan,
+  type BrokerPlan,
+  type JetStreamBrokerLimits,
+  jetstream,
+} from './index.ts';
 
 const nanosPerSecond = 1_000_000_000;
 
@@ -88,7 +93,7 @@ function aConnect() {
 }
 
 /** Every setting a stream and a Durable consumer needs, as the files the arranged ones are made with. */
-const testLimits: BrokerLimits = {
+const testLimits: JetStreamBrokerLimits = {
   streamDefaults: {
     retention: 'limits',
     maxAge: '7d',
@@ -137,7 +142,7 @@ function aBilling(prefix: string) {
 }
 
 /** Limits as a Service reads them from a JSON file, so a test can write a value the types refuse. */
-function readFromJson(limits: unknown): BrokerLimits {
+function readFromJson(limits: unknown): JetStreamBrokerLimits {
   return JSON.parse(JSON.stringify(limits));
 }
 
@@ -242,7 +247,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       streamDefaults: {
         retention: 'interest',
         maxAge: '1h',
@@ -271,7 +276,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       durableConsumerDefaults: {
         deliverPolicy: 'new',
@@ -300,7 +305,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { maxAge: '2h' } },
       durableConsumers: { [orders.chargeDurable]: { ackWait: '2m', maxDeliver: 9 } },
@@ -370,7 +375,7 @@ describe('applyBrokerPlan', () => {
       description: 'arranged by hand',
     });
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { retention: 'interest' } },
     };
@@ -510,7 +515,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       streamDefaults: { ...testLimits.streamDefaults, maxAge: 'unlimited' },
       durableConsumerDefaults: {
         ...testLimits.durableConsumerDefaults,
@@ -531,7 +536,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxAge: '365d' },
     };
@@ -546,7 +551,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxAge: '106751d' },
     };
@@ -561,7 +566,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: { maxAge: undefined, replicas: undefined } },
       durableConsumers: { [orders.chargeDurable]: { ackWait: undefined } },
@@ -579,7 +584,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streams: { [orders.stream]: undefined, [`${prefix}_unlisted`]: undefined },
       durableConsumers: {
@@ -598,7 +603,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       durableConsumerDefaults: {
         ...testLimits.durableConsumerDefaults,
@@ -621,7 +626,7 @@ describe('applyBrokerPlan', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const withBackoff: BrokerLimits = {
+    const withBackoff: JetStreamBrokerLimits = {
       ...testLimits,
       durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: ['30s', '1m'] },
     };
@@ -863,7 +868,7 @@ describe('what applyBrokerPlan refuses', () => {
     const prefix = aPrefix();
     const orders = anOrders(prefix);
     const connecting = { connect: aConnect().connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, replicas: 3 },
     };
@@ -922,7 +927,7 @@ describe('what applyBrokerPlan refuses', () => {
     };
     const service = aConnect();
     const connecting = { connect: service.connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       streamDefaults: { retention: 'limits', replicas: 1, storage: 'file' },
       durableConsumers: { [billing.durable]: { deliverPolicy: 'all', ackWait: '30s' } },
     };
@@ -944,7 +949,7 @@ describe('what applyBrokerPlan refuses', () => {
     const orders = anOrders(prefix);
     const service = aConnect();
     const connecting = { connect: service.connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       streamDefaults: { ...testLimits.streamDefaults, maxAge: undefined },
       durableConsumerDefaults: undefined,
       durableConsumers: { [orders.chargeDurable]: undefined },
@@ -1053,7 +1058,7 @@ describe('what applyBrokerPlan refuses', () => {
     const service = aConnect();
     const prefix = aPrefix();
     const connecting = { connect: service.connect };
-    const noLimits = undefined as unknown as BrokerLimits;
+    const noLimits = undefined as unknown as JetStreamBrokerLimits;
 
     const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, noLimits));
 
@@ -1078,10 +1083,10 @@ describe('what applyBrokerPlan refuses', () => {
 
     expect(error.message.split('\n').sort()).toEqual(
       [
-        'limits.other is a key BrokerLimits does not define',
-        'limits.streamDefaults.maxage is a key BrokerLimits does not define',
-        'limits.durableConsumerDefaults.backoff is a key BrokerLimits does not define',
-        `limits.streams.${orders.stream}.replica is a key BrokerLimits does not define`,
+        'limits.other is a key JetStreamBrokerLimits does not define',
+        'limits.streamDefaults.maxage is a key JetStreamBrokerLimits does not define',
+        'limits.durableConsumerDefaults.backoff is a key JetStreamBrokerLimits does not define',
+        `limits.streams.${orders.stream}.replica is a key JetStreamBrokerLimits does not define`,
       ].sort(),
     );
     expect(service.opened).toHaveLength(0);
@@ -1094,12 +1099,12 @@ describe('what applyBrokerPlan refuses', () => {
     const limits = {
       ...testLimits,
       streamDefaults: { ...testLimits.streamDefaults, maxBytes: undefined },
-    } as BrokerLimits;
+    } as JetStreamBrokerLimits;
 
     const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
 
     expect(error.message).toBe(
-      'limits.streamDefaults.maxBytes is a key BrokerLimits does not define',
+      'limits.streamDefaults.maxBytes is a key JetStreamBrokerLimits does not define',
     );
     expect(service.opened).toHaveLength(0);
   });
@@ -1109,7 +1114,7 @@ describe('what applyBrokerPlan refuses', () => {
     const orders = anOrders(prefix);
     const service = aConnect();
     const connecting = { connect: service.connect };
-    const limits: BrokerLimits = {
+    const limits: JetStreamBrokerLimits = {
       ...testLimits,
       streams: { [`${prefix}_ordres-service`]: { replicas: 1 } },
       durableConsumers: { [`${prefix}_orders-service_command_ChargeCard_v2`]: { ackWait: '2m' } },

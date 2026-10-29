@@ -156,10 +156,10 @@ A Service with Messages runs only on a Broker that holds its Stream and Durable 
 ```ts
 // scripts/apply-broker-plan.ts
 import { execFileSync } from 'node:child_process';
-import { applyBrokerPlan, type BrokerLimits } from '@cf-loom/messaging/jetstream';
+import { applyBrokerPlan, type JetStreamBrokerLimits } from '@cf-loom/messaging/jetstream';
 import { connect } from '@nats-io/transport-node';
 
-const limits: BrokerLimits = {
+const limits: JetStreamBrokerLimits = {
   streamDefaults: { retention: 'limits', maxAge: '7d', duplicateWindow: '2m', replicas: 1, storage: 'file' },
   durableConsumerDefaults: { deliverPolicy: 'all', ackWait: '30s', maxDeliver: 5, maxAckPending: 100 },
 };

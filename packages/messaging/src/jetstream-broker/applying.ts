@@ -5,7 +5,7 @@ import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
 import { applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { JetStreamConnecting } from './jetstream.ts';
-import type { BrokerLimits } from './limits.ts';
+import type { JetStreamBrokerLimits } from './limits.ts';
 import { checkedOf, type ResolvedPlan } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
 import { managerOf } from './stream-check.ts';
@@ -14,7 +14,10 @@ import { managerOf } from './stream-check.ts';
 export async function applyBrokerPlan<const Given = unknown, const GivenLimits = unknown>(
   connecting: Closed<Given, JetStreamConnecting>,
   plan: BrokerPlan,
-  limits: Closed<GivenLimits, BrokerLimits & DefaultsFields<GivenLimits, BrokerLimits>>,
+  limits: Closed<
+    GivenLimits,
+    JetStreamBrokerLimits & DefaultsFields<GivenLimits, JetStreamBrokerLimits>
+  >,
 ): Promise<void> {
   const checked = checkedOf(plan, limits);
   if (checked.kind === 'refused') {

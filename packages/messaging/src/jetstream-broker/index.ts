@@ -6,4 +6,8 @@ export type {
 export { applyBrokerPlan } from './applying.ts';
 export type { JetStreamBrokerOptions, JetStreamConnecting } from './jetstream.ts';
 export { jetstream } from './jetstream.ts';
-export type { BrokerLimits, DurableConsumerLimits, StreamLimits } from './limits.ts';
+export type {
+  JetStreamBrokerLimits,
+  JetStreamDurableConsumerLimits,
+  JetStreamStreamLimits,
+} from './limits.ts';
