@@ -151,7 +151,7 @@ Replace each Stub with `handle(…, async (…) => …)`: an [EndpointHandler](p
 
 ### Apply the Broker plan
 
-A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's broker plan`. Apply the Broker plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's Broker plan before its Subscribers' (the limits are the organization's: see [Applying the Broker plan](packages/messaging/README.md#applying-the-broker-plan) in the messaging README for them, for the prefix and for what applying never removes):
+A Service with Messages runs only on a Broker that holds its Stream and Durable consumers. cf-loom derives them from the Contract and never applies them, so without this step the first run of a Service that publishes or sends fails with `The stream orders-service does not exist: apply the Service's Broker plan`. Apply the Broker plan in a deploy step, with a script such as this one, run with `node scripts/apply-broker-plan.ts`, or the organization's own tooling, a Provider's Broker plan before its Subscribers' (the limits are the organization's: see [Applying the Broker plan](packages/messaging/README.md#applying-the-broker-plan) in the messaging README for them, for the prefix and for what applying never removes):
 
 ```ts
 // scripts/apply-broker-plan.ts

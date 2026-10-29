@@ -277,7 +277,7 @@ Exit 3, a tooling error:
 | `<dir> is no folder: package writes a folder` | `package` |
 | `<dir> is a symbolic link: package writes a folder of its own` | `package` |
 | `A Definitions Package has no Contract Package: it is published from its own source` | `package` |
-| `An Application has no broker plan: only a Service's Messages travel through the Broker`, `A Definitions Package has no broker plan: only a Service's Messages travel through the Broker` | `broker-plan` |
+| `An Application has no Broker plan: only a Service's Messages travel through the Broker`, `A Definitions Package has no Broker plan: only a Service's Messages travel through the Broker` | `broker-plan` |
 | `An Application has no OpenAPI document: only a Service offers Endpoints`, `A Definitions Package has no OpenAPI document: only a Service offers Endpoints` | `openapi` |
 | `An Application has no AsyncAPI document: only a Service publishes Events`, `A Definitions Package has no AsyncAPI document: only a Service publishes Events` | `asyncapi` |
 | `<identity> and <identity> name path param <n> <name> and <name>: an OpenAPI path names it once, so rename one`, for two Endpoints on one path that name one of its params differently (`DELETE /orders/{} and GET /orders/{} name path param 1 id and orderId: …`) | `openapi` |

@@ -17,7 +17,7 @@ export async function brokerPlanCommand(run: Run, prefix: string | null): Promis
 }
 
 function noPlanLine(root: string): string {
-  return `${root} has no broker plan: only a Service's Messages travel through the Broker`;
+  return `${root} has no Broker plan: only a Service's Messages travel through the Broker`;
 }
 
 /** The lines `broker-plan` prints: each stream with its subjects, then each Durable consumer, or that the Service needs none. */
