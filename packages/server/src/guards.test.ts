@@ -74,6 +74,16 @@ const misattached = defineEndpoint({
   success: { status: 204 },
 });
 
+const misordered = defineEndpoint({
+  name: 'misordered',
+  method: 'GET',
+  path: '/misordered',
+  visibility: 'public',
+  description: 'Attaches a Guard before the Guard whose Context it lists',
+  guards: [{ guard: permission, qualifier: ['orders:read'] }, userToken] as never,
+  success: { status: 204 },
+});
+
 const addNote = defineEndpoint({
   name: 'addNote',
   method: 'POST',
@@ -102,7 +112,7 @@ const contract = defineService({
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [updateOrder, misattached, addNote, listOrders],
+      endpoints: [updateOrder, misattached, misordered, addNote, listOrders],
     }),
   ],
 });
@@ -138,6 +148,7 @@ const handlers = {
   endpoints: {
     updateOrder: updateOrderHandler,
     misattached: handle.stub(misattached),
+    misordered: handle.stub(misordered),
     addNote: handle(addNote, () => success(addNote)),
     listOrders: handle(listOrders, () => success(listOrders)),
   },
@@ -503,5 +514,34 @@ describe('serve: Guards', () => {
         issues: [{ part: 'qualifier', path: [0], code: 'invalid_value' }],
       },
     ]);
+  });
+
+  test('a Context provider attached after the Guard that lists it is the runtime’s own bug, and no Handler runs', async () => {
+    calls.length = 0;
+    const faults: ServedFault[] = [];
+    const http = serve(contract, handlers, {
+      onServiceFault: (fault) => {
+        faults.push(fault);
+      },
+    });
+
+    const response = await http(
+      new Request('http://test/misordered', { headers: { authorization: 'Bearer u-1' } }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      fault: { committed: 'no', retryable: false, message: 'Internal error' },
+    });
+    expect(faults).toMatchObject([
+      {
+        kind: 'runtime-bug',
+        declaration: misordered,
+        name: 'misordered',
+        guard: permission,
+        issues: [{ part: 'context', path: ['userToken'] }],
+      },
+    ]);
+    expect(calls).toEqual([]);
   });
 });
