@@ -306,6 +306,8 @@ describe('failure lines: defs that hold defs', () => {
 
   const levels = 24;
   const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
+  /** The CPU time telling the 2^24 paths stays under when it walks each def once. */
+  const pathsCpuMilliseconds = 2000;
 
   test.for([
     ['a valid union', () => z.union([z.string(), z.number()]), []],
@@ -322,10 +324,10 @@ describe('failure lines: defs that hold defs', () => {
       const tell = () => linesOf(serviceWith([endpoint]));
 
       const lines = tell();
-      const cpuMilliseconds = cpuMillisecondsOf(tell, 2000);
+      const cpuMilliseconds = cpuMillisecondsOf(tell, pathsCpuMilliseconds);
 
       expect(lines).toEqual(told);
-      expect(cpuMilliseconds).toBeLessThan(2000);
+      expect(cpuMilliseconds).toBeLessThan(pathsCpuMilliseconds);
     },
   );
 });

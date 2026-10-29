@@ -1053,9 +1053,7 @@ function codeReachSnapshot(): ServiceSnapshot {
 }
 
 describe('exportedSnapshotOf, depth', () => {
-  test('an exported Endpoint reaching 5,000 nested defs carries all 5,000 in its cut', {
-    timeout: 60_000,
-  }, () => {
+  test('an exported Endpoint reaching 5,000 nested defs carries all 5,000 in its cut', () => {
     const count = 5_000;
     const entries: [string, SchemaNode][] = [];
     for (let index = 0; index < count; index++) {

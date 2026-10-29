@@ -1453,16 +1453,19 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
+  /** The CPU time a walk of the ring stays under. */
+  const ringCpuMilliseconds = 1000;
+
   test('a ring of 255 schemas walks fast', () => {
     const ring = aRingOf(255);
 
     const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
 
     const walked = walk();
-    const cpuMilliseconds = cpuMillisecondsOf(walk, 1000);
+    const cpuMilliseconds = cpuMillisecondsOf(walk, ringCpuMilliseconds);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(cpuMilliseconds).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(ringCpuMilliseconds);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1586,13 +1589,13 @@ describe('walkSchemas: recursion', () => {
   });
 
   /**
-   * Reads each failure tree once, so the chain's walk takes about 0.4 s of CPU time; read afresh for
-   * each id, the trees cost over 6 s. The walk's memory also grows with the square of a chain of ids,
-   * so the chain stays at 7,000.
+   * Reads each failure tree once; read afresh for each id, the trees make the chain's walk take about
+   * 16 times the CPU time. The walk's memory also grows with the square of a chain of ids, so the
+   * chain stays at 7,000.
    */
   const memoCpuMilliseconds = 2_000;
 
-  /** The chain is walked up to four times, which takes half a minute with the memo off. */
+  /** The chain is walked up to four times, each run 16 times longer with the memo off. */
   const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
@@ -1615,6 +1618,9 @@ describe('walkSchemas: recursion', () => {
     expect(cpuMilliseconds).toBeLessThan(memoCpuMilliseconds);
   });
 
+  /** The CPU time a walk stays under when it walks the failing def once, not once per path. */
+  const manyPathsCpuMilliseconds = 1000;
+
   test('a failing def met by many paths is reported once and walked once', () => {
     const count = 26;
     const steps: z.ZodType[] = [];
@@ -1634,13 +1640,13 @@ describe('walkSchemas: recursion', () => {
     const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
 
     const walked = walk();
-    const cpuMilliseconds = cpuMillisecondsOf(walk, 1000);
+    const cpuMilliseconds = cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(cpuMilliseconds).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
   });
 });
 
