@@ -1,7 +1,14 @@
 import { safeParse } from 'zod/v4/core';
 import type { Attachment, Guard } from '../declarations/index.ts';
 import { isDeclaration, isGuard } from '../declarations/index.ts';
-import { fieldStep, indexStep, inFields, inside, type Place } from '../walker/index.ts';
+import {
+  fieldStep,
+  indexStep,
+  inFields,
+  inside,
+  type Place,
+  withinStack,
+} from '../walker/index.ts';
 import {
   attachedGuardOf,
   isPlainObject,
@@ -101,12 +108,13 @@ function valueFailures(
   nodes: Nodes,
 ): readonly DeclarationFailure[] {
   const isWalked = nodes.nodeOf(guard, 'qualifier') !== undefined;
-  if (guard.qualifier === undefined || !isWalked || isWithoutValue(attachment.qualifier)) {
+  const { qualifier } = guard;
+  if (qualifier === undefined || !isWalked || isWithoutValue(attachment.qualifier)) {
     return [];
   }
   const qualifierAt = inFields(at, 'qualifier');
-  const parsed = safeParse(guard.qualifier, attachment.qualifier);
-  if (!parsed.success) {
+  const parsed = withinStack(() => safeParse(qualifier, attachment.qualifier));
+  if (parsed?.success !== true) {
     const message = `${textOf(guard.name)} takes a Qualifier its schema accepts`;
     return [failure(qualifierAt, 'qualifier-value', message)];
   }
