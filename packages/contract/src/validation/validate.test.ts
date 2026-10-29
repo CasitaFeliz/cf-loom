@@ -672,7 +672,7 @@ describe('validateRoot: the README’s examples', () => {
     expect(validated).toEqual(['valid', 'valid', 'valid']);
   });
 
-  test('a Contract of 4000 Endpoints validates', { timeout: 30_000 }, () => {
+  test('a Contract of 4000 Endpoints validates', () => {
     const endpoints = Array.from({ length: 4000 }, (_, index) =>
       defineEndpoint({
         name: `getItem${index}`,
