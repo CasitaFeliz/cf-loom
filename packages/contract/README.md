@@ -8,42 +8,42 @@ Each declaration returns what was written with its `kind`: the object and every 
 
 ## First declarations
 
-An Endpoint, the Group that lists it and the Root that lists the Group are three files, which `generate` reads to write the Snapshot, shown with their imports:
+An Endpoint, the Group that lists it and the Root that lists the Group are three files, which `generate` reads to write the Snapshot, shown here with their imports for `notes-service`, a small Service of its own:
 
 ```ts
-// src/contract/endpoints/orders/get-order.endpoint.ts
+// notes-service/src/contract/endpoints/notes/get-note.endpoint.ts
 import { defineEndpoint } from '@cf-loom/contract';
 import { z } from 'zod';
 
-export const getOrder = defineEndpoint({
-  name: 'getOrder',
+export const getNote = defineEndpoint({
+  name: 'getNote',
   method: 'GET',
-  path: '/orders/:orderId',
+  path: '/notes/:noteId',
   visibility: 'internal',
-  description: 'One order by id',
-  input: { params: z.object({ orderId: z.uuid() }) },
-  success: { status: 200, body: z.object({ id: z.uuid(), total: z.number() }) },
+  description: 'One note by id',
+  input: { params: z.object({ noteId: z.uuid() }) },
+  success: { status: 200, body: z.object({ id: z.uuid(), text: z.string() }) },
 });
 ```
 
 ```ts
-// src/contract/groups/orders.group.ts
+// notes-service/src/contract/groups/notes.group.ts
 import { defineGroup } from '@cf-loom/contract';
-import { getOrder } from '../endpoints/orders/get-order.endpoint.ts';
+import { getNote } from '../endpoints/notes/get-note.endpoint.ts';
 
-export const ordersGroup = defineGroup({
-  name: 'orders',
-  description: 'Order lifecycle',
-  endpoints: [getOrder],
+export const notesGroup = defineGroup({
+  name: 'notes',
+  description: 'Notes',
+  endpoints: [getNote],
 });
 ```
 
 ```ts
-// src/contract/index.ts
+// notes-service/src/contract/index.ts
 import { defineService } from '@cf-loom/contract';
-import { ordersGroup } from './groups/orders.group.ts';
+import { notesGroup } from './groups/notes.group.ts';
 
-export const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });
+export const contract = defineService({ name: 'notes-service', groups: [notesGroup] });
 ```
 
 [Required fields](#required-fields) says what a declaration may leave out, and [The Root](#the-root) and [Groups](#groups) show the rest of what these three take.
@@ -99,7 +99,7 @@ export const adminPaymentsDependency = defineDependency({ endpoints: [getPayment
 // web-admin/src/contract/index.ts
 export const application = defineApplication({
   name: 'web-admin',
-  dependencies: [adminOrdersDependency, adminPaymentsDependency],
+  dependencies: [adminPaymentsDependency],
 });
 ```
 
@@ -119,7 +119,7 @@ export const definitions = defineDefinitions({
   },
 });
 
-export { userToken, permission, money, pagination, unauthenticated, forbidden };
+export { apiKey, userToken, permission, money, pagination, unauthenticated, forbidden };
 ```
 
 Services import its Guards, Rejections and schemas by name; a Service names its Definitions object as `standardRejections` to take its Standard Rejections (see [The Root](#the-root)). Its Root file exports its Definitions object, which `init` exports as `definitions`, and exactly what it shares: each Guard, Rejection and zod schema, under the name Services import it by; those exports are what its Snapshot describes. Any other export fails `generate`, and so does a Guard or Rejection an exported Guard reaches without being exported, since Services import it to attach it or reject with it. Only the Root file's exports count: a declaration exported only from another entry of the package is none of its members. It is published built, as JavaScript with its `.d.ts`, from erasable TypeScript source, since Node strips no types under `node_modules`. It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
@@ -156,7 +156,7 @@ A Group lists at least one Endpoint, Event, Command or Subscription; one that li
 
 ```ts
 // src/contract/endpoints/orders/get-order.endpoint.ts
-import { money } from '@org/definitions';
+import { apiKey, money } from '@org/definitions';
 
 export const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -212,10 +212,10 @@ export const orderLocked = defineRejection({
 });
 ```
 
-A Rejection may declare `headers`, as a Success does: an object of the HTTP headers it promises, which nothing implies, so RFC 9110's `WWW-Authenticate` of a 401 or `Retry-After` of a 429 is sent only where a Rejection declares it. They follow the text rules and the name rules of a Success's headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md). A Handler gives them with the body: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })` (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README).
+A Rejection may declare `headers`, as a Success does: an object of the HTTP headers it promises, which nothing implies, so RFC 9110's `WWW-Authenticate` of a 401 or `Retry-After` of a 429 is sent only where a Rejection declares it. They follow the text rules and the name rules of a Success's headers, and the object is always open (see [Headers, path and query](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#headers-path-and-query) in COMPATIBILITY.md). A Handler gives them with the body: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })` (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README). Every Service rejects with `unauthenticated`, so the Definitions Package declares it (see [Definitions Packages](#definitions-packages)):
 
 ```ts
-// src/contract/rejections/unauthenticated.rejection.ts
+// definitions/src/definitions/rejections/unauthenticated.rejection.ts
 export const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
   status: 401,
@@ -231,13 +231,13 @@ The three Standard Rejections, invalid input, not found and not implemented, are
 The body of the invalid-input Rejection is cf-loom's, whatever the Definitions Package declares, and its runtime produces it:
 
 ```ts
-{
-  issues: [{ in: 'params' | 'query' | 'headers' | 'body', path: (string | number)[], code: string, message: string }],
-  omittedIssues: number,
-}
+type InvalidInputBody = {
+  issues: { in: 'params' | 'query' | 'headers' | 'body'; path: (string | number)[]; code: string; message: string }[];
+  omittedIssues: number;
+};
 ```
 
-`issues` lists the issues in the order the Provider read them (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md): by part, params, query, headers, then body, and within a part in zod's order. It stops before the first issue that would make it more than 100 issues or more than 64 KiB of JSON (65,536 bytes of UTF-8, the array as sent). `omittedIssues` counts every issue not listed, 0 when every issue is: so the listed issues are always the first ones, and an issue whose path alone holds more than 64 KiB, such as a long record key, is counted, never listed. A Caller tells a whole list by `omittedIssues === 0`.
+`issues` lists the issues in the order the Provider read them (see [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md): a Guard's demands alone, or the Input's by part, params, query, headers, then body, and within a part in zod's order. It stops before the first issue that would make it more than 100 issues or more than 64 KiB of JSON (65,536 bytes of UTF-8, the array as sent). `omittedIssues` counts every issue not listed, 0 when every issue is: so the listed issues are always the first ones, and an issue whose path alone holds more than 64 KiB, such as a long record key, is counted, never listed. A Caller tells a whole list by `omittedIssues === 0`.
 
 `code` is one of a set cf-loom owns, not zod's issue codes: `required`, `invalid_type`, `invalid_value`, `invalid_format`, `too_small`, `too_big`, `not_multiple`, `unrecognized_key` and `malformed` (an unparseable body, a wrong content type or a value nested too deeply to read). An issue is `required` when nothing is at its path: a key the value does not hold itself, a hole of a list, or `undefined`. `in` and `code` are Open Enums, which a Caller reads through its Provider's Contract Package with their Unknown case, so a part or a code a later cf-loom adds is an Additive Change. An issue never carries the received value.
 
@@ -245,8 +245,10 @@ Wherever cf-loom writes an issue on one line, in an error, a log or a Fake Provi
 
 ## Guards
 
+Every Service attaches `apiKey`, so the Definitions Package declares it (see [Definitions Packages](#definitions-packages)):
+
 ```ts
-// src/contract/guards/api-key.guard.ts
+// definitions/src/definitions/guards/api-key.guard.ts
 export const apiKey = defineGuard({
   name: 'apiKey',
   description: 'An API key per Caller',
@@ -276,8 +278,19 @@ export const permission = defineGuard({
 ```
 
 ```ts
-// an Endpoint lists every Guard itself, in order
-guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],
+// src/contract/endpoints/orders/edit-order.endpoint.ts
+import { permission, userToken } from '@org/definitions';
+
+export const editOrder = defineEndpoint({
+  name: 'editOrder',
+  method: 'PUT',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'Edits an order',
+  guards: [userToken, { guard: permission, qualifier: ['orders:edit'] }],   // every Guard listed, in order
+  input: { params: z.object({ orderId: z.uuid() }) },
+  success: { status: 204 },
+});
 ```
 
 - `guards` lists the Guards whose Context its GuardHandler reads, one key per Guard that provides a Context, by name.
@@ -291,6 +304,8 @@ Each Message Version is its own declaration and file.
 
 ```ts
 // src/contract/events/orders/order-created.v2.event.ts
+import { money } from '@org/definitions';
+
 export const orderCreatedV2 = defineEvent({
   name: 'OrderCreated',
   version: 2,
