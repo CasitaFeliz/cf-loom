@@ -6,13 +6,13 @@ import {
   indexStep,
   inFields,
   inside,
+  isSchema,
   type Place,
   withinStack,
 } from '../walker/index.ts';
 import {
   attachedGuardOf,
   isPlainObject,
-  isSchema,
   isWithoutValue,
   type LocatedEndpoint,
   type LocatedGuard,

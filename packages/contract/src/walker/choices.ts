@@ -1,6 +1,7 @@
 import type * as core from 'zod/v4/core';
 import { isOpen } from '../open/index.ts';
 import { canonicalJson, inCanonicalJsonOrder, isJsonPrimitive } from './canonical-json.ts';
+import { isSchema } from './def-types.ts';
 import { innerOfLazy } from './lazy.ts';
 import { inside } from './location.ts';
 import type {
@@ -163,15 +164,26 @@ function taggedVariant(
   return walked([canonicalJson(literals[0]), node]);
 }
 
-/** A variant must be an object whose discriminator is a literal; a discriminated union in its place is named. */
+/**
+ * A variant must be an object whose discriminator is a literal; a discriminated union in its place
+ * is named. A lazy that stands for no zod 4 schema is refused where the variant's walk entered it.
+ */
 function variantRefusalOf(option: core.$ZodType, discriminator: string): Refused | undefined {
-  const def = innerOfLazy(option)._zod.def;
+  const inner = innerOfLazy(option);
+  if (!isSchema(inner)) {
+    return undefined;
+  }
+  const def = inner._zod.def;
   if (def.type !== 'object') {
     return 'discriminator' in def ? refused.nestedDiscriminatedUnion : refused.objectlessVariant;
   }
   const { shape } = def as core.$ZodObjectDef;
   const field = Object.hasOwn(shape, discriminator) ? shape[discriminator] : undefined;
-  const isLiteral = field !== undefined && innerOfLazy(field)._zod.def.type === 'literal';
+  const discriminatorSchema = field === undefined ? undefined : innerOfLazy(field);
+  if (discriminatorSchema !== undefined && !isSchema(discriminatorSchema)) {
+    return undefined;
+  }
+  const isLiteral = discriminatorSchema?._zod.def.type === 'literal';
   return isLiteral ? undefined : refused.unliteralDiscriminator;
 }
 

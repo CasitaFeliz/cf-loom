@@ -1,6 +1,6 @@
-import { $ZodType } from 'zod/v4/core';
+import type { $ZodType } from 'zod/v4/core';
 import type { Endpoint, Guard, IssueCode, inputIns, Rejection } from '../declarations/index.ts';
-import { inside, type Place, partsOf } from '../walker/index.ts';
+import { inside, isSchema, type Place, partsOf } from '../walker/index.ts';
 import { partOf } from './written.ts';
 
 /** A slot of a declaration that holds a schema, as the Snapshot names it. */
@@ -137,13 +137,4 @@ export function schemaOf(
 ): $ZodType | undefined {
   const written = writtenAt(declaration, part);
   return isSchema(written) ? written : undefined;
-}
-
-/**
- * Whether a value is a zod schema, by zod's own `instanceof`: it reads the traits in `_zod`, which
- * zod, `zod/mini` and any copy of either set and a hand-built `_zod` object lacks, so an impostor
- * never reaches the walker, which reads `_zod.def`.
- */
-export function isSchema(value: unknown): value is $ZodType {
-  return value instanceof $ZodType;
 }

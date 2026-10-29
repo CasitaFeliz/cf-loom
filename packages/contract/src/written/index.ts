@@ -69,7 +69,6 @@ export {
   inputParts,
   isInputPart,
   isObjectPart,
-  isSchema,
   partFieldOf,
   schemaOf,
   slotAt,

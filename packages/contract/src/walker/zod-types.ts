@@ -8,6 +8,7 @@ import {
   type Def,
   defTypes,
   isKnownDefType,
+  isSchema,
   isWalkedDef,
   pipeRefusalKeyOf,
   type RefusedDef,
@@ -19,7 +20,16 @@ import { annotated } from './metadata.ts';
 import { notAllowed, type Refused, refused, refusedZodType } from './not-allowed.ts';
 import { walkIntersection, walkObject, walkRecord } from './objects.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
-import { keyStep, valueStep } from './steps.ts';
+import {
+  fieldStep,
+  indexStep,
+  itemsStep,
+  keyStep,
+  optionStep,
+  restStep,
+  type Step,
+  valueStep,
+} from './steps.ts';
 import {
   failed,
   failuresOf,
@@ -74,9 +84,74 @@ function* nodeOfType(schema: core.$ZodType, at: Reached, walker: Walker): Walkin
   if (!isKnownDefType(type)) {
     return notAllowed(at, refusedZodType(type));
   }
-  return isWalkedDef(def)
-    ? yield* walkedNodeOf({ schema, at }, def, walker)
-    : yield* refusedNodeOf(def, at, walker);
+  if (!isWalkedDef(def)) {
+    return yield* refusedNodeOf(def, at, walker);
+  }
+  const held = heldValuesOf(schema, def);
+  if (held.every(({ value }) => isSchema(value))) {
+    return yield* walkedNodeOf({ schema, at }, def, walker);
+  }
+  return yield* withNonSchemaHeld(held, at, walker);
+}
+
+/** A value a walked def holds where `defTypes` lists a schema, and the step it sits at, if any. */
+type Held = { readonly value: unknown; readonly step: Step | undefined; readonly isField: boolean };
+
+/** The step a child under each key `defTypes` lists sits at, by its position under that key. */
+const stepsByKey: Readonly<Record<string, (position: number) => Step | undefined>> = {
+  keyType: () => keyStep,
+  valueType: () => valueStep,
+  element: () => itemsStep,
+  items: indexStep,
+  rest: () => restStep,
+  options: optionStep,
+  left: () => indexStep(0),
+  right: () => indexStep(1),
+  getter: () => undefined,
+  innerType: () => undefined,
+};
+
+/**
+ * The values a walked def holds, as its `defTypes` row lists them: an object's fields, the schemas
+ * under each listed key, and the schema a lazy's getter returns. A tuple without `rest` holds none.
+ */
+function heldValuesOf(schema: core.$ZodType, def: WalkedDef): readonly Held[] {
+  const treatment: { readonly walks: readonly string[] } | { readonly fields: string } =
+    defTypes[def.type];
+  if ('fields' in treatment) {
+    const shape = Object.entries((def as core.$ZodObjectDef).shape);
+    return shape.map(([name, value]) => ({ value, step: fieldStep(name), isField: true }));
+  }
+  const keyed = def as unknown as Readonly<Record<string, unknown>>;
+  return treatment.walks.flatMap((key) => {
+    const stepAt = stepsByKey[key] ?? (() => undefined);
+    const value = key === 'getter' ? innerOfOneLazy(schema as core.$ZodLazy) : keyed[key];
+    if (key === 'rest' && value === null) {
+      return [];
+    }
+    const values = Array.isArray(value) ? value : [value];
+    return values.map((item, position) => ({
+      value: item,
+      step: stepAt(position),
+      isField: false,
+    }));
+  });
+}
+
+/**
+ * A walked def holding a value that is no zod 4 schema: each value it holds is entered at its step,
+ * where that one is refused, so no type reader reads its `_zod`, and the others are walked beside it.
+ */
+function* withNonSchemaHeld(held: readonly Held[], at: Reached, walker: Walker): Walking {
+  const walkedHeld: Walked<unknown>[] = [];
+  for (const { value, step, isField } of held) {
+    const under = step === undefined ? at : inside(at, step);
+    const schema = value as core.$ZodType;
+    walkedHeld.push(
+      isField ? yield* walker.field(schema, under) : yield* walker.schema(schema, under),
+    );
+  }
+  return failed(failuresOf(walkedHeld));
 }
 
 /** The node of a def type the walk reads one from. */
@@ -193,17 +268,25 @@ function* refusedAround({ refusal, inside }: Around, at: Reached, walker: Walker
   return failed(failuresOf([notAllowed(at, refusal), ...walkedInside]));
 }
 
-/** The schemas of a pipe other than its transform, which the pipe's own refusal already names. */
+/**
+ * The schemas of a pipe other than its transform, which the pipe's own refusal already names; an
+ * end that is no zod 4 schema is entered, where it is refused.
+ */
 function pipeSchemasOf(def: core.$ZodPipeDef): readonly core.$ZodType[] {
-  return [def.in, def.out].filter((schema) => schema._zod.def.type !== 'transform');
+  return [def.in, def.out].filter((schema) => defTypeOf(schema) !== 'transform');
 }
 
 /** A pipe refused as `pipeRefusals` reads its shape. */
 function pipeRefusal(def: core.$ZodPipeDef): Refused {
   const shape = {
     reversed: 'reverseTransform' in def,
-    in: def.in._zod.def.type,
-    out: def.out._zod.def.type,
+    in: defTypeOf(def.in),
+    out: defTypeOf(def.out),
   };
   return refused[pipeRefusalKeyOf(shape)];
+}
+
+/** The def type of a zod 4 schema; none for any other value. */
+function defTypeOf(value: unknown): string | undefined {
+  return isSchema(value) ? value._zod.def.type : undefined;
 }

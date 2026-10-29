@@ -1,4 +1,4 @@
-import type * as core from 'zod/v4/core';
+import * as core from 'zod/v4/core';
 import type { refused } from './not-allowed.ts';
 
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
@@ -95,6 +95,15 @@ const refusedDefTypes: ReadonlySet<string> = new Set(
     .map(([type]) => type),
 );
 
+/**
+ * Whether a value is a zod 4 schema, by zod's own `instanceof`: it reads the traits in `_zod`, which
+ * zod, `zod/mini` and any copy of either set, and a zod/v3 schema or a hand-built `_zod` object
+ * lacks, so the walk never reads `_zod.def` of anything else.
+ */
+export function isSchema(value: unknown): value is core.$ZodType {
+  return value instanceof core.$ZodType;
+}
+
 /** Whether a def is one the walk reads a node from, rather than refuses by name. */
 export function isWalkedDef(def: Def): def is WalkedDef {
   return !refusedDefTypes.has(def.type);
@@ -113,11 +122,14 @@ export type PipeRule = {
   readonly refuses: RefusalKey;
 };
 
-/** The shape of one pipe: whether it has a reverse transform, and the def types of its ends. */
+/**
+ * The shape of one pipe: whether it has a reverse transform, and the def types of its ends, none
+ * for an end that is no zod 4 schema.
+ */
 export type PipeShape = {
   readonly reversed: boolean;
-  readonly in: string;
-  readonly out: string;
+  readonly in: string | undefined;
+  readonly out: string | undefined;
 };
 
 /**

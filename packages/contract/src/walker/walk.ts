@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import type { Def } from './def-types.ts';
+import { type Def, isSchema } from './def-types.ts';
 import { walkedBy } from './drive.ts';
 import type { Place } from './location.ts';
 import {
@@ -10,7 +10,7 @@ import {
   withExamplesParsed,
 } from './metadata.ts';
 import type { Field, NotAllowed, Origin, SchemaNode } from './nodes.ts';
-import { notAllowed, refusedWrapperId } from './not-allowed.ts';
+import { notAllowed, refused, refusedWrapperId } from './not-allowed.ts';
 import { compositionOf } from './open-compositions.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
@@ -120,7 +120,11 @@ function withOrigin(schema: core.$ZodType, at: Under, own: Origin | undefined): 
   return { ...at, schema, origin: own ?? at.origin };
 }
 
+/** A schema walked where it sits; a value that is no zod 4 schema is refused there, unread. */
 function* walkSchema(schema: core.$ZodType, under: Under, state: WalkState): Walking {
+  if (!isSchema(schema)) {
+    return notAllowed(withOrigin(schema, under, undefined), refused.notZod4);
+  }
   const own = state.originOf(schema);
   const at = withOrigin(schema, under, own);
   if (!state.met.has(schema)) {
@@ -145,6 +149,9 @@ function recordComposition(node: Walked, at: Reached, { compositions }: WalkStat
 
 /** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
 function* walkField(schema: core.$ZodType, under: Under, state: WalkState): Walking<Field> {
+  if (!isSchema(schema)) {
+    return requiredField(yield* state.walker.schema(schema, under));
+  }
   const def = schema._zod.def as Def;
   if (def.type === 'optional') {
     const inner = yield* state.walker.schema(def.innerType, under);
@@ -162,8 +169,8 @@ function* walkField(schema: core.$ZodType, under: Under, state: WalkState): Walk
 }
 
 function* walkRequired(schema: core.$ZodType, under: Under, state: WalkState): Walking {
-  const def = schema._zod.def as Def;
-  if (def.type !== 'optional') {
+  const def = isSchema(schema) ? (schema._zod.def as Def) : undefined;
+  if (def?.type !== 'optional') {
     return yield* state.walker.schema(schema, under);
   }
   const inner = yield* state.walker.schema(def.innerType, under);

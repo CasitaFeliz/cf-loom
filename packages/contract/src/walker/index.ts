@@ -19,6 +19,7 @@ export {
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { Catchalls, DefTypes, PipeRefusals } from './def-types.ts';
+export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
