@@ -271,8 +271,9 @@ agree with it, or it is read against nothing.
 **C23. Behavior, through a public seam.** A test drives a package through its entries (`.`, its subpaths, or
 `./internal` where another cf-loom package uses it, or where several of a package's commands share a step) and checks
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
-status of a command. It imports no private module and asserts no call order of mocks. *Why:* a test of
-the mechanics fails on every refactor and passes on every bug.
+status of a command. It imports no private module and asserts no call order of mocks. A README test imports the
+README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
+them. *Why:* a test of the mechanics fails on every refactor and passes on every bug.
 
 **C24. A test's name states the behavior in plain English.** `"an optional path param fails generate"`, not
 `"handles params"` or `"walk returns not-allowed"`. The `describe` names the seam; the `test` reads as a sentence
