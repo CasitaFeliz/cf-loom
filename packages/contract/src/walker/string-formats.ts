@@ -1,15 +1,9 @@
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
-import { refusedCheck } from './check-names.ts';
+import { refusedCheck, refusedRegexBuiltFormat } from './check-names.ts';
 import { formatOptionsOf } from './format-options.ts';
 import { isStringFormat, regexBuiltFormatOf, type StringFormat } from './format-schemas.ts';
 import type { Regex, StringNode } from './nodes.ts';
-import {
-  notAllowed,
-  type Refused,
-  refused,
-  refusedRegexBuiltFormat,
-  refusedStringFormat,
-} from './not-allowed.ts';
+import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 import { type Reached, type Walked, walked } from './walked.ts';
 
 /** What the walker reads of a string format check, from zod and `zod/mini` alike. */
@@ -59,7 +53,7 @@ function functionFormatRefusalOf(format: string): Refused {
   const regexBuilt = regexBuiltFormatOf(format);
   return regexBuilt === undefined
     ? refusedStringFormat(format)
-    : refusedRegexBuiltFormat(format, regexBuilt.call, regexBuilt.regexName);
+    : refusedRegexBuiltFormat(format, regexBuilt);
 }
 
 /** A format zod builds from its options: the pattern must be the one zod builds for them. */

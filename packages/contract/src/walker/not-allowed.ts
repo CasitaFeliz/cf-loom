@@ -192,17 +192,6 @@ export function refusedStringFormat(format: string): Refused {
   return { construct: `z.stringFormat(${JSON.stringify(format)})` };
 }
 
-/**
- * A format zod builds from a regex and checks through a function, by each spelling that builds
- * it: the same regex in `.regex()` is a check zod runs from data.
- */
-export function refusedRegexBuiltFormat(format: string, call: string, regexName: string): Refused {
-  return {
-    construct: `${call}() or ${refusedStringFormat(format).construct}`,
-    instead: `.regex(z.regexes.${regexName})`,
-  };
-}
-
 /** One failure, as the walk of a schema returns it, with the node the walk was building. */
 export function notAllowed(at: Reached, construct: Refused, outline?: Outline): Failed {
   return failed([{ kind: 'not-allowed', ...at, ...construct }], outline);
