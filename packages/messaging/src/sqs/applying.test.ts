@@ -12,6 +12,7 @@ import {
   subscriptionsOf,
   topicNamesOf,
 } from '../../test/aws-clients.ts';
+import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type SqsBrokerLimits } from './index.ts';
 
@@ -75,6 +76,28 @@ function aBilling(prefix: string | null = null) {
     },
   };
   return { durable, plan, orders };
+}
+
+/** A seeded generator of the same sequence every run, so a failing sequence can be replayed. */
+function seededNext(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+/** A plan of Durable consumers on one Stream with exactly the given names, all of one Service. */
+function aPlanOfDurables(names: readonly string[]): BrokerPlan {
+  const subject = 'long.event.E.v1';
+  const durableConsumers = Object.fromEntries(
+    names.map((name) => [name, { service: 'long', stream: 'long', subject }]),
+  );
+  return {
+    prefix: null,
+    streams: { long: { service: 'long', subjects: [subject] } },
+    durableConsumers,
+  };
 }
 
 function sqsArnOf(queue: string): string {
@@ -290,5 +313,106 @@ describe('applyBrokerPlan', () => {
     expect(JSON.parse(attributes['FilterPolicy'] ?? '{}')).toEqual({
       'cf-loom-subject': [orders.charge],
     });
+  });
+
+  test('applyBrokerPlan applies the plan of the longest names the grammars accept, under the longest prefix, each queue name within 80 characters and each cf-loom:subscription tag the whole subscription ARN', async () => {
+    const { contract, prefix } = aServiceOfLongestNames();
+    const plan = planOf(contract, prefix);
+    const [stream = ''] = Object.keys(plan.streams);
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    const queues = await queueNamesOf(connecting.sqs);
+    const subscriptions = await subscriptionsOf(connecting.sns, snsArnOf(stream));
+    const tagged = await Promise.all(
+      queues
+        .filter((queue) => !queue.endsWith('_dlq'))
+        .map((queue) => queueTagsOf(connecting.sqs, queue)),
+    );
+    expect(queues).toHaveLength(4);
+    expect(Math.max(...queues.map((queue) => queue.length))).toBeLessThanOrEqual(80);
+    expect(tagged.map((tags) => tags['cf-loom:subscription']).sort()).toEqual(
+      subscriptions.map(({ arn }) => arn).sort(),
+    );
+    const topicArnLength = `${snsArnOf(stream)}:`.length;
+    expect(subscriptions.map(({ arn }) => arn.length)).toEqual([
+      topicArnLength + 36,
+      topicArnLength + 36,
+    ]);
+  });
+
+  test('every Durable consumer of a plan of long names sharing their first 63 characters gets queues of its own, found by its cf-loom:durable tag', async () => {
+    const next = seededNext(477);
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789_-';
+    const head = `${'h'.repeat(62)}_`;
+    const tailOf = (length: number) =>
+      Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
+    const lengths = [1, 2, 63, 64, 75, 76, 77, 78, 79, 80, 224, 225];
+    const randomLengths = Array.from({ length: 28 }, () => 1 + Math.floor(next() * 225));
+    const names = [
+      ...new Set(
+        [...lengths, ...randomLengths].map((length) => `${head}${tailOf(225)}`.slice(0, length)),
+      ),
+    ];
+    const plan = aPlanOfDurables(names);
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    const queues = await queueNamesOf(connecting.sqs);
+    const tagsByQueue = new Map(
+      await Promise.all(
+        queues.map(async (queue) => [queue, await queueTagsOf(connecting.sqs, queue)] as const),
+      ),
+    );
+    const queueOf = (durable: string) =>
+      [...tagsByQueue].filter(
+        ([queue, tags]) => tags['cf-loom:durable'] === durable && !queue.endsWith('_dlq'),
+      );
+    expect(queues).toHaveLength(names.length * 2);
+    expect(Math.max(...queues.map((queue) => queue.length))).toBeLessThanOrEqual(80);
+    for (const name of names) {
+      const [found, ...others] = queueOf(name);
+      expect(others).toEqual([]);
+      const queue = found?.[0] ?? '';
+      expect(name.length <= 76 ? queue === name : queue.length === 76).toBe(true);
+      expect(queue.startsWith(name.slice(0, 63))).toBe(true);
+      expect(queues).toContain(`${queue}_dlq`);
+    }
+  });
+
+  test('Subscriptions notify and notifyDlq get four distinct queues, two of them dead-letter queues', async () => {
+    const subject = 'billing-service.event.E.v1';
+    const plan: BrokerPlan = {
+      prefix: null,
+      streams: { 'billing-service': { service: 'billing-service', subjects: [subject] } },
+      durableConsumers: {
+        'billing-service_notify': {
+          service: 'billing-service',
+          stream: 'billing-service',
+          subject,
+        },
+        'billing-service_notify-dlq': {
+          service: 'billing-service',
+          stream: 'billing-service',
+          subject,
+        },
+      },
+    };
+    const connecting = anAwsConnecting(moto.url);
+
+    await applyBrokerPlan(connecting, plan, testLimits);
+
+    expect(await queueNamesOf(connecting.sqs)).toEqual(
+      [
+        'billing-service_notify-dlq',
+        'billing-service_notify-dlq_dlq',
+        'billing-service_notify_dlq',
+        'billing-service_notify',
+      ].sort(),
+    );
+    const tags = await queueTagsOf(connecting.sqs, 'billing-service_notify_dlq');
+    expect(tags['cf-loom:durable']).toBe('billing-service_notify');
   });
 });
