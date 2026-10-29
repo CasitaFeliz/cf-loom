@@ -92,31 +92,47 @@ describe('walkSchemas: strings', () => {
     );
   });
 
-  test.each<[string, core.$ZodType, string, string]>([
-    ['z.hex()', z.hex(), 'z.hex()', 'hex'],
-    ['z.hostname()', z.hostname(), 'z.hostname()', 'hostname'],
-    ['z.currencyCode()', z.currencyCode(), 'z.currencyCode()', 'currencyCode'],
-    ['z.hash()', z.hash('sha256'), 'z.hash()', 'sha256_hex'],
-    ['z.hash() with an encoding', z.hash('md5', { enc: 'base64url' }), 'z.hash()', 'md5_base64url'],
-    ['zm.hex()', zm.hex(), 'z.hex()', 'hex'],
-    ['zm.hostname()', zm.hostname(), 'z.hostname()', 'hostname'],
-    ['zm.currencyCode()', zm.currencyCode(), 'z.currencyCode()', 'currencyCode'],
-    ['zm.hash()', zm.hash('sha256'), 'z.hash()', 'sha256_hex'],
-    [
-      'z.stringFormat() with zod’s own regex',
-      z.stringFormat('hex', z.regexes.hex),
-      'z.hex()',
-      'hex',
-    ],
-    ['z.stringFormat() with another regex', z.stringFormat('hex', /^[a-f]+$/), 'z.hex()', 'hex'],
+  test.each<{ name: string; schema: core.$ZodType; refusal: string }>([
+    { name: 'z.hex()', schema: z.hex(), refusal: 'z.hex() hex' },
+    { name: 'z.hostname()', schema: z.hostname(), refusal: 'z.hostname() hostname' },
+    {
+      name: 'z.currencyCode()',
+      schema: z.currencyCode(),
+      refusal: 'z.currencyCode() currencyCode',
+    },
+    { name: 'z.hash()', schema: z.hash('sha256'), refusal: 'z.hash() sha256_hex' },
+    {
+      name: 'z.hash() with an encoding',
+      schema: z.hash('md5', { enc: 'base64url' }),
+      refusal: 'z.hash() md5_base64url',
+    },
+    { name: 'zm.hex()', schema: zm.hex(), refusal: 'z.hex() hex' },
+    { name: 'zm.hostname()', schema: zm.hostname(), refusal: 'z.hostname() hostname' },
+    {
+      name: 'zm.currencyCode()',
+      schema: zm.currencyCode(),
+      refusal: 'z.currencyCode() currencyCode',
+    },
+    { name: 'zm.hash()', schema: zm.hash('sha256'), refusal: 'z.hash() sha256_hex' },
+    {
+      name: 'z.stringFormat() with zod’s own regex',
+      schema: z.stringFormat('hex', z.regexes.hex),
+      refusal: 'z.hex() hex',
+    },
+    {
+      name: 'z.stringFormat() with another regex',
+      schema: z.stringFormat('hex', /^[a-f]+$/),
+      refusal: 'z.hex() hex',
+    },
   ])(
-    '%s, whose check zod runs through a function, fails with its z.regexes pattern instead',
-    (_name, schema, call, regex) => {
-      const instead = `.regex(z.regexes.${regex})`;
+    '$name, whose check zod runs through a function, fails with its z.regexes pattern instead',
+    ({ schema, refusal }) => {
+      const [call = '', regex = ''] = refusal.split(' ');
+      const refused = refusedAt('', call, `.regex(z.regexes.${regex})`);
 
-      expect(walkBody(schema)).toEqual(refusedAt('', call, instead));
+      expect(walkBody(schema)).toEqual(refused);
       expect(refusalsOf(built.walkSchemas([{ at: bodyAt, schema }], () => undefined))).toEqual(
-        refusedAt('', call, instead),
+        refused,
       );
     },
   );
@@ -180,6 +196,7 @@ describe('walkSchemas: strings', () => {
     base64: true,
     base64url: true,
     e164: true,
+    // biome-ignore lint/style/useNamingConvention: SNAPSHOT.md's name of the format
     credit_card: true,
     iban: true,
     jwt: true,
