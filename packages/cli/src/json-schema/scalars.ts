@@ -15,16 +15,56 @@ export function stringSchemaOf(node: StringNode): JsonSchema {
   });
 }
 
-/** A number with its bounds and its step as the matching keywords. */
+/** One side of a number's bounds: the inclusive one and the exclusive one, each when declared. */
+type Side = { readonly inclusive: number | undefined; readonly exclusive: number | undefined };
+
+/** The end of the safe integers on one side, and which of two bounds on that side is the tighter. */
+type SafeEnd = {
+  readonly limit: number;
+  readonly tighter: (bound: number, other: number) => number;
+};
+
+const lowestSafe: SafeEnd = { limit: Number.MIN_SAFE_INTEGER, tighter: Math.max };
+const highestSafe: SafeEnd = { limit: Number.MAX_SAFE_INTEGER, tighter: Math.min };
+
+/**
+ * A number with its bounds and its step as the matching keywords; an int is a safe integer, as zod's
+ * `z.int()` checks, so its bounds are cut to the safe integers.
+ */
 export function numberSchemaOf(node: NumberNode): JsonSchema {
+  const lower = lowerOf(node);
+  const upper = upperOf(node);
   return definedOf({
     type: node.int === true ? 'integer' : 'number',
-    minimum: node.min,
-    maximum: node.max,
-    exclusiveMinimum: node.exclusiveMin,
-    exclusiveMaximum: node.exclusiveMax,
+    minimum: lower.inclusive,
+    maximum: upper.inclusive,
+    exclusiveMinimum: lower.exclusive,
+    exclusiveMaximum: upper.exclusive,
     multipleOf: node.multipleOf,
   });
+}
+
+function lowerOf(node: NumberNode): Side {
+  const declared = { inclusive: node.min, exclusive: node.exclusiveMin };
+  return node.int === true ? cutToSafe(declared, lowestSafe) : declared;
+}
+
+function upperOf(node: NumberNode): Side {
+  const declared = { inclusive: node.max, exclusive: node.exclusiveMax };
+  return node.int === true ? cutToSafe(declared, highestSafe) : declared;
+}
+
+/**
+ * The tighter of a side's bounds and the end of the safe integers: an exclusive bound beyond the end
+ * gives way to it, and one inside it stands in for it.
+ */
+function cutToSafe({ inclusive, exclusive }: Side, { limit, tighter }: SafeEnd): Side {
+  const exclusiveStands = exclusive !== undefined && tighter(exclusive, limit) === exclusive;
+  const kept = exclusiveStands ? exclusive : undefined;
+  if (inclusive !== undefined) {
+    return { inclusive: tighter(inclusive, limit), exclusive: kept };
+  }
+  return { inclusive: exclusiveStands ? undefined : limit, exclusive: kept };
 }
 
 /** The formats JSON Schema defines otherwise than zod does, so a document that names them would be stricter. */

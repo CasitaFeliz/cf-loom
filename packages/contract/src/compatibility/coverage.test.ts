@@ -202,30 +202,26 @@ function describeMutations(mutations: readonly Mutation[]): string {
 }
 
 describe('compatibilityReportOf, every difference in the published text is a Change', () => {
-  test.each(examples)(
-    'every single-place mutation of %s that generate can write',
-    { timeout: 30_000 },
-    (example) => {
-      const declared = declaredSnapshotOf(example);
-      const baseline = publishedSnapshotOf(undefined, declared as Snapshot, publishedAt('1.0.0'));
-      const missed: string[] = [];
-      let checked = 0;
+  test.each(examples)('every single-place mutation of %s that generate can write', (example) => {
+    const declared = declaredSnapshotOf(example);
+    const baseline = publishedSnapshotOf(undefined, declared as Snapshot, publishedAt('1.0.0'));
+    const missed: string[] = [];
+    let checked = 0;
 
-      for (const mutation of mutationsOf(declared)) {
-        const proposed = writableAfter(declared, [mutation]);
-        if (proposed === undefined) {
-          continue;
-        }
-        checked++;
-        if (isUnnamed(baseline, proposed)) {
-          missed.push(describeMutations([mutation]));
-        }
+    for (const mutation of mutationsOf(declared)) {
+      const proposed = writableAfter(declared, [mutation]);
+      if (proposed === undefined) {
+        continue;
       }
+      checked++;
+      if (isUnnamed(baseline, proposed)) {
+        missed.push(describeMutations([mutation]));
+      }
+    }
 
-      expect(missed).toEqual([]);
-      expect(checked).toBeGreaterThan(25);
-    },
-  );
+    expect(missed).toEqual([]);
+    expect(checked).toBeGreaterThan(25);
+  });
 
   test.each(examples)(
     'seeded mutations of several places of %s that generate can write',
@@ -526,9 +522,7 @@ function publishProblemsOf(
 }
 
 describe('compatibilityReportOf, every difference in a seeded def graph’s history is a Change', () => {
-  test('150 histories of 7 versions, with alias defs in fields, arrays, records, tagged variants, a plain union’s option and a tuple’s rest', {
-    timeout: 30_000,
-  }, () => {
+  test('150 histories of 7 versions, with alias defs in fields, arrays, records, tagged variants, a plain union’s option and a tuple’s rest', () => {
     const graphs = seededGraphs(1);
     const problems: string[] = [];
 
@@ -699,23 +693,18 @@ describe('decodeSnapshot, a Baseline it decodes never makes the Check throw', ()
     return { baseline, declared };
   };
 
-  test.each(examples)(
-    'every single-place mutation of the Baseline %s publishes',
-    { timeout: 30_000 },
-    (example) => {
-      const { baseline, declared } = published(example);
+  test.each(examples)('every single-place mutation of the Baseline %s publishes', (example) => {
+    const { baseline, declared } = published(example);
 
-      const thrown = baselineMutationsOf(baseline).map((mutation) =>
-        thrownFor(baseline, [mutation], declared),
-      );
+    const thrown = baselineMutationsOf(baseline).map((mutation) =>
+      thrownFor(baseline, [mutation], declared),
+    );
 
-      expect(thrown.filter((line) => line !== undefined)).toEqual([]);
-    },
-  );
+    expect(thrown.filter((line) => line !== undefined)).toEqual([]);
+  });
 
   test.each(examples)(
     'seeded mutations of several places of the Baseline %s publishes',
-    { timeout: 30_000 },
     (example) => {
       const { baseline, declared } = published(example);
 

@@ -17,14 +17,37 @@ type Draw = {
 
 const numbers = [0, 1, 2, 3, 5, 0.5, -1, 10];
 
-/** Draws random zod schemas, nested up to a depth, from what a Contract commonly declares. */
-export function randomSchemas(next: () => number) {
+/**
+ * Draws random zod schemas, nested up to a depth, from what a Contract commonly declares; each
+ * member drawn passes through `annotate`, which draws from its own sequence, so one seed builds
+ * the same tree with annotations or without.
+ */
+export function randomSchemas(
+  next: () => number,
+  annotate: (schema: z.ZodType) => z.ZodType = (schema) => schema,
+) {
   const pick = <Value>(values: readonly Value[]): Value =>
     values[Math.floor(next() * values.length)] as Value;
   const draw: Draw = { next, pick };
   const schemaOf = (depth: number): z.ZodType =>
-    depth <= 0 || next() < 0.3 ? aLeaf(draw) : aComposite(draw, () => schemaOf(depth - 1));
+    annotate(
+      depth <= 0 || next() < 0.3 ? aLeaf(draw) : aComposite(draw, () => schemaOf(depth - 1)),
+    );
   return { schemaOf };
+}
+
+const exampleCandidates: readonly unknown[] = ['a', 'bb', 1, 2.5, true, null, [], {}];
+
+/** Describes a schema, or gives it an example it parses, at random from `next`'s sequence. */
+export function randomAnnotations(next: () => number) {
+  return (schema: z.ZodType): z.ZodType => {
+    const roll = next();
+    if (roll < 0.3) {
+      return schema.describe(next() < 0.5 ? 'p' : 'q');
+    }
+    const example = exampleCandidates.find((value) => schema.safeParse(value).success);
+    return roll < 0.45 && example !== undefined ? schema.meta({ examples: [example] }) : schema;
+  };
 }
 
 function aString({ next, pick }: Draw): z.ZodType {

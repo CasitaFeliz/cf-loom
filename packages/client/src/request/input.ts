@@ -163,7 +163,8 @@ function isEmptyList(value: unknown): boolean {
   return Array.isArray(value) && value.length === 0;
 }
 
-function isFields(value: unknown): value is Readonly<Record<string, unknown>> {
+/** Whether a value is a record of fields: an object that is neither `null` nor an array. */
+export function isFields(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

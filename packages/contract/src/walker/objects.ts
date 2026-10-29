@@ -1,10 +1,9 @@
 import { prototypeNames } from '../declarations/index.ts';
-import { inCanonicalJsonOrder } from './canonical-json.ts';
 import { catchallRefusalKeyOf, type DefOfType, defOf } from './def-types.ts';
 import { inside } from './location.ts';
 import type { Field, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
-import { shapeKey } from './shapes.ts';
+import { inShapeOrder, shapeKey } from './shapes.ts';
 import { fieldStep, indexStep, keyStep, valueStep } from './steps.ts';
 import {
   allWalked,
@@ -114,7 +113,7 @@ export function* walkIntersection(
   if (leftNode?.type === 'object' && rightNode?.type === 'object') {
     return mergedObjects(leftNode, rightNode, at);
   }
-  return walked({ type: 'allOf', items: inCanonicalJsonOrder(items.value) });
+  return walked({ type: 'allOf', items: inShapeOrder(items.value) });
 }
 
 /**

@@ -3,6 +3,7 @@ import type {
   DeclaredFieldsRule,
   GroupedOf,
   IsOneLiteral,
+  LiveOf,
   Refusal,
 } from '@cf-loom/contract/internal';
 import type { GivenHeaders } from './checks.ts';
@@ -27,9 +28,6 @@ type OwnEventOf<C extends ServiceContract> = Extract<GroupedOf<C, 'events'>, Eve
 
 /** The Command Message Versions a Root's Groups list, each with its exact type. */
 type OwnCommandOf<C extends ServiceContract> = Extract<GroupedOf<C, 'commands'>, Command>;
-
-/** The Message Versions that still work: Active and Deprecated, never Retired. */
-type LiveOf<M> = Exclude<M, { readonly lifecycle: 'retired' }>;
 
 /** The names of the Events a Root publishes: those with a version not Retired. */
 type PublishedNameOf<C extends ServiceContract> = LiveOf<OwnEventOf<C>>['name'];

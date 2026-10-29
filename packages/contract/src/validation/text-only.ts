@@ -10,6 +10,7 @@ import {
   type SchemaNode,
   shapeKey,
 } from '../walker/index.ts';
+import { sharedTextOf } from '../wire/index.ts';
 import {
   attachedGuardsOf,
   isInputPart,
@@ -20,6 +21,7 @@ import {
   slotAt,
   type TextIn,
   textOf,
+  writtenTextOf,
 } from '../written/index.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
@@ -125,11 +127,29 @@ function fieldFailures(
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
   }
   if (textTypes.includes(items.type)) {
-    return [];
+    return sharedTextFailures({ at: fieldAt, part }, name, items);
   }
   const lists = part === 'query' ? ', or a list of those' : '';
   const message = `${nouns[part]} travels as text: a string, number, boolean, literal or enum${lists}: ${name}`;
   return [failure(fieldAt, 'not-text', message)];
+}
+
+/**
+ * A text part's enum whose values travel as one text: the received text reads back as the first,
+ * so the other could never arrive.
+ */
+function sharedTextFailures(
+  { at, part }: { readonly at: Place; readonly part: TextIn },
+  name: string,
+  node: SchemaNode,
+): readonly DeclarationFailure[] {
+  const shared = node.type === 'enum' ? sharedTextOf(node.values) : undefined;
+  if (shared === undefined) {
+    return [];
+  }
+  const [first, second] = shared.map(writtenTextOf);
+  const message = `${nouns[part]}'s values each have a text of their own: ${name} has ${first} and ${second}`;
+  return [failure(at, 'shared-text', message)];
 }
 
 function partConflicts(

@@ -119,8 +119,10 @@ const businessCodes = resolved.filter(isBusinessRejection);
 nested through defs, lazies or wrappers, of Snapshot nodes through `ref`s, of failure trees or of nested JSON keeps
 the parts it has still to read in an array and loops over it, as `leadsBackWithNoNode` and `refusalsIn` do; a walk that
 must return to a part after reading what it holds keeps one frame per part on that array, as the walker's driver
-does. *Why:* the call stack is a few thousand frames, set by Node rather than by any rule of the Contract, so a read
-that recurses fails a Contract the documents allow, at a depth that shifts with the shape and with the field order.
+does. Nor does it pass a list read from a file or a request, or an author's value such as an example or an enum, as the
+arguments of one call (`push(...items)`): a call's arguments sit on the same stack. *Why:* the call stack is a few
+thousand frames, set by Node rather than by any rule of the Contract, so a read that recurses fails a Contract the
+documents allow, at a depth that shifts with the shape and with the field order.
 
 ```ts
 // bad
