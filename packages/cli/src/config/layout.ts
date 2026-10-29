@@ -54,7 +54,7 @@ export function layoutOf(written: unknown): LoadedLayout {
     }
     const refusal = pathRefusalOf(field, path);
     if (refusal !== undefined) {
-      return failed(refusal);
+      return failed(`layout.${field} ${refusal}: ${path}`);
     }
     paths[field] = path;
   }

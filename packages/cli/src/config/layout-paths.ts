@@ -1,4 +1,4 @@
-import { contractFolder, isUnderContract } from '../loading/index.ts';
+import { contractFolder, isUnderContract, sourceFolder } from '../loading/index.ts';
 import type { Layout } from './config.ts';
 
 /** A field of the layout: a kind of Handler path, or a generated file's. */
@@ -8,9 +8,6 @@ export type LayoutField = keyof Layout;
 const variables = ['group', 'name', 'version'] as const;
 
 type Variable = (typeof variables)[number];
-
-/** The folder a Service's code and generated files sit in. */
-export const layoutFolder = 'src';
 
 /** What a Handler's file name ends with. */
 export const handlerEnding = '.handler.ts';
@@ -89,6 +86,7 @@ export function filledPathOf(template: string, values: VariableValues): string {
   });
 }
 
+/** A rule a path meets: the clause a line about the path ends with when it breaks the rule. */
 type PathRule = (field: LayoutField, path: string) => string | undefined;
 
 /** The rules a path meets, in the order the first broken one is reported. */
@@ -101,7 +99,11 @@ const pathRules: readonly PathRule[] = [
   declarationRefusalOf,
 ];
 
-/** The first rule a field's path breaks, as the line says it, or none. */
+/**
+ * The first rule a path of a field breaks, as the clause that follows what the path is called in
+ * a line, or none: the same rules hold for a template at load, and for a path once it is filled
+ * or recorded.
+ */
 export function pathRefusalOf(field: LayoutField, path: string): string | undefined {
   for (const rule of pathRules) {
     const refusal = rule(field, path);
@@ -112,16 +114,16 @@ export function pathRefusalOf(field: LayoutField, path: string): string | undefi
   return undefined;
 }
 
-function locationRefusalOf(field: LayoutField, path: string): string | undefined {
-  if (path.startsWith(`${layoutFolder}/`) && !isUnderContract(path)) {
+function locationRefusalOf(_field: LayoutField, path: string): string | undefined {
+  if (path.startsWith(`${sourceFolder}/`) && !isUnderContract(path)) {
     return undefined;
   }
-  return `layout.${field} must be under ${layoutFolder}/ and outside ${contractFolder}/: ${path}`;
+  return `must be under ${sourceFolder}/ and outside ${contractFolder}/`;
 }
 
 function endingRefusalOf(field: LayoutField, path: string): string | undefined {
   const { ending } = fieldRules[field];
-  return path.endsWith(ending) ? undefined : `layout.${field} must end with ${ending}: ${path}`;
+  return path.endsWith(ending) ? undefined : `must end with ${ending}`;
 }
 
 function variableRefusalOf(field: LayoutField, path: string): string | undefined {
@@ -132,7 +134,7 @@ function variableRefusalOf(field: LayoutField, path: string): string | undefined
     return undefined;
   }
   const takes = taken.length === 0 ? 'takes no variable' : `takes only ${joinedOf(taken)}`;
-  return `layout.${field} holds {${foreign}}, but ${owner} ${takes}: ${path}`;
+  return `holds {${foreign}}, but ${owner} ${takes}`;
 }
 
 /** Variables as a sentence names them: `{name}`, `{name} and {version}`, `{group}, {name} and {version}`. */
@@ -142,12 +144,12 @@ function joinedOf(taken: readonly Variable[]): string {
   return written.length === 1 ? last : `${written.slice(0, -1).join(', ')} and ${last}`;
 }
 
-function segmentRefusalOf(field: LayoutField, path: string): string | undefined {
+function segmentRefusalOf(_field: LayoutField, path: string): string | undefined {
   const [, ...segments] = path.split('/');
   if (segments.every(isPortableSegment)) {
     return undefined;
   }
-  return `layout.${field} has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .: ${path}`;
+  return 'has a segment that is empty, starts with a dot, or holds a character other than a-z, 0-9, -, _ and .';
 }
 
 /** A segment is text once variables count: every value a variable takes starts with a-z or 0-9. */
@@ -156,23 +158,23 @@ function isPortableSegment(segment: string): boolean {
   return segment !== '' && !segment.startsWith('.') && portableText.test(literal);
 }
 
-function folderRefusalOf(field: LayoutField, path: string): string | undefined {
+function folderRefusalOf(_field: LayoutField, path: string): string | undefined {
   const folders = path.split('/').slice(0, -1);
   const isNamedLikeFile = (folder: string) =>
     folder.endsWith(handlerEnding) || folder.endsWith(generatedEnding);
   if (!folders.some(isNamedLikeFile)) {
     return undefined;
   }
-  return `layout.${field} has a folder ending ${handlerEnding} or ${generatedEnding}: ${path}`;
+  return `has a folder ending ${handlerEnding} or ${generatedEnding}`;
 }
 
 /** TypeScript reads `x.d.handler.ts` as the declarations of `x.handler`, not as a module. */
-function declarationRefusalOf(field: LayoutField, path: string): string | undefined {
+function declarationRefusalOf(_field: LayoutField, path: string): string | undefined {
   const fileName = path.split('/').at(-1) ?? '';
   if (!fileName.includes('.d.')) {
     return undefined;
   }
-  return `layout.${field} has a file name holding .d., which TypeScript reads as a declaration file: ${path}`;
+  return 'has a file name holding .d., which TypeScript reads as a declaration file';
 }
 
 /** Whether a key names a field of the layout. */
