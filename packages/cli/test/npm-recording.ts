@@ -1,0 +1,54 @@
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { inheritedPath } from './npm-environment.ts';
+
+/** A call the recording npm got: its arguments, and the SHA-512 (hex) of the file it was asked to `publish`. */
+export type RecordedNpmCall = {
+  readonly args: readonly string[];
+  readonly publishedSha512: string | null;
+};
+
+/** An `npm` that records its calls, the PATH that finds it before the real one, and the variables it reads. */
+export type RecordingNpm = {
+  readonly path: string;
+  readonly env: Readonly<Record<string, string>>;
+  readonly calls: () => readonly RecordedNpmCall[];
+};
+
+/** The variables the recording npm reads: where it logs, and the PATH that finds the npm it runs. */
+const callsVariable = 'CF_LOOM_NPM_CALLS';
+const realPathVariable = 'CF_LOOM_NPM_REAL_PATH';
+
+const script = [
+  '#!/usr/bin/env node',
+  "const { appendFileSync, readFileSync, statSync } = require('node:fs');",
+  "const { createHash } = require('node:crypto');",
+  "const { spawnSync } = require('node:child_process');",
+  'const args = process.argv.slice(2);',
+  "const file = args[0] === 'publish' ? args[1] : undefined;",
+  'const isFile = file !== undefined && statSync(file).isFile();',
+  'const bytes = isFile ? readFileSync(file) : undefined;',
+  "const sha = bytes === undefined ? null : createHash('sha512').update(bytes).digest('hex');",
+  `appendFileSync(process.env.${callsVariable}, JSON.stringify({ args, publishedSha512: sha }) + '\\n');`,
+  `const real = { ...process.env, PATH: process.env.${realPathVariable} };`,
+  "const ran = spawnSync('npm', args, { stdio: 'inherit', env: real });",
+  'process.exit(ran.status ?? 1);',
+].join('\n');
+
+/** An `npm` in `folder` that appends each call to a log and then runs the npm the developer has. */
+export function anNpmRecording(folder: string): RecordingNpm {
+  const bin = join(folder, 'recording-npm');
+  const log = join(folder, 'npm-calls.jsonl');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'npm'), script);
+  chmodSync(join(bin, 'npm'), 0o755);
+  const calls = () =>
+    existsSync(log)
+      ? readFileSync(log, 'utf8')
+          .trim()
+          .split('\n')
+          .map((line) => JSON.parse(line))
+      : [];
+  const env = { [callsVariable]: log, [realPathVariable]: inheritedPath };
+  return { path: `${bin}:${inheritedPath}`, env, calls };
+}

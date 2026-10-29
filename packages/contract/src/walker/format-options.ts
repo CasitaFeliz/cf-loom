@@ -1,11 +1,17 @@
 import { z } from 'zod';
 import { canonicalJson } from './canonical-json.ts';
 import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
+import type { Regex } from './nodes.ts';
+import { plainRegexOf } from './plain-regexes.ts';
 
-/** The options of a format zod builds, or a pattern of the author's in place of zod's. */
+/**
+ * The options of a format zod builds, a pattern of the author's in place of zod's, or a regex the
+ * def holds that is no plain RegExp.
+ */
 export type FormatOptions =
   | { readonly kind: 'options'; readonly declared: Readonly<Record<string, unknown>> }
-  | { readonly kind: 'custom-pattern' };
+  | { readonly kind: 'custom-pattern' }
+  | { readonly kind: 'regex-not-plain' };
 
 type Option = [string, unknown];
 
@@ -76,17 +82,43 @@ export function formatOptionsOf(check: DeclaredCheck): FormatOptions | undefined
   const def = check.def as unknown as BuiltDef;
   const keys = optionKeysByFormat.get(String(def.format)) ?? [];
   const declared = keys.map((key): Option => [key, def[key]]).filter(isDeclared);
+  if (!holdsOnlyPlainRegexes(def, declared)) {
+    return { kind: 'regex-not-plain' };
+  }
   const reference = check.rebuilt({ ...baseOf(def), ...Object.fromEntries(declared) });
   const defaults = check.rebuilt(baseOf(def));
   if (reference === undefined || defaults === undefined) {
     return undefined;
   }
-  if (!samePattern(def.pattern, reference.pattern)) {
+  if (!samePattern(plainRegexOf(def.pattern), plainRegexOf(reference.pattern))) {
     return { kind: 'custom-pattern' };
   }
   const format: DeclaredFormat = { check, declared, reference, defaults };
-  const options = declared.filter((option) => isNonDefault(option, format)).map(jsonOption);
+  const options = declared.filter((option) => isNonDefault(option, format)).map(judgedOption);
   return { kind: 'options', declared: Object.fromEntries(options) };
+}
+
+/**
+ * Whether every regex a format's def holds is a plain RegExp, judged before anything of it is
+ * read, since zod tests a value through that regex's own `test`.
+ */
+function holdsOnlyPlainRegexes(def: BuiltDef, declared: readonly Option[]): boolean {
+  const isPatternPlain = def.pattern === undefined || plainRegexOf(def.pattern) !== undefined;
+  return isPatternPlain && declared.every(isPlainWhereRegex);
+}
+
+/** Whether an option a Snapshot holds as a regex is a plain RegExp; any other option is. */
+function isPlainWhereRegex([key, value]: Option): boolean {
+  return !isRegexOption(key) || plainRegexOf(value) !== undefined;
+}
+
+/** An option as a Snapshot holds it, a regex as its source and flags. */
+function judgedOption([key, value]: Option): Option {
+  return isRegexOption(key) ? [key, plainRegexOf(value)] : [key, value];
+}
+
+function isRegexOption(key: string): boolean {
+  return isFormatOptionKey(key) && formatOptionValues[key] === regexOption;
 }
 
 /**
@@ -96,9 +128,7 @@ export function formatOptionsOf(check: DeclaredCheck): FormatOptions | undefined
 function isNonDefault(option: Option, format: DeclaredFormat): boolean {
   const [key] = option;
   const { check, declared, reference } = format;
-  if (
-    canonicalJson(jsonOption(option)) === canonicalJson(jsonOption([key, defaultOf(key, format)]))
-  ) {
+  if (canonicalJson(judgedOption(option)) === canonicalJson([key, defaultOf(key, format)])) {
     return false;
   }
   if (reference.pattern === undefined) {
@@ -107,13 +137,16 @@ function isNonDefault(option: Option, format: DeclaredFormat): boolean {
   const others = declared.filter(([name]) => name !== key);
   const def = check.def as unknown as BuiltDef;
   const withoutOption = check.rebuilt({ ...baseOf(def), ...Object.fromEntries(others) });
-  return !samePattern(reference.pattern, withoutOption?.pattern);
+  return !samePattern(plainRegexOf(reference.pattern), plainRegexOf(withoutOption?.pattern));
 }
 
-/** zod's default for an option; zod reads a boolean option left out as `false`. */
+/**
+ * zod's default for an option, as a Snapshot holds it; zod reads a boolean option left out as
+ * `false`.
+ */
 function defaultOf(key: string, format: DeclaredFormat): unknown {
   const declared = format.declared.find(([name]) => name === key)?.[1];
-  const zodDefault = format.defaults[key];
+  const [, zodDefault] = judgedOption([key, format.defaults[key]]);
   return zodDefault === undefined && typeof declared === 'boolean' ? false : zodDefault;
 }
 
@@ -121,19 +154,10 @@ function baseOf(def: BuiltDef): BuiltDef {
   return { type: 'string', check: 'string_format', format: def.format };
 }
 
-function samePattern(left: unknown, right: unknown): boolean {
-  const leftPattern = left instanceof RegExp ? left : undefined;
-  const rightPattern = right instanceof RegExp ? right : undefined;
-  return leftPattern?.source === rightPattern?.source && leftPattern?.flags === rightPattern?.flags;
+function samePattern(left: Regex | undefined, right: Regex | undefined): boolean {
+  return left?.source === right?.source && left?.flags === right?.flags;
 }
 
 function isDeclared([, value]: Option): boolean {
   return value !== undefined;
-}
-
-function jsonOption([key, value]: Option): Option {
-  if (value instanceof RegExp) {
-    return [key, { source: value.source, flags: value.flags }];
-  }
-  return [key, value];
 }

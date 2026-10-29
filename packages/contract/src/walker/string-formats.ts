@@ -2,14 +2,15 @@ import type { BuiltDef, DeclaredCheck } from './check-defs.ts';
 import { refusedCheck, refusedRegexBuiltFormat } from './check-names.ts';
 import { formatOptionsOf } from './format-options.ts';
 import { isStringFormat, regexBuiltFormatOf, type StringFormat } from './format-schemas.ts';
-import type { Regex, StringNode } from './nodes.ts';
+import type { StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedStringFormat } from './not-allowed.ts';
+import { plainRegexOf } from './plain-regexes.ts';
 import { type Reached, type Walked, walked } from './walked.ts';
 
 /** What the walker reads of a string format check, from zod and `zod/mini` alike. */
 type FormatDef = BuiltDef & {
   readonly format: string;
-  readonly pattern?: RegExp | undefined;
+  readonly pattern?: unknown;
   readonly fn?: ((value: string) => unknown) | undefined;
   readonly normalize?: boolean | undefined;
 };
@@ -36,7 +37,7 @@ export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<Stri
     return notAllowed(at, functionFormatRefusalOf(def.format));
   }
   if (def.format === 'regex' && def.pattern !== undefined) {
-    return walked({ regex: regexOf(def.pattern) });
+    return regexCheckOf(def.pattern, at);
   }
   if (!isKnownFormat(def)) {
     return notAllowed(at, refusedCheck(check.def));
@@ -44,8 +45,10 @@ export function formatOf(check: DeclaredCheck, at: Reached): Walked<Partial<Stri
   return builtFormatOf(check, def, at);
 }
 
-function regexOf(pattern: RegExp): Regex {
-  return { source: pattern.source, flags: pattern.flags };
+/** A `.regex()` check, whose regex zod tests through its own `test`: data only when it is a plain RegExp. */
+function regexCheckOf(pattern: unknown, at: Reached): Walked<Partial<StringNode>> {
+  const regex = plainRegexOf(pattern);
+  return regex === undefined ? notAllowed(at, refused.plainRegex) : walked({ regex });
 }
 
 /** A format check that runs a function: a format zod builds from a regex by its spellings, else by its name. */
@@ -66,11 +69,14 @@ function builtFormatOf(
   if (options === undefined) {
     return notAllowed(at, refusedStringFormat(def.format));
   }
-  if (options.kind === 'custom-pattern') {
-    return notAllowed(at, refused.customPattern);
+  switch (options.kind) {
+    case 'regex-not-plain':
+      return notAllowed(at, refused.plainRegex);
+    case 'custom-pattern':
+      return notAllowed(at, refused.customPattern);
+    case 'options':
+      return Object.keys(options.declared).length === 0
+        ? walked({ format: def.format })
+        : walked({ format: def.format, formatOptions: options.declared });
   }
-  if (Object.keys(options.declared).length === 0) {
-    return walked({ format: def.format });
-  }
-  return walked({ format: def.format, formatOptions: options.declared });
 }

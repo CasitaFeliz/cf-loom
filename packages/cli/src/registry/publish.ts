@@ -2,26 +2,50 @@ import { ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import type { DistTag } from '../versioning/index.ts';
 import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { packedTarballOf, publishedSnapshotIn } from './published-tarball.ts';
+import type { ExpectedSnapshot } from './versions.ts';
 
-/** A staged folder to publish as a package's version, and the dist-tag it takes. */
-export type Publishing = {
+/** A staged folder to pack, the folder its tarball goes in, and the Snapshot the tarball must hold. */
+export type Packing = {
   readonly folder: string;
-  readonly packageName: string;
-  readonly version: string;
+  readonly into: string;
+  readonly expected: ExpectedSnapshot;
+};
+
+/** A tarball to publish as a package's version, called by its spec, and the dist-tag it takes. */
+export type Publishing = {
+  readonly file: string;
+  readonly spec: string;
   readonly tag: DistTag;
 };
 
 /**
- * Publishes a folder through the organization's npm, in the project's directory, with no
- * lifecycle script, and never naming a registry: where it goes is the organization's npm
- * configuration.
+ * Packs a staged folder into the one tarball that will be published and reads it as `check` will
+ * read the version from the registry, so that a package `check` cannot read is never published.
  */
-export async function publishFolder(
+export async function packedForPublish(
   npm: NpmPlace,
-  { folder, packageName, version, tag }: Publishing,
+  { folder, into, expected }: Packing,
+): Promise<{ readonly kind: 'packed'; readonly file: string } | Failed> {
+  const packed = await packedTarballOf(npm, { spec: expected.spec, target: folder }, into);
+  if (packed.kind === 'failed') {
+    return packed;
+  }
+  const read = publishedSnapshotIn(packed.bytes, expected);
+  return read.kind === 'failed' ? read : { kind: 'packed', file: packed.file };
+}
+
+/**
+ * Publishes a tarball through the organization's npm, in the project's directory, with no
+ * lifecycle script, and never naming a registry: where it goes is the organization's npm
+ * configuration, and the `publishConfig` in the tarball's package.json.
+ */
+export async function publishTarball(
+  npm: NpmPlace,
+  { file, spec, tag }: Publishing,
 ): Promise<{ readonly kind: 'published' } | Failed> {
-  const label = `npm publish ${packageName}@${version}`;
-  const args = ['publish', folder, '--tag', tag, '--ignore-scripts'];
+  const label = `npm publish ${spec}`;
+  const args = ['publish', file, '--tag', tag, '--ignore-scripts'];
   const run = await jsonFromNpm(npm, { label, args });
   switch (run.kind) {
     case 'json':
