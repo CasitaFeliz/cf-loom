@@ -18,7 +18,7 @@ type StagedContent = {
 
 /**
  * Where a package was staged, or why it could not be and the lines naming a folder it could not
- * remove. `folder` is the package, which `npm publish` and `tsc` get; it sits under `staging` in
+ * remove. `folder` is the package, which `tsc` and `npm pack` get; it sits under `staging` in
  * a `node_modules`, so Node finds it as it finds an installed package.
  */
 export type Staged =
