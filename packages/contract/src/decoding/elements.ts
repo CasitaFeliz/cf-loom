@@ -68,7 +68,7 @@ const endpointFields = {
   success,
   rejections: inCanonicalOrder(z.string(), byCodePoint),
 };
-const endpointDeprecation = { deprecatedAt: instantText.exactOptional() };
+const endpointDeprecation = { deprecatedAt: instantText };
 
 /** Format 1's Endpoint in a published Snapshot: declared, or its tombstone with its name. */
 export const publishedEndpoint: z.ZodType<PublishedEndpoint> = published(

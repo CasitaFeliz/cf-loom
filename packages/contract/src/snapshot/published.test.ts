@@ -192,7 +192,7 @@ describe('the published Snapshot’s types', () => {
   });
 
   test('the Snapshot a decoder returns is a PublishedSnapshot', () => {
-    const decoded = decodeSnapshot(canonicalTextOf(aPublishedService()));
+    const decoded = decodeSnapshot(canonicalTextOf(aPublishedService({ groups: {} })));
 
     if (decoded.kind === 'decoded') {
       expectTypeOf(decoded.snapshot).toEqualTypeOf<PublishedSnapshot>();
