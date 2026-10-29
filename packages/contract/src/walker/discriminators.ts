@@ -117,7 +117,9 @@ function valuesOfTagged(union: DefOfType<'union'>, key: string): ReadonlySet<unk
       }
     } else if (variant !== undefined && isTaggedDef(variant) && !met.has(variant)) {
       met.add(variant);
-      pending.push(...variant.options);
+      for (const option of variant.options) {
+        pending.push(option);
+      }
     }
   }
   return values;
