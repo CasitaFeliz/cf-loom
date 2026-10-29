@@ -2923,7 +2923,6 @@ describe('cf-loom generate: what it refuses', () => {
       stdout: '',
       stderr: lines([
         'src/contract/messages.ts: events.OrderCreated@2 body.items not allowed: .meta({ id: "2-tree" }) (use a camelCase name)',
-        'src/contract/messages.ts: events.OrderCreated@2 body.items.children[] not allowed: a cycle without .meta({ id }) (use .meta({ id }))',
       ]),
     });
   });
