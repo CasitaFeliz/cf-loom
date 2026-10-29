@@ -202,7 +202,7 @@ merged since the last sweep, and before each release candidate. The sweep reads 
 agent per feature and lens: every rule and fact in one place (C1), duplication across packages, every document against
 the code, whether each feature is still worth its cost for v1, and correctness at the edges, with the list of
 [1. Plan](#1-plan), on the platforms the packages run on (a browser for `contract` and `client`, a real Broker for
-messaging).
+messaging). Its agents build and run tests at most four at once ([6. Next](#6-next)).
 
 Before it proposes a finding, the sweep sorts it against the plan comments of the closed issues in its area and the
 open issues: new, incomplete (naming the issue that left it), decided (naming the decision), or already filed. It
