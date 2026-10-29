@@ -282,6 +282,35 @@ describe('the README Service written out', () => {
     expect(fileOf(directory, 'src/user.ts')).toContain("import { more } from './a.ts';");
   });
 
+  test('a word that only a string or a comment holds is no import', () => {
+    const block = ['// src/label.ts', "export const label = 'orders'; // the orders"].join('\n');
+    const repository = aRepository(
+      { handlers: aReadme('packages/handlers/README.md', block).markdown },
+      { 'src/service-code.ts': 'export const orders = [];' },
+    );
+    const directory = join(repository, '.readme-service');
+
+    writeReadmeService(directory, repository);
+
+    expect(fileOf(directory, 'src/label.ts')).not.toContain('import { orders }');
+  });
+
+  test('a test of the scope is written as it is, with no import added', () => {
+    const repository = aRepository(
+      {},
+      {
+        'src/service-code.ts': 'export const orders = [];',
+        'test/x.readme.test.ts':
+          'export function count() {\n  const orders = 1;\n  return orders;\n}',
+      },
+    );
+    const directory = join(repository, '.readme-service');
+
+    writeReadmeService(directory, repository);
+
+    expect(fileOf(directory, 'test/x.readme.test.ts')).not.toContain('import');
+  });
+
   test('a name a block without a path declares is no import for another block', () => {
     const readme = aReadme('FIXTURE.md', 'const shared = 1;', 'export const again = shared;');
 

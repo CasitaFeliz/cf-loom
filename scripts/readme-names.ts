@@ -1,3 +1,5 @@
+const commentsAndStrings =
+  /\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
 const declarations =
   /^(?:export\s+)?(?:declare\s+)?(?:default\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum)\s+(\w+)/gm;
 const exportedDeclarations =
@@ -34,9 +36,17 @@ export function ownNames(source: string): string[] {
   return names.filter((name) => name !== '');
 }
 
-/** Every word of a file that could name something. */
+/** Every word of a file's code that could name something: its comments and strings hold none, but a template's `${…}` do. */
 export function mentionedNames(source: string): Set<string> {
-  return new Set(source.match(/[A-Za-z_$][\w$]*/g) ?? []);
+  const code = source.replaceAll(commentsAndStrings, expressionsOf);
+  return new Set(code.match(/[A-Za-z_$][\w$]*/g) ?? []);
+}
+
+function expressionsOf(commentOrString: string): string {
+  const inserted = commentOrString.startsWith('`')
+    ? commentOrString.matchAll(/\$\{([^}]*)\}/g)
+    : [];
+  return [...inserted].map((match) => match[1]).join(' ');
 }
 
 /** The name an entry of a destructuring binds: `a`, `a = 1`, `a: b` and `...a` bind `a`, `a`, `b` and `a`. */

@@ -97,10 +97,11 @@ function isImportable(path: string, file: ProjectFile): boolean {
 
 /**
  * The file with an import of each name it mentions and does not declare, after its code so lines
- * stay. A snippet no path names also exports what it declares, for the tests that run it.
+ * stay. A snippet no path names also exports what it declares, for the tests that run it; a test
+ * is written in full and left as it is.
  */
 export function completed(path: string, file: ProjectFile, providers: Providers): string {
-  if (!path.endsWith('.ts')) {
+  if (!path.endsWith('.ts') || path.startsWith('test/')) {
     return file.source;
   }
   const own = declaredNames(file.source);

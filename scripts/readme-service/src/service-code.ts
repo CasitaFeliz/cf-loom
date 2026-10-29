@@ -1,8 +1,12 @@
+import { client } from '@cf-loom/client';
 import type { MessageMeta } from '@cf-loom/handlers';
-import type { Broker, CommandSender, EventPublisher } from '@cf-loom/messaging';
+import { type Broker, messaging } from '@cf-loom/messaging';
 import type { BrokerLimits, BrokerPlan, JetStreamConnecting } from '@cf-loom/messaging/jetstream';
-import type { contract } from './contract/index.ts';
+import { paymentsDependency } from './contract/dependencies/payments-service.dependency.ts';
+import { contract } from './contract/index.ts';
 import type { Resources } from './resources.ts';
+
+type Money = { amount: number; currency: string };
 
 export type Orders = {
   find(
@@ -12,7 +16,7 @@ export type Orders = {
     | {
         id: string;
         status: 'pending' | 'paid';
-        total: { amount: number; currency: string };
+        total: Money;
         locked: boolean;
         lockedAt: string;
       }
@@ -23,28 +27,93 @@ export type Callers = { byKey(key: string | undefined): Promise<{ id: string } |
 export type Permissions = { of(userId: string): Promise<string[]> };
 export type Notifications = { send(paymentId: string): Promise<void> };
 
-export declare function ordersRepository(): Promise<Orders>;
-export declare function mongoOrders(): Promise<Orders>;
-export declare function mongoCallers(): Promise<Callers>;
-export declare function mongoPermissions(): Promise<Permissions>;
-export declare function mongoNotifications(): Promise<Notifications>;
-export declare function preflight(request: Request): Response;
+export const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
+export const baseUrl = 'http://payments.test';
 
-export declare const resources: Resources;
-export declare const orders: Orders;
-export declare const notifications: Notifications;
-export declare const ORDER_ID: string;
-export declare const baseUrl: string;
-export declare const broker: Broker;
-export declare const plan: BrokerPlan;
-export declare const limits: BrokerLimits;
-export declare const connecting: JetStreamConnecting;
-export declare const newOrder: { customerId: string; total: { amount: number; currency: string } };
-export declare const body: { paymentId: string; method: 'card' | 'transfer' };
+const stored = {
+  id: ORDER_ID,
+  callerId: 'c-1',
+  status: 'paid',
+  total: { amount: 1200, currency: 'EUR' },
+  locked: false,
+  lockedAt: '2026-10-18T10:00:00Z',
+} as const;
+const sent: string[] = [];
 
-export declare const publisher: EventPublisher<typeof contract>;
-export declare const sender: CommandSender<typeof contract>;
-export declare const orderId: string;
-export declare const total: { amount: number; currency: string };
-export declare const order: { id: string };
-export declare const meta: MessageMeta;
+export const orders: Orders = {
+  find: async (orderId, callerId) =>
+    orderId === stored.id && callerId === stored.callerId ? stored : undefined,
+};
+export const callers: Callers = {
+  byKey: async (key) => (key === 'k-1' ? { id: 'c-1' } : undefined),
+};
+export const permissions: Permissions = { of: async () => ['orders:edit'] };
+export const notifications: Notifications & { readonly sent: readonly string[] } = {
+  send: async (paymentId) => void sent.push(paymentId),
+  sent,
+};
+
+/** Puts what the Service's code kept back as it began, for a test's `beforeEach`. */
+export function resetServiceCode(): void {
+  sent.length = 0;
+}
+
+export async function ordersRepository(): Promise<Orders> {
+  return orders;
+}
+export async function mongoOrders(): Promise<Orders> {
+  return orders;
+}
+export async function mongoCallers(): Promise<Callers> {
+  return callers;
+}
+export async function mongoPermissions(): Promise<Permissions> {
+  return permissions;
+}
+export async function mongoNotifications(): Promise<Notifications> {
+  return notifications;
+}
+export function preflight(_request: Request): Response {
+  return new Response(null, { status: 204 });
+}
+
+export const broker: Broker = {
+  connect: async () => ({
+    publish: async () => ({ duplicate: false }),
+    consume: async () => undefined,
+    close: async () => undefined,
+  }),
+};
+const running = await messaging(contract, broker);
+export const publisher = running.publisher;
+export const sender = running.sender;
+
+export const resources: Resources = {
+  orders,
+  callers,
+  permissions,
+  payments: client(paymentsDependency, { baseUrl }),
+  notifications,
+  publisher,
+  sender,
+};
+
+export const plan: BrokerPlan = { prefix: null, streams: {}, durableConsumers: {} };
+export const limits: BrokerLimits = {};
+export const connecting: JetStreamConnecting = {
+  connect: () => Promise.reject(new Error('The README Service has no NATS to connect to')),
+};
+
+export const total: Money = { amount: 1200, currency: 'EUR' };
+export const orderId = ORDER_ID;
+export const order = { id: ORDER_ID };
+export const newOrder = { customerId: '5d0b2a10-6f35-4c43-9c1e-0a1b2c3d4e5f', total };
+export const body = { paymentId: 'pay-1', method: 'card' } as const;
+export const meta: MessageMeta = {
+  messageId: 'event.PaymentSettled.v1:f-1',
+  factId: 'f-1',
+  deliveryCount: 1,
+  lastAttempt: false,
+  headers: { traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01' },
+  signal: new AbortController().signal,
+};

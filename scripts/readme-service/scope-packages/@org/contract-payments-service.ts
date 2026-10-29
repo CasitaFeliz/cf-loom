@@ -1,4 +1,12 @@
-import { openEnumReader, providedEndpoint, providedEvent } from '@cf-loom/contract';
+import {
+  defineEndpoint,
+  defineGroup,
+  defineService,
+  openEnumReader,
+  providedEndpoint,
+  providedEvent,
+} from '@cf-loom/contract';
+import { exportedCutOf, identityOf, snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 
 const payments = {
@@ -15,21 +23,42 @@ const payments = {
   },
 } as const;
 
-export const getPaymentEndpoint = providedEndpoint(
-  payments,
-  {
-    name: 'getPayment',
-    method: 'GET',
-    path: '/payments/:paymentId',
-    visibility: 'public',
-    description: 'One payment by id',
-    input: { params: z.object({ paymentId: z.string() }) },
-    success: { status: 200, body: z.object({ paymentId: z.string() }) },
-  },
-  null,
-);
+const getPayment = defineEndpoint({
+  name: 'getPayment',
+  method: 'GET',
+  path: '/payments/:paymentId',
+  visibility: 'public',
+  description: 'One payment by id',
+  input: { params: z.object({ paymentId: z.string() }) },
+  success: { status: 200, body: z.object({ paymentId: z.string() }) },
+});
 
-export const paymentSettledEventV1 = providedEvent('payments-service', {
+/** The Snapshot the Provider exports, from which its Contract Package cuts each Endpoint. */
+function exportedSnapshot() {
+  const group = defineGroup({ name: 'payments', description: 'Payments', endpoints: [getPayment] });
+  const root = defineService({ name: payments.name, groups: [group] });
+  const rootPackage = {
+    packageName: payments.name,
+    packages: [],
+    contractPackages: [],
+    rootExports: {},
+  };
+  const validated = validateRoot(root, rootPackage);
+  if (validated.kind !== 'valid') {
+    throw new Error(`The payments Contract is invalid: ${JSON.stringify(validated.failures)}`);
+  }
+  const snapshot = snapshotOf(validated);
+  if (snapshot.kind !== 'service') {
+    throw new Error('The payments Contract is no Service');
+  }
+  return snapshot;
+}
+
+const cut = exportedCutOf(exportedSnapshot(), identityOf(getPayment.method, getPayment.path));
+
+export const getPaymentEndpoint = providedEndpoint(payments, getPayment, cut);
+
+export const paymentSettledEventV1 = providedEvent(payments.name, {
   name: 'PaymentSettled',
   version: 1,
   visibility: 'internal',
