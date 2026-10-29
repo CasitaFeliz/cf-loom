@@ -315,7 +315,7 @@ export {
   successResponseOf,
   textOfValue,
   textPartsOf,
-  textTravelsAs,
+  textTravel,
   transportHeaderFitOf,
   travelingFaultOf,
   withDeprecation,

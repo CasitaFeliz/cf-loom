@@ -6,15 +6,7 @@ import {
   type SchemaNode,
   shapeKey,
 } from '../walker/index.ts';
-import {
-  isHeaderText,
-  isQueryText,
-  isSegmentText,
-  isTextValue,
-  sharedTextOf,
-  textOfValue,
-  textTravelsAs,
-} from '../wire/index.ts';
+import { isTextValue, sharedTextOf, textOfValue, textTravel } from '../wire/index.ts';
 import {
   attachedGuardsOf,
   isObjectPart,
@@ -25,7 +17,7 @@ import {
   textOf,
   writtenTextOf,
 } from '../written/index.ts';
-import { listOf } from './closed-values.ts';
+import { joinedOf } from './closed-values.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { headerNameFailures } from './header-names.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
@@ -124,13 +116,6 @@ function sharedTextFailures(
   return [failure(at, 'shared-text', message)];
 }
 
-/** What each text part carries: the check the runtime sends by. */
-const isCarriedIn: Readonly<Record<TextIn, (text: string) => boolean>> = {
-  params: isSegmentText,
-  query: isQueryText,
-  headers: isHeaderText,
-};
-
 /**
  * A text part's enum holding a value whose text its part cannot carry: no Caller can send it and
  * no Outcome holding it is ever valid.
@@ -140,15 +125,16 @@ function unsendableTextFailures(
   name: string,
   node: SchemaNode,
 ): readonly DeclarationFailure[] {
+  const { isCarried, travelsAs } = textTravel[part];
   const unsendable =
     node.type === 'enum'
-      ? node.values.filter(isTextValue).filter((value) => !isCarriedIn[part](textOfValue(value)))
+      ? node.values.filter(isTextValue).filter((value) => !isCarried(textOfValue(value)))
       : [];
   if (unsendable.length === 0) {
     return [];
   }
-  const values = listOf(unsendable.map(writtenTextOf), 'and');
-  const message = `${nouns[part]}'s values each travel as ${textTravelsAs[part]}: ${name} has ${values}`;
+  const values = joinedOf(unsendable.map(writtenTextOf), 'and');
+  const message = `${nouns[part]}'s values each travel as ${travelsAs}: ${name} has ${values}`;
   return [failure(at, 'unsendable-text', message)];
 }
 

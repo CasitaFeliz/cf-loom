@@ -51,7 +51,7 @@ export {
   reservedCodeFaults,
   travelingFaultOf,
 } from './envelopes.ts';
-export { headerTextsOf, isHeaderText } from './header-text.ts';
+export { headerTextsOf } from './header-text.ts';
 export type { Http } from './http.ts';
 export { kebabCaseOf } from './identifiers.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
@@ -88,5 +88,5 @@ export type { TextAcceptance } from './text-acceptance.ts';
 export { textAcceptanceOf } from './text-acceptance.ts';
 export type { TextSource } from './text-parts.ts';
 export { headerValuesOf, textPartsOf } from './text-parts.ts';
-export { textTravelsAs } from './text-travel.ts';
+export { textTravel } from './text-travel.ts';
 export { isQueryText, isSegmentText, segmentOf } from './url-text.ts';

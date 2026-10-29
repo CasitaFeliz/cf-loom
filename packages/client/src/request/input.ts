@@ -2,13 +2,11 @@ import type { Endpoint } from '@cf-loom/contract';
 import {
   headerTextsOf,
   type InputIssue,
-  isQueryText,
-  isSegmentText,
   isTextValue,
   notJsonContentType,
   readingOf,
   textOfValue,
-  textTravelsAs,
+  textTravel,
 } from '@cf-loom/contract/internal';
 
 /** An Input's parts as parsed, unknown keys stripped, by the field a Caller passes each under. */
@@ -114,24 +112,26 @@ function sentFieldsOf(
 
 /** A path param whose text cannot arrive as its own segment. */
 function paramIssuesOf(params: Readonly<Record<string, unknown>>): readonly InputIssue[] {
-  const unsendable = Object.entries(params).filter(([, value]) => !isSegmentText(textOf(value)));
+  const unsendable = Object.entries(params).filter(
+    ([, value]) => !textTravel.params.isCarried(textOf(value)),
+  );
   return unsendable.map(([name]) => ({
     part: 'input.params',
     path: [name],
     code: 'invalid_format',
-    message: `The path param cannot travel as ${textTravelsAs.params}`,
+    message: `The path param cannot travel as ${textTravel.params.travelsAs}`,
   }));
 }
 
 /** A query value, or a list's item, whose text cannot arrive as itself. */
 function queryIssuesOf(query: Readonly<Record<string, unknown>>): readonly InputIssue[] {
   const items = Object.entries(query).flatMap(([name, value]) => itemsOf(name, value));
-  const unsendable = items.filter(([, item]) => !isQueryText(textOf(item)));
+  const unsendable = items.filter(([, item]) => !textTravel.query.isCarried(textOf(item)));
   return unsendable.map(([path]) => ({
     part: 'input.query',
     path,
     code: 'invalid_format',
-    message: `The query value cannot travel as ${textTravelsAs.query}`,
+    message: `The query value cannot travel as ${textTravel.query.travelsAs}`,
   }));
 }
 
