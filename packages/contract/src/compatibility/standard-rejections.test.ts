@@ -183,7 +183,7 @@ describe('compatibilityReportOf, a Service’s Standard Rejections', () => {
 });
 
 describe('compatibilityReportOf, a Definitions Package’s Standard Rejections', () => {
-  test('a Standard Rejection resolving to another code is one Neutral code-changed, Public, beside the code it adds', () => {
+  test('a Standard Rejection resolving to another code is one Neutral code-changed, Public', () => {
     const baseline: PublishedDefinitionsSnapshot = {
       ...aDefinitions(resolved),
       version: '4.2.0',
@@ -192,10 +192,6 @@ describe('compatibilityReportOf, a Definitions Package’s Standard Rejections',
 
     const { changes } = compatibilityReportOf(baseline, aDefinitions(remapped));
 
-    expect(changes.map(({ site: { kind }, difference }) => [kind, difference.kind])).toEqual([
-      ['code', 'added'],
-      ['standard-rejection', 'code-changed'],
-    ]);
-    expect(changes.at(-1)).toEqual(neutral('public', 'NOT_FOUND', 'ORDER_GONE'));
+    expect(changes).toEqual([neutral('public', 'NOT_FOUND', 'ORDER_GONE')]);
   });
 });

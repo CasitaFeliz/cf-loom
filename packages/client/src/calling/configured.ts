@@ -1,5 +1,6 @@
 import { ownOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
+import { isFields } from '../request/index.ts';
 import { abortableOf } from './abortable.ts';
 import type { CallOptions } from './client-types.ts';
 
@@ -43,8 +44,4 @@ async function headerValueOf(
 
 function isHeaderFunction(value: unknown): value is (call: CallOptions) => unknown {
   return typeof value === 'function';
-}
-
-function isFields(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

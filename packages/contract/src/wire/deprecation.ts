@@ -1,7 +1,9 @@
-import { instantTextOf, isInstantInRange, isUtcInstant } from '../declarations/index.ts';
-
-/** The header every response of a Deprecated Endpoint carries (RFC 9745). */
-export const deprecationHeader = 'deprecation';
+import {
+  deprecationHeader,
+  instantTextOf,
+  isInstantInRange,
+  isUtcInstant,
+} from '../declarations/index.ts';
 
 /** The `Deprecation` header's value for a `deprecatedAt`: `@<unix seconds>`. */
 export function deprecationHeaderOf(deprecatedAt: string): string {
