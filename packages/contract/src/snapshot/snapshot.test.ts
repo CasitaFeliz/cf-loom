@@ -353,7 +353,7 @@ function textOf(snapshot: Snapshot): string {
 }
 
 describe('snapshotOf: a Service', () => {
-  test('the top level names the format, the kind and the Contract, and no CLI, version or Definitions Package', () => {
+  test('the top level holds the format, the kind, the Contract’s name and what it declares, and no more', () => {
     const snapshot = serviceSnapshot();
 
     expect(snapshot).toMatchObject({
@@ -364,8 +364,21 @@ describe('snapshotOf: a Service', () => {
       commands: {},
       subscriptions: {},
     });
-    expect(snapshot).not.toHaveProperty('generator');
-    expect(snapshot).not.toHaveProperty('version');
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'codes',
+      'commands',
+      'defs',
+      'dependencies',
+      'endpoints',
+      'events',
+      'format',
+      'groups',
+      'guards',
+      'kind',
+      'name',
+      'standardRejections',
+      'subscriptions',
+    ]);
   });
 
   test('groups holds each Group by name with its description', () => {
@@ -1130,10 +1143,21 @@ describe('snapshotOf: deprecatedAt', () => {
     expect(snapshot.endpoints['GET /scheduled']?.deprecatedAt).toBe('2999-01-01T00:00:00Z');
   });
 
-  test('an Active Endpoint carries no deprecatedAt', () => {
+  test('an Active Endpoint’s entry holds the parts of its declaration, and no more', () => {
     const snapshot = serviceSnapshot();
 
-    expect(snapshot.endpoints['GET /orders/{}']).not.toHaveProperty('deprecatedAt');
+    expect(Object.keys(snapshot.endpoints['GET /orders/{}'] ?? {}).sort()).toEqual([
+      'description',
+      'group',
+      'guards',
+      'input',
+      'lifecycle',
+      'name',
+      'params',
+      'rejections',
+      'success',
+      'visibility',
+    ]);
   });
 });
 
@@ -1193,8 +1217,16 @@ describe('snapshotOf: a Definitions Package', () => {
     ]);
     expect(snapshot.kind === 'definitions' && snapshot.codes['UNUSED']?.origin).toBe('local');
     expect(snapshot.kind === 'definitions' && snapshot.codes['BAD_REQUEST']?.origin).toBe('local');
-    expect(snapshot).not.toHaveProperty('endpoints');
-    expect(snapshot).not.toHaveProperty('definitions');
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'codes',
+      'defs',
+      'exports',
+      'format',
+      'guards',
+      'kind',
+      'name',
+      'standardRejections',
+    ]);
   });
 
   test('a Definitions Package’s standardRejections maps each Standard Rejection to its code', () => {

@@ -364,7 +364,14 @@ describe('a Rejection that declares headers', () => {
 
     const outcome = await orders.editOrder(edit);
 
-    expect(outcome).not.toHaveProperty('headers');
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      source: 'provider',
+      code: 'ORDER_LOCKED',
+      status: 409,
+      message: 'Locked',
+      body: { lockedAt: '2026-10-18T10:00:00Z' },
+    });
   });
 
   test('the invalid-input Rejection the client answers without sending has no headers key', async () => {
@@ -372,8 +379,18 @@ describe('a Rejection that declares headers', () => {
 
     const outcome = await orders.editOrder({ ...edit, body: { quantity: 'two' as never } });
 
-    expect(outcome).toMatchObject({ kind: 'rejection', source: 'client', code: 'BAD_REQUEST' });
-    expect(outcome).not.toHaveProperty('headers');
+    expect(outcome).toStrictEqual({
+      kind: 'rejection',
+      source: 'client',
+      code: 'BAD_REQUEST',
+      status: 400,
+      message: 'The request is invalid',
+      body: {
+        issues: [
+          { in: 'body', path: ['quantity'], code: 'invalid_type', message: expect.any(String) },
+        ],
+      },
+    });
   });
 });
 

@@ -175,6 +175,7 @@ A PR is done when all of these hold; the main session checks them and lists them
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
 - [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
+- [ ] a PR that changes a package carries a changeset (see [.changeset/README.md](.changeset/README.md));
 - [ ] no `TODO` is left without a linked issue;
 - [ ] each issue's plan comment matches what was built.
 
@@ -225,6 +226,7 @@ of these rules rest on the agents.
 
 ## Changesets
 
-When a PR carries a changeset is a rule of the repository ([CLAUDE.md](CLAUDE.md#repository)).
+When a PR carries a changeset is a rule of the repository ([.changeset/README.md](.changeset/README.md)).
 While changesets wait on `main`, the [release workflow](.github/workflows/release.yml) keeps the PR
-`chore: version packages` open; merging it publishes, and only the user merges it.
+`chore: version packages` open (in pre mode its title ends in ` (rc)`); merging it publishes, and only the user
+merges it.
