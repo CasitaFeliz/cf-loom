@@ -257,7 +257,7 @@ describe('walkSchemas: discriminated unions', () => {
     },
     {
       what: 'a piped variant',
-      variant: () => wire.pipe(z.object({ type: z.string() })),
+      variant: () => wire.pipe(z.object({ type: z.literal('wire') })),
       lines: [
         ['<type="wire">', notAnObject],
         ['<type="wire">', '.pipe()'],
@@ -273,7 +273,7 @@ describe('walkSchemas: discriminated unions', () => {
     },
     {
       what: 'a piped discriminator',
-      variant: () => z.object({ type: z.literal('wire').pipe(z.string()) }),
+      variant: () => z.object({ type: z.literal('wire').pipe(z.literal('wire')) }),
       lines: [
         ['<type="wire">', unliteral],
         ['<type="wire">.type', '.pipe()'],
