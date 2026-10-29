@@ -15,6 +15,7 @@ import {
 import type { InstalledPackage } from '../loading/index.ts';
 import type { BuiltProject, Project } from '../project/index.ts';
 import {
+  expectedSnapshotOf,
   type Listing,
   type NpmPlace,
   type Packing,
@@ -118,8 +119,9 @@ function stagedPackageOf(
 ): StagedPackage {
   const { packageName, folder, staging } = staged;
   const { version } = published;
-  const spec = `${packageName}@${version}`;
-  const expected = { spec, version, declared: { kind: published.kind, name: published.name } };
+  const declaring = { packageName, declared: { kind: published.kind, name: published.name } };
+  const expected = expectedSnapshotOf(version, declaring);
+  const { spec } = expected;
   const packing = { folder, into: staging, expected };
   switch (published.kind) {
     case 'service': {

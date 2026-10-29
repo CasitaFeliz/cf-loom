@@ -103,11 +103,11 @@ async function baselineAmong(
 /** The Baseline's `snapshot.json`, read from its tarball and checked against the version, with its peer ranges. */
 async function baselineRead(
   npm: NpmPlace,
-  { source, metadata }: Found,
+  { expected, metadata }: Found,
   { listing, chosen }: Pick<Baseline, 'chosen'> & { readonly listing: Listing },
 ): Promise<ReadBaseline> {
   const downloaded = await downloadedSnapshotOf(npm, {
-    expected: source,
+    expected,
     digests: metadata.digests,
   });
   if (downloaded.kind === 'failed') {

@@ -32,6 +32,20 @@ export type ExpectedSnapshot = {
   readonly declared: Pick<Snapshot, 'kind' | 'name'>;
 };
 
+/** The package and declared Snapshot a version of it is read or published for. */
+export type DeclaredPackage = {
+  readonly packageName: string;
+  readonly declared: ExpectedSnapshot['declared'];
+};
+
+/** The Snapshot a version of a package must hold. */
+export function expectedSnapshotOf(
+  version: string,
+  { packageName, declared }: DeclaredPackage,
+): ExpectedSnapshot {
+  return { spec: `${packageName}@${version}`, version, declared };
+}
+
 /**
  * The versions `npm view <package> versions` printed, lowest first; a package that lists none, or
  * a key that is no semantic version, is a failure, since the Baseline cannot be chosen.
@@ -61,10 +75,10 @@ function keysPrintedIn(printed: unknown): readonly unknown[] {
 
 /** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
 export function metadataFrom(
-  source: ExpectedSnapshot,
+  expected: ExpectedSnapshot,
   printed: unknown,
 ): VersionMetadata | NotPublishedByCfLoom | Failed {
-  const { spec, version, declared } = source;
+  const { spec, version, declared } = expected;
   if (ownOf(printed, 'version') !== version) {
     return failed(`npm view ${spec} printed no metadata`);
   }

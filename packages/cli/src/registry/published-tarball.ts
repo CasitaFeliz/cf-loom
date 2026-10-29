@@ -62,14 +62,14 @@ export async function packedTarballOf(
 
 /**
  * The published Snapshot in a package's tarball as `check` reads a Baseline: the one
- * `snapshot.json` as strict UTF-8, decoded, and of the name, kind and version the source expects.
+ * `snapshot.json` as strict UTF-8, decoded, and of the name, kind and version it expects.
  */
 export function publishedSnapshotIn(
   tarball: Buffer,
-  source: ExpectedSnapshot,
+  expected: ExpectedSnapshot,
 ): PublishedIn | Failed {
-  const text = snapshotTextIn(source.spec, tarball);
-  return text.kind === 'failed' ? text : snapshotFrom(source, text.text);
+  const text = snapshotTextIn(expected.spec, tarball);
+  return text.kind === 'failed' ? text : snapshotFrom(expected, text.text);
 }
 
 function filenameOf(printed: unknown): string | undefined {
@@ -135,8 +135,8 @@ function utf8Of(
   }
 }
 
-function snapshotFrom(source: ExpectedSnapshot, text: string): PublishedIn | Failed {
-  const { spec, version, declared } = source;
+function snapshotFrom(expected: ExpectedSnapshot, text: string): PublishedIn | Failed {
+  const { spec, version, declared } = expected;
   const decoded = decodeSnapshot(text);
   switch (decoded.kind) {
     case 'no-json':
