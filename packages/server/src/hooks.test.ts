@@ -117,6 +117,7 @@ const downFault = { committed: 'no', retryable: true } as const;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function tooLarge(): Request {
@@ -693,5 +694,20 @@ describe('serve: what the hooks receive beside the record', () => {
     await http(new Request('http://test/orders/o-1', { signal: controller.signal }));
 
     expect(answered[0]?.aborted).toBe(true);
+  });
+
+  test('a Caller that aborts while onServiceFault runs is recorded as aborted, and durationMs includes the time onServiceFault took', async () => {
+    vi.useFakeTimers({ toFake: ['performance'] });
+    const controller = new AbortController();
+    const { http, answered } = recording({
+      onServiceFault: () => {
+        vi.advanceTimersByTime(250);
+        controller.abort();
+      },
+    });
+
+    await http(new Request('http://test/orders/down', { signal: controller.signal }));
+
+    expect(answered[0]).toMatchObject({ kind: 'fault', aborted: true, durationMs: 250 });
   });
 });
