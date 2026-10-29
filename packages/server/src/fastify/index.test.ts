@@ -9,6 +9,7 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
 import { fastifyServe } from './index.ts';
@@ -233,61 +234,9 @@ async function nodeServed(): Promise<string> {
   return `http://127.0.0.1:${port}`;
 }
 
-/** Sends raw HTTP/1.1 text to the server at `url`, and what came back, once the server closes. */
-async function raw(url: string, text: string): Promise<string> {
-  const { port } = new URL(url);
-  return await new Promise<string>((resolve) => {
-    const socket = connect(Number(port), '127.0.0.1');
-    let received = '';
-    socket.on('data', (chunk) => {
-      received += chunk.toString('latin1');
-    });
-    socket.on('error', () => undefined);
-    socket.on('close', () => resolve(received));
-    socket.write(text);
-  });
-}
-
-/**
- * Sends raw HTTP/1.1 text and waits at most `ms` for the server to close the socket: what came
- * back, and whether it closed in time.
- */
-async function rawFor(url: string, text: string, ms: number) {
-  const { port } = new URL(url);
-  return await new Promise<{ readonly received: string; readonly closed: boolean }>((resolve) => {
-    const socket = connect(Number(port), '127.0.0.1');
-    let received = '';
-    const timer = setTimeout(() => {
-      socket.destroy();
-      resolve({ received, closed: false });
-    }, ms);
-    socket.on('data', (chunk) => {
-      received += chunk.toString('latin1');
-    });
-    socket.on('error', () => undefined);
-    socket.on('close', () => {
-      clearTimeout(timer);
-      resolve({ received, closed: true });
-    });
-    socket.write(text);
-  });
-}
-
 /** One raw HTTP/1.1 request that asks the server to close the connection after it. */
 function requestText(method: string, target: string, extra = ''): string {
   return `${method} ${target} HTTP/1.1\r\nHost: test\r\n${extra}Connection: close\r\n\r\n`;
-}
-
-function statusLinesOf(received: string): string[] {
-  return received.match(/HTTP\/1\.1 \d+ [^\r\n]+/g) ?? [];
-}
-
-function statusLineOf(received: string): string {
-  return received.split('\r\n')[0] ?? '';
-}
-
-function bodyOf(received: string): string {
-  return received.split('\r\n\r\n').slice(1).join('\r\n\r\n');
 }
 
 /** A raw response without the `Date`, which is the one thing two answers to a request differ in. */
