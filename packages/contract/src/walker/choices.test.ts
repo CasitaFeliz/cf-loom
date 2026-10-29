@@ -234,6 +234,70 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
+  const wire = z.object({ type: z.literal('wire') });
+  const notAnObject = 'a discriminated union variant that is not an object';
+  const unliteral = 'a discriminated union variant whose discriminator is not a literal';
+
+  test.each([
+    {
+      what: 'a readonly variant',
+      variant: () => z.readonly(wire),
+      lines: [
+        ['<type="wire">', notAnObject],
+        ['<type="wire">', '.readonly()'],
+      ],
+    },
+    {
+      what: 'a lazy readonly variant',
+      variant: () => z.lazy(() => z.readonly(wire)),
+      lines: [
+        ['<type="wire">', notAnObject],
+        ['<type="wire">', '.readonly()'],
+      ],
+    },
+    {
+      what: 'a piped variant',
+      variant: () => wire.pipe(z.object({ type: z.string() })),
+      lines: [
+        ['<type="wire">', notAnObject],
+        ['<type="wire">', '.pipe()'],
+      ],
+    },
+    {
+      what: 'a readonly discriminator',
+      variant: () => z.object({ type: z.readonly(z.literal('wire')) }),
+      lines: [
+        ['<type="wire">', unliteral],
+        ['<type="wire">.type', '.readonly()'],
+      ],
+    },
+    {
+      what: 'a piped discriminator',
+      variant: () => z.object({ type: z.literal('wire').pipe(z.string()) }),
+      lines: [
+        ['<type="wire">', unliteral],
+        ['<type="wire">.type', '.pipe()'],
+      ],
+    },
+    {
+      what: 'a lazy one-value enum discriminator, which zod reads no value from',
+      variant: () => z.object({ type: z.lazy(() => z.enum(['wire'])) }),
+      lines: [['<|1>', unliteral]],
+    },
+  ])('$what is told by its discriminator value where zod reads one', ({ variant, lines }) => {
+    const walked = walkBody(z.discriminatedUnion('type', [card, variant()]));
+
+    expect(walked).toEqual({
+      located: [
+        {
+          kind: 'not-allowed',
+          failures: lines.map(([at, construct]) => ({ kind: 'not-allowed', at, construct })),
+        },
+      ],
+      defs: {},
+    });
+  });
+
   test('a discriminated union as a variant of another fails', () => {
     const nested = z.discriminatedUnion('kind', [
       z.object({ type: z.literal('wallet'), kind: z.literal('crypto') }),

@@ -1,8 +1,25 @@
 import * as core from 'zod/v4/core';
 import type { refused } from './not-allowed.ts';
 
+/** What a def holds where zod types a schema: unknown, until `isSchema` judges it. */
+type Unjudged<Held> = Held extends core.$ZodType
+  ? unknown
+  : Held extends readonly core.$ZodType[]
+    ? readonly unknown[]
+    : Held extends Readonly<Record<string, core.$ZodType>>
+      ? Readonly<Record<string, unknown>>
+      : Held;
+
+/** A zod def with every schema it holds typed unknown: a child is read only once `isSchema` judges it. */
+type UnjudgedDef<Zod> = Zod extends unknown
+  ? { readonly [Key in keyof Zod]: Unjudged<Zod[Key]> }
+  : never;
+
 /** A zod def, as the union of every def zod declares, so a switch over its type is closed. */
-export type Def = core.$ZodTypes['_zod']['def'];
+export type Def = UnjudgedDef<core.$ZodTypes['_zod']['def']>;
+
+/** The def of a discriminated union, which zod types as a union and `Def` does not list apart. */
+export type TaggedDef = UnjudgedDef<core.$ZodDiscriminatedUnionDef>;
 
 /** The name zod gives each kind of def. */
 export type DefType = Def['type'];
@@ -102,6 +119,18 @@ const refusedDefTypes: ReadonlySet<string> = new Set(
  */
 export function isSchema(value: unknown): value is core.$ZodType {
   return value instanceof core.$ZodType;
+}
+
+/** The def of a zod 4 schema, read once it is judged; none for any other value. */
+export function defOf(schema: core.$ZodType): Def;
+export function defOf(value: unknown): Def | undefined;
+export function defOf(value: unknown): Def | undefined {
+  return isSchema(value) ? (value._zod.def as Def) : undefined;
+}
+
+/** Whether a def is a discriminated union's, which zod writes as a union with a discriminator. */
+export function isTaggedDef(def: Def): def is TaggedDef {
+  return 'discriminator' in def;
 }
 
 /** Whether a def is one the walk reads a node from, rather than refuses by name. */

@@ -1,4 +1,3 @@
-import type * as core from 'zod/v4/core';
 import type { StringFormat } from './format-schemas.ts';
 import type { Place } from './location.ts';
 
@@ -133,13 +132,14 @@ export type SchemaNode =
 
 /**
  * A zod construct no node or check maps, where it was written, and what to use instead, with the
- * schema it sits in, so a construct reached from many places is told once, and the origin of the
- * Definitions Package that declares that schema, or the nearest one around it.
+ * schema it sits in (the value itself, for one that is no zod 4 schema), so a construct reached
+ * from many places is told once, and the origin of the Definitions Package that declares that
+ * schema, or the nearest one around it.
  */
 export type NotAllowed = Place & {
   readonly kind: 'not-allowed';
   readonly construct: string;
   readonly instead?: string;
-  readonly schema: core.$ZodType;
+  readonly schema: unknown;
   readonly origin: Origin | undefined;
 };
