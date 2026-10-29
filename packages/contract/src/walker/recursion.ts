@@ -12,8 +12,10 @@ import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
  * The cycles of one walk: a schema with an id lies on a cycle, and every such schema in a
  * strongly connected group of schemas is written once under `defs` and is a `ref` wherever it
  * is used, whichever schema the walk enters the group at. A schema the walk answers from memory
- * keeps the group it belongs to, so answering it counts as an edge to that group. A schema entered
- * more than 256 schemas below its root, as written, is refused there and not entered.
+ * keeps the group it belongs to, so answering it counts as an edge to that group. A schema with an
+ * id is walked once: its def, or its failure, answers every later use; a failure that holds a
+ * cycle no id names, once per declaration. A schema entered more than 256 schemas below its root,
+ * as written, is refused there and not entered.
  */
 export type Recursion = {
   readonly within: (entering: Entering, walk: () => Walking) => Walking;

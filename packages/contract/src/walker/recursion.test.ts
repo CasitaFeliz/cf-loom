@@ -3,7 +3,13 @@ import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
 import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
-import { idOf, type Mix, type RandomGraph, randomGraph } from '../../test/random-graphs.ts';
+import {
+  idOf,
+  type Mix,
+  type Naming,
+  type RandomGraph,
+  randomGraph,
+} from '../../test/random-graphs.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -1081,13 +1087,32 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
-    test('one schema used at two fields fails at both', () => {
+    test('one schema used at two fields is the failure walked at the first, at both', () => {
       const order = z.object({ paid: money, due: money });
 
       expect(walkBody(order)).toEqual({
-        located: [refused([acyclicAt('paid', 'money'), acyclicAt('due', 'money')])],
+        located: [refused([acyclicAt('paid', 'money')])],
         defs: {},
       });
+    });
+
+    test('an id off a cycle whose failure holds a cycle no id names is walked afresh in each declaration', () => {
+      const holder = z.object({ unnamed: anUnnamedCycle() }).meta({ id: 'holder' });
+
+      const walked = walkSchemas(
+        [
+          { at: placeIn('body', 'first'), schema: holder },
+          { at: placeIn('success', 'second'), schema: holder },
+        ],
+        () => undefined,
+      );
+
+      const failures = [acyclicAt('', 'holder'), { at: 'unnamed.self[]', ...unnamedCycle }];
+      expect(refusalsOf(walked).located).toEqual([refused(failures), refused(failures)]);
+      expect(refusalSitesOf(walked)).toEqual([
+        ['exports.body', 'exports.body'],
+        ['exports.success', 'exports.success'],
+      ]);
     });
 
     test('it fails with what else is not allowed in the schema', () => {
@@ -1904,6 +1929,7 @@ describe('walkSchemas: recursion', () => {
     const graphsPerMix = 2000;
     const mixes: readonly Mix[] = ['mixed', 'ids', 'arrays'];
     const offCycleId = /^\.meta\(\{ id: "([^"]+)" \}\) on a schema that lies on no cycle$/;
+    const acceptedIds: readonly Naming[] = ['id', 'takenId', 'nullableId'];
 
     /** The graph walked from its two roots, in one declaration for an odd seed, in two for an even one. */
     function walkedFromRoots(graph: RandomGraph, seed: number) {
@@ -1965,6 +1991,203 @@ describe('walkSchemas: recursion', () => {
       }
 
       expect(wrong).toEqual([]);
+    });
+
+    test.each(mixes)('every use of a failing schema with an id is the same failure: %s', (mix) => {
+      const walkedAgain: string[] = [];
+
+      for (let seed = 1; seed <= graphsPerMix; seed++) {
+        const graph = randomGraph(seed, mix);
+        const located = graph.schemas.flatMap((schema, index) => [
+          { at: placeAt(`first${index}`), schema },
+          { at: placeAt(`second${index}`), schema },
+        ]);
+        const walked = walkSchemas(located, () => undefined).located;
+        for (const [index, naming] of graph.namings.entries()) {
+          const first = walked[2 * index]?.walked;
+          const second = walked[2 * index + 1]?.walked;
+          const isFailing = first?.kind === 'not-allowed' && second?.kind === 'not-allowed';
+          if (acceptedIds.includes(naming) && isFailing && first.tree !== second.tree) {
+            walkedAgain.push(`seed ${seed}: n${index}`);
+          }
+        }
+      }
+
+      expect(walkedAgain).toEqual([]);
+    });
+  });
+
+  describe('a schema with an id walked once', () => {
+    /** `count` ids, each holding the next twice and what `extra` gives it, the first returned. */
+    function aFanOf(count: number, extra: (self: () => z.ZodType) => Record<string, z.ZodType>) {
+      let next: z.ZodType | undefined;
+      for (let index = count - 1; index >= 0; index--) {
+        const held: Record<string, z.ZodType> = next === undefined ? {} : { a: next, b: next };
+        const link: z.ZodType = z
+          .object({ ...extra(() => link), ...held })
+          .meta({ id: `fan${index}` });
+        next = link;
+      }
+      return next ?? z.never();
+    }
+
+    /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
+    const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
+
+    function cpuMillisecondsOfBody(schema: z.ZodType) {
+      const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+      return cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
+    }
+
+    test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', () => {
+      const fan = aFanOf(18, () => ({}));
+
+      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
+
+      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+    });
+
+    test('a fan of 11 defs each cut for its depth, each holding the next twice, walks each once', () => {
+      const fan = aFanOf(11, cutBack);
+
+      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
+
+      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+    });
+
+    test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', () => {
+      const fan = aFanOf(18, () => ({ unnamed: anUnnamedCycle() }));
+
+      const cpuMilliseconds = cpuMillisecondsOfBody(fan);
+
+      expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+    });
+
+    test('a def cut for its depth used at two locations is the failure walked at the first, at both', () => {
+      const deep: z.ZodType = z.object(cutBack(() => deep)).meta({ id: 'deep' });
+
+      const walked = walkSchemas(
+        [
+          { at: placeAt('body'), schema: deep },
+          { at: placeAt('success'), schema: z.array(deep) },
+        ],
+        () => undefined,
+      );
+
+      expect(constructsOf(walked)).toEqual([[writtenTooDeep], [writtenTooDeep]]);
+      expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.body']]);
+    });
+
+    test('a second schema with a taken id used at two locations is the duplicate walked at the first, at both', () => {
+      const tree: z.ZodType = z
+        .object({
+          get children() {
+            return z.array(tree);
+          },
+        })
+        .meta({ id: 'tree' });
+      const folder: z.ZodType = z
+        .object({
+          get folders() {
+            return z.array(folder);
+          },
+        })
+        .meta({ id: 'tree' });
+
+      const walked = walkSchemas(
+        [
+          { at: placeAt('body'), schema: tree },
+          { at: placeAt('success'), schema: folder },
+          { at: placeAt('failure'), schema: z.array(folder) },
+        ],
+        () => undefined,
+      );
+
+      const duplicate = refused([{ at: '', construct: 'two schemas with .meta({ id: "tree" })' }]);
+      expect(refusalsOf(walked).located).toEqual([
+        walkedTo({ type: 'ref', name: 'tree' }),
+        duplicate,
+        duplicate,
+      ]);
+      expect(refusalSitesOf(walked)).toEqual([[], ['exports.success'], ['exports.success']]);
+    });
+
+    describe('reached by two Endpoints', () => {
+      /** A Service whose two Endpoints answer `body`, `getFirst` before `getSecond`. */
+      function validatedByTwo(body: z.ZodType) {
+        const endpointAt = (name: string, path: string) =>
+          defineEndpoint({
+            name,
+            method: 'GET',
+            path,
+            visibility: 'public',
+            description: 'The tree',
+            success: { status: 200, body },
+          });
+        const endpoints = [
+          endpointAt('getFirst', '/first'),
+          endpointAt('getSecond', '/second'),
+        ] as const;
+        const group = defineGroup({ name: 'trees', description: 'Trees', endpoints });
+        const service = defineService({ name: 'orders-service', groups: [group] });
+        return summarized(validateRoot(service, aRootPackage(service)));
+      }
+
+      const acyclicMoney = {
+        construct: '.meta({ id: "money" }) on a schema that lies on no cycle',
+        instead: '.meta({ id }) only on a recursive schema',
+      };
+
+      test('an id off a cycle is told once, at the first, with the other Endpoint in alsoIn', () => {
+        const money = z.object({ amount: z.int() }).meta({ id: 'money' });
+
+        const validated = validatedByTwo(z.object({ paid: money }));
+
+        expect(validated).toEqual({
+          kind: 'invalid',
+          failures: [
+            {
+              kind: 'not-allowed',
+              location: 'endpoints.GET /first (getFirst) success.body.paid',
+              ...acyclicMoney,
+              alsoIn: ['endpoints.GET /second (getSecond)'],
+              origin: undefined,
+            },
+          ],
+        });
+      });
+
+      test('a second schema with a taken id is told once, at the first, with the other Endpoint in alsoIn', () => {
+        const first: z.ZodType = z
+          .object({
+            get e1() {
+              return z.array(second);
+            },
+          })
+          .meta({ id: 'shared' });
+        const second: z.ZodType = z
+          .object({
+            get e0() {
+              return z.array(first);
+            },
+          })
+          .meta({ id: 'shared' });
+
+        const validated = validatedByTwo(z.object({ first, second }));
+
+        expect(validated).toEqual({
+          kind: 'invalid',
+          failures: [
+            {
+              kind: 'not-allowed',
+              location: 'endpoints.GET /first (getFirst) success.body.first',
+              construct: 'two schemas with .meta({ id: "shared" })',
+              alsoIn: ['endpoints.GET /second (getSecond)'],
+              origin: undefined,
+            },
+          ],
+        });
+      });
     });
   });
 });
@@ -2053,6 +2276,16 @@ function aNestOf(
     schema = wrap(schema);
   }
   return schema;
+}
+
+/** A cycle no id names. */
+function anUnnamedCycle(): z.ZodType {
+  const unnamed: z.ZodType = z.object({
+    get self() {
+      return z.array(unnamed);
+    },
+  });
+  return unnamed;
 }
 
 /** A Service whose one Endpoint answers `body`. */
