@@ -169,7 +169,6 @@ export type {
   ResolvedContractPackage,
   ResolvedDefinitions,
   RootPackage,
-  TextPartNodes,
   Unidentified,
   ValidatedRoot,
   ValidRoot,
@@ -308,6 +307,7 @@ export type {
   PathSegment,
   ReadShape,
   ShapeFields,
+  TextPartNodes,
 } from '../written/index.ts';
 export {
   answerableByCodeOf,
