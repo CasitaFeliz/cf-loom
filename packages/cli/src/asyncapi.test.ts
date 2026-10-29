@@ -436,7 +436,10 @@ describe('cf-loom asyncapi: the payloads', () => {
   test('an Active Message Version’s payload is not marked deprecated', () => {
     expect(payloadOf('OrderCreated@2')).toStrictEqual({
       type: 'object',
-      properties: { orderId: { type: 'string', format: 'uuid' }, total: { type: 'integer' } },
+      properties: {
+        orderId: { type: 'string', format: 'uuid' },
+        total: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      },
       required: ['orderId', 'total'],
     });
   });
