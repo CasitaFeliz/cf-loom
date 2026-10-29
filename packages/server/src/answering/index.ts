@@ -1,4 +1,5 @@
 export type { Http } from '@cf-loom/contract';
+export type { ServedHandlers } from '../served/index.ts';
 export { answeredOf } from './fallback.ts';
 export type { AnsweredRequest, ServedFault } from './hooks.ts';
 export type { BodyLimit, ServeOptions, Serving } from './serve.ts';

@@ -1,6 +1,6 @@
 # @cf-loom/server
 
-`serve`, which answers a Contract's Endpoints with their Handlers, and its types (see [Types](#types)); `@cf-loom/server/node-http` is its adapter for `node:http`, `nodeHttp` and `nodeListener`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`serve`, which answers a Contract's Endpoints with their Handlers, and its types (see [Types](#types)); its adapters connect it to a host (see [Adapters](#adapters)): `@cf-loom/server/node-http` for `node:http`, `nodeHttp` and `nodeListener`, and `@cf-loom/server/fastify` inside a Fastify app, `fastifyServe`. How `serve` validates what it sends is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/ARCHITECTURE.md); how an Outcome travels, routing and text conversion included, is in [Wire protocol](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#wire-protocol) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 ## Serving
 
@@ -68,7 +68,7 @@ How `serve` validates every Outcome before sending it is in [Validation](https:/
 
 The Faults `serve` answers with a Reserved code and no Handler (see [Reserved code](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md#language) in CONTEXT.md), `RETIRED`, `NO_SUCH_ENDPOINT`, `METHOD_NOT_ALLOWED` and `BODY_TOO_LARGE`, never reach it; `onAnswered` counts them. Without an `onServiceFault`, what it would receive goes to the console, one line per Issue after `<name>[ <guard>]`, as the contract writes an Issue (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), or the Fault's message, or `the Handler threw`, and its `cause` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). What `messaging`'s `onServiceFault` receives is in [onServiceFault](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#onservicefault) in the messaging README.
 
-`serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onAnswered` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, `Access-Control-Expose-Headers` among them (see [In a browser](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#in-a-browser-applications) in the client README), and any `Set-Cookie`, which no Contract declares since a browser never exposes it; the Service adds both by wrapping the handler `serve` returns.
+`serve(contract, handlers, { fallback })` hands every request no declared Endpoint matches to `fallback`, an `Http` of the Service's own, and returns its Response as is, or the internal Fault, logged as `serve: the fallback rejected`, when it rejects; a Retired Endpoint still answers `RETIRED`, and `onAnswered` does not record what the fallback answered. A framework adapter that hands a request back to its framework passes a fallback that returns a Response it recognizes by identity. The fallback answers only what `serve` does not: a browser Application also needs CORS headers on every Endpoint's response, `Access-Control-Expose-Headers` among them (see [In a browser](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#in-a-browser-applications) in the client README), and any `Set-Cookie`, which no Contract declares since a browser never exposes it; the Service adds both by wrapping the handler `serve` returns. Under `fastifyServe`, an app `onRequest` hook registered before it sets them on the reply instead (see [fastify](#fastify)).
 
 ```ts
 import { serve } from '@cf-loom/server';
@@ -90,9 +90,46 @@ const http = serve(contract, handlers, {
 
 Both hooks may be async and are awaited before the response is returned; what one throws or rejects is logged and never escapes (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
-## node-http
+## Adapters
 
-`@cf-loom/server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. A target in origin form (`/orders/o-1`) or absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept) is routed on its path and query, and a path that starts with `//` is a path, never a host. The adapter answers two kinds of request itself, as Node already answers a malformed request before any listener runs, so `onAnswered` sees neither: a target in any other form (`*`, `host:port`, another scheme, credentials), one a web-standard `Request` cannot be built from, or a `Host` header that is missing or is more than a host and an optional port, gets 400; a method a web-standard `Request` refuses (`CONNECT`, `TRACE`, `TRACK`) gets `NO_SUCH_ENDPOINT` (404), since no Endpoint can have it. A request's body is streamed to `serve` for every method but `GET` and `HEAD`, and a response to `HEAD` carries no body. A response sent before `serve` read the request's whole body, such as `NO_SUCH_ENDPOINT`, a Guard's Rejection or `BODY_TOO_LARGE`, carries `connection: close`, and the connection closes after it, so a body `serve` did not read never stalls the next request; the Caller reconnects for its next request. A Caller that disconnects before its response is written aborts the request's signal, which its Handlers received (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README); a response that fails while it is written destroys the socket. A handler that rejects is answered 500 with the Fault Envelope, `committed: 'unknown'`, and logged as `nodeListener: the handler rejected`.
+An adapter connects the handler `serve` returns to a host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). cf-loom ships two, [node-http](#node-http) and [fastify](#fastify), and both:
+
+- hand `serve` every request whose method and path a declared Endpoint has, Retired ones included;
+- route a target in origin form (`/orders/o-1`), or in absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept), on its path and query, and read a path that starts with `//` as a path, never a host; the URL is on the origin the `Host` header names, read as sent;
+- stream a request's body to `serve` for every method but `GET` and `HEAD`, and apply no limit of their own: `maxBodyBytes` governs;
+- write every response the same way: its status and headers, then its body, which `serve` built in memory and is sent in one piece with its `content-length`, while a body that streams, such as a fallback's, is sent as it streams; a response to `HEAD` carries no body;
+- send a response written before `serve` read the request's whole body, such as `NO_SUCH_ENDPOINT`, a Guard's Rejection or `BODY_TOO_LARGE`, with `connection: close`, and the connection closes after it, so a body `serve` did not read never stalls the next request; the Caller reconnects for its next request;
+- abort the request's signal, which its Handlers received (see [EndpointHandler](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/handlers/README.md#endpointhandler) in the handlers README), when a Caller disconnects before its response is written;
+- destroy the socket when a response fails while it is written.
+
+Each adapter says what it does with a request it cannot read or that no Endpoint has.
+
+### node-http
+
+`@cf-loom/server/node-http` exports `nodeHttp(http)`, a `node:http` `Server` that answers every request it receives with the handler `serve` returns, as `nodeHttp(http).listen(3000)` does above, and `nodeListener(http)`, the request listener it is built on, for a server the Service creates itself, such as `createServer(options, nodeListener(http))`. The adapter answers two kinds of request itself, as Node already answers a malformed request before any listener runs, so `onAnswered` sees neither: a target in any other form (`*`, `host:port`, another scheme, credentials), one a web-standard `Request` cannot be built from, or a `Host` header that is missing or is more than a host and an optional port, gets 400; a method a web-standard `Request` refuses (`CONNECT`, `TRACE`, `TRACK`) gets `NO_SUCH_ENDPOINT` (404), since no Endpoint can have it. A handler that rejects is answered 500 with the Fault Envelope, `committed: 'unknown'`, and logged as `nodeListener: the handler rejected`.
+
+### fastify
+
+`@cf-loom/server/fastify` exports `fastifyServe(contract, handlers, options)`, a Fastify plugin that serves a Contract inside an app, beside the app's own routes, which keep working: a health check, static files, anything outside the Contract.
+
+```ts
+import Fastify from 'fastify';
+import { fastifyServe } from '@cf-loom/server/fastify';
+import handlers from '../src/handlers.generated.ts';
+
+export const app = Fastify();
+app.get('/healthz', async () => 'ok');   // the app's own route
+await app.register(fastifyServe(contract, handlers, { resources, maxBodyBytes: 1_048_576 }));
+```
+
+- **Setup.** Fastify v5 is an optional peer dependency of `@cf-loom/server`, installed only by a Service that uses this adapter. `fastifyServe` takes what `serve` takes but `fallback`, which is a type error, since a request no Endpoint has goes on to the app. `serve`'s startup checks throw when `fastifyServe` is called, before `register`; registering it throws with a `prefix`, since an Endpoint's path is its whole path, inside an encapsulated plugin, where its hook would cover only that plugin, and on an HTTP/2 app.
+- **What it takes from Fastify.** Its global `onRequest` hook takes every request whose method and path a declared Endpoint has, Retired ones included, whatever app route matches it, and answers it as `serve` does.
+- **What goes on to the app.** An undeclared path; another method on a declared path, which gets Fastify's 404, never `METHOD_NOT_ALLOWED` with `Allow`; `HEAD`, and `OPTIONS` unless an Endpoint declares it; a target or `Host` the adapter cannot read, such as `*` or a `Host` that is more than a host and an optional port; and `TRACE` and `TRACK`, which a web-standard `Request` refuses (`CONNECT` never reaches Fastify, since Node hands it to the server's `connect` event). `onAnswered` records only what cf-loom answered.
+- **Which app hooks see an Endpoint.** Its request is the app's no longer once taken. The app's `onRequest` hooks registered before the plugin run first, those of an encapsulated plugin included; one that answers keeps the request from cf-loom, and the headers they set on the reply are sent with the Endpoint's answer, `serve`'s own header winning where the names meet. `onRequest` hooks registered after the plugin do not run. No `onSend` hook (compression among them), route handler, not-found handler, error handler or `handlerTimeout` touches the request. `onResponse` hooks and Fastify's request log see it.
+- **CORS headers and `Set-Cookie`** come from such an earlier `onRequest` hook, since the response is cf-loom's.
+- **Body limits and parsing.** Fastify's `bodyLimit`, content-type parsers and schemas do not apply to Endpoints; `maxBodyBytes` governs.
+- **`rewriteUrl`** applies: cf-loom routes on the URL it returns. The `Host` header is read as sent, never through `trustProxy`.
+- **What Fastify answers first.** It answers two requests before any hook runs: a segment that is not valid percent-encoding (400) and, when an app route shares the prefix, a param longer than `maxParamLength` (414).
 
 ## Compiling schemas
 
@@ -119,6 +156,7 @@ node --import zod/compile src/main.ts
 - An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
 - `Http`, re-exported from `@cf-loom/contract`: the handler `serve` returns.
 - `ServeOptions<Resources>`, `{ resources?, maxBodyBytes?: BodyLimit, fallback?, onServiceFault?, onAnswered? }`: what `serve` takes, always given, besides the Contract and the Handler map: the Resources its Handlers take, required exactly when some Handler takes any, and what is operational about serving; none of it is part of the Contract.
+- `fastifyServe`'s options: `ServeOptions` without `fallback`.
 - `BodyLimit`, `number | 'unlimited'`: what `maxBodyBytes` takes, a whole number of bytes from 0 or no limit.
 - `ServedFault`: what `onServiceFault` receives first, beside the `Request`, `{ declaration, name, guard? }` and `returned`, `thrown`, `invalid-outcome` or `runtime-bug`.
 - `AnsweredRequest`, `{ method, endpoint?, path?, status, kind, code?, aborted, durationMs }`: what `onAnswered` receives first, beside the `Request`.
