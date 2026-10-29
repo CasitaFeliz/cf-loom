@@ -91,15 +91,15 @@ describe('defineDependency', () => {
     expectTypeOf<Written['endpoints']>().toExtend<
       Refusal<"A Dependency lists one Provider's Endpoints: payments-service, refunds-service">
     >();
-    // @ts-expect-error a Dependency calls one Provider
+    // @ts-expect-error TS2322 a Dependency calls one Provider
     const declare = () => defineDependency({ endpoints: [getPayment, getRefund] });
     expect(declare).not.toThrow();
   });
 
   test('a Dependency that lists no Endpoint is a type error', () => {
-    // @ts-expect-error a Dependency lists at least one Endpoint
+    // @ts-expect-error TS2322 a Dependency lists at least one Endpoint
     const empty = () => defineDependency({ endpoints: [] });
-    // @ts-expect-error nor leaves its list out
+    // @ts-expect-error TS2345 nor leaves its list out
     const missing = () => defineDependency({});
 
     expect(empty).not.toThrow();
@@ -117,7 +117,7 @@ describe('defineDependency', () => {
     });
 
     const declare = () =>
-      // @ts-expect-error no Provider's Contract Package exports it
+      // @ts-expect-error TS2322 no Provider's Contract Package exports it
       defineDependency({ endpoints: [getReceipt] });
 
     expect(declare).not.toThrow();
@@ -129,7 +129,7 @@ describe('defineDependency fields', () => {
     const declare = () =>
       defineDependency({
         endpoints: [getPayment],
-        // @ts-expect-error a Dependency lists Endpoints only
+        // @ts-expect-error TS2322 a Dependency lists Endpoints only
         events: [paymentSettledV1],
       });
 

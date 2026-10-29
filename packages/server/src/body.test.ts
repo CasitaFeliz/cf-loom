@@ -366,7 +366,7 @@ describe('serve: maxBodyBytes', () => {
 
   test('maxBodyBytes takes a number or unlimited, and no other text', () => {
     const unlimited: ServeOptions = { maxBodyBytes: 'unlimited' };
-    // @ts-expect-error a number of bytes as text is not a limit
+    // @ts-expect-error TS2322 a number of bytes as text is not a limit
     const text: ServeOptions = { maxBodyBytes: '10' };
 
     expect([unlimited.maxBodyBytes, text.maxBodyBytes]).toEqual(['unlimited', '10']);

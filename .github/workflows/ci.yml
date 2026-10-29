@@ -75,4 +75,5 @@ jobs:
       - run: node scripts/check-layout.ts
       - run: node scripts/check-terms.ts
       - run: pnpm build
+      - run: node scripts/check-expect-errors.ts
       - run: pnpm vitest run

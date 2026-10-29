@@ -4,7 +4,7 @@ import { defineConfig } from './index.ts';
 describe('defineConfig', () => {
   test('scope is not a field of the configuration: package.json names every package', () => {
     const defined = defineConfig({
-      // @ts-expect-error: a package's name comes from its package.json
+      // @ts-expect-error TS2322 a package's name comes from its package.json
       scope: '@org',
     });
 
@@ -14,7 +14,7 @@ describe('defineConfig', () => {
   test('a configuration given through a variable with a field it does not declare is a type error', () => {
     const config = { layout: {}, layot: {} };
 
-    // @ts-expect-error layot is not a declared field
+    // @ts-expect-error TS2345 layot is not a declared field
     const defining = () => defineConfig(config);
 
     expect(defining).toBeTypeOf('function');
@@ -26,7 +26,7 @@ describe('defineConfig', () => {
       handlerMapp: 'src/x.generated.ts',
     } as const;
 
-    // @ts-expect-error handlerMapp is not a declared field
+    // @ts-expect-error TS2322 handlerMapp is not a declared field
     const defining = () => defineConfig({ layout });
 
     expect(defining).toBeTypeOf('function');
@@ -72,7 +72,7 @@ describe('defineConfig', () => {
 
   test('a Handler path that does not end with .handler.ts is a type error', () => {
     const defined = defineConfig({
-      // @ts-expect-error: a Handler's file ends with `.handler.ts`
+      // @ts-expect-error TS2322 a Handler's file ends with `.handler.ts`
       layout: { guard: 'src/guards/{name}.ts' },
     });
 
@@ -81,7 +81,7 @@ describe('defineConfig', () => {
 
   test('a Handler path outside src/ is a type error', () => {
     const defined = defineConfig({
-      // @ts-expect-error: a Handler's file sits under `src/`
+      // @ts-expect-error TS2322 a Handler's file sits under `src/`
       layout: { guard: 'lib/guards/{name}.handler.ts' },
     });
 
@@ -90,7 +90,7 @@ describe('defineConfig', () => {
 
   test('a generated file’s path that does not end with .generated.ts is a type error', () => {
     const defined = defineConfig({
-      // @ts-expect-error: a generated file ends with `.generated.ts`
+      // @ts-expect-error TS2322 a generated file ends with `.generated.ts`
       layout: { readers: 'src/readers.ts' },
     });
 
@@ -99,7 +99,7 @@ describe('defineConfig', () => {
 
   test('a field the layout does not declare is a type error', () => {
     const defined = defineConfig({
-      // @ts-expect-error: `endpoints` is not a field of the layout
+      // @ts-expect-error TS2322 `endpoints` is not a field of the layout
       layout: { endpoints: 'src/{name}.handler.ts' },
     });
 
@@ -108,7 +108,7 @@ describe('defineConfig', () => {
 
   test('a field the configuration does not declare is a type error', () => {
     const defined = defineConfig({
-      // @ts-expect-error: `registries` is not a field of the configuration
+      // @ts-expect-error TS2322 `registries` is not a field of the configuration
       registries: ['https://npm.internal.example'],
     });
 
@@ -117,7 +117,7 @@ describe('defineConfig', () => {
 
   test('registry is not a field of the configuration', () => {
     const defined = defineConfig({
-      // @ts-expect-error: the registry is the organization's npm configuration
+      // @ts-expect-error TS2322 the registry is the organization's npm configuration
       registry: 'https://registry.npmjs.org',
     });
 
@@ -126,15 +126,15 @@ describe('defineConfig', () => {
 
   test('approvals, approvers and allowSelfApproval are not fields of the configuration', () => {
     const approvals = defineConfig({
-      // @ts-expect-error: the organization's review process enforces Approvals
+      // @ts-expect-error TS2322 the organization's review process enforces Approvals
       approvals: null,
     });
     const approvers = defineConfig({
-      // @ts-expect-error: the organization's review process decides who may approve
+      // @ts-expect-error TS2322 the organization's review process decides who may approve
       approvers: ['@org/platform-team'],
     });
     const allowSelfApproval = defineConfig({
-      // @ts-expect-error: the organization's review process decides who may approve
+      // @ts-expect-error TS2322 the organization's review process decides who may approve
       allowSelfApproval: false,
     });
 

@@ -3073,7 +3073,7 @@ describe('cf-loom generate: the Service type-checks', () => {
     expect(cfLoom(project, 'generate').status).toBe(0);
     write(project, {
       'src/check.ts': aCheck([
-        '// @ts-expect-error ChargeCard@2’s Handler is no Handler of ChargeCard@1',
+        '// @ts-expect-error TS2322 ChargeCard@2’s Handler is no Handler of ChargeCard@1',
         'export const wrong: MessageHandler<typeof chargeCardV1> = handlers.commands.chargeCardV2;',
         'export { auditCreated, chargeCardV2 };',
       ]),
@@ -3104,7 +3104,7 @@ describe('cf-loom generate: the Service type-checks', () => {
         "const orderId = '0b8f5f8e-8a5e-4c1e-9d0c-2f3b8c1d2e3f';",
         'const audit = handlers.subscriptions.auditCreated;',
         "export const unknown = audit({ orderId, status: { unknown: 'refunded' }, items }, meta);",
-        '// @ts-expect-error an undeclared value is read as its Unknown case, never bare',
+        '// @ts-expect-error TS2322 an undeclared value is read as its Unknown case, never bare',
         "export const bare = audit({ orderId, status: 'refunded', items }, meta);",
         'export { auditCreated, chargeCardV1, chargeCardV2 };',
       ]),

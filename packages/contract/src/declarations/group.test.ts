@@ -80,7 +80,7 @@ describe('defineGroup', () => {
   });
 
   test('a Group that lists nothing is a type error', () => {
-    // @ts-expect-error a Group lists at least one Endpoint, Event, Command or Subscription
+    // @ts-expect-error TS2345 a Group lists at least one Endpoint, Event, Command or Subscription
     const declare = () => defineGroup({ name: 'orders', description: 'Order lifecycle' });
 
     expect(declare).not.toThrow();
@@ -94,7 +94,7 @@ describe('defineGroup', () => {
           name: 'orders',
           description: 'Orders',
           events: [orderCreatedV1],
-          // @ts-expect-error a list in a Group is never empty
+          // @ts-expect-error TS2322 a list in a Group is never empty
           endpoints: [],
         }),
     ],
@@ -105,7 +105,7 @@ describe('defineGroup', () => {
           name: 'orders',
           description: 'Orders',
           endpoints: [listOrders],
-          // @ts-expect-error a list in a Group is never empty
+          // @ts-expect-error TS2322 a list in a Group is never empty
           events: [],
         }),
     ],
@@ -116,7 +116,7 @@ describe('defineGroup', () => {
           name: 'orders',
           description: 'Orders',
           endpoints: [listOrders],
-          // @ts-expect-error a list in a Group is never empty
+          // @ts-expect-error TS2322 a list in a Group is never empty
           commands: [],
         }),
     ],
@@ -127,7 +127,7 @@ describe('defineGroup', () => {
           name: 'orders',
           description: 'Orders',
           endpoints: [listOrders],
-          // @ts-expect-error a list in a Group is never empty
+          // @ts-expect-error TS2322 a list in a Group is never empty
           subscriptions: [],
         }),
     ],
@@ -143,7 +143,7 @@ describe('defineGroup fields', () => {
         name: 'orders',
         description: 'Order lifecycle',
         endpoints: [listOrders],
-        // @ts-expect-error a Group adds no prefix
+        // @ts-expect-error TS2322 a Group adds no prefix
         prefix: '/orders',
       });
 

@@ -42,7 +42,7 @@ describe('defineEvent', () => {
       defineEvent({
         name: 'OrderCreated',
         version: 1,
-        // @ts-expect-error a Message travels only through the broker
+        // @ts-expect-error TS2322 a Message travels only through the broker
         visibility: 'public',
         description: 'An order was placed',
         body,
@@ -53,7 +53,7 @@ describe('defineEvent', () => {
 
   test('an Event without a body is a type error', () => {
     const declare = () =>
-      // @ts-expect-error every Message Version declares its body
+      // @ts-expect-error TS2345 every Message Version declares its body
       defineEvent({
         name: 'OrderCreated',
         version: 1,
@@ -72,7 +72,7 @@ describe('defineEvent', () => {
         visibility: 'internal',
         description: 'An order was placed',
         body,
-        // @ts-expect-error an Event declares no headers
+        // @ts-expect-error TS2375 an Event declares no headers
         headers: z.object({}),
       });
 
@@ -83,7 +83,7 @@ describe('defineEvent', () => {
     const declare = () => [
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error versions count from 1
+        // @ts-expect-error TS2322 versions count from 1
         version: 0,
         visibility: 'internal',
         description: 'An order was placed',
@@ -91,7 +91,7 @@ describe('defineEvent', () => {
       }),
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error a version is a whole number
+        // @ts-expect-error TS2322 a version is a whole number
         version: 1.5,
         visibility: 'internal',
         description: 'An order was placed',
@@ -99,7 +99,7 @@ describe('defineEvent', () => {
       }),
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error a version written in exponent form is still a fraction
+        // @ts-expect-error TS2322 a version written in exponent form is still a fraction
         version: 1e-7,
         visibility: 'internal',
         description: 'An order was placed',
@@ -114,7 +114,7 @@ describe('defineEvent', () => {
     const declare = () =>
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error a version is written without an exponent
+        // @ts-expect-error TS2322 a version is written without an exponent
         version: 1e21,
         visibility: 'internal',
         description: 'An order was placed',
@@ -128,7 +128,7 @@ describe('defineEvent', () => {
     const declare = () =>
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error Infinity is no whole number
+        // @ts-expect-error TS2322 Infinity is no whole number
         // biome-ignore lint/correctness/noPrecisionLoss: the literal under test is too large for a number
         version: 1e999,
         visibility: 'internal',
@@ -144,7 +144,7 @@ describe('defineEvent', () => {
     const declare = () =>
       defineEvent({
         name: 'OrderCreated',
-        // @ts-expect-error a union of two versions is not one literal
+        // @ts-expect-error TS2322 a union of two versions is not one literal
         version: oneOfTwo,
         visibility: 'internal',
         description: 'An order was placed',
@@ -163,15 +163,15 @@ describe('defineEvent', () => {
     } as const;
     const either = z.union([z.object({ a: z.string() }), z.object({ b: z.int() })]);
     const declare = () => [
-      // @ts-expect-error a string cannot grow
+      // @ts-expect-error TS2375 a string cannot grow
       defineEvent({ ...base, body: z.string() }),
-      // @ts-expect-error a list cannot grow
+      // @ts-expect-error TS2375 a list cannot grow
       defineEvent({ ...base, body: z.array(z.object({ orderId: z.uuid() })) }),
-      // @ts-expect-error a record is no object of its fields
+      // @ts-expect-error TS2375 a record is no object of its fields
       defineEvent({ ...base, body: z.record(z.string(), z.string()) }),
-      // @ts-expect-error a union is no object of its fields
+      // @ts-expect-error TS2375 a union is no object of its fields
       defineEvent({ ...base, body: either }),
-      // @ts-expect-error a nullable object is no object of its fields
+      // @ts-expect-error TS2375 a nullable object is no object of its fields
       defineEvent({ ...base, body: z.object({ orderId: z.uuid() }).nullable() }),
     ];
 

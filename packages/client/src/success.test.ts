@@ -112,7 +112,7 @@ describe('a Success', () => {
       expectTypeOf(outcome.status).toEqualTypeOf<200>();
       expectTypeOf(outcome.body).toEqualTypeOf<{ id: string; total: number }>();
       expectTypeOf(outcome.headers['x-total']).toEqualTypeOf<number>();
-      // @ts-expect-error: a header the Endpoint does not declare is not read, so it is not typed
+      // @ts-expect-error TS7053 a header the Endpoint does not declare is not read, so it is not typed
       expectTypeOf(outcome.headers['x-undeclared']).toBeUnknown();
     }
   });

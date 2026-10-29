@@ -94,7 +94,7 @@ describe('serve: what it checks before the first request', () => {
   test('a live Endpoint without a Handler throws, naming it', () => {
     const missing = { ...handlers, endpoints: { getOrder: handlers.endpoints.getOrder } };
 
-    // @ts-expect-error findOrder has no Handler
+    // @ts-expect-error TS2345 findOrder has no Handler
     const serving = () => serve(contract, missing, {});
 
     expect(serving).toThrow(
@@ -108,7 +108,7 @@ describe('serve: what it checks before the first request', () => {
       endpoints: { ...handlers.endpoints, findOrder: handlers.endpoints.getOrder },
     };
 
-    // @ts-expect-error findOrder holds the Handler of getOrder
+    // @ts-expect-error TS2345 findOrder holds the Handler of getOrder
     const serving = () => serve(contract, swapped, {});
 
     expect(serving).toThrow('endpoints.findOrder holds the Handler written for getOrder');
@@ -118,7 +118,7 @@ describe('serve: what it checks before the first request', () => {
     const lookalike = Object.assign(() => undefined, { declaration: findOrder });
     const forged = { ...handlers, endpoints: { ...handlers.endpoints, findOrder: lookalike } };
 
-    // @ts-expect-error a wrapper is no Handler handle() returned
+    // @ts-expect-error TS2345 a wrapper is no Handler handle() returned
     const serving = () => serve(contract, forged, {});
 
     expect(serving).toThrow(
@@ -152,7 +152,7 @@ describe('serve: what it checks before the first request', () => {
   test('a Guard a live Endpoint attaches without a Handler throws, naming it', () => {
     const missing = { ...handlers, guards: {} };
 
-    // @ts-expect-error apiKey has no Handler
+    // @ts-expect-error TS2345 apiKey has no Handler
     const serving = () => serve(contract, missing, {});
 
     expect(serving).toThrow(
@@ -350,7 +350,7 @@ describe('serve: what it checks before the first request', () => {
   test('a GuardHandler written for another Guard throws, naming the Guard', () => {
     const swapped = { ...handlers, guards: { apiKey: handle(legacyKey, () => admit(legacyKey)) } };
 
-    // @ts-expect-error apiKey holds the Handler of legacyKey
+    // @ts-expect-error TS2345 apiKey holds the Handler of legacyKey
     const serving = () => serve(contract, swapped, {});
 
     expect(serving).toThrow('guards.apiKey holds the Handler written for legacyKey');

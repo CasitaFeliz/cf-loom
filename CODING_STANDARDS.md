@@ -273,7 +273,9 @@ agree with it, or it is read against nothing.
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
 status of a command. It imports no private module and asserts no call order of mocks. A README test imports the
 README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
-them. *Why:* a test of the mechanics fails on every refactor and passes on every bug.
+them. A type test that a call is refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and
+`pnpm check` verifies that the line below fails with that code **(check)**; a bare `@ts-expect-error` is met by any error
+and proves nothing. *Why:* a test of the mechanics fails on every refactor and passes on every bug.
 
 **C24. A test's name states the behavior in plain English.** `"an optional path param fails generate"`, not
 `"handles params"` or `"walk returns not-allowed"`. The `describe` names the seam; the `test` reads as a sentence
@@ -320,7 +322,9 @@ read, a destructuring or a cast of `_zod` (a name bound to `_zod` is out of reac
 judged (C1), and a spread argument of `push`, `unshift` or `splice` (C29). `scripts/check-tsdoc.ts` fails on an
 exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run it.
 `scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout); `pnpm check`
-and CI run it.
+and CI run it. `scripts/check-expect-errors.ts` type-checks the test projects of the packages and the examples and fails
+on a `@ts-expect-error` that names no code or whose line below does not fail with the code it names (C23); it needs the
+Contract Package that `pnpm build` writes, so CI runs it after the build.
 
 The rest stays judgment, and C27 is where it is exercised: the vague words of C14, every name of C15, a boolean
 parameter of a function that is not exported or is exported through an `export { … }` list (C17), whether a doc

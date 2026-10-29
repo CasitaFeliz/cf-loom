@@ -241,13 +241,13 @@ describe('the types of a Provider’s Elements', () => {
       defineGroup({
         name: 'billing',
         description: 'Billing',
-        // @ts-expect-error a Group lists its Contract’s own Elements
+        // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
         endpoints: [ping],
       }),
       defineGroup({
         name: 'billing',
         description: 'Billing',
-        // @ts-expect-error a Group lists its Contract’s own Elements
+        // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
         events: [pinged],
       }),
     ];
@@ -260,13 +260,13 @@ describe('the types of a Provider’s Elements', () => {
       defineGroup({
         name: 'billing',
         description: 'Billing',
-        // @ts-expect-error a Group lists its Contract’s own Elements
+        // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
         endpoints: [ownEndpoint, ping],
       }),
       defineGroup({
         name: 'billing',
         description: 'Billing',
-        // @ts-expect-error a Group lists its Contract’s own Elements
+        // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
         events: [pinged, ownEvent],
       }),
     ];

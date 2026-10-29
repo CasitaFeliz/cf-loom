@@ -284,7 +284,7 @@ describe('an EndpointHandler’s second argument', () => {
     const getOrderHandler = handle.stub(getOrder);
     const deleteOrderHandler = handle.stub(deleteOrder);
 
-    // @ts-expect-error getOrder's Guards give it a Context
+    // @ts-expect-error TS2345 getOrder's Guards give it a Context
     const withoutContext = () => getOrderHandler(getInput, {});
 
     expectTypeOf(deleteOrderHandler).toBeCallableWith(getInput, {});
@@ -432,7 +432,7 @@ describe('an EndpointHandler’s Context, for a Guard named like every object', 
       const guard = defineGuard({
         name: name as 'inherited',
         description: 'Named like every object',
-        // @ts-expect-error a Contract declares no optional Context; the handler's reading of one is tested
+        // @ts-expect-error TS2375 a Contract declares no optional Context; the handler's reading of one is tested
         context: z.object({ id: z.string() }).optional(),
       });
       const ping = defineEndpoint({
@@ -610,7 +610,7 @@ describe('an EndpointHandler’s Success', () => {
 
   test('a Success of the wrong shape is a type error', () => {
     const write = () =>
-      // @ts-expect-error total is a number
+      // @ts-expect-error TS2322 total is a number
       handle(getOrder, () => success(getOrder, { id: ORDER_ID, total: 'one' }));
 
     expect(write).not.toThrow();
@@ -662,7 +662,7 @@ describe('an EndpointHandler’s Rejections', () => {
     });
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    // @ts-expect-error a direct call takes no contract
+    // @ts-expect-error TS2322 a direct call takes no contract
     const withContract = () => getOrderHandler(getInput, { context: getContext }, { contract });
 
     expect(withContract).toBeTypeOf('function');
@@ -742,11 +742,11 @@ describe('an EndpointHandler’s Rejections', () => {
 
   test('a Rejection the Endpoint does not list, invalidInput and a missing body are type errors', () => {
     const write = () => [
-      // @ts-expect-error forbidden is not a Rejection getOrder answers
+      // @ts-expect-error TS2322 forbidden is not a Rejection getOrder answers
       handle(getOrder, () => reject(forbidden)),
-      // @ts-expect-error the runtime answers invalid input
+      // @ts-expect-error TS2345 the runtime answers invalid input
       handle(getOrder, () => reject(invalidInput)),
-      // @ts-expect-error orderLocked declares a body
+      // @ts-expect-error TS2345 orderLocked declares a body
       handle(getOrder, () => reject(orderLocked)),
     ];
 
@@ -808,15 +808,15 @@ describe('an EndpointHandler’s Rejections with headers', () => {
       handle(searchOrders, () =>
         reject(sessionExpired, { headers: { 'www-authenticate': 'Bearer' } }),
       ),
-      // @ts-expect-error a Rejection with headers takes { headers, body }, not a bare body
+      // @ts-expect-error TS2353 a Rejection with headers takes { headers, body }, not a bare body
       handle(searchOrders, () => reject(rateLimited, { limit: 100 })),
-      // @ts-expect-error a Rejection with headers takes its headers
+      // @ts-expect-error TS2345 a Rejection with headers takes its headers
       handle(searchOrders, () => reject(sessionExpired)),
-      // @ts-expect-error a Rejection with a body takes it beside its headers
+      // @ts-expect-error TS2741 a Rejection with a body takes it beside its headers
       handle(searchOrders, () => reject(rateLimited, { headers: { 'retry-after': 30 } })),
-      // @ts-expect-error a Rejection without a body takes none beside its headers
+      // @ts-expect-error TS2345 a Rejection without a body takes none beside its headers
       handle(searchOrders, () => reject(sessionExpired, withBody)),
-      // @ts-expect-error a header is typed by its schema
+      // @ts-expect-error TS2322 a header is typed by its schema
       handle(searchOrders, () => reject(sessionExpired, { headers: { 'www-authenticate': 3 } })),
     ];
 
@@ -956,7 +956,7 @@ describe('fault() retryAfter', () => {
     const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
 
     expectTypeOf(later.retryAfter).toEqualTypeOf<number>();
-    // @ts-expect-error a Fault not worth retrying says no time to retry
+    // @ts-expect-error TS2769 a Fault not worth retrying says no time to retry
     expect(() => fault({ committed: 'no', retryable: false, retryAfter: 5 })).toThrow(
       'fault(): retryAfter is given only to a retryable Fault',
     );
@@ -996,12 +996,12 @@ describe('fault() retryAfter', () => {
     const built: Fault = { kind: 'fault', committed: 'no', retryable, message: 'm' };
     const plain: MessageFault = fault({ committed: 'no', retryable });
 
-    // @ts-expect-error a spread cannot make a Fault that says when to retry not retryable
+    // @ts-expect-error TS2322 a spread cannot make a Fault that says when to retry not retryable
     const spread: Fault = {
       ...fault({ committed: 'no', retryable: true, retryAfter: 5 }),
       retryable: false,
     };
-    // @ts-expect-error a Fault built by hand that is not retryable takes no retryAfter
+    // @ts-expect-error TS2322 a Fault built by hand that is not retryable takes no retryAfter
     const byHand: Fault = {
       kind: 'fault',
       committed: 'no',
@@ -1009,7 +1009,7 @@ describe('fault() retryAfter', () => {
       message: 'm',
       retryAfter: 5,
     };
-    // @ts-expect-error fault() refuses retryAfter on a Fault that is not retryable, given as a value
+    // @ts-expect-error TS2769 fault() refuses retryAfter on a Fault that is not retryable, given as a value
     const fromValue = () => fault(given);
 
     expectTypeOf<Extract<Fault, { retryable: false }>['retryAfter']>().toEqualTypeOf<undefined>();
@@ -1065,10 +1065,10 @@ describe('what an EndpointHandler returns', () => {
   test('a body on a headers-only Success is a type error', () => {
     const write = () => [
       handle(orderTotal, () =>
-        // @ts-expect-error a headers-only Success has no body
+        // @ts-expect-error TS2322 a headers-only Success has no body
         success(orderTotal, { headers: { 'x-total': 3 }, body: { id: ORDER_ID } }),
       ),
-      // @ts-expect-error a 204 Success has no body
+      // @ts-expect-error TS2554 a 204 Success has no body
       handle(deleteOrder, () => success(deleteOrder, { id: ORDER_ID })),
     ];
 
