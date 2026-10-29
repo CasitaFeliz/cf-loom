@@ -36,9 +36,12 @@ export default handle(getOrder, async ({ params }, { context }, { resources: { o
 
 ```ts
 // src/guards/api-key.handler.ts
+import { admit, handle, reject } from '@cf-loom/handlers';
+import { apiKey, unauthenticated } from '@org/definitions';
+
 export default handle(apiKey, async ({ headers }, _call, { resources: { callers } }: Needs<'callers'>) => {
   const caller = await callers.byKey(headers['x-api-key']);
-  if (!caller) return reject(unauthenticated);
+  if (!caller) return reject(unauthenticated, { headers: { 'www-authenticate': 'ApiKey realm="orders"' } });
   return admit({ callerId: caller.id });
 });
 ```
@@ -49,6 +52,9 @@ A Guard that lists other Guards, or declares a `qualifier` (see [Guards](https:/
 
 ```ts
 // src/guards/permission.handler.ts
+import { admit, handle, reject } from '@cf-loom/handlers';
+import { forbidden, permission } from '@org/definitions';
+
 export default handle(permission, async (_demands, { context: { userToken }, qualifier }, { resources: { permissions } }: Needs<'permissions'>) => {
   const held = await permissions.of(userToken.userId);
   const granted = qualifier.every((code) => held.includes(code));
@@ -68,13 +74,16 @@ The Service declares one type for all of it, and each Handler picks the keys it 
 
 ```ts
 // src/resources.ts
+import type { Client } from '@cf-loom/client';
 import type { WithResources } from '@cf-loom/handlers';
+import type { CommandSender, EventPublisher } from '@cf-loom/messaging';
 
 export type Resources = {
   readonly orders: Orders;
   readonly callers: Callers;
   readonly permissions: Permissions;
   readonly payments: Client<typeof paymentsDependency>;
+  readonly notifications: Notifications;
   readonly publisher: EventPublisher<typeof contract>;
   readonly sender: CommandSender<typeof contract>;
 };
@@ -82,13 +91,18 @@ export type Needs<Key extends keyof Resources> = WithResources<Pick<Resources, K
 ```
 
 ```ts
-// src/main.ts
+import { client } from '@cf-loom/client';
+import { messaging } from '@cf-loom/messaging';
+import { serve } from '@cf-loom/server';
+import handlers from '../src/handlers.generated.ts';
+
 const running = await messaging(contract, broker);
 const resources: Resources = {
   orders: await mongoOrders(),
   callers: await mongoCallers(),
   permissions: await mongoPermissions(),
   payments: client(paymentsDependency, { baseUrl }),
+  notifications: await mongoNotifications(),
   publisher: running.publisher,
   sender: running.sender,
 };
@@ -139,6 +153,11 @@ const answer = await notifyOnSettledHandler(
 The Handler map is plain data (see [Stubs and the Handler map](#stubs-and-the-handler-map)), so a test replaces one Handler, a Guard's for example, by spreading the map:
 
 ```ts
+import { admit, handle } from '@cf-loom/handlers';
+import { serve } from '@cf-loom/server';
+import { apiKey } from '@org/definitions';
+import handlers from '../src/handlers.generated.ts';
+
 const http = serve(
   contract,
   { ...handlers, guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ callerId: 'c-1' })) } },
