@@ -13,7 +13,8 @@ plans.
 - Fidelity: the change does what the plans say, nothing missing or extra.
 - Consistency: each rule lives in one document and the others link to it; no document contradicts another or the
   code; the documents describe the current design only, never its history.
-- Terms: glossary terms are capitalized and no _Avoid_ word is used as a name for its entry's own thing.
+- Terms: the glossary's terms, as [CLAUDE.md](../../CLAUDE.md#documents) says; `pnpm check` covers the multi-word ones,
+  the single words are yours.
 - Links and anchors resolve; code, commands and paths named exist.
 - Configuration and scripts work: run what the change adds.
 

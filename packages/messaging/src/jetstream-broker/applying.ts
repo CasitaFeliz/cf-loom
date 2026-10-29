@@ -35,7 +35,7 @@ function checkedOf(plan: unknown, limits: unknown): Checked {
   const decoded = decodeBrokerPlan(plan);
   if (decoded.kind === 'malformed') {
     const shape =
-      'The broker plan is not the plan of the document cf-loom broker-plan --json prints';
+      'The value is not the Broker plan of the document cf-loom broker-plan --json prints';
     return { kind: 'refused', message: `${shape}: ${decoded.reason}` };
   }
   const settings = settingsOf(decoded.plan, limits);

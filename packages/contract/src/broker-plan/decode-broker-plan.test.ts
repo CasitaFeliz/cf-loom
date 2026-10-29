@@ -130,12 +130,12 @@ describe('reading a broker plan', () => {
     [
       'a plan with a key the shape does not have',
       aPlan({ version: 1 }),
-      'version is a key the broker plan does not define',
+      'version is a key the Broker plan does not define',
     ],
     [
       'a stream with a key the shape does not have',
       aPlanWithStream({ retention: 'limits' }),
-      `streams.${ordersStream}.retention is a key the broker plan does not define`,
+      `streams.${ordersStream}.retention is a key the Broker plan does not define`,
     ],
     [
       'a stream with no service',
@@ -165,7 +165,7 @@ describe('reading a broker plan', () => {
     [
       'a Durable consumer with a key the shape does not have',
       aPlanWithDurableConsumer({ ackWait: '30s' }),
-      `durableConsumers.${invoiceDurableConsumer}.ackWait is a key the broker plan does not define`,
+      `durableConsumers.${invoiceDurableConsumer}.ackWait is a key the Broker plan does not define`,
     ],
   ])('%s is malformed, naming where', (_, value, reason) => {
     expect(decodeBrokerPlan(value)).toEqual(malformed(reason));
