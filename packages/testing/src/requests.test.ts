@@ -352,6 +352,7 @@ describe('fakeProvider: requests', () => {
           issues: [
             { in: 'params', path: ['paymentId'], code: 'too_small', message: expect.any(String) },
           ],
+          omittedIssues: 0,
         },
       },
     });
@@ -361,8 +362,40 @@ describe('fakeProvider: requests', () => {
         issues: [
           { in: 'params', path: ['paymentId'], code: 'too_small', message: expect.any(String) },
         ],
+        omittedIssues: 0,
       },
     ]);
+  });
+
+  test('a request of 150 invalid items is answered and recorded with its first 100 Issues and 50 omitted', async () => {
+    const tagPayments = defineEndpoint({
+      name: 'tagPayments',
+      method: 'POST',
+      path: '/payments/tags',
+      visibility: 'internal',
+      description: 'Tags payments',
+      input: { body: z.array(z.string()) },
+      success: { status: 204 },
+    });
+    const tagging = contractPackageOf({ tagPayments });
+    const fake = fakeProvider(defineDependency({ endpoints: [tagging.endpoints.tagPayments] }));
+    const items = JSON.stringify(Array.from({ length: 150 }, () => 1));
+
+    const response = await fake.fetch(
+      new Request(`${at}/payments/tags`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: items,
+      }),
+    );
+
+    const answered = (await response.json()) as { rejection: { body: unknown } };
+    const [recorded] = fake.invalidCalls('tagPayments');
+    expect(recorded).toEqual(answered.rejection.body);
+    expect(recorded?.issues.map((issue) => issue.path)).toEqual(
+      Array.from({ length: 100 }, (_, index) => [index]),
+    );
+    expect(recorded?.omittedIssues).toBe(50);
   });
 
   test('a missing demanded header answers alone, before the Input is read', async () => {
@@ -455,7 +488,7 @@ describe('fakeProvider: requests', () => {
     ]);
   });
 
-  test('invalidCalls lists the Issues of each request answered with invalid input, in arrival order', async () => {
+  test('invalidCalls lists the invalid-input body each request was answered with, in arrival order', async () => {
     const { fake } = countingFake();
     const headers = { 'x-api-key': 'k' };
 
@@ -470,8 +503,8 @@ describe('fakeProvider: requests', () => {
       message: expect.any(String),
     });
     expect(fake.invalidCalls('getPayment')).toEqual([
-      { issues: [issueOf('params', 'paymentId', 'too_small')] },
-      { issues: [issueOf('headers', 'x-api-key', 'required')] },
+      { issues: [issueOf('params', 'paymentId', 'too_small')], omittedIssues: 0 },
+      { issues: [issueOf('headers', 'x-api-key', 'required')], omittedIssues: 0 },
     ]);
   });
 

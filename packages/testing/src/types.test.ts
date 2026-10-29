@@ -470,8 +470,8 @@ describe('the records a test reads and writes', () => {
     >();
   });
 
-  test('an InvalidCall holds the Issues, and no more', () => {
-    expectTypeOf<keyof InvalidCall>().toEqualTypeOf<'issues'>();
+  test('an InvalidCall holds the Issues and the count of those omitted, and no more', () => {
+    expectTypeOf<keyof InvalidCall>().toEqualTypeOf<'issues' | 'omittedIssues'>();
   });
 
   test('a Script holds once and otherwise, and no more', () => {
