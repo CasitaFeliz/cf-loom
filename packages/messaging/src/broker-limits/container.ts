@@ -49,19 +49,14 @@ export type ReadOf<Reading extends Readers> = {
   readonly [Name in keyof Reading]?: z.output<Reading[Name]>;
 };
 
-/** The limits as read: every setting of a kind in its adapter's units, and no `undefined` anywhere. */
-export type Container<StreamReaders extends Readers, DurableConsumerReaders extends Readers> = {
-  readonly streamDefaults?: ReadOf<StreamReaders> | undefined;
-  readonly streams?: Readonly<Record<string, ReadOf<StreamReaders>>> | undefined;
-  readonly durableConsumerDefaults?: ReadOf<DurableConsumerReaders> | undefined;
-  readonly durableConsumers?: Readonly<Record<string, ReadOf<DurableConsumerReaders>>> | undefined;
-};
+/** The limits as read, as the container's schema yields them. */
+export type Container<
+  StreamReaders extends Readers,
+  DurableConsumerReaders extends Readers,
+> = OutputOf<ReturnType<typeof streamFieldsOf<StreamReaders>>> &
+  OutputOf<ReturnType<typeof durableConsumerFieldsOf<DurableConsumerReaders>>>;
 
-/** The container's keys of a Broker without per-Stream settings. */
-type DurableConsumerFields<DurableConsumerReaders extends Readers> = Pick<
-  Container<Readers, DurableConsumerReaders>,
-  'durableConsumerDefaults' | 'durableConsumers'
->;
+type OutputOf<Fields> = { readonly [Name in keyof Fields]?: z.output<Fields[Name]> };
 
 /** The readers of the kinds an adapter's Broker has settings for; a Broker without per-Stream settings has no `stream`. */
 export type KindReaders<StreamReaders extends Readers, DurableConsumerReaders extends Readers> = {
@@ -105,7 +100,7 @@ function settingsSchemaOf<Reading extends Readers>(readers: Reading) {
   return settings.transform((read) => definedOf(names, read)) as z.ZodType<ReadOf<Reading>>;
 }
 
-/** The defaults of one kind's settings, and each name's own, as the container holds them under that kind's two keys. */
+/** The defaults of one kind's settings, and each name's own. */
 function perKindOf<Reading extends Readers>(readers: Reading) {
   const settings = settingsSchemaOf(readers);
   return {
@@ -114,23 +109,29 @@ function perKindOf<Reading extends Readers>(readers: Reading) {
   };
 }
 
+function streamFieldsOf<Reading extends Readers>(readers: Reading) {
+  const stream = perKindOf(readers);
+  return { streamDefaults: stream.defaults, streams: stream.entries };
+}
+
+function durableConsumerFieldsOf<Reading extends Readers>(readers: Reading) {
+  const durableConsumer = perKindOf(readers);
+  return {
+    durableConsumerDefaults: durableConsumer.defaults,
+    durableConsumers: durableConsumer.entries,
+  };
+}
+
 function containerOf<StreamReaders extends Readers, DurableConsumerReaders extends Readers>(
   kinds: KindReaders<StreamReaders, DurableConsumerReaders>,
-) {
-  const durableConsumer = perKindOf(kinds.durableConsumer);
+): z.ZodType<Container<StreamReaders, DurableConsumerReaders>> {
+  const durableConsumer = durableConsumerFieldsOf(kinds.durableConsumer);
   if (kinds.stream === undefined) {
-    return z.strictObject({
-      durableConsumerDefaults: durableConsumer.defaults,
-      durableConsumers: durableConsumer.entries,
-    } satisfies Record<keyof DurableConsumerFields<DurableConsumerReaders>, z.ZodType>);
+    return z.strictObject(durableConsumer);
   }
-  const stream = perKindOf(kinds.stream);
-  return z.strictObject({
-    streamDefaults: stream.defaults,
-    durableConsumerDefaults: durableConsumer.defaults,
-    streams: stream.entries,
-    durableConsumers: durableConsumer.entries,
-  } satisfies Record<keyof Container<StreamReaders, DurableConsumerReaders>, z.ZodType>);
+  const { streamDefaults, streams } = streamFieldsOf(kinds.stream);
+  const { durableConsumerDefaults, durableConsumers } = durableConsumer;
+  return z.strictObject({ streamDefaults, durableConsumerDefaults, streams, durableConsumers });
 }
 
 /** Reads the limits an adapter's `applyBrokerPlan` took, which only a JSON file or untyped code can get wrong. */

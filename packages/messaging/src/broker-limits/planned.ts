@@ -155,10 +155,10 @@ function unsetDurableConsumerLine({ name, names }: Unset): string {
  * per-Stream settings.
  */
 export type AdapterLimits<
-  StreamReaders extends Readers,
   DurableConsumerReaders extends Readers,
-  StreamPlanned,
   DurableConsumerPlanned,
+  StreamReaders extends Readers = Readers,
+  StreamPlanned = never,
 > = {
   readonly definer: string;
   readonly stream?: KindLimits<StreamReaders, BrokerPlanStream, StreamPlanned>;
@@ -179,10 +179,10 @@ export function plannedOf<
   plan: unknown,
   limits: unknown,
   adapter: AdapterLimits<
-    StreamReaders,
     DurableConsumerReaders,
-    StreamPlanned,
-    DurableConsumerPlanned
+    DurableConsumerPlanned,
+    StreamReaders,
+    StreamPlanned
   >,
 ):
   | {
