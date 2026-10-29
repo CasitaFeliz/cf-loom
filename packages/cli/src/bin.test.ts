@@ -6718,52 +6718,52 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     [
       'lists a workspace: range in dependencies',
       { dependencies: { '@org/shared': 'workspace:*' } },
-      'package.json lists @org/shared in dependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists @org/shared in dependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in dependencies',
       { dependencies: { left: 'catalog:' } },
-      'package.json lists left in dependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists left in dependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a workspace: range in optionalDependencies',
       { optionalDependencies: { '@org/shared': 'workspace:^' } },
-      'package.json lists @org/shared in optionalDependencies as workspace:^, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists @org/shared in optionalDependencies as workspace:^, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in optionalDependencies',
       { optionalDependencies: { left: 'catalog:' } },
-      'package.json lists left in optionalDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists left in optionalDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a file: range in dependencies',
       { dependencies: { '@org/shared': 'file:../shared' } },
-      'package.json lists @org/shared in dependencies as file:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists @org/shared in dependencies as file:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a link: range in dependencies',
       { dependencies: { '@org/shared': 'link:../shared' } },
-      'package.json lists @org/shared in dependencies as link:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists @org/shared in dependencies as link:../shared, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a file: range in optionalDependencies',
       { optionalDependencies: { left: 'file:./vendor/left.tgz' } },
-      'package.json lists left in optionalDependencies as file:./vendor/left.tgz, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists left in optionalDependencies as file:./vendor/left.tgz, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a link: range in optionalDependencies',
       { optionalDependencies: { left: 'link:./vendor/left' } },
-      'package.json lists left in optionalDependencies as link:./vendor/left, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists left in optionalDependencies as link:./vendor/left, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a workspace: range in peerDependencies',
       { peerDependencies: { '@org/shared': 'workspace:*' } },
-      'package.json lists @org/shared in peerDependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists @org/shared in peerDependencies as workspace:*, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
     [
       'lists a catalog: range in peerDependencies',
       { peerDependencies: { left: 'catalog:' } },
-      'package.json lists left in peerDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)',
+      'package.json lists left in peerDependencies as catalog:, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)',
     ],
   ] as const)(
     'a Definitions Package whose package.json %s is a tooling error, and nothing is put or left behind',
@@ -6828,7 +6828,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
       const lists = `package.json lists left in ${field} as ${range}`;
       const checked = `${neverPublished(registry, '@org/definitions')}\n`;
-      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)\n`;
+      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)\n`;
       expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
       expect(putRequestsOf(registry)).toEqual([]);
       expect(leftBehindIn(project)).toEqual([]);
@@ -6852,7 +6852,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
 
       const lists = `package.json lists left in dependencies as ${range}`;
       const checked = `${neverPublished(registry, '@org/definitions')}\n`;
-      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)\n`;
+      const refused = `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)\n`;
       expect(ran).toEqual({ status: 3, stdout: checked, stderr: refused });
     },
   );

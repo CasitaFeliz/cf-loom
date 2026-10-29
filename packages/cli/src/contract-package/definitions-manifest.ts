@@ -51,7 +51,7 @@ export function definitionsManifestOf(
     const { field, name: dependency, range } = uninstallable;
     const lists = `package.json lists ${dependency} in ${field} as ${range}`;
     return unpublishable(
-      `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)`,
+      `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one under a lower-case package name)`,
     );
   }
   return { kind: 'manifest', file: manifestFileOf(manifest) };
@@ -120,9 +120,9 @@ function uninstallableIn(
 
 /**
  * Whether a dependency's range is one cf-loom keeps as resolved from the registry: a version, a
- * version range or a dist-tag, or an `npm:` alias of one whose name is a package name npm accepts
- * for a new package, which refuses some aliases npm resolves. Without a semver parser, a malformed
- * range or tag reads as a valid one.
+ * version range or a dist-tag, or an `npm:` alias of one whose name is a lower-case package name
+ * npm accepts, which refuses some aliases npm resolves. Without a semver parser, a malformed range
+ * or tag reads as a valid one.
  */
 function isRegistryRange(range: string): boolean {
   if (!aliasPrefix.test(range)) {

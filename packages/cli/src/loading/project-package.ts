@@ -26,7 +26,7 @@ const packageNamePattern = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 /** The unscoped names npm reserves and refuses for any package. */
 const reservedNames: ReadonlySet<string> = new Set(['node_modules', 'favicon.ico']);
 
-/** Whether `name` is a package name npm accepts for a new package: lower-case, scoped or not, never a scope alone nor a name npm reserves. */
+/** Whether `name` is a lower-case package name npm accepts: scoped or not, never a scope alone nor a name npm reserves. */
 export function isPackageName(name: string): boolean {
   return packageNamePattern.test(name) && !reservedNames.has(name);
 }
