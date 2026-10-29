@@ -46,19 +46,19 @@ export function runCfLoom(directory: string, paths: readonly string[]): void {
   if (!existsSync(cli)) {
     throw new Error(`The README Service needs the CLI built: ${cli} is written by pnpm build`);
   }
-  const refused: CfLoomProblem[] = [];
-  for (const service of servicesOf(paths)) {
-    linkDefinitions(join(directory, service));
-    const out = join(directory, packageFolderOf(service));
-    for (const command of [['generate'], ['package', '--out', out]]) {
-      const problems = cfLoom(join(directory, service), command, service);
-      refused.push(...problems);
-      if (problems.length > 0) {
-        break;
-      }
-    }
-  }
+  const refused = servicesOf(paths).flatMap((service) => generatedAndPackaged(directory, service));
   writeFileSync(join(directory, refusedAt), JSON.stringify(refused));
+}
+
+/** Runs `generate`, then `package` once `generate` refused nothing, and what either refused. */
+function generatedAndPackaged(directory: string, service: string): CfLoomProblem[] {
+  const folder = join(directory, service);
+  linkDefinitions(folder);
+  const generated = cfLoom(folder, ['generate'], service);
+  if (generated.length > 0) {
+    return generated;
+  }
+  return cfLoom(folder, ['package', '--out', join(directory, packageFolderOf(service))], service);
 }
 
 /** What cf-loom refused when the README Service was written to `directory`. */
