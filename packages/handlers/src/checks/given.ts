@@ -8,7 +8,7 @@ import {
   parsedPartsOf,
   schemaOf,
 } from '@cf-loom/contract/internal';
-import { type Checked, checkedAll, type Issue, withIssues } from './checked.ts';
+import { type Checked, checkedAll, type Issue, mapValue, withIssues } from './checked.ts';
 
 /**
  * What a request carries beside its Input, for cancelling and tracing: its abort signal and its
@@ -36,11 +36,46 @@ export type GuardGiven = {
 /** Parsed values by the field a Handler reads them under. */
 type ValuesByField = Readonly<Record<string, unknown>>;
 
+/**
+ * What `serve` gives one call of an EndpointHandler: its Input as the contract's reading parsed it,
+ * and the Context `serve` built from its Guards' Admissions, which the run checks; the request and
+ * the Resources passed on unchecked.
+ */
+export type EndpointRead = {
+  readonly input: ValuesByField;
+  readonly context: unknown;
+  readonly request: HandledRequest;
+  readonly resources: unknown;
+};
+
+/**
+ * What `serve` gives one call of a GuardHandler: its demands as the contract's reading parsed them,
+ * and the Context and Qualifier `serve` built, which the run checks; the request and the Resources
+ * passed on unchecked.
+ */
+export type GuardRead = {
+  readonly demands: ValuesByField;
+  readonly context: unknown;
+  readonly qualifier: unknown;
+  readonly request: HandledRequest;
+  readonly resources: unknown;
+};
+
+/** The Input and Context an EndpointHandler's implementation receives, checked. */
+export type EndpointReceived = { readonly input: ValuesByField; readonly context: ValuesByField };
+
+/** The demands, Context and Qualifier a GuardHandler's implementation receives, checked. */
+export type GuardReceived = {
+  readonly demands: ValuesByField;
+  readonly context: ValuesByField;
+  readonly qualifier: unknown;
+};
+
 /** The Input and Context of one call of an EndpointHandler, as its implementation receives them. */
 export function checkedEndpointCall(
   endpoint: Endpoint,
   given: EndpointGiven,
-): Checked<{ readonly input: ValuesByField; readonly context: ValuesByField }> {
+): Checked<EndpointReceived> {
   const schemaAt = (part: (typeof inputParts)[number]) => schemaOf(endpoint, part);
   return checkedAll({
     input: parsedPartsOf(inputParts, schemaAt, given.input),
@@ -48,21 +83,41 @@ export function checkedEndpointCall(
   });
 }
 
+/** The Input and Context of one call `serve` read: the Input as its reading parsed it, the Context checked. */
+export function servedEndpointCall(
+  endpoint: Endpoint,
+  read: EndpointRead,
+): Checked<EndpointReceived> {
+  const context = checkedContext(endpoint, read.context);
+  return mapValue(context, (checked) => ({ input: read.input, context: checked }));
+}
+
 /** The demands, Context and Qualifier of one call of a GuardHandler, as its implementation receives them. */
-export function checkedGuardCall(
-  guard: Guard,
-  given: GuardGiven,
-): Checked<{
-  readonly demands: ValuesByField;
-  readonly context: ValuesByField;
-  readonly qualifier: unknown;
-}> {
+export function checkedGuardCall(guard: Guard, given: GuardGiven): Checked<GuardReceived> {
   const schemaAt = (part: (typeof demandParts)[number]) => schemaOf(guard, part);
   return checkedAll({
     demands: parsedPartsOf(demandParts, schemaAt, given.demands),
     context: checkedContext(guard, given.context),
-    qualifier: parsedPartOf('qualifier', schemaOf(guard, 'qualifier'), { value: given.qualifier }),
+    qualifier: checkedQualifier(guard, given.qualifier),
   });
+}
+
+/** The demands, Context and Qualifier of one call `serve` read: the demands as parsed, the rest checked. */
+export function servedGuardCall(guard: Guard, read: GuardRead): Checked<GuardReceived> {
+  const checked = checkedAll({
+    context: checkedContext(guard, read.context),
+    qualifier: checkedQualifier(guard, read.qualifier),
+  });
+  return mapValue(checked, ({ context, qualifier }) => ({
+    demands: read.demands,
+    context,
+    qualifier,
+  }));
+}
+
+/** A Guard's Qualifier, parsed with the Guard's `qualifier` schema. */
+function checkedQualifier(guard: Guard, qualifier: unknown): Checked<unknown> {
+  return parsedPartOf('qualifier', schemaOf(guard, 'qualifier'), { value: qualifier });
 }
 
 /**
