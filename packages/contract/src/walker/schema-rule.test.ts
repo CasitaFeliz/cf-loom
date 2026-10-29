@@ -826,6 +826,28 @@ describe('what the types leave to generate', () => {
     expect(event.kind).toBe('event');
   });
 
+  test('a field typed unknown is not read as a value that is no zod 4 schema', () => {
+    const shape: { readonly open: unknown } = { open: z.string() };
+
+    const endpoint = defineEndpoint({
+      ...listOrders,
+      success: { status: 200, body: z.object(shape) },
+    });
+
+    expect(endpoint.kind).toBe('endpoint');
+  });
+
+  test('a field that may be absent is not read as a value that is no zod 4 schema', () => {
+    const shape: { readonly maybe?: z.ZodString | undefined } = {};
+
+    const endpoint = defineEndpoint({
+      ...listOrders,
+      success: { status: 200, body: z.object(shape) },
+    });
+
+    expect(endpoint.kind).toBe('endpoint');
+  });
+
   test('a schema typed by a type parameter compiles in a generic function’s declaration', () => {
     function declareStage<Stage extends z.ZodType>(stage: Stage) {
       return defineEndpoint({

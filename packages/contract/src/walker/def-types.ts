@@ -10,7 +10,7 @@ type Unjudged<Held> = Held extends core.$ZodType
       ? Readonly<Record<string, unknown>>
       : Held;
 
-/** A zod def with every schema it holds typed unknown: a child is read only once `isSchema` judges it. */
+/** A zod def with every schema it holds typed unknown, so a child is read only once judged. */
 type UnjudgedDef<Zod> = Zod extends unknown
   ? { readonly [Key in keyof Zod]: Unjudged<Zod[Key]> }
   : never;
@@ -113,9 +113,8 @@ const refusedDefTypes: ReadonlySet<string> = new Set(
 );
 
 /**
- * Whether a value is a zod 4 schema, by zod's own `instanceof`: it reads the traits in `_zod`, which
- * zod, `zod/mini` and any copy of either set, and a zod/v3 schema or a hand-built `_zod` object
- * lacks, so the walk never reads `_zod.def` of anything else.
+ * Whether a value is a zod 4 schema, by zod's own `instanceof`, which `zod`, `zod/mini` and any
+ * copy of either satisfy and a zod/v3 schema or a hand-built `_zod` object does not.
  */
 export function isSchema(value: unknown): value is core.$ZodType {
   return value instanceof core.$ZodType;

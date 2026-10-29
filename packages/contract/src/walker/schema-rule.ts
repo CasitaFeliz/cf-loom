@@ -183,16 +183,13 @@ type NoZod4Schema = { readonly _zod: { readonly def: { readonly type: 'notZod4' 
  * Whether a type is of a value that has no `_zod`, as a zod/v3 schema: `any` and `unknown`, which a
  * wide type holds, and `undefined`, which an optional slot adds, say nothing of one.
  */
-type IsNoSchema<Value> =
-  IsAny<Value> extends true
+type IsNoSchema<Value> = unknown extends Value
+  ? false
+  : [Value] extends [undefined]
     ? false
-    : unknown extends Value
+    : Value extends { readonly _zod: unknown }
       ? false
-      : [Value] extends [undefined]
-        ? false
-        : Value extends { readonly _zod: unknown }
-          ? false
-          : true;
+      : true;
 
 type RequiredOf<Inner> =
   DefOf<Inner> extends {
@@ -232,8 +229,8 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
 /**
  * What every schema a declaration holds must also satisfy: a zod type the Not allowed list refuses
  * by name, a pipe or codec, coercion, a catchall or a field that is no zod 4 schema is a type error
- * that words the construct as `generate` does. A schema whose type says nothing, `z.json()` and what lies past ten schemas are
- * left to `generate`.
+ * that words the construct as `generate` does. A schema whose type says nothing, `z.json()` and
+ * what lies past ten schemas are left to `generate`.
  */
 export type SchemaRule<Schema> = [RefusedIn<Schema>] extends [never]
   ? unknown

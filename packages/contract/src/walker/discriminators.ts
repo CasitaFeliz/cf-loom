@@ -21,7 +21,7 @@ export function discriminatorOf(option: unknown, key: string): Discriminator {
   return { values: valuesOf(option, key), refusal: refusalOf(option, key) };
 }
 
-/** A variant must be an object whose discriminator is a literal; a discriminated union in its place is named. */
+/** A variant must be an object whose discriminator is a literal; a union in its place is named. */
 function refusalOf(option: unknown, key: string): Refused | undefined {
   const variant = defOf(innerOfLazy(option));
   if (variant === undefined) {
@@ -42,11 +42,11 @@ function fieldOf(variant: DefOfType<'object'>, key: string): unknown {
   return Object.hasOwn(variant.shape, key) ? variant.shape[key] : undefined;
 }
 
-/** The def types whose values zod reads through to the schema inside: a variant's, then a discriminator's. */
+/** The def types zod reads values through to the schema inside, of a variant and of a discriminator. */
 const variantForwarding: ReadonlySet<string> = new Set(['lazy', 'readonly', 'pipe']);
 const fieldForwarding: ReadonlySet<string> = new Set(['readonly', 'pipe']);
 
-/** The def zod reads values from, through the wrappers that forward them; none for a value that is no schema. */
+/** The def zod reads values from, through the wrappers that forward them; none for no schema. */
 function forwardedDefOf(value: unknown, forwarding: ReadonlySet<string>): Def | undefined {
   const met = new Set<unknown>();
   let current = value;

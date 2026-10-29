@@ -27,7 +27,7 @@ const keyAt: Step = { kind: 'key' };
 const valueAt: Step = { kind: 'value' };
 const itemsAt: Step = { kind: 'items' };
 
-/** A slot in a schema that holds another: how to build it around a child, and where the child sits. */
+/** A slot a schema holds another in: how to build it around a child, and where the child sits. */
 type Slot = {
   readonly name: string;
   readonly around: (child: never) => unknown;
@@ -41,7 +41,7 @@ type Slot = {
 const jsonOptions = [z.string(), z.number(), z.boolean(), z.null()] as const;
 const stringKeyed = z.record(z.string(), z.string());
 
-/** Every slot a schema holds another in that the walk reads, the readers that peek before they enter included. */
+/** Every slot the walk reads a schema in, those the readers peek at before they enter included. */
 const slots: readonly Slot[] = [
   { name: 'an object field', around: (child) => z.object({ a: child }), steps: [fieldAt('a')] },
   {
@@ -184,7 +184,7 @@ function isNothingHere(slot: Slot, bad: unknown): boolean {
   return Object.hasOwn(slot, 'noneIs') && slot.noneIs === bad;
 }
 
-/** What is wrong with the walk of a bad value at the end of these slots, none when it is as it should be. */
+/** What is wrong with the walk of a bad value at the end of these slots, none when all is well. */
 function problemOf(nesting: Nesting, what: string, schema: unknown): string | undefined {
   const label = `${nesting.map(({ name }) => name).join(' > ')} :: ${what}`;
   const at = authorPathOf(nesting.flatMap(({ steps }) => steps)) ?? '';
@@ -230,7 +230,7 @@ describe('walkSchemas: a value that is no zod 4 schema in any slot', () => {
   );
 });
 
-/** The refusals of a walk, in the order of their places and lines, so a test states them in any order. */
+/** The refusals of a walk in the order of their places, so a test can state them in any order. */
 function sortedFailuresOf(schema: unknown) {
   const key = ({ at, construct }: { at: string; construct: string }) => `${at}\n${construct}`;
   return failuresOf(schema).toSorted((left, right) => key(left).localeCompare(key(right)));
