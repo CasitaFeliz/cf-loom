@@ -1729,7 +1729,24 @@ describe('cf-loom generate: a configured layout', () => {
     expect(ran).toEqual({
       status: 3,
       stdout: '',
-      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outsideSrcClause}: ${replaceLinkFix}\n`,
+      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${intoContractClause}: ${replaceLinkIntoFix}\n`,
+    });
+  });
+
+  test('a Handler path whose link leaves src/ and lands in the Contract’s folder is refused as leaving src/', () => {
+    const project = aProject(aService());
+    cfLoom(project, 'generate');
+    renameSync(join(project, 'src/contract'), join(project, 'contract'));
+    symlinkSync(join(project, 'contract'), join(project, 'src/contract'), 'dir');
+    symlinkSync(join(project, 'contract/endpoints'), join(project, 'src/shared'), 'dir');
+    write(project, withLayout({}, "{ endpoint: 'src/shared/{group}/{name}.handler.ts' }"));
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `endpoints.createOrder is src/shared/orders/create-order.handler.ts, which ${outOfSrcClause}: ${replaceLinkOutFix}\n`,
     });
   });
 
@@ -5150,9 +5167,12 @@ function refusedImportLine(
   return `${from} records the Handler of ${label} at ${at}, which ${clause}: ${fix}\n`;
 }
 
-const outsideSrcClause = 'a link leads out of src/ or into src/contract/';
-const replaceLinkFix =
+const outOfSrcClause = 'a link leads out of src/';
+const intoContractClause = 'a link leads into src/contract/';
+const replaceLinkOutFix =
   'replace the link with a folder or file under src/, or give it another path in the layout of cf-loom.config.ts';
+const replaceLinkIntoFix =
+  'replace the link with a folder or file outside src/contract/, or give it another path in the layout of cf-loom.config.ts';
 const beneathSrcClause = 'must be under src/ and outside src/contract/';
 
 describe('cf-loom generate and verify: only a Handler path cf-loom could have placed is recorded', () => {
@@ -5245,7 +5265,7 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
     const line = refusedImportLine(
       'src/handlers.generated.ts',
       { label: 'endpoints.getOrder', at: 'src/shared/get-order.handler.ts' },
-      outsideSrcClause,
+      outOfSrcClause,
     );
     expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
     expect(verified.status).toBe(1);
@@ -5268,7 +5288,7 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
     const line = refusedImportLine(
       'src/handlers.generated.ts',
       { label: 'endpoints.getOrder', at: 'src/shared/get-order.handler.ts' },
-      outsideSrcClause,
+      intoContractClause,
     );
     expect(generated).toEqual({ status: 1, stdout: '', stderr: line });
     expect(verified.status).toBe(1);
@@ -5325,17 +5345,17 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
     {
       name: 'a Handler path',
       layout: () => "{ endpoint: 'src/shared/{name}.handler.ts' }",
-      line: `endpoints.createOrder is src/shared/create-order.handler.ts, which ${outsideSrcClause}`,
+      line: `endpoints.createOrder is src/shared/create-order.handler.ts, which ${outOfSrcClause}`,
     },
     {
       name: 'the Handler map’s path',
       layout: () => "{ handlerMap: 'src/shared/handlers.generated.ts' }",
-      line: `layout.handlerMap is src/shared/handlers.generated.ts, which ${outsideSrcClause}`,
+      line: `layout.handlerMap is src/shared/handlers.generated.ts, which ${outOfSrcClause}`,
     },
     {
       name: 'the readers’ path',
       layout: () => "{ readers: 'src/shared/readers.generated.ts' }",
-      line: `layout.readers is src/shared/readers.generated.ts, which ${outsideSrcClause}`,
+      line: `layout.readers is src/shared/readers.generated.ts, which ${outOfSrcClause}`,
     },
   ])(
     '$name that a folder link carries out of src/ fails generate and verify with exit 3 and writes nothing outside',
@@ -5348,7 +5368,7 @@ describe('cf-loom generate and verify: only a Handler path cf-loom could have pl
       const generated = cfLoom(project, 'generate');
       const verified = cfLoom(project, 'verify');
 
-      const stderr = `${line}: ${replaceLinkFix}\n`;
+      const stderr = `${line}: ${replaceLinkOutFix}\n`;
       expect(generated).toEqual({ status: 3, stdout: '', stderr });
       expect(verified).toEqual({ status: 3, stdout: '', stderr });
       expect(treeOf(outside, '.')).toEqual(before);
