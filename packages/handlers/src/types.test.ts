@@ -479,61 +479,77 @@ describe('success() and admit() take their declaration first, and check a litera
     expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
   });
 
-  test('a Success built in a helper with no declared return type, or into a variable before the return, type-checks', async () => {
+  test('a Success built in a helper with no declared return type type-checks', async () => {
     const found = (orderId: string) =>
       orderId === 'o-1' ? success(getOrder, { orderId }) : reject(gone);
-    const fromHelper = handle(getOrder, ({ params }) => found(params.orderId));
-    const fromVariable = handle(getOrder, ({ params }) => {
+    const handler = handle(getOrder, ({ params }) => found(params.orderId));
+
+    const outcome = await handler(input, { context });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
+  });
+
+  test('a Success built into a variable before the return type-checks', async () => {
+    const handler = handle(getOrder, ({ params }) => {
       const built = success(getOrder, { orderId: params.orderId });
       return built;
     });
 
-    const outcomes = [await fromHelper(input, { context }), await fromVariable(input, { context })];
+    const outcome = await handler(input, { context });
 
-    expect(outcomes).toEqual([
-      { kind: 'success', status: 200, body: { orderId: 'o-1' } },
-      { kind: 'success', status: 200, body: { orderId: 'o-1' } },
-    ]);
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
   });
 
-  test('success takes nothing more for an Endpoint that declares neither headers nor a body, and refuses a value', async () => {
+  test('success takes nothing more for an Endpoint that declares neither headers nor a body', async () => {
     const handler = handle(deleteOrder, () => success(deleteOrder));
-    const withValue = handle(deleteOrder, ({ params }) =>
-      // @ts-expect-error a 204 without headers takes no value
-      success(deleteOrder, { orderId: params.orderId }),
-    );
 
     const outcome = await handler(input, { context });
 
     expect(outcome).toMatchObject({ kind: 'success', status: 204 });
-    expect(withValue).toBeTypeOf('function');
   });
 
-  test('an admit literal with a field the Context does not declare is a type error, and a variable that carries more type-checks', async () => {
-    const misspelled = handle(apiKey, () =>
+  test('success given a value for an Endpoint that declares neither headers nor a body is a type error', () => {
+    const handler = handle(deleteOrder, ({ params }) =>
+      // @ts-expect-error a 204 without headers takes no value
+      success(deleteOrder, { orderId: params.orderId }),
+    );
+
+    expect(handler).toBeTypeOf('function');
+  });
+
+  test('an admit literal with a field the Context does not declare is a type error', () => {
+    const handler = handle(apiKey, () =>
       // @ts-expect-error callrId is not a declared field
       admit(apiKey, { callerId: 'c-1', callrId: 'c-1' }),
     );
+
+    expect(handler).toBeTypeOf('function');
+  });
+
+  test('admit given a variable that carries more fields than the Context declares type-checks', async () => {
     const caller = { callerId: 'c-1', plan: 'gold' };
     const handler = handle(apiKey, () => admit(apiKey, caller));
 
     const admission = await handler({ headers: { 'x-api-key': 'k-1' } }, {});
 
     expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
-    expect(misspelled).toBeTypeOf('function');
   });
 
-  test('admit takes nothing more for a Guard that provides no Context, and refuses a Context', async () => {
+  test('admit takes nothing more for a Guard that provides no Context', async () => {
     const handler = handle(permission, () => admit(permission));
-    const withContext = handle(permission, () =>
-      // @ts-expect-error permission provides no Context
-      admit(permission, { callerId: 'c-1' }),
-    );
 
     const admission = await handler({}, { context, qualifier: ['orders:read'] });
 
     expect(admission).toMatchObject({ kind: 'admitted' });
-    expect(withContext).toBeTypeOf('function');
+  });
+
+  test('admit given a Context for a Guard that provides none is a type error', () => {
+    const handler = handle(permission, () =>
+      // @ts-expect-error permission provides no Context
+      admit(permission, { callerId: 'c-1' }),
+    );
+
+    expect(handler).toBeTypeOf('function');
   });
 });
 

@@ -440,7 +440,7 @@ describe('serve: Guards', () => {
     });
   });
 
-  test('an admit() that breaks the Guard’s context is INVALID_OUTCOME, the Guard named to onServiceFault', async () => {
+  test('an admit(guard) that breaks the Guard’s context is INVALID_OUTCOME, the Guard named to onServiceFault', async () => {
     const faults: ServedFault[] = [];
     const broken = handle(userToken, () => admit(userToken, { userId: 7 } as never));
     const http = serve(

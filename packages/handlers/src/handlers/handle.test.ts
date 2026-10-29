@@ -273,7 +273,7 @@ describe('handle', () => {
 
   test('an implementation returning a value that is no Fault is a type error', () => {
     // @ts-expect-error a Message Handler returns nothing or a Fault
-    const write = () => handle(chargeCard, () => success(chargeCard));
+    const write = () => handle(chargeCard, () => success(getOrder, { id: ORDER_ID }));
 
     expect(write).not.toThrow();
   });
