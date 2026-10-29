@@ -89,8 +89,8 @@ plan comment on the issue:
     already has, a throw, rejection or hang from what it calls, and what the platform does by default; or why a case
     does not apply;
   - for code that reads a structure whose size an author or a Caller controls: its bound in time, memory and output
-    size against each dimension (depth, width, sharing, count), each covered by a growth test, a ratio between two
-    sizes;
+    size against each dimension (depth, width, sharing, count), each covered by a growth test
+    ([C30](CODING_STANDARDS.md#tests));
   - the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by
     a randomized or exhaustive test whose generator draws what the public API lets an author or a Caller produce,
     including every case where the rule acts and every kind of node the format holds (asserted by the test), checked
@@ -132,7 +132,7 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] the public API is fixed: signatures and TSDoc;
 - [ ] every file is named, with one responsibility each;
 - [ ] the test list covers every behavior the issue asks for, each test through a public seam;
-- [ ] its inputs and invariants are listed as [1. Plan](#1-plan) says, and the vet's own list found nothing missing;
+- [ ] its inputs and invariants are listed as [1. Plan](#1-plan) says, with every item the vet's own list found missing;
 - [ ] what it removes, renames or narrows was searched across the repository, and every gap it leaves out is an issue;
 - [ ] the document sections it implements are linked, and every change to them is written in the plan;
 - [ ] its new terms are in the plan's CONTEXT.md changes;
