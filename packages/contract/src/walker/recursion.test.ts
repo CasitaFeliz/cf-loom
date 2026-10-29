@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
+import { cpuMillisecondsOf, cpuRatioOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -1452,15 +1453,19 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
+  /** The CPU time a walk of the ring stays under. */
+  const ringCpuMilliseconds = 1000;
+
   test('a ring of 255 schemas walks fast', () => {
     const ring = aRingOf(255);
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, ringCpuMilliseconds);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(ringCpuMilliseconds);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1583,29 +1588,67 @@ describe('walkSchemas: recursion', () => {
     );
   });
 
+  /** A chain of `count` ids around `inner`, each holding the next. */
+  function aChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      schema = z.object({ next: schema }).meta({ id: `link${index}` });
+    }
+    return schema;
+  }
+
+  /** A chain of `count` ids around `inner`, each holding the next and itself, so on a cycle of its own. */
+  function aLoopedChainOf(count: number, inner: z.ZodType): z.ZodType {
+    let schema = inner;
+    for (let index = 0; index < count; index++) {
+      const next = schema;
+      const link: z.ZodType = z
+        .object({
+          next,
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      schema = link;
+    }
+    return schema;
+  }
+
   /**
-   * Reads each failure tree once, so the chain takes well under a second; read afresh for each id,
-   * the trees cost seconds, past this test's timeout. The walk's memory also grows with the square
-   * of a chain of ids, so the chain stays at 7,000.
+   * How many times longer the chain's walk may take than a walk of as many ids, each on a cycle of
+   * its own, that refuses nothing: under 1 when the walk reads each failure tree once, and many times
+   * over 3 when it reads the trees afresh for each id. The walk's memory grows with the square of a
+   * chain of ids, so the chain stays at 7,000.
    */
-  const memoTimeout = 4_000;
+  const memoCpuRatio = 3;
+
+  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
+  const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
     timeout: memoTimeout,
   }, () => {
-    let schema = arraysAround(250, z.bigint());
-    for (let index = 0; index < 7_000; index++) {
-      schema = z.object({ next: schema }).meta({ id: `link${index}` });
-    }
+    const schema = aChainOf(7_000, arraysAround(250, z.bigint()));
+    const looped = aLoopedChainOf(7_000, arraysAround(250, z.string()));
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walkLooped = () =>
+      walkSchemas([{ at: placeAt('body'), schema: looped }], () => undefined);
 
-    const walked = walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    const walked = walk();
+    walkLooped();
+    const cpuRatio = cpuRatioOf(walk, walkLooped, memoCpuRatio);
 
     const constructs = constructsOf(walked).flat();
     const offCycle = constructs.filter((construct) => construct.endsWith('lies on no cycle'));
     expect(offCycle).toHaveLength(7_000);
     expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
     expect(constructs).toHaveLength(7_001);
+    expect(cpuRatio).toBeLessThan(memoCpuRatio);
   });
+
+  /** The CPU time a walk stays under when it walks the failing def once, not once per path. */
+  const manyPathsCpuMilliseconds = 1000;
 
   test('a failing def met by many paths is reported once and walked once', () => {
     const count = 26;
@@ -1623,15 +1666,16 @@ describe('walkSchemas: recursion', () => {
       steps.push(z.object(shape).meta({ id: `step${index}` }));
     }
 
-    const started = performance.now();
-    const walked = walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
-    const elapsed = performance.now() - started;
+    const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
+
+    const walked = walk();
+    const cpuMilliseconds = cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(elapsed).toBeLessThan(1000);
+    expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
   });
 });
 
@@ -1679,8 +1723,11 @@ describe('reachedDefsOf', () => {
 /** How deep the depth tests nest: past every depth at which a walk on the call stack overflowed. */
 const depth = 5_000;
 
-/** A deep test walks thousands of schemas, which takes seconds on a CI runner with shared cores. */
-const deepTimeout = 60_000;
+/**
+ * A deep test walks thousands of schemas, which takes up to 8 s while the project's files run in
+ * parallel, and several times that on a CI runner that several runs share.
+ */
+const deepTimeout = 240_000;
 
 /**
  * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies

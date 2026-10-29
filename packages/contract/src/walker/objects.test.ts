@@ -129,6 +129,18 @@ describe('walkSchemas: objects', () => {
       }),
     );
   });
+
+  test('a field declared with .exactOptional() is optional, as .optional() writes it', () => {
+    const exact = z.object({ note: z.string().exactOptional() });
+    const zodMiniExact = zm.object({ note: zm.exactOptional(zm.string()) });
+    const optional = walkedTo({
+      type: 'object',
+      fields: { note: { required: false, schema: text } },
+    });
+
+    expect(walkBody(exact)).toEqual(optional);
+    expect(walkBody(zodMiniExact)).toEqual(optional);
+  });
 });
 
 describe('walkSchemas: records', () => {

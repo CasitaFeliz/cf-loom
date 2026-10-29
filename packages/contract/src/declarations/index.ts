@@ -38,6 +38,7 @@ export type { Guard } from './guard.ts';
 export { defineGuard } from './guard.ts';
 export type { Method, RejectionStatus, SuccessStatus } from './http.ts';
 export {
+  deprecationHeader,
   isMethod,
   isRejectionStatus,
   isReservedRequestHeaderName,

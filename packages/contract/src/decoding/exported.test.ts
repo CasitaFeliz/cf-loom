@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { exportedOrders, getOrder, oldOrder, ordersSnapshot } from '../../test/orders-exported.ts';
 import { aProvider } from '../../test/providers.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { providedEndpoint } from '../index.ts';
 import {
   exportedCutOf,
@@ -304,5 +305,86 @@ describe('providedSnapshotOf', () => {
     expect(read).toThrow(
       "orders-service's exported Snapshot is malformed: codes.gone.removedIn is a key its format does not define",
     );
+  });
+});
+
+/** A schema of `containers` array nodes one inside the other, the innermost holding strings. */
+function containersDeep(containers: number): object {
+  let nested: object = { type: 'string' };
+  for (let level = 1; level < containers; level++) {
+    nested = { type: 'array', items: nested };
+  }
+  return nested;
+}
+
+/** A `json` schema holding one example that is an array of `width` objects. */
+function wideNode(width: number): object {
+  return { type: 'json', examples: [Array.from({ length: width }, () => ({}))] };
+}
+
+describe('providedSnapshotOf reads a cut as wide and as deep as a Snapshot holds', () => {
+  /** The exported cut with the defs written over those it has. */
+  function withDefs(defs: object) {
+    return changed((copy) => {
+      copy['defs'] = { ...(copy['defs'] as object), ...defs };
+    });
+  }
+
+  /** The exported cut with a def nesting `levels` levels below the cut, which is level 1. */
+  function nestedCut(levels: number) {
+    return withDefs({ deep: containersDeep(levels - 2) });
+  }
+
+  /** What a decoder does with a cut: reads it, refuses it as malformed, or anything else it throws. */
+  function outcomeOf(read: () => unknown): string {
+    try {
+      read();
+      return 'read';
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  test.each([257, 20_000])(
+    'a cut nested %i levels is refused as malformed at the first level past the limit',
+    (levels) => {
+      const read = () => providedSnapshotOf(nestedCut(levels));
+
+      const at = ['defs', 'deep', ...Array<string>(254).fill('items')].join('.');
+      expect(read).toThrow(
+        `orders-service's exported Snapshot is malformed: ${at} nests deeper than 256 levels`,
+      );
+    },
+  );
+
+  test('a cut nested exactly 256 levels is read', () => {
+    const read = providedSnapshotOf(nestedCut(256));
+
+    expect(read.defs['deep']).toStrictEqual(containersDeep(254));
+  });
+
+  test('a cut holding a json example of 300,000 objects is read', () => {
+    const read = providedSnapshotOf(withDefs({ wide: wideNode(300_000) }));
+
+    expect(read.defs['wide']).toStrictEqual(wideNode(300_000));
+  });
+
+  test('random wide and deep cuts are read within the limit and refused past it, never a throw', () => {
+    const next = seededNext(343);
+    const draws = Array.from({ length: 10 }, (_, draw) => {
+      const refused = draw % 2 === 1;
+      const levels = refused ? 300 + Math.floor(next() * 20_000) : 1 + Math.floor(next() * 250);
+      return { refused, width: Math.floor(next() * 300_000), levels };
+    });
+
+    const outcomes = draws.map(({ width, levels }) =>
+      outcomeOf(() =>
+        providedSnapshotOf(withDefs({ a: wideNode(width), b: containersDeep(levels) })),
+      ),
+    );
+
+    const at = ['defs', 'b', ...Array<string>(254).fill('items')].join('.');
+    const refusal = `orders-service's exported Snapshot is malformed: ${at} nests deeper than 256 levels`;
+    expect(outcomes).toEqual(draws.map(({ refused }) => (refused ? refusal : 'read')));
   });
 });

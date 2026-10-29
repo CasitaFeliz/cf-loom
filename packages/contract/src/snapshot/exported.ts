@@ -1,6 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
-import type { TextPartNodes } from '../validation/index.ts';
-import { identityOf } from '../written/index.ts';
+import { identityOf, type TextPartNodes } from '../written/index.ts';
 import type { CodeSnapshot, EndpointSnapshot, ExportedCut } from './types.ts';
 
 /**

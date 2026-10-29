@@ -778,9 +778,7 @@ describe('exportedCutOf, the declared Endpoints that win a URL its Endpoint matc
     expect(cut.shadowing).toStrictEqual({ 'GET /payments/first': { lifecycle: 'retired' } });
   });
 
-  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', {
-    timeout: 30_000,
-  }, () => {
+  test('on every URL an exported Endpoint matches, the winner among it and its cut’s shadowing Endpoints is the winner among all declared ones', () => {
     const mismatches: string[] = [];
 
     for (const declared of declaredSetsOf(smallPaths, 4)) {
@@ -1055,9 +1053,7 @@ function codeReachSnapshot(): ServiceSnapshot {
 }
 
 describe('exportedSnapshotOf, depth', () => {
-  test('an exported Endpoint reaching 5,000 nested defs carries all 5,000 in its cut', {
-    timeout: 60_000,
-  }, () => {
+  test('an exported Endpoint reaching 5,000 nested defs carries all 5,000 in its cut', () => {
     const count = 5_000;
     const entries: [string, SchemaNode][] = [];
     for (let index = 0; index < count; index++) {

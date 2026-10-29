@@ -61,7 +61,16 @@ export { eventServiceOf, eventSourceOf } from './messaging.ts';
 export { isOwnProvided } from './own-provider.ts';
 export type { PackageNameParts } from './package-names.ts';
 export { packageNamePartsOf } from './package-names.ts';
-export type { InputIn, InputPart, Issue, IssuePart, ObjectPart, Part, TextIn } from './parts.ts';
+export type {
+  InputIn,
+  InputPart,
+  Issue,
+  IssuePart,
+  ObjectPart,
+  Part,
+  TextIn,
+  TextPartNodes,
+} from './parts.ts';
 export {
   demandParts,
   endpointParts,

@@ -22,12 +22,15 @@ export const successStatuses = [200, 201, 202, 203, 204] as const;
 /** The statuses a Success may declare: 205 and 206 carry semantics cf-loom does not implement. */
 export type SuccessStatus = (typeof successStatuses)[number];
 
+/** The header every response of a Deprecated Endpoint carries (RFC 9745). */
+export const deprecationHeader = 'deprecation';
+
 /** The header names no Contract declares in either direction: the body's, and the `deprecation` cf-loom owns. */
 const bodyAndCfLoomHeaderNames: readonly string[] = [
   'content-type',
   'content-encoding',
   'content-range',
-  'deprecation',
+  deprecationHeader,
 ];
 
 /**

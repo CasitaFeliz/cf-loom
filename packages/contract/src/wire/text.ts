@@ -86,6 +86,24 @@ function booleanOf(text: string): unknown {
   return text === 'false' ? false : text;
 }
 
+/**
+ * The first two declared values that travel as one text, by `textOfValue`, so the second could
+ * never arrive; `undefined` when each value has a text of its own.
+ */
+export function sharedTextOf(
+  values: readonly JsonPrimitive[],
+): readonly [TextValue, TextValue] | undefined {
+  const byText = new Map<string, TextValue>();
+  for (const value of values.filter(isTextValue)) {
+    const first = byText.get(textOfValue(value));
+    if (first !== undefined) {
+      return [first, value];
+    }
+    byText.set(textOfValue(value), value);
+  }
+  return undefined;
+}
+
 /** The declared value whose text, as it travels, is the one received, keeping its JSON type. */
 function declaredValueOf(values: readonly JsonPrimitive[], text: string): unknown {
   return values.find((value) => isTextValue(value) && textOfValue(value) === text) ?? text;
