@@ -2,11 +2,13 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
- * How long a server may take to listen. It is below Vitest's default 5 s test timeout and 10 s `beforeAll` timeout, so
- * a server that never listens fails its start, and is stopped, before either fires and leaves the process behind.
+ * How long a server may take to listen. The messaging project's test and hook timeouts are derived from it, so they
+ * exceed it by the time a failed start takes to stop the server: a server that never listens fails its start, and
+ * is stopped, before either timeout fires and leaves the process behind.
  */
-const startDeadlineMs = 4_000;
-const stopTimeoutMs = 5_000;
+export const startDeadlineMs = 10_000;
+/** How long a server may take to stop before it is killed. */
+export const stopTimeoutMs = 5_000;
 const pollIntervalMs = 20;
 const stderrKept = 4_096;
 
