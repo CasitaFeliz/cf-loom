@@ -401,7 +401,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
   const replacing = client(replacingDependency, { baseUrl });
   const input = { params: { orderId: 'o-1' }, body: { total: 12 } };
 
-  test('a call’s options given through a variable with a field they do not declare is a type error', () => {
+  test('a call’s options, an optional parameter, given through a variable whose type is one object type with a field they do not declare is a type error', () => {
     const call = { signal: new AbortController().signal, signl: 1 };
 
     // @ts-expect-error signl is not a declared field
@@ -415,18 +415,6 @@ describe('a call’s Input and options, typed by what they declare', () => {
 
     // @ts-expect-error querry is not a declared field
     const calling = () => replacing.putOrder(misspelled);
-
-    expect(calling).toBeTypeOf('function');
-  });
-
-  test('an optional parameter refuses a variable whose type is one object type holding a field it does not declare', () => {
-    const call: { readonly signal: AbortSignal; readonly signl: number } = {
-      signal: new AbortController().signal,
-      signl: 1,
-    };
-
-    // @ts-expect-error signl is not a declared field
-    const calling = () => replacing.putOrder(input, call);
 
     expect(calling).toBeTypeOf('function');
   });

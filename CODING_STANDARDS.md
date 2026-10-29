@@ -232,10 +232,11 @@ type Walked =
 **C19. A parameter object has a name and a responsibility.** A function takes at most three parameters **(lint)**: the
 values it needs, or one object that is a thing of the domain (a matched Endpoint, a Baseline and its declared
 Snapshot). A dependency object narrows what it takes (`Pick<BrokerConnection, 'publish'>`). A twelve-field options
-bag handed through every function is a global under another name. An exported function's object parameter whose shape
-cf-loom gives is typed `Closed<Given, Shape>` from `@cf-loom/contract/internal`, `Given` a `const` type parameter of
-that function, and so is an object one of its fields holds whose shape cf-loom gives; one whose shape the Contract gives
-is not (see [Runtime](ARCHITECTURE.md#runtime)). *Why:* the signature is the function's contract; a
+bag handed through every function is a global under another name. An exported function's object parameter of data or
+options whose shape cf-loom gives is typed `Closed<Given, Shape>` from `@cf-loom/contract/internal`, `Given` a `const`
+type parameter of that function, and so is an object one of its fields holds whose shape cf-loom gives, a record's values
+excepted; one whose shape the Contract gives is not, nor an implementation of a cf-loom interface, such as a `Broker`
+(see [Runtime](ARCHITECTURE.md#runtime)). *Why:* the signature is the function's contract; a
 bag says the contract is "everything".
 
 ## Comments and docs

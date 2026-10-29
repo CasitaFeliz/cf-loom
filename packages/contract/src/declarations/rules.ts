@@ -30,7 +30,8 @@ type KeysOfEach<Union> = Union extends unknown ? keyof Union : never;
 
 /**
  * A parameter whose shape cf-loom gives, an options object or what `fault()` is given: `Shape`, and
- * no field it does not declare, given as a literal or through a variable.
+ * no field it does not declare, given as a literal or through a variable whose type is one object
+ * type (see the Runtime section of ARCHITECTURE.md).
  */
 export type Closed<Given, Shape> = Shape & Given & NoInfer<DeclaredFieldsRule<Given, Shape>>;
 
