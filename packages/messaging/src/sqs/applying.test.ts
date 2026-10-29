@@ -1,9 +1,18 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import {
-  anAwsConnecting,
+  arrangeQueue,
   arrangeTopic,
   publishOn,
+  setQueueAttributes,
+  setSubscriptionAttribute,
+  storeIn,
+  subscribeByHand,
+  tagByHand,
+  unsubscribe,
+} from '../../test/aws-arranging.ts';
+import { anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
+import {
   queueAttributesOf,
   queueNamesOf,
   queueTagsOf,
@@ -11,7 +20,7 @@ import {
   subscriptionAttributesOf,
   subscriptionsOf,
   topicNamesOf,
-} from '../../test/aws-clients.ts';
+} from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type SqsBrokerLimits } from './index.ts';
@@ -414,5 +423,248 @@ describe('applyBrokerPlan', () => {
     );
     const tags = await queueTagsOf(connecting.sqs, 'billing-service_notify_dlq');
     expect(tags['cf-loom:durable']).toBe('billing-service_notify');
+  });
+
+  test('applying again with other limits updates the visibility timeout, retention, backoff tag and redrive count, and keeps the queue attributes limits has no name for', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    await setQueueAttributes(connecting.sqs, orders.chargeDurable, {
+      DelaySeconds: '7',
+      MaximumMessageSize: '2048',
+    });
+    const other: SqsBrokerLimits = {
+      durableConsumerDefaults: {
+        ackWait: ['45s', '2m'],
+        maxDeliver: 8,
+        retention: '2d',
+        deadLetterRetention: '10d',
+      },
+    };
+
+    await applyBrokerPlan(connecting, orders.plan, other);
+
+    const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    const deadLetter = await queueAttributesOf(connecting.sqs, `${orders.chargeDurable}_dlq`);
+    expect(attributes).toMatchObject({
+      VisibilityTimeout: '45',
+      MessageRetentionPeriod: '172800',
+      DelaySeconds: '7',
+      MaximumMessageSize: '2048',
+    });
+    expect(JSON.parse(attributes['RedrivePolicy'] ?? '{}').maxReceiveCount).toBe(8);
+    expect(tags['cf-loom:backoff']).toBe('2m');
+    expect(deadLetter['MessageRetentionPeriod']).toBe('864000');
+  });
+
+  test('a backoff list that becomes one wait removes the queue’s backoff tag', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const backoff: SqsBrokerLimits = {
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: ['30s', '1m'] },
+    };
+    await applyBrokerPlan(connecting, orders.plan, backoff);
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(Object.keys(tags).sort()).toEqual([
+      'cf-loom:durable',
+      'cf-loom:service',
+      'cf-loom:subscription',
+    ]);
+  });
+
+  test('a changed maxDeliver updates the redrive policy’s count and keeps the dead-letter queue and what it holds', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const deadLetterQueue = `${orders.chargeDurable}_dlq`;
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    await storeIn(connecting.sqs, deadLetterQueue, 'parked');
+
+    await applyBrokerPlan(connecting, orders.plan, {
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, maxDeliver: 12 },
+    });
+
+    const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const deadLetter = await queueAttributesOf(connecting.sqs, deadLetterQueue);
+    expect(JSON.parse(attributes['RedrivePolicy'] ?? '{}')).toEqual({
+      deadLetterTargetArn: sqsArnOf(deadLetterQueue),
+      maxReceiveCount: 12,
+    });
+    expect(deadLetter['ApproximateNumberOfMessages']).toBe('1');
+  });
+
+  test.each([
+    ['a list holding a stale cf-loom-topic statement', 'list'],
+    ['one object', 'object'],
+  ] as const)(
+    'applyBrokerPlan replaces the cf-loom-topic statement of an existing queue policy and keeps the organization’s other statements, held as %s',
+    async (_held, form) => {
+      const orders = anOrders();
+      const connecting = anAwsConnecting(moto.url);
+      const organizations = {
+        Sid: 'organization',
+        Effect: 'Allow',
+        Principal: { AWS: 'arn:aws:iam::123456789012:root' },
+        Action: 'sqs:ReceiveMessage',
+        Resource: sqsArnOf(orders.chargeDurable),
+      };
+      const stale = { ...organizations, Sid: 'cf-loom-topic', Action: 'sqs:DeleteMessage' };
+      const Statement = form === 'list' ? [organizations, stale] : organizations;
+      const Policy = JSON.stringify({ Version: '2012-10-17', Statement });
+      await arrangeQueue(connecting.sqs, orders.chargeDurable, { attributes: { Policy } });
+
+      await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+      const attributes = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+      const statements = JSON.parse(attributes['Policy'] ?? '{}').Statement;
+      expect(statements.map((statement: { Sid: string }) => statement.Sid)).toEqual([
+        'organization',
+        'cf-loom-topic',
+      ]);
+      expect(statements[1].Action).toBe('sqs:SendMessage');
+    },
+  );
+
+  test('applying an existing subscription again restores raw delivery, the filter and its scope changed by hand', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    const before = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    const arn = before['cf-loom:subscription'] ?? '';
+    const byHand = [
+      { name: 'RawMessageDelivery', value: 'false' },
+      { name: 'FilterPolicy', value: '{"cf-loom-subject":["other"]}' },
+      { name: 'FilterPolicyScope', value: 'MessageBody' },
+    ];
+    for (const attribute of byHand) {
+      await setSubscriptionAttribute(connecting.sns, arn, attribute);
+    }
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const attributes = await subscriptionAttributesOf(connecting.sns, arn);
+    const subscriptions = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
+    expect(attributes).toMatchObject({
+      RawMessageDelivery: 'true',
+      FilterPolicyScope: 'MessageAttributes',
+    });
+    expect(JSON.parse(attributes['FilterPolicy'] ?? '{}')).toEqual({
+      'cf-loom-subject': [orders.charge],
+    });
+    expect(subscriptions.map((subscription) => subscription.arn)).toEqual([arn]);
+  });
+
+  test('applying again adds the filter and its scope to a subscription made by hand with no filter, and creates no second subscription', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const topicArn = snsArnOf(orders.stream);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    const [ours] = await subscriptionsOf(connecting.sns, topicArn);
+    await unsubscribe(connecting.sns, ours?.arn ?? '');
+    const byHand = await subscribeByHand(connecting.sns, {
+      topicArn,
+      queueArn: sqsArnOf(orders.chargeDurable),
+    });
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const subscriptions = await subscriptionsOf(connecting.sns, topicArn);
+    const attributes = await subscriptionAttributesOf(connecting.sns, byHand);
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(subscriptions.map((subscription) => subscription.arn)).toEqual([byHand]);
+    expect(attributes).toMatchObject({
+      RawMessageDelivery: 'true',
+      FilterPolicyScope: 'MessageAttributes',
+    });
+    expect(JSON.parse(attributes['FilterPolicy'] ?? '{}')).toEqual({
+      'cf-loom-subject': [orders.charge],
+    });
+    expect(tags['cf-loom:subscription']).toBe(byHand);
+  });
+
+  test('a second apply with nothing changed sets no subscription attribute', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    const settings = countCommands(connecting.sns, 'SetSubscriptionAttributesCommand');
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    expect(settings.sent()).toBe(0);
+  });
+
+  test('applyBrokerPlan never removes a topic, queue, dead-letter queue, subscription or organization’s tag that the plan it applies does not list', async () => {
+    const orders = anOrders();
+    const refund = 'orders-service_command_Refund_v1';
+    const refundSubject = 'orders-service.command.Refund.v1';
+    const earlier: BrokerPlan = {
+      ...orders.plan,
+      durableConsumers: {
+        ...orders.plan.durableConsumers,
+        [refund]: { service: 'orders-service', stream: orders.stream, subject: refundSubject },
+      },
+    };
+    const connecting = anAwsConnecting(moto.url);
+    await arrangeTopic(connecting.sns, 'unrelated');
+    await applyBrokerPlan(connecting, earlier, testLimits);
+    await tagByHand(connecting.sqs, orders.chargeDurable, { team: 'orders' });
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const subscriptions = await subscriptionsOf(connecting.sns, snsArnOf(orders.stream));
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(await topicNamesOf(connecting.sns)).toEqual(['orders-service', 'unrelated']);
+    expect(await queueNamesOf(connecting.sqs)).toEqual(
+      [orders.chargeDurable, `${orders.chargeDurable}_dlq`, refund, `${refund}_dlq`].sort(),
+    );
+    expect(subscriptions.map(({ endpoint }) => endpoint).sort()).toEqual(
+      [sqsArnOf(orders.chargeDurable), sqsArnOf(refund)].sort(),
+    );
+    expect(tags['team']).toBe('orders');
+  });
+
+  test('a queue that exists without cf-loom’s tags gets them, and the organization’s tags stay', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await arrangeQueue(connecting.sqs, orders.chargeDurable, { tags: { team: 'orders' } });
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    expect(tags).toMatchObject({
+      team: 'orders',
+      'cf-loom:durable': orders.chargeDurable,
+      'cf-loom:service': 'orders-service',
+    });
+  });
+
+  test('applying the same plan twice leaves the topics, queues, subscriptions and stored Messages as the first left them', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const queues = [orders.chargeDurable, `${orders.chargeDurable}_dlq`];
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    for (const queue of queues) {
+      await storeIn(connecting.sqs, queue, `stored in ${queue}`);
+    }
+    const stateOf = async () => ({
+      topics: await topicNamesOf(connecting.sns),
+      queues: await queueNamesOf(connecting.sqs),
+      subscriptions: await subscriptionsOf(connecting.sns, snsArnOf(orders.stream)),
+      stored: await Promise.all(
+        queues.map(async (queue) => {
+          const attributes = await queueAttributesOf(connecting.sqs, queue);
+          return attributes['ApproximateNumberOfMessages'];
+        }),
+      ),
+    });
+    const first = await stateOf();
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    expect(await stateOf()).toEqual(first);
+    expect(first.stored).toEqual(['1', '1']);
   });
 });

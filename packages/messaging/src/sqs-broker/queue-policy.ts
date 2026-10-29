@@ -1,9 +1,4 @@
 // biome-ignore-all lint/style/useNamingConvention: IAM spells its policy fields in PascalCase
-import {
-  GetQueueAttributesCommand,
-  SetQueueAttributesCommand,
-  type SQSClient,
-} from '@aws-sdk/client-sqs';
 import { z } from 'zod';
 
 const topicStatementId = 'cf-loom-topic';
@@ -17,21 +12,9 @@ const policyDocument = z.looseObject({
 /** Who may send to a queue: the topic its Durable consumer's Stream is. */
 export type TopicSender = { readonly queueArn: string; readonly topicArn: string };
 
-/** Lets the Stream's topic send to the queue, in the statement `cf-loom-topic`: added to the queue's policy, or replacing the one cf-loom wrote, with every other statement kept. */
-export async function applyQueuePolicy(
-  sqs: SQSClient,
-  url: string,
-  sender: TopicSender,
-): Promise<void> {
-  const read = await sqs.send(
-    new GetQueueAttributesCommand({ QueueUrl: url, AttributeNames: ['Policy'] }),
-  );
-  const policy = policyWith(read.Attributes?.['Policy'], sender);
-  await sqs.send(new SetQueueAttributesCommand({ QueueUrl: url, Attributes: { Policy: policy } }));
-}
-
-function policyWith(existing: string | undefined, sender: TopicSender): string {
-  const document = policyDocument.parse(existing === undefined ? {} : JSON.parse(existing));
+/** The queue's policy with the Stream's topic allowed to send to it, in the statement `cf-loom-topic`: added to the policy the queue holds, or replacing the one cf-loom wrote, with every other statement kept. */
+export function queuePolicyWith(held: string | undefined, sender: TopicSender): string {
+  const document = policyDocument.parse(held === undefined ? {} : JSON.parse(held));
   const statements = statementsOf(document.Statement);
   const written = topicStatementOf(sender);
   const at = statements.findIndex(isTopicStatement);

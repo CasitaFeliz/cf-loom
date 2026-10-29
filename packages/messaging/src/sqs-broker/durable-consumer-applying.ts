@@ -4,7 +4,7 @@ import { type Applied, refusedBy } from './applied.ts';
 import { type Place, queueArnOf, topicArnOf } from './connecting.ts';
 import { applyQueue, tagQueue } from './queue-applying.ts';
 import { deadLetterQueueNameOf, queueNameOf } from './queue-names.ts';
-import { applyQueuePolicy } from './queue-policy.ts';
+import { queuePolicyWith, type TopicSender } from './queue-policy.ts';
 import type { PlannedQueue } from './reading-limits.ts';
 import type { Subscribing } from './subscribing.ts';
 import { subscriptionShapeOf } from './subscription-shape.ts';
@@ -32,11 +32,10 @@ export async function applyDurableConsumer(
 
 async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<void> {
   const { sqs, place } = applier;
-  await applyDeadLetterQueue(sqs, planned);
-  const url = await applyMainQueue(applier, planned);
   const queueArn = queueArnOf(place, queueNameOf(planned.name));
   const topicArn = topicArnOf(place, planned.stream);
-  await applyQueuePolicy(sqs, url, { queueArn, topicArn });
+  await applyDeadLetterQueue(sqs, planned);
+  const url = await applyMainQueue(applier, planned, { queueArn, topicArn });
   const shape = subscriptionShapeOf({ topicArn, queueArn, subject: planned.subject });
   const subscription = await applier.subscribing.subscribe(shape);
   await tagQueue(sqs, url, { [subscriptionTag]: subscription });
@@ -51,7 +50,11 @@ async function applyDeadLetterQueue(sqs: SQSClient, planned: PlannedQueue): Prom
   });
 }
 
-async function applyMainQueue({ sqs, place }: Applier, planned: PlannedQueue): Promise<string> {
+async function applyMainQueue(
+  { sqs, place }: Applier,
+  planned: PlannedQueue,
+  sender: TopicSender,
+): Promise<string> {
   const redrive = {
     deadLetterTargetArn: queueArnOf(place, deadLetterQueueNameOf(planned.name)),
     maxReceiveCount: planned.maxDeliver,
@@ -65,5 +68,6 @@ async function applyMainQueue({ sqs, place }: Applier, planned: PlannedQueue): P
     },
     tags: queueTagsOf(planned),
     untagged: planned.backoff === undefined ? [backoffTag] : [],
+    policy: (held) => queuePolicyWith(held, sender),
   });
 }
