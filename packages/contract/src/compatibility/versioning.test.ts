@@ -423,14 +423,23 @@ describe('versionBumpOf', () => {
 
   test('a Breaking Change on a Definitions Package’s Guard bumps major', () => {
     const baseline = aBaselineDefinitions({ guards: { authenticated: aGuard() } });
+    const token = { required: true, schema: { type: 'string' } } as const;
+    const query = { type: 'object', fields: { token } } as const;
+    const demanding = { ...aGuard(), demands: { ...aGuard().demands, query } };
 
-    const report = comparedReportOf(baseline, aDefinitions());
+    const report = comparedReportOf(
+      baseline,
+      aDefinitions({ guards: { authenticated: demanding } }),
+    );
 
     expect(versionBumpOf(report, unmoved)).toBe('major');
   });
 
-  test('an Additive Change on a Definitions Package’s code bumps minor', () => {
-    const proposed = aDefinitions({ codes: { [orderLocked]: aCode(409) } });
+  test('an Additive Change on a Definitions Package’s export bumps minor', () => {
+    const proposed = aDefinitions({
+      exports: { [orderLocked]: { kind: 'rejection', code: orderLocked } },
+      codes: { [orderLocked]: aCode(409) },
+    });
 
     const report = comparedReportOf(aBaselineDefinitions(), proposed);
 

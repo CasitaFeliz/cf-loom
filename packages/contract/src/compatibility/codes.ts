@@ -35,19 +35,18 @@ export function serviceCodeDifferencesOf(
 }
 
 /**
- * A Definitions Package's codes by code in code point order: added or removed, since Services
- * import its Rejections by name, then compared as a Service's are.
+ * A Definitions Package's codes by code in code point order, compared as a Service's are. A code
+ * added or removed is no Change here: Services import a Rejection by its export, which says it.
  */
 export function definitionsCodeDifferencesOf(
   baseline: PublishedDefinitionsSnapshot,
   proposed: DefinitionsSnapshot,
 ): readonly SiteDifferences[] {
   const defs = bothDefsOf(baseline, proposed);
-  const standard = standardCodesOf(baseline);
   return counterpartsOf(baseline.codes, proposed.codes).map(
     (code): SiteDifferences => ({
       site: { kind: 'code', code: code.key, visibility: 'public' },
-      differences: [...presenceDifferencesOf(code, standard), ...comparedDifferencesOf(code, defs)],
+      differences: comparedDifferencesOf(code, defs),
     }),
   );
 }
@@ -113,26 +112,4 @@ function comparedDifferencesOf(
 /** The defs a code's `ref`s name on each side: a removed code's Baseline side is its own, as it was removed. */
 function codeDefsOf(baseline: PublishedCode, defs: BothDefs): BothDefs {
   return isRemoved(baseline) ? { ...defs, baseline: baseline.defs } : defs;
-}
-
-/**
- * Whether a Definitions Package declares a code now or no longer, but for the code a Standard
- * Rejection resolved to, which Services never name.
- */
-function presenceDifferencesOf(
-  code: Counterpart<PublishedCode, CodeSnapshot>,
-  standard: ReadonlySet<string>,
-): readonly Difference[] {
-  switch (code.kind) {
-    case 'added':
-      return [{ kind: 'added' }];
-    case 'removed':
-      return isRemoved(code.baseline) || standard.has(code.key) ? [] : [{ kind: 'removed' }];
-    case 'kept':
-      return isRemoved(code.baseline) ? [{ kind: 'added' }] : [];
-  }
-}
-
-function standardCodesOf(baseline: PublishedDefinitionsSnapshot): ReadonlySet<string> {
-  return new Set(Object.values(baseline.standardRejections));
 }

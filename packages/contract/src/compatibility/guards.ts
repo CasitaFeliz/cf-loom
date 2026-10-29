@@ -16,8 +16,9 @@ import { inputHeaderDifferencesOf, textPartDifferencesOf } from './text-parts.ts
 import { widestVisibilitiesOf } from './visibility.ts';
 
 /**
- * A Definitions Package's Guards by name in code point order: added, removed, or their demands read
- * as Input and the codes they answer, then what no rule compares, which is Neutral.
+ * A Definitions Package's Guards by name in code point order: their demands read as Input and the
+ * codes they answer, then what no rule compares, which is Neutral. A Guard added or removed is no
+ * Change here: Services import a Guard by its export, which says it.
  */
 export function guardDifferencesOf(
   baseline: PublishedDefinitionsSnapshot,
@@ -33,14 +34,7 @@ export function guardDifferencesOf(
 }
 
 function differencesOf(guard: Counterpart<GuardSnapshot>, defs: BothDefs): readonly Difference[] {
-  switch (guard.kind) {
-    case 'added':
-      return [{ kind: 'added' }];
-    case 'removed':
-      return [{ kind: 'removed' }];
-    case 'kept':
-      return keptDifferencesOf(guard.baseline, guard.proposed, defs);
-  }
+  return guard.kind === 'kept' ? keptDifferencesOf(guard.baseline, guard.proposed, defs) : [];
 }
 
 /**
