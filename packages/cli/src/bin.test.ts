@@ -6511,7 +6511,10 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ['dependencies', './shared'],
     ['dependencies', '/opt/shared'],
     ['dependencies', '~/shared'],
+    ['dependencies', '.shared'],
+    ['dependencies', 'shared\\lib'],
     ['dependencies', 'shared.tgz'],
+    ['dependencies', 'shared.TGZ'],
     ['dependencies', 'shared.tar.gz'],
     ['dependencies', 'git+file:///opt/shared'],
     ['dependencies', 'git+https://example.org/org/shared.git'],
@@ -6522,6 +6525,11 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ['peerDependencies', 'npm:@org/shared@workspace:*'],
     ['peerDependencies', 'npm:shared@file:../shared'],
     ['peerDependencies', 'npm:org/shared'],
+    ['peerDependencies', 'NPM:shared@file:../shared'],
+    ['peerDependencies', 'npm:shared.tgz'],
+    ['peerDependencies', 'npm:shared.tar.gz'],
+    ['peerDependencies', 'npm:.shared'],
+    ['peerDependencies', 'npm:@org/.shared'],
   ] as const)(
     'a Definitions Package whose %s list the range %s fails dry-run, as no registry install resolves it',
     async ([field, range], { lab }) => {
@@ -6548,6 +6556,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     ['an npm: alias of a package', 'npm:@org/shared'],
     ['an npm: alias of a caret', 'npm:@org/shared@^1.0.0'],
     ['an npm: alias of a dist-tag', 'npm:shared@beta'],
+    ['an npm: alias in upper case', 'NPM:shared@^1.0.0'],
   ] as const)(
     'a Definitions Package depending on %s (%s) is published as it lists it',
     async ([, range], { lab }) => {
