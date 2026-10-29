@@ -4,16 +4,16 @@
 
 ## Serving
 
-A Service without messaging serves HTTP alone:
+A Service without messaging, `notes-service` here, serves HTTP alone:
 
 ```ts
-// src/main.ts
+// notes-service/src/main.ts
 import { serve } from '@cf-loom/server';
 import { nodeHttp } from '@cf-loom/server/node-http';
 import { contract } from './contract/index.ts';
 import handlers from './handlers.generated.ts';
 
-const resources = { orders: await ordersRepository() };   // the Service's own
+const resources = { notes: await notesRepository() };   // the Service's own
 const http = serve(contract, handlers, { resources, maxBodyBytes: 1_048_576 });   // (Request) => Promise<Response>
 const server = nodeHttp(http).listen(3000);
 
@@ -38,6 +38,8 @@ const running = await messaging(contract, jetstream({
 }));
 const resources = {      // the Service's own
   orders: await ordersRepository(),
+  callers: await mongoCallers(),
+  notifications: await mongoNotifications(),
   publisher: running.publisher,
   sender: running.sender,
 };

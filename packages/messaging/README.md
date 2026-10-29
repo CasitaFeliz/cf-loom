@@ -124,7 +124,7 @@ import handlers from '../src/handlers.generated.ts';
 import createOrderHandler from '../src/endpoints/orders/create-order.handler.ts';
 
 const running = await memory(contract);
-const resources = { publisher: running.publisher, sender: running.sender };
+const resources = { publisher: running.publisher, sender: running.sender, notifications };
 await running.consume(handlers, { resources });
 
 await createOrderHandler({ body: newOrder }, { context: { apiKey: { callerId: 'c-1' } } }, { resources });

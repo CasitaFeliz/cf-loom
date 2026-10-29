@@ -70,6 +70,18 @@ describe('the handlers README', () => {
     ]);
   });
 
+  test('the permission example rejects a user who holds none of the permissions asked', async () => {
+    const context = { userToken: { userId: 'u-2' } };
+
+    const admission = await permissionHandler(
+      {},
+      { context, qualifier: ['orders:edit'] },
+      { resources },
+    );
+
+    expect(admission).toMatchObject({ kind: 'rejection', rejection: forbidden });
+  });
+
   test("the direct call of a Subscription's Message Handler receives its body and answers nothing", async () => {
     const { answer } = await import('../snippets/handlers-testing-a-services-own-code-2.ts');
 

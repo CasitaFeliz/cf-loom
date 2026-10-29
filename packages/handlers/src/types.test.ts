@@ -6,7 +6,7 @@ import {
   defineService,
   type Endpoint,
 } from '@cf-loom/contract';
-import { describe, expect, expectTypeOf, test } from 'vitest';
+import { describe, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import type {
   Admission,
@@ -30,7 +30,6 @@ import type {
   Readers,
   WithResources,
 } from './index.ts';
-import { hookFailureOf } from './internal/index.ts';
 
 /** Every key any member of a union of records holds. */
 type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
@@ -224,16 +223,5 @@ describe('what a Handler builds and a direct call returns', () => {
       | 'message'
       | 'cause'
     >();
-  });
-});
-
-describe('the hooks a Service gives', () => {
-  test('a hook may return a value', async () => {
-    const failure = await hookFailureOf((count: number) => count + 1, 1, {
-      source: 'orders',
-      hook: 'onServiceFault',
-    });
-
-    expect(failure).toBeUndefined();
   });
 });

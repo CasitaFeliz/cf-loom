@@ -47,7 +47,9 @@ export const orders: Orders = {
 export const callers: Callers = {
   byKey: async (key) => (key === 'k-1' ? { id: 'c-1' } : undefined),
 };
-export const permissions: Permissions = { of: async () => ['orders:edit'] };
+export const permissions: Permissions = {
+  of: async (userId) => (userId === 'u-1' ? ['orders:edit'] : []),
+};
 export const notifications: Notifications & { readonly sent: readonly string[] } = {
   send: async (paymentId) => void sent.push(paymentId),
   sent,
