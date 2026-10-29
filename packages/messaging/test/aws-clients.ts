@@ -85,3 +85,18 @@ export function alteringAnswers(
     { step: 'initialize', name: `alter-${commandName}` },
   );
 }
+
+/** Records the inputs of the commands of one kind an SQS client sends from now on, such as `CreateQueueCommand`. */
+export function recordingInputs(sqs: SQSClient, commandName: string) {
+  const inputs: Record<string, unknown>[] = [];
+  sqs.middlewareStack.add(
+    (next, context) => (args) => {
+      if (context.commandName === commandName && isRecord(args.input)) {
+        inputs.push(args.input);
+      }
+      return next(args);
+    },
+    { step: 'initialize', name: `record-${commandName}` },
+  );
+  return { sent: () => inputs };
+}

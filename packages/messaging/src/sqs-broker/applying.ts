@@ -18,11 +18,12 @@ export async function applyBrokerPlan<const Given = unknown, const GivenLimits =
   if (checked.kind === 'refused') {
     throw new Error(checked.message);
   }
-  const { sns, sqs } = connecting;
+  const { sns, sqs, account } = connecting;
   const applier: Applier = {
     sns,
     sqs,
-    place: await placeOf(connecting),
+    topicPlace: await placeOf(sns, account),
+    queuePlace: await placeOf(sqs, account),
     subscribing: subscribingOn(sns),
   };
   const streams = Object.keys(checked.plan.streams);

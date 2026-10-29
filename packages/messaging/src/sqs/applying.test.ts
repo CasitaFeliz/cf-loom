@@ -16,6 +16,7 @@ import {
   alteringAnswers,
   anAwsConnecting,
   countCommands,
+  recordingInputs,
 } from '../../test/aws-clients.ts';
 import {
   queueAttributesOf,
@@ -1122,5 +1123,54 @@ describe('applyBrokerPlan', () => {
     expect(error.message).toBe(
       `The Durable consumer ${orders.chargeDurable} could not be applied: AWS answered no Endpoint`,
     );
+  });
+
+  test('a new queue is created with its attributes, redrive policy, policy and tags, and its dead-letter queue with its attributes and tags, none set afterwards', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const created = recordingInputs(connecting.sqs, 'CreateQueueCommand');
+    const set = recordingInputs(connecting.sqs, 'SetQueueAttributesCommand');
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const [deadLetter, queue] = created.sent();
+    expect(deadLetter).toMatchObject({
+      QueueName: `${orders.chargeDurable}_dlq`,
+      Attributes: { MessageRetentionPeriod: '1209600' },
+      tags: { 'cf-loom:durable': orders.chargeDurable, 'cf-loom:service': 'orders-service' },
+    });
+    expect(queue).toMatchObject({
+      QueueName: orders.chargeDurable,
+      Attributes: {
+        VisibilityTimeout: '30',
+        MessageRetentionPeriod: '345600',
+        RedrivePolicy: JSON.stringify({
+          deadLetterTargetArn: sqsArnOf(`${orders.chargeDurable}_dlq`),
+          maxReceiveCount: 5,
+        }),
+      },
+      tags: { 'cf-loom:durable': orders.chargeDurable, 'cf-loom:service': 'orders-service' },
+    });
+    expect(queue).toMatchObject({
+      Attributes: {
+        Policy: expect.stringContaining(`"Resource":"${sqsArnOf(orders.chargeDurable)}"`),
+      },
+    });
+    expect(set.sent()).toEqual([]);
+  });
+
+  test('a new queue whose ARN SQS gives otherwise than the account and region of the clients make is refused naming both, before its Durable consumer is subscribed', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    alteringAnswers(connecting.sqs, 'GetQueueAttributesCommand', (output) => {
+      output['Attributes'] = { QueueArn: 'arn:aws:sqs:eu-west-1:210987654321:elsewhere' };
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(
+      `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:elsewhere, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the SQS client`,
+    );
+    expect(await subscriptionsOf(connecting.sns, snsArnOf(orders.stream))).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@ import { GetTopicAttributesCommand, type SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { type Applied, refusedBy } from '../broker-applying/index.ts';
 import { isAwsError } from './aws-errors.ts';
-import { type Place, topicArnOf } from './connecting.ts';
+import { type Place, queueArnOf, topicArnOf } from './connecting.ts';
 import { type AppliedQueue, applyQueue, tagQueue } from './queue-applying.ts';
 import { deadLetterQueueNameOf, queueNameOf } from './queue-names.ts';
 import { queuePolicyWith } from './queue-policy.ts';
@@ -12,11 +12,12 @@ import type { Subscribing } from './subscribing.ts';
 import { subscriptionShapeOf } from './subscription-shape.ts';
 import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from './tags.ts';
 
-/** What applying works with: the SNS and SQS clients, where the environment's topics are, and the subscriptions made so far. */
+/** What applying works with: the SNS and SQS clients, the place of each, and the subscriptions made so far. */
 export type Applier = {
   readonly sns: SNSClient;
   readonly sqs: SQSClient;
-  readonly place: Place;
+  readonly topicPlace: Place;
+  readonly queuePlace: Place;
   readonly subscribing: Subscribing;
 };
 
@@ -33,15 +34,15 @@ export async function applyDurableConsumer(
 }
 
 async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<Applied> {
-  const { sns, sqs, place } = applier;
-  const topicArn = topicArnOf(place, planned.stream);
+  const { sns, sqs } = applier;
+  const topicArn = topicArnOf(applier.topicPlace, planned.stream);
   if (!(await isTopic(sns, topicArn))) {
     const reads = `reads the stream ${planned.stream}, whose topic ${topicArn} does not exist yet`;
     const remedy = "apply its Service's plan first";
     return { kind: 'refused', message: `The Durable consumer ${planned.name} ${reads}: ${remedy}` };
   }
-  const deadLetterQueue = await applyDeadLetterQueue(sqs, planned);
-  const queue = await applyMainQueue(sqs, planned, { deadLetterQueue, topicArn });
+  const deadLetterQueue = await applyDeadLetterQueue(applier, planned);
+  const queue = await applyMainQueue(applier, planned, { deadLetterQueue, topicArn });
   const queueOnTopic = { topicArn, queueArn: queue.arn, subject: planned.subject };
   const subscription = await applier.subscribing.subscribe(subscriptionShapeOf(queueOnTopic));
   await tagQueue(sqs, queue.url, { [subscriptionTag]: subscription });
@@ -60,9 +61,14 @@ async function isTopic(sns: SNSClient, topicArn: string): Promise<boolean> {
   }
 }
 
-function applyDeadLetterQueue(sqs: SQSClient, planned: PlannedQueue): Promise<AppliedQueue> {
+function applyDeadLetterQueue(
+  { sqs, queuePlace }: Applier,
+  planned: PlannedQueue,
+): Promise<AppliedQueue> {
+  const name = deadLetterQueueNameOf(planned.name);
   return applyQueue(sqs, {
-    name: deadLetterQueueNameOf(planned.name),
+    name,
+    arn: queueArnOf(queuePlace, name),
     attributes: { MessageRetentionPeriod: String(planned.deadLetterRetention) },
     tags: deadLetterQueueTagsOf(planned),
     untagged: [],
@@ -73,13 +79,15 @@ function applyDeadLetterQueue(sqs: SQSClient, planned: PlannedQueue): Promise<Ap
 type Around = { readonly deadLetterQueue: AppliedQueue; readonly topicArn: string };
 
 function applyMainQueue(
-  sqs: SQSClient,
+  { sqs, queuePlace }: Applier,
   planned: PlannedQueue,
   { deadLetterQueue, topicArn }: Around,
 ): Promise<AppliedQueue> {
   const redrive = { deadLetterTargetArn: deadLetterQueue.arn, maxReceiveCount: planned.maxDeliver };
+  const name = queueNameOf(planned.name);
   return applyQueue(sqs, {
-    name: queueNameOf(planned.name),
+    name,
+    arn: queueArnOf(queuePlace, name),
     attributes: {
       VisibilityTimeout: String(planned.visibilityTimeout),
       MessageRetentionPeriod: String(planned.retention),
