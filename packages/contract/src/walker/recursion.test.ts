@@ -1617,13 +1617,13 @@ describe('walkSchemas: recursion', () => {
 
   /**
    * How many times longer the chain's walk may take than a walk of as many ids, each on a cycle of
-   * its own, that refuses nothing. It measures 0.5 to 0.7 when the walk reads each failure tree once,
-   * and 9 to 16 when it reads the trees afresh for each id, on idle and loaded cores alike. The walk's
-   * memory grows with the square of a chain of ids, so the chain stays at 7,000.
+   * its own, that refuses nothing: under 1 when the walk reads each failure tree once, and many times
+   * over 3 when it reads the trees afresh for each id. The walk's memory grows with the square of a
+   * chain of ids, so the chain stays at 7,000.
    */
   const memoCpuRatio = 3;
 
-  /** Each chain is walked up to four times, the refused one 9 to 16 times longer with the memo off. */
+  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
   const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {

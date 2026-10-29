@@ -43,9 +43,9 @@ export function cpuMillisecondsOf(call: () => unknown, bound: number): number {
 }
 
 /**
- * How many times the CPU time of the thread `reference` takes `call` takes: the fastest run of each
- * over up to three interleaved runs of both, which stop at the first ratio under `bound`. A slower
- * CPU, or more garbage collection, stretches both alike, so the ratio holds on any host where an
+ * How many times longer `call` takes than `reference`, in CPU time of the thread: the fastest run of
+ * each over up to three interleaved runs of both, which stop at the first ratio under `bound`. A
+ * slower host stretches the ratio far less than it stretches either run, so it holds where an
  * absolute bound does not.
  */
 export function cpuRatioOf(call: () => unknown, reference: () => unknown, bound: number): number {
