@@ -222,6 +222,31 @@ describe('memory types', () => {
     expect(inMemory.messages).toEqual([]);
   });
 
+  test('a RecordedMessage holds its subject, ids, headers and body, and no more', () => {
+    expectTypeOf<keyof RecordedMessage>().toEqualTypeOf<
+      'subject' | 'messageId' | 'factId' | 'headers' | 'body'
+    >();
+  });
+
+  test('DeliveryMeta holds the Fact id, the Broker message id and the headers, and no more', () => {
+    expectTypeOf<keyof DeliveryMeta>().toEqualTypeOf<'factId' | 'messageId' | 'headers'>();
+  });
+
+  test('a MemoryMessaging holds a Messaging’s keys and what a test drives and watches it with, and no more', () => {
+    expectTypeOf<keyof MemoryMessaging<typeof contract>>().toEqualTypeOf<
+      | 'publisher'
+      | 'sender'
+      | 'consume'
+      | 'close'
+      | 'settled'
+      | 'messages'
+      | 'messagesOf'
+      | 'deliver'
+      | 'redeliver'
+      | 'pending'
+    >();
+  });
+
   test('messagesOf lists the Messages of a Message Version, their body typed by it', () => {
     const recorded = inMemory.messagesOf(orderCreatedV1);
     const sent = inMemory.messagesOf(chargeCardV1);

@@ -6,7 +6,7 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { Child } from './children.ts';
+export type { Child, ResolvedRef } from './children.ts';
 export {
   childrenOf,
   defsReachedOf,
@@ -75,3 +75,4 @@ export { walkMeetingSchemas, walkSchemas } from './walk.ts';
 export type { LocatedSchema, Memo } from './walked.ts';
 export { failuresOf, refusalsIn } from './walked.ts';
 export { refNamed, withChild, withField, withoutNullable } from './with-child.ts';
+export { withinStack } from './within-stack.ts';

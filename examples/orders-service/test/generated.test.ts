@@ -99,8 +99,17 @@ describe('the Contract Package', () => {
       'total: z.object({ amount: z.int().min(0)',
     );
     expect(importing).toEqual([]);
-    expect(manifest.peerDependencies).not.toHaveProperty(['@org/definitions']);
-    expect(manifest).not.toHaveProperty('dependencies');
+    expect(Object.keys(manifest.peerDependencies).sort()).toEqual(['@cf-loom/contract', 'zod']);
+    expect(Object.keys(manifest).sort()).toEqual([
+      'cfLoom',
+      'exports',
+      'files',
+      'name',
+      'peerDependencies',
+      'sideEffects',
+      'type',
+      'version',
+    ]);
   });
 
   test('the Contract Package exports OrderCreated@1 and nothing of ChargeCard or chargeOnCreated', () => {

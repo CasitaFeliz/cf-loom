@@ -14,8 +14,8 @@ export function annotationFindingsOf({ baseline, proposed }: NodePair): readonly
 }
 
 /**
- * The def's name a use carries, when it differs: another def's, or none where the shape is now
- * written inline, or one where it was. The name is an annotation (`.meta({ id })`), never a shape.
+ * The def name a `ref` carries, a use's or an alias def's, when it differs: another def's, or none
+ * where the other side is not a `ref`. The name is an annotation (`.meta({ id })`), never a shape.
  */
 export function renamedFindingsOf({ baseline, proposed }: NodePair): readonly Finding[] {
   const isRenamed = defNameOf(baseline) !== defNameOf(proposed);

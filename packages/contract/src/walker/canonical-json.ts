@@ -8,28 +8,56 @@ export function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** Whether a value is JSON: scalars, `null`, and lists and plain objects of JSON, with no cycle. */
-export function isJsonValue(value: unknown, ancestors: readonly object[] = []): boolean {
-  if (value === null || isJsonPrimitive(value)) {
-    return true;
+/**
+ * Whether a value is JSON: scalars, `null`, and lists and plain objects of JSON, with no cycle,
+ * read with an explicit stack that holds the containers on the path, so one held twice is JSON.
+ */
+export function isJsonValue(value: unknown): boolean {
+  const onPath = new Set<object>();
+  const frames: MembersRead[] = [];
+  let member = value;
+  for (;;) {
+    if (!isJsonScalar(member)) {
+      if (!isJsonContainer(member) || onPath.has(member)) {
+        return false;
+      }
+      onPath.add(member);
+      frames.push({ container: member, members: Object.values(member), next: 0 });
+    }
+    let frame = frames.at(-1);
+    while (frame !== undefined && frame.next === frame.members.length) {
+      frames.pop();
+      onPath.delete(frame.container);
+      frame = frames.at(-1);
+    }
+    if (frame === undefined) {
+      return true;
+    }
+    member = frame.members[frame.next++];
   }
-  if (typeof value !== 'object' || ancestors.includes(value)) {
+}
+
+/** A list or plain object whose members are being read, and how many have been. */
+type MembersRead = {
+  readonly container: object;
+  readonly members: readonly unknown[];
+  next: number;
+};
+
+function isJsonScalar(value: unknown): boolean {
+  return value === null || isJsonPrimitive(value);
+}
+
+function isJsonContainer(value: unknown): value is object {
+  if (typeof value !== 'object' || value === null) {
     return false;
   }
-  const isPlain = Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype;
-  const inside = [...ancestors, value];
-  return isPlain && Object.values(value).every((member) => isJsonValue(member, inside));
+  return Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype;
 }
 
 /** A value as JSON with object keys sorted by code point, so equal values give equal text. */
 export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJson).join(',')}]`;
-  }
-  if (typeof value === 'object' && value !== null) {
-    return canonicalObject(value);
-  }
-  return JSON.stringify(value);
+  return composedText(value, compactContainerOf);
 }
 
 /** Orders values by their canonical JSON, for the arrays whose order means nothing. */
@@ -52,7 +80,9 @@ export function inCanonicalJsonOrder<Value>(values: readonly Value[]): Value[] {
  * the outermost object holds are written before the rest, in that order.
  */
 export function indentedCanonicalJson(value: unknown, first: readonly string[] = []): string {
-  return indentedAt(value, '', first);
+  return composedText(value, (container, depth) =>
+    indentedContainerOf(container, depth, depth === 0 ? first : []),
+  );
 }
 
 /** Orders text by code point, as the Snapshot orders keys and the arrays whose order means nothing. */
@@ -69,11 +99,66 @@ export function byCodePoint(left: string, right: string): number {
   return left.length - right.length;
 }
 
-function canonicalObject(value: object): string {
-  const members = membersOf(value, []).map(
-    ([key, member]) => `${JSON.stringify(key)}:${canonicalJson(member)}`,
-  );
-  return `{${members.join(',')}}`;
+/** A list or object, the children its text is made of, and how their texts make it. */
+type Composed = {
+  readonly children: readonly unknown[];
+  readonly textOf: (texts: readonly (string | undefined)[]) => string;
+};
+
+/** A container being composed, how deep it sits and the texts of the children made so far. */
+type Composing = {
+  readonly composed: Composed;
+  readonly depth: number;
+  readonly texts: (string | undefined)[];
+};
+
+/**
+ * A value's text, a scalar's as `JSON.stringify` writes it and a container's from its children's
+ * texts once they are made, read with an explicit stack.
+ */
+function composedText(
+  value: unknown,
+  containerOf: (value: unknown, depth: number) => Composed | undefined,
+): string {
+  const root = containerOf(value, 0);
+  if (root === undefined) {
+    return JSON.stringify(value);
+  }
+  const frames: Composing[] = [{ composed: root, depth: 0, texts: [] }];
+  let made = '';
+  for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
+    const { children, textOf } = frame.composed;
+    if (frame.texts.length === children.length) {
+      frames.pop();
+      made = textOf(frame.texts);
+      frames.at(-1)?.texts.push(made);
+      continue;
+    }
+    const child = children[frame.texts.length];
+    const depth = frame.depth + 1;
+    const composed = containerOf(child, depth);
+    if (composed === undefined) {
+      frame.texts.push(JSON.stringify(child));
+    } else {
+      frames.push({ composed, depth, texts: [] });
+    }
+  }
+  return made;
+}
+
+function compactContainerOf(value: unknown): Composed | undefined {
+  if (Array.isArray(value)) {
+    return { children: value, textOf: (texts) => `[${texts.join(',')}]` };
+  }
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const members = membersOf(value, []);
+  const textOf = (texts: readonly (string | undefined)[]) => {
+    const written = members.map(([key], index) => `${JSON.stringify(key)}:${texts[index]}`);
+    return `{${written.join(',')}}`;
+  };
+  return { children: members.map(([, member]) => member), textOf };
 }
 
 /**
@@ -100,17 +185,29 @@ function hasValue(entry: [string, unknown]): boolean {
   return entry[1] !== undefined;
 }
 
-function indentedAt(value: unknown, indent: string, first: readonly string[]): string {
+function indentedContainerOf(
+  value: unknown,
+  depth: number,
+  first: readonly string[],
+): Composed | undefined {
+  const indent = '  '.repeat(depth);
   const inner = `${indent}  `;
   if (Array.isArray(value)) {
-    const items = value.map((item) => `${inner}${indentedAt(item, inner, [])}`);
-    return items.length === 0 ? '[]' : `[\n${items.join(',\n')}\n${indent}]`;
+    const textOf = (texts: readonly (string | undefined)[]) => {
+      const items = texts.map((text) => `${inner}${text}`);
+      return items.length === 0 ? '[]' : `[\n${items.join(',\n')}\n${indent}]`;
+    };
+    return { children: value, textOf };
   }
-  if (typeof value === 'object' && value !== null) {
-    const members = membersOf(value, first).map(
-      ([key, member]) => `${inner}${JSON.stringify(key)}: ${indentedAt(member, inner, [])}`,
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+  const members = membersOf(value, first);
+  const textOf = (texts: readonly (string | undefined)[]) => {
+    const written = members.map(
+      ([key], index) => `${inner}${JSON.stringify(key)}: ${texts[index]}`,
     );
-    return members.length === 0 ? '{}' : `{\n${members.join(',\n')}\n${indent}}`;
-  }
-  return JSON.stringify(value);
+    return written.length === 0 ? '{}' : `{\n${written.join(',\n')}\n${indent}}`;
+  };
+  return { children: members.map(([, member]) => member), textOf };
 }

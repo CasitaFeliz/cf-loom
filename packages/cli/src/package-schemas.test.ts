@@ -315,8 +315,8 @@ describe('cf-loom package: the schemas it writes', () => {
   test('the Success reader strips keys it does not know, a nested object’s included', () => {
     const parsed = read({ ...sample, inner: { a: 'x', b: 1 } });
 
-    expect(parsed.data).not.toHaveProperty('extra');
-    expect(parsed.data?.['inner']).toEqual({ a: 'x' });
+    const { extra: _dropped, ...known } = sample;
+    expect(parsed.data).toStrictEqual(known);
   });
 
   test('the Success reader reads an unknown Open Enum value as its Unknown case', () => {
@@ -537,8 +537,8 @@ describe('cf-loom package: an exported Event’s body', () => {
   test('it reads a value the Contract declares, unknown keys stripped', () => {
     const parsed = shaped.body.safeParse(sample);
 
-    expect(parsed.data?.['tree']).toEqual(sample.tree);
-    expect(parsed.data).not.toHaveProperty('extra');
+    const { extra: _dropped, ...known } = sample;
+    expect(parsed.data).toStrictEqual(known);
   });
 
   test('it reads an unknown Open Enum value as its Unknown case', () => {

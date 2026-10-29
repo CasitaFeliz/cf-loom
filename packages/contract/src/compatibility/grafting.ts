@@ -5,7 +5,6 @@ import {
   type Defs,
   defsReachedOf,
   refNamed,
-  resolvedRefOf,
   type SchemaNode,
   type Step,
   withChild,
@@ -15,13 +14,14 @@ import {
 import type { BothDefs, Finding, NodePair } from './findings.ts';
 import {
   copyMet,
+  followedPairOf,
+  followedRefOf,
   type GraftDefs,
   graftRecorded,
   namedDefs,
   pairMet,
   recordingDefs,
 } from './graft-names.ts';
-import { followedOf } from './refs.ts';
 import { findingsOf } from './schemas.ts';
 
 /** What a former Input is rewritten onto: an Endpoint's query and body as proposed, and the defs their `ref`s name. */
@@ -166,16 +166,17 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
 type Place = { readonly owner: number | undefined; readonly put: Put };
 
 /**
- * A pair as the compare follows it: built in place when the proposed side is written inline, else
- * a `ref` to its def, held as the Snapshot declares it or named apart, built once.
+ * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place
+ * when the proposed side is written inline, else a `ref` to its def, held as the Snapshot declares
+ * it or named apart, built once.
  */
 function placePair(walk: Walk, pair: NodePair, place: Place): void {
-  const followed = followedOf(pair, walk.defs, []);
-  if (followed.kind !== 'entered' || pair.proposed.type !== 'ref') {
+  const followed = followedPairOf(pair, walk.defs);
+  if (pair.proposed.type !== 'ref') {
     pushGraft(walk, followed.pair, place);
     return;
   }
-  const { index, name, isBuilt } = pairMet(walk.met, followed.entered, place.owner);
+  const { index, name, isBuilt } = pairMet(walk.met, followed.key, place.owner);
   const chain = { nullable: followed.pair.proposed.nullable === true };
   place.put(name === undefined ? pair.proposed : refNamed(pair.proposed, name, chain));
   if (isBuilt) {
@@ -209,10 +210,7 @@ function placeCopy(walk: Walk, node: SchemaNode, put: Put): void {
     walk.frames.push({ kind: 'copy', children: childrenOf(node).values(), node, put });
     return;
   }
-  const resolved = resolvedRefOf(node, walk.defs.baseline);
-  if (resolved === undefined) {
-    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
-  }
+  const resolved = followedRefOf(node, walk.defs.baseline);
   const { name, isBuilt } = copyMet(walk.met, resolved.name);
   put(refNamed(node, name ?? resolved.name, resolved));
   if (isBuilt) {
