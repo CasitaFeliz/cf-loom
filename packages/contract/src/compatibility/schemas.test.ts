@@ -9,6 +9,8 @@ import {
   compatibilityReportOf,
   type DefinitionsSnapshot,
   type Defs,
+  type EndpointFields,
+  type EndpointLifecycle,
   type EndpointSnapshot,
   type EventSnapshot,
   type Field,
@@ -19,6 +21,7 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  type RefNode,
   type SchemaNode,
   type ServiceSnapshot,
   type ShapeDifference,
@@ -62,18 +65,21 @@ const noBodies = {
   success: { status: 200, headers: { type: 'object', fields: {} }, body: null },
 } as const;
 
-function anEndpoint(fields: Partial<EndpointSnapshot> = {}): EndpointSnapshot {
+function anEndpoint<const Lifecycle extends EndpointLifecycle = { readonly lifecycle: 'active' }>(
+  fields: Partial<EndpointFields> = {},
+  lifecycle?: Lifecycle,
+): EndpointFields & (Lifecycle | { readonly lifecycle: 'active' }) {
   return {
     name: 'createOrder',
     group: 'orders',
     visibility: 'public',
-    lifecycle: 'active',
     description: 'Places an order',
     params: [],
     guards: [],
     rejections: [],
     ...noBodies,
     ...fields,
+    ...(lifecycle ?? { lifecycle: 'active' }),
   };
 }
 
@@ -1587,7 +1593,206 @@ const sprawl = anObject(
   ),
 );
 
+const selfReferring = anObject({ f: optional(aString), c: optional(aRef('node')) });
+const kField = ['fields', 'k'];
+const idChanged = found(annotationChanged('id'), neutralEverywhere, kField);
+
+function aBodyWith(fields: Readonly<Record<string, SchemaNode>>): ObjectNode {
+  const entries = Object.entries(fields).map(([name, schema]) => [name, required(schema)]);
+  return anObject(Object.fromEntries(entries));
+}
+
+type RefAnnotations = Pick<RefNode, 'description' | 'examples' | 'origin'>;
+
+function anAliasOf(name: string, annotations: RefAnnotations): RefNode {
+  return { type: 'ref', name, ...annotations };
+}
+
+function anAliasAnnotationRow(
+  change: string,
+  annotation: 'description' | 'examples' | 'origin',
+  annotations: { readonly from: RefAnnotations; readonly to: RefAnnotations },
+): Row {
+  return {
+    change,
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { node: selfReferring, alias: anAliasOf('node', annotations.from) },
+    toDefs: { node: selfReferring, alias: anAliasOf('node', annotations.to) },
+    found: [found(annotationChanged(annotation), neutralEverywhere, kField)],
+  };
+}
+
+const variantCard = anObject({ kind: required(aClosedEnum('a')) });
+const plainCard = anObject({ f: optional(aString) });
+const aliasVariant: SchemaNode = {
+  type: 'tagged',
+  discriminator: 'kind',
+  variants: { '"a"': aRefVariant('alias') },
+};
+
+const aliasRows: readonly Row[] = [
+  {
+    change: 'pointing a ref at the def its alias names, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: aRef('alias') }),
+    to: aBodyWith({ g: aRef('node'), k: aRef('node') }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: { node: selfReferring },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'pointing a ref at an alias of the def it named, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: aRef('node') }),
+    to: aBodyWith({ g: aRef('node'), k: aRef('alias') }),
+    fromDefs: { node: selfReferring },
+    toDefs: { node: selfReferring, alias: aRef('node') },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'pointing an array’s items at the def their alias names, met earlier in the schema',
+    from: aBodyWith({ g: aRef('node'), k: anArray(aRef('alias')) }),
+    to: aBodyWith({ g: aRef('node'), k: anArray(aRef('node')) }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: { node: selfReferring },
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
+    ],
+  },
+  anAliasAnnotationRow('changing an alias def’s description', 'description', {
+    from: { description: 'x' },
+    to: { description: 'y' },
+  }),
+  anAliasAnnotationRow('describing an alias def', 'description', {
+    from: {},
+    to: { description: 'y' },
+  }),
+  anAliasAnnotationRow('giving an alias def examples', 'examples', {
+    from: {},
+    to: { examples: [1] },
+  }),
+  anAliasAnnotationRow('giving an alias def an origin', 'origin', {
+    from: {},
+    to: { origin: 'local' },
+  }),
+  {
+    change: 'pointing an alias def at a renamed def of the same shape',
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { node: selfReferring, alias: aRef('node') },
+    toDefs: {
+      renamed: anObject({ f: optional(aString), c: optional(aRef('renamed')) }),
+      alias: aRef('renamed'),
+    },
+    found: [
+      idChanged,
+      found(annotationChanged('id'), neutralEverywhere, [...kField, 'fields', 'c']),
+    ],
+  },
+  {
+    change: 'shortening a chain of alias defs',
+    from: aBodyWith({ k: aRef('outer') }),
+    to: aBodyWith({ k: aRef('outer') }),
+    fromDefs: { node: selfReferring, outer: aRef('middle'), middle: aRef('node') },
+    toDefs: { node: selfReferring, outer: aRef('node') },
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'turning a def into an alias of a def of the same shape',
+    from: aBodyWith({ k: aRef('alias') }),
+    to: aBodyWith({ k: aRef('alias') }),
+    fromDefs: { alias: anObject({ f: optional(aString) }) },
+    toDefs: { alias: aRef('node'), node: anObject({ f: optional(aString) }) },
+    found: [idChanged],
+  },
+  {
+    change: 'describing an alias def a variant names',
+    from: aliasVariant,
+    to: aliasVariant,
+    fromDefs: { card: variantCard, alias: aRef('card') },
+    toDefs: { card: variantCard, alias: anAliasOf('card', { description: 'A card' }) },
+    found: [found(annotationChanged('description'), neutralEverywhere, ['variants', '"a"'])],
+  },
+  {
+    change: 'writing a nullable ref’s def inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('card')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { card: plainCard },
+    toDefs: {},
+    found: [idChanged],
+  },
+  {
+    change: 'naming a nullable schema written inline as a def',
+    from: aBodyWith({ k: aNullable(plainCard) }),
+    to: aBodyWith({ k: aNullable(aRef('card')) }),
+    fromDefs: {},
+    toDefs: { card: plainCard },
+    found: [idChanged],
+  },
+  {
+    change: 'writing a nullable ref’s alias chain inline, nullable',
+    from: aBodyWith({ k: aNullable(aRef('alias')) }),
+    to: aBodyWith({ k: aNullable(plainCard) }),
+    fromDefs: { alias: aRef('card'), card: plainCard },
+    toDefs: {},
+    found: [idChanged, idChanged],
+  },
+  {
+    change: 'making a ref nullable while its def gains a description',
+    from: aBodyWith({ k: aRef('node') }),
+    to: aBodyWith({ k: aNullable(aRef('node')) }),
+    fromDefs: { node: selfReferring },
+    toDefs: { node: { ...selfReferring, description: 'x' } },
+    found: [
+      found({ kind: 'nullability-added' }, guaranteesLess, kField),
+      found(annotationChanged('description'), neutralEverywhere, kField),
+    ],
+  },
+];
+
+/** A schema as `generate` writes it, with the defs its `ref`s name. */
+function walkedWithDefsOf(schema: z.ZodType): { readonly node: SchemaNode; readonly defs: Defs } {
+  const walked = walkSchemas(
+    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    () => undefined,
+  );
+  const [first] = walked.located;
+  if (first?.walked.kind !== 'walked') {
+    throw new Error('the schema must be allowed in a Contract');
+  }
+  return { node: first.walked.value, defs: walked.defs };
+}
+
+function anOuterAlias(annotations: { readonly description?: string }): z.ZodType {
+  const inner: z.ZodType = z
+    .lazy(() => z.object({ children: z.array(outer) }))
+    .meta({ id: 'inner' });
+  const outer: z.ZodType = z.lazy(() => inner).meta({ id: 'outer', ...annotations });
+  return outer;
+}
+
 describe('compatibilityReportOf, refs', () => {
+  test.each(casesOf(aliasRows))('$change is $outcome in $place', expectRow);
+
+  test.each(places)(
+    'describing an alias def zod declares is one description, in $name',
+    (place) => {
+      const from = walkedWithDefsOf(anOuterAlias({}));
+      const to = walkedWithDefsOf(anOuterAlias({ description: 'x' }));
+
+      const report = reportOf(place, {
+        from: from.node,
+        to: to.node,
+        fromDefs: from.defs,
+        toDefs: to.defs,
+      });
+
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(place, found(annotationChanged('description'), neutralEverywhere)),
+      ]);
+    },
+  );
+
   test('a ref made nullable through an alias def is nullability added', () => {
     const defs: Defs = { alias: aRef('target'), target: anObject({ v: required(aString) }) };
 
@@ -1656,6 +1861,17 @@ describe('compatibilityReportOf, refs', () => {
         input,
         found(annotationChanged('id'), neutralEverywhere, ['fields', 'x', 'fields', 'x']),
       ),
+      changeAt(
+        input,
+        found(annotationChanged('id'), neutralEverywhere, [
+          'fields',
+          'x',
+          'fields',
+          'x',
+          'fields',
+          'x',
+        ]),
+      ),
     ]);
   });
 
@@ -1705,7 +1921,10 @@ describe('compatibilityReportOf, refs', () => {
         to: aRef('branch'),
         fromDefs: { tree, branch },
         toDefs: { tree, branch },
-        found: [found(annotationChanged('id'), neutralEverywhere)],
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+        ],
       },
       {
         change: 'renaming a recursive def’s id',
@@ -1713,7 +1932,10 @@ describe('compatibilityReportOf, refs', () => {
         to: aRef('branch'),
         fromDefs: { tree },
         toDefs: { branch },
-        found: [found(annotationChanged('id'), neutralEverywhere)],
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+        ],
       },
       {
         change: 'pointing a ref at the other def of a mutual recursion of the same shape',
@@ -1724,6 +1946,7 @@ describe('compatibilityReportOf, refs', () => {
         found: [
           found(annotationChanged('id'), neutralEverywhere),
           found(annotationChanged('id'), neutralEverywhere, ['fields', 'next']),
+          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next', 'fields', 'next']),
         ],
       },
       {
@@ -1732,7 +1955,10 @@ describe('compatibilityReportOf, refs', () => {
         to: aRef('alias'),
         fromDefs: { tree },
         toDefs: { alias: aRef('tree'), tree },
-        found: [found(annotationChanged('id'), neutralEverywhere)],
+        found: [
+          found(annotationChanged('id'), neutralEverywhere),
+          found(annotationChanged('id'), neutralEverywhere),
+        ],
       },
       {
         change: 'describing a recursive def a ref names',

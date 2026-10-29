@@ -520,11 +520,22 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('an object admits other keys', () => {
-    expect(echoed('payment')).not.toHaveProperty('additionalProperties');
+    expect(echoed('payment')).toStrictEqual({
+      type: 'object',
+      properties: {
+        iban: { type: 'string', format: 'iban' },
+        last4: { type: 'string' },
+        type: { anyOf: [{ enum: ['card', 'transfer'] }, { type: 'string' }] },
+      },
+      required: ['type'],
+    });
   });
 
   test('an object with no required field has no required keyword', () => {
-    expect(echoed('optionals')).not.toHaveProperty('required');
+    expect(echoed('optionals')).toStrictEqual({
+      type: 'object',
+      properties: { note: { type: 'string' } },
+    });
   });
 
   test('an object admits other keys, the Input body’s included', () => {
@@ -534,9 +545,10 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
     ];
 
     expect(bodies.map((body) => valueAt(body, 'type'))).toEqual(['object', 'object']);
-    expect(bodies.filter((body) => Object.hasOwn(body as object, 'additionalProperties'))).toEqual(
-      [],
-    );
+    expect(bodies.map(keysOf)).toEqual([
+      ['type', 'properties', 'required'],
+      ['type', 'properties', 'required'],
+    ]);
   });
 
   test('a record is additionalProperties of its value with propertyNames of its key', () => {
@@ -632,7 +644,20 @@ describe('cf-loom openapi: the JSON Schema of each node', () => {
   });
 
   test('a discriminated union has no discriminator, which OpenAPI would read as a component name', () => {
-    expect(echoed('shape')).not.toHaveProperty('discriminator');
+    expect(echoed('shape')).toStrictEqual({
+      oneOf: [
+        {
+          type: 'object',
+          properties: { kind: { type: 'string', const: 'circle' }, r: { type: 'number' } },
+          required: ['kind', 'r'],
+        },
+        {
+          type: 'object',
+          properties: { kind: { type: 'string', const: 'square' }, side: { type: 'number' } },
+          required: ['kind', 'side'],
+        },
+      ],
+    });
   });
 
   test('z.json() is the schema that admits any value', () => {
@@ -885,12 +910,28 @@ describe('cf-loom openapi: the OpenAPI operations', () => {
     });
   });
 
-  test('an Endpoint with no Input body has no requestBody', () => {
-    expect(operationOf('/orders/{orderId}', 'get')).not.toHaveProperty('requestBody');
+  test('an Active Endpoint with no Input body has no requestBody and is not marked deprecated', () => {
+    expect(keysOf(operationOf('/orders/{orderId}', 'get'))).toEqual([
+      'operationId',
+      'tags',
+      'description',
+      'x-cf-loom-visibility',
+      'x-cf-loom-guards',
+      'parameters',
+      'responses',
+    ]);
   });
 
   test('an Endpoint with no parameter has none', () => {
-    expect(operationOf('/orders', 'post')).not.toHaveProperty('parameters');
+    expect(keysOf(operationOf('/orders', 'post'))).toEqual([
+      'operationId',
+      'tags',
+      'description',
+      'x-cf-loom-visibility',
+      'x-cf-loom-guards',
+      'requestBody',
+      'responses',
+    ]);
   });
 });
 
@@ -918,7 +959,12 @@ describe('cf-loom openapi: the responses', () => {
   });
 
   test('a Success with no body has no content', () => {
-    expect(responseOf('/orders/{orderId}', 'delete', '204')).not.toHaveProperty('content');
+    expect(responseOf('/orders/{orderId}', 'delete', '204')).toStrictEqual({
+      description: 'Success',
+      headers: {
+        deprecation: { required: true, schema: { type: 'string', const: '@1792229400' } },
+      },
+    });
   });
 
   test('a Rejection is the response of its code’s status, described by its code and message', () => {
@@ -1050,7 +1096,13 @@ describe('cf-loom openapi: the responses', () => {
   });
 
   test('an OpenAPI operation with no Input body does not answer 413', () => {
-    expect(keysOf(valueAt(operationOf('/health', 'get'), 'responses'))).not.toContain('413');
+    expect(keysOf(valueAt(operationOf('/health', 'get'), 'responses'))).toEqual([
+      '200',
+      '400',
+      '500',
+      '501',
+      '503',
+    ]);
   });
 
   test('a Rejection with the status of a Fault shares its response with the Fault Envelope', () => {
@@ -1198,10 +1250,6 @@ describe('cf-loom openapi: lifecycle', () => {
     expect(valueAt(operationOf('/orders/{orderId}', 'delete'), 'deprecated')).toBe(true);
   });
 
-  test('an Active Endpoint is not marked deprecated', () => {
-    expect(operationOf('/orders/{orderId}', 'get')).not.toHaveProperty('deprecated');
-  });
-
   test('each response of a Deprecated Endpoint carries the Deprecation header of its deprecatedAt', () => {
     const committed = JSON.parse(readFileSync(join(fixture, 'contract.snapshot.json'), 'utf8'));
     const deprecatedAt = valueAt(committed, 'endpoints', 'DELETE /orders/{}', 'deprecatedAt');
@@ -1252,8 +1300,17 @@ describe('cf-loom openapi: lifecycle', () => {
     ]);
   });
 
-  test('a Retired Endpoint has no request body', () => {
-    expect(operationOf('/orders/{orderId}', 'put')).not.toHaveProperty('requestBody');
+  test('a Retired Endpoint has no request body and no security', () => {
+    expect(keysOf(operationOf('/orders/{orderId}', 'put'))).toEqual([
+      'operationId',
+      'tags',
+      'description',
+      'deprecated',
+      'x-cf-loom-visibility',
+      'x-cf-loom-guards',
+      'parameters',
+      'responses',
+    ]);
   });
 
   test('a Retired Endpoint keeps its Visibility', () => {
@@ -1311,7 +1368,16 @@ describe('cf-loom openapi: the authorization header', () => {
   });
 
   test('an own authorization header is no header parameter either', () => {
-    expect(operationOf('/extra', 'post')).not.toHaveProperty('parameters');
+    expect(keysOf(operationOf('/extra', 'post'))).toEqual([
+      'operationId',
+      'tags',
+      'description',
+      'x-cf-loom-visibility',
+      'x-cf-loom-guards',
+      'requestBody',
+      'responses',
+      'security',
+    ]);
   });
 
   test('several Guards that demand authorization are one requirement, its schemes in code point order', () => {
@@ -1325,11 +1391,14 @@ describe('cf-loom openapi: the authorization header', () => {
   });
 
   test('an Endpoint with no authorization header has no security', () => {
-    expect(operationOf('/health', 'get')).not.toHaveProperty('security');
-  });
-
-  test('a Retired Endpoint has no security', () => {
-    expect(operationOf('/orders/{orderId}', 'put')).not.toHaveProperty('security');
+    expect(keysOf(operationOf('/health', 'get'))).toEqual([
+      'operationId',
+      'tags',
+      'description',
+      'x-cf-loom-visibility',
+      'x-cf-loom-guards',
+      'responses',
+    ]);
   });
 
   test('the security schemes are the Guards of Endpoints that are not Retired, in code point order', () => {
@@ -1345,7 +1414,7 @@ describe('cf-loom openapi: the authorization header', () => {
 
     const plain = JSON.parse(cfLoom(project, 'openapi').stdout);
 
-    expect(valueAt(plain, 'components')).not.toHaveProperty('securitySchemes');
+    expect(keysOf(valueAt(plain, 'components'))).toEqual(['schemas']);
   });
 });
 
