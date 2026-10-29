@@ -9,7 +9,13 @@ import {
   type MessageRun,
   messageRunOf,
 } from '../calls/index.ts';
-import { checkedMessageBody, type EndpointGiven, type GuardGiven } from '../checks/index.ts';
+import {
+  checkedMessageBody,
+  type EndpointRead,
+  type GuardRead,
+  readEndpointCall,
+  readGuardCall,
+} from '../checks/index.ts';
 import {
   type AnyHandler,
   isAnyWritten,
@@ -24,20 +30,30 @@ export function isStub(handler: AnyHandler): boolean {
   return writtenOf(handler, isAnyWritten).stub;
 }
 
-/** Runs one call of an EndpointHandler, answering a broken Contract as a value, never a throw. */
+/**
+ * Runs one call of an EndpointHandler on what `serve` read: its Input as parsed, never parsed
+ * again, its Context checked, then what it built. A Context that breaks the Contract is `serve`'s
+ * own bug; a broken Contract is a value, never a throw.
+ */
 export function runEndpoint(
   handler: { readonly declaration: Endpoint },
-  given: EndpointGiven,
+  read: EndpointRead,
 ): Promise<EndpointRun> {
-  return endpointRunOf(writtenOf(handler, isEndpointWritten), given);
+  const written = writtenOf(handler, isEndpointWritten);
+  return endpointRunOf(written, read, () => readEndpointCall(written.declaration, read));
 }
 
-/** Runs one call of a GuardHandler, answering a broken Contract as a value, never a throw. */
+/**
+ * Runs one call of a GuardHandler on what `serve` read: its demands as parsed, never parsed again,
+ * its Context and Qualifier checked, then what it admitted; a broken Contract is a value, never a
+ * throw.
+ */
 export function runGuard(
   handler: { readonly declaration: Guard },
-  given: GuardGiven,
+  read: GuardRead,
 ): Promise<GuardRun> {
-  return guardRunOf(writtenOf(handler, isGuardWritten), given);
+  const written = writtenOf(handler, isGuardWritten);
+  return guardRunOf(written, read, () => readGuardCall(written.declaration, read));
 }
 
 /** Runs one call of a Message Handler on a body as received, read with its Reader and never written back. */

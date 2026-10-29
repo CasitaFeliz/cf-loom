@@ -17,7 +17,12 @@ import {
   type Pairing,
   type Written,
 } from '../calls/index.ts';
-import { checkedBody, type HandledRequest } from '../checks/index.ts';
+import {
+  checkedBody,
+  checkedEndpointCall,
+  checkedGuardCall,
+  type HandledRequest,
+} from '../checks/index.ts';
 import { reject } from '../outcomes/index.ts';
 import type {
   EndpointHandler,
@@ -157,17 +162,23 @@ type DirectLastGiven = { readonly resources?: unknown };
 
 function endpointCallOf(written: Written<Endpoint>) {
   return async (input: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
-    const given = { input, context: call.context, request: requestOf(call) };
-    const run = await endpointRunOf(written, { ...given, resources: last?.resources });
+    const request = requestOf(call);
+    const given = { input, context: call.context, request, resources: last?.resources };
+    const run = await endpointRunOf(written, given, () =>
+      checkedEndpointCall(written.declaration, given),
+    );
     return answerOf(written.declaration, run);
   };
 }
 
 function guardCallOf(written: Written<Guard>) {
   return async (demands: unknown, call: DirectCallGiven, last?: DirectLastGiven) => {
-    const { qualifier } = call;
-    const given = { demands, context: call.context, qualifier, request: requestOf(call) };
-    const run = await guardRunOf(written, { ...given, resources: last?.resources });
+    const { context, qualifier } = call;
+    const request = requestOf(call);
+    const given = { demands, context, qualifier, request, resources: last?.resources };
+    const run = await guardRunOf(written, given, () =>
+      checkedGuardCall(written.declaration, given),
+    );
     return answerOf(written.declaration, run);
   };
 }
