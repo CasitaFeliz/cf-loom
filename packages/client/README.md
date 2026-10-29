@@ -103,7 +103,7 @@ export const createPayment = defineEndpoint({
 import { admit, handle } from '@cf-loom/handlers';
 import { idempotencyKey } from '@org/definitions';
 
-export default handle(idempotencyKey, ({ headers }) => admit({ key: headers['idempotency-key'] }));
+export default handle(idempotencyKey, ({ headers }) => admit(idempotencyKey, { key: headers['idempotency-key'] }));
 
 // payments-service/src/endpoints/payments/create-payment.handler.ts
 import { handle, success } from '@cf-loom/handlers';
@@ -113,9 +113,9 @@ export default handle(
   async ({ body }, { context }, { resources: { payments } }: Needs<'payments'>) => {
     const { key } = context.idempotencyKey;
     const done = await payments.byKey(key);
-    if (done) return success(done);   // the first attempt happened: the same Success again
+    if (done) return success(createPayment, done);   // the first attempt happened: the same Success again
     const payment = await payments.create(key, body.amount);
-    return success(payment);
+    return success(createPayment, payment);
   },
 );
 ```

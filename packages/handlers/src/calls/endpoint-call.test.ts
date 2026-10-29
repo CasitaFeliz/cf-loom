@@ -4,6 +4,7 @@ import {
   defineGuard,
   defineRejection,
   defineService,
+  type Endpoint,
   invalidInput,
   notFound,
   notImplemented,
@@ -27,6 +28,9 @@ import {
 } from '../index.ts';
 
 const ORDER_ID = '7f1c3a52-1b2c-4d3e-8f4a-5b6c7d8e9f00';
+
+/** `success` as a JavaScript Handler calls it, its value unchecked, to reach the runtime's own check. */
+const successUnchecked = success as (endpoint: Endpoint, value?: unknown) => never;
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -188,7 +192,7 @@ async function issuesOf(call: () => Promise<unknown>): Promise<readonly Issue[]>
 }
 
 const created = handle(createOrder, () =>
-  success({ headers: { location: `/orders/${ORDER_ID}` }, body: { id: ORDER_ID } }),
+  success(createOrder, { headers: { location: `/orders/${ORDER_ID}` }, body: { id: ORDER_ID } }),
 );
 
 describe('an EndpointHandler’s Resources', () => {
@@ -201,7 +205,7 @@ describe('an EndpointHandler’s Resources', () => {
       getOrder,
       (_input, { context }, call: WithResources<{ readonly orders: Orders }>) => {
         received.push(context, call.resources);
-        return success({ id: ORDER_ID, total: 1 });
+        return success(getOrder, { id: ORDER_ID, total: 1 });
       },
     );
 
@@ -219,7 +223,7 @@ describe('an EndpointHandler’s Resources', () => {
       (input, _call, { resources }: WithResources<{ readonly orders: Orders }>) =>
         resources.orders.find(input.params.orderId) === undefined
           ? reject(notFound)
-          : success({ id: ORDER_ID, total: 1 }),
+          : success(getOrder, { id: ORDER_ID, total: 1 }),
     );
 
     const outcome = await getOrderHandler(
@@ -237,7 +241,7 @@ describe('an EndpointHandler’s second argument', () => {
     const received: EndpointCall<typeof getOrder>[] = [];
     const getOrderHandler = handle(getOrder, (_input, call) => {
       received.push(call);
-      return success({ id: ORDER_ID, total: 1 });
+      return success(getOrder, { id: ORDER_ID, total: 1 });
     });
     const headers = new Headers({ traceparent: '00-4bf92f3577b34da6a3ce929d0e0e4736-01' });
 
@@ -253,7 +257,7 @@ describe('an EndpointHandler’s second argument', () => {
     const received: EndpointCall<typeof getOrder>[] = [];
     const getOrderHandler = handle(getOrder, (_input, call) => {
       received.push(call);
-      return success({ id: ORDER_ID, total: 1 });
+      return success(getOrder, { id: ORDER_ID, total: 1 });
     });
 
     await getOrderHandler(getInput, { context: getContext });
@@ -267,7 +271,7 @@ describe('an EndpointHandler’s second argument', () => {
     const received: EndpointCall<typeof getOrder>[] = [];
     const getOrderHandler = handle(getOrder, (_input, call) => {
       received.push(call);
-      return success({ id: ORDER_ID, total: 1 });
+      return success(getOrder, { id: ORDER_ID, total: 1 });
     });
     const signal = AbortSignal.abort(new Error('the Caller went away'));
 
@@ -294,7 +298,7 @@ describe('an EndpointHandler’s Input', () => {
     const received: unknown[] = [];
     const getOrderHandler = handle(getOrder, (input, { context }) => {
       received.push(input, context);
-      return success({ id: ORDER_ID, total: 1 });
+      return success(getOrder, { id: ORDER_ID, total: 1 });
     });
 
     await getOrderHandler(
@@ -352,7 +356,7 @@ describe('an EndpointHandler’s Input', () => {
     for (let depth = 0; depth < 5000; depth += 1) {
       body = { next: body };
     }
-    const nestHandler = handle(nest, () => success());
+    const nestHandler = handle(nest, () => success(nest));
 
     const issues = await issuesOf(() => nestHandler({ body }, {}));
 
@@ -370,7 +374,7 @@ describe('an EndpointHandler’s Input', () => {
     const received: unknown[] = [];
     const deleteOrderHandler = handle(deleteOrder, (input) => {
       received.push(input);
-      return success();
+      return success(deleteOrder);
     });
 
     await deleteOrderHandler({ ...getInput, body: 'anything' } as never, {});
@@ -380,7 +384,7 @@ describe('an EndpointHandler’s Input', () => {
 });
 
 describe('an EndpointHandler’s Context', () => {
-  const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID, total: 1 }));
+  const getOrderHandler = handle(getOrder, () => success(getOrder, { id: ORDER_ID, total: 1 }));
 
   test('a Context that breaks its Guard’s context schema throws', async () => {
     const issues = await issuesOf(() =>
@@ -440,7 +444,7 @@ describe('an EndpointHandler’s Context, for a Guard named like every object', 
         guards: [guard],
         success: { status: 204 },
       });
-      const pingHandler = handle(ping, () => success());
+      const pingHandler = handle(ping, () => success(ping));
 
       const outcome = await pingHandler({}, { context: {} as never });
 
@@ -452,7 +456,7 @@ describe('an EndpointHandler’s Context, for a Guard named like every object', 
     const received: unknown[] = [];
     const getOrderHandler = handle(getOrder, (_input, { context }) => {
       received.push(context);
-      return success({ id: ORDER_ID, total: 1 });
+      return success(getOrder, { id: ORDER_ID, total: 1 });
     });
 
     await getOrderHandler(getInput, { context: getContext });
@@ -462,10 +466,9 @@ describe('an EndpointHandler’s Context, for a Guard named like every object', 
 });
 
 describe('an EndpointHandler’s Success', () => {
-  test('success(body) resolves to the declared status and the parsed body', async () => {
-    const getOrderHandler = handle(getOrder, () =>
-      success({ id: ORDER_ID, total: 1, extra: true }),
-    );
+  test('success(endpoint, body) resolves to the declared status and the parsed body', async () => {
+    const order = { id: ORDER_ID, total: 1, extra: true };
+    const getOrderHandler = handle(getOrder, () => success(getOrder, order));
 
     const outcome = await getOrderHandler(getInput, { context: getContext });
 
@@ -476,7 +479,7 @@ describe('an EndpointHandler’s Success', () => {
     });
   });
 
-  test('success({ headers, body }) carries both when the Endpoint declares headers', async () => {
+  test('success(endpoint, { headers, body }) carries both when the Endpoint declares headers', async () => {
     const outcome = await created(createInput, {});
 
     expect(outcome).toEqual({
@@ -487,16 +490,18 @@ describe('an EndpointHandler’s Success', () => {
     });
   });
 
-  test('success() resolves a 204 Endpoint', async () => {
-    const deleteOrderHandler = handle(deleteOrder, () => success());
+  test('success(endpoint) resolves a 204 Endpoint', async () => {
+    const deleteOrderHandler = handle(deleteOrder, () => success(deleteOrder));
 
     const outcome = await deleteOrderHandler(getInput, {});
 
     expect(outcome).toEqual({ kind: 'success', status: 204 });
   });
 
-  test('success({ headers }) resolves a 204 Endpoint with headers', async () => {
-    const orderTotalHandler = handle(orderTotal, () => success({ headers: { 'x-total': 3 } }));
+  test('success(endpoint, { headers }) resolves a 204 Endpoint with headers', async () => {
+    const orderTotalHandler = handle(orderTotal, () =>
+      success(orderTotal, { headers: { 'x-total': 3 } }),
+    );
 
     const outcome = await orderTotalHandler(getInput, {});
 
@@ -504,7 +509,7 @@ describe('an EndpointHandler’s Success', () => {
   });
 
   test('a Success body that breaks a constraint throws InvalidOutcomeError', async () => {
-    const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID, total: -1 }));
+    const getOrderHandler = handle(getOrder, () => success(getOrder, { id: ORDER_ID, total: -1 }));
 
     const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 
@@ -515,7 +520,7 @@ describe('an EndpointHandler’s Success', () => {
 
   test('Success headers that break their schema throw InvalidOutcomeError', async () => {
     const createOrderHandler = handle(createOrder, () =>
-      success({ headers: { location: '' }, body: { id: ORDER_ID } }),
+      success(createOrder, { headers: { location: '' }, body: { id: ORDER_ID } }),
     );
 
     const issues = await issuesOf(() => createOrderHandler(createInput, {}));
@@ -544,7 +549,7 @@ describe('an EndpointHandler’s Success', () => {
     'a Success header value %s cannot travel, so the direct call throws InvalidOutcomeError at success.headers',
     async (_case, location) => {
       const createOrderHandler = handle(createOrder, () =>
-        success({ headers: { location }, body: { id: ORDER_ID } }),
+        success(createOrder, { headers: { location }, body: { id: ORDER_ID } }),
       );
 
       const issues = await issuesOf(() => createOrderHandler(createInput, {}));
@@ -562,7 +567,7 @@ describe('an EndpointHandler’s Success', () => {
 
   test('a header value with a tab inside, or U+00FF, is returned as given', async () => {
     const createOrderHandler = handle(createOrder, () =>
-      success({ headers: { location: 'v\tÿ' }, body: { id: ORDER_ID } }),
+      success(createOrder, { headers: { location: 'v\tÿ' }, body: { id: ORDER_ID } }),
     );
 
     const outcome = await createOrderHandler(createInput, {});
@@ -578,7 +583,7 @@ describe('an EndpointHandler’s Success', () => {
   test('an undeclared Success header that cannot travel is dropped, never checked', async () => {
     const given = { location: '/o/1', 'x-extra': 'a\nb' };
     const createOrderHandler = handle(createOrder, () =>
-      success({ headers: given, body: { id: ORDER_ID } }),
+      success(createOrder, { headers: given, body: { id: ORDER_ID } }),
     );
 
     const outcome = await createOrderHandler(createInput, {});
@@ -592,7 +597,9 @@ describe('an EndpointHandler’s Success', () => {
   });
 
   test('a body given to a 204 throws InvalidOutcomeError', async () => {
-    const deleteOrderHandler = handle(deleteOrder, () => success({ id: ORDER_ID }) as never);
+    const deleteOrderHandler = handle(deleteOrder, () =>
+      successUnchecked(deleteOrder, { id: ORDER_ID }),
+    );
 
     const issues = await issuesOf(() => deleteOrderHandler(getInput, {}));
 
@@ -604,7 +611,7 @@ describe('an EndpointHandler’s Success', () => {
   test('a Success of the wrong shape is a type error', () => {
     const write = () =>
       // @ts-expect-error total is a number
-      handle(getOrder, () => success({ id: ORDER_ID, total: 'one' }));
+      handle(getOrder, () => success(getOrder, { id: ORDER_ID, total: 'one' }));
 
     expect(write).not.toThrow();
   });
@@ -885,7 +892,7 @@ describe('an EndpointHandler’s Rejections with headers', () => {
 
 describe('what a direct call returns of the parts a Success or a Rejection declares', () => {
   test('a declared optional body given undefined comes back as its key, for a Success and a Rejection alike', async () => {
-    const found = handle(lookup, () => success(undefined as never));
+    const found = handle(lookup, () => success(lookup, undefined as never));
     const refused = handle(lookup, () => reject(noted, undefined as never));
 
     const outcomes = [await found({}, {}), await refused({}, {})];
@@ -1044,9 +1051,8 @@ describe('fault() retryAfter', () => {
 
 describe('what an EndpointHandler returns', () => {
   test('a body on a headers-only Success throws InvalidOutcomeError', async () => {
-    const orderTotalHandler = handle(
-      orderTotal,
-      () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } }) as never,
+    const orderTotalHandler = handle(orderTotal, () =>
+      successUnchecked(orderTotal, { headers: { 'x-total': 3 }, body: { id: ORDER_ID } }),
     );
 
     const issues = await issuesOf(() => orderTotalHandler(getInput, {}));
@@ -1058,10 +1064,12 @@ describe('what an EndpointHandler returns', () => {
 
   test('a body on a headers-only Success is a type error', () => {
     const write = () => [
-      // @ts-expect-error a headers-only Success has no body
-      handle(orderTotal, () => success({ headers: { 'x-total': 3 }, body: { id: ORDER_ID } })),
+      handle(orderTotal, () =>
+        // @ts-expect-error a headers-only Success has no body
+        success(orderTotal, { headers: { 'x-total': 3 }, body: { id: ORDER_ID } }),
+      ),
       // @ts-expect-error a 204 Success has no body
-      handle(deleteOrder, () => success({ id: ORDER_ID })),
+      handle(deleteOrder, () => success(deleteOrder, { id: ORDER_ID })),
     ];
 
     expect(write).not.toThrow();
@@ -1128,7 +1136,7 @@ describe('what an EndpointHandler returns', () => {
 });
 
 describe('more of what a direct call answers', () => {
-  test('success({ headers }) resolves a 204 Endpoint with headers', async () => {
+  test('success(endpoint, { headers }) resolves a 204 Endpoint with headers', async () => {
     const touchOrder = defineEndpoint({
       name: 'touchOrder',
       method: 'POST',
@@ -1138,7 +1146,9 @@ describe('more of what a direct call answers', () => {
       input: { params: z.object({ orderId: z.uuid() }) },
       success: { status: 204, headers: z.object({ etag: z.string() }) },
     });
-    const touchOrderHandler = handle(touchOrder, () => success({ headers: { etag: 'v2' } }));
+    const touchOrderHandler = handle(touchOrder, () =>
+      success(touchOrder, { headers: { etag: 'v2' } }),
+    );
 
     const outcome = await touchOrderHandler(getInput, {});
 
@@ -1149,7 +1159,7 @@ describe('more of what a direct call answers', () => {
     class Row {
       readonly id = ORDER_ID;
     }
-    const getOrderHandler = handle(getOrder, () => success(new Row() as never));
+    const getOrderHandler = handle(getOrder, () => success(getOrder, new Row() as never));
 
     const issues = await issuesOf(() => getOrderHandler(getInput, { context: getContext }));
 

@@ -66,8 +66,9 @@ function rejectionBodySchemaOf(
 }
 
 /**
- * What `success()`, `reject()` and their scripted twins are given, by side: the body alone where
- * the shape declares no headers, else `{ headers, body }`; the one place that reads it.
+ * What `success()` and `reject()` are given after their declaration, and their scripted twins, by
+ * side: the body alone where the shape declares no headers, else `{ headers, body }`; the one place
+ * that reads it.
  */
 export function shapeFieldsOf(shape: ReadShape, given: unknown): ShapeFields {
   if (shape.headers.schema === undefined) {

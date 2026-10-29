@@ -61,9 +61,9 @@ const contract = defineService({
   ],
 });
 
-const getOrderHandler = handle(getOrder, () => success());
-const findOrderHandler = handle(findOrder, () => success());
-const apiKeyHandler = handle(apiKey, () => admit());
+const getOrderHandler = handle(getOrder, () => success(getOrder));
+const findOrderHandler = handle(findOrder, () => success(findOrder));
+const apiKeyHandler = handle(apiKey, () => admit(apiKey));
 
 describe('serve: what onServiceFault receives', () => {
   test('a ServedFault holds the Endpoint, its name, the Guard, and how it failed, and no more', () => {
@@ -183,7 +183,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
         contract,
         {
           endpoints,
-          guards: { apiKey: apiKeyHandler, legacyKey: handle(legacyKey, () => admit()) },
+          guards: { apiKey: apiKeyHandler, legacyKey: handle(legacyKey, () => admit(legacyKey)) },
         },
         {},
       ),
@@ -197,7 +197,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
     // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
     const loose = handle(findOrder, async (_input, _call, { resources }: WithResources<any>) => {
       await resources.ready;
-      return success();
+      return success(findOrder);
     });
     const handlers = {
       endpoints: { getOrder: getOrderHandler, findOrder: loose },
@@ -225,7 +225,7 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
     findOrder,
     (_input, _call, { resources: taken }: WithResources<Resources>) => {
       taken.orders.find();
-      return success();
+      return success(findOrder);
     },
   );
   const typed: HandlerMapOf<typeof contract, Resources> = {
@@ -255,7 +255,7 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
   test('a Handler that takes a Resource the Service lacks is a type error in a map annotated with them', () => {
     const alien = handle(findOrder, (_input, _call, { resources: taken }: WithResources<Alien>) => {
       taken.db.toFixed();
-      return success();
+      return success(findOrder);
     });
 
     const annotated = (): HandlerMapOf<typeof contract, Resources> => ({
@@ -385,7 +385,7 @@ describe('serve: the options, typed by what they declare', () => {
     findOrder,
     (_input, _call, { resources }: WithResources<{ clock: typeof clock }>) => {
       resources.clock.now();
-      return success();
+      return success(findOrder);
     },
   );
   const handlers = {
@@ -483,7 +483,7 @@ describe('serve: a wrapper over the Handler map', () => {
   const clock: Clock = { now: () => 0 };
   const needsClock = handle(findOrder, (_input, _call, { resources }: WithResources<Resources>) => {
     resources.clock.now();
-    return success();
+    return success(findOrder);
   });
   const handlers: HandlerMapOf<typeof contract, Resources> = {
     endpoints: { getOrder: getOrderHandler, findOrder: needsClock },

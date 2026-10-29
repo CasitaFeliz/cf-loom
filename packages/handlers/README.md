@@ -23,13 +23,13 @@ export default handle(getOrder, async ({ params }, { context }, { resources: { o
   const order = await orders.find(params.orderId, context.apiKey.callerId);
   if (!order) return reject(notFound);
   if (order.locked) return reject(orderLocked, { lockedAt: order.lockedAt });
-  return success({ id: order.id, status: order.status, total: order.total });
+  return success(getOrder, { id: order.id, status: order.status, total: order.total });
 });
 ```
 
 - The Handler receives the validated Input, parsed with its schemas: unknown keys are stripped, so it sees only the fields the Endpoint declares; then `{ context, request }`, the Context, one key per Guard that provides a Context, and the request's `signal` and `headers` as received, which are no Input: for cancelling work when the Caller goes away and for tracing; then `{ resources }`, the Resources it takes (see [Resources](#resources)).
 - Only the Endpoint's Rejections type-check in `reject`, each with its declared body, or `{ headers, body }` when it declares headers, as `success` takes them: `reject(unauthenticated, { headers: { 'www-authenticate': 'Bearer realm="orders"' } })`, `reject(rateLimited, { headers: { 'retry-after': 30 }, body: { limit: 100 } })`. What a Handler builds carries a Rejection as its declaration, `rejection`, and its `headers` and `body`, not as a resolved code, status or message: `serve` resolves them against the Root (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README); a Direct call returns them as built (see [Testing a Service's own code](#testing-a-services-own-code)). The `Outcome` type of `@cf-loom/handlers` is not the client's (see [Consuming a Contract](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md#consuming-a-contract) in the client README).
-- When the Endpoint declares `success.headers`, the Handler returns them with the Success, `success({ headers, body })` (`success({ headers })` for 204); otherwise `success(body)`.
+- `success` takes the Endpoint first, as `reject` takes its Rejection: `success(getOrder, body)`, or `success(getOrder, { headers, body })` when the Endpoint declares `success.headers`, `success(endpoint, { headers })` for a 204 with headers and `success(endpoint)` for one without. A literal with a field the Endpoint does not declare is a type error where it is written, a helper that builds a Success needs no declared return type, and a variable may carry more, which is stripped (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 - Anything thrown, or returned that is no Outcome, becomes a Fault with `committed: 'unknown'` and `retryable: false`, since nothing says the same request could succeed later, and the fixed message `Internal error`; the error itself reaches only `onServiceFault`, as `cause` (see [Serving](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/server/README.md#serving) in the server README). A Handler that knows better returns `fault({ committed: 'no', retryable: true })`, just as it returns `success` and `reject`; its `message` is `Internal error` unless it gives one, and a `cause` it gives is the Handler's own: it never travels, and reaches only `serve`'s `onServiceFault`, which receives every Fault the Handler returned. A retryable Fault may say when to retry, `fault({ committed: 'no', retryable: true, retryAfter: 30 })`, in whole seconds from 0, which `serve` sends as `Retry-After`; `fault()` throws on any other `retryAfter`; a Fault that is not retryable takes none: the type refuses it, and one built past the types with a `retryAfter`, or with any other `retryAfter`, is `INVALID_OUTCOME`. Message Handlers differ: there a throw has the Message delivered again (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README).
 
 ## GuardHandler
@@ -42,9 +42,11 @@ import { apiKey, unauthenticated } from '@org/definitions';
 export default handle(apiKey, async ({ headers }, _call, { resources: { callers } }: Needs<'callers'>) => {
   const caller = await callers.byKey(headers['x-api-key']);
   if (!caller) return reject(unauthenticated, { headers: { 'www-authenticate': 'ApiKey realm="orders"' } });
-  return admit({ callerId: caller.id });
+  return admit(apiKey, { callerId: caller.id });
 });
 ```
+
+`admit` takes the Guard first, then the Context it provides, or nothing when it provides none; it checks a literal as `success` does.
 
 The Guard declares the key optional (see [Guards](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#guards) in the contract README), so a request without it reaches this Handler, which rejects it as `unauthenticated`.
 
@@ -58,7 +60,7 @@ import { forbidden, permission } from '@org/definitions';
 export default handle(permission, async (_demands, { context: { userToken }, qualifier }, { resources: { permissions } }: Needs<'permissions'>) => {
   const held = await permissions.of(userToken.userId);
   const granted = qualifier.every((code) => held.includes(code));
-  return granted ? admit() : reject(forbidden);
+  return granted ? admit(permission) : reject(forbidden);
 });
 ```
 
@@ -126,7 +128,7 @@ A Handler returned by `handle()` is a function, and its `declaration` is the End
 - A Message Handler answers nothing when it returns nothing, returns a Fault it returns unchanged and rethrows what it throws, since `consume` answers no Caller; returning anything else throws a `TypeError` naming what came back.
 - A Fake Provider's Mistake thrown into an EndpointHandler, such as a call the test never scripted, is answered as a Fault like any throw; the Fake Provider's `verify()` reports it (see [Faking Providers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/testing/README.md#faking-providers) in the testing README).
 - An Endpoint or Guard Stub checks what it is given first, like any Handler, then returns the not-implemented Rejection, so a Direct call's Outcome type includes it; a Message Handler Stub checks its body too, then throws, since `consume` never runs it.
-- A GuardHandler validates what its Guard demands, the Context it is given against the `context` schemas of the Guards it lists and its Qualifier against its `qualifier` schema, or refuses one when the Guard declares none (`permissionHandler({}, { context: { userToken: { userId: 'u-1' } }, qualifier: ['orders:edit'] }, { resources })`), and checks an `admit()` against the Guard's `context` schema; `serve` answers an invalid `admit()` with `INVALID_OUTCOME`.
+- A GuardHandler validates what its Guard demands, the Context it is given against the `context` schemas of the Guards it lists and its Qualifier against its `qualifier` schema, or refuses one when the Guard declares none (`permissionHandler({}, { context: { userToken: { userId: 'u-1' } }, qualifier: ['orders:edit'] }, { resources })`), and checks an `admit(…)` against the Guard's `context` schema; `serve` answers an invalid `admit(…)` with `INVALID_OUTCOME`.
 - The Context passed to an EndpointHandler is checked against each attached Guard's `context` schema, read only from a key the Context holds itself, never one it inherits, and a key no attached Guard provides is an `unrecognized_key`.
 - A Message Handler is written for the Pairing of its Command's Message Version or Subscription with its Reader schema, as the Readers file's `readers` holds it (`readers.commands.chargeCardV1`, `readers.subscriptions.notifyOnSettled`), never for the bare declaration: passing that to `handle` is a type error naming the Readers file. `consume` reads with the Reader the Handler map's `readers` pair, and refuses a Handler written for any other Pairing (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README). It takes its body as a Subscriber reads it, with Unknown cases written `{ unknown: … }`, typed `ReceivedBodyOf<typeof readers.subscriptions.notifyOnSettled>`: a Direct call writes it back through that Reader, as a Fake Provider writes a scripted value, so a body that breaks it throws `InvalidCallError` at `body`, then reads it as `consume` does; what the in-memory `deliver` takes for a body is in [In memory](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#in-memory) in the messaging README. In a Direct call its meta (see [Message Handlers](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/messaging/README.md#message-handlers) in the messaging README) may be left out, whole or in part: the Fact id is random, the Broker message id is derived from it as a published Message's is, `deliveryCount` is 1, `lastAttempt` `false`, `headers` `{}` and `signal` a signal never aborted; its last argument is `{ resources }`.
 
@@ -160,7 +162,7 @@ import handlers from '../src/handlers.generated.ts';
 
 const http = serve(
   contract,
-  { ...handlers, guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit({ callerId: 'c-1' })) } },
+  { ...handlers, guards: { ...handlers.guards, apiKey: handle(apiKey, async () => admit(apiKey, { callerId: 'c-1' })) } },
   { resources },
 );
 const res = await http(new Request(`http://test/orders/${ORDER_ID}`, {
@@ -173,8 +175,8 @@ Which test runner, mocking library, fixtures or end-to-end tools a Service uses 
 ## Types
 
 - An object parameter whose shape cf-loom gives, such as an options object, refuses in its type a field it does not declare as [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md says.
-- `Outcome<typeof getOrder>`, what an EndpointHandler builds: `success(…)`, one of the Endpoint's Rejections with its headers and body (its own, its Guards', not found when listed and not implemented; never invalid input, which the runtime answers), or a Fault; `CheckedOutcome<typeof getOrder>`, what its Direct call returns, the Success with its status, a Rejection as built with its headers and body parsed, or a Fault.
-- `Admission<typeof apiKey>`, what a GuardHandler builds: `admit(…)` with the Context its Guard provides, one of the Guard's Rejections, or a Fault; `CheckedAdmission<typeof apiKey>`, what its Direct call returns, a Rejection as built.
+- `Outcome<typeof getOrder>`, what an EndpointHandler builds: `success(getOrder, …)`, one of the Endpoint's Rejections with its headers and body (its own, its Guards', not found when listed and not implemented; never invalid input, which the runtime answers), or a Fault; `CheckedOutcome<typeof getOrder>`, what its Direct call returns, the Success with its status, a Rejection as built with its headers and body parsed, or a Fault.
+- `Admission<typeof apiKey>`, what a GuardHandler builds: `admit(apiKey, …)` with the Context its Guard provides, one of the Guard's Rejections, or a Fault; `CheckedAdmission<typeof apiKey>`, what its Direct call returns, a Rejection as built.
 - `isRejectionOf(outcome, rejection)`, whether a Direct call's answer is that Rejection, a Standard one included, narrowing it with its headers and body typed and its `rejection` to that declaration.
 - `Fault`, `{ kind: 'fault', committed, retryable, message, cause?, retryAfter? }`, `retryAfter` only when `retryable` is `true`, and `Committed`, `'no'`, `'yes'` or `'unknown'`; `MessageFault`, the Fault a Message Handler returns, a `Fault` with no `retryAfter`.
 - `EndpointHandler<typeof getOrder, Resources>` and `GuardHandler<typeof apiKey, Resources>`, what `handle()` and `handle.stub()` return, nominal over the Endpoint or Guard they were written for and typed by the Resources they take; `EndpointImplementation`, `GuardImplementation` and `MessageImplementation`, the function `handle()` wraps, typed by its last parameter, `EndpointImplementation<typeof getOrder, Needs<'orders'>>`, from which `handle()` reads the Resources the Handler takes.

@@ -138,12 +138,12 @@ const served = serve(
           case 'down':
             return fault({ committed: 'no', retryable: true });
           case 'unsendable':
-            return success({ headers: unsendable, body });
+            return success(getPayment, { headers: unsendable, body });
           default:
-            return success({ headers, body });
+            return success(getPayment, { headers, body });
         }
       }),
-      capturePayment: handle(capturePayment, () => success()),
+      capturePayment: handle(capturePayment, () => success(capturePayment)),
     },
     guards: {},
   },
@@ -206,7 +206,7 @@ const faultsGiven = (['no', 'yes', 'unknown'] as const).flatMap((committed) =>
 function servedFaultOf(given: (typeof faultsGiven)[number]) {
   const endpoints = {
     getPayment: handle(getPayment, () => fault(given as never)),
-    capturePayment: handle(capturePayment, () => success()),
+    capturePayment: handle(capturePayment, () => success(capturePayment)),
   };
   return serve(paymentsService, { endpoints, guards: {} }, { onServiceFault: () => undefined });
 }
@@ -259,8 +259,8 @@ describe('fakeProvider and serve answer alike', () => {
     const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
     const root = defineService({ name: 'payments-service', groups: [group] });
     const handlers = {
-      getPayment: handle(getPayment, () => success({ headers, body })),
-      capturePayment: handle(capturePayment, () => success()),
+      getPayment: handle(getPayment, () => success(getPayment, { headers, body })),
+      capturePayment: handle(capturePayment, () => success(capturePayment)),
     };
     const providing = serve(root, { endpoints: handlers, guards: {} }, {});
     const provider = contractPackageOf(
@@ -311,8 +311,8 @@ describe('fakeProvider and serve answer alike', () => {
       const group = defineGroup({ name: 'payments', description: 'Payments', endpoints });
       const root = defineService({ name: 'payments-service', groups: [group] });
       const handlers = {
-        getFirst: handle(first, () => success()),
-        getHidden: handle(hidden, () => success()),
+        getFirst: handle(first, () => success(first)),
+        getHidden: handle(hidden, () => success(hidden)),
       };
       const providing = serve(root, { endpoints: handlers, guards: {} }, {});
       const provider = contractPackageOf({ getFirst: first }, endpoints);
@@ -443,8 +443,11 @@ const servedRefund = serve(
     ],
   }),
   {
-    endpoints: { refundPayment: handle(refundPayment, () => success()) },
-    guards: { merchant: handle(merchant, () => admit()), region: handle(region, () => admit()) },
+    endpoints: { refundPayment: handle(refundPayment, () => success(refundPayment)) },
+    guards: {
+      merchant: handle(merchant, () => admit(merchant)),
+      region: handle(region, () => admit(region)),
+    },
   },
   {},
 );

@@ -1,9 +1,17 @@
-import type { Rejection, StandardRejection } from '@cf-loom/contract';
+import type {
+  Endpoint,
+  Guard,
+  ProvidedContextOf,
+  Rejection,
+  StandardRejection,
+} from '@cf-loom/contract';
 import {
   type AnswerableRejection,
+  type GivenArgumentsOf,
   type ReceivedShapeOf,
   type RejectionValueOf,
   rejectionShapeOf,
+  type SuccessValueOf,
   shapeFieldsOf,
 } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
@@ -47,10 +55,15 @@ export type AnyRejection = {
 /** What a GuardHandler builds when it admits the request: the Context its Guard provides. */
 export type BuiltAdmitted<Context> = { readonly kind: 'admitted'; readonly context: Context };
 
-/** The Success a Handler answers: nothing for 204, the body, or `{ headers, body }` with headers. */
-export function success(): BuiltSuccess<undefined>;
-export function success<Value>(value: Value): BuiltSuccess<Value>;
-export function success(value?: unknown): BuiltSuccess<unknown> {
+/**
+ * The Success a Handler answers for its Endpoint: nothing where it declares neither headers nor a
+ * body, the body, or `{ headers, body }` with headers.
+ */
+export function success<Target extends Endpoint>(
+  endpoint: Target,
+  ...value: GivenArgumentsOf<SuccessValueOf<Target>>
+): BuiltSuccess<SuccessValueOf<Target>>;
+export function success(_endpoint: Endpoint, value?: unknown): BuiltSuccess<unknown> {
   return { kind: 'success', value };
 }
 
@@ -73,9 +86,14 @@ export function reject(rejection: AnswerableRejection, ...given: readonly unknow
   return { kind: 'rejection', rejection, headers, body };
 }
 
-/** What a GuardHandler answers when it admits the request: the Context its Guard provides. */
-export function admit(): BuiltAdmitted<undefined>;
-export function admit<Context>(context: Context): BuiltAdmitted<Context>;
-export function admit(context?: unknown): BuiltAdmitted<unknown> {
+/**
+ * What a GuardHandler answers when it admits the request: the Context its Guard provides, nothing
+ * where it provides none.
+ */
+export function admit<Target extends Guard>(
+  guard: Target,
+  ...context: GivenArgumentsOf<ProvidedContextOf<Target>>
+): BuiltAdmitted<ProvidedContextOf<Target>>;
+export function admit(_guard: Guard, context?: unknown): BuiltAdmitted<unknown> {
   return { kind: 'admitted', context };
 }

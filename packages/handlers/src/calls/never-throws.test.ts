@@ -50,7 +50,7 @@ const fromTheThrow = {
 
 describe('a direct call never throws what a check throws', () => {
   test('a Success body whose getter throws answers the Fault, the error as cause', async () => {
-    const getOrderHandler = handle(getOrder, () => success(entityThatThrows()));
+    const getOrderHandler = handle(getOrder, () => success(getOrder, entityThatThrows()));
 
     const outcome = await getOrderHandler({ body: { id: ORDER_ID } }, {});
 
@@ -66,7 +66,7 @@ describe('a direct call never throws what a check throws', () => {
   });
 
   test('an admitted Context whose getter throws answers the Fault', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit(entityThatThrows()));
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, entityThatThrows()));
 
     const admission = await apiKeyHandler({}, {});
 
@@ -74,7 +74,7 @@ describe('a direct call never throws what a check throws', () => {
   });
 
   test('Input whose getter throws answers the Fault, not committed since nothing ran', async () => {
-    const getOrderHandler = handle(getOrder, () => success({ id: ORDER_ID }));
+    const getOrderHandler = handle(getOrder, () => success(getOrder, { id: ORDER_ID }));
 
     const outcome = await getOrderHandler({ body: entityThatThrows() }, {});
 

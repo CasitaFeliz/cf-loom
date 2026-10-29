@@ -74,13 +74,18 @@ const contract = defineService({
 const handlers = {
   endpoints: {
     createOrder: handle(createOrder, ({ body }, { context: { apiKey: caller } }) =>
-      success({ headers: { 'x-order-count': 1 }, body: { ...body, by: caller.callerId } }),
+      success(createOrder, {
+        headers: { 'x-order-count': 1 },
+        body: { ...body, by: caller.callerId },
+      }),
     ),
-    noteOrder: handle(noteOrder, ({ body }) => success(body)),
-    getOrder: handle(getOrder, ({ params }) => success({ id: params.orderId })),
-    greet: handle(greet, ({ query }) => success({ headers: { 'x-greeted': query.name } })),
+    noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, body)),
+    getOrder: handle(getOrder, ({ params }) => success(getOrder, { id: params.orderId })),
+    greet: handle(greet, ({ query }) => success(greet, { headers: { 'x-greeted': query.name } })),
   },
-  guards: { apiKey: handle(apiKey, ({ headers }) => admit({ callerId: headers['x-api-key'] })) },
+  guards: {
+    apiKey: handle(apiKey, ({ headers }) => admit(apiKey, { callerId: headers['x-api-key'] })),
+  },
 };
 
 const servers: ReturnType<typeof nodeHttp>[] = [];
@@ -593,7 +598,7 @@ describe('nodeHttp', () => {
     const signals: AbortSignal[] = [];
     const watching = handle(getOrder, ({ params }, { request }) => {
       signals.push(request.signal);
-      return success({ id: params.orderId });
+      return success(getOrder, { id: params.orderId });
     });
     const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: watching } };
     const url = await listening(nodeHttp(serve(contract, served, {})));
@@ -612,7 +617,7 @@ describe('nodeHttp', () => {
       signals.push(request.signal);
       started();
       await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
-      return success({ id: params.orderId });
+      return success(getOrder, { id: params.orderId });
     });
     const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: waiting } };
     const url = await listening(nodeHttp(serve(contract, served, {})));

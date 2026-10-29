@@ -31,7 +31,7 @@ import type {
   Readers,
   WithResources,
 } from './index.ts';
-import { admit, fault, handle, readersOf, success } from './index.ts';
+import { admit, fault, handle, readersOf, reject, success } from './index.ts';
 
 /** Every key any member of a union of records holds. */
 type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
@@ -246,8 +246,8 @@ describe('what a Handler builds and a direct call returns', () => {
 });
 
 describe('a Direct call and fault() refuse a field they do not declare, given through a variable too', () => {
-  const getOrderHandler = handle(getOrder, () => success({ orderId: 'o-1' }));
-  const permissionHandler = handle(permission, () => admit());
+  const getOrderHandler = handle(getOrder, () => success(getOrder, { orderId: 'o-1' }));
+  const permissionHandler = handle(permission, () => admit(permission));
   const chargeCardHandler = handle(readers.commands.chargeCardV1, () => undefined);
   const input = { params: { orderId: 'o-1' } };
   const context = { apiKey: { callerId: 'c-1' } };
@@ -365,7 +365,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     const callersHandler = handle(
       permission,
       (_demands, _call, { resources }: WithResources<{ readonly callers: string }>) =>
-        resources.callers === '' ? admit() : admit(),
+        resources.callers === '' ? admit(permission) : admit(permission),
     );
     const last = { resources: { callers: 'c-1' }, resourcs: { callers: 'c-2' } };
 
@@ -393,7 +393,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     const ordersHandler = handle(
       getOrder,
       (_input, _call, { resources }: WithResources<{ readonly orders: string }>) =>
-        success({ orderId: resources.orders }),
+        success(getOrder, { orderId: resources.orders }),
     );
     const last = { resources: { orders: 'o-1' }, resourcs: { orders: 'o-2' } };
 
@@ -407,13 +407,149 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     const ordersHandler = handle(
       getOrder,
       (_input, _call, { resources }: WithResources<{ readonly orders: string }>) =>
-        success({ orderId: resources.orders }),
+        success(getOrder, { orderId: resources.orders }),
     );
     const last = { resources: { orders: 'o-1', clock: () => 0 } };
 
     const outcome = await ordersHandler(input, { context }, last);
 
     expect(outcome).toMatchObject({ kind: 'success', body: { orderId: 'o-1' } });
+  });
+});
+
+describe('success() and admit() take their declaration first, and check a literal against it', () => {
+  const createOrder = defineEndpoint({
+    name: 'createOrder',
+    method: 'POST',
+    path: '/orders',
+    visibility: 'public',
+    description: 'Places an order',
+    guards: [apiKey],
+    input: { body: z.object({ orderId: z.string() }) },
+    success: {
+      status: 201,
+      headers: z.object({ location: z.string(), 'x-trace-id': z.string().optional() }),
+      body: z.object({ orderId: z.string() }),
+    },
+  });
+  const deleteOrder = defineEndpoint({
+    name: 'deleteOrder',
+    method: 'DELETE',
+    path: '/orders/:orderId',
+    visibility: 'public',
+    description: 'Deletes an order',
+    guards: [apiKey],
+    input: { params: z.object({ orderId: z.string() }) },
+    success: { status: 204 },
+  });
+  const input = { params: { orderId: 'o-1' } };
+  const context = { apiKey: { callerId: 'c-1' } };
+
+  test('a success literal with a field the Endpoint does not declare is a type error, in a sync and an async Handler', () => {
+    const syncHandler = handle(getOrder, ({ params }) =>
+      // @ts-expect-error ordrId is not a declared field
+      success(getOrder, { orderId: params.orderId, ordrId: params.orderId }),
+    );
+    const asyncHandler = handle(getOrder, async ({ params }) =>
+      // @ts-expect-error ordrId is not a declared field
+      success(getOrder, { orderId: params.orderId, ordrId: params.orderId }),
+    );
+
+    expect([syncHandler, asyncHandler]).toHaveLength(2);
+  });
+
+  test('a misspelled optional header in a success literal is a type error', () => {
+    const handler = handle(createOrder, ({ body }) =>
+      success(createOrder, {
+        // @ts-expect-error x-trace-di is not a declared header
+        headers: { location: `/orders/${body.orderId}`, 'x-trace-di': 't-1' },
+        body,
+      }),
+    );
+
+    expect(handler).toBeTypeOf('function');
+  });
+
+  test('a success given a variable that carries more fields than the body declares type-checks', async () => {
+    const row = { orderId: 'o-1', passwordHash: 'h-1' };
+    const handler = handle(getOrder, () => success(getOrder, row));
+
+    const outcome = await handler(input, { context });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
+  });
+
+  test('a Success built in a helper with no declared return type type-checks', async () => {
+    const found = (orderId: string) =>
+      orderId === 'o-1' ? success(getOrder, { orderId }) : reject(gone);
+    const handler = handle(getOrder, ({ params }) => found(params.orderId));
+
+    const outcome = await handler(input, { context });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
+  });
+
+  test('a Success built into a variable before the return type-checks', async () => {
+    const handler = handle(getOrder, ({ params }) => {
+      const built = success(getOrder, { orderId: params.orderId });
+      return built;
+    });
+
+    const outcome = await handler(input, { context });
+
+    expect(outcome).toEqual({ kind: 'success', status: 200, body: { orderId: 'o-1' } });
+  });
+
+  test('success takes nothing more for an Endpoint that declares neither headers nor a body', async () => {
+    const handler = handle(deleteOrder, () => success(deleteOrder));
+
+    const outcome = await handler(input, { context });
+
+    expect(outcome).toMatchObject({ kind: 'success', status: 204 });
+  });
+
+  test('success given a value for an Endpoint that declares neither headers nor a body is a type error', () => {
+    const handler = handle(deleteOrder, ({ params }) =>
+      // @ts-expect-error a 204 without headers takes no value
+      success(deleteOrder, { orderId: params.orderId }),
+    );
+
+    expect(handler).toBeTypeOf('function');
+  });
+
+  test('an admit literal with a field the Context does not declare is a type error', () => {
+    const handler = handle(apiKey, () =>
+      // @ts-expect-error callrId is not a declared field
+      admit(apiKey, { callerId: 'c-1', callrId: 'c-1' }),
+    );
+
+    expect(handler).toBeTypeOf('function');
+  });
+
+  test('admit given a variable that carries more fields than the Context declares type-checks', async () => {
+    const caller = { callerId: 'c-1', plan: 'gold' };
+    const handler = handle(apiKey, () => admit(apiKey, caller));
+
+    const admission = await handler({ headers: { 'x-api-key': 'k-1' } }, {});
+
+    expect(admission).toEqual({ kind: 'admitted', context: { callerId: 'c-1' } });
+  });
+
+  test('admit takes nothing more for a Guard that provides no Context', async () => {
+    const handler = handle(permission, () => admit(permission));
+
+    const admission = await handler({}, { context, qualifier: ['orders:read'] });
+
+    expect(admission).toMatchObject({ kind: 'admitted' });
+  });
+
+  test('admit given a Context for a Guard that provides none is a type error', () => {
+    const handler = handle(permission, () =>
+      // @ts-expect-error permission provides no Context
+      admit(permission, { callerId: 'c-1' }),
+    );
+
+    expect(handler).toBeTypeOf('function');
   });
 });
 

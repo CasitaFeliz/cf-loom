@@ -51,6 +51,7 @@ export type {
   BodyOf,
   ContextOf,
   DemandsOf,
+  GivenArgumentsOf,
   GivenShapeOf,
   InputOf,
   ProvidedContextOf,

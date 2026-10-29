@@ -101,23 +101,23 @@ const handlers = {
       switch (params.orderId) {
         case 'slow':
           await new Promise((resolve) => setTimeout(resolve, 40));
-          return success({ secret: 'a long enough secret' });
+          return success(getOrder, { secret: 'a long enough secret' });
         case 'missing':
           return reject(notFound);
         case 'down':
           return fault({ committed: 'no', retryable: true });
         case 'leaky':
-          return success({ secret: 'short' });
+          return success(getOrder, { secret: 'short' });
         case 'thrown':
           throw new Error('a bug');
         default:
-          return success({ secret: 'a long enough secret' });
+          return success(getOrder, { secret: 'a long enough secret' });
       }
     }),
-    listOrders: handle(listOrders, () => success({ count: 1 })),
-    importOrders: handle(importOrders, () => success()),
+    listOrders: handle(listOrders, () => success(listOrders, { count: 1 })),
+    importOrders: handle(importOrders, () => success(importOrders)),
   },
-  guards: { apiKey: handle(apiKey, () => admit({ callerId: 'c-1' })) },
+  guards: { apiKey: handle(apiKey, () => admit(apiKey, { callerId: 'c-1' })) },
 };
 
 const downFault = { committed: 'no', retryable: true } as const;
@@ -181,7 +181,7 @@ describe('serve: onServiceFault', () => {
 
   test('without it, the console names the Guard whose Handler failed', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const broken = handle(apiKey, () => admit({ callerId: 7 } as never));
+    const broken = handle(apiKey, () => admit(apiKey, { callerId: 7 } as never));
 
     await serve(contract, { ...handlers, guards: { apiKey: broken } }, {})(get('/orders/o-1'));
 
@@ -551,7 +551,7 @@ describe('serve: the Deprecation header', () => {
     const http = serve(
       service,
       {
-        endpoints: { scheduled: handle(scheduled, () => success()) },
+        endpoints: { scheduled: handle(scheduled, () => success(scheduled)) },
         guards: {},
       },
       {},
@@ -688,7 +688,7 @@ describe('serve: what the hooks receive beside the record', () => {
     const controller = new AbortController();
     const slow = handle(getOrder, async () => {
       controller.abort();
-      return success({ secret: 'a long enough secret' });
+      return success(getOrder, { secret: 'a long enough secret' });
     });
     const { http, answered } = recording(
       {},

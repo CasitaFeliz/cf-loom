@@ -13,7 +13,8 @@ export default handle(
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       const outcome = await payments.getPayment({ params: { paymentId: params.paymentId } });
       received.push(outcome);
-      if (outcome.kind === 'success') return success({ amount: outcome.body.amount });
+      if (outcome.kind === 'success')
+        return success(settlePayment, { amount: outcome.body.amount });
     }
     return fault({ committed: 'no', retryable: true });
   },

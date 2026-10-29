@@ -10,6 +10,6 @@ export default handle(
     const order = { id: randomUUID(), status: 'pending', placedAt, ...body } as const;
     const created = { orderId: order.id, customerId: order.customerId, total: order.total };
     await publisher.publish('OrderCreated', { v1: created }, { factId: `${order.id}:created` });
-    return success(order);
+    return success(createOrder, order);
   },
 );

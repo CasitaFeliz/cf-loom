@@ -62,11 +62,11 @@ const http = serve(
   contract,
   {
     endpoints: {
-      getPage: handle(getPage, (input) => success({ received: input as never })),
-      search: handle(search, (input) => success({ received: input as never })),
-      lookup: handle(lookup, (input) => success({ received: input as never })),
+      getPage: handle(getPage, (input) => success(getPage, { received: input as never })),
+      search: handle(search, (input) => success(search, { received: input as never })),
+      lookup: handle(lookup, (input) => success(lookup, { received: input as never })),
     },
-    guards: { tenant: handle(tenant, () => admit()) },
+    guards: { tenant: handle(tenant, () => admit(tenant)) },
   },
   {},
 );
