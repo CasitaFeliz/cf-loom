@@ -1,10 +1,19 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS names its headers, actions and fields in PascalCase, as they travel
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aMotoServer, type MotoServer } from './moto-server.ts';
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function isListening(url: string): Promise<boolean> {
   const { hostname, port } = new URL(url);
@@ -51,13 +60,14 @@ describe('a test moto server', () => {
   const directories: string[] = [];
 
   /** Puts a `moto_server` that runs this Node script alone on PATH, to start a server that fails the way a real one may. */
-  async function stubMotoServer(script: string): Promise<void> {
+  async function stubMotoServer(script: string): Promise<string> {
     const directory = await mkdtemp(join(tmpdir(), 'cf-loom-moto-stub-'));
     directories.push(directory);
     const executable = join(directory, 'moto_server');
     await writeFile(executable, `#!${process.execPath}\n${script}`);
     await chmod(executable, 0o755);
     vi.stubEnv('PATH', directory);
+    return directory;
   }
 
   async function aStartedServer(): Promise<MotoServer> {
@@ -92,6 +102,18 @@ describe('a test moto server', () => {
     await expect(starting).rejects.toThrow(
       'moto_server exited before it listened: cannot bind the port',
     );
+  });
+
+  test('a server that stays alive without listening fails the start within the test timeout and is gone afterwards', async () => {
+    const directory = await stubMotoServer(
+      "require('node:fs').writeFileSync(require('node:path').join(__dirname, 'pid'), String(process.pid)); setInterval(() => undefined, 1000);",
+    );
+
+    const starting = aMotoServer();
+
+    await expect(starting).rejects.toThrow('moto_server did not listen within');
+    const pid = Number(await readFile(join(directory, 'pid'), 'utf8'));
+    expect(isRunning(pid)).toBe(false);
   });
 
   test('a started server answers on the URL it reports, at 127.0.0.1', async () => {
