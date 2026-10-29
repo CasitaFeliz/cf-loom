@@ -1,4 +1,4 @@
-import type { NotAllowedFailure } from '../validation/index.ts';
+import type { NotAllowedFailure, Problem } from '../validation/index.ts';
 import type { Path, Site } from '../walker/index.ts';
 import { ownOf } from '../written/index.ts';
 import { defScopesOf } from './def-scopes.ts';
@@ -96,8 +96,20 @@ export function tooDeepNodePathOf(snapshot: Snapshot | PublishedSnapshot): Path 
  * The path of the first object or array nested deeper than a Snapshot may, the outermost value
  * being level 1, read without recursion so no depth can overflow the stack; `undefined` when none.
  */
-export function tooDeepPathOf(json: unknown): Path | undefined {
+function tooDeepPathOf(json: unknown): Path | undefined {
   return pathBeyondLimitFrom(json, { at: [], depth: 1 }, snapshotNestingLimit);
+}
+
+/**
+ * Where a JSON value nests past the levels a Snapshot holds, as the decoders refuse it: the path of
+ * the first container nested past them and `nests deeper than 256 levels`; `undefined` when it
+ * nests no deeper.
+ */
+export function nestingProblemOf(json: unknown): Problem | undefined {
+  const at = tooDeepPathOf(json);
+  return at === undefined
+    ? undefined
+    : { at, reason: `nests deeper than ${snapshotNestingLimit} levels` };
 }
 
 /** The first container below a value at `root` deeper than `limit`, read without recursion. */
@@ -110,7 +122,9 @@ function pathBeyondLimitFrom(json: unknown, root: Root, limit: number): Path | u
     if (container.depth > limit) {
       return container.at;
     }
-    pending.push(...childrenOf(container));
+    for (const child of childrenOf(container)) {
+      pending.push(child);
+    }
   }
   return undefined;
 }
