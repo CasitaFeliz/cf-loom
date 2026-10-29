@@ -42,7 +42,7 @@ function fieldOf(variant: DefOfType<'object'>, key: string): unknown {
   return Object.hasOwn(variant.shape, key) ? variant.shape[key] : undefined;
 }
 
-/** The def types zod reads values through to the schema inside, of a variant and of a discriminator. */
+/** The def types zod reads values through, for a variant and for a discriminator. */
 const variantForwarding: ReadonlySet<string> = new Set(['lazy', 'readonly', 'pipe']);
 const fieldForwarding: ReadonlySet<string> = new Set(['readonly', 'pipe']);
 

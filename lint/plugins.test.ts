@@ -13,7 +13,7 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
-/** Each `C<n>@<line>` the repository's GritQL plugins report for one source file, `probe.ts` or the path given. */
+/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given. */
 function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[] {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {

@@ -2161,7 +2161,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
     return kind === 'none' || kind === 'dropped' || kind === 'dropped-refused';
   }
 
-  /** What the unnamed-cycle line says to write: the id the first member that lost a valid one dropped, else any. */
+  /** What the unnamed-cycle line says to write: the valid id the first member dropped, else any. */
   function firstDroppedInstead(members: readonly Member[]): string {
     const dropped = members.find(({ kind }) => kind === 'dropped');
     return dropped === undefined
