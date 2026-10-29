@@ -42,13 +42,23 @@ const nest = defineEndpoint({
   success: { status: 204 },
 });
 
+const tagOrders = defineEndpoint({
+  name: 'tagOrders',
+  method: 'POST',
+  path: '/orders/tags',
+  visibility: 'public',
+  description: 'Tags orders',
+  input: { body: z.array(z.string()) },
+  success: { status: 204 },
+});
+
 const contract = defineService({
   name: 'orders-service',
   groups: [
     defineGroup({
       name: 'orders',
       description: 'Orders',
-      endpoints: [createOrder, deleteOrder, nest],
+      endpoints: [createOrder, deleteOrder, nest, tagOrders],
     }),
   ],
 });
@@ -58,6 +68,7 @@ const handlers = {
     createOrder: handle(createOrder, ({ body }) => success(body)),
     deleteOrder: handle(deleteOrder, () => success()),
     nest: handle(nest, () => success()),
+    tagOrders: handle(tagOrders, () => success()),
   },
   guards: {},
 };
@@ -99,6 +110,25 @@ describe('serve: the body', () => {
       { in: 'body', path: ['email'], code: 'invalid_format', message: expect.any(String) },
       { in: 'body', path: ['quantity'], code: 'too_small', message: expect.any(String) },
     ]);
+  });
+
+  test('a body whose 300,000 items each break its schema is invalid input, one Issue per item', async () => {
+    const items = JSON.stringify(Array.from({ length: 300_000 }, () => 1));
+
+    const response = await http(
+      new Request('http://test/orders/tags', { method: 'POST', headers: json, body: items }),
+    );
+
+    expect(response.status).toBe(400);
+    const issues = (await issuesOf(response)) as { path: unknown[] }[];
+    expect(issues).toHaveLength(300_000);
+    expect(issues[0]).toEqual({
+      in: 'body',
+      path: [0],
+      code: 'invalid_type',
+      message: expect.any(String),
+    });
+    expect(issues[299_999]?.path).toEqual([299_999]);
   });
 
   test('a content type with parameters still names JSON', async () => {

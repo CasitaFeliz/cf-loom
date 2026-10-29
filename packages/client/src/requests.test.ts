@@ -632,6 +632,42 @@ describe('Input nested past the stack', () => {
   });
 });
 
+describe('Input of many Issues', () => {
+  const tagOrders = defineEndpoint({
+    name: 'tagOrders',
+    method: 'POST',
+    path: '/orders/tags',
+    visibility: 'public',
+    description: 'Tags orders',
+    input: { body: z.array(z.string()) },
+    success: { status: 204 },
+  });
+  const taggingPackage = contractPackageOf({ tagOrders }, defaultStandards);
+  const tagging = defineDependency({ endpoints: [taggingPackage.endpoints.tagOrders] });
+
+  test('an Input whose 300,000 items each break its schema is the invalid-input Rejection, never sent', async () => {
+    const sent: Request[] = [];
+    const tags = client(tagging, {
+      baseUrl: 'http://orders.test',
+      fetch: async (request) => {
+        sent.push(request);
+        return new Response(null, { status: 204 });
+      },
+    });
+    const body = Array.from({ length: 300_000 }, () => 1) as unknown as string[];
+
+    const outcome = await tags.tagOrders({ body });
+
+    expect(outcome).toMatchObject({ kind: 'rejection', source: 'client', code: 'INVALID_INPUT' });
+    if (outcome.kind !== 'rejection' || outcome.code !== 'INVALID_INPUT') {
+      throw new Error('the call did not end in the invalid-input Rejection');
+    }
+    expect(outcome.body.issues).toHaveLength(300_000);
+    expect(outcome.body.issues[299_999]).toMatchObject({ in: 'body', path: [299_999] });
+    expect(sent).toEqual([]);
+  });
+});
+
 describe('a Guard’s demands, checked before the Input, as serve checks them', () => {
   const apiKey = defineGuard({
     name: 'apiKey',

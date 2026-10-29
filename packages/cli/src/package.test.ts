@@ -346,7 +346,11 @@ function shortCodes(): readonly string[] {
   let words = [''];
   for (let length = 1; length <= 5; length++) {
     words = words.flatMap((word) => [`${word}A`, `${word}1`, `${word}_`]);
-    codes.push(...words.filter((word) => grammar.test(word)));
+    for (const word of words) {
+      if (grammar.test(word)) {
+        codes.push(word);
+      }
+    }
   }
   return codes;
 }
@@ -1218,7 +1222,11 @@ describe('cf-loom package: the built package', () => {
     let words = [''];
     for (let length = 1; length <= 3; length++) {
       words = words.flatMap((word) => alphabet.map((character) => `${word}${character}`));
-      descriptions.push(...words.filter((word) => word.trim() !== ''));
+      for (const word of words) {
+        if (word.trim() !== '') {
+          descriptions.push(word);
+        }
+      }
     }
     const project = aProject(aServiceOfDeprecatedEndpoints(descriptions));
     const out = join(aFolder(), 'contract-orders-service');

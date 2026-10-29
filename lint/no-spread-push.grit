@@ -1,0 +1,12 @@
+language js
+
+JsCallExpression(callee=or {
+  `$list.push`,
+  `$list?.push`,
+  `$list.unshift`,
+  `$list?.unshift`,
+  `$list.splice`,
+  `$list?.splice`
+}, arguments=JsCallArguments(args=some JsSpread())) as $call where {
+  register_diagnostic(span=$call, message="C29: add each item in a loop; a spread passes every item as an argument on the stack.", severity="error")
+}

@@ -69,7 +69,9 @@ function refsOf(value: unknown): readonly string[] {
     if (key === '$ref' && typeof found === 'string') {
       refs.push(found);
     } else {
-      refs.push(...refsOf(found));
+      for (const ref of refsOf(found)) {
+        refs.push(ref);
+      }
     }
   }
   return refs;

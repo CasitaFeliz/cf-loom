@@ -26,7 +26,9 @@ export function parsedPartsOf<Part extends InputPart>(
     const field = partFieldOf(part);
     const parsed = parseValue(schema, ownOf(given, field));
     if (parsed.kind === 'issues') {
-      issues.push(...parsed.issues.map((issue) => ({ part, ...issue })));
+      for (const issue of parsed.issues) {
+        issues.push({ part, ...issue });
+      }
     } else {
       values.push([field, parsed.value]);
     }

@@ -52,7 +52,11 @@ function stderrOf(ranked: readonly Ranked[]): readonly string[] {
   const lines: string[] = [];
   for (const rank of ranking) {
     const ofRank = ranked.filter(({ status }) => status === rank);
-    lines.push(...ofRank.flatMap(({ stderr }) => stderr));
+    for (const { stderr } of ofRank) {
+      for (const line of stderr) {
+        lines.push(line);
+      }
+    }
   }
   return lines;
 }

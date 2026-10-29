@@ -57,7 +57,9 @@ function exportedSchemasOf(
   const nodes: SnapshotNode[] = [];
   for (const [name, exported] of Object.entries(snapshot.exports)) {
     if (exported.kind === 'schema') {
-      nodes.push(...partsAt(['exports', name], { schema: exported.schema }));
+      for (const node of partsAt(['exports', name], { schema: exported.schema })) {
+        nodes.push(node);
+      }
     }
   }
   return nodes;

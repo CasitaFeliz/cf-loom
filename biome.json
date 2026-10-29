@@ -153,6 +153,7 @@
     "./lint/no-flatmap-filter.grit",
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit",
+    "./lint/no-spread-push.grit",
     "./lint/no-zod-derived-getters.grit"
   ],
   "vcs": {

@@ -75,7 +75,9 @@ export function dependencyPackageFailures(
   for (const provider of usedProvidersOf(declarations)) {
     const message = problemOf(contractPackageOf(packages, provider), provider.name);
     if (message !== undefined) {
-      failures.push(...provider.holders.map((at) => failure(at, 'dependency-package', message)));
+      for (const at of provider.holders) {
+        failures.push(failure(at, 'dependency-package', message));
+      }
     }
   }
   return failures;
