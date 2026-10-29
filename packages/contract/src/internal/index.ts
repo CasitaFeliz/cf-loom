@@ -48,7 +48,6 @@ export {
   carriedStandardRejectionsOf,
   codeNameOf,
   commandSubscribedSentence,
-  endpointLabel,
   exactParamsSentence,
   follows,
   frozenCopyOf,

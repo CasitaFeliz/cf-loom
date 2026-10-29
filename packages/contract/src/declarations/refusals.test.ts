@@ -255,11 +255,3 @@ describe('the refusal sentences the types and generate share', () => {
     },
   );
 });
-
-describe('an Endpoint as the sentences name it', () => {
-  test('is its Provider and its name, written once for every sentence that names one', () => {
-    const label = internal.endpointLabel('payments-service', 'getPayment');
-
-    expect(label).toBe("payments-service's getPayment");
-  });
-});

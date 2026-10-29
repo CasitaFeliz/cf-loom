@@ -18,11 +18,13 @@ import {
  */
 export function aRootPackage(root: unknown, given: Partial<RootPackage> = {}): RootPackage {
   const name = typeof root === 'object' && root !== null ? Reflect.get(root, 'name') : undefined;
+  const kind = typeof root === 'object' && root !== null ? Reflect.get(root, 'kind') : undefined;
+  const own = kind === 'service' ? name : undefined;
   return {
     packageName: typeof name === 'string' ? name : '@org/definitions',
     packages: [],
     contractPackages: providersOf(root)
-      .filter(([provider]) => provider !== name)
+      .filter(([provider]) => provider !== own)
       .map(([provider, elements]) => anInstalledContract(provider, elements)),
     rootExports: {},
     ...given,
