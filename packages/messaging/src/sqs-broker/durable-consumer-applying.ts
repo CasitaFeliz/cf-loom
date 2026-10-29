@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its attributes in PascalCase
+import { GetTopicAttributesCommand, type SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
-import { type Applied, refusedBy } from './applied.ts';
+import { type Applied, isAwsError, refusedBy } from './applied.ts';
 import { type Place, queueArnOf, topicArnOf } from './connecting.ts';
 import { applyQueue, tagQueue } from './queue-applying.ts';
 import { deadLetterQueueNameOf, queueNameOf } from './queue-names.ts';
@@ -12,6 +13,7 @@ import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from 
 
 /** What applying a Durable consumer works with: the SQS client, where the environment's topics and queues are, and the subscriptions made so far. */
 export type Applier = {
+  readonly sns: SNSClient;
   readonly sqs: SQSClient;
   readonly place: Place;
   readonly subscribing: Subscribing;
@@ -23,22 +25,39 @@ export async function applyDurableConsumer(
   planned: PlannedQueue,
 ): Promise<Applied> {
   try {
-    await createOrUpdate(applier, planned);
-    return { kind: 'applied' };
+    return await createOrUpdate(applier, planned);
   } catch (error) {
     return refusedBy(`The Durable consumer ${planned.name}`, error);
   }
 }
 
-async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<void> {
-  const { sqs, place } = applier;
+async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<Applied> {
+  const { sns, sqs, place } = applier;
   const queueArn = queueArnOf(place, queueNameOf(planned.name));
   const topicArn = topicArnOf(place, planned.stream);
+  if (!(await isTopic(sns, topicArn))) {
+    const reads = `reads the stream ${planned.stream}, whose topic ${topicArn} does not exist yet`;
+    const remedy = "apply its Service's plan first";
+    return { kind: 'refused', message: `The Durable consumer ${planned.name} ${reads}: ${remedy}` };
+  }
   await applyDeadLetterQueue(sqs, planned);
   const url = await applyMainQueue(applier, planned, { queueArn, topicArn });
   const shape = subscriptionShapeOf({ topicArn, queueArn, subject: planned.subject });
   const subscription = await applier.subscribing.subscribe(shape);
   await tagQueue(sqs, url, { [subscriptionTag]: subscription });
+  return { kind: 'applied' };
+}
+
+async function isTopic(sns: SNSClient, topicArn: string): Promise<boolean> {
+  try {
+    await sns.send(new GetTopicAttributesCommand({ TopicArn: topicArn }));
+    return true;
+  } catch (error) {
+    if (isAwsError(error, 'NotFoundException')) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 async function applyDeadLetterQueue(sqs: SQSClient, planned: PlannedQueue): Promise<void> {

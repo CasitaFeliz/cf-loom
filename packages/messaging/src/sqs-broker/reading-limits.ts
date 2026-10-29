@@ -2,7 +2,6 @@ import type { BrokerPlanDurableConsumer } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 import {
   countOf,
-  durationText,
   everySetOf,
   type KindLimits,
   millisecondsOf,
@@ -10,12 +9,28 @@ import {
   readAs,
 } from '../broker-limits/index.ts';
 import type { SqsDurableConsumerLimits } from './limits.ts';
-import { backoffTextOf } from './tags.ts';
+import { backoffTextOf, longestTagValue } from './tags.ts';
 
-/** The whole seconds of a duration text. */
+const secondsInDay = 86_400;
+const longestVisibilityTimeout = 12 * 3_600 - 1;
+const shortestRetention = 60;
+const longestRetention = 14 * secondsInDay;
+const mostDeliveries = 1_000;
+
+/** The whole seconds of a duration text; undefined for a text that is no duration or not whole seconds. */
 function secondsOf(input: unknown): number | undefined {
   const milliseconds = millisecondsOf(input);
-  return milliseconds === undefined ? undefined : Number(milliseconds / 1_000n);
+  return milliseconds === undefined || milliseconds % 1_000n !== 0n
+    ? undefined
+    : Number(milliseconds / 1_000n);
+}
+
+/** Reads a duration text as whole seconds within a range, both ends included. */
+function secondsBetween(least: number, most: number): (input: unknown) => number | undefined {
+  return (input) => {
+    const seconds = secondsOf(input);
+    return seconds !== undefined && seconds >= least && seconds <= most ? seconds : undefined;
+  };
 }
 
 /** The first ack wait in seconds, which is the queue's visibility timeout, and the waits after it as written, which are its backoff tag. */
@@ -23,8 +38,10 @@ type Waits = { readonly visibilityTimeout: number; readonly backoff: string | un
 
 type Wait = { readonly text: string; readonly seconds: number };
 
+const readVisibilityTimeout = secondsBetween(1, longestVisibilityTimeout);
+
 function waitOf(input: unknown): Wait | undefined {
-  const seconds = secondsOf(input);
+  const seconds = readVisibilityTimeout(input);
   return typeof input === 'string' && seconds !== undefined ? { text: input, seconds } : undefined;
 }
 
@@ -34,15 +51,25 @@ function waitsOf(input: unknown): Waits | undefined {
     return undefined;
   }
   const backoff = later.length === 0 ? undefined : backoffTextOf(later.map(({ text }) => text));
-  return { visibilityTimeout: first.seconds, backoff };
+  const isTooLong = backoff !== undefined && backoff.length > longestTagValue;
+  return isTooLong ? undefined : { visibilityTimeout: first.seconds, backoff };
 }
+
+function deliveriesOf(input: unknown): number | undefined {
+  const count = countOf(input);
+  return count !== undefined && count <= mostDeliveries ? count : undefined;
+}
+
+const waitsText = `a duration of whole seconds under 12h such as 30s or 5m, or a list of them whose entries after the first take at most ${longestTagValue} characters, joined by a space`;
+const retentionText = 'a duration of whole seconds from 1m to 14d';
+const readRetention = secondsBetween(shortestRetention, longestRetention);
 
 /** The readers of a Durable consumer's settings, which read each in SQS's units. */
 export const durableConsumerReaders = {
-  ackWait: readAs(`${durationText}, or a list of them`, waitsOf),
-  maxDeliver: readAs('a whole number from 1', countOf),
-  retention: readAs(durationText, secondsOf),
-  deadLetterRetention: readAs(durationText, secondsOf),
+  ackWait: readAs(waitsText, waitsOf),
+  maxDeliver: readAs(`a whole number from 1 to ${mostDeliveries}`, deliveriesOf),
+  retention: readAs(retentionText, readRetention),
+  deadLetterRetention: readAs(retentionText, readRetention),
 } satisfies Record<keyof SqsDurableConsumerLimits, z.ZodType>;
 
 /** The name of each setting of a Durable consumer's limits. */

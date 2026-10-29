@@ -11,7 +11,7 @@ import {
   tagByHand,
   unsubscribe,
 } from '../../test/aws-arranging.ts';
-import { anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
+import { aClosedUrl, anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
 import {
   queueAttributesOf,
   queueNamesOf,
@@ -23,7 +23,7 @@ import {
 } from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
-import { applyBrokerPlan, type BrokerPlan, type SqsBrokerLimits } from './index.ts';
+import { applyBrokerPlan, type BrokerPlan, type Duration, type SqsBrokerLimits } from './index.ts';
 
 let moto: MotoServer;
 
@@ -107,6 +107,23 @@ function aPlanOfDurables(names: readonly string[]): BrokerPlan {
     streams: { long: { service: 'long', subjects: [subject] } },
     durableConsumers,
   };
+}
+
+/** Limits as a Service reads them from a JSON file, so a test can write a value the types refuse. */
+function readFromJson(limits: unknown): SqsBrokerLimits {
+  return JSON.parse(JSON.stringify(limits));
+}
+
+async function rejectionOf(applying: Promise<void>): Promise<Error> {
+  try {
+    await applying;
+  } catch (error) {
+    if (error instanceof Error) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error('applyBrokerPlan did not reject');
 }
 
 function sqsArnOf(queue: string): string {
@@ -666,5 +683,273 @@ describe('applyBrokerPlan', () => {
 
     expect(await stateOf()).toEqual(first);
     expect(first.stored).toEqual(['1', '1']);
+  });
+
+  test('applyBrokerPlan refuses a plan whose shape is not the documented one, creating nothing', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    const notAPlan = { prefix: null, streams: [], durableConsumers: {} } as unknown as BrokerPlan;
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, notAPlan, testLimits));
+
+    expect(error.message).toMatch(
+      /^The value is not the Broker plan of the document cf-loom broker-plan --json prints: /,
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
+  });
+
+  test('applyBrokerPlan refuses every setting left unset, naming each Durable consumer and the setting, creating nothing', async () => {
+    const billing = aBilling();
+    const both: BrokerPlan = {
+      ...billing.plan,
+      durableConsumers: {
+        ...billing.plan.durableConsumers,
+        ...anOrders().plan.durableConsumers,
+      },
+    };
+    const connecting = anAwsConnecting(moto.url);
+    const limits: SqsBrokerLimits = {
+      durableConsumerDefaults: { ackWait: '30s' },
+      durableConsumers: { [anOrders().chargeDurable]: { maxDeliver: 3 } },
+    };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, both, limits));
+
+    expect(error.message.split('\n')).toEqual([
+      `The Durable consumer ${billing.durable} has no maxDeliver, retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${anOrders().chargeDurable} has no retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+    ]);
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
+  });
+
+  test('a maxDeliver of unlimited, which SQS cannot hold without a dead-letter queue, is refused naming where it is in limits, creating nothing', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const limits = readFromJson({
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, maxDeliver: 'unlimited' },
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+    expect(error.message).toBe(
+      "limits.durableConsumerDefaults.maxDeliver 'unlimited' is not a whole number from 1 to 1000",
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+  });
+
+  test.each([
+    ['streamDefaults', { maxAge: '7d' }],
+    ['streams', { 'orders-service': { replicas: 1 } }],
+    ['other', {}],
+  ])(
+    'applyBrokerPlan refuses limits with the key %s, which SqsBrokerLimits does not define, naming it, creating nothing',
+    async (key, value) => {
+      const orders = anOrders();
+      const connecting = anAwsConnecting(moto.url);
+      const limits = readFromJson({ ...testLimits, [key]: value });
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+      expect(error.message).toBe(`limits.${key} is a key SqsBrokerLimits does not define`);
+      expect(await topicNamesOf(connecting.sns)).toEqual([]);
+    },
+  );
+
+  test('applyBrokerPlan refuses a setting a Durable consumer has on JetStream and not on SNS/SQS, in the defaults or in one Durable consumer’s own limits, naming each', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const limits = readFromJson({
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, deliverPolicy: 'all' },
+      durableConsumers: { [orders.chargeDurable]: { maxAckPending: 10 } },
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+    expect(error.message.split('\n').sort()).toEqual(
+      [
+        'limits.durableConsumerDefaults.deliverPolicy is a key SqsBrokerLimits does not define',
+        `limits.durableConsumers.${orders.chargeDurable}.maxAckPending is a key SqsBrokerLimits does not define`,
+      ].sort(),
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+  });
+
+  test('applyBrokerPlan refuses a duration that is not whole seconds, an ack wait of 12h or more, a retention outside 1m to 14d and a maxDeliver outside 1 to 1000, naming where each is in limits, creating nothing', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const limits = readFromJson({
+      durableConsumerDefaults: {
+        ackWait: '1500ms',
+        maxDeliver: 1001,
+        retention: '30s',
+        deadLetterRetention: '15d',
+      },
+      durableConsumers: { [orders.chargeDurable]: { ackWait: ['30s', '12h'], maxDeliver: 0 } },
+    });
+    const ackWait =
+      'a duration of whole seconds under 12h such as 30s or 5m, or a list of them whose entries after the first take at most 256 characters, joined by a space';
+    const retention = 'a duration of whole seconds from 1m to 14d';
+    const maxDeliver = 'a whole number from 1 to 1000';
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+    expect(error.message.split('\n').sort()).toEqual(
+      [
+        `limits.durableConsumerDefaults.ackWait '1500ms' is not ${ackWait}`,
+        `limits.durableConsumerDefaults.maxDeliver 1001 is not ${maxDeliver}`,
+        `limits.durableConsumerDefaults.retention '30s' is not ${retention}`,
+        `limits.durableConsumerDefaults.deadLetterRetention '15d' is not ${retention}`,
+        `limits.durableConsumers.${orders.chargeDurable}.ackWait [ '30s', '12h' ] is not ${ackWait}`,
+        `limits.durableConsumers.${orders.chargeDurable}.maxDeliver 0 is not ${maxDeliver}`,
+      ].sort(),
+    );
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+  });
+
+  test('applyBrokerPlan accepts the bounds of each range', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const limits: SqsBrokerLimits = {
+      durableConsumerDefaults: {
+        ackWait: ['1s', '43199s'],
+        maxDeliver: 1000,
+        retention: '1m',
+        deadLetterRetention: '14d',
+      },
+      durableConsumers: { [orders.chargeDurable]: { maxDeliver: 1, retention: '14d' } },
+    };
+
+    await applyBrokerPlan(connecting, orders.plan, limits);
+
+    expect(await queueNamesOf(connecting.sqs)).toHaveLength(2);
+  });
+
+  test('a backoff whose tag would exceed 256 characters is refused, naming where that ackWait is in limits, creating nothing', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const waits = (count: number): Duration[] => [
+      '30s',
+      ...Array.from({ length: count }, (): Duration => '10000s'),
+    ];
+    const fits = waits(36);
+    const exceeds = waits(37);
+    expect(fits.slice(1).join(' ')).toHaveLength(251);
+    expect(exceeds.slice(1).join(' ')).toHaveLength(258);
+
+    await applyBrokerPlan(connecting, orders.plan, {
+      durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: fits },
+    });
+    await moto.reset();
+    const error = await rejectionOf(
+      applyBrokerPlan(connecting, orders.plan, {
+        durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: exceeds },
+      }),
+    );
+
+    expect(error.message).toMatch(/^limits\.durableConsumerDefaults\.ackWait \[/);
+    expect(error.message).toContain('at most 256 characters');
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+  });
+
+  test('an account that is not 12 digits is refused, creating nothing', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { account: '1234' });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe("connecting.account '1234' is not a 12-digit AWS account id");
+    expect(await topicNamesOf(connecting.sns)).toEqual([]);
+  });
+
+  test.each([
+    ['', '123456789012'],
+    ['another account is given, ', '210987654321'],
+  ])(
+    'a Durable consumer whose Stream’s topic does not exist yet is refused naming the Stream and the topic ARN it looked for, and the topics created before it stay, when %sthe topic is in %s',
+    async (_given, account) => {
+      const billing = aBilling();
+      const own: BrokerPlan = {
+        ...billing.plan,
+        streams: {
+          'billing-service': {
+            service: 'billing-service',
+            subjects: ['billing-service.event.E.v1'],
+          },
+        },
+      };
+      const connecting = anAwsConnecting(moto.url, { account });
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, own, testLimits));
+
+      expect(error.message).toBe(
+        `The Durable consumer ${billing.durable} reads the stream orders-service, whose topic arn:aws:sns:eu-west-1:${account}:orders-service does not exist yet: apply its Service's plan first`,
+      );
+      expect(await topicNamesOf(connecting.sns)).toEqual(['billing-service']);
+    },
+  );
+
+  test('applyBrokerPlan stops at the first Durable consumer it cannot apply and creates none after it', async () => {
+    const orders = anOrders();
+    const subject = 'ghost.event.E.v1';
+    const plan: BrokerPlan = {
+      ...orders.plan,
+      durableConsumers: {
+        'a-first': { service: 'orders-service', stream: 'ghost', subject },
+        ...orders.plan.durableConsumers,
+      },
+    };
+    const connecting = anAwsConnecting(moto.url);
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, plan, testLimits));
+
+    expect(error.message).toMatch(/^The Durable consumer a-first reads the stream ghost/);
+    expect(await queueNamesOf(connecting.sqs)).toEqual([]);
+    expect(await topicNamesOf(connecting.sns)).toEqual(['orders-service']);
+  });
+
+  test('a failure of the SNS client rejects naming the Stream, with the client’s error as cause', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(await aClosedUrl());
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toMatch(/^The stream orders-service could not be applied: /);
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
+  test('a failure of the SQS client rejects naming the Durable consumer, with the client’s error as cause', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { sqsUrl: await aClosedUrl() });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toMatch(
+      new RegExp(`^The Durable consumer ${orders.chargeDurable} could not be applied: `),
+    );
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
+  test('the region of the SNS client decides the partition of every ARN', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url, { region: 'us-gov-west-1' });
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    const queue = await queueAttributesOf(connecting.sqs, orders.chargeDurable);
+    const deadLetter = JSON.parse(queue['RedrivePolicy'] ?? '{}').deadLetterTargetArn;
+    const policy = JSON.parse(queue['Policy'] ?? '{}').Statement[0];
+    const [subscription] = await subscriptionsOf(
+      connecting.sns,
+      'arn:aws-us-gov:sns:us-gov-west-1:123456789012:orders-service',
+    );
+    expect(deadLetter).toBe(
+      `arn:aws-us-gov:sqs:us-gov-west-1:123456789012:${orders.chargeDurable}_dlq`,
+    );
+    expect(policy.Condition.ArnEquals['aws:SourceArn']).toBe(
+      'arn:aws-us-gov:sns:us-gov-west-1:123456789012:orders-service',
+    );
+    expect(subscription?.endpoint).toBe(
+      `arn:aws-us-gov:sqs:us-gov-west-1:123456789012:${orders.chargeDurable}`,
+    );
   });
 });

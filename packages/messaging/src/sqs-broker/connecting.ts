@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { partition } from '@aws-sdk/core/client';
@@ -33,4 +34,12 @@ export function topicArnOf(place: Place, name: string): string {
 /** The ARN of the SQS queue named `name` in the place. */
 export function queueArnOf(place: Place, name: string): string {
   return `arn:${place.partition}:sqs:${place.region}:${place.account}:${name}`;
+}
+
+/** The lines refusing an account that is not 12 digits, which only untyped code can pass; whether it is the clients' own is AWS's to answer. */
+export function accountLinesOf(account: unknown): readonly string[] {
+  const isAccount = typeof account === 'string' && /^\d{12}$/.test(account);
+  return isAccount
+    ? []
+    : [`connecting.account ${inspect(account)} is not a 12-digit AWS account id`];
 }
