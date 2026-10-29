@@ -11,17 +11,29 @@ export function reachOf<Key>(
 ): readonly Key[] {
   const seen = new Set<Key>();
   const reached: Key[] = [];
-  const visit = (guard: Key): void => {
-    if (seen.has(guard)) {
-      return;
+  const frames: Listing<Key>[] = [];
+  const enter = (guard: Key): void => {
+    if (!seen.has(guard)) {
+      seen.add(guard);
+      frames.push({ guard, listed: listedBy(guard), next: 0 });
     }
-    seen.add(guard);
-    listedBy(guard).forEach(visit);
-    reached.push(guard);
   };
-  guards.forEach(visit);
+  for (const guard of guards) {
+    enter(guard);
+    for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
+      if (frame.next === frame.listed.length) {
+        frames.pop();
+        reached.push(frame.guard);
+      } else {
+        enter(frame.listed[frame.next++] as Key);
+      }
+    }
+  }
   return reached;
 }
+
+/** A Guard whose listed Guards are being reached, and how many have been. */
+type Listing<Key> = { readonly guard: Key; readonly listed: readonly Key[]; next: number };
 
 /**
  * Every Guard the given ones reach, each once, the Guards one lists before it: themselves and,

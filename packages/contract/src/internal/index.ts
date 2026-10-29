@@ -97,6 +97,8 @@ export type {
   CommandSnapshot,
   DefinitionsSnapshot,
   DependencySnapshot,
+  EndpointFields,
+  EndpointLifecycle,
   EndpointSnapshot,
   EndpointTombstone,
   EventSnapshot,
