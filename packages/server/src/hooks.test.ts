@@ -5,6 +5,7 @@ import {
   defineGuard,
   defineRejection,
   defineService,
+  type Method,
   notFound,
 } from '@cf-loom/contract';
 import {
@@ -16,9 +17,15 @@ import {
   reject,
   success,
 } from '@cf-loom/handlers';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, test, vi } from 'vitest';
 import { z } from 'zod';
-import { type AnsweredRequest, type ServedFault, type ServeOptions, serve } from './index.ts';
+import {
+  type AnsweredRequest,
+  type Http,
+  type ServedFault,
+  type ServeOptions,
+  serve,
+} from './index.ts';
 
 const unauthenticated = defineRejection({
   code: 'UNAUTHENTICATED',
@@ -709,5 +716,51 @@ describe('serve: what the hooks receive beside the record', () => {
     await http(new Request('http://test/orders/down', { signal: controller.signal }));
 
     expect(answered[0]).toMatchObject({ kind: 'fault', aborted: true, durationMs: 250 });
+  });
+});
+
+describe('serve: the types of its hooks and of what it returns', () => {
+  test('serve takes the map and its hooks, and returns the web-standard Http', () => {
+    const http = serve(contract, handlers, {
+      maxBodyBytes: 1_000_000,
+      onServiceFault: (fault, request) => {
+        expectTypeOf(fault.name).toEqualTypeOf<string>();
+        expectTypeOf(request).toEqualTypeOf<Request>();
+      },
+      onAnswered: async (answered, request) => {
+        const { method, endpoint, path, status, kind, code, aborted, durationMs } = answered;
+        expectTypeOf([
+          method,
+          endpoint,
+          path,
+          status,
+          kind,
+          code,
+          aborted,
+          durationMs,
+        ]).not.toBeNever();
+        expectTypeOf(request.headers.get('traceparent')).toEqualTypeOf<string | null>();
+      },
+    });
+
+    expectTypeOf(http).toEqualTypeOf<Http>();
+    expectTypeOf(http).toEqualTypeOf<(request: Request) => Promise<Response>>();
+    expect(http).toBeTypeOf('function');
+  });
+
+  test('a record with an Endpoint has its path and declared method, one without has neither', () => {
+    const http = serve(contract, handlers, {
+      onAnswered: (record) => {
+        if (record.endpoint !== undefined) {
+          expectTypeOf(record.path).toEqualTypeOf<string>();
+          expectTypeOf(record.method).toEqualTypeOf<Method>();
+          return;
+        }
+        expectTypeOf(record.path).toEqualTypeOf<undefined>();
+        expectTypeOf(record.method).toEqualTypeOf<Method | 'HEAD' | '_OTHER'>();
+      },
+    });
+
+    expect(http).toBeTypeOf('function');
   });
 });
