@@ -11,7 +11,7 @@ import {
   type WithResources,
 } from '@cf-loom/handlers';
 import { describe, expect, expectTypeOf, test } from 'vitest';
-import { type ServedFault, type ServeOptions, serve } from './index.ts';
+import { type AnsweredRequest, type ServedFault, type ServeOptions, serve } from './index.ts';
 
 /** Every key any member of a union of records holds. */
 type KeysOfEach<Record> = Record extends unknown ? keyof Record : never;
@@ -69,6 +69,20 @@ describe('serve: what onServiceFault receives', () => {
   test('a ServedFault holds the Endpoint, its name, the Guard, and how it failed, and no more', () => {
     expectTypeOf<KeysOfEach<ServedFault>>().toEqualTypeOf<
       'declaration' | 'name' | 'guard' | 'kind' | 'fault' | 'cause' | 'issues'
+    >();
+  });
+
+  test('an AnsweredRequest holds the status, kind, code, whether the Caller went away, duration, method, Endpoint and path, and no more', () => {
+    expectTypeOf<KeysOfEach<AnsweredRequest>>().toEqualTypeOf<
+      'status' | 'kind' | 'code' | 'aborted' | 'durationMs' | 'method' | 'endpoint' | 'path'
+    >();
+  });
+});
+
+describe('serve: what it takes', () => {
+  test('ServeOptions hold the Resources, body limit, fault and answer hooks and fallback, and no more', () => {
+    expectTypeOf<keyof ServeOptions<{ readonly clock: () => Date }>>().toEqualTypeOf<
+      'resources' | 'maxBodyBytes' | 'onServiceFault' | 'fallback' | 'onAnswered'
     >();
   });
 });

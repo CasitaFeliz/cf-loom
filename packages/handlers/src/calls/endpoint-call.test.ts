@@ -640,15 +640,12 @@ describe('an EndpointHandler’s Rejections', () => {
     });
   });
 
-  test('a direct call’s Rejection carries no code, by value or by type', async () => {
+  test('a direct call’s Rejection is its declaration, with no code of its own', async () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
     const outcome = await getOrderHandler(getInput, { context: getContext });
 
-    expect(outcome).not.toHaveProperty('code');
-    expectTypeOf<
-      Extract<CheckedOutcome<typeof getOrder>, { readonly kind: 'rejection' }>
-    >().not.toHaveProperty('code');
+    expect(outcome).toStrictEqual({ kind: 'rejection', rejection: notFound });
   });
 
   test('a direct call takes no contract', () => {
