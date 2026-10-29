@@ -34,7 +34,7 @@ const plan = z.strictObject({
  * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
-  const structured = readWith(plan, value, 'the broker plan');
+  const structured = readWith(plan, value, 'the Broker plan');
   if (structured.kind === 'refused') {
     return malformedAt(structured.problems[0]);
   }

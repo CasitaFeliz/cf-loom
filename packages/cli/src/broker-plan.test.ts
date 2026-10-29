@@ -534,7 +534,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr:
-        "An Application has no broker plan: only a Service's Messages travel through the Broker\n",
+        "An Application has no Broker plan: only a Service's Messages travel through the Broker\n",
     });
   });
 
@@ -547,7 +547,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       status: 3,
       stdout: '',
       stderr:
-        "A Definitions Package has no broker plan: only a Service's Messages travel through the Broker\n",
+        "A Definitions Package has no Broker plan: only a Service's Messages travel through the Broker\n",
     });
   });
 
@@ -557,7 +557,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
       'an Application',
       anApplication,
       3,
-      "An Application has no broker plan: only a Service's Messages travel through the Broker",
+      "An Application has no Broker plan: only a Service's Messages travel through the Broker",
     ],
   ] as const)(
     '--json gives the errors of %s, and stderr still carries their lines',
