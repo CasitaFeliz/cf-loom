@@ -575,7 +575,10 @@ describe('the invalid-input body, from the client unsent and from serve', () => 
       }),
     );
     const { rejection } = (await answered.json()) as { rejection: { body: unknown } };
-    return { client: unsent.kind === 'rejection' ? unsent.body : unsent, serve: rejection.body };
+    return {
+      client: unsent.kind === 'rejection' && unsent.code === 'INVALID_INPUT' ? unsent.body : unsent,
+      serve: rejection.body,
+    };
   }
 
   test('an Input of 150 invalid items gets the same first 100 Issues and count from both', async () => {
