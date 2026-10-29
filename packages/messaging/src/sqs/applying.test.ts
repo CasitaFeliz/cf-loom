@@ -613,6 +613,27 @@ describe('applyBrokerPlan', () => {
     expect(settings.sent()).toBe(0);
   });
 
+  test('an existing subscription whose filter policy is the same JSON written otherwise is left as it is', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+    const tags = await queueTagsOf(connecting.sqs, orders.chargeDurable);
+    const filterPolicy = {
+      name: 'FilterPolicy',
+      value: `{ "cf-loom-subject": [ "${orders.charge}" ] }`,
+    };
+    await setSubscriptionAttribute(
+      connecting.sns,
+      tags['cf-loom:subscription'] ?? '',
+      filterPolicy,
+    );
+    const settings = countCommands(connecting.sns, 'SetSubscriptionAttributesCommand');
+
+    await applyBrokerPlan(connecting, orders.plan, testLimits);
+
+    expect(settings.sent()).toBe(0);
+  });
+
   test('applyBrokerPlan never removes a topic, queue, dead-letter queue, subscription or organization’s tag that the plan it applies does not list', async () => {
     const orders = anOrders();
     const refund = 'orders-service_command_Refund_v1';
