@@ -30,8 +30,8 @@ type Listed = { readonly field: string; readonly name: string; readonly range: s
 /**
  * A Definitions Package's own package.json as published: its version, its peers with `zod` and
  * `@cf-loom/contract` set to the ranges the CLI declares, and `cfLoom`, `snapshot.json`
- * in its `files` and no `publishConfig.tag`; refused when it depends on a range npm does not
- * resolve from the registry, a peer read after those two are set.
+ * in its `files` and no `publishConfig.tag`; refused when it depends on a range that is no
+ * registry range cf-loom keeps, a peer read after those two are set.
  */
 export function definitionsManifestOf(
   source: Readonly<Record<string, unknown>>,
@@ -50,7 +50,9 @@ export function definitionsManifestOf(
   if (uninstallable !== undefined) {
     const { field, name: dependency, range } = uninstallable;
     const lists = `package.json lists ${dependency} in ${field} as ${range}`;
-    return unpublishable(`${lists}, which npm cannot install from the registry`);
+    return unpublishable(
+      `${lists}, no registry range cf-loom keeps (a version, range or tag, or an npm: alias of one)`,
+    );
   }
   return { kind: 'manifest', file: manifestFileOf(manifest) };
 }

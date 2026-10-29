@@ -23,9 +23,12 @@ export type ProjectPackage =
 /** A package name npm accepts: lower-case, scoped or not, never a scope alone. */
 const packageNamePattern = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 
-/** Whether `name` is a package name npm accepts for a new package: lower-case, scoped or not, never a scope alone. */
+/** The unscoped names npm reserves and refuses for any package. */
+const reservedNames: ReadonlySet<string> = new Set(['node_modules', 'favicon.ico']);
+
+/** Whether `name` is a package name npm accepts for a new package: lower-case, scoped or not, never a scope alone nor a name npm reserves. */
 export function isPackageName(name: string): boolean {
-  return packageNamePattern.test(name);
+  return packageNamePattern.test(name) && !reservedNames.has(name);
 }
 
 /**
