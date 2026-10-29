@@ -11,6 +11,27 @@ describe('defineConfig', () => {
     expect(Object.keys(defined)).toEqual(['scope']);
   });
 
+  test('a configuration given through a variable with a field it does not declare is a type error', () => {
+    const config = { layout: {}, layot: {} };
+
+    // @ts-expect-error layot is not a declared field
+    const defining = () => defineConfig(config);
+
+    expect(defining).toBeTypeOf('function');
+  });
+
+  test('a layout given through a variable with a field it does not declare is a type error', () => {
+    const layout = {
+      handlerMap: 'src/handlers.generated.ts',
+      handlerMapp: 'src/x.generated.ts',
+    } as const;
+
+    // @ts-expect-error handlerMapp is not a declared field
+    const defining = () => defineConfig({ layout });
+
+    expect(defining).toBeTypeOf('function');
+  });
+
   test('defineConfig returns the configuration it is given', () => {
     const config = {};
 
