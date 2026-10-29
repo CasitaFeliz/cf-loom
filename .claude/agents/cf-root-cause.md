@@ -33,4 +33,5 @@ Write nothing in the worktree. Your final message is:
 - **Options**, each with what it removes and costs;
 - **Recommendation** and its strongest counter-argument;
 - **Document changes** the recommendation needs;
-- **Unverified**: every fact you could not probe.
+- **Unverified**: every fact you could not probe;
+- **Questions for the user**, each in final form, as [Decisions](../../WORKFLOW.md#decisions) says.

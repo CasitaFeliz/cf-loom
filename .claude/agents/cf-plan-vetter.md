@@ -18,4 +18,5 @@ for every role, its [Decisions](../../WORKFLOW.md#decisions), [Root-cause check]
    implementation detail, or a decision for the user. Give the strongest objection to each recommendation.
 6. Flag anything that triggers the Root-cause check, anything v1 does not need, and an issue too large for one PR.
 
-Write nothing in the worktree. Your final message lists blockers, should-fix and nits, then your answer per question.
+Write nothing in the worktree. Your final message lists blockers, should-fix and nits, then your answer per question,
+then each question for the user in final form, as [Decisions](../../WORKFLOW.md#decisions) says.
