@@ -482,6 +482,8 @@ A Dependency lists the Endpoints its owner calls, one or more, all one Provider'
 
 ## Subscriptions
 
+To subscribe to another Service's Event, install its Contract Package, as for a Dependency (see [Dependencies](#dependencies)), and import the Event from it:
+
 ```ts
 // src/contract/subscriptions/orders/notify-on-settled.subscription.ts
 import { paymentSettledEventV1 } from '@org/contract-payments-service';
@@ -493,7 +495,7 @@ export const notifyOnSettled = defineSubscription({
 });
 ```
 
-`name` is unique in the Service and names the Subscription's Durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one another Service's Contract Package exports, taken from it, never its own (`A Provider is another Service: …`, a type error on `defineService` as well as a failure of `generate`), and not Retired; another fails `generate`, and a Retired one is also a type error. The Snapshot records that Service among the Providers the Contract uses, against the version of the installed package that exports the Event, with no Endpoint when no Dependency lists one. A Command in `event` is a type error too, and fails `generate`: a Command's Message Version has its own Message Handler. Neither ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
+`name` is unique in the Service and names the Subscription's Durable consumer from its name in kebab-case (`orders-service_notify-on-settled`). The Event is the Service's own, listed in one of its Groups, or one another Service's Contract Package exports, taken from it, never its own (`A Provider is another Service: …`, a type error on `defineService` as well as a failure of `generate`), and not Retired; another fails `generate`, and a Retired one is also a type error. The Snapshot records that Service among the Providers the Contract uses, against the version of the installed package that exports the Event, with no Endpoint when no Dependency lists one. A Command in `event` is a type error too, and fails `generate`: a Command's Message Version has its own Message Handler. Neither the Subscription's name nor its Event ever changes: to follow a new Message Version, add a new Subscription and remove the old one in a later Release (see [Subscriptions](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#subscriptions)).
 
 ## Types
 
