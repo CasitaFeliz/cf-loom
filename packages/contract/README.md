@@ -119,7 +119,7 @@ export const definitions = defineDefinitions({
   },
 });
 
-export { apiKey, userToken, permission, money, pagination, unauthenticated, forbidden };
+export { apiKey, userToken, permission, idempotencyKey, money, pagination, unauthenticated, forbidden };
 ```
 
 Services import its Guards, Rejections and schemas by name; a Service names its Definitions object as `standardRejections` to take its Standard Rejections (see [The Root](#the-root)). Its Root file exports its Definitions object, which `init` exports as `definitions`, and exactly what it shares: each Guard, Rejection and zod schema, under the name Services import it by; those exports are what its Snapshot describes. Any other export fails `generate`, and so does a Guard or Rejection an exported Guard reaches without being exported, since Services import it to attach it or reject with it. Only the Root file's exports count: a declaration exported only from another entry of the package is none of its members. It is published built, as JavaScript with its `.d.ts`, from erasable TypeScript source, since Node strips no types under `node_modules`. It may declare any of the three Standard Rejections, each with a code, a status and a message and never a body; one it leaves out takes cf-loom's default (see [Rejections](#rejections)). A status the Rejection rules do not allow (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#rejections) in COMPATIBILITY.md), or a body, is a type error.
@@ -145,7 +145,7 @@ Every Endpoint, Event's or Command's Message Version, and Subscription belongs t
 export const ordersGroup = defineGroup({
   name: 'orders',
   description: 'Order lifecycle',
-  endpoints: [getOrder, createOrder],
+  endpoints: [getOrder, createOrder, settlePayment],
   events: [orderCreatedV1, orderCreatedV2],
   commands: [chargeCardV1],
   subscriptions: [notifyOnSettled],
@@ -492,9 +492,9 @@ Then write the Dependency in a file and list it in the Root's `dependencies` (se
 
 ```ts
 // src/contract/dependencies/payments-service.dependency.ts
-import { getPaymentEndpoint } from '@org/contract-payments-service';
+import { createPaymentEndpoint, getPaymentEndpoint } from '@org/contract-payments-service';
 
-export const paymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint] });
+export const paymentsDependency = defineDependency({ endpoints: [getPaymentEndpoint, createPaymentEndpoint] });
 ```
 
 A Dependency lists the Endpoints its owner calls, one or more, all one Provider's, imported from the Provider's Contract Package by their exported names (`getPaymentEndpoint`, see [The Root](#the-root)), as `endpoints`, the list as written; its client has a method named after each Endpoint it lists (`client(paymentsDependency, …).getPayment`, see the [client README](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/README.md)), and no more. A Contract Package's Elements are declarations marked as its Provider's (`Provided`), and each Endpoint carries its Provider's name and Standard Rejections, so the client narrows by those Standard Rejections, their codes kept as the Provider wrote them, and reads nodes in the exported Snapshot cut the Endpoint carries (see [The Contract Package](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#the-contract-package) in ARCHITECTURE.md). The Snapshot records the Provider's name, each Endpoint by its identity (see [Identities](https://github.com/CasitaFeliz/cf-loom/blob/main/SNAPSHOT.md#identities) in SNAPSHOT.md), and as `against` the version in the package.json of the installed package that exports them. Endpoints of two Providers in one Dependency, or none, or a Private or own Endpoint, or one of the Service's own Contract Package (`A Provider is another Service: orders-service is this Service`, a type error on `defineService`), is a type error and fails `generate`; one listed twice fails `generate`; `defineDependency` never throws, so what the types refuse, written through a cast, is reported by `generate` at the Dependency's place, `(root) dependencies[0]`, naming the Provider. Several Dependencies may list one Provider's Endpoints, so an Application split into routes can give each its own and each bundle carries only what its route calls; the Snapshot records them together, each Endpoint once. A Dependency lists no Event: a Subscription to another Service's Event takes it from that Service's Contract Package with no Dependency (see [Subscriptions](#subscriptions)). Which Elements a Service or an Application may depend on is in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#dependencies) in ARCHITECTURE.md.

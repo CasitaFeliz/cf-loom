@@ -82,6 +82,13 @@ describe('the handlers README', () => {
     expect(admission).toMatchObject({ kind: 'rejection', rejection: forbidden });
   });
 
+  test('a test replaces one Handler by spreading the map', async () => {
+    const { res } = await import('../snippets/handlers-testing-a-services-own-code-3.ts');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ id: ORDER_ID, status: 'paid' });
+  });
+
   test("the direct call of a Subscription's Message Handler receives its body and answers nothing", async () => {
     const { answer } = await import('../snippets/handlers-testing-a-services-own-code-2.ts');
 

@@ -2,30 +2,34 @@
 
 `client` and its types (see [Types](#types)). How an Outcome travels, how the client decodes it and which Fault it infers when there is none are in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http) in the root ARCHITECTURE.md; how the package is built is in [ARCHITECTURE.md](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/client/ARCHITECTURE.md). Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
-The example leaves out the import of `paymentsDependency`, a Dependency declared as in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#dependencies) in the contract README.
+The examples leave out the imports of `paymentsDependency` and `adminPaymentsDependency`, Dependencies declared as in [Dependencies](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#dependencies) and [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README.
 
 ## Consuming a Contract
 
 ```ts
+// src/payments/amount-of.ts
 import { client } from '@cf-loom/client';
 
-const payments = client(paymentsDependency, {
+export const payments = client(paymentsDependency, {
   baseUrl,
   headers: { 'x-api-key': settings.paymentsKey },   // a string
 });
-const outcome = await payments.getPayment({ params: { paymentId } });
 
-switch (outcome.kind) {
-  case 'success':
-    return outcome.body.amount;
-  case 'rejection':
-    if (outcome.code === 'NOT_FOUND') return null;   // getPayment lists notFound
-    throw new Error(outcome.message);
-  case 'unknown-rejection':
-    throw new Error(`${outcome.code}: ${outcome.message}`);
-  case 'fault':
-    if (outcome.committed === 'no' && outcome.retryable) return null;   // a Caller retries here, as Retrying shows
-    throw new Error(`payments-service failed: ${outcome.source}`);
+export async function amountOf(paymentId: string) {
+  const outcome = await payments.getPayment({ params: { paymentId } });
+
+  switch (outcome.kind) {
+    case 'success':
+      return outcome.body.amount;
+    case 'rejection':
+      if (outcome.code === 'NOT_FOUND') return null;   // getPayment lists notFound
+      throw new Error(outcome.message);
+    case 'unknown-rejection':
+      throw new Error(`${outcome.code}: ${outcome.message}`);
+    case 'fault':
+      if (outcome.committed === 'no' && outcome.retryable) return null;   // a Caller retries here, as Retrying shows
+      throw new Error(`payments-service failed: ${outcome.source}`);
+  }
 }
 ```
 
@@ -70,7 +74,7 @@ Without a key, a call that timed out after the request was sent is never retried
 
 The Faults the client infers from what it met are in the table in [Over HTTP](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-http), and hold wherever `fetch` runs. A 429 and a timeout before the request was sent are `committed: 'no'`, `retryable: true`, so both rules retry them; a 503 and a timeout after it was sent are `committed: 'unknown'`, `retryable: true`, so only a call with a key retries them. What differs is the `TypeError` `fetch` throws for a network failure. Node's carries a `cause.code`: a refused connection is `no-connection`, retried by both rules, and a lost one `connection-lost`, retried only with a key. A browser's is a bare `TypeError`, `connection-failed`: `committed: 'unknown'`, `retryable: false`, so neither rule retries it until `inferFault` relaxes it (see [In a browser](#in-a-browser-applications)). `retryAfter` is the `Retry-After` header as received, a string of whole seconds or an HTTP date.
 
-The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the examples leave out their imports, and the Service's Resources has a `payments` Resource with `byKey` and `create`):
+The Provider's Guard demands the key, its GuardHandler admits the request with it, and its Handler stores each Success under the key and replays it (the Service's Resources has a `payments` Resource with `byKey` and `create`):
 
 ```ts
 // definitions/src/definitions/guards/idempotency-key.guard.ts
@@ -81,7 +85,9 @@ export const idempotencyKey = defineGuard({
   context: z.object({ key: z.string() }),
 });
 
-// src/contract/endpoints/payments/create-payment.endpoint.ts
+// payments-service/src/contract/endpoints/payments/create-payment.endpoint.ts
+import { idempotencyKey } from '@org/definitions';
+
 export const createPayment = defineEndpoint({
   name: 'createPayment',
   method: 'POST',
@@ -93,10 +99,15 @@ export const createPayment = defineEndpoint({
   success: { status: 201, body: z.object({ id: z.string(), amount: z.int() }) },
 });
 
-// src/guards/idempotency-key.handler.ts
+// payments-service/src/guards/idempotency-key.handler.ts
+import { admit, handle } from '@cf-loom/handlers';
+import { idempotencyKey } from '@org/definitions';
+
 export default handle(idempotencyKey, ({ headers }) => admit({ key: headers['idempotency-key'] }));
 
-// src/endpoints/payments/create-payment.handler.ts
+// payments-service/src/endpoints/payments/create-payment.handler.ts
+import { handle, success } from '@cf-loom/handlers';
+
 export default handle(
   createPayment,
   async ({ body }, { context }, { resources: { payments } }: Needs<'payments'>) => {
@@ -161,7 +172,10 @@ A Deprecated Endpoint still works, and its responses carry `Deprecation` (see [L
 An Application (see [Applications](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#applications) in the contract README) calls its Providers from a browser with this same `client`. The package uses only web-standard APIs, no Node API. The browser's own concerns of a Request, `credentials` for one, go through the `fetch` option (see [fetch and inferFault](#fetch-and-inferfault)):
 
 ```ts
-const orders = client(ordersDependency, {
+// web-admin/src/payments.ts
+import { client } from '@cf-loom/client';
+
+export const payments = client(adminPaymentsDependency, {
   baseUrl: 'https://api.example.com',
   headers: { 'x-api-key': apiKey },
   fetch: (request) => fetch(new Request(request, { credentials: 'include' })),   // cookies on a cross-origin call

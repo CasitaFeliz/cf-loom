@@ -1,4 +1,8 @@
-import { getPaymentEndpoint, paymentSettledEventV1 } from '@org/contract-payments-service';
+import {
+  createPaymentEndpoint,
+  getPaymentEndpoint,
+  paymentSettledEventV1,
+} from '@org/contract-payments-service';
 import {
   apiKey,
   definitions,
@@ -64,7 +68,10 @@ describe('the contract README’s declaration examples', () => {
   });
 
   test('the Dependency holds the Endpoints it calls, as listed, and no Event', () => {
-    expect(paymentsDependency).toEqual({ kind: 'dependency', endpoints: [getPaymentEndpoint] });
+    expect(paymentsDependency).toEqual({
+      kind: 'dependency',
+      endpoints: [getPaymentEndpoint, createPaymentEndpoint],
+    });
   });
 
   test('the Guard leaves the key optional, so its Handler decides on a request without one', () => {
