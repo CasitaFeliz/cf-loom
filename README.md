@@ -171,7 +171,7 @@ await applyBrokerPlan({ connect: () => connect({ servers }) }, plan, limits);
 
 ### Serve
 
-`src/main.ts` connects messaging with the Broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
+`src/main.ts` connects messaging with the Broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)). zod can compile the schemas `serve`, `consume` and `client` parse with; whether to is the organization's choice (see [Compiling schemas](packages/server/README.md#compiling-schemas)).
 
 ### Test
 
