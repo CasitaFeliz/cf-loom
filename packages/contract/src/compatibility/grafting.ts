@@ -160,7 +160,6 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
   const put = (schema: SchemaNode) => {
     frame.edits.push({ kind: 'field', name: step.name, field: { ...field, schema } });
   };
-  put(field.schema);
   placeCopy(walk, field.schema, put);
 }
 
