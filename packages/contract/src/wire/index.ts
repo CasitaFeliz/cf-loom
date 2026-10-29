@@ -83,6 +83,12 @@ export {
   sendableRetryAfterOf,
   successResponseOf,
 } from './responses.ts';
+export {
+  snsFactIdAttribute,
+  snsHeadersAttribute,
+  snsMessageIdAttribute,
+  snsSubjectAttribute,
+} from './sns-attributes.ts';
 export { isTextValue, sharedTextOf, textOfValue } from './text.ts';
 export type { TextAcceptance } from './text-acceptance.ts';
 export { textAcceptanceOf } from './text-acceptance.ts';
