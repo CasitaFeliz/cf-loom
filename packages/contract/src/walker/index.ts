@@ -54,7 +54,7 @@ export { neutralAnnotations } from './nodes.ts';
 export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
-export { shapeKey, shapeOf } from './shapes.ts';
+export { byShape, shapeKey, shapeOf } from './shapes.ts';
 export type { PartName, Step } from './steps.ts';
 export {
   authorPathOf,
