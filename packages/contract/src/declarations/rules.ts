@@ -22,6 +22,12 @@ export type DeclaredFieldsRule<Declaration, Shape> = {
   >;
 };
 
+/**
+ * A parameter whose shape cf-loom gives, an options object or what `fault()` is given: `Shape`, and
+ * no field it does not declare, given as a literal or through a variable.
+ */
+export type Closed<Given, Shape> = Shape & Given & NoInfer<DeclaredFieldsRule<Given, Shape>>;
+
 /** What an Endpoint, Guard or Subscription must also satisfy: its name is no reserved name. */
 export type ReservedNameRule<
   Declaration extends { readonly name: string },

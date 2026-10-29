@@ -1,5 +1,6 @@
 import type { Committed } from '@cf-loom/contract';
 import {
+  type Closed,
   internalError,
   type RetryAfterGiven,
   sendableRetryAfterOf,
@@ -28,24 +29,23 @@ type FaultGiven = {
   readonly cause?: unknown;
 };
 
+/** Every field a Fault is given. */
+type FaultFields = FaultGiven & { readonly retryAfter?: number };
+
 /** A retryable Fault that says, in whole seconds from 0, when to retry, which `serve` sends as `Retry-After`. */
-export function fault(
-  given: FaultGiven & { readonly retryable: true; readonly retryAfter: number },
+export function fault<
+  const Given extends FaultGiven & { readonly retryable: true; readonly retryAfter: number },
+>(
+  given: Closed<Given, FaultFields>,
 ): Extract<Fault, { readonly retryable: true }> & { readonly retryAfter: number };
 /**
  * A Fault the Handler knows better than `Internal error`: whether the change was committed and
  * whether retrying is worth it.
  */
-export function fault(
-  given: FaultGiven & { readonly retryAfter?: never },
+export function fault<const Given extends FaultGiven & { readonly retryAfter?: never }>(
+  given: Closed<Given, FaultFields>,
 ): Fault & { readonly retryAfter?: never };
-export function fault({
-  committed,
-  retryable,
-  message,
-  cause,
-  retryAfter,
-}: FaultGiven & { readonly retryAfter?: number }): Fault {
+export function fault({ committed, retryable, message, cause, retryAfter }: FaultFields): Fault {
   const sendable = sendableRetryAfterOf({ retryable, retryAfter });
   if (sendable.kind === 'refused') {
     throw new Error(`fault(): ${sendable.message}`);

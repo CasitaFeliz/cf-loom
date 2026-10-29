@@ -1,3 +1,4 @@
+import type { Closed } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { DirectMeta, MessageMeta, Pairing } from '../calls/index.ts';
 import type { Fault } from '../outcomes/index.ts';
@@ -29,9 +30,12 @@ export type MessageImplementation<
 > = (body: ReceivedBodyOf<Target>, meta: MessageMeta, last: Last) => Answered | Promise<Answered>;
 
 /** The Handler of a Command's Message Version or of a Subscription, written for its pairing in the readers file: calling it reads the body as `consume` would, and answers nothing or the Fault it returned. */
-export type MessageHandler<Target extends Pairing, Resources extends object = NoResources> = ((
+export type MessageHandler<Target extends Pairing, Resources extends object = NoResources> = (<
+  const Given = unknown,
+  const GivenLast = unknown,
+>(
   body: ReceivedBodyOf<Target>,
-  meta?: DirectMeta,
-  ...last: CallArgument<ResourcesField<Resources>>
+  meta?: Closed<Given, DirectMeta>,
+  ...last: CallArgument<GivenLast, ResourcesField<Resources>>
 ) => Promise<Fault | undefined>) &
   HandledBy<Target['declaration'], Resources>;
