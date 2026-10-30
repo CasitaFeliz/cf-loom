@@ -54,13 +54,21 @@ function runPin(checkout: string, ...args: string[]): { status: number | null; s
   return { status: run.status, stderr: run.stderr };
 }
 
+function refusedLinesOf(readme: string): number[] {
+  const pinned = pinnedReadme(readme, repository, commit);
+  return pinned.kind === 'refused' ? pinned.problems.map(({ line }) => line) : [];
+}
+
 describe('pinnedReadme', () => {
   it('points a link to a repository file at main at the commit, keeping its path and anchor', () => {
     const readme = `See [the rule](${atMain}/COMPATIBILITY.md#not-allowed-in-a-contract).`;
 
     const pinned = pinnedReadme(readme, repository, commit);
 
-    expect(pinned).toBe(`See [the rule](${atCommit}/COMPATIBILITY.md#not-allowed-in-a-contract).`);
+    expect(pinned).toEqual({
+      kind: 'pinned',
+      text: `See [the rule](${atCommit}/COMPATIBILITY.md#not-allowed-in-a-contract).`,
+    });
   });
 
   it('pins every such link of a README, several on one line and one inside a code block', () => {
@@ -74,15 +82,16 @@ describe('pinnedReadme', () => {
 
     const pinned = pinnedReadme(readme, repository, commit);
 
-    expect(pinned).toBe(
-      [
+    expect(pinned).toEqual({
+      kind: 'pinned',
+      text: [
         `[one](${atCommit}/CONTEXT.md) and [two](${atCommit}/COMPATIBILITY.md#rules), [three](${atCommit}/SNAPSHOT.md)`,
         '',
         '```md',
         `[in a block](${atCommit}/ARCHITECTURE.md#runtime)`,
         '```',
       ].join('\n'),
-    );
+    });
   });
 
   it.each([
@@ -106,7 +115,7 @@ describe('pinnedReadme', () => {
   ])('leaves %s as it is', (_name, readme) => {
     const pinned = pinnedReadme(readme, repository, commit);
 
-    expect(pinned).toBe(readme);
+    expect(pinned).toEqual({ kind: 'pinned', text: readme });
   });
 
   it('matches the repository literally, so its dot is no wildcard', () => {
@@ -117,12 +126,13 @@ describe('pinnedReadme', () => {
 
     const pinned = pinnedReadme(readme, 'a.b/c', commit);
 
-    expect(pinned).toBe(
-      [
+    expect(pinned).toEqual({
+      kind: 'pinned',
+      text: [
         `[other](https://github.com/axb/c/blob/main/x.md)`,
         `[own](https://github.com/a.b/c/blob/${commit}/x.md)`,
       ].join('\n'),
-    );
+    });
   });
 
   it.each([
@@ -152,19 +162,25 @@ describe('pinnedReadme', () => {
   ])('refuses %s, naming its line', (_form, offending) => {
     const readme = [`[ok](${atMain}/CONTEXT.md)`, '', offending].join('\n');
 
-    const pin = () => pinnedReadme(readme, repository, commit);
+    const refused = refusedLinesOf(readme);
 
-    expect(pin).toThrow(/^line 3: /);
+    expect(refused).toEqual([3]);
   });
 
-  it('names every offending line when a README has several', () => {
+  it('says what is wrong on every offending line when a README has several', () => {
     const readme = ['[x](../up.md)', `[ok](${atMain}/CONTEXT.md)`, `<${atMain}/CONTEXT.md>`].join(
       '\n',
     );
 
-    const pin = () => pinnedReadme(readme, repository, commit);
+    const pinned = pinnedReadme(readme, repository, commit);
 
-    expect(pin).toThrow(/^line 1: .*\nline 3: /);
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [
+        { line: 1, problem: expect.stringContaining('../up.md') },
+        { line: 3, problem: expect.stringContaining(repository) },
+      ],
+    });
   });
 });
 
@@ -203,10 +219,10 @@ describe('repositoryOf', () => {
       'a url with a path in the repository',
       { repository: { url: 'git+https://github.com/CasitaFeliz/cf-loom/x.git' } },
     ],
-  ])('refuses a manifest with %s', (_case, manifest) => {
-    const repository = () => repositoryOf(manifest);
+  ])('names no repository for a manifest with %s', (_case, manifest) => {
+    const repository = repositoryOf(manifest);
 
-    expect(repository).toThrow(/^repository\.url must be /);
+    expect(repository).toBeUndefined();
   });
 });
 
@@ -270,6 +286,22 @@ describe('pin-readme-links', () => {
     expect(filesOf(checkout)).toEqual(before);
   });
 
+  it('fails and writes nothing when a manifest is not JSON', () => {
+    const checkout = aCheckoutWith({
+      'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
+      'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
+      'packages/b/package.json': '{ not json',
+      'packages/b/README.md': '',
+    });
+    const before = filesOf(checkout);
+
+    const run = runPin(checkout, commit);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('SyntaxError');
+    expect(filesOf(checkout)).toEqual(before);
+  });
+
   it.each([
     ['missing', []],
     ['empty', ['']],
@@ -314,9 +346,10 @@ describe('the package READMEs', () => {
       const links = countOf(readme, `github.com/${named}`);
 
       const pinned = pinnedReadme(readme, named, commit);
+      const text = pinned.kind === 'pinned' ? pinned.text : '';
 
-      expect(countOf(pinned, `github.com/${named}/blob/${commit}/`)).toBe(links);
-      expect(countOf(pinned, `github.com/${named}/blob/main`)).toBe(0);
+      expect(countOf(text, `github.com/${named}/blob/${commit}/`)).toBe(links);
+      expect(countOf(text, `github.com/${named}/blob/main`)).toBe(0);
     },
   );
 });

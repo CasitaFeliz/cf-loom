@@ -26,78 +26,86 @@ function problemOf(restOfLine: string, repository: string): string | undefined {
   return undefined;
 }
 
+/** What is wrong on one line of a README. */
+export type ReadmeProblem = { readonly line: number; readonly problem: string };
+
+/** A README pinned to a commit, or the lines that keep it from being pinned. */
+export type ReadmePinning =
+  | { readonly kind: 'pinned'; readonly text: string }
+  | { readonly kind: 'refused'; readonly problems: readonly ReadmeProblem[] };
+
 /**
  * The README with each link to a file of `repository` at `main` pointing at the same file at `commit`.
  *
  * The one form it pins is a Markdown link target `https://github.com/<repository>/blob/main/<path>`, anchor allowed.
- * It throws, with a `line <n>: …` for each README line, on any other reference to `repository` (compared ignoring
- * case) and on a link target with no scheme that is not an anchor `#…`, so a pinned README holds nothing at `main`.
+ * It refuses, with the lines, any other reference to `repository` (compared ignoring case) and any link target with
+ * no scheme that is not an anchor `#…`, so a pinned README holds nothing at `main`.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
  * @param commit - The full SHA of the commit the release packs.
  */
-export function pinnedReadme(readme: string, repository: string, commit: string): string {
+export function pinnedReadme(readme: string, repository: string, commit: string): ReadmePinning {
   const link = linkAtMain(repository);
   const pinToCommit = (_link: string, before: string, after: string) =>
     `${before}${commit}${after}`;
-  const problems: string[] = [];
+  const problems: ReadmeProblem[] = [];
   const pinned: string[] = [];
   for (const [index, line] of readme.split('\n').entries()) {
     const problem = problemOf(line.replace(link, ''), repository);
     if (problem !== undefined) {
-      problems.push(`line ${index + 1}: ${problem}`);
+      problems.push({ line: index + 1, problem });
     }
     pinned.push(line.replace(link, pinToCommit));
   }
   if (problems.length > 0) {
-    throw new Error(problems.join('\n'));
+    return { kind: 'refused', problems };
   }
-  return pinned.join('\n');
+  return { kind: 'pinned', text: pinned.join('\n') };
 }
 
 const githubRepositoryUrl = /^git\+https:\/\/github\.com\/([\w-]+\/[\w.-]+?)\.git$/;
 
 /**
  * The `<owner>/<name>` of the GitHub repository a package's manifest declares in `repository.url`
- * (`git+https://github.com/<owner>/<name>.git`); throws when the field is absent or names another form.
+ * (`git+https://github.com/<owner>/<name>.git`), or `undefined` when the field is absent or names another form.
  */
-export function repositoryOf(manifest: { readonly repository?: unknown }): string {
+export function repositoryOf(manifest: { readonly repository?: unknown }): string | undefined {
   const { repository } = manifest;
   const url =
     typeof repository === 'object' && repository !== null && 'url' in repository
       ? repository.url
       : undefined;
   const match = typeof url === 'string' ? githubRepositoryUrl.exec(url) : null;
-  if (match?.[1] === undefined) {
-    throw new Error('repository.url must be "git+https://github.com/<owner>/<name>.git"');
-  }
-  return match[1];
+  return match?.[1];
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+type PinnedFile = { readonly path: string; readonly text: string };
 
-/** The error `step` throws, with `path` in front of each line of its message. */
-function atPath<Value>(path: string, step: () => Value): Value {
-  try {
-    return step();
-  } catch (error) {
-    throw new Error(messageOf(error).replaceAll(/^/gm, `${path}: `), { cause: error });
-  }
-}
-
-type PinnedReadme = { readonly path: string; readonly text: string };
+/** What pinning a package folder gives: its README pinned, or each problem with its file and line. */
+type FolderPinning =
+  | { readonly kind: 'pinned'; readonly file: PinnedFile }
+  | { readonly kind: 'refused'; readonly problems: readonly string[] };
 
 /** The README of a package folder, pinned with the repository its `package.json` declares. */
-function pinnedReadmeOf(folder: string, commit: string): PinnedReadme {
+function pinFolder(folder: string, commit: string): FolderPinning {
   const manifestPath = join(folder, 'package.json');
-  const manifest = atPath(manifestPath, () => JSON.parse(readFileSync(manifestPath, 'utf8')));
-  const repository = atPath(manifestPath, () => repositoryOf(manifest));
+  const repository = repositoryOf(JSON.parse(readFileSync(manifestPath, 'utf8')));
+  if (repository === undefined) {
+    const form = '"git+https://github.com/<owner>/<name>.git"';
+    return { kind: 'refused', problems: [`${manifestPath}: repository.url must be ${form}`] };
+  }
   const path = join(folder, 'README.md');
-  const text = atPath(path, () => pinnedReadme(readFileSync(path, 'utf8'), repository, commit));
-  return { path, text };
+  const pinning = pinnedReadme(readFileSync(path, 'utf8'), repository, commit);
+  switch (pinning.kind) {
+    case 'pinned':
+      return { kind: 'pinned', file: { path, text: pinning.text } };
+    case 'refused':
+      return {
+        kind: 'refused',
+        problems: pinning.problems.map(({ line, problem }) => `${path}: line ${line}: ${problem}`),
+      };
+  }
 }
 
 /** The folders of `packages/` that hold a README. */
@@ -110,13 +118,19 @@ function packagesWithReadme(): string[] {
 
 /** Pins every package README of the current directory to `commit`, all or none. */
 function pinPackageReadmes(commit: string): void {
-  const pinned: PinnedReadme[] = [];
+  const files: PinnedFile[] = [];
   const problems: string[] = [];
   for (const folder of packagesWithReadme()) {
-    try {
-      pinned.push(pinnedReadmeOf(folder, commit));
-    } catch (error) {
-      problems.push(messageOf(error));
+    const pinning = pinFolder(folder, commit);
+    switch (pinning.kind) {
+      case 'pinned':
+        files.push(pinning.file);
+        break;
+      case 'refused':
+        for (const problem of pinning.problems) {
+          problems.push(problem);
+        }
+        break;
     }
   }
   if (problems.length > 0) {
@@ -124,7 +138,7 @@ function pinPackageReadmes(commit: string): void {
     process.exitCode = 1;
     return;
   }
-  for (const { path, text } of pinned) {
+  for (const { path, text } of files) {
     writeFileSync(path, text);
   }
 }
