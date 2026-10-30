@@ -23,6 +23,14 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
 import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
+import {
+  closeRawCallers,
+  dataFrame,
+  postFrame,
+  type RawCaller,
+  rawCaller,
+  resetFrame,
+} from '../../test/h2-raw.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -218,6 +226,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   closeSessions();
   closeFrameProxies();
+  closeRawCallers();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -781,7 +790,7 @@ describe('fastifyServe', () => {
       ]);
     });
 
-    test('over HTTP/2, a Caller that resets its stream while its body is read fails the read', async () => {
+    test('over HTTP/2, a Caller that ends its body, then resets, has its body read as it ended it', async () => {
       const records: AnsweredRequest[] = [];
       const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
       const { url } = await served({
@@ -804,12 +813,59 @@ describe('fastifyServe', () => {
       stream.write('{"text":');
       await waitFor(50);
       stream.close(constants.NGHTTP2_CANCEL);
-      await Promise.race([recorded, waitFor(1000)]);
+      await recorded;
 
       expect(records.map(({ status, code }) => ({ status, code }))).toEqual([
         { status: 400, code: 'INVALID_INPUT' },
       ]);
     });
+
+    test.each([
+      {
+        name: 'resets its stream with CANCEL',
+        leave: (caller: RawCaller) => caller.send(resetFrame(1, 8)),
+      },
+      {
+        name: 'resets its stream with NO_ERROR',
+        leave: (caller: RawCaller) => caller.send(resetFrame(1, 0)),
+      },
+      { name: 'loses its connection', leave: (caller: RawCaller) => caller.drop() },
+    ])(
+      'over HTTP/2, a Caller that $name before its END_STREAM, after a whole JSON value, fails the read, and no Handler runs',
+      async ({ leave }) => {
+        const records: AnsweredRequest[] = [];
+        const handled: string[] = [];
+        const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+        const noting = handle(noteOrder, ({ body }) => {
+          handled.push(body.text);
+          return success(noteOrder, body);
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ noteOrder: noting }),
+          options: {
+            onAnswered: (answered) => {
+              records.push(answered);
+              record();
+            },
+          },
+        });
+        const caller = rawCaller(url);
+
+        caller.send(
+          postFrame(1, '/notes', { 'content-length': '100' }),
+          dataFrame(1, '{"text":"half of what I meant"}'),
+        );
+        await waitFor(100);
+        leave(caller);
+        await recorded;
+
+        expect(records.map(({ status, code }) => ({ status, code }))).toEqual([
+          { status: 400, code: 'INVALID_INPUT' },
+        ]);
+        expect(handled).toEqual([]);
+      },
+    );
   });
 
   describe('a claimed request is never Fastify’s again', () => {

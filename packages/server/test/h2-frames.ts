@@ -64,7 +64,7 @@ export function wireEndOf(frames: readonly string[]): string {
 }
 
 /** Reads every whole frame in `received` into `framesById`, and returns the bytes left over. */
-function framesRead(received: Buffer, framesById: Map<number, string[]>): Buffer {
+export function framesRead(received: Buffer, framesById: Map<number, string[]>): Buffer {
   let rest = received;
   while (rest.length >= 9 && rest.length >= 9 + rest.readUIntBE(0, 3)) {
     const length = rest.readUIntBE(0, 3);

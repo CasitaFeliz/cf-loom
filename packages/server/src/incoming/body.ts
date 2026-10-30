@@ -1,3 +1,4 @@
+import { Http2ServerRequest } from 'node:http2';
 import type { Incoming } from './incoming.ts';
 
 /** What a body's next read finds on its request: a chunk, the end, or why it failed. */
@@ -42,7 +43,9 @@ async function pulledFrom(incoming: Incoming): Promise<Pulled> {
       return { kind: 'chunk', chunk: new Uint8Array(chunk) };
     }
     if (incoming.readableEnded) {
-      return { kind: 'end' };
+      return isCut(incoming)
+        ? { kind: 'failed', error: new Error('the request was cut off before its end') }
+        : { kind: 'end' };
     }
     if (incoming.destroyed) {
       return { kind: 'failed', error: incoming.errored ?? new Error('the request closed early') };
@@ -65,4 +68,13 @@ function readableAgain(incoming: Incoming): Promise<void> {
       incoming.on(event, settled);
     }
   });
+}
+
+/**
+ * Whether a message that ended was cut off by its Caller and not ended by it: over HTTP/2 Node ends
+ * the request on every stream close and marks a reset or a lost connection as aborted; over
+ * HTTP/1.1 Node fails the message instead.
+ */
+function isCut(incoming: Incoming): boolean {
+  return incoming instanceof Http2ServerRequest && incoming.aborted;
 }
