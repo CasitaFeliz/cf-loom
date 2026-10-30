@@ -1,4 +1,4 @@
-import { rmSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { configDefaults, defineConfig } from 'vitest/config';
 import { writeReadmeService } from './scripts/readme-snippets.ts';
@@ -16,15 +16,20 @@ const spawningTimeout = 30_000;
 /**
  * Written before any test file is collected, since a project's own setup runs after: see CLAUDE.md.
  * Each Vitest process writes a folder of its own, so a second process in the checkout never replaces
- * the files this one's tests read.
+ * the files this one's tests read, and removes it when it exits. Vitest loads this file again, in the
+ * same process, when it restarts for a change to it: that load rewrites the folder, which only an
+ * earlier load can have made, and registers no second removal.
  */
 const readmeService = join(
   import.meta.dirname,
   '.readme-service',
   `${process.pid}-${performance.timeOrigin}`,
 );
+const loadedBefore = existsSync(readmeService);
+if (!loadedBefore) {
+  process.on('exit', () => rmSync(readmeService, { recursive: true, force: true }));
+}
 writeReadmeService(readmeService);
-process.on('exit', () => rmSync(readmeService, { recursive: true, force: true }));
 
 const provide = { readmeService };
 
