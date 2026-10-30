@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import {
   brokerHeaderBytesOf,
@@ -435,4 +436,120 @@ describe('the Broker headers of a Message received', () => {
       names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
     });
   });
+});
+
+describe('the growth of encoding and reading SNS attributes back', () => {
+  /**
+   * How many times longer a shape eight times as large may take: 8 for a read that visits each part once,
+   * which a large object's allocation and collection stretch to 10 to 14, and 64 for one that copies at each part.
+   */
+  const linearGrowth = 24;
+  const growthTimeout = 240_000;
+  const widths = { small: 2_000, large: 16_000 };
+  const lengths = { small: 20_000, large: 160_000 };
+
+  /** A string of `length` code units over every kind the encoding acts on. */
+  function aTextOf(length: number): string {
+    const unit = ['a', '\u0001', '"', '\\', '\u00e9', '\u{1f600}', ' '];
+    return Array.from({ length: Math.ceil(length / 2) }, (_, at) => unit[at % unit.length])
+      .join('')
+      .slice(0, length);
+  }
+
+  const headersOfWidth = (width: number) =>
+    Object.fromEntries(Array.from({ length: width }, (_, at) => [`h${at}`, `value ${at}`]));
+
+  const messageOf = (headers: Readonly<Record<string, string>>) => aMessage({ headers });
+
+  test.each([
+    ['the number of headers', widths, (size: number) => messageOf(headersOfWidth(size))],
+    ['one value’s length', lengths, (size: number) => messageOf({ 'x-pad': aTextOf(size) })],
+  ])(
+    'encoding grows linearly with %s',
+    (_, sizes, aMessageOf) => {
+      const encoding = (size: number) => {
+        const message = aMessageOf(size);
+        return () => snsAttributesOf(message);
+      };
+
+      const growth = growthOf(encoding, sizes, linearGrowth);
+
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+    growthTimeout,
+  );
+
+  test.each([
+    ['the number of headers', widths, (size: number) => messageOf(headersOfWidth(size))],
+    ['one value’s length', lengths, (size: number) => messageOf({ 'x-pad': aTextOf(size) })],
+  ])(
+    'reading back grows linearly with %s',
+    (_, sizes, aMessageOf) => {
+      const reading = (size: number) => {
+        const attributes = snsAttributesOf(aMessageOf(size));
+        return () => receivedSnsAttributesOf(attributes);
+      };
+
+      const growth = growthOf(reading, sizes, linearGrowth);
+
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+    growthTimeout,
+  );
+});
+
+describe('the growth of reading foreign SNS attributes', () => {
+  const linearGrowth = 24;
+  const growthTimeout = 240_000;
+
+  test(
+    'an id attribute of the largest size SQS carries is read, refused or accepted, in time that grows linearly with its length',
+    () => {
+      const aReading = (length: number) => {
+        const attributes = {
+          ...snsAttributesOf(aMessage()),
+          [snsFactIdAttribute]: JSON.stringify('x'.repeat(length)),
+        };
+        return () => receivedSnsAttributesOf(attributes);
+      };
+      const nearOneMebibyte = 1_000_000;
+
+      const accepted = aReading(30_000)();
+      const refused = aReading(nearOneMebibyte)();
+      const growth = growthOf(aReading, { small: 4_000, large: 32_000 }, linearGrowth);
+      const growthBeyond = growthOf(
+        aReading,
+        { small: 125_000, large: nearOneMebibyte },
+        linearGrowth,
+      );
+
+      expect(accepted.kind).toBe('read');
+      expect(refused).toEqual({
+        kind: 'missing',
+        names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
+      });
+      expect(growth).toBeLessThan(linearGrowth);
+      expect(growthBeyond).toBeLessThan(linearGrowth);
+    },
+    growthTimeout,
+  );
+
+  test(
+    'a cf-loom-headers nested 100,000 levels deep is listed as not reading back, in time that grows linearly with its depth',
+    () => {
+      const aReading = (depth: number) => {
+        const nested = `${'{"a":'.repeat(depth)}"x"${'}'.repeat(depth)}`;
+        const attributes = { ...snsAttributesOf(aMessage()), [snsHeadersAttribute]: nested };
+        return () => receivedSnsAttributesOf(attributes);
+      };
+      const deepest = 100_000;
+
+      const read = aReading(deepest)();
+      const growth = growthOf(aReading, { small: deepest / 8, large: deepest }, linearGrowth);
+
+      expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+    growthTimeout,
+  );
 });
