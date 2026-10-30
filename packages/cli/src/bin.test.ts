@@ -1452,7 +1452,17 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
-  test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
+  test.for([
+    '\\r',
+    '\\u0085',
+    '\\u2028',
+    '\\u2029',
+    '\\u000b',
+    '\\u000c',
+    '\\u001c',
+    '\\u001d',
+    '\\u001e',
+  ])(
     'a Root file that throws a text holding %s reports it as one line, with the line break written escaped',
     (visible) => {
       const project = aProject({
