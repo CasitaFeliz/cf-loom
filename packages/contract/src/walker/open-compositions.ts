@@ -1,4 +1,4 @@
-import { nodesReachedFrom } from './children.ts';
+import { nodesReachedFrom } from './def-graph.ts';
 import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';

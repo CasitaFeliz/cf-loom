@@ -1,21 +1,6 @@
-import { childrenOf } from './children.ts';
+import { refsWrittenIn } from './def-graph.ts';
 import type { SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
-
-/** The def names a node's own `ref`s name, each once, inside the node alone, with no def entered. */
-export function refsWrittenIn(node: SchemaNode): readonly string[] {
-  const names = new Set<string>();
-  const pending = [node];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (next.type === 'ref') {
-      names.add(next.name);
-    }
-    for (const child of childrenOf(next)) {
-      pending.push(child.node);
-    }
-  }
-  return [...names];
-}
 
 /**
  * Each def's facts together with those of every def it reaches through `ref`s, from the facts each
