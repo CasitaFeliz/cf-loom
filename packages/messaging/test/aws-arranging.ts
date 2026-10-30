@@ -74,7 +74,14 @@ export async function setQueueAttributes(
 export type RawMessage = {
   readonly body: string;
   readonly attributes?: Readonly<
-    Record<string, { readonly DataType: string; readonly StringValue?: string }>
+    Record<
+      string,
+      {
+        readonly DataType: string;
+        readonly StringValue?: string;
+        readonly BinaryValue?: Uint8Array;
+      }
+    >
   >;
 };
 

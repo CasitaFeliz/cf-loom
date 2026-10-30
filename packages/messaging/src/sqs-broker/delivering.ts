@@ -45,15 +45,17 @@ type Reading =
 
 function readingOf({ queue, message }: ReceivedMessage): Reading {
   const attributes = {
-    [snsMessageIdAttribute]: message.MessageAttributes?.[snsMessageIdAttribute]?.StringValue,
-    [snsFactIdAttribute]: message.MessageAttributes?.[snsFactIdAttribute]?.StringValue,
-    [snsHeadersAttribute]: message.MessageAttributes?.[snsHeadersAttribute]?.StringValue,
+    [snsMessageIdAttribute]: stringValueOf(message, snsMessageIdAttribute),
+    [snsFactIdAttribute]: stringValueOf(message, snsFactIdAttribute),
+    [snsHeadersAttribute]: stringValueOf(message, snsHeadersAttribute),
   };
   const read = receivedSnsAttributesOf(attributes);
-  if (read.kind === 'missing') {
-    return { kind: 'unreadable', names: read.names };
+  const deliveryCount = receiveCountOf(message);
+  if (read.kind === 'missing' || deliveryCount === undefined) {
+    const unreadCount = deliveryCount === undefined ? [receiveCountAttribute] : [];
+    const names = [...(read.kind === 'missing' ? read.names : []), ...unreadCount];
+    return { kind: 'unreadable', names };
   }
-  const deliveryCount = Number(message.Attributes?.['ApproximateReceiveCount']);
   const delivery = {
     messageId: read.messageId,
     factId: read.factId,
@@ -64,6 +66,21 @@ function readingOf({ queue, message }: ReceivedMessage): Reading {
     body: new TextEncoder().encode(message.Body ?? ''),
   };
   return { kind: 'readable', delivery };
+}
+
+const receiveCountAttribute = 'ApproximateReceiveCount';
+
+/** How many times SQS has received the Message, a whole number from 1 as SQS counts them; `undefined` when it says otherwise. */
+function receiveCountOf(message: Message): number | undefined {
+  const text = message.Attributes?.[receiveCountAttribute];
+  const count = text !== undefined && /^[1-9]\d*$/.test(text) ? Number(text) : Number.NaN;
+  return Number.isSafeInteger(count) ? count : undefined;
+}
+
+/** The text of a message attribute of the DataType `String`, which is how cf-loom sends them; an attribute of any other DataType counts as absent. */
+function stringValueOf(message: Message, name: string): string | undefined {
+  const attribute = message.MessageAttributes?.[name];
+  return attribute?.DataType === 'String' ? attribute.StringValue : undefined;
 }
 
 /** Says that the Message is left alone, so the redrive moves it intact to the dead-letter queue, and why: it is not one cf-loom published. */

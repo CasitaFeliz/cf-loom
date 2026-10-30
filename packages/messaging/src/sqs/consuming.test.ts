@@ -440,6 +440,122 @@ describe('consuming over sqs()', () => {
     expect(faults).toEqual([]);
   });
 
+  describe('a Message with cf-loom’s attributes in a form cf-loom cannot read', () => {
+    const valid = {
+      'cf-loom-message-id': '"event.OrderCreated.v1:f-1"',
+      'cf-loom-fact-id': '"f-1"',
+      'cf-loom-headers': '{}',
+    };
+    const asString = (value: string) => ({ DataType: 'String', StringValue: value });
+
+    /** The attributes of a Message that cf-loom reads, but for one that `replacing` gives in another form. */
+    const withOne = (name: keyof typeof valid, replacing: RawAttribute) => ({
+      'cf-loom-message-id': asString(valid['cf-loom-message-id']),
+      'cf-loom-fact-id': asString(valid['cf-loom-fact-id']),
+      'cf-loom-headers': asString(valid['cf-loom-headers']),
+      [name]: replacing,
+    });
+
+    const attributeCases = [
+      {
+        reason: 'DataType Number',
+        name: 'cf-loom-message-id',
+        attribute: { DataType: 'Number', StringValue: '1' },
+      },
+      {
+        reason: 'DataType String.json',
+        name: 'cf-loom-fact-id',
+        attribute: { DataType: 'String.json', StringValue: '"f-1"' },
+      },
+      {
+        reason: 'DataType Binary',
+        name: 'cf-loom-headers',
+        attribute: { DataType: 'Binary', BinaryValue: new TextEncoder().encode('{}') },
+      },
+      {
+        reason: 'a String with an empty StringValue',
+        name: 'cf-loom-fact-id',
+        attribute: { DataType: 'String', StringValue: '' },
+      },
+    ] as const;
+
+    test('the table holds each attribute cf-loom reads and each form it cannot read', () => {
+      const names = new Set<string>(attributeCases.map(({ name }) => name));
+      const reasons = attributeCases.map(({ reason }) => reason);
+
+      expect(names).toEqual(new Set(Object.keys(valid)));
+      expect(reasons).toEqual([
+        'DataType Number',
+        'DataType String.json',
+        'DataType Binary',
+        'a String with an empty StringValue',
+      ]);
+    });
+
+    test.each(attributeCases)(
+      'a Message whose $name is $reason is left for the dead-letter queue, its console line naming that attribute',
+      async ({ name, attribute }) => {
+        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const { consume, connecting, orders } = await aMessaging({
+          limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+        });
+        const id = await storeIn(connecting.sqs, orders.notifyQueue, {
+          body: '{"orderId":"o-1"}',
+          attributes: withOne(name, attribute),
+        });
+        const received: Received[] = [];
+
+        await consume(handlersOf(received), {});
+
+        const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read ${name}`;
+        await until(() => expect(written.mock.calls.map(([text]) => String(text))).toContain(line));
+        expect(received).toEqual([]);
+      },
+    );
+  });
+
+  describe('a Message whose receive count cf-loom cannot read', () => {
+    /** Makes the queue's answers to `ReceiveMessage` carry this `ApproximateReceiveCount`, or none. */
+    function answeringReceiveCount(sqsClient: SQSClient, count: string | undefined): void {
+      alteringAnswers(sqsClient, 'ReceiveMessageCommand', (output) => {
+        const messages = (output['Messages'] ?? []) as { Attributes?: Record<string, string> }[];
+        for (const message of messages) {
+          message.Attributes = count === undefined ? {} : { ApproximateReceiveCount: count };
+        }
+      });
+    }
+
+    test.each([
+      ['absent', undefined],
+      ['0', '0'],
+      ['-1', '-1'],
+      ['not a number', 'many'],
+      ['not a whole number', '1.5'],
+      ['written with a leading zero', '01'],
+      ['written in exponent form', '1e3'],
+    ])(
+      'a Message whose ApproximateReceiveCount is %s is left for the dead-letter queue, its console line naming it',
+      async (_, count) => {
+        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const { publisher, consume, connecting, orders } = await aMessaging();
+        answeringReceiveCount(connecting.sqs, count);
+        const received: Received[] = [];
+        await consume(handlersOf(received), {});
+
+        await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+        const left = `${orders.notifyQueue}: left SQS message `;
+        const reason =
+          ' for the dead-letter queue, since it lacks or cannot read ApproximateReceiveCount';
+        await until(() => {
+          const lines = written.mock.calls.map(([text]) => String(text));
+          expect(lines.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
+        });
+        expect(received).toEqual([]);
+      },
+    );
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
@@ -757,3 +873,10 @@ function fromJson(text: string): Record<string, string> {
 function isLeftLine(line: string): boolean {
   return line.includes(': left SQS message ');
 }
+
+/** A message attribute as SQS carries it. */
+type RawAttribute = {
+  readonly DataType: string;
+  readonly StringValue?: string;
+  readonly BinaryValue?: Uint8Array;
+};
