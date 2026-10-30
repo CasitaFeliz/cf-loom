@@ -10,7 +10,7 @@ import {
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
 import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
-import { brokerHeaders, brokerHeadersName } from './headers.ts';
+import { brokerHeadersName, brokerHeadersSchemaOf } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
 import type { AsyncApiWire } from './wire.ts';
 
@@ -56,7 +56,7 @@ export function asyncApiDocumentOf(
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
-    components: { schemas: schemasOf(defs, published) },
+    components: { schemas: schemasOf(defs, published, brokerHeadersSchemaOf(wire.broker)) },
   };
   return { kind: 'written', document };
 }
@@ -90,6 +90,7 @@ function byIdentity(
 function schemasOf(
   defs: Readonly<Record<string, JsonSchema>>,
   published: readonly PublishedVersion[],
+  brokerHeaders: JsonSchema,
 ): Readonly<Record<string, JsonSchema>> {
   const schemas = published.length === 0 ? defs : { ...defs, [brokerHeadersName]: brokerHeaders };
   return Object.fromEntries(
