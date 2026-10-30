@@ -1,5 +1,5 @@
 import type { Http } from '@cf-loom/contract';
-import { type InputIssue, invalidInputBodyOf } from '@cf-loom/contract/internal';
+import { heldRequestOf, type InputIssue, invalidInputBodyOf } from '@cf-loom/contract/internal';
 import { type DecodedOutcome, outcomeOf, rejectionOf } from '../decoding/index.ts';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import { type InferFault, notSentFaultOf, thrownFaultOf } from '../inference/index.ts';
@@ -41,19 +41,39 @@ export function methodOf(
       return invalidInputOf(called, readied.issues);
     }
     const sent = requestOf(called.endpoint, calling.base, readied.input);
-    const request = signal === undefined ? sent : new Request(sent, { signal });
-    const inferring = { signal, inferFault: calling.inferFault };
-    const send = calling.fetch;
-    let response: Response;
+    const held = signal === undefined ? undefined : heldRequestOf(sent, { signal });
     try {
-      response = await send(request);
-    } catch (e) {
-      return thrownFaultOf(e, inferring) ?? rethrown(e);
+      return await answerOf(held?.request ?? sent, { called, calling, signal }, watch);
+    } finally {
+      held?.release();
     }
-    const outcome = await outcomeOf(response, called, inferring);
-    watch(response);
-    return outcome;
   };
+}
+
+/** One call on its way: its Endpoint, its client's shared settings, and the Caller's signal. */
+type Sending = {
+  readonly called: CalledEndpoint;
+  readonly calling: Calling;
+  readonly signal: AbortSignal | undefined;
+};
+
+/** What a request comes to once sent: the Fault a `fetch` that threw stands for, or its response decoded. */
+async function answerOf(
+  request: Request,
+  { called, calling, signal }: Sending,
+  watch: (response: Response) => void,
+): Promise<DecodedOutcome> {
+  const inferring = { signal, inferFault: calling.inferFault };
+  const send = calling.fetch;
+  let response: Response;
+  try {
+    response = await send(request);
+  } catch (e) {
+    return thrownFaultOf(e, inferring) ?? rethrown(e);
+  }
+  const outcome = await outcomeOf(response, called, inferring);
+  watch(response);
+  return outcome;
 }
 
 /** What reading a call's headers and Input came to: the Input, or what a Caller's code threw. */
