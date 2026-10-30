@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { handle } from '@cf-loom/handlers';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { wakeEach } from '../../test/aws-arranging.ts';
-import { countCommands } from '../../test/aws-clients.ts';
-import { queueCountsOf } from '../../test/aws-reading.ts';
+import { countCommands, failingCommand, holdingCommand } from '../../test/aws-clients.ts';
+import { queueCountsOf, topicNamesOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
-import { handlersOf, type Received } from '../../test/orders.ts';
+import { handlersOf, ordersReaders, type Received } from '../../test/orders.ts';
 import {
   aGate,
   anOrdersMessaging,
@@ -11,7 +12,7 @@ import {
   type Settings,
 } from '../../test/orders-messaging.ts';
 import { until } from '../../test/until.ts';
-import { CloseAbortedError } from '../index.ts';
+import { type BrokerTrouble, CloseAbortedError } from '../index.ts';
 
 let moto: MotoServer;
 
@@ -117,4 +118,113 @@ describe('close over sqs()', () => {
     await next.consume(handlersOf(again), {});
     await until(() => expect(again.map(({ meta }) => meta.deliveryCount)).toEqual([2]));
   });
+
+  test('close while consume is still checking the queues means no receive at all', async () => {
+    const { consume, close, connecting } = await aMessaging();
+    const receives = countCommands(connecting.sqs, 'ReceiveMessageCommand');
+    const holding = holdingCommand(connecting.sqs, 'GetQueueAttributesCommand');
+
+    const consuming = consume(handlersOf([]), {});
+    const closing = close();
+    holding.open();
+    await consuming;
+    await closing;
+
+    expect(receives.sent()).toBe(0);
+  });
+
+  test('close while pulls fail leaves no retry pause running and reports nothing more', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { consume, close, connecting } = await aMessaging({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    failingCommand(connecting.sqs, {
+      command: 'ReceiveMessageCommand',
+      error: new Error('SQS is down'),
+    });
+    const timersBefore = activeTimers();
+    await consume(handlersOf([]), {});
+    await until(() => expect(troubles).toHaveLength(2));
+
+    await close();
+
+    expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
+    expect(troubles.map(({ kind }) => kind)).toEqual(['pull-failed', 'pull-failed']);
+  });
+
+  test('close leaves the organization’s SNS and SQS clients usable', async () => {
+    const { consume, close, connecting, orders } = await aMessaging();
+    await consume(handlersOf([]), {});
+    await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
+    await close();
+
+    const topics = await topicNamesOf(connecting.sns);
+    const counts = await queueCountsOf(connecting.sqs, orders.notifyQueue);
+
+    expect(topics).toEqual(['staging_orders-service']);
+    expect(counts.visible + counts.inFlight).toBe(1);
+  });
+
+  test('a hand-back SQS refuses at close makes close reject naming the Durable consumer, with the client’s error as cause', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const first = await aMessaging();
+    const producer = await orderMessagingOver(first.connecting);
+    const refusal = new Error('SQS refused the hand-back');
+    failingCommand(first.connecting.sqs, {
+      command: 'ChangeMessageVisibilityCommand',
+      error: refusal,
+    });
+    const handlers = {
+      ...handlersOf([]),
+      commands: { chargeCardV1: handle.stub(ordersReaders.commands.chargeCardV1) },
+    };
+    await first.consume(handlers, {});
+    const closing = first.close();
+    const rejection = closing.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await producer.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    const error = await rejection;
+    expect(error).toMatchObject({
+      message: `SQS refused to settle Messages of the Durable consumers ${first.orders.notifyDurable}`,
+    });
+    expect((error as Error).cause).toBe(refusal);
+  });
+
+  test('a DeleteMessage SQS refuses after closing aborted makes close reject the same way, naming every Durable consumer once', async () => {
+    const { publisher, sender, consume, close, connecting, orders } = await aMessaging();
+    const refusal = new Error('SQS refused the delete');
+    failingCommand(connecting.sqs, { command: 'DeleteMessageCommand', error: refusal });
+    const received: Received[] = [];
+    const gate = aGate();
+    const held = () => gate.opened;
+    await consume(handlersOf(received, { notify: held, charge: held }), {});
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-2' });
+    await until(() => expect(received).toHaveLength(2));
+    const closing = close();
+    const rejection = closing.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    gate.open();
+
+    const error = await rejection;
+    const message = (error as Error).message;
+    expect(message.startsWith('SQS refused to settle Messages of the Durable consumers ')).toBe(
+      true,
+    );
+    const named = message.slice(message.indexOf('consumers ') + 'consumers '.length).split(', ');
+    expect(named.sort()).toEqual([orders.chargeDurable, orders.notifyDurable].sort());
+    expect((error as Error).cause).toBe(refusal);
+  });
 });
+
+/** How many timers this process has running, to say none outlives what a test closed. */
+function activeTimers(): number {
+  return process.getActiveResourcesInfo().filter((resource) => resource === 'Timeout').length;
+}
