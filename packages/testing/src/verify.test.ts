@@ -244,6 +244,10 @@ describe('fake.verify()', () => {
         `payments-service: getPayment: ${refused}`,
         `payments-service: getSummary: ${refused}`,
       ]);
+      expect(errorsOf(thrown).map((error) => error.message.split(lineBreakPattern))).toEqual([
+        [`payments-service: getPayment: ${refused}`],
+        [`payments-service: getSummary: ${refused}`],
+      ]);
     },
   );
 
