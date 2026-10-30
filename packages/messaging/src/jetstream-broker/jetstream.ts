@@ -1,4 +1,4 @@
-import type { Closed } from '@cf-loom/contract/internal';
+import { type Closed, unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { type Broker, type BrokerPrefixed, checkedPrefixOf, planRemedy } from '../broker/index.ts';

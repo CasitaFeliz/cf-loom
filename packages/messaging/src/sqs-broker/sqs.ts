@@ -1,5 +1,10 @@
 import type { SNSClient } from '@aws-sdk/client-sns';
-import { type Closed, prefixedNameOf } from '@cf-loom/contract/internal';
+import {
+  type Closed,
+  linesTextOf,
+  prefixedNameOf,
+  unbrokenLineOf,
+} from '@cf-loom/contract/internal';
 import {
   type Broker,
   type BrokerPrefixed,
@@ -25,7 +30,7 @@ export function sqs<const Given = unknown>(options: Closed<Given, SqsBrokerOptio
   const prefix = checkedPrefixOf(options.prefix);
   const accountLines = accountLinesOf(options.account);
   if (accountLines.length > 0) {
-    throw new Error(accountLines.join('\n'));
+    throw new Error(linesTextOf(accountLines));
   }
   return {
     connect: async (serviceStream) => {
@@ -41,7 +46,7 @@ export function sqs<const Given = unknown>(options: Closed<Given, SqsBrokerOptio
 async function locatedBy(connecting: SqsConnecting): Promise<Place> {
   const located = await placeOf(connecting);
   if (located.kind === 'refused') {
-    throw new Error(located.lines.join('\n'));
+    throw new Error(linesTextOf(located.lines));
   }
   return located.place;
 }
@@ -55,5 +60,7 @@ async function checkTopic(
   if (serviceStream.subjects.length === 0 || (await isTopic(sns, topic.arn))) {
     return;
   }
-  throw new Error(`The stream ${topic.stream} has no SNS topic ${topic.arn}: ${planRemedy}`);
+  throw new Error(
+    unbrokenLineOf(`The stream ${topic.stream} has no SNS topic ${topic.arn}: ${planRemedy}`),
+  );
 }

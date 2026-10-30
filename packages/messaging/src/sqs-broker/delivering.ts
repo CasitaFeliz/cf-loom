@@ -7,10 +7,12 @@ import {
 } from '@aws-sdk/client-sqs';
 import {
   joinedOf,
+  logOf,
   receivedSnsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,
   snsMessageIdAttribute,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 import type { Delivery, Settlement } from '../broker/index.ts';
 import { deliveryWaitOf } from '../broker-limits/index.ts';
@@ -44,9 +46,10 @@ export function refusalsOf(): Refusals {
       const durables = [...causes.keys()].join(', ');
       return causes.size === 0
         ? undefined
-        : new Error(`SQS refused to settle Messages of the Durable consumers ${durables}`, {
-            cause,
-          });
+        : new Error(
+            unbrokenLineOf(`SQS refused to settle Messages of the Durable consumers ${durables}`),
+            { cause },
+          );
     },
   };
 }
@@ -122,7 +125,9 @@ function leftForTheDeadLetterQueue(
   names: readonly string[],
 ): void {
   console.error(
-    `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names, 'and')}`,
+    ...logOf(
+      `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names, 'and')}`,
+    ),
   );
 }
 

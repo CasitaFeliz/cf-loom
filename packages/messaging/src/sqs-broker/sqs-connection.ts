@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SNS spells its fields in PascalCase
 import { PublishCommand, type SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
-import { prefixedSubjectOf, snsAttributesOf } from '@cf-loom/contract/internal';
+import { linesTextOf, prefixedSubjectOf, snsAttributesOf } from '@cf-loom/contract/internal';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
 import type { Place } from './connecting.ts';
 import { refusalsOf } from './delivering.ts';
@@ -28,7 +28,7 @@ export function sqsConnectionOf(working: Working, topicArn: string): BrokerConne
     consume: async (durableConsumers, { closing, troubled }) => {
       const found = await queuesFoundOf(working, durableConsumers);
       if (found.kind === 'refused') {
-        throw new Error(found.lines.join('\n'));
+        throw new Error(linesTextOf(found.lines));
       }
       for (const queue of found.queues) {
         running.push(receiveFrom(queue, { sqs: working.sqs, closing, troubled, refusals }));

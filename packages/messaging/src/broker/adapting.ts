@@ -1,4 +1,4 @@
-import { brokerPrefixRule, isBrokerPrefix } from '@cf-loom/contract/internal';
+import { brokerPrefixRule, isBrokerPrefix, unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { ConsumeRun, DurableConsumer } from './broker.ts';
 
 /** What a refusal tells whoever reads it to do, when the Broker lacks what the Service's plan lists or holds it differently. */
@@ -17,7 +17,9 @@ export function checkedPrefixOf(prefix: string | undefined): string | null {
   }
   if (!isBrokerPrefix(prefix)) {
     throw new Error(
-      `The broker prefix "${prefix}" is not ${brokerPrefixRule}: leave prefix undefined for none`,
+      unbrokenLineOf(
+        `The broker prefix "${prefix}" is not ${brokerPrefixRule}: leave prefix undefined for none`,
+      ),
     );
   }
   return prefix;
