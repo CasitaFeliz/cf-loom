@@ -1,6 +1,13 @@
+import type { SNSClient } from '@aws-sdk/client-sns';
 import { type Closed, prefixedNameOf } from '@cf-loom/contract/internal';
-import { type Broker, type BrokerPrefixed, checkedPrefixOf, planRemedy } from '../broker/index.ts';
-import { placeOf, type SqsConnecting, topicArnOf } from './connecting.ts';
+import {
+  type Broker,
+  type BrokerPrefixed,
+  checkedPrefixOf,
+  planRemedy,
+  type ServiceStream,
+} from '../broker/index.ts';
+import { type Place, placeOf, type SqsConnecting, topicArnOf } from './connecting.ts';
 import { sqsConnectionOf } from './sqs-connection.ts';
 import { isTopic } from './topic-exists.ts';
 
@@ -12,16 +19,30 @@ export function sqs<const Given = unknown>(options: Closed<Given, SqsBrokerOptio
   const prefix = checkedPrefixOf(options.prefix);
   return {
     connect: async (serviceStream) => {
-      const located = await placeOf(options);
-      if (located.kind === 'refused') {
-        throw new Error(located.lines.join('\n'));
-      }
+      const place = await locatedBy(options);
       const stream = prefixedNameOf(prefix, serviceStream.stream);
-      const topicArn = topicArnOf(located.place, stream);
-      if (!(await isTopic(options.sns, topicArn))) {
-        throw new Error(`The stream ${stream} has no SNS topic ${topicArn}: ${planRemedy}`);
-      }
+      await checkTopic(options.sns, serviceStream, { stream, arn: topicArnOf(place, stream) });
       return sqsConnectionOf();
     },
   };
+}
+
+async function locatedBy(connecting: SqsConnecting): Promise<Place> {
+  const located = await placeOf(connecting);
+  if (located.kind === 'refused') {
+    throw new Error(located.lines.join('\n'));
+  }
+  return located.place;
+}
+
+/** Refuses a Service that publishes or sends when its Stream has no topic; one that does neither needs none. */
+async function checkTopic(
+  sns: SNSClient,
+  serviceStream: ServiceStream,
+  topic: { readonly stream: string; readonly arn: string },
+): Promise<void> {
+  if (serviceStream.subjects.length === 0 || (await isTopic(sns, topic.arn))) {
+    return;
+  }
+  throw new Error(`The stream ${topic.stream} has no SNS topic ${topic.arn}: ${planRemedy}`);
 }

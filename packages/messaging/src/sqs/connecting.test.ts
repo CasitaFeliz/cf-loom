@@ -1,3 +1,4 @@
+import { defineService } from '@cf-loom/contract';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { anAwsConnecting } from '../../test/aws-clients.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
@@ -37,5 +38,14 @@ describe('sqs()', () => {
     await expect(opening).rejects.toThrow(
       `The stream staging_orders-service has no SNS topic arn:aws:sns:eu-west-1:123456789012:staging_orders-service: apply the Service's Broker plan`,
     );
+  });
+
+  test('a Service that publishes and sends nothing connects with no topic at all', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    const quiet = defineService({ name: 'quiet-service' });
+
+    const opening = messaging(quiet, sqs(connecting));
+
+    await expect(opening).resolves.toBeDefined();
   });
 });
