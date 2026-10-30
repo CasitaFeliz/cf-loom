@@ -127,7 +127,20 @@ export async function deliver(
   await settle(run, received, settlement);
 }
 
+/** Applies the Settlement with SQS's calls; one SQS refuses is told to nobody, as a JetStream acknowledgement is never heard of: the Message comes back after its wait. */
 async function settle(
+  run: QueueRun,
+  received: ReceivedMessage,
+  settlement: Settlement,
+): Promise<void> {
+  try {
+    await settlementApplied(run, received, settlement);
+  } catch {
+    return;
+  }
+}
+
+async function settlementApplied(
   { sqs }: QueueRun,
   { queue, message }: ReceivedMessage,
   settlement: Settlement,

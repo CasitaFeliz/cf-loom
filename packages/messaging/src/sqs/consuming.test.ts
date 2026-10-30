@@ -612,6 +612,99 @@ describe('consuming over sqs()', () => {
     );
   });
 
+  test('each Durable consumer hands its Handler one Message at a time: a second Message stays in the queue, not received, until the first is settled', async () => {
+    const { publisher, consume, connecting, orders } = await aMessaging();
+    const received: Received[] = [];
+    const gate = aGate();
+    const holdingTheFirst = ({ body }: Received) =>
+      (body as { orderId: string }).orderId === 'o-1' ? gate.opened : undefined;
+    await consume(handlersOf(received, { notify: holdingTheFirst }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await until(() => expect(received).toHaveLength(1));
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-2' });
+
+    await expect(queueCountsOf(connecting.sqs, orders.notifyQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 1,
+    });
+    expect(received).toHaveLength(1);
+    gate.open();
+    await until(() => expect(received).toHaveLength(2));
+    expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }, { orderId: 'o-2' }]);
+  });
+
+  test('the Handlers of two Durable consumers run at the same time', async () => {
+    const { publisher, sender, consume } = await aMessaging();
+    const received: Received[] = [];
+    const gate = aGate();
+    await consume(
+      handlersOf(received, { notify: () => gate.opened, charge: () => gate.opened }),
+      {},
+    );
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-2' });
+
+    await until(() =>
+      expect(received.map(({ handler }) => handler).sort()).toEqual([
+        'ChargeCard@1',
+        'notifyOnCreated',
+      ]),
+    );
+  });
+
+  test('a delivery whose onServiceFault throws is left for redelivery', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { publisher, consume } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s' }),
+      onServiceFault: () => {
+        throw new Error('the hook is down');
+      },
+    });
+    const received: Received[] = [];
+    const failing = () => fault({ committed: 'no', retryable: false, message: 'cannot be done' });
+    await consume(handlersOf(received, { notify: failing }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(received.length).toBeGreaterThanOrEqual(2));
+    expect(received.slice(0, 2).map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  });
+
+  test('two fresh Messages on one queue reach the Handler with delivery count 1 each', async () => {
+    const { publisher, consume } = await aMessaging();
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-2' } }, { factId: 'f-2' });
+
+    await until(() => expect(received).toHaveLength(2));
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 1]);
+  });
+
+  test('a DeleteMessage SQS refuses while consuming reaches neither hook nor the console, and the Message comes back after its wait', async () => {
+    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const hooked: unknown[] = [];
+    const { publisher, consume, connecting } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s' }),
+      onServiceFault: (consumed) => void hooked.push(consumed),
+      onBrokerTrouble: (trouble) => void hooked.push(trouble),
+    });
+    const refusal = new Error('SQS refused the delete');
+    failingCommand(connecting.sqs, { command: 'DeleteMessageCommand', error: refusal, times: 1 });
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(received).toHaveLength(2));
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+    expect(hooked).toEqual([]);
+    expect(written).not.toHaveBeenCalled();
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
@@ -936,3 +1029,11 @@ type RawAttribute = {
   readonly StringValue?: string;
   readonly BinaryValue?: Uint8Array;
 };
+
+/** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
+function aGate() {
+  const gate = Promise.withResolvers<undefined>();
+  const open = () => gate.resolve(undefined);
+  onTestFinished(open);
+  return { opened: gate.promise, open };
+}
