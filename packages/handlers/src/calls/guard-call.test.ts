@@ -69,6 +69,7 @@ const permission = defineGuard({
 
 type Held = { readonly permissions: { readonly held: readonly string[] } };
 type Keyed = { readonly callers: { readonly byKey: () => string } };
+type Answer<Handler extends (...args: never[]) => unknown> = Awaited<ReturnType<Handler>>;
 
 const apiKeyDemands = { headers: { 'x-api-key': 'key-1' } };
 const userContext = { userToken: { userId: 'u-1' } };
@@ -430,7 +431,6 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a GuardHandler’s direct call answers the Admission its implementation builds', async () => {
-    type Answer<Handler extends (...args: never[]) => unknown> = Awaited<ReturnType<Handler>>;
     const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
     const teamed = defineGuard({
       name: 'teamed',
@@ -473,10 +473,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a GuardHandler’s direct call answers the Guard’s Rejections and not-implemented', () => {
-    type Rejected = Extract<
-      Awaited<ReturnType<GuardHandler<typeof apiKey>>>,
-      { kind: 'rejection' }
-    >;
+    type Rejected = Extract<Answer<GuardHandler<typeof apiKey>>, { kind: 'rejection' }>;
 
     expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
       typeof unauthenticated | typeof notImplemented
