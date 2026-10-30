@@ -7,9 +7,8 @@ import {
   type NodelessGraph,
   nodelessGraph,
 } from '../../test/random-nodeless-schemas.ts';
-import { aRootPackage } from '../../test/root-package.ts';
-import { defineEndpoint, defineGroup, defineService } from '../index.ts';
-import { refusalsIn, siteTextOf, validateRoot, walkSchemas } from '../internal/index.ts';
+import { validatedAnswering } from '../../test/validated-answering.ts';
+import { refusalsIn, siteTextOf, walkSchemas } from '../internal/index.ts';
 
 const nodelessCycle =
   'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse';
@@ -17,10 +16,11 @@ const nodelessCycle =
 const graphs = Array.from({ length: 5_000 }, (_, index) => nodelessGraph(index + 1));
 
 /*
- * The oracle shares nothing with `src/`. It reads the graph a seed draws: each schema's kind and the
- * schemas it holds, in order. Two schemas lead to each other with no node between when they hold
- * each other through a union's options, an intersection's items or an alias' target, however
- * `.nullable()`, a description, a nested union or intersection stand around the held schema.
+ * The oracle shares nothing with `src/` and simulates no walk. It reads the graph a seed draws:
+ * each schema's kind and the schemas it holds, in order. Two schemas lead to each other with no
+ * node between when they hold each other through a union's options, an intersection's items or an
+ * alias' target, however `.nullable()`, a description, a nested union or intersection stand around
+ * the held schema. A schema fails when it is in such a group or reaches one.
  */
 const nodelessKinds: readonly Kind[] = ['union', 'allOf', 'alias'];
 const nodelessArounds: readonly Around[] = ['nothing', 'nullable', 'described', 'union', 'allOf'];
@@ -93,121 +93,46 @@ function nodelessGroupsOf(graph: NodelessGraph): readonly Group[] {
   return [...groups.values()];
 }
 
-/** A group the walk tells: its schemas, the one entered first, and the declaration it was entered in. */
-type Told = {
-  readonly members: readonly number[];
-  readonly first: number;
-  readonly declaration: number;
-};
-
-/** What the walk of a graph is expected to do, derived from the graph by the rules the documents give. */
-type Expected = {
-  readonly told: readonly Told[];
-  /** Whether each declaration's schema is accepted. */
-  readonly accepted: readonly boolean[];
-  /** The schemas with an id that are defs when the walk ends. */
-  readonly defs: readonly number[];
-};
-
-/** The state of the graph's expected walk. */
-type Run = {
-  readonly graph: NodelessGraph;
-  readonly entries: { index: number; declaration: number }[];
-  readonly written: Set<number>;
-  readonly failed: Set<number>;
-  readonly told: Told[];
-  declaration: number;
-};
-
-const entryOf = (run: Run, index: number) =>
-  run.entries.findIndex((entry) => entry.index === index);
+/**
+ * Whether no member of the group reaches a group outside its own group of schemas: no refusal
+ * fails a member before the group is judged, so the walk tells it (README.md, "its own line is the
+ * only one"). A group that a member's own failure hides stays hidden.
+ */
+function isUnhidden(graph: NodelessGraph, groups: readonly Group[], group: Group): boolean {
+  const inGroups = new Set(groups.flatMap((other) => other.members));
+  return group.members.every((member) => {
+    const walkGroup = cycleOf(graph, allStepsOf, member);
+    return [...reachedFrom(graph, allStepsOf, member)].every(
+      (reached) =>
+        !inGroups.has(reached) || group.members.includes(reached) || walkGroup.includes(reached),
+    );
+  });
+}
 
 /**
- * The walk, run on the graph. A schema is entered each time it is met, and one with an id once; a
- * schema with an id whose own walk holds no refusal is a def, and one that holds a refusal fails
- * and gives its failure to the schemas of its group entered below it. A group of schemas that lead
- * back to each other is closed by the schema entered first, which tells each group of defs that
- * lead back to themselves with no node between at the def entered first, and fails the group.
+ * Where the walk enters each schema with an id, in order, and in which declaration: depth first,
+ * each schema's holds in the order the zod schema keeps them. A schema with no id is entered each
+ * time it is met, and one with an id once.
  */
-function expectedOf(graph: NodelessGraph): Expected {
-  const run: Run = {
-    graph,
-    entries: [],
-    written: new Set(),
-    failed: new Set(),
-    told: [],
-    declaration: 0,
-  };
-  const accepted = graph.declarations.map((root, position) => {
-    run.declaration = position;
-    return !enter(run, root);
-  });
-  const defs = run.entries.map((entry) => entry.index).filter((index) => !run.failed.has(index));
-  return { told: run.told, accepted, defs };
-}
-
-/** Whether the walk of a schema holds a refusal. */
-function enter(run: Run, index: number): boolean {
-  const { graph } = run;
-  const hasId = graph.hasId[index] === true;
-  if (hasId && entryOf(run, index) >= 0) {
-    return run.failed.has(index);
-  }
-  const position = run.entries.length;
-  if (hasId) {
-    run.entries.push({ index, declaration: run.declaration });
-  }
-  let isRefused = false;
-  for (const to of allStepsOf(graph, index)) {
-    isRefused = enter(run, to) || isRefused;
-  }
-  if (!hasId) {
-    return isRefused;
-  }
-  settle(run, index, isRefused);
-  const group = cycleOf(graph, allStepsOf, index);
-  const isRoot = group.every((member) => entryOf(run, member) >= position);
-  return (isRoot && closeGroup(run, index)) || isRefused;
-}
-
-/** A schema with an id whose walk ended is a def, or fails and fails the schemas of its group entered below it. */
-function settle(run: Run, index: number, isRefused: boolean): void {
-  if (!isRefused) {
-    run.written.add(index);
-    return;
-  }
-  run.failed.add(index);
-  const group = cycleOf(run.graph, allStepsOf, index);
-  for (const entry of run.entries.slice(entryOf(run, index) + 1)) {
-    if (group.includes(entry.index)) {
-      run.failed.add(entry.index);
+function entriesOf(graph: NodelessGraph): readonly { index: number; declaration: number }[] {
+  const entries: { index: number; declaration: number }[] = [];
+  const seen = new Set<number>();
+  for (const [declaration, root] of graph.declarations.entries()) {
+    const pending = [root];
+    for (let index = pending.pop(); index !== undefined; index = pending.pop()) {
+      if (graph.hasId[index] === true && seen.has(index)) {
+        continue;
+      }
+      if (graph.hasId[index] === true) {
+        seen.add(index);
+        entries.push({ index, declaration });
+      }
+      for (const to of allStepsOf(graph, index).toReversed()) {
+        pending.push(to);
+      }
     }
   }
-}
-
-/** Tells each group of the defs of the group of schemas closing that leads back to itself with no node between. */
-function closeGroup(run: Run, root: number): boolean {
-  const group = cycleOf(run.graph, allStepsOf, root);
-  const defs = group.filter((member) => run.written.has(member));
-  const stepsAmongDefs: Steps = (graph, index) =>
-    nodelessStepsOf(graph, index).filter((to) => defs.includes(to));
-  const cycles = new Map<string, readonly number[]>();
-  for (const member of defs) {
-    const members = cycleOf(run.graph, stepsAmongDefs, member);
-    if (members.length > 0) {
-      cycles.set(members.join(), members);
-    }
-  }
-  for (const members of cycles.values()) {
-    const byEntry = members.toSorted((left, right) => entryOf(run, left) - entryOf(run, right));
-    const first = byEntry[0] ?? 0;
-    const declaration = run.entries[entryOf(run, first)]?.declaration ?? 0;
-    run.told.push({ members, first, declaration });
-  }
-  for (const member of cycles.size > 0 ? group : []) {
-    run.failed.add(member);
-  }
-  return cycles.size > 0;
+  return entries;
 }
 
 function reaches(graph: NodelessGraph, groups: readonly Group[], index: number): boolean {
@@ -235,25 +160,6 @@ function refusalsOf(walked: ReturnType<typeof walkSchemas>) {
   return [...new Set(refusals)];
 }
 
-/** A Service whose Endpoints `getFirst`, `getSecond` and `getThird` answer the schemas of the graph's declarations. */
-function validatedBy(graph: NodelessGraph) {
-  const names = ['First', 'Second', 'Third'] as const;
-  const endpointAt = (position: number) =>
-    defineEndpoint({
-      name: `get${names[position]}`,
-      method: 'GET',
-      path: `/${names[position]?.toLowerCase()}`,
-      visibility: 'public',
-      description: 'A schema',
-      success: { status: 200, body: graph.schemas[graph.declarations[position] ?? 0]! },
-    });
-  const [first, ...others] = graph.declarations.map((_, position) => endpointAt(position));
-  const endpoints = [first ?? endpointAt(0), ...others] as const;
-  const group = defineGroup({ name: 'schemas', description: 'Schemas', endpoints });
-  const service = defineService({ name: 'orders-service', groups: [group] });
-  return validateRoot(service, aRootPackage(service));
-}
-
 function endpointTextAt(position: number): string {
   const name = ['First', 'Second', 'Third'][position] ?? '';
   return `endpoints.GET /${name.toLowerCase()} (get${name})`;
@@ -270,7 +176,6 @@ function holds(cases: string[], condition: boolean, name: string): void {
 function casesOf(graph: NodelessGraph): readonly string[] {
   const cases: string[] = [];
   const groups = nodelessGroupsOf(graph);
-  const told = expectedOf(graph).told;
   for (const index of walkedByAny(graph)) {
     cases.push(`kind ${graph.kinds[index]}`);
     for (const hold of graph.holds[index] ?? []) {
@@ -278,18 +183,23 @@ function casesOf(graph: NodelessGraph): readonly string[] {
     }
   }
   holds(cases, groups.length === 0, 'no group');
-  holds(cases, told.length < groups.length, 'a group hidden below another');
-  for (const group of told) {
-    for (const drawn of casesOfGroup(graph, group, told)) {
+  holds(
+    cases,
+    groups.some((group) => !isUnhidden(graph, groups, group)),
+    'a group hidden below another',
+  );
+  for (const group of groups) {
+    for (const drawn of casesOfGroup(graph, group, groups)) {
       cases.push(drawn);
     }
   }
   return cases;
 }
 
-function casesOfGroup(graph: NodelessGraph, group: Told, told: readonly Told[]): string[] {
+function casesOfGroup(graph: NodelessGraph, group: Group, groups: readonly Group[]): string[] {
+  const first = group.members[0] ?? 0;
   const cases = [`group of ${Math.min(group.members.length, 3)}`];
-  holds(cases, group.members.length === 1, `lone ${graph.kinds[group.first]}`);
+  holds(cases, group.members.length === 1, `lone ${graph.kinds[first]}`);
   for (const member of group.members) {
     cases.push(`group member ${graph.kinds[member]}`);
     const inside = (graph.holds[member] ?? []).filter(
@@ -300,11 +210,11 @@ function casesOfGroup(graph: NodelessGraph, group: Told, told: readonly Told[]):
     }
     holds(cases, inside.length > 1, 'a def on two cycles');
   }
-  const walkGroup = cycleOf(graph, allStepsOf, group.first);
+  const walkGroup = cycleOf(graph, allStepsOf, first);
   const declared = graph.declarations.filter((root) => reaches(graph, [group], root));
   holds(cases, declared.length > 1, 'a group reached from two declarations');
   holds(cases, group.members.length < walkGroup.length, 'a group inside a larger one');
-  const inWalkGroup = told.filter((other) => walkGroup.includes(other.first));
+  const inWalkGroup = groups.filter((other) => walkGroup.includes(other.members[0] ?? 0));
   holds(cases, inWalkGroup.length > 1, 'two groups in one walk group');
   const above = [...walkedByAny(graph)].filter(
     (index) =>
@@ -316,44 +226,72 @@ function casesOfGroup(graph: NodelessGraph, group: Told, told: readonly Told[]):
   return cases;
 }
 
+/** The refusals of a nodeless cycle the walk raised, each as the schema it sits at and where. */
+function toldIn(graph: NodelessGraph) {
+  const refusals = refusalsOf(walkOf(graph));
+  return {
+    told: refusals
+      .filter(({ construct }) => construct === nodelessCycle)
+      .map((refusal) => ({
+        index: graph.schemas.indexOf(refusal.schema as never),
+        site: siteTextOf(refusal.site),
+      })),
+    others: refusals.filter(({ construct }) => construct !== nodelessCycle),
+  };
+}
+
+/** The problems of what the walk told of a graph: a schema off every group or told twice, a group that nothing hides left untold or told away from its first entered def. */
+function problemsOfTold(graph: NodelessGraph): readonly string[] {
+  const groups = nodelessGroupsOf(graph);
+  const entries = entriesOf(graph);
+  const { told, others } = toldIn(graph);
+  const problems = others.map(({ construct }) => `refused ${construct}`);
+  for (const { index } of told) {
+    const isOffGroups = !groups.some((group) => group.members.includes(index));
+    const count = told.filter((other) => other.index === index).length;
+    holds(problems, isOffGroups, `n${index} told off any group`);
+    holds(problems, count > 1, `n${index} told ${count} times`);
+  }
+  for (const group of groups.filter((other) => isUnhidden(graph, groups, other))) {
+    const first = entries.find((entry) => group.members.includes(entry.index));
+    const inGroup = told.filter(({ index }) => group.members.includes(index));
+    const expected = `n${first?.index} at exports.r${first?.declaration}`;
+    const actual = inGroup.map(({ index, site }) => `n${index} at ${site}`);
+    const text = `group ${group.members}: ${actual.join()} not ${expected}`;
+    holds(problems, actual.join() !== expected, text);
+  }
+  return problems;
+}
+
 describe('walkSchemas: nodeless cycles of random graphs', () => {
-  test('the walk tells each nodeless group once, at its first entered def, and nothing else', () => {
+  test('the walk tells a group nothing hides once, at its first entered def, and a schema off every group or twice never', () => {
     const wrong: string[] = [];
 
     for (const [position, graph] of graphs.entries()) {
-      const expected = expectedOf(graph).told.map(
-        ({ first, declaration }) => `n${first} at exports.r${declaration}`,
-      );
-      const refusals = refusalsOf(walkOf(graph));
-      const told = refusals
-        .filter(({ construct }) => construct === nodelessCycle)
-        .map(
-          (refusal) =>
-            `n${graph.schemas.indexOf(refusal.schema as never)} at ${siteTextOf(refusal.site)}`,
-        );
-      const others = refusals.filter(({ construct }) => construct !== nodelessCycle);
-      if (told.sort().join() !== expected.sort().join() || others.length > 0) {
-        const text = `${told.join()} not ${expected.join()}, ${others.length} others`;
-        wrong.push(`seed ${position + 1}: ${text}`);
+      const problems = problemsOfTold(graph);
+      if (problems.length > 0) {
+        wrong.push(`seed ${position + 1}: ${problems.join('; ')}`);
       }
     }
 
     expect(wrong).toEqual([]);
   });
 
-  test('the walk writes none of the defs of a group it tells, nor of a schema that reaches one, and every other id is a def', () => {
+  test('a declaration is accepted exactly when it reaches no nodeless group, and the defs are the ids that reach none', () => {
     const wrong: string[] = [];
 
     for (const [position, graph] of graphs.entries()) {
-      const expected = expectedOf(graph);
+      const groups = nodelessGroupsOf(graph);
       const walked = walkOf(graph);
       const accepted = walked.located.map(({ walked: located }) => located.kind === 'walked');
+      const expectedAccepted = graph.declarations.map((root) => !reaches(graph, groups, root));
       const defs = Object.keys(walked.defs).sort().join();
-      const expectedDefs = expected.defs
+      const expectedDefs = [...walkedByAny(graph)]
+        .filter((index) => graph.hasId[index] === true && !reaches(graph, groups, index))
         .map((index) => `n${index}`)
         .sort()
         .join();
-      if (defs !== expectedDefs || accepted.join() !== expected.accepted.join()) {
+      if (defs !== expectedDefs || accepted.join() !== expectedAccepted.join()) {
         wrong.push(`seed ${position + 1}: ${defs} not ${expectedDefs}`);
       }
     }
@@ -365,23 +303,25 @@ describe('walkSchemas: nodeless cycles of random graphs', () => {
     const wrong: string[] = [];
 
     for (const [position, graph] of graphs.entries()) {
-      const validated = validatedBy(graph);
+      const groups = nodelessGroupsOf(graph);
+      const validated = validatedAnswering(graph.declarations.map((root) => graph.schemas[root]!));
       const failures = validated.kind === 'valid' ? [] : validated.failures;
-      const told = failures.map((failure) =>
+      const lines = failures.map((failure) =>
         failure.kind === 'not-allowed' && failure.construct === nodelessCycle
           ? [failure.site, ...failure.alsoIn].map(siteTextOf).sort().join()
           : `other ${failure.kind}`,
       );
-      const expected = expectedOf(graph).told.map((group) =>
-        graph.declarations
+      const expected = toldIn(graph).told.map(({ index }) => {
+        const group = groups.find((other) => other.members.includes(index));
+        return graph.declarations
           .map((root, declared) => ({ root, declared }))
-          .filter(({ root }) => reaches(graph, [group], root))
+          .filter(({ root }) => group !== undefined && reaches(graph, [group], root))
           .map(({ declared }) => endpointTextAt(declared))
           .sort()
-          .join(),
-      );
-      if (told.sort().join('|') !== expected.sort().join('|')) {
-        wrong.push(`seed ${position + 1}: ${told.join('|')} not ${expected.join('|')}`);
+          .join();
+      });
+      if (lines.sort().join('|') !== expected.sort().join('|')) {
+        wrong.push(`seed ${position + 1}: ${lines.join('|')} not ${expected.join('|')}`);
       }
     }
 

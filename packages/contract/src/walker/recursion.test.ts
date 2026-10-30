@@ -21,6 +21,7 @@ import {
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
+import { validatedAnswering } from '../../test/validated-answering.ts';
 import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   compatibilityReportOf,
@@ -625,10 +626,44 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
-      test('an id every object has is refused on a nodeless cycle and written off one', () => {
+      test('a group whose root is an object with no id lists every Endpoint that reaches its cycle', () => {
+        const entry: z.ZodType = z.object({
+          get next() {
+            return loop;
+          },
+        });
+        const loop: z.ZodType = z.union([z.lazy(() => loop), z.array(entry)]).meta({ id: 'loop' });
+
+        const validated = summarized(validatedAnswering([entry, entry]));
+
+        expect(validated).toEqual({
+          kind: 'invalid',
+          failures: [
+            {
+              kind: 'not-allowed',
+              location: 'endpoints.GET /first (getFirst) success.body.next',
+              ...nodelessCycle,
+              alsoIn: ['endpoints.GET /second (getSecond)'],
+              origin: undefined,
+            },
+          ],
+        });
+      });
+
+      test('an id every object has is refused on a nodeless cycle', () => {
         const onCycle: z.ZodType = z
           .union([z.lazy(() => onCycle), z.string()])
           .meta({ id: 'constructor' });
+
+        const walked = walkBody(onCycle);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      test('an id every object has is written as a def off a nodeless cycle', () => {
         const offCycle: z.ZodType = z
           .object({
             get next() {
@@ -637,15 +672,10 @@ describe('walkSchemas: recursion', () => {
           })
           .meta({ id: 'constructor' });
 
-        const refusedWalk = walkBody(onCycle);
-        const writtenWalk = walkBody(offCycle);
+        const walked = walkBody(offCycle);
 
-        expect(refusedWalk).toEqual({
-          located: [refused([{ at: '', ...nodelessCycle }])],
-          defs: {},
-        });
-        expect(Object.keys(writtenWalk.defs)).toEqual(['constructor']);
-        expect(writtenWalk.located).toEqual([walkedTo({ type: 'ref', name: 'constructor' })]);
+        expect(Object.keys(walked.defs)).toEqual(['constructor']);
+        expect(walked.located).toEqual([walkedTo({ type: 'ref', name: 'constructor' })]);
       });
 
       test('a nullable def on a cycle through another def fails as a nullable def alone', () => {
@@ -666,7 +696,7 @@ describe('walkSchemas: recursion', () => {
       });
 
       test('the line of a cycle lists a second Endpoint that reaches only a later member of its group', () => {
-        const validated = validatedByTwoAnswering(z.object({ value: tree }), branch);
+        const validated = summarized(validatedAnswering([z.object({ value: tree }), branch]));
 
         expect(validated).toEqual({
           kind: 'invalid',
@@ -2939,24 +2969,7 @@ describe('walkSchemas: recursion', () => {
 
     describe('reached by two Endpoints', () => {
       /** A Service whose two Endpoints answer `body`, `getFirst` before `getSecond`. */
-      function validatedByTwo(body: z.ZodType) {
-        const endpointAt = (name: string, path: string) =>
-          defineEndpoint({
-            name,
-            method: 'GET',
-            path,
-            visibility: 'public',
-            description: 'The tree',
-            success: { status: 200, body },
-          });
-        const endpoints = [
-          endpointAt('getFirst', '/first'),
-          endpointAt('getSecond', '/second'),
-        ] as const;
-        const group = defineGroup({ name: 'trees', description: 'Trees', endpoints });
-        const service = defineService({ name: 'orders-service', groups: [group] });
-        return summarized(validateRoot(service, aRootPackage(service)));
-      }
+      const validatedByTwo = (body: z.ZodType) => summarized(validatedAnswering([body, body]));
 
       const acyclicMoney = {
         construct: '.meta({ id: "money" }) on a schema that lies on no cycle',
@@ -3130,26 +3143,6 @@ function aServiceAnswering(body: z.ZodType) {
 function validated(body: z.ZodType) {
   const service = aServiceAnswering(body);
   return validateRoot(service, aRootPackage(service));
-}
-
-/** A Service whose Endpoints `getFirst` and `getSecond` answer `first` and `second`. */
-function validatedByTwoAnswering(first: z.ZodType, second: z.ZodType) {
-  const endpointAt = (name: string, path: string, body: z.ZodType) =>
-    defineEndpoint({
-      name,
-      method: 'GET',
-      path,
-      visibility: 'public',
-      description: 'The tree',
-      success: { status: 200, body },
-    });
-  const endpoints = [
-    endpointAt('getFirst', '/first', first),
-    endpointAt('getSecond', '/second', second),
-  ] as const;
-  const group = defineGroup({ name: 'trees', description: 'Trees', endpoints });
-  const service = defineService({ name: 'orders-service', groups: [group] });
-  return summarized(validateRoot(service, aRootPackage(service)));
 }
 
 /** The Snapshot of a Service's Root the test knows is valid. */
