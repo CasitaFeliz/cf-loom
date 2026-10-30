@@ -988,6 +988,11 @@ describe('what applyBrokerPlan refuses', () => {
       "limits.durableConsumerDefaults.ackWait [ '1s', '2s', '3s', '4s', '5s', '6s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
     [
+      'a list of seven lists',
+      { streamDefaults: { replicas: [[1], [2], [3], [4], [5], [6], [7]] } },
+      'limits.streamDefaults.replicas [ [ 1 ], [ 2 ], [ 3 ], [ 4 ], [ 5 ], [ 6 ], [ 7 ] ] is not a whole number from 1',
+    ],
+    [
       'a setting broken under each of the four keys, written in reverse, in the order streamDefaults, durableConsumerDefaults, streams, durableConsumers',
       {
         durableConsumers: { charge: { ackWait: '0s' } },
