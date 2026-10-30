@@ -17,6 +17,7 @@ import {
 const optionTypes = {
   out: { type: 'string' },
   prefix: { type: 'string' },
+  broker: { type: 'string' },
   against: { type: 'string' },
   json: { type: 'boolean' },
   'dry-run': { type: 'boolean' },
@@ -53,11 +54,11 @@ function parsedOf(args: readonly string[]) {
   });
 }
 
-/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--against <version|dist-tag>`, `--json`, `--dry-run`, `--force`, `--prerelease`, `--help` and `--version` are the options, any other a usage error. */
+/** Reads the arguments; `--out <dir>`, `--prefix <p>`, `--broker <name>`, `--against <version|dist-tag>`, `--json`, `--dry-run`, `--force`, `--prerelease`, `--help` and `--version` are the options, any other a usage error. */
 function calledOf(args: readonly string[]): Parsed {
   const parsed = parsedOf(args);
   const { positionals, values } = parsed;
-  const { out, prefix, against, force, prerelease, help, version } = values;
+  const { out, prefix, broker, against, force, prerelease, help, version } = values;
   const dryRun = values['dry-run'] === true;
   const output = outputOf(parsed);
   const broken = optionProblemIn(parsed);
@@ -72,6 +73,7 @@ function calledOf(args: readonly string[]): Parsed {
     version: version === true,
     ...(typeof out === 'string' ? { out } : {}),
     ...(prefix === undefined ? {} : { prefix: typeof prefix === 'string' ? prefix : '' }),
+    ...(broker === undefined ? {} : { broker: typeof broker === 'string' ? broker : '' }),
     ...(typeof against === 'string' ? { against } : {}),
   };
   return { kind: 'called', called };

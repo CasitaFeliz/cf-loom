@@ -12,6 +12,7 @@ import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeaders, brokerHeadersName } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
+import type { AsyncApiWire } from './wire.ts';
 
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
@@ -30,13 +31,13 @@ export type AsyncApiDocument = {
 /** The document of a Service's Events. */
 export type AsyncApiWritten = { readonly kind: 'written'; readonly document: AsyncApiDocument };
 
-/** The AsyncAPI document of the Events a Service publishes at a version, each subject under the prefix, if one is given. */
+/** The AsyncAPI document of the Events a Service publishes at a version, as the wire of a Broker carries them. */
 export function asyncApiDocumentOf(
   snapshot: ServiceSnapshot,
-  prefix: string | null,
+  wire: AsyncApiWire,
   version: string,
 ): AsyncApiWritten {
-  const published = publishedVersionsOf(snapshot, prefix);
+  const published = publishedVersionsOf(snapshot, wire.prefix);
   const defs = defComponentsOf(
     published.map(({ event }) => event.body),
     snapshot.defs,

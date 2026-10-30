@@ -629,6 +629,31 @@ describe('cf-loom asyncapi: what it prints', () => {
   });
 });
 
+describe('cf-loom asyncapi --broker', () => {
+  test.for([
+    ['no prefix', []],
+    ['a prefix', ['--prefix', 'staging']],
+  ] as const)(
+    'without --broker and with --broker jetstream, asyncapi prints the same bytes: %s',
+    ([_case, options]) => {
+      const without = cfLoom(fixture, 'asyncapi', ...options);
+
+      const named = cfLoom(fixture, 'asyncapi', '--broker', 'jetstream', ...options);
+
+      expect(without.status).toBe(0);
+      expect(named).toEqual(without);
+    },
+  );
+
+  test('with --broker sqs --json, the document is the document of the JSON output', () => {
+    const plain = JSON.parse(cfLoom(fixture, 'asyncapi', '--broker', 'sqs').stdout);
+
+    const json = cfLoom(fixture, 'asyncapi', '--broker', 'sqs', '--json');
+
+    expect(JSON.parse(json.stdout)).toEqual({ format: 1, status: 0, document: plain });
+  });
+});
+
 describe('cf-loom asyncapi: what it refuses', () => {
   test('asyncapi fails when contract.snapshot.json is missing, exit 1, printing no document', () => {
     const project = aProject(theService);
