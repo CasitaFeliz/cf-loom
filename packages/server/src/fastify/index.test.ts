@@ -1496,6 +1496,25 @@ describe('fastifyServe', () => {
       });
     });
 
+    test('a Success larger than the flow-control window reaches a slow-reading Caller whole, ending with END_STREAM', async () => {
+      const { url } = await served({ fastify: { http2: true } });
+      const wire = await framesProxy(url);
+      const session = h2Session(wire.url);
+
+      const stream = session.request({ ':path': '/report' });
+      stream.pause();
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      const ended = new Promise((resolve) => stream.on('end', resolve));
+      await waitFor(300);
+      stream.resume();
+      await ended;
+      await waitFor(50);
+
+      expect(Buffer.concat(chunks).length).toBe(JSON.stringify({ data: bigData }).length);
+      expect(wireEndOf(wire.framesOf(1))).toBe('end');
+    });
+
     test('when something fails once a request is taken, its stream is reset with an error code, the session’s other streams and the app’s routes keep answering, and the request reaches onRequestAbort, then onResponse, since Node finishes an HTTP/2 response on every close', async () => {
       const hooks: string[] = [];
       const { url } = await served({
