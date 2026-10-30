@@ -9,7 +9,11 @@ import { encodedValueOf, walkSchemas } from '../internal/index.ts';
 type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
 
 function aPlace() {
-  return { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  return {
+    site: { kind: 'export', name: 'body' },
+    declaration: undefined,
+    steps: undefined,
+  } as const;
 }
 
 /** Whether the walker reads a schema as an Open Enum: its enum node's `open`, none for any other node. */
@@ -105,14 +109,14 @@ describe('openEnum', () => {
   });
 
   test('an Open Enum type names the enum it holds', () => {
-    // @ts-expect-error a bare OpenEnum would accept no Open Enum
+    // @ts-expect-error TS2314 a bare OpenEnum would accept no Open Enum
     const bare: OpenEnum | undefined = undefined;
 
     expect(bare).toBeUndefined();
   });
 
   test('openEnum takes string values only', () => {
-    // @ts-expect-error an Open Enum's values are strings
+    // @ts-expect-error TS2322 an Open Enum's values are strings
     const declare = () => contract.openEnum([1, 2]);
 
     expect(declare).not.toThrow();

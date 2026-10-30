@@ -232,6 +232,7 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
+  chainDown,
   formatConstructorOf,
   isJsonValue,
   isSchema,
@@ -239,6 +240,7 @@ export {
   refusalsIn,
   siteTextOf,
   snapshotPathOf,
+  stepListOf,
   tokenOf,
   walkSchemas,
 } from '../walker/index.ts';
@@ -311,6 +313,10 @@ export {
   reservedResponseOf,
   segmentOf,
   sendableRetryAfterOf,
+  snsFactIdAttribute,
+  snsHeadersAttribute,
+  snsMessageIdAttribute,
+  snsSubjectAttribute,
   streamNameOf,
   subjectOf,
   successResponseOf,

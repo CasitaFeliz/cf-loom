@@ -1,5 +1,6 @@
 import { JetStreamApiCodes, type JetStreamManager, type StreamInfo } from '@nats-io/jetstream';
-import { type Applied, isApiError, refusedBy } from './applied.ts';
+import { type Applied, refusedBy } from '../broker-applying/index.ts';
+import { isApiError } from './api-error.ts';
 import type { PlannedStream } from './settings.ts';
 import { missingSubjectsOf } from './stream-check.ts';
 

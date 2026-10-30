@@ -207,7 +207,7 @@ describe('validateRoot: Subscriptions', () => {
       subscriptions: [onRefunded],
     });
 
-    // @ts-expect-error a Provider is another Service
+    // @ts-expect-error TS2322 a Provider is another Service
     const contract = defineService({ name: 'orders-service', groups: [group] });
 
     expect(summarized(validateRoot(contract, aRootPackage(contract)))).toEqual(

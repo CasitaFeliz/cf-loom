@@ -4,11 +4,12 @@ import type { ConnectionOptions, NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { planOf } from '../../test/broker-plans.ts';
 import { droppedUnder, stopServerUnder, withMethods } from '../../test/connections.ts';
 import { arrangeDurableConsumersOf, durableConsumerInfoOf } from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, planOf } from '../../test/streams.ts';
+import { arrangePlanOf } from '../../test/streams.ts';
 import { CloseAbortedError, messaging } from '../index.ts';
 import { jetstream } from './index.ts';
 

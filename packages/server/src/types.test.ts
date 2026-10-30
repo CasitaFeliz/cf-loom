@@ -93,7 +93,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(
         contract,
         {
-          // @ts-expect-error findOrder has no Handler
+          // @ts-expect-error TS2741 findOrder has no Handler
           endpoints: { getOrder: getOrderHandler },
           guards: { apiKey: apiKeyHandler },
         },
@@ -108,7 +108,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(
         contract,
         {
-          // @ts-expect-error findOrder has no Handler
+          // @ts-expect-error TS2741 findOrder has no Handler
           endpoints: { getOrder: getOrderHandler },
           guards: { apiKey: apiKeyHandler },
         },
@@ -124,7 +124,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
         contract,
         {
           endpoints: { getOrder: getOrderHandler, findOrder: findOrderHandler },
-          // @ts-expect-error apiKey has no Handler
+          // @ts-expect-error TS2322 apiKey has no Handler
           guards: {},
         },
         {},
@@ -138,7 +138,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(
         contract,
         {
-          // @ts-expect-error findOrder holds getOrder's Handler
+          // @ts-expect-error TS2322 findOrder holds getOrder's Handler
           endpoints: { getOrder: getOrderHandler, findOrder: getOrderHandler },
           guards: { apiKey: apiKeyHandler },
         },
@@ -155,7 +155,7 @@ describe('serve: the Handler map, typed by the Contract', () => {
       serve(
         contract,
         {
-          // @ts-expect-error a wrapper is no Handler handle() returned
+          // @ts-expect-error TS2322 a wrapper is no Handler handle() returned
           endpoints: { getOrder: getOrderHandler, findOrder: wrapped },
           guards: { apiKey: apiKeyHandler },
         },
@@ -205,9 +205,9 @@ describe('serve: the Handler map, typed by the Contract', () => {
     };
 
     const serving = () => [
-      // @ts-expect-error the Resources of findOrder are any
+      // @ts-expect-error TS2345 the Resources of findOrder are any
       serve(contract, handlers, {}),
-      // @ts-expect-error the Resources of findOrder are any
+      // @ts-expect-error TS2353 the Resources of findOrder are any
       serve(contract, handlers, { resources: { orders: {} } }),
     ];
 
@@ -242,9 +242,9 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
 
     const served = [start(typed), serve(contract, typed, { resources })];
     const serving = () => [
-      // @ts-expect-error the Handlers take the Service's Resources
+      // @ts-expect-error TS2345 the Handlers take the Service's Resources
       serve(contract, typed, {}),
-      // @ts-expect-error the Handlers take the Service's Resources, orders among them
+      // @ts-expect-error TS2322 the Handlers take the Service's Resources, orders among them
       serve(contract, typed, { resources: {} }),
     ];
 
@@ -262,7 +262,7 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
       ...typed,
       endpoints: {
         getOrder: getOrderHandler,
-        // @ts-expect-error the Service has no db
+        // @ts-expect-error TS2322 the Service has no db
         findOrder: alien,
       },
     });
@@ -274,17 +274,17 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
     const unspecified: HandlerMapOf<typeof contract> = typed;
     const neverMap: HandlerMapOf<typeof contract, never> = typed;
     const start = (map: HandlerMapOf<typeof contract, never>) =>
-      // @ts-expect-error the helper's parameter leaves the Resources unspecified
+      // @ts-expect-error TS2322 the helper's parameter leaves the Resources unspecified
       serve(contract, map, { resources });
 
     const serving = () => [
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2345 the annotation leaves the Resources unspecified
       serve(contract, unspecified, {}),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2322 the annotation leaves the Resources unspecified
       serve(contract, unspecified, { resources }),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2345 the annotation leaves the Resources unspecified
       serve(contract, neverMap, {}),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2322 the annotation leaves the Resources unspecified
       serve(contract, neverMap, { resources }),
       start(neverMap),
     ];
@@ -308,14 +308,14 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
       ...typed,
       endpoints: {
         getOrder: getOrderHandler,
-        // @ts-expect-error the brand alone hides what findOrder takes
+        // @ts-expect-error TS2322 the brand alone hides what findOrder takes
         findOrder: bare,
       },
     });
     const serving = () => [
-      // @ts-expect-error the brand alone hides what findOrder takes
+      // @ts-expect-error TS2322 the brand alone hides what findOrder takes
       serve(contract, inferred, { resources }),
-      // @ts-expect-error never hides what findOrder takes
+      // @ts-expect-error TS2322 never hides what findOrder takes
       serve(contract, inferredNever, { resources }),
     ];
 
@@ -326,7 +326,7 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
   test('a map annotated without the Resources is no map annotated with them', () => {
     const unspecified: HandlerMapOf<typeof contract> = typed;
 
-    // @ts-expect-error the annotation left the Resources unspecified
+    // @ts-expect-error TS2322 the annotation left the Resources unspecified
     const widened: HandlerMapOf<typeof contract, Resources> = unspecified;
 
     expect(widened).toBe(typed);
@@ -345,7 +345,7 @@ describe('serve: a Handler map typed with the Service’s Resources', () => {
       ...none,
       endpoints: {
         getOrder: getOrderHandler,
-        // @ts-expect-error the Service has none
+        // @ts-expect-error TS2322 the Service has none
         findOrder: ordersHandler,
       },
     });
@@ -370,7 +370,7 @@ describe('serve: its options are always given', () => {
 
     const served = [serve(contract, handlers, {}), serve(contract, handlers, { maxBodyBytes: 1 })];
     const serving = () => [
-      // @ts-expect-error serve always takes its options
+      // @ts-expect-error TS2554 serve always takes its options
       serve(contract, handlers),
     ];
 
@@ -400,7 +400,7 @@ describe('serve: the options, typed by what they declare', () => {
   test('an options variable holding resources and a misspelled maxBodyBytes is a type error', () => {
     const options = { resources: { clock }, maxBodyByte: 1_048_576 };
 
-    // @ts-expect-error maxBodyByte is not a declared field
+    // @ts-expect-error TS2345 maxBodyByte is not a declared field
     const serving = () => serve(contract, handlersWithClock, options);
 
     expect(serving).toBeTypeOf('function');
@@ -409,7 +409,7 @@ describe('serve: the options, typed by what they declare', () => {
   test('an options variable holding a declared hook and a misspelled one is a type error', () => {
     const options = { onAnswered: () => undefined, onAnswerd: () => undefined };
 
-    // @ts-expect-error onAnswerd is not a declared field
+    // @ts-expect-error TS2345 onAnswerd is not a declared field
     const serving = () => serve(contract, handlers, options);
 
     expect(serving).toBeTypeOf('function');
@@ -467,9 +467,9 @@ describe('serve: the options, typed by what they declare', () => {
     const mistyped = { resources: { clock: 'tick' } };
 
     const serving = () => [
-      // @ts-expect-error findOrder's Handler takes the clock
+      // @ts-expect-error TS2345 findOrder's Handler takes the clock
       serve(contract, handlersWithClock, options),
-      // @ts-expect-error the clock is not what findOrder's Handler takes
+      // @ts-expect-error TS2345 the clock is not what findOrder's Handler takes
       serve(contract, handlersWithClock, mistyped),
     ];
 
@@ -509,12 +509,12 @@ describe('serve: a wrapper over the Handler map', () => {
     const overOptions = <O extends ServeOptions<Resources>>(
       map: HandlerMapOf<typeof contract, Resources>,
       options: O,
-      // @ts-expect-error O may hold a field ServeOptions does not declare
+      // @ts-expect-error TS2379 O may hold a field ServeOptions does not declare
     ) => serve(contract, map, options);
     const overMap = <const H extends Served>(
       map: H,
       options: ServeOptions<ResourcesOf<Pick<H, 'endpoints' | 'guards'>>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked for undeclared fields
+      // @ts-expect-error TS2379 the options of a generic Handler map cannot be checked for undeclared fields
     ) => serve(contract, map, options);
 
     expect([overOptions, overMap]).toHaveLength(2);

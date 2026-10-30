@@ -235,7 +235,7 @@ describe('a client of the faked orders-service', () => {
 
   test('cf-loom’s default NOT_FOUND is a type error and a mistake for the fake', async () => {
     const { fake, client } = fakeOrders();
-    // @ts-expect-error orders-service answers RESOURCE_NOT_FOUND, never cf-loom's default code
+    // @ts-expect-error TS2345 orders-service answers RESOURCE_NOT_FOUND, never cf-loom's default code
     fake.on('getOrder').otherwise((r) => r.reject('NOT_FOUND'));
 
     const invoicing = invoiceFor(client, ORDER_ID);

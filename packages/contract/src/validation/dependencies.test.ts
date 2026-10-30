@@ -214,7 +214,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
   test('an Endpoint of the Service’s own Contract Package in a Dependency fails, and is a type error', () => {
     const ownDependency = defineDependency({ endpoints: [getOrder] });
 
-    // @ts-expect-error a Provider is another Service
+    // @ts-expect-error TS2322 a Provider is another Service
     const contract = defineService({ name: 'orders-service', dependencies: [ownDependency] });
 
     expect(validateInPackage(contract)).toEqual(

@@ -145,11 +145,11 @@ The message system a Service's messaging runs on, through an adapter: it holds t
 _Avoid_: bus, queue, message bus
 
 **Stream**:
-What the Broker stores Messages in: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the Stream of the Service whose Event it takes.
+What a Service's Messages are published to: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the Stream of the Service whose Event it takes. On JetStream it stores the Messages; on SNS/SQS it is an SNS topic, and each Durable consumer's queue stores them.
 _Avoid_: topic, queue, log
 
 **Durable consumer**:
-The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged. The Broker's word, unrelated to a Consumer. Its name (see [Over the Broker](ARCHITECTURE.md#over-the-broker) for its format) is its `durable` in the API, as a Stream's name is its `stream`.
+The Broker's named, persistent position of one Subscription, or of one Command's Message Version, in a Stream, which keeps what the Broker has delivered and what is still unacknowledged (on SNS/SQS, one SQS queue subscribed to its Stream's topic). The Broker's word, unrelated to a Consumer. Its name (see [Over the Broker](ARCHITECTURE.md#over-the-broker) for its format) is its `durable` in the API, as a Stream's name is its `stream`.
 _Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:

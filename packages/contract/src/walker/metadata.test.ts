@@ -8,7 +8,7 @@ import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 const bodyAt = {
   site: { kind: 'export', name: 'body' },
   declaration: undefined,
-  steps: [],
+  steps: undefined,
 } as const;
 
 function walkBody(schema: core.$ZodType) {
@@ -88,14 +88,14 @@ describe('walkSchemas: metadata', () => {
   );
 
   test('an id that is not a string fails', () => {
-    // @ts-expect-error zod types an id as a string
+    // @ts-expect-error TS2322 zod types an id as a string
     const order = z.object({ money: z.string().meta({ id: 42 }) });
 
     expect(walkBody(order)).toEqual(refusedAt('money', '.meta({ id }) that is not a string'));
   });
 
   test('a description that is not a string fails', () => {
-    // @ts-expect-error zod types a description as a string
+    // @ts-expect-error TS2322 zod types a description as a string
     const order = z.object({ note: z.string().meta({ description: 42 }) });
 
     expect(walkBody(order)).toEqual(

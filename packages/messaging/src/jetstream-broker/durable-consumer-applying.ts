@@ -1,5 +1,6 @@
 import { type ConsumerConfig, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
-import { type Applied, isApiError, refusedBy } from './applied.ts';
+import { type Applied, refusedBy } from '../broker-applying/index.ts';
+import { isApiError } from './api-error.ts';
 import type { DurableConsumerSettings } from './durable-consumer-shape.ts';
 import type { PlannedDurableConsumer } from './settings.ts';
 

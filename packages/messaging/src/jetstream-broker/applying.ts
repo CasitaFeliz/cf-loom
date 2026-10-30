@@ -1,11 +1,11 @@
 import type { BrokerPlan, Closed } from '@cf-loom/contract/internal';
 import type { JetStreamManager } from '@nats-io/jetstream';
+import { type Applied, applyInOrder, throwIfRefused } from '../broker-applying/index.ts';
 import type { DefaultsFields } from '../broker-limits/index.ts';
-import type { Applied } from './applied.ts';
 import { drainOrClose, unansweredDrainError } from './connection.ts';
 import { applyDurableConsumer } from './durable-consumer-applying.ts';
 import type { JetStreamConnecting } from './jetstream.ts';
-import type { BrokerLimits } from './limits.ts';
+import type { JetStreamBrokerLimits } from './limits.ts';
 import { checkedOf, type ResolvedPlan } from './settings.ts';
 import { applyStream } from './stream-applying.ts';
 import { managerOf } from './stream-check.ts';
@@ -14,16 +14,16 @@ import { managerOf } from './stream-check.ts';
 export async function applyBrokerPlan<const Given = unknown, const GivenLimits = unknown>(
   connecting: Closed<Given, JetStreamConnecting>,
   plan: BrokerPlan,
-  limits: Closed<GivenLimits, BrokerLimits & DefaultsFields<GivenLimits, BrokerLimits>>,
+  limits: Closed<
+    GivenLimits,
+    JetStreamBrokerLimits & DefaultsFields<GivenLimits, JetStreamBrokerLimits>
+  >,
 ): Promise<void> {
   const checked = checkedOf(plan, limits);
   if (checked.kind === 'refused') {
     throw new Error(checked.message);
   }
-  const applied = await appliedOn(connecting, checked);
-  if (applied.kind === 'refused') {
-    throw new Error(applied.message, { cause: applied.cause });
-  }
+  throwIfRefused(await appliedOn(connecting, checked));
 }
 
 async function appliedOn(
@@ -45,18 +45,9 @@ async function appliedOn(
   return applied.value;
 }
 
-async function applyAll(manager: JetStreamManager, settings: ResolvedPlan): Promise<Applied> {
-  for (const stream of settings.streams) {
-    const applied = await applyStream(manager, stream);
-    if (applied.kind === 'refused') {
-      return applied;
-    }
-  }
-  for (const planned of settings.durableConsumers) {
-    const applied = await applyDurableConsumer(manager, planned);
-    if (applied.kind === 'refused') {
-      return applied;
-    }
-  }
-  return { kind: 'applied' };
+function applyAll(manager: JetStreamManager, settings: ResolvedPlan): Promise<Applied> {
+  return applyInOrder(settings, {
+    stream: (stream) => applyStream(manager, stream),
+    durableConsumer: (planned) => applyDurableConsumer(manager, planned),
+  });
 }

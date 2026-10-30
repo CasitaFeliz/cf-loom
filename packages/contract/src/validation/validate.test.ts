@@ -28,12 +28,12 @@ function validateInPackage(root: Root) {
 
 /** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
 function aPlace(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 /** Where a declaration sits: at its site, with the declaration itself and no steps. */
 function sitting(site: Site, declaration: unknown) {
-  return { site, declaration, steps: [] };
+  return { site, declaration, steps: undefined };
 }
 
 function noOrigin() {
@@ -470,7 +470,7 @@ describe('validateRoot', () => {
       path: '/orders',
       visibility: 'public',
       description: 'Creates an order',
-      // @ts-expect-error z.date() is refused by the types, as generate refuses it
+      // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
@@ -504,7 +504,7 @@ describe('validateRoot', () => {
       visibility: 'public',
       description: 'Creates an order',
       input: {
-        // @ts-expect-error z.date() is refused by the types, as generate refuses it
+        // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
         body: z.object({ placedAt: z.date() }),
         headers: z.object({ 'x-tenant': z.object({ id: z.string() }) }),
       },
@@ -544,7 +544,7 @@ describe('validateRoot', () => {
       path: '/orders/',
       visibility: 'public',
       description: 'Creates an order',
-      // @ts-expect-error z.date() is refused by the types, as generate refuses it
+      // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });

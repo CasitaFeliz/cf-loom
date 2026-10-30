@@ -150,7 +150,7 @@ function unsetDurableConsumerLine({ name, names }: Unset): string {
 }
 
 /**
- * What an adapter hands `plannedOf`: the `definer` its refusals word the limits for, such as `BrokerLimits`, and the
+ * What an adapter hands `plannedOf`: the `definer` its refusals word the limits for, such as `JetStreamBrokerLimits`, and the
  * readers and resolution of each kind its Broker has settings for, a `stream` kind only when its Broker has
  * per-Stream settings.
  */

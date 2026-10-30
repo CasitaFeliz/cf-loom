@@ -14,10 +14,16 @@ depend on this one. Write the plan file with every item of section 1, in this or
   need, if one does, and build on it.
 - Say what v1 needs and the smallest version that serves it; leave the rest out and say so.
 - For each shared rule the plan adds, name the issues that will consume it, so it lands where they can reuse it.
+- Write the inputs and invariants item of [1. Plan](../../WORKFLOW.md#1-plan) from what the public API lets an author
+  or a Caller produce, never from the design's own tables. When the issue fixes a defect, find every instance of its
+  kind across the packages before you scope it.
+- Search the whole repository for every name, behavior or term the plan removes, renames or narrows. For each gap you
+  leave out, name the issue that holds it, or list it for the main session to open before the approval.
 - Check every claim against the documents and the code, with file and line. What they settle goes under "Already
   settled", never under questions.
-- Treat a rule whose only job is keeping two sources in step, a config option, a safeguard or a second name for an
-  existing concept as a sign the design is wrong: redesign, or list it as a Root-cause check to run.
+- Treat a rule whose only job is keeping two sources in step, a config option, a safeguard, a second name for an
+  existing concept, or a copy of something cf-loom already decides or derives (in a type, a fake or root tooling, a v1
+  cut included) as a sign the design is wrong: redesign, or list it as a Root-cause check to run before the approval.
 - Decide what [Decisions](../../WORKFLOW.md#decisions) lets the main session decide, and list it. Ask at most about
   five questions, each as Decisions says, with the scenario and the facts it rests on, verified or not.
 

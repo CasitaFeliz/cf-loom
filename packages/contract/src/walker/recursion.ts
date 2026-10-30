@@ -3,7 +3,13 @@ import { startMemos } from './memos.ts';
 import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedDroppedId } from './not-allowed.ts';
-import { type Entered, type Entering, isRemembered, type State } from './recursion-state.ts';
+import {
+  deepestEntryOf,
+  type Entered,
+  type Entering,
+  isRemembered,
+  type State,
+} from './recursion-state.ts';
 import { startRemembered } from './remembered.ts';
 import { type Composition, type Memo, type Walked, type Walking, walked } from './walked.ts';
 import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
@@ -19,25 +25,28 @@ export type Recursion = {
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
   /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
   readonly forgetUnnamedCycles: () => void;
+  /** A composition the walk built, whose refusal is raised inside the remembered schema it is built in. */
+  readonly built: (composition: Composition) => void;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
-export function startRecursion(compositions: readonly Composition[]): Recursion {
+export function startRecursion(): Recursion {
   const state: State = {
     ancestors: [],
     open: [],
     remembered: startRemembered(),
     schemaById: new Map(),
     defById: new Map(),
-    memos: startMemos(compositions),
+    memos: startMemos(),
     count: 0,
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
     forgetUnnamedCycles: () => forgetUnnamedCycles(state),
+    built: (composition) => state.memos.built(composition),
     memoOf: state.memos.memoOf,
   };
 }
@@ -79,6 +88,10 @@ function enter(state: State, entering: Entering): Entered {
     isOpen: true,
     isOnCycle,
     answer: undefined,
+    depth: state.ancestors.length,
+    outer: deepestEntryOf(state, entering.schema),
+    slot: state.open.length,
+    droppedThrough: undefined,
   };
   state.remembered.enter(entered);
   state.ancestors.push(entered);
@@ -106,23 +119,20 @@ function rememberedOf(state: State, entering: Entering): Walked | undefined {
  * still names the cycle, whose schema then fails by that refusal alone.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
-  const closingIndex = state.ancestors.findLastIndex(
-    (ancestor) => ancestor.schema === entering.schema,
-  );
-  const closing = state.ancestors[closingIndex];
+  const closing = deepestEntryOf(state, entering.schema);
   if (closing === undefined) {
     return undefined;
   }
   reachBackTo(state, closing);
-  const cycle = state.ancestors.slice(closingIndex);
   const id = writtenIdOf(entering.schema);
   if (id !== undefined) {
     state.memos.reached(entering.schema, entering.at);
     return walked({ type: 'ref', name: id });
   }
-  if (cycle.some((member) => hasOwnId(member.schema))) {
+  if (isNamedFrom(state, closing.depth)) {
     return undefined;
   }
+  const cycle = state.ancestors.slice(closing.depth);
   const failure = notAllowed(entering.at, unnamedCycleRefusalOf(cycle));
   for (const ancestor of cycle) {
     state.remembered.remember(ancestor, failure);
@@ -130,6 +140,17 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   state.memos.raised(failure.tree);
   state.memos.reached(entering.schema, entering.at);
   return failure;
+}
+
+/** Whether a schema on the path from `depth` on wrote an id, found without copying the path. */
+function isNamedFrom(state: State, depth: number): boolean {
+  for (let index = depth; index < state.ancestors.length; index++) {
+    const member = state.ancestors[index];
+    if (member !== undefined && hasOwnId(member.schema)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** A cycle no id names is refused, naming the id a later call dropped from one of its schemas. */

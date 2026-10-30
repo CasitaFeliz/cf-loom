@@ -1,0 +1,15 @@
+language js
+
+JsCallExpression(callee=or {
+  `performance.now`,
+  `globalThis.performance.now`,
+  `Date.now`,
+  `globalThis.Date.now`,
+  `process.hrtime`,
+  `process.hrtime.bigint`,
+  `process.cpuUsage`,
+  `process.threadCpuUsage`
+}) as $call where {
+  $filename <: r".*\.test\.ts$",
+  register_diagnostic(span=$call, message="C30: a test that bounds time asserts a ratio, never a clock; measure with the growth helpers, or wait for an event.", severity="error")
+}

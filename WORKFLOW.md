@@ -48,14 +48,24 @@ how), and every fact an option depends on is marked as verified by a probe or no
 premise. Before 1.0 the recommendation is the fix at the level of the cause, breaking or not; documenting a
 limitation is never the recommended option.
 
+Every question to the user is written in final form, options and previews included, by the agent that holds its facts:
+the vetter for a plan, the `cf-root-cause` agent for its check, the reviewer or rechecker for a finding. It opens with
+the situation in the user's terms (who does what, and what happens) before any number or name from the code. The main
+session asks it as written; a question it has to write itself first goes through a `cf-plan-vetter` run on that
+question alone. When the main session takes a vetter's, reviewer's or root-cause recommendation, the plan or the round
+comment quotes it word for word; narrowing it is a decision of its own, listed as one.
+
 ## Root-cause check
 
 A `cf-root-cause` agent finds the cause before the user sees options. It runs when:
 
 - a second fix lands on the same area or the same kind of defect in one issue;
 - the user rejects every option offered;
-- a plan or a fix adds to cf-loom a config option, a rule whose only job is keeping two sources in step, a
-  safeguard, a special case, or a second name for a concept that already exists;
+- a plan, a vetter's patch, a fix or a decision (the main session's or a root-cause agent's) adds, to cf-loom or to
+  the repository's own tooling and tests, a config option, a safeguard, a special case, a second name for a concept
+  that already exists, or a second statement of something cf-loom already decides or derives (at the type level, in a
+  fake, in root tooling, as a second table, list or pass, or a document defining a term again), unless one is derived
+  from the other or a test compares the two over their whole domain;
 - a finding is the consequence of an earlier decision;
 - a reviewer marks a finding a class or Escalate, or a fixer stops on a possible class.
 
@@ -65,6 +75,17 @@ proposes anything: a missing concept, a concept in two places, reimplementing wh
 the wrong place. It says whether a documented decision causes it, and offers two or three fixes at the level of the
 cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
 glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
+
+A trigger that a plan, a vet or a finding names runs before the approval or the fix; it is never deferred to review
+and never waived by an argument, only by the user, as a question. A decision that accepts a special case, a safeguard
+or a copy is never left for the user to overrule later: it runs the check or goes to the user.
+
+The agent prototypes the option it recommends and runs on it the reproductions and every instance found. The main
+session adopts a recommendation only when every unverified fact it rests on has been probed, or is put to the user
+marked unverified; that fact becomes the plan's first failing test. The invariant the adopted option establishes is
+written in the package's ARCHITECTURE.md, with a randomized or exhaustive test, in the same PR. When a check reverses a plan
+decision that other decisions rest on, or an earlier check's option, the plan is rewritten and vetted again before
+more code is written.
 
 An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at once. When
 a third would trigger, the issue is held for the user with its state and what is still open, findings or questions, and
@@ -83,18 +104,42 @@ plan comment on the issue:
 - what v1 needs, and the smallest version that serves it;
 - the public API: signatures with their TSDoc;
 - every file, with its one responsibility;
-- the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by a
-  randomized or exhaustive test, and the key set of each public record it adds or renames by a type test
-  ([C26](CODING_STANDARDS.md#tests));
+- its inputs and invariants, each part where it applies:
+  - each value the change reads that it did not build (a request, a Message, a file, a generated file, an option, what
+    a hook or a Broker returns), with the cases its tests cover: malformed, absent, wide and deep, a name every object
+    already has, a throw, rejection or hang from what it calls, and what the platform does by default; or why a case
+    does not apply;
+  - for code that reads a structure whose size an author or a Caller controls: its bound in time, memory and output
+    size against each dimension (depth, width, sharing, count), each covered by a growth test
+    ([C30](CODING_STANDARDS.md#tests));
+  - the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by
+    a randomized or exhaustive test whose generator draws what the public API lets an author or a Caller produce,
+    including every case where the rule acts and every kind of node the format holds (asserted by the test), checked
+    against an independent oracle where one exists; the plan states what the generator leaves out;
+  - for each public type, type parameter or parameter whose type it adds or changes, its type promise: the rows that
+    must not compile and those that must, each a type test through the public entry point, always including `any`,
+    `never`, `unknown`, each type parameter's default, a union, a widened literal, a variable upcast to the shape, a
+    missing optional field and a generic wrapper; a row the mechanism cannot refuse is listed outside the promise, and
+    no document promises more; the key set of each public record it adds or renames is one row
+    ([C26](CODING_STANDARDS.md#tests));
+  - when one rule applies to many sites (parameters, records, reads), a test that lists the sites from the code, never
+    a hand-written list;
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
 - the new terms it adds to [CONTEXT.md](CONTEXT.md), and their existing uses in the documents, which the same PR
   spells as [CLAUDE.md](CLAUDE.md#documents) says;
+- every name, option, command, behavior or term it removes, renames or narrows, and each line of the documents and
+  TSDoc that states it, found by searching the whole repository, not only the sections it implements;
+- when the issue fixes a defect, every other instance of its kind across the packages, each in scope or a follow-up;
+- what it leaves out on purpose, each gap with the issue that holds it, an existing one or one opened before the
+  approval; a rule that judges what an earlier run, publish or version left behind names the record it reads, or
+  lists every input that can change between the two runs;
 - what the documents already settle that the issue relies on, kept apart from what is new;
 - the decisions the main session took itself, and the questions for the user ([Decisions](#decisions)).
 
 A `cf-plan-vetter` agent reads the plan before the user does. It states the problem and sketches its own answer before
-it reads the planner's; probes every fact a decision rests on; checks every option against the design principles; and
+it reads the planner's, its own inputs and invariants among it; probes every fact a decision rests on, checking that
+each probe's or oracle's pool holds the cases the decision changes; checks every option against the design principles; and
 sorts each question into settled by the documents, a decision for the user, or an implementation detail. The user then
 approves the plan or corrects it. Nothing is implemented before the approval.
 
@@ -108,6 +153,8 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] the public API is fixed: signatures and TSDoc;
 - [ ] every file is named, with one responsibility each;
 - [ ] the test list covers every behavior the issue asks for, each test through a public seam;
+- [ ] its inputs and invariants are listed as [1. Plan](#1-plan) says, with every item the vet's own list found missing;
+- [ ] what it removes, renames or narrows was searched across the repository, and every gap it leaves out is an issue;
 - [ ] the document sections it implements are linked, and every change to them is written in the plan;
 - [ ] its new terms are in the plan's CONTEXT.md changes;
 - [ ] what the documents already settle is listed apart from what is new;
@@ -138,7 +185,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 and C29 |
 | Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22); the documents' use of the glossary's terms ([CLAUDE.md](CLAUDE.md#documents)) |
-| Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
+| Correctness | Bugs, the plan's edges and the ones it left out, growth at two sizes, probes, and the tests: C23–C26 and C30 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more
 fields: **Kind**, a slip or one instance of a class, with the other instances found; **Cause**, why the code came out
@@ -146,9 +193,11 @@ this way (a gap in the plan, a missing concept, a misread document); and **Escal
 special case or the area was fixed in an earlier round.
 
 The main session merges the reports, removes duplicates, checks each finding against the code and sorts them in C27's
-order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. The main
-session never fixes an Escalate finding without its check on its own judgment: when it believes the finding only
-completes an earlier Root-cause decision, it asks the user before the merge. Once the round's fixes are pushed, it posts
+order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. An Escalate
+finding waits for its check, except when its fix only deletes code in favor of an owner the code or the documents
+already name, or changes only tests or documents: the round comment then marks it **skipped (deletion only)** or
+**skipped (tests or documents only)**. Any other skip is a question to the user, and an Escalate finding on an issue
+that already used its two checks holds it. Once the round's fixes are pushed, it posts
 one comment on the PR for the round, listing every finding by lens as **fixed**, **asked** (with the user's answer) or
 **dismissed** (with the reason).
 
@@ -157,7 +206,8 @@ one comment on the PR for the round, listing every finding by lens as **fixed**,
 A defect with one evident fix is fixed without asking, removing before adding (C28). A finding that would change a
 public API, a rule or what a document means is put to the user. A `cf-fixer` agent, or the resumed implementer, fixes
 the findings with the user's answers; it writes a failing test for each bug before fixing it, then runs `pnpm test`
-and `pnpm check` and pushes. When a fix lands on an area this PR already fixed, or needs a special case, it stops and
+and `pnpm check` and pushes. When a fix lands on an area this PR already fixed, needs a special case, or adds a second
+table, list, pass or check for what the code already decides, it stops and
 reports a possible class instead.
 
 Round 1 is the first review. Round 2 is one `cf-rechecker` agent, which reads the whole PR with every round's
@@ -174,7 +224,8 @@ A PR is done when all of these hold; the main session checks them and lists them
 - [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head, and actionlint too when the PR
       changes `.github/workflows/`;
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
-- [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
+- [ ] every finding of every round is marked fixed, asked or dismissed on the PR, and every Escalate finding checked,
+      skipped for one of the two reasons of [Review](#3-review), or asked;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
 - [ ] a PR that changes a package carries a changeset (see [.changeset/README.md](.changeset/README.md));
 - [ ] no `TODO` is left without a linked issue;
@@ -197,20 +248,30 @@ After a merge, the main session starts the next issue in milestone order without
 each other may be planned in parallel, and implemented in parallel when their plans share no code file: documents (`*.md`) and `index.ts` export files may be
 shared, code, tests, generated files and `pnpm-lock.yaml` may not. A PR whose base moved gets `main` merged into its
 branch, a plain push, and `pnpm build`, `pnpm test` and `pnpm check` run again; when the merge touched a file the PR
-changes, a short recheck reads the merge before it merges.
+changes, a short recheck reads the merge before it merges. At most four agents build or run tests at once, since more
+have brought the machine down.
 
 ## Milestone sweep
 
-When a milestone's last issue merges, a sweep reads the whole repository, not a diff: every rule and fact in one
-place (C1), duplication across packages, every document against the code, and whether each feature is still worth
-its cost for v1. Its findings, each verified by a second agent, become issues of the next milestone.
+The main session starts a sweep, without being asked, when a milestone's last issue merges, once about 30 issues have
+merged since the last sweep, and before each release candidate. The sweep reads the whole repository, not a diff, one
+agent per feature and lens: every rule and fact in one place (C1), duplication across packages, every document against
+the code, whether each feature is still worth its cost for v1, and correctness at the edges, with the list of
+[1. Plan](#1-plan), on the platforms the packages run on (a browser for `contract` and `client`, a real Broker for
+messaging). Its agents build and run tests at most four at once ([6. Next](#6-next)).
+
+Before it proposes a finding, the sweep sorts it against the plan comments of the closed issues in its area and the
+open issues: new, incomplete (naming the issue that left it), decided (naming the decision), or already filed. It
+proposes the new and the incomplete; the decided go to the user in one list, to reopen or not. A second agent verifies
+each proposed finding, and only then does it become an issue of the next milestone.
 
 ## Documentation and chore issues
 
 An issue that changes only documents or configuration keeps the plan, the Definition of Ready, the fix loop, the
 Definition of Done and the merge, without the items that do not apply (a public API, a test list). The main session
 makes the change itself, since it holds the design context, and one `cf-doc-reviewer` agent reads the PR for
-fidelity, consistency across the documents, and links; a mechanical change (a rename, a find and replace) gets the
+fidelity, consistency across the documents, and links, and follows every procedure the PR adds or changes as a reader
+would; a mechanical change (a rename, a find and replace) gets the
 same reviewer on Sonnet. The main session fixes the findings, and the same reviewer reads the whole PR again each
 round, at most two rounds. The reviewer reads once the change passes locally.
 
@@ -224,10 +285,19 @@ round, at most two rounds. The reviewer reads once the change passes locally.
   ([CLAUDE.md](CLAUDE.md#repository)).
 - Never read or print `~/.npmrc`, environment variables or any file that holds credentials, and never publish except
   to a registry you started yourself.
+- Never reach a real registry, even to read: `npm view`, `npm info`, `npx` and installing a tool all read the user's
+  npm configuration. A probe that needs registry data uses a registry you started.
+- Never use `git stash`: every worktree shares one stash list. Commit work in progress to your own branch instead.
+- Stop only the processes you started, by their PID; never by a pattern (`pkill`, `killall`).
+- Never load the machine on purpose to reproduce a timing failure; report it as a test that bounds time.
+- Run commands with the Node and npm [CLAUDE.md](CLAUDE.md#repository) names first on `PATH`, as CI does.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
-[`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools; the rest
-of these rules rest on the agents.
+[`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools and running
+`git stash`, `pkill`, `killall` and `npx`; a hook, `scripts/shared-state-commands.ts`, refuses the same commands
+anywhere in a command line (`git -C <dir> stash`, after `&&`), and another, `scripts/one-question.ts`, refuses an
+`AskUserQuestion` call with more than one question ([Decisions](#decisions)). The rest of these rules rest on the
+agents.
 
 ## Changesets
 

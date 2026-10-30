@@ -50,7 +50,7 @@ describe('dependent Guards', () => {
   });
 
   test('a missing required Guard is a type error', () => {
-    // @ts-expect-error permission requires tenant earlier in guards
+    // @ts-expect-error TS2322 permission requires tenant earlier in guards
     const declare = () => defineEndpoint({ ...endpoint, guards: [userToken, permission] });
 
     expect(declare).not.toThrow();
@@ -58,14 +58,14 @@ describe('dependent Guards', () => {
 
   test('a required Guard listed later is a type error', () => {
     const declare = () =>
-      // @ts-expect-error tenant requires userToken earlier in guards
+      // @ts-expect-error TS2322 tenant requires userToken earlier in guards
       defineEndpoint({ ...endpoint, guards: [internalOnly, tenant, userToken] });
 
     expect(declare).not.toThrow();
   });
 
   test('a Guard listed twice is a type error', () => {
-    // @ts-expect-error userToken is listed twice
+    // @ts-expect-error TS2322 userToken is listed twice
     const declare = () => defineEndpoint({ ...endpoint, guards: [userToken, userToken] });
 
     expect(declare).not.toThrow();
@@ -105,7 +105,7 @@ describe('dependent Guards in a diamond', () => {
 
   test('a Guard listed before one of the two it needs is a type error', () => {
     const declare = () =>
-      // @ts-expect-error audit requires region earlier in guards
+      // @ts-expect-error TS2322 audit requires region earlier in guards
       defineEndpoint({ ...endpoint, guards: [userToken, internalOnly, tenant, audit, region] });
 
     expect(declare).not.toThrow();

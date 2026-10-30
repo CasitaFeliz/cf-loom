@@ -372,7 +372,7 @@ describe("a Message Handler's meta, left out", () => {
 
     expectTypeOf(plain).toBeCallableWith(body);
     expectTypeOf(plain).toBeCallableWith(body, { factId: 'f-1' });
-    // @ts-expect-error Resources required are given after the meta
+    // @ts-expect-error TS2554 Resources required are given after the meta
     const missing = () => withResources(body);
     expectTypeOf(withResources).toBeCallableWith(body, {}, { resources });
     expect(missing).toBeTypeOf('function');
@@ -400,7 +400,7 @@ describe("what a Message Handler's direct call answers", () => {
   test('a Message Handler may return a retryable Fault, but not one with retryAfter', () => {
     const later = fault({ committed: 'no', retryable: true, retryAfter: 5 });
     const retryable = handle(chargeCard, () => fault({ committed: 'no', retryable: true }));
-    // @ts-expect-error the Durable consumer's configuration decides when the Message comes again
+    // @ts-expect-error TS2322 the Durable consumer's configuration decides when the Message comes again
     const timed = handle(chargeCard, () => later);
 
     expect([typeof retryable, typeof timed]).toEqual(['function', 'function']);
@@ -412,7 +412,7 @@ describe("what a Message Handler's direct call answers", () => {
     }
 
     const helped = handle(chargeCard, async (): Promise<MessageFault | undefined> => unavailable());
-    // @ts-expect-error a Message Handler's Fault is a MessageFault, with no retryAfter
+    // @ts-expect-error TS2322 a Message Handler's Fault is a MessageFault, with no retryAfter
     const typedFault = handle(chargeCard, async (): Promise<Fault | undefined> => undefined);
 
     expect([typeof helped, typeof typedFault]).toEqual(['function', 'function']);

@@ -15,6 +15,7 @@ import { headers, type NatsConnection, type Subscription } from '@nats-io/nats-c
 import { connect } from '@nats-io/transport-node';
 import { afterAll, afterEach, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
 import { z } from 'zod';
+import { planOf } from '../../test/broker-plans.ts';
 import { withMethods } from '../../test/connections.ts';
 import {
   arrangeDurableConsumer,
@@ -24,7 +25,7 @@ import {
 } from '../../test/durable-consumers.ts';
 import { aHoldingProxy } from '../../test/holding-proxy.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
-import { arrangePlanOf, dropStream, planOf } from '../../test/streams.ts';
+import { arrangePlanOf, dropStream } from '../../test/streams.ts';
 import {
   type Broker,
   type BrokerTrouble,
@@ -264,16 +265,24 @@ async function waitUntilSettled(stream: string, durable: string, delivered: numb
 
 const oneSecond = 1_000_000_000;
 
-/** A request for a Message a Durable consumer is pulled with: its subject, how long it waits in nanoseconds, and when it was sent. */
-type RecordedPull = { readonly subject: string; readonly expires: number; readonly at: number };
+/** A little under the retry pause of one second, in milliseconds. */
+const beforeRetryPauseEnds = 900;
 
-/** The methods of a NATS connection that record each request for a Message a Durable consumer is pulled with. */
-function recordingPulls(pulls: RecordedPull[]): Replacing {
+/** A request for a Message a Durable consumer is pulled with: its subject and how long it waits in nanoseconds. */
+type RecordedPull = { readonly subject: string; readonly expires: number };
+
+/** The methods of a NATS connection that record each request for a Message a Durable consumer is pulled with, and tell `onRecorded` of each as it is recorded. */
+function recordingPulls(
+  pulls: RecordedPull[],
+  onRecorded: (pull: RecordedPull) => void = () => undefined,
+): Replacing {
   return (connection) => ({
     publish: (subject, data, options) => {
       if (subject.includes('.CONSUMER.MSG.NEXT.')) {
         const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
-        pulls.push({ subject, expires: JSON.parse(text).expires, at: Date.now() });
+        const pull = { subject, expires: JSON.parse(text).expires };
+        pulls.push(pull);
+        onRecorded(pull);
       }
       connection.publish(subject, data, options);
     },
@@ -314,7 +323,7 @@ function causeOf(trouble: BrokerTrouble): string | undefined {
 }
 
 /** The seed of the random order of pull outcomes, printed in its test's name. */
-const seed = 1 + (Date.now() % 2_147_483_646);
+const seed = 1 + Math.floor(Math.random() * 2_147_483_646);
 
 type Step = 'failed' | 'answered';
 
@@ -1658,16 +1667,22 @@ describe('pulling over jetstream()', () => {
     const names = anOrders(prefix);
     await arrangeOrders(prefix, { max_expires: oneSecond / 2 });
     const pulls: RecordedPull[] = [];
-    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls) });
-    const received: Received[] = [];
     const ofNotify = () => pulls.filter(({ subject }) => subject.endsWith(names.notifyDurable));
+    const followedBeforePauseCouldEnd = Promise.withResolvers<boolean>();
+    const timeFirstPull = (pull: RecordedPull) => {
+      if (ofNotify()[0] === pull) {
+        const expiryAndMostOfPause = pull.expires / 1_000_000 + beforeRetryPauseEnds;
+        void sleep(expiryAndMostOfPause).then(() =>
+          followedBeforePauseCouldEnd.resolve(ofNotify().length >= 2),
+        );
+      }
+    };
+    const orders = await aMessaging(prefix, { replacing: recordingPulls(pulls, timeFirstPull) });
+    const received: Received[] = [];
 
     await orders.consume(handlersOf(received), {});
 
-    await vi.waitFor(() => expect(ofNotify().length).toBeGreaterThanOrEqual(4), { timeout: 5_000 });
-    const sentAt = ofNotify().map(({ at }) => at);
-    const gaps = sentAt.slice(1).map((at, index) => at - (sentAt[index] ?? at));
-    expect(Math.max(...gaps)).toBeLessThan(1_000);
+    expect(await followedBeforePauseCouldEnd.promise).toBe(true);
     expect(received).toEqual([]);
   }, 10_000);
 
@@ -1680,14 +1695,14 @@ describe('pulling over jetstream()', () => {
     await orders.consume(handlersOf([]), {});
     await waitUntilPulling(names.stream, names.notifyDurable);
     const pulledBefore = pulls.length;
-
-    const deletedAt = Date.now();
-    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
-
     const nextOf = () =>
       pulls.slice(pulledBefore).find(({ subject }) => subject.endsWith(names.notifyDurable));
+    const askedBeforePauseEnds = sleep(beforeRetryPauseEnds).then(() => nextOf() !== undefined);
+
+    await dropDurableConsumer(server.url, names.stream, names.notifyDurable);
+
     await vi.waitFor(() => expect(nextOf()).toBeDefined(), { timeout: 3_000 });
-    expect((nextOf()?.at ?? 0) - deletedAt).toBeGreaterThanOrEqual(900);
+    expect(await askedBeforePauseEnds).toBe(false);
   }, 10_000);
 
   test.each([
