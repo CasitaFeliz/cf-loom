@@ -1,4 +1,4 @@
-import { isIdHeaderValue, type ReceivedHeaders } from './broker.ts';
+import { isIdHeaderValue, type ReceivedHeaders, transportHeaderFitOf } from './broker.ts';
 
 /** The SNS message attribute a Message's subject travels in, which each Durable consumer's subscription filters on. */
 export const snsSubjectAttribute = 'cf-loom-subject';
@@ -53,15 +53,15 @@ function idOf(text: string | undefined): string | undefined {
   return isIdHeaderValue(id) ? id : undefined;
 }
 
-/** The Transport headers an attribute holds as a JSON object of strings, each an own entry whatever its name. */
+/** The Transport headers an attribute holds as a JSON object of headers the core lets travel, each an own entry whatever its name. */
 function headersOf(text: string | undefined): Readonly<Record<string, string>> | undefined {
   const parsed = parsedJsonOf(text);
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return undefined;
   }
   const entries = Object.entries(parsed);
-  const isEveryText = entries.every(([, value]) => typeof value === 'string');
-  return isEveryText ? Object.fromEntries(entries) : undefined;
+  const travels = entries.every(([name, value]) => transportHeaderFitOf(name, value) === 'travels');
+  return travels ? Object.fromEntries(entries) : undefined;
 }
 
 /** The inverse of `snsAttributesOf` for what a queue received: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */

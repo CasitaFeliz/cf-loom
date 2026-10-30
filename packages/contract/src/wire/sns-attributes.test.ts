@@ -285,3 +285,31 @@ describe('the Transport headers receivedSnsAttributesOf reads', () => {
     });
   });
 });
+
+describe('the Transport headers the core would refuse', () => {
+  test.each([
+    ['a Cf-Loom- name', '{"Cf-Loom-Trace":"abc"}'],
+    ['a Nats- name in lower case', '{"nats-msg-id":"abc"}'],
+    ['a name NATS cannot carry', '{"x trace":"abc"}'],
+    ['a name with a colon', '{"x:trace":"abc"}'],
+    ['a value with a CR', '{"x-trace":"a\\rb"}'],
+    ['a value with a LF', '{"x-trace":"a\\nb"}'],
+    ['a value with whitespace at its end', '{"x-trace":"abc "}'],
+    ['a value with a lone surrogate', '{"x-trace":"\\ud800"}'],
+  ])('a cf-loom-headers holding %s is listed as not reading back', (_, value) => {
+    const attributes = snsAttributesOf(aMessage());
+
+    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+
+    expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+  });
+
+  test('one refused header among accepted ones lists the attribute and gives no header', () => {
+    const attributes = snsAttributesOf(aMessage());
+    const value = '{"x-trace":"abc","Nats-Msg-Id":"abc"}';
+
+    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+
+    expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+  });
+});
