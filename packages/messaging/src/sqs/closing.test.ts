@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { handle } from '@cf-loom/handlers';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { wakeEach } from '../../test/aws-arranging.ts';
@@ -11,6 +12,7 @@ import {
   orderMessagingOver,
   type Settings,
 } from '../../test/orders-messaging.ts';
+import { startProcess } from '../../test/test-process.ts';
 import { until } from '../../test/until.ts';
 import { type BrokerTrouble, CloseAbortedError } from '../index.ts';
 
@@ -31,6 +33,8 @@ beforeEach(async () => {
 function aMessaging(settings: Settings = {}) {
   return anOrdersMessaging(moto.url, settings);
 }
+
+const nodeExecutable = globalThis.process.execPath;
 
 describe('close over sqs()', () => {
   test('close lets the open poll finish and hands back the Message it returns, so the next process receives it at once with delivery count 2', async () => {
@@ -221,6 +225,20 @@ describe('close over sqs()', () => {
     const named = message.slice(message.indexOf('consumers ') + 'consumers '.length).split(', ');
     expect(named.sort()).toEqual([orders.chargeDurable, orders.notifyDurable].sort());
     expect((error as Error).cause).toBe(refusal);
+  });
+
+  test('a process whose messaging over sqs() closed exits on its own: nothing of the adapter’s is left running', async () => {
+    const { connecting, orders } = await aMessaging();
+    const producer = await orderMessagingOver(connecting);
+    await producer.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    const fixture = fileURLToPath(new URL('../../test/sqs-closing-fixture.ts', import.meta.url));
+    const process = startProcess(nodeExecutable, [fixture, moto.url, 'staging']);
+
+    await until(() => expect(process.stdout()).toContain('closing'));
+    await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
+
+    const exit = await process.exited;
+    expect(exit, process.stderr()).toEqual({ status: 0, signal: null });
   });
 });
 
