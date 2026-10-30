@@ -269,4 +269,27 @@ describe('pin-readme-links', () => {
     expect(run.stderr).toContain('packages/b/package.json: repository.url must be ');
     expect(filesOf(checkout)).toEqual(before);
   });
+
+  it.each([
+    ['missing', []],
+    ['empty', ['']],
+    ['short', ['0123456']],
+    ['upper-case', [commit.toUpperCase()]],
+    ['39 digits', [commit.slice(1)]],
+    ['41 digits', [`${commit}0`]],
+    ['not hexadecimal', [`${commit.slice(1)}g`]],
+    ['a branch name', ['main']],
+  ])('prints its usage and writes nothing when the commit is %s', (_case, args) => {
+    const checkout = aCheckoutWith({
+      'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
+      'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
+    });
+    const before = filesOf(checkout);
+
+    const run = runPin(checkout, ...args);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toMatch(/^usage: node scripts\/pin-readme-links\.ts <commit>/);
+    expect(filesOf(checkout)).toEqual(before);
+  });
 });

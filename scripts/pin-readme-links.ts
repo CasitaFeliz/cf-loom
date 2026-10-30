@@ -125,6 +125,20 @@ function pinPackageReadmes(commit: string): void {
   }
 }
 
+const fullCommit = /^[0-9a-f]{40}$/;
+
+/** The command: pins the READMEs to the commit it is given, or says how to give one. */
+function runCommand(commit: string | undefined): void {
+  if (commit === undefined || !fullCommit.test(commit)) {
+    console.error(
+      'usage: node scripts/pin-readme-links.ts <commit>  (40 lower-case hexadecimal digits)',
+    );
+    process.exitCode = 1;
+    return;
+  }
+  pinPackageReadmes(commit);
+}
+
 if (import.meta.main) {
-  pinPackageReadmes(process.argv[2] ?? '');
+  runCommand(process.argv[2]);
 }
