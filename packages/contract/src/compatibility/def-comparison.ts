@@ -1,4 +1,5 @@
 import {
+  canonicalJson,
   closureFactsOf,
   type Defs,
   neutralAnnotations,
@@ -14,6 +15,7 @@ import {
   type NodePair,
   shapeKeyBesidesNullability,
 } from './findings.ts';
+import type { Compared } from './pairs.ts';
 import type { ShapeDifference } from './shape-differences.ts';
 
 /** What differs in a def or in a def it reaches: its shape, or a Neutral annotation. */
@@ -61,18 +63,26 @@ function differencesWithin(pair: NodePair, defs: BothDefs): ReadonlySet<Fact> {
   if (!hasSameShape) {
     return new Set<Fact>(['changed']);
   }
-  const differing = new Set<Fact>(annotationsInside(pair));
-  const reached = refsWrittenIn(pair.baseline);
+  return new Set<Fact>([...annotationsInside(pair), ...factsReachedBy([pair.baseline], defs)]);
+}
+
+/**
+ * The facts of every def the nodes' `ref`s name, and every def those reach, merged: none exactly
+ * when all are the same on both sides. A name the comparison holds nothing for is a change.
+ */
+function factsReachedBy(nodes: readonly SchemaNode[], defs: BothDefs): ReadonlySet<Fact> {
+  const reached = nodes.flatMap(refsWrittenIn);
+  const facts = new Set<Fact>();
   if (reached.length === 0) {
-    return differing;
+    return facts;
   }
   const comparison = comparisonOf(defs);
   for (const name of reached) {
     for (const fact of comparison.get(name) ?? unknownDef) {
-      differing.add(fact);
+      facts.add(fact);
     }
   }
-  return differing;
+  return facts;
 }
 
 function comparisonOf({ baseline, proposed }: BothDefs): DefComparison {
@@ -106,4 +116,37 @@ function ownFactsOf(
   }
   const pair = { baseline, proposed };
   return [...differingAnnotationsOf(pair), ...annotationsInside(pair)];
+}
+
+/**
+ * Whether every def the nodes' `ref`s name, and every def those reach, is the same on both sides:
+ * the def comparison holds no fact for any of them. A name a side holds no def for is a change.
+ */
+function reachesOnlyUnchanged(nodes: readonly SchemaNode[], defs: BothDefs): boolean {
+  return factsReachedBy(nodes, defs).size === 0;
+}
+
+/**
+ * Whether two nodes are `ref`s naming one def that, with every def it reaches, is the same on both
+ * sides, so no rule finds a Difference beyond the two `ref`s themselves.
+ */
+export function isUnchangedRefPair({ baseline, proposed }: NodePair, defs: BothDefs): boolean {
+  return (
+    baseline.type === 'ref' &&
+    proposed.type === 'ref' &&
+    baseline.name === proposed.name &&
+    reachesOnlyUnchanged([baseline], defs)
+  );
+}
+
+/**
+ * Whether two values are the same canonical text and every def their schema nodes reach is the
+ * same on both sides; the nodes are the Baseline's, whose `ref`s the proposed one writes alike.
+ */
+export function isSameReaching(
+  { baseline, proposed }: Compared<unknown>,
+  nodes: readonly SchemaNode[],
+  defs: BothDefs,
+): boolean {
+  return canonicalJson(baseline) === canonicalJson(proposed) && reachesOnlyUnchanged(nodes, defs);
 }
