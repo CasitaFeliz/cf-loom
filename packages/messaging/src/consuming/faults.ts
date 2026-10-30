@@ -1,5 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import { issueLineOf, logOf } from '@cf-loom/contract/internal';
+import { issueLinesOf, logOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -46,12 +46,12 @@ export function reportOf(onServiceFault: ServiceFaultHook | undefined): Report {
   };
 }
 
-/** The lines a fault is told in, wherever it is told: one per Issue, or one for a Fault or a throw. */
+/** The lines a fault is told in, wherever it is told: its Issues listed and counted, or one line for a Fault or a throw. */
 export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
   const source = sourceOf(fault);
   switch (fault.kind) {
     case 'invalid-body':
-      return fault.issues.map((issue) => issueLineOf(source, issue));
+      return issueLinesOf(source, fault.issues);
     case 'returned':
     case 'thrown':
       return [failureLineOf(source, fault)];
