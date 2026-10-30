@@ -363,6 +363,7 @@ export {
   isPlainObject,
   isSameRejection,
   issueLineOf,
+  listedIssueLinesOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,

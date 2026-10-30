@@ -40,7 +40,7 @@ Broker options come from the Service; cf-loom has no defaults for them.
 - `returned`, a Fault the Handler returned, retryable or not, as `fault`;
 - `thrown`, anything thrown, as `cause`.
 
-Without an `onServiceFault`, they go to the console, one line per Issue after `<name> <subject> <messageId> <factId> attempt <n>`, as the contract writes an Issue (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), or one line, `<name> <subject> <messageId> <factId> attempt <n>: ` and the Fault's message or `the Handler threw`, with its `cause`; the last attempt reads `attempt <n>, the last` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+Without an `onServiceFault`, they go to the console, the first Issues one line each after `<name> <subject> <messageId> <factId> attempt <n>`, as the contract writes an Issue, listed as the invalid-input body's Issues are, then one line `<name> <subject> <messageId> <factId> attempt <n>: <count> more Issues` (`1 more Issue`) when any is left out (see [Rejections](https://github.com/CasitaFeliz/cf-loom/blob/main/packages/contract/README.md#rejections) in the contract README), or one line, `<name> <subject> <messageId> <factId> attempt <n>: ` and the Fault's message or `the Handler threw`, with its `cause`; the last attempt reads `attempt <n>, the last` (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
 
 ### onBrokerTrouble
 

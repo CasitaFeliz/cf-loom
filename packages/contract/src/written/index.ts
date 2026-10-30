@@ -40,7 +40,8 @@ export {
   segmentsOf,
   subjectVersionOf,
 } from './identity.ts';
-export { issueLineOf } from './issue-line.ts';
+export { issueLineOf, listedIssueLinesOf } from './issue-line.ts';
+export { listedIssuesOf } from './listed-issues.ts';
 export type {
   LocatedCode,
   LocatedCommand,
