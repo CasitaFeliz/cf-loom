@@ -6,18 +6,20 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { Child, ResolvedRef } from './children.ts';
+export type { Child } from './children.ts';
+export { childrenOf, nodesWithin } from './children.ts';
+export { closureFactsOf } from './closure-facts.ts';
+export type { DecimalDigits } from './decimal-digits.ts';
+export { decimalDigitsOf } from './decimal-digits.ts';
+export type { ResolvedRef } from './def-graph.ts';
 export {
-  childrenOf,
   defsReachedOf,
   leadsBackWithNoNode,
   nodesReachedFrom,
-  nodesWithin,
   reachedDefsOf,
+  refsWrittenIn,
   resolvedRefOf,
-} from './children.ts';
-export type { DecimalDigits } from './decimal-digits.ts';
-export { decimalDigitsOf } from './decimal-digits.ts';
+} from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';

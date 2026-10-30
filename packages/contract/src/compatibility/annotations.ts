@@ -1,7 +1,8 @@
 import { canonicalJson, childrenOf, neutralAnnotations, type SchemaNode } from '../walker/index.ts';
-import { type BothDefs, type Finding, found, type NodePair } from './findings.ts';
+import { type Finding, found, type NodePair } from './findings.ts';
 
-type Annotation = (typeof neutralAnnotations)[number];
+/** A Neutral annotation: `description`, `examples` or `origin`. */
+export type Annotation = (typeof neutralAnnotations)[number];
 
 /** The Neutral annotations two nodes differ in, in order: description, examples, then origin. */
 export function annotationFindingsOf(pair: NodePair): readonly Finding[] {
@@ -24,13 +25,12 @@ function defNameOf(node: SchemaNode): string | undefined {
 }
 
 /**
- * The Neutral annotations that differ anywhere inside two nodes of one shape, such as a plain
- * union's options and the defs they reach, each once, at the nodes' own path; both sides are read
- * in lockstep, a child by its steps and a def by its name, so a moved annotation is one that differs.
+ * The Neutral annotations that differ inside two nodes of one shape, the two nodes themselves left
+ * out and no def entered; both sides are read in lockstep, a child by its steps, so a moved
+ * annotation is one that differs.
  */
-export function innerAnnotationFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
+export function annotationsInside(pair: NodePair): ReadonlySet<Annotation> {
   const changed = new Set<Annotation>();
-  const entered = new Set<string>();
   const pending: NodePair[] = [];
   pushChildPairs(pending, pair);
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
@@ -38,16 +38,12 @@ export function innerAnnotationFindingsOf(pair: NodePair, defs: BothDefs): reado
       changed.add(annotation);
     }
     pushChildPairs(pending, next);
-    if (next.baseline.type === 'ref' && !entered.has(next.baseline.name)) {
-      entered.add(next.baseline.name);
-      pending.push(defPairOf(next.baseline.name, defs));
-    }
   }
-  const inOrder = neutralAnnotations.filter((annotation) => changed.has(annotation));
-  return inOrder.map((annotation) => found({ kind: 'annotation-changed', annotation }));
+  return changed;
 }
 
-function differingAnnotationsOf({ baseline, proposed }: NodePair): readonly Annotation[] {
+/** The Neutral annotations two nodes differ in, in order: description, examples, then origin. */
+export function differingAnnotationsOf({ baseline, proposed }: NodePair): readonly Annotation[] {
   return neutralAnnotations.filter(
     (annotation) => canonicalJson(baseline[annotation]) !== canonicalJson(proposed[annotation]),
   );
@@ -65,13 +61,4 @@ function pushChildPairs(pending: NodePair[], { baseline, proposed }: NodePair): 
     }
     pending.push({ baseline: child.node, proposed: counterpart });
   }
-}
-
-function defPairOf(name: string, defs: BothDefs): NodePair {
-  const baseline = defs.baseline[name];
-  const proposed = defs.proposed[name];
-  if (baseline === undefined || proposed === undefined) {
-    throw new Error(`\`ref\` to ${name} reaches no schema on both sides: a bug.`);
-  }
-  return { baseline, proposed };
 }

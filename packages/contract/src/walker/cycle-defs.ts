@@ -1,4 +1,4 @@
-import { leadsBackWithNoNode } from './children.ts';
+import { leadsBackWithNoNode } from './def-graph.ts';
 import { writtenIdOf } from './metadata.ts';
 import type { RefNode } from './nodes.ts';
 import {
