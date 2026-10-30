@@ -181,6 +181,34 @@ describe('validateRoot: a code is declared once', () => {
     },
   );
 
+  test('a code three sources declare fails code-once naming them as a list, the last after and', () => {
+    const declared = (message: string) =>
+      defineRejection({ code: 'NOT_FOUND', status: 404, message });
+    const installed = declared('Installed');
+    const packages = [
+      anInstalledPackage(
+        defineDefinitions({}),
+        { installed },
+        {
+          packageName: '@org/one',
+          version: '1.0.0',
+        },
+      ),
+    ];
+    const endpoints = [declared('First'), declared('Second'), installed].map((rejection) => ({
+      rejections: [rejection],
+    }));
+
+    const failures = failuresOf(aService(endpoints), packages);
+
+    expect(failures).toEqual([
+      codeOnce(
+        'NOT_FOUND',
+        'the Contract, twice, @org/one@1.0.0 and the notFound Standard Rejection',
+      ),
+    ]);
+  });
+
   test('two Standard Rejections resolving to one code fail code-once', () => {
     const definitions = defineDefinitions({
       standardRejections: {

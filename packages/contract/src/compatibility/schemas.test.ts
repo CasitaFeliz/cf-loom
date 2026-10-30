@@ -12,6 +12,7 @@ import { seededNext } from '../../test/random-schemas.ts';
 import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   authorPathOf,
+  byCodePoint,
   type Change,
   type ChangeSite,
   type CommandSnapshot,
@@ -2421,14 +2422,24 @@ describe('compatibilityReportOf, a long chain of ids', () => {
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
-  /** `count` defs, each an object on a cycle of its own that holds the one before it by `next`, and the first holds a string. */
-  function aChainOf(count: number, descriptionOf: (index: number) => string): Defs {
+  /**
+   * `count` defs, each an object on a cycle of its own that holds the one before it by `next`, and
+   * the first holds a string; with `holdingOf`, each also holds the one before it by `u`, inside what
+   * `holdingOf` makes of it.
+   */
+  function aChainOf(
+    count: number,
+    descriptionOf: (index: number) => string,
+    holdingOf?: (previous: SchemaNode) => SchemaNode,
+  ): Defs {
     const entries: [string, SchemaNode][] = [];
     for (let index = 0; index < count; index++) {
       const next = index === 0 ? aString : aRef(`link${index - 1}`);
+      const previous = index === 0 ? aNumber : aRef(`link${index - 1}`);
       const link = anObject({
         self: optional(aRef(`link${index}`)),
         next: required(next),
+        ...(holdingOf === undefined ? {} : { u: required(holdingOf(previous)) }),
       });
       entries.push([`link${index}`, { ...link, description: descriptionOf(index) }]);
     }
@@ -2436,14 +2447,17 @@ describe('compatibilityReportOf, a long chain of ids', () => {
   }
 
   /** The check of a chain of `count` defs, as an organization's Definitions Package declares it, against its Baseline. */
-  function checkOfChain(proposedDescriptionOf: (index: number) => string) {
+  function checkOfChain(
+    proposedDescriptionOf: (index: number) => string,
+    holdingOf?: (previous: SchemaNode) => SchemaNode,
+  ) {
     return (count: number) => {
       const top = aRef(`link${count - 1}`);
       const baseline = shared.baseline(
         top,
-        aChainOf(count, () => 'a'),
+        aChainOf(count, () => 'a', holdingOf),
       );
-      const proposed = shared.proposed(top, aChainOf(count, proposedDescriptionOf));
+      const proposed = shared.proposed(top, aChainOf(count, proposedDescriptionOf, holdingOf));
       return () => compatibilityReportOf(baseline, proposed);
     };
   }
@@ -2524,6 +2538,118 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     ]);
     expect(growth).toBeLessThan(linearGrowth);
   });
+  /** A node that holds another in what the plain-union rule judges: a union's option, a tuple's item or an `allOf`'s item. */
+  type Holding = {
+    readonly holder: string;
+    readonly holdingOf: (held: SchemaNode) => SchemaNode;
+    readonly difference: ShapeDifference;
+  };
+
+  const holdings: readonly Holding[] = [
+    {
+      holder: "a plain union's option",
+      holdingOf: (held) => ({ type: 'union', options: [held, aBoolean] }),
+      difference: { kind: 'union-changed' },
+    },
+    {
+      holder: "a tuple's item",
+      holdingOf: (held) => ({ type: 'tuple', items: [held, aBoolean] }),
+      difference: { kind: 'unproven', node: 'tuple' },
+    },
+    {
+      holder: 'an intersection with a string',
+      holdingOf: (held) => ({ type: 'allOf', items: [held, aString] }),
+      difference: { kind: 'unproven', node: 'allOf' },
+    },
+  ];
+
+  test.each(holdings)(
+    'a chain of ids, each reached through $holder, is checked in time that grows with its length',
+    {
+      timeout: growthTimeout,
+    },
+    ({ holdingOf }) => {
+      const checkChain = checkOfChain(() => 'a', holdingOf);
+
+      const report = checkChain(sizes.large)();
+      const growth = growthOf(checkChain, sizes, linearGrowth);
+
+      expect(report).toEqual({ changes: [] });
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
+
+  /** `count` objects `c0`, `c1`…, each holding the one before it by `next`, the first a `leaf` and a description. */
+  function aFanChainOf(count: number, innermost: { description: string; leaf: SchemaNode }): Defs {
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count; index++) {
+      const next = index === 0 ? innermost.leaf : aRef(`c${index - 1}`);
+      const link = anObject({ next: required(next) });
+      const described = index === 0 ? { ...link, description: innermost.description } : link;
+      entries.push([`c${index}`, described]);
+    }
+    return Object.fromEntries(entries);
+  }
+
+  /** The check of an object of `count` fields, each holding the head of a chain of `count` objects, against its Baseline. */
+  function checkOfFan(
+    holdingOf: Holding['holdingOf'],
+    proposedInnermost: { description: string; leaf: SchemaNode },
+  ) {
+    return (count: number) => {
+      const fields = Array.from({ length: count }, (_, index) => [
+        `field${index}`,
+        required(holdingOf(aRef(`c${count - 1}`))),
+      ]);
+      const top = anObject(Object.fromEntries(fields));
+      const innermost = { description: 'a', leaf: aString };
+      const baseline = shared.baseline(top, aFanChainOf(count, innermost));
+      const proposed = shared.proposed(top, aFanChainOf(count, proposedInnermost));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  /** The Changes of a fan of `count` fields that each report `difference`, at their field. */
+  function fanChangesOf(count: number, difference: Found) {
+    const names = Array.from({ length: count }, (_, index) => `field${index}`);
+    return names
+      .sort(byCodePoint)
+      .map((name) => changeAt(shared, { ...difference, at: ['fields', name] }));
+  }
+
+  test.each(holdings)(
+    'many fields that each hold the head of a long chain in $holder, its innermost def’s description changed, report one Neutral Change each, at their field, in time that grows with their number and the chain’s length',
+    {
+      timeout: growthTimeout,
+    },
+    ({ holdingOf }) => {
+      const checkFan = checkOfFan(holdingOf, { description: 'b', leaf: aString });
+
+      const report = checkFan(sizes.large)();
+      const growth = growthOf(checkFan, sizes, linearGrowth);
+
+      const neutralAtField = found(annotationChanged('description'), neutralEverywhere);
+      expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, neutralAtField));
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
+
+  test.each(holdings)(
+    'many fields that each hold the head of a long chain in $holder, its innermost def’s shape changed, report one Breaking Change each, at their field, in time that grows with their number and the chain’s length',
+    {
+      timeout: growthTimeout,
+    },
+    ({ holdingOf, difference }) => {
+      const checkFan = checkOfFan(holdingOf, { description: 'a', leaf: aNumber });
+
+      const report = checkFan(sizes.large)();
+      const growth = growthOf(checkFan, sizes, linearGrowth);
+
+      const breakingAtField = found(difference, breaksEverywhere);
+      expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, breakingAtField));
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
 });
 
 describe('compatibilityReportOf, the steps of a Change in random nested schemas', () => {

@@ -1,5 +1,5 @@
-import { type Defs, reachedDefsOf, type SchemaNode, shapeKey } from '../walker/index.ts';
-import { type BothDefs, type NodePair, shapeKeyBesidesNullability } from './findings.ts';
+import type { Defs, SchemaNode } from '../walker/index.ts';
+import type { BothDefs, NodePair } from './findings.ts';
 
 /**
  * The pairs of schemas a hop entered within a root schema, by their nodes: a def by its node in
@@ -21,26 +21,6 @@ export function hopOf(pair: NodePair, defs: BothDefs): NodePair {
 /** Whether a pair was already entered within its root schema. */
 export function hasEntered(entered: Entered, { baseline, proposed }: NodePair): boolean {
   return entered.get(baseline)?.has(proposed) === true;
-}
-
-/**
- * Whether two nodes have the same shape, apart from their own nullability, and every def their
- * `ref`s reach has the same shape on both sides. No def is compared by Position.
- */
-export function isUnchanged({ baseline, proposed }: NodePair, defs: BothDefs): boolean {
-  const hasSameShape =
-    shapeKeyBesidesNullability(baseline) === shapeKeyBesidesNullability(proposed);
-  return (
-    hasSameShape && reachedDefsOf([baseline], defs.baseline).every((name) => hasSameDef(name, defs))
-  );
-}
-
-function hasSameDef(name: string, defs: BothDefs): boolean {
-  const baseline = defs.baseline[name];
-  const proposed = defs.proposed[name];
-  return (
-    baseline !== undefined && proposed !== undefined && shapeKey(baseline) === shapeKey(proposed)
-  );
 }
 
 /** The def a `ref` names, or the node itself when it is written inline: a name with no def is a bug. */
