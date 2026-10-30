@@ -180,7 +180,7 @@ type Config = {
   readonly handlers?: Handlers;
   readonly options?: {
     readonly maxBodyBytes?: number;
-    readonly onAnswered?: (record: AnsweredRequest) => void;
+    readonly onAnswered?: (record: AnsweredRequest, request: Request) => void;
   };
   readonly fastify?:
     | FastifyServerOptions
@@ -436,6 +436,29 @@ describe('fastifyServe', () => {
           reached.length = 0;
           await raw(url, text);
           const answeredByServe = await raw(nodeUrl, text);
+          if (reached.length > 0 !== handedBack(answeredByServe)) {
+            disagreements.push(`${method} ${target}`);
+          }
+        }
+      }
+
+      expect(disagreements).toEqual([]);
+    });
+
+    test('over HTTP/2 too, a request reaches the app exactly when serve answers NO_SUCH_ENDPOINT or METHOD_NOT_ALLOWED, or its URL cannot be read', async () => {
+      const { url, reached } = await served({ fastify: { http2: true } });
+      const nodeUrl = await nodeServed();
+      const session = h2Session(url);
+      const disagreements: string[] = [];
+
+      for (const method of methods) {
+        for (const target of targets) {
+          reached.length = 0;
+          await h2(session, { ':method': method, ':path': target });
+          const answeredByServe = await raw(
+            nodeUrl,
+            requestText(method, target, 'Content-Length: 0\r\n'),
+          );
           if (reached.length > 0 !== handedBack(answeredByServe)) {
             disagreements.push(`${method} ${target}`);
           }
@@ -891,6 +914,72 @@ describe('fastifyServe', () => {
       expect([health.status, health.body]).toEqual([200, 'ok']);
       expect(reached).toEqual(['GET /healthz']);
       expect(responded).toEqual(['/orders/o-1', '/healthz']);
+    });
+
+    test('serve receives the Request on the URL :scheme, :authority and the path make, with the Caller’s headers and no pseudo-header', async () => {
+      const seen: Request[] = [];
+      const reading = handle(getOrder, (_input, { request }) =>
+        success(getOrder, { id: request.headers.get('x-tenant') ?? 'none' }),
+      );
+      const { url } = await served({
+        fastify: { http2: true },
+        handlers: withEndpoints({ getOrder: reading }),
+        options: { onAnswered: (_record, request) => void seen.push(request) },
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, {
+        ':path': '/orders/o-1?x=1',
+        ':scheme': 'https',
+        ':authority': 'orders.example:8443',
+        'x-tenant': 't-1',
+      });
+
+      expect(JSON.parse(answer.body)).toEqual({ id: 't-1' });
+      expect(seen[0]?.url).toBe('https://orders.example:8443/orders/o-1?x=1');
+      expect([...(seen[0]?.headers.keys() ?? [])].filter((name) => name.startsWith(':'))).toEqual(
+        [],
+      );
+    });
+
+    test('a request with no :authority is on the origin its Host names', async () => {
+      const seen: string[] = [];
+      const { url } = await served({
+        fastify: { http2: true },
+        options: { onAnswered: (_record, request) => void seen.push(request.url) },
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, { ':path': '/orders/o-1', host: 'orders.example' });
+
+      expect(answer.status).toBe(200);
+      expect(seen).toEqual(['http://orders.example/orders/o-1']);
+    });
+
+    test('several Cookie fields reach the Handler as one header, joined by "; "', async () => {
+      const reading = handle(getOrder, (_input, { request }) =>
+        success(getOrder, { id: request.headers.get('cookie') ?? 'none' }),
+      );
+      const { url } = await served({
+        fastify: { http2: true },
+        handlers: withEndpoints({ getOrder: reading }),
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, { ':path': '/orders/o-1', cookie: ['a=1', 'b=2'] });
+
+      expect(JSON.parse(answer.body)).toEqual({ id: 'a=1; b=2' });
+    });
+
+    test('a :scheme other than http or https, and OPTIONS *, go on to the app', async () => {
+      const { url, reached } = await served({ fastify: { http2: true } });
+      const session = h2Session(url);
+
+      const foreign = await h2(session, { ':path': '/orders/o-1', ':scheme': 'ftp' });
+      const asterisk = await h2(session, { ':method': 'OPTIONS', ':path': '*' });
+
+      expect([foreign.status, asterisk.status]).toEqual([404, 404]);
+      expect(reached).toEqual(['GET /orders/o-1', 'OPTIONS *']);
     });
   });
 });
