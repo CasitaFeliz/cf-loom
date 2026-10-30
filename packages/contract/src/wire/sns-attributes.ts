@@ -53,21 +53,31 @@ function idOf(text: string | undefined): string | undefined {
   return isIdHeaderValue(id) ? id : undefined;
 }
 
+/** The Transport headers an attribute holds as a JSON object of strings, each an own entry whatever its name. */
+function headersOf(text: string | undefined): Readonly<Record<string, string>> | undefined {
+  const parsed = parsedJsonOf(text);
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const entries = Object.entries(parsed);
+  const isEveryText = entries.every(([, value]) => typeof value === 'string');
+  return isEveryText ? Object.fromEntries(entries) : undefined;
+}
+
 /** The inverse of `snsAttributesOf` for what a queue received: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */
 export function receivedSnsAttributesOf(
   attributes: Readonly<Record<string, string | undefined>>,
 ): ReceivedHeaders {
   const messageId = idOf(attributes[snsMessageIdAttribute]);
   const factId = idOf(attributes[snsFactIdAttribute]);
-  const headers = Object.fromEntries(
-    Object.entries(JSON.parse(attributes[snsHeadersAttribute] ?? '')),
-  );
+  const headers = headersOf(attributes[snsHeadersAttribute]);
   const readings = [
     [snsMessageIdAttribute, messageId],
     [snsFactIdAttribute, factId],
+    [snsHeadersAttribute, headers],
   ] as const;
   const names = readings.filter(([, read]) => read === undefined).map(([name]) => name);
-  if (messageId === undefined || factId === undefined) {
+  if (messageId === undefined || factId === undefined || headers === undefined) {
     return { kind: 'missing', names };
   }
   return { kind: 'read', messageId, factId, headers };

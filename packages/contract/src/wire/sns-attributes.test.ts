@@ -257,3 +257,31 @@ describe('the ids receivedSnsAttributesOf reads', () => {
     expect(read).toEqual({ kind: 'read', messageId: id, factId: id, headers: {} });
   });
 });
+
+describe('the Transport headers receivedSnsAttributesOf reads', () => {
+  test.each([
+    ['missing', undefined],
+    ['text that is not JSON', 'x-trace=abc'],
+    ['a JSON array', '[]'],
+    ['a JSON string', '"x-trace"'],
+    ['a JSON null', 'null'],
+    ['an object with a number', '{"x-trace":1}'],
+    ['an object with a nested object', '{"x-trace":{"a":"b"}}'],
+    ['an object with a null', '{"x-trace":null}'],
+  ])('a cf-loom-headers that is %s is listed as not reading back', (_, value) => {
+    const attributes = snsAttributesOf(aMessage());
+
+    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+
+    expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+  });
+
+  test('a message lacking its ids and its headers lists the three, in attribute order', () => {
+    const read = receivedSnsAttributesOf({});
+
+    expect(read).toEqual({
+      kind: 'missing',
+      names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
+    });
+  });
+});
