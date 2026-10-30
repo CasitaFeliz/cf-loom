@@ -544,3 +544,50 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
     ]);
   });
 });
+
+describe('compatibilityReportOf, a plain union whose reached def and option both differ in a Neutral annotation', () => {
+  /** A Definitions Package whose one export is a plain union of a described def and a boolean with examples. */
+  function exportingUnion(description: string, examples: readonly string[]) {
+    const described: SchemaNode = {
+      type: 'object',
+      description,
+      fields: { a: { required: true, schema: { type: 'string' } } },
+    };
+    const options: SchemaNode[] = [
+      { type: 'ref', name: 'described' },
+      { type: 'boolean', examples },
+    ];
+    const wrapped: SchemaNode = { type: 'union', options };
+    return {
+      ...definitionsHeading,
+      defs: { described },
+      exports: schemaExports({ wrapped }),
+    };
+  }
+
+  function neutralAt(annotation: Neutral): Change {
+    return {
+      site: { kind: 'export', name: 'wrapped', visibility: 'public' },
+      difference: {
+        kind: 'schema',
+        position: 'message',
+        at: [],
+        shape: { kind: 'annotation-changed', annotation },
+      },
+      class: 'neutral',
+      verdict: 'allowed',
+    };
+  }
+
+  test('a reached def’s description and an option’s examples that both differ are two Neutral Changes, in the order description, examples', () => {
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...exportingUnion('x', ['1']),
+      ...publishedAt('1.0.0'),
+    };
+    const proposed: DefinitionsSnapshot = exportingUnion('y', ['2']);
+
+    const changes = compatibilityReportOf(baseline, proposed).changes;
+
+    expect(changes).toEqual([neutralAt('description'), neutralAt('examples')]);
+  });
+});
