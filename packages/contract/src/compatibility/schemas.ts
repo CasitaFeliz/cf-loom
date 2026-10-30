@@ -57,7 +57,7 @@ type Hop = Met & { readonly kind: 'hop' };
  * its path, following each `ref` one hop at a time into its Snapshot's defs. A `ref` is compared
  * where it sits, and the pair it leads to the first time that pair is met, so a def used at
  * several paths reports its differences at the first. A pair holds its steps shared with the pair
- * it is inside and a difference reads them as a list once, so a long chain of defs costs its length.
+ * it is inside and a difference reads them as a list once.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
