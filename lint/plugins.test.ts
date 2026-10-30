@@ -291,6 +291,8 @@ describe('lint plugins', () => {
       '    super(unbrokenLineOf(text), { cause: text });',
       '  }',
       '}',
+      'export const aggregateCalled = AggregateError([], text);',
+      "export const aggregateCalledLiteral = AggregateError([], 'ok');",
     ];
 
     expect(pluginReportsFor(lines, 'packages/client/src/probe.ts')).toEqual([
@@ -302,6 +304,7 @@ describe('lint plugins', () => {
       'C1@14',
       'C1@17',
       'C1@20',
+      'C1@33',
     ]);
     expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);

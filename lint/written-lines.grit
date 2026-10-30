@@ -41,6 +41,7 @@ or {
     JsNewExpression(callee=built_in_error(), arguments=JsCallArguments(args=[$message, ...])),
     JsCallExpression(callee=built_in_error(), arguments=JsCallArguments(args=[$message, ...])),
     JsNewExpression(callee=`AggregateError`, arguments=JsCallArguments(args=[$_, $message, ...])),
+    JsCallExpression(callee=`AggregateError`, arguments=JsCallArguments(args=[$_, $message, ...])),
     JsCallExpression(callee=JsSuperExpression(), arguments=JsCallArguments(args=[$message, ...]))
   } as $made where {
     $message <: not written_message(),
