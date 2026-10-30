@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 
 import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { fault, handle } from '@cf-loom/handlers';
@@ -73,6 +74,14 @@ beforeEach(async () => {
 function aMessaging(settings: Settings = {}) {
   return anOrdersMessaging(moto.url, settings);
 }
+
+/** How long a Handler of the backoff test is waited for: the visibility timeout at the first delivery, the backoff entry at every later one. */
+function waitMsOf(deliveryCount: number): number {
+  return deliveryCount === 1 ? 1_000 : 2_000;
+}
+
+/** How long before its wait ends a Handler stops looking at the queue: SQS ends the visibility timeout a little before the core ends the wait, so the last look would race it. */
+const beforeTheEnd = 250;
 
 /** What `aMessaging` gives a test. */
 type AMessaging = Awaited<ReturnType<typeof aMessaging>>;
@@ -316,11 +325,17 @@ describe('consuming over sqs()', () => {
       limits: limitsWith({ ackWait: ['1s', '2s'], maxDeliver: 3 }),
       onServiceFault: (consumed) => void faults.push(consumed),
     });
-    const samples: { visible: number; inFlight: number }[] = [];
+    const samples: { deliveryCount: number; visible: number; inFlight: number }[] = [];
     const watching = async ({ meta }: Received) => {
-      while (!meta.signal.aborted) {
-        samples.push(await queueCountsOf(connecting.sqs, orders.notifyQueue));
+      const watched = AbortSignal.timeout(waitMsOf(meta.deliveryCount) - beforeTheEnd);
+      const stop = AbortSignal.any([meta.signal, watched]);
+      while (!stop.aborted) {
+        const counts = await queueCountsOf(connecting.sqs, orders.notifyQueue);
+        samples.push({ deliveryCount: meta.deliveryCount, ...counts });
         await sleep(100);
+      }
+      if (!meta.signal.aborted) {
+        await once(meta.signal, 'abort');
       }
       return undefined;
     };
@@ -331,7 +346,7 @@ describe('consuming over sqs()', () => {
     await until(() => expect(faults).toHaveLength(3));
     const waited = faults.map((consumed) => (consumed as { cause: DeadlineError }).cause.waitMs);
     expect(waited).toEqual([1_000, 2_000, 2_000]);
-    expect(samples.length).toBeGreaterThan(0);
+    expect(new Set(samples.map(({ deliveryCount }) => deliveryCount))).toEqual(new Set([1, 2, 3]));
     expect(new Set(samples.map(({ visible }) => visible))).toEqual(new Set([0]));
   });
 
