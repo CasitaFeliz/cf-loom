@@ -19,6 +19,7 @@ import {
   dropQueue,
   setQueueAttributes,
   setSubscriptionAttribute,
+  storeIn,
   subscribeByHand,
   tagByHand,
   unsubscribe,
@@ -31,7 +32,13 @@ import {
   anAwsConnecting,
   failingCommand,
 } from '../../test/aws-clients.ts';
-import { queueCountsOf, queueNamesOf, queueTagsOf, receivedFrom } from '../../test/aws-reading.ts';
+import {
+  messagesWithAttributesIn,
+  queueCountsOf,
+  queueNamesOf,
+  queueTagsOf,
+  receivedFrom,
+} from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
@@ -405,6 +412,34 @@ describe('consuming over sqs()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 3]);
   });
 
+  test('a Message without cf-loom’s attributes is left: one console line per Delivery names the queue and what it lacks, nothing reaches onServiceFault, and after maxReceiveCount receives it is in the dead-letter queue with its body and attributes', async () => {
+    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const faults: ConsumedFault[] = [];
+    const { consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const id = await storeIn(connecting.sqs, orders.notifyQueue, {
+      body: 'not cf-loom’s',
+      attributes: { 'x-other': { DataType: 'String', StringValue: 'kept' } },
+    });
+    const received: Received[] = [];
+
+    await consume(handlersOf(received), {});
+
+    const dead = `${orders.notifyQueue}_dlq`;
+    await until(async () => {
+      expect(await messagesWithAttributesIn(connecting.sqs, dead)).toEqual([
+        { body: 'not cf-loom’s', attributes: { 'x-other': 'kept' } },
+      ]);
+    });
+    const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
+    const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read cf-loom-message-id, cf-loom-fact-id, cf-loom-headers`;
+    expect(lines).toEqual([line, line, line]);
+    expect(received).toEqual([]);
+    expect(faults).toEqual([]);
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
@@ -716,4 +751,9 @@ const redriveOf = (maxReceiveCount: number, queue: string) =>
 /** A tag set as JSON text holds it, so a key such as `__proto__` is an own key of the value. */
 function fromJson(text: string): Record<string, string> {
   return JSON.parse(text);
+}
+
+/** Whether a console line is one the adapter writes for a Message it left for the dead-letter queue. */
+function isLeftLine(line: string): boolean {
+  return line.includes(': left SQS message ');
 }

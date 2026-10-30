@@ -29,15 +29,21 @@ export type Prepared =
 
 /** Reads the Message into the Delivery its Handler runs with, and gives it the wait of a later delivery on a queue with a backoff; one cf-loom cannot read is none. */
 export async function preparedFrom(run: QueueRun, received: ReceivedMessage): Promise<Prepared> {
-  const delivery = deliveryOf(received);
-  if (delivery === undefined) {
+  const reading = readingOf(received);
+  if (reading.kind === 'unreadable') {
+    leftForTheDeadLetterQueue(received, reading.names);
     return { kind: 'none' };
   }
+  const { delivery } = reading;
   const changed = await changedVisibility(run, received, delivery);
   return changed.kind === 'failed' ? changed : { kind: 'ready', delivery };
 }
 
-function deliveryOf({ queue, message }: ReceivedMessage): Delivery | undefined {
+type Reading =
+  | { readonly kind: 'readable'; readonly delivery: Delivery }
+  | { readonly kind: 'unreadable'; readonly names: readonly string[] };
+
+function readingOf({ queue, message }: ReceivedMessage): Reading {
   const attributes = {
     [snsMessageIdAttribute]: message.MessageAttributes?.[snsMessageIdAttribute]?.StringValue,
     [snsFactIdAttribute]: message.MessageAttributes?.[snsFactIdAttribute]?.StringValue,
@@ -45,10 +51,10 @@ function deliveryOf({ queue, message }: ReceivedMessage): Delivery | undefined {
   };
   const read = receivedSnsAttributesOf(attributes);
   if (read.kind === 'missing') {
-    return undefined;
+    return { kind: 'unreadable', names: read.names };
   }
   const deliveryCount = Number(message.Attributes?.['ApproximateReceiveCount']);
-  return {
+  const delivery = {
     messageId: read.messageId,
     factId: read.factId,
     deliveryCount,
@@ -57,6 +63,17 @@ function deliveryOf({ queue, message }: ReceivedMessage): Delivery | undefined {
     headers: read.headers,
     body: new TextEncoder().encode(message.Body ?? ''),
   };
+  return { kind: 'readable', delivery };
+}
+
+/** Says that the Message is left alone, so the redrive moves it intact to the dead-letter queue, and why: it is not one cf-loom published. */
+function leftForTheDeadLetterQueue(
+  { queue, message }: ReceivedMessage,
+  names: readonly string[],
+): void {
+  console.error(
+    `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${names.join(', ')}`,
+  );
 }
 
 /** Gives a delivery after the first the wait of its backoff entry, which the queue's own visibility timeout does not know. */

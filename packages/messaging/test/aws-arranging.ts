@@ -70,10 +70,26 @@ export async function setQueueAttributes(
   await sqs.send(new SetQueueAttributesCommand({ QueueUrl, Attributes: attributes }));
 }
 
-/** Puts a Message into the queue named `name`, as a Message already stored in it. */
-export async function storeIn(sqs: SQSClient, name: string, body: string): Promise<void> {
+/** A raw Message as a test stores it: its body, and the message attributes it carries. */
+export type RawMessage = {
+  readonly body: string;
+  readonly attributes?: Readonly<
+    Record<string, { readonly DataType: string; readonly StringValue?: string }>
+  >;
+};
+
+/** Puts a Message into the queue named `name`, as a Message already stored in it, with the message attributes it is given; answers its SQS MessageId. */
+export async function storeIn(
+  sqs: SQSClient,
+  name: string,
+  stored: string | RawMessage,
+): Promise<string> {
   const QueueUrl = await queueUrlOf(sqs, name);
-  await sqs.send(new SendMessageCommand({ QueueUrl, MessageBody: body }));
+  const { body, attributes = {} } = typeof stored === 'string' ? { body: stored } : stored;
+  const sent = await sqs.send(
+    new SendMessageCommand({ QueueUrl, MessageBody: body, MessageAttributes: { ...attributes } }),
+  );
+  return sent.MessageId ?? '';
 }
 
 /** Subscribes a queue to a topic with no attribute, as the organization's tooling would, and answers the subscription's ARN. */

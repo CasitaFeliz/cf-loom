@@ -148,3 +148,25 @@ export async function queueCountsOf(
     inFlight: Number(attributes['ApproximateNumberOfMessagesNotVisible']),
   };
 }
+
+/** The Messages waiting in the queue named `name`, each with its body and the string value of each message attribute it carries. */
+export async function messagesWithAttributesIn(
+  sqs: SQSClient,
+  name: string,
+): Promise<{ readonly body: string; readonly attributes: Record<string, string | undefined> }[]> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  const received = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl,
+      MaxNumberOfMessages: 10,
+      MessageAttributeNames: ['All'],
+    }),
+  );
+  return (received.Messages ?? []).map((message) => {
+    const entries = Object.entries(message.MessageAttributes ?? {});
+    const attributes = Object.fromEntries(
+      entries.map(([attribute, { StringValue }]) => [attribute, StringValue]),
+    );
+    return { body: message.Body ?? '', attributes };
+  });
+}
