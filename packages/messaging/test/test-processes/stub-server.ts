@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 /**
  * Stands in for `moto_server` and `nats-server` in the fixtures of `test-processes.test.ts`; its mode says whether it
  * listens and whether it answers SIGTERM. It logs its pid to the file `STUB_PIDS` names once started, after the
- * `warming up` a silent one writes to stderr. It ends itself when its parent, the fixture's Vitest worker, ends
+ * `warming up` a silent one writes to stderr. It ends itself when its parent, the Vitest running the fixture, ends
  * without killing it.
  */
 const [mode] = process.argv.slice(2);

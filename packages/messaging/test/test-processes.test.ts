@@ -2,8 +2,9 @@
 import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { delimiter, dirname, join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, test } from 'vitest';
-import { aTemporaryDirectory, startProcess } from './test-process.ts';
+import { aTemporaryDirectory, startProcess, type TestProcess } from './test-process.ts';
 
 const fixtures = join(import.meta.dirname, 'test-processes');
 const vitestCli = join(
@@ -58,11 +59,21 @@ async function writeStub(directory: string, command: string, mode: Stub): Promis
   await chmod(executable, 0o755);
 }
 
+/** A fixture running in a Vitest of its own, and where it logs and leaves things. */
+type Started = {
+  readonly vitest: TestProcess;
+  readonly pidsFile: string;
+  readonly temporary: string;
+};
+
 /**
- * Runs one fixture in a Vitest of its own, with `stubs` on PATH as the executables they stand in for, a temporary
+ * Starts one fixture in a Vitest of its own, with `stubs` on PATH as the executables they stand in for, a temporary
  * directory of its own, and the file the stubs log their pids to in `STUB_PIDS`.
  */
-async function runFixture(fixture: string, stubs: Readonly<Record<string, Stub>>): Promise<Run> {
+async function startFixture(
+  fixture: string,
+  stubs: Readonly<Record<string, Stub>>,
+): Promise<Started> {
   const directory = aTemporaryDirectory('cf-loom-test-processes-');
   const temporary = join(directory, 'tmp');
   await mkdir(temporary);
@@ -78,6 +89,12 @@ async function runFixture(fixture: string, stubs: Readonly<Record<string, Stub>>
   };
   const args = [vitestCli, 'run', '--reporter=default', fixture];
   const vitest = startProcess(process.execPath, args, { cwd: fixtures, env });
+  return { vitest, pidsFile, temporary };
+}
+
+/** Runs one fixture in a Vitest of its own to its end; see `startFixture`. */
+async function runFixture(fixture: string, stubs: Readonly<Record<string, Stub>>): Promise<Run> {
+  const { vitest, pidsFile, temporary } = await startFixture(fixture, stubs);
   const exit = await vitest.exited;
   return {
     output: `${vitest.stdout()}\n${vitest.stderr()}`,
@@ -85,6 +102,13 @@ async function runFixture(fixture: string, stubs: Readonly<Record<string, Stub>>
     pids: (await linesOf(pidsFile)).map(Number),
     leftInTemporary: (await readdir(temporary)).filter((name) => name.startsWith('cf-loom-')),
   };
+}
+
+/** Resolves once `condition` holds; the test's timeout bounds it. */
+async function until(condition: () => boolean | Promise<boolean>): Promise<void> {
+  while (!(await condition())) {
+    await sleep(20);
+  }
 }
 
 describe('a process a test starts through test-process.ts', () => {
@@ -104,7 +128,7 @@ describe('a process a test starts through test-process.ts', () => {
     expect(run.pids).toHaveLength(2);
   });
 
-  test('a server that ignores SIGTERM, whose stop in afterEach times out, is killed when its test ends', async () => {
+  test('a server that ignores SIGTERM, whose stop in afterEach times out, is killed when its owner ends', async () => {
     const run = await runFixture('hung-stop.fixture.ts', { moto_server: 'deaf' });
 
     expect(run.pids).toHaveLength(1);
@@ -137,10 +161,25 @@ describe('a process a test starts through test-process.ts', () => {
   });
 
   test('a process started outside any test or hook fails naming why', async () => {
-    const run = await runFixture('outside-any-test.fixture.ts', {});
+    const run = await runFixture('process-outside-any-test.fixture.ts', {});
 
     expect(run.passed).toBe(false);
     expect(run.output).toContain('no test or hook owns');
+  });
+
+  test('a stub server is a child of the Vitest running its fixture, and ends when that is killed', async () => {
+    const { vitest, pidsFile } = await startFixture('stuck-start.fixture.ts', {
+      moto_server: 'silent',
+    });
+    await until(async () => (await linesOf(pidsFile)).length === 1);
+    const [stub] = (await linesOf(pidsFile)).map(Number);
+    const parent = startProcess('ps', ['-o', 'ppid=', '-p', String(stub)]);
+    await parent.exited;
+
+    expect(Number(parent.stdout())).toBe(vitest.child.pid);
+    vitest.child.kill('SIGKILL');
+    await vitest.exited;
+    await until(() => !isRunning(stub!));
   });
 
   test('a nats-server started outside any test or hook fails before it creates its store', async () => {
