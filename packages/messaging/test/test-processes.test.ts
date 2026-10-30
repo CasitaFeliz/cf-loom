@@ -1,6 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: the environment variables of the Vitest run the fixtures need
 import { execFile } from 'node:child_process';
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -98,5 +98,36 @@ describe('a process a test spawns through test-process.ts', () => {
     expect(run.pids).toHaveLength(1);
     expect(isRunning(run.pids[0]!)).toBe(false);
     expect(run.output).toContain('Hook timed out');
+  });
+
+  test('a start still waiting when its beforeAll times out is killed at the end of the file, and its stderr is in the output', async () => {
+    const run = await runFixture('hang-in-hook.fixture.ts', { 'nats-server': 'silent' });
+
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+    expect(run.output).toContain('nats-server');
+    expect(run.output).toContain('warming up');
+  });
+
+  test('a nats-server whose start is still waiting when its beforeAll times out leaves no temporary store', async () => {
+    const run = await runFixture('hang-in-hook.fixture.ts', { 'nats-server': 'silent' });
+
+    expect(run.stores).toHaveLength(1);
+    await expect(stat(run.stores[0]!)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  test('a server started in a beforeAll is alive in every test of its file and gone after the file', async () => {
+    const run = await runFixture('server-for-file.fixture.ts', { moto_server: 'serves' });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.pids).toHaveLength(1);
+    expect(isRunning(run.pids[0]!)).toBe(false);
+  });
+
+  test('a process started outside any test or hook fails naming why', async () => {
+    const run = await runFixture('outside-any-test.fixture.ts', {});
+
+    expect(run.exitCode).toBe(1);
+    expect(run.output).toContain('no test or hook owns');
   });
 });

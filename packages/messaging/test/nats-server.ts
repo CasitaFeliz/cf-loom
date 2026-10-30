@@ -17,24 +17,18 @@ export type NatsServer = {
 /** Starts `nats-server -p -1 -a 127.0.0.1 -js` from PATH, reading its port from the ports file; never a fixed port or the user's own NATS. */
 export async function aNatsServer(): Promise<NatsServer> {
   const directory = await mkdtemp(join(tmpdir(), 'cf-loom-nats-'));
+  const removeStore = () => rm(directory, { recursive: true, force: true });
   const options = ['-p', '-1', '-a', '127.0.0.1', '-js', '-sd', directory];
   const server = startProcess('nats-server', [...options, '--ports_file_dir', directory], {
     notOnPath,
+    cleanup: removeStore,
   });
-  try {
-    const url = await untilListening(server, 'nats-server', () => portsFileUrlOf(directory));
-    return {
-      url,
-      directory,
-      stop: async () => {
-        await stopProcess(server);
-        await rm(directory, { recursive: true, force: true });
-      },
-    };
-  } catch (error) {
-    await rm(directory, { recursive: true, force: true });
-    throw error;
-  }
+  const url = await untilListening(server, 'nats-server', () => portsFileUrlOf(directory));
+  const stop = async (): Promise<void> => {
+    await stopProcess(server);
+    await removeStore();
+  };
+  return { url, directory, stop };
 }
 
 async function portsFileUrlOf(directory: string): Promise<string | undefined> {

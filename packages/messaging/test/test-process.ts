@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import type { Readable } from 'node:stream';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { aroundEach } from 'vitest';
+import { aroundAll, aroundEach } from 'vitest';
 
 const pollIntervalMs = 20;
 const outputKept = 4_096;
@@ -13,8 +13,8 @@ export type Exit = {
 };
 
 /**
- * A process a test spawned. It is owned from its spawn: what is still running when the test that spawned it ends is
- * killed then. It keeps the end of its stdout and stderr.
+ * A process a test spawned. It is owned from its spawn: what is still running when the test that spawned it ends, or
+ * its file when a hook spawned it, is killed then. It keeps the end of its stdout and stderr.
  */
 export type TestProcess = {
   readonly child: ChildProcess;
@@ -23,23 +23,35 @@ export type TestProcess = {
   readonly stderr: () => string;
 };
 
-/** Where and how to spawn: `env` replaces the environment when given; `notOnPath` is the message when `command` is not on PATH. */
+/**
+ * Where and how to spawn: `env` replaces the environment when given; `notOnPath` is the message when `command` is not
+ * on PATH; `cleanup` runs once the owner has killed the process, to remove what the process left behind.
+ */
 export type Spawning = {
   readonly cwd?: string;
   readonly env?: Readonly<Record<string, string>>;
   readonly notOnPath?: string;
+  readonly cleanup?: () => Promise<void>;
 };
 
-const owners: Set<TestProcess>[] = [];
+type Held = { readonly server: TestProcess; readonly cleanup: () => Promise<void> };
+
+const owners: Held[][] = [];
 const waiting = new Map<TestProcess, string>();
 
-/** Spawns `command` with stdout and stderr piped, owned by the running test. */
+/** Spawns `command` with stdout and stderr piped, owned by the running test, or by the file when a hook spawns it. */
 export function startProcess(
   command: string,
   args: readonly string[],
   spawning: Spawning = {},
 ): TestProcess {
-  const { cwd, env, notOnPath } = spawning;
+  const owner = owners.at(-1);
+  if (owner === undefined) {
+    throw new Error(
+      `no test or hook owns ${command}: start it inside one, in a file that imports test-process.ts itself`,
+    );
+  }
+  const { cwd, env, notOnPath, cleanup = async () => undefined } = spawning;
   const child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
   const exited = new Promise<Exit>((resolve, reject) => {
     child.once('close', (status, signal) => resolve({ status, signal }));
@@ -50,7 +62,7 @@ export function startProcess(
   });
   exited.catch(() => undefined);
   const server = { child, exited, stdout: tailOf(child.stdout), stderr: tailOf(child.stderr) };
-  owners.at(-1)?.add(server);
+  owner.push({ server, cleanup });
   return server;
 }
 
@@ -96,11 +108,11 @@ export function stopProcess(server: TestProcess): Promise<Exit> {
 }
 
 /**
- * Runs a test as the owner of what it spawns, then kills what is still running and writes to stderr the name and
- * stderr of each process still waiting to listen. The tests it owns run one at a time.
+ * Runs a test, or a file, as the owner of what it spawns, then kills what is still running and writes to stderr the
+ * name and stderr of each process still waiting to listen. The tests it owns run one at a time.
  */
 async function ownProcesses(run: () => Promise<void>): Promise<void> {
-  const owned = new Set<TestProcess>();
+  const owned: Held[] = [];
   owners.push(owned);
   try {
     await run();
@@ -110,15 +122,21 @@ async function ownProcesses(run: () => Promise<void>): Promise<void> {
   }
 }
 
-async function release(owned: ReadonlySet<TestProcess>): Promise<void> {
-  for (const server of owned) {
+async function release(owned: readonly Held[]): Promise<void> {
+  for (const { server } of owned) {
     const name = waiting.get(server);
     if (name !== undefined) {
       console.error(`${name} was still waiting to listen when its owner ended: ${server.stderr()}`);
     }
     server.child.kill('SIGKILL');
   }
-  await Promise.all([...owned].map((server) => server.exited.catch(() => undefined)));
+  await Promise.all(
+    owned.map(async ({ server, cleanup }) => {
+      await server.exited.catch(() => undefined);
+      await cleanup();
+    }),
+  );
 }
 
-aroundEach((runTest) => ownProcesses(runTest));
+aroundAll(ownProcesses);
+aroundEach(ownProcesses);
