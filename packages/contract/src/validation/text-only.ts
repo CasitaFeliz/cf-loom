@@ -26,6 +26,13 @@ import type { Nodes, WalkedSlot } from './schemas.ts';
 /** Where a text part's field sits, and which part carries it. */
 type Located = { readonly at: Place; readonly part: TextIn };
 
+/** A field of a text part, with the values the part's own examples give it. */
+type TextField = {
+  readonly name: string;
+  readonly schema: SchemaNode;
+  readonly partExamples: readonly unknown[];
+};
+
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
@@ -79,7 +86,7 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
     const partExamples = examplesByField.get(field) ?? [];
     return [
       ...headerNameFailures({ at, part, textIn }, field),
-      ...fieldFailures({ at, part: textIn, partExamples }, field, schema),
+      ...fieldFailures({ at, part: textIn }, { name: field, schema, partExamples }),
     ];
   });
 }
@@ -101,9 +108,8 @@ function partExamplesByField(part: ObjectNode): ReadonlyMap<string, readonly unk
 }
 
 function fieldFailures(
-  { at, part, partExamples }: Located & { readonly partExamples: readonly unknown[] },
-  name: string,
-  schema: SchemaNode,
+  { at, part }: Located,
+  { name, schema, partExamples }: TextField,
 ): readonly DeclarationFailure[] {
   const fieldAt = inFields(at, name);
   const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
@@ -142,20 +148,15 @@ function sharedTextFailures(
 
 /**
  * Every value `generate` knows a text part's field takes: its enum's values and its examples, and
- * the values the part's own examples give it. A query list's examples, and the part's for it, hold
- * lists of items.
+ * the values the part's own examples give it.
  */
 function valuesOf(
   schema: SchemaNode,
   items: SchemaNode,
   partExamples: readonly unknown[],
 ): readonly unknown[] {
-  const listed = schema === items ? [] : (schema.examples ?? []);
-  return [
-    ...(items.type === 'enum' ? items.values : []),
-    ...(items.examples ?? []),
-    ...[...listed, ...partExamples].flat(),
-  ];
+  const examples = [...(schema.examples ?? []), ...(items.examples ?? []), ...partExamples];
+  return [...(items.type === 'enum' ? items.values : []), ...examples.flat()];
 }
 
 /**
