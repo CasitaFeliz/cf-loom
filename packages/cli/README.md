@@ -127,7 +127,6 @@ The hint says how to avoid a Change, from a closed table; the first row that fit
 | `header-refuses-text` | `accept any text` |
 | `name-kind-changed` | `declare it under a new name` |
 | a Breaking `field-added` that is required | `make it optional` |
-| a Breaking `value-added` to a closed enum, when the Verdict needs an Approval | `declare it with openEnum, so readers take values added later` |
 | a Breaking Change to an Event's or a Command's body, or `identity-reused` on one | `make the change in a new Message Version` |
 
 The kinds of a Difference, and the fields it carries besides the ones the line has words for. A `schema` Difference also carries `at`, its path from the site, and `position`, `input`, `success` or `message` (an exported schema is judged as a Message), and the kind of its shape, and `removedIn` when it was found against a Former Input of the Endpoint (see [Fields](https://github.com/CasitaFeliz/cf-loom/blob/main/COMPATIBILITY.md#fields) in COMPATIBILITY.md): the version that first published a field of that Input removed, so Callers built on the versions before it send what the Difference fails; a `body-added` or `body-removed` carries `at` and a `position` of `input` or `success`; a `header-refuses-text` carries `at`:
