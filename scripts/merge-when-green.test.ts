@@ -39,7 +39,7 @@ describe('when a done PR merges', () => {
 });
 
 const passed = (name: string): CheckRun => ({ name, status: 'completed', conclusion: 'success' });
-const running = (name: string, status = 'in_progress'): CheckRun => ({
+const running = (name: string, status: CheckRun['status'] = 'in_progress'): CheckRun => ({
   name,
   status,
   conclusion: null,
@@ -91,6 +91,6 @@ describe('what the check runs say of CI', () => {
   });
 });
 
-function conclusionOf(name: string, conclusion: string): CheckRun {
+function conclusionOf(name: string, conclusion: CheckRun['conclusion']): CheckRun {
   return { name, status: 'completed', conclusion };
 }

@@ -25,9 +25,14 @@ function cliNpmJobIn(workflow: string): readonly string[] {
 
 /** The npm releases the `cli-npm` matrix pins, in its order. */
 function testedReleasesIn(workflow: string): readonly string[] {
-  return cliNpmJobIn(workflow).flatMap(
-    (line) => /^\s+- version: (\d+\.\d+\.\d+)\s*$/.exec(line)?.[1] ?? [],
-  );
+  const releases: string[] = [];
+  for (const line of cliNpmJobIn(workflow)) {
+    const release = /^\s+- version: (\d+\.\d+\.\d+)\s*$/.exec(line)?.[1];
+    if (release !== undefined) {
+      releases.push(release);
+    }
+  }
+  return releases;
 }
 
 /**

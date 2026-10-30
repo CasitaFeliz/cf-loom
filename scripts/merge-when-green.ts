@@ -24,8 +24,17 @@ export type MergeStep =
 /** A check run of GitHub Actions as GitHub reports it: its name, its status, and its conclusion once it completed. */
 export type CheckRun = {
   readonly name: string;
-  readonly status: string;
-  readonly conclusion: string | null;
+  readonly status: 'queued' | 'in_progress' | 'completed' | 'waiting' | 'requested' | 'pending';
+  readonly conclusion:
+    | 'success'
+    | 'failure'
+    | 'neutral'
+    | 'cancelled'
+    | 'skipped'
+    | 'timed_out'
+    | 'action_required'
+    | 'stale'
+    | null;
 };
 
 /**

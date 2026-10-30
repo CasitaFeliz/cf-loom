@@ -83,7 +83,8 @@ jobs:
       - run: node scripts/check-expect-errors.ts
       - run: pnpm vitest run --project '!@cf-loom/cli'
   # The CLI reads and publishes through the npm on PATH (packages/cli/ARCHITECTURE.md): its tests run once for each npm
-  # release engines.npm of @cf-loom/cli admits, scripts/npm-releases.test.ts checks that this matrix and it agree.
+  # release this matrix pins, whose carets are engines.npm of @cf-loom/cli; scripts/npm-releases.test.ts checks that
+  # they agree.
   # pnpm puts Node's own folder, with the npm it bundles, first on PATH, so Vitest is started with node.
   cli-npm:
     name: cli-npm (npm ${{ matrix.npm.version }})
