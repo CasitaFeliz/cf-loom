@@ -53,7 +53,7 @@ export function isRemembered(state: State, schema: core.$ZodType): boolean {
  * The deepest entry of a schema on the walk's path: its last entry, or the entry that one was
  * entered inside, whichever `ancestors` still holds at its depth.
  */
-export function deepestOnPath(state: State, schema: core.$ZodType): Entered | undefined {
+export function deepestEntryOf(state: State, schema: core.$ZodType): Entered | undefined {
   for (let entry = state.remembered.enteredOf(schema); entry !== undefined; entry = entry.outer) {
     if (state.ancestors[entry.depth] === entry) {
       return entry;

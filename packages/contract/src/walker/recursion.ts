@@ -4,7 +4,7 @@ import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedDroppedId } from './not-allowed.ts';
 import {
-  deepestOnPath,
+  deepestEntryOf,
   type Entered,
   type Entering,
   isRemembered,
@@ -89,7 +89,7 @@ function enter(state: State, entering: Entering): Entered {
     isOnCycle,
     answer: undefined,
     depth: state.ancestors.length,
-    outer: deepestOnPath(state, entering.schema),
+    outer: deepestEntryOf(state, entering.schema),
     slot: state.open.length,
     droppedThrough: undefined,
   };
@@ -120,7 +120,7 @@ function rememberedOf(state: State, entering: Entering): Walked | undefined {
  * its deepest entry on the walk's path.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
-  const closing = deepestOnPath(state, entering.schema);
+  const closing = deepestEntryOf(state, entering.schema);
   if (closing === undefined) {
     return undefined;
   }
