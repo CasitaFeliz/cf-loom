@@ -11,6 +11,7 @@ import { isTextValue, sharedTextOf, textOfValue, textTravel } from '../wire/inde
 import {
   attachedGuardsOf,
   isObjectPart,
+  isPlainObject,
   type LocatedEndpoint,
   partFieldOf,
   slotAt,
@@ -21,6 +22,9 @@ import {
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { headerNameFailures } from './header-names.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
+
+/** Where a text part's field sits, and which part carries it. */
+type Located = { readonly at: Place; readonly part: TextIn };
 
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
@@ -70,14 +74,34 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
   }
-  return Object.entries(node.fields).flatMap(([field, { schema }]) => [
-    ...headerNameFailures({ at, part, textIn }, field),
-    ...fieldFailures({ at, part: textIn }, field, schema),
-  ]);
+  const examplesByField = partExamplesByField(node);
+  return Object.entries(node.fields).flatMap(([field, { schema }]) => {
+    const partExamples = examplesByField.get(field) ?? [];
+    return [
+      ...headerNameFailures({ at, part, textIn }, field),
+      ...fieldFailures({ at, part: textIn, partExamples }, field, schema),
+    ];
+  });
+}
+
+/** The values each field takes in the part's own examples, read once over each example's entries. */
+function partExamplesByField(part: ObjectNode): ReadonlyMap<string, readonly unknown[]> {
+  const byField = new Map<string, unknown[]>();
+  for (const example of (part.examples ?? []).filter(isPlainObject)) {
+    for (const [field, value] of Object.entries(example)) {
+      const values = byField.get(field);
+      if (values === undefined) {
+        byField.set(field, [value]);
+      } else {
+        values.push(value);
+      }
+    }
+  }
+  return byField;
 }
 
 function fieldFailures(
-  { at, part }: { readonly at: Place; readonly part: TextIn },
+  { at, part, partExamples }: Located & { readonly partExamples: readonly unknown[] },
   name: string,
   schema: SchemaNode,
 ): readonly DeclarationFailure[] {
@@ -90,7 +114,7 @@ function fieldFailures(
     const place = { at: fieldAt, part };
     return [
       ...sharedTextFailures(place, name, items),
-      ...unsendableTextFailures(place, name, valuesOf(items)),
+      ...unsendableTextFailures(place, name, valuesOf(schema, items, partExamples)),
     ];
   }
   const lists = part === 'query' ? ', or a list of those' : '';
@@ -103,7 +127,7 @@ function fieldFailures(
  * so the other could never arrive.
  */
 function sharedTextFailures(
-  { at, part }: { readonly at: Place; readonly part: TextIn },
+  { at, part }: Located,
   name: string,
   node: SchemaNode,
 ): readonly DeclarationFailure[] {
@@ -116,9 +140,22 @@ function sharedTextFailures(
   return [failure(at, 'shared-text', message)];
 }
 
-/** Every value `generate` knows a text part's field takes: its enum's values and its examples. */
-function valuesOf(node: SchemaNode): readonly unknown[] {
-  return [...(node.type === 'enum' ? node.values : []), ...(node.examples ?? [])];
+/**
+ * Every value `generate` knows a text part's field takes: its enum's values and its examples, and
+ * the values the part's own examples give it. A query list's examples, and the part's for it, hold
+ * lists of items.
+ */
+function valuesOf(
+  schema: SchemaNode,
+  items: SchemaNode,
+  partExamples: readonly unknown[],
+): readonly unknown[] {
+  const listed = schema === items ? [] : (schema.examples ?? []);
+  return [
+    ...(items.type === 'enum' ? items.values : []),
+    ...(items.examples ?? []),
+    ...[...listed, ...partExamples].flat(),
+  ];
 }
 
 /**
@@ -126,7 +163,7 @@ function valuesOf(node: SchemaNode): readonly unknown[] {
  * carry: no Caller can send it and no Outcome holding it is ever valid.
  */
 function unsendableTextFailures(
-  { at, part }: { readonly at: Place; readonly part: TextIn },
+  { at, part }: Located,
   name: string,
   values: readonly unknown[],
 ): readonly DeclarationFailure[] {

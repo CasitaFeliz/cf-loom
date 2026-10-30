@@ -798,6 +798,34 @@ function unsendable(part: keyof typeof words, name: string, values: string) {
   return `${words[part]}: ${name} has ${values}`;
 }
 
+/** The text a part's field holds: the edge texts and their pairs, where each part's rule bites. */
+const edgeTexts = [
+  '',
+  ' ',
+  '\t',
+  'a',
+  'a b',
+  'a\tb',
+  'é',
+  'ÿ',
+  'Ā',
+  '€',
+  '\n',
+  '\r',
+  '\u007f',
+  '.',
+  '..',
+  '\uD800',
+  '😀',
+];
+
+/** Whether the runtime would refuse this text in the part, by the check it sends by. */
+const runtimeRefuses = {
+  headers: (value: string) => headerTextsOf('input.headers', { 'x-s': value }).kind === 'issues',
+  params: (value: string) => !isSegmentText(value),
+  query: (value: string) => !isQueryText(value),
+} as const;
+
 describe('validateRoot: the values of a text part’s enum each travel in their part', () => {
   test('an Input header literal of " 1" and "é\\n" fails, naming both', () => {
     const endpoint = defineEndpoint({
@@ -1002,34 +1030,6 @@ describe('validateRoot: the values of a text part’s enum each travel in their 
     expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
 
-  /** The text a part's field holds: the edge texts and their pairs, where each part's rule bites. */
-  const edgeTexts = [
-    '',
-    ' ',
-    '\t',
-    'a',
-    'a b',
-    'a\tb',
-    'é',
-    'ÿ',
-    'Ā',
-    '€',
-    '\n',
-    '\r',
-    '\u007f',
-    '.',
-    '..',
-    '\uD800',
-    '😀',
-  ];
-
-  /** Whether the runtime would refuse this text in the part, by the check it sends by. */
-  const runtimeRefuses = {
-    headers: (value: string) => headerTextsOf('input.headers', { 'x-s': value }).kind === 'issues',
-    params: (value: string) => !isSegmentText(value),
-    query: (value: string) => !isQueryText(value),
-  } as const;
-
   function endpointHolding(part: keyof typeof runtimeRefuses, values: [string, ...string[]]) {
     const enumeration = z.literal(values);
     switch (part) {
@@ -1191,7 +1191,14 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
   test('an optional header’s example that cannot travel fails as a required one’s does', () => {
     const endpoint = defineEndpoint({
       ...listing,
-      input: { headers: z.object({ 'x-s': z.string().optional().meta({ examples: [' a'] }) }) },
+      input: {
+        headers: z.object({
+          'x-s': z
+            .string()
+            .optional()
+            .meta({ examples: [' a'] }),
+        }),
+      },
     });
 
     expect(validateEndpoint(endpoint)).toEqual(
@@ -1201,6 +1208,61 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
         unsendable('header', 'x-s', '" a"'),
       ),
     );
+  });
+
+  test('a query list’s own example holding a lone surrogate fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ q: z.array(z.string()).meta({ examples: [['a', '\uD800']] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.q`,
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('a query list’s own example and its items’ example holding a lone surrogate name it once', () => {
+    const items = z.string().meta({ examples: ['\uD800'] });
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ q: z.array(items).meta({ examples: [['\uD800']] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.q`,
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('a headers object whose own example gives a field " a" fails at that field', () => {
+    const headers = z
+      .object({ 'x-s': z.string(), 'x-t': z.string() })
+      .meta({ examples: [{ 'x-s': 'a', 'x-t': ' a' }] });
+    const endpoint = defineEndpoint({ ...listing, input: { headers } });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-t`,
+        'unsendable-text',
+        unsendable('header', 'x-t', '" a"'),
+      ),
+    );
+  });
+
+  test('a headers object example that leaves an optional field out validates', () => {
+    const headers = z
+      .object({ 'x-s': z.string(), 'x-o': z.string().optional() })
+      .meta({ examples: [{ 'x-s': 'a' }] });
+    const endpoint = defineEndpoint({ ...listing, input: { headers } });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
 
   test('a number or a boolean header’s examples validate, since each is always carried', () => {
@@ -1230,5 +1292,95 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
         unsendable('header', 'x-s', '" x"'),
       ),
     );
+  });
+
+  /** Where an example of a text field sits: the field, the part's own examples, a query list or its items. */
+  const placements = {
+    headers: ['field', 'part'],
+    params: ['field', 'part'],
+    query: ['field', 'part', 'partList', 'list', 'items'],
+  } as const;
+
+  type Part = keyof typeof placements;
+  type Placement = (typeof placements)[Part][number];
+
+  const fieldNames = {
+    headers: { text: 'x-s', number: 'x-n', boolean: 'x-b' },
+    query: { text: 'x-s', number: 'x-n', boolean: 'x-b' },
+    params: { text: 'xS', number: 'xN', boolean: 'xB' },
+  } as const;
+
+  /** The schema of the text field, with `values` as examples where `placement` puts them. */
+  function textFieldOf(placement: Placement, values: string[]): z.ZodType {
+    switch (placement) {
+      case 'field':
+        return z.string().meta({ examples: values });
+      case 'list':
+        return z.array(z.string()).meta({ examples: [values] });
+      case 'items':
+        return z.array(z.string().meta({ examples: values }));
+      case 'part':
+        return z.string();
+      case 'partList':
+        return z.array(z.string());
+    }
+  }
+
+  /** The part's examples when `placement` puts the values there: each leaves an optional field out. */
+  function partExamplesOf(placement: Placement, values: string[], part: Part) {
+    const { text, number, boolean } = fieldNames[part];
+    const others = { [number]: 2, [boolean]: false };
+    if (placement === 'partList') {
+      return [{ [text]: values, ...others }];
+    }
+    return placement === 'part' ? values.map((value) => ({ [text]: value, ...others })) : [];
+  }
+
+  /** An Endpoint whose text field holds `values` as examples at `placement` of `part`, beside an optional field and a number and a boolean field with examples of their own. */
+  function endpointWithExamples(part: Part, placement: Placement, values: string[]) {
+    const { text, number, boolean } = fieldNames[part];
+    const optional = part === 'params' ? {} : { 'x-o': z.string().optional() };
+    const shape = {
+      [text]: textFieldOf(placement, values),
+      [number]: z.number().meta({ examples: [0, 1.5] }),
+      [boolean]: z.boolean().meta({ examples: [true] }),
+      ...optional,
+    };
+    const examples = partExamplesOf(placement, values, part);
+    const object = headersOf(shape).meta(examples.length === 0 ? {} : { examples });
+    const path = part === 'params' ? '/orders/:xS/:xN/:xB' : '/orders';
+    return defineEndpoint({ ...listing, path, input: { [part]: object } } as never);
+  }
+
+  /** The rules `generate` breaks on an Endpoint whose text field holds `values` as examples. */
+  function rulesOf(part: Part, placement: Placement, values: string[]) {
+    const validated = validateEndpoint(endpointWithExamples(part, placement, values));
+    return validated.kind === 'valid' ? [] : validated.failures.map((one) => one.rule);
+  }
+
+  const sites = Object.entries(placements).flatMap(([part, held]) =>
+    held.map((placement) => ({ part: part as Part, placement })),
+  );
+
+  test('generate refuses a text field exactly when one of its examples fails the part’s runtime check', () => {
+    const next = seededNext(463);
+    const edge = () => edgeTexts[Math.floor(next() * edgeTexts.length)] as string;
+    const outcomes = sites.map(() => new Set<string>());
+
+    for (let draw = 0; draw < 200; draw++) {
+      const size = 1 + Math.floor(next() * 3);
+      const values = [...new Set(Array.from({ length: size }, () => `${edge()}${edge()}`))];
+      for (const [at, { part, placement }] of sites.entries()) {
+        const refused = values.some(runtimeRefuses[part]);
+
+        expect(
+          rulesOf(part, placement, values),
+          `${part} ${placement} ${JSON.stringify(values)}`,
+        ).toEqual(refused ? ['unsendable-text'] : []);
+        outcomes[at]?.add(refused ? 'refused' : 'valid');
+      }
+    }
+
+    expect(outcomes.map((seen) => [...seen].sort())).toEqual(sites.map(() => ['refused', 'valid']));
   });
 });
