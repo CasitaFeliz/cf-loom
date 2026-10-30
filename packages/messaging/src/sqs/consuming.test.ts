@@ -12,7 +12,7 @@ import {
 } from '../../test/orders.ts';
 import { until } from '../../test/until.ts';
 import { messaging } from '../index.ts';
-import { sqs } from './index.ts';
+import { type SqsConnecting, sqs } from './index.ts';
 
 let moto: MotoServer;
 
@@ -28,15 +28,12 @@ beforeEach(async () => {
   await moto.reset();
 });
 
-/** An Orders messaging over sqs() on the test's moto, closed when the test ends, with the names it works with. */
-async function aMessaging(prefix: string | null = 'staging') {
-  const connecting = anAwsConnecting(moto.url);
-  await arrangeOrders(connecting, { prefix });
-  const orders = anOrders(prefix);
-  const started = await messaging(
-    ordersContract,
-    sqs(prefix === null ? connecting : { ...connecting, prefix }),
-  );
+/** Closes a messaging when the test ends, waking its open polls so the closing does not wait them out. */
+function closedWhenDone(
+  started: { readonly close: () => Promise<void> },
+  connecting: SqsConnecting,
+): void {
+  const orders = anOrders('staging');
   onTestFinished(async () => {
     const closing = started.close();
     for (const queue of [orders.notifyQueue, orders.chargeQueue]) {
@@ -44,7 +41,15 @@ async function aMessaging(prefix: string | null = 'staging') {
     }
     await closing.catch(() => undefined);
   });
-  return { ...started, connecting, orders };
+}
+
+/** An Orders messaging over sqs() on the test's moto, closed when the test ends, with the names it works with. */
+async function aMessaging() {
+  const connecting = anAwsConnecting(moto.url);
+  await arrangeOrders(connecting, { prefix: 'staging' });
+  const started = await messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
+  closedWhenDone(started, connecting);
+  return { ...started, connecting, orders: anOrders('staging') };
 }
 
 describe('consuming over sqs()', () => {
@@ -125,5 +130,28 @@ describe('consuming over sqs()', () => {
       inFlight: 0,
     });
     expect(received).toEqual([]);
+  });
+
+  test('consume called again once the queues exist starts consuming', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    await arrangeTopic(connecting.sns, 'staging_orders-service');
+    const { sender, consume } = await messaging(
+      ordersContract,
+      sqs({ ...connecting, prefix: 'staging' }),
+    );
+    onTestFinished(async () => {
+      const orders = anOrders('staging');
+      await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]).catch(
+        () => undefined,
+      );
+    });
+    const received: Received[] = [];
+    await expect(consume(handlersOf(received), {})).rejects.toThrow('has no queue');
+    await arrangeOrders(connecting, { prefix: 'staging' });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+
+    await consume(handlersOf(received), {});
+
+    await until(() => expect(received).toHaveLength(1));
   });
 });
