@@ -175,6 +175,24 @@ const nest = defineEndpoint({
 
 const validOrder = { email: 'a@b.co', quantity: 2, channel: 'web', note: 'none' } as const;
 const { note: _note, ...withoutNote } = validOrder;
+/** Each character a reader may end a line at, with its name and the text that shows its escape. */
+const lineBreaks = [
+  ['LF', 0x0a, '\\n'],
+  ['CR', 0x0d, '\\r'],
+  ['U+0085', 0x85, '\\u0085'],
+  ['U+2028', 0x2028, '\\u2028'],
+  ['U+2029', 0x2029, '\\u2029'],
+  ['U+000B', 0x0b, '\\u000b'],
+  ['U+000C', 0x0c, '\\u000c'],
+  ['U+001C', 0x1c, '\\u001c'],
+  ['U+001D', 0x1d, '\\u001d'],
+  ['U+001E', 0x1e, '\\u001e'],
+] as const;
+
+/** Splits a text where any reader would end a line, so a message of a line per Issue splits into the Issues. */
+const lineBreakPattern = new RegExp(
+  `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,
+);
 const createInput = { headers: { 'x-request-id': 'r-1' }, body: validOrder };
 const getInput = { params: { orderId: ORDER_ID } };
 const getContext = { apiKey: { callerId: 'c-1' } };
@@ -1184,6 +1202,34 @@ describe('more of what a direct call answers', () => {
       expect.stringMatching(/^createOrder: input\.body\.quantity too_small: /),
     ]);
   });
+
+  test.for(lineBreaks)(
+    'a body with a record key holding %s throws one line per Issue, the break written escaped',
+    async ([, code, visible]) => {
+      const tally = defineEndpoint({
+        name: 'tally',
+        method: 'POST',
+        path: '/tally',
+        visibility: 'internal',
+        description: 'Counts words',
+        input: { body: z.record(z.string(), z.string().max(3)) },
+        success: { status: 204 },
+      });
+      const tallied = handle(tally, () => success(tally));
+      const body = { [`a${String.fromCharCode(code)}b`]: 'toolong', other: 'toolong' };
+
+      const caught = await tallied({ body }, {}).then(
+        () => undefined,
+        (thrown: unknown) => thrown,
+      );
+
+      const message = (caught as InvalidCallError).message;
+      expect(message.split(lineBreakPattern)).toEqual([
+        expect.stringContaining(`tally: input.body.a${visible}b too_big: `),
+        expect.stringContaining('tally: input.body.other too_big: '),
+      ]);
+    },
+  );
 
   test('something that is no Rejection, rejected, throws InvalidOutcomeError', async () => {
     const getOrderHandler = handle(getOrder, () => reject(undefined as never));
