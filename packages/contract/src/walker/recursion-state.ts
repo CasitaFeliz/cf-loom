@@ -13,6 +13,10 @@ export type Entering = ReachedSchema & { readonly id: string | undefined };
  */
 export type Entered = Entering & {
   readonly index: number;
+  /** Its index in `ancestors` while it is on the walk's path. */
+  readonly depth: number;
+  /** The same schema's deepest entry on the path when this one was entered, if the schema was on it. */
+  readonly outer: Entered | undefined;
   low: number;
   isReached: boolean;
   /** While its group is still being walked, a schema that reaches it reaches that group. */
@@ -36,4 +40,17 @@ export type State = {
 /** Whether the walk answers the schema from memory from now on: a def, or a failure kept for its uses. */
 export function isRemembered(state: State, schema: core.$ZodType): boolean {
   return state.remembered.enteredOf(schema)?.answer !== undefined;
+}
+
+/**
+ * The deepest entry of a schema on the walk's path: its last entry, or the entry that one was
+ * entered inside, whichever `ancestors` still holds at its depth.
+ */
+export function deepestOnPath(state: State, schema: core.$ZodType): Entered | undefined {
+  for (let entry = state.remembered.enteredOf(schema); entry !== undefined; entry = entry.outer) {
+    if (state.ancestors[entry.depth] === entry) {
+      return entry;
+    }
+  }
+  return undefined;
 }

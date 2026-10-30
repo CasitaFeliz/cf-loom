@@ -3,7 +3,13 @@ import { startMemos } from './memos.ts';
 import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedDroppedId } from './not-allowed.ts';
-import { type Entered, type Entering, isRemembered, type State } from './recursion-state.ts';
+import {
+  deepestOnPath,
+  type Entered,
+  type Entering,
+  isRemembered,
+  type State,
+} from './recursion-state.ts';
 import { startRemembered } from './remembered.ts';
 import { type Composition, type Memo, type Walked, type Walking, walked } from './walked.ts';
 import { writtenDepthOf, writtenNestingLimit } from './written-depth.ts';
@@ -79,6 +85,8 @@ function enter(state: State, entering: Entering): Entered {
     isOpen: true,
     isOnCycle,
     answer: undefined,
+    depth: state.ancestors.length,
+    outer: deepestOnPath(state, entering.schema),
   };
   state.remembered.enter(entered);
   state.ancestors.push(entered);
@@ -103,26 +111,24 @@ function rememberedOf(state: State, entering: Entering): Walked | undefined {
 /**
  * The schema met again inside itself: its `ref` if it wrote an id, a failure if no schema of the
  * cycle wrote one, else nothing, so the walk goes on to one that has. An id the walk refuses
- * still names the cycle, whose schema then fails by that refusal alone.
+ * still names the cycle, whose schema then fails by that refusal alone. The schema is found by
+ * its deepest entry on the walk's path.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
-  const closingIndex = state.ancestors.findLastIndex(
-    (ancestor) => ancestor.schema === entering.schema,
-  );
-  const closing = state.ancestors[closingIndex];
+  const closing = deepestOnPath(state, entering.schema);
   if (closing === undefined) {
     return undefined;
   }
   reachBackTo(state, closing);
-  const cycle = state.ancestors.slice(closingIndex);
   const id = writtenIdOf(entering.schema);
   if (id !== undefined) {
     state.memos.reached(entering.schema, entering.at);
     return walked({ type: 'ref', name: id });
   }
-  if (cycle.some((member) => hasOwnId(member.schema))) {
+  if (isNamedFrom(state, closing.depth)) {
     return undefined;
   }
+  const cycle = state.ancestors.slice(closing.depth);
   const failure = notAllowed(entering.at, unnamedCycleRefusalOf(cycle));
   for (const ancestor of cycle) {
     state.remembered.remember(ancestor, failure);
@@ -130,6 +136,17 @@ function metAgain(state: State, entering: Entering): Walked | undefined {
   state.memos.raised(failure.tree);
   state.memos.reached(entering.schema, entering.at);
   return failure;
+}
+
+/** Whether a schema on the path from `depth` on wrote an id, found without copying the path. */
+function isNamedFrom(state: State, depth: number): boolean {
+  for (let index = depth; index < state.ancestors.length; index++) {
+    const member = state.ancestors[index];
+    if (member !== undefined && hasOwnId(member.schema)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** A cycle no id names is refused, naming the id a later call dropped from one of its schemas. */
