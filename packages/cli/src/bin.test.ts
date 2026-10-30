@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot, publishedSnapshotOf, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
+import { lineBreaks } from '../../contract/test/line-breaks.ts';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
@@ -1474,17 +1475,7 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
-  test.for([
-    '\\r',
-    '\\u0085',
-    '\\u2028',
-    '\\u2029',
-    '\\u000b',
-    '\\u000c',
-    '\\u001c',
-    '\\u001d',
-    '\\u001e',
-  ])(
+  test.for(lineBreaks.filter(([name]) => name !== 'LF').map(([, , visible]) => visible))(
     'a Root file that throws a text holding %s reports it as one line, with the line break written escaped',
     (visible) => {
       const project = aProject({
