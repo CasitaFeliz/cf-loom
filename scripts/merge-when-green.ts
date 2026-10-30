@@ -85,44 +85,49 @@ function stateOf(pr: string, sha: string, fixesMain: boolean): MergeState {
   };
 }
 
-function merge(pr: string, sha: string, fixesMain: boolean): Promise<number> {
-  return (async () => {
-    for (let attempt = 0; attempt < attempts; attempt++) {
-      if (
-        gh(['pr', 'view', pr, '-R', repository, '--json', 'state', '-q', '.state']) === 'MERGED'
-      ) {
-        process.stdout.write(`#${pr} merged\n`);
-        return 0;
-      }
-      const step = stepOf(stateOf(pr, sha, fixesMain));
-      if (step.kind === 'refuse') {
-        process.stderr.write(`#${pr} not merged: ${step.reason}\n`);
-        return 1;
-      }
-      if (step.kind === 'merge') {
-        const title = gh(['pr', 'view', pr, '-R', repository, '--json', 'title', '-q', '.title']);
-        gh([
-          'pr',
-          'merge',
-          pr,
-          '-R',
-          repository,
-          '--squash',
-          '--subject',
-          `${title} (#${pr})`,
-          '--match-head-commit',
-          sha,
-        ]);
-        process.stdout.write(`#${pr} merged\n`);
-        return 0;
-      }
-      await new Promise((resolve) => setTimeout(resolve, pollMilliseconds));
+function prField(pr: string, field: string): string {
+  return gh(['pr', 'view', pr, '-R', repository, '--json', field, '-q', `.${field}`]);
+}
+
+/** Squash-merges the PR's head `sha` with the PR title and `(#<pr>)` as the subject. */
+function squashMerge(pr: string, sha: string): void {
+  const subject = `${prField(pr, 'title')} (#${pr})`;
+  gh([
+    'pr',
+    'merge',
+    pr,
+    '-R',
+    repository,
+    '--squash',
+    '--subject',
+    subject,
+    '--match-head-commit',
+    sha,
+  ]);
+}
+
+async function merge(pr: string, sha: string, fixesMain: boolean): Promise<number> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (prField(pr, 'state') === 'MERGED') {
+      process.stdout.write(`#${pr} merged\n`);
+      return 0;
     }
-    process.stderr.write(
-      `#${pr} not merged: timed out waiting for CI or mergeability; run it again\n`,
-    );
-    return 2;
-  })();
+    const step = stepOf(stateOf(pr, sha, fixesMain));
+    if (step.kind === 'refuse') {
+      process.stderr.write(`#${pr} not merged: ${step.reason}\n`);
+      return 1;
+    }
+    if (step.kind === 'merge') {
+      squashMerge(pr, sha);
+      process.stdout.write(`#${pr} merged\n`);
+      return 0;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMilliseconds));
+  }
+  process.stderr.write(
+    `#${pr} not merged: timed out waiting for CI or mergeability; run it again\n`,
+  );
+  return 2;
 }
 
 if (import.meta.main) {
