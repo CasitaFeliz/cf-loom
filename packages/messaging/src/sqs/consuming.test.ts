@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, onTestFinished, test } from 'vitest';
-import { wakeEach } from '../../test/aws-arranging.ts';
-import { anAwsConnecting } from '../../test/aws-clients.ts';
+import { arrangeTopic, dropQueue, wakeEach } from '../../test/aws-arranging.ts';
+import { aClosedUrl, anAwsConnecting } from '../../test/aws-clients.ts';
+import { queueCountsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
@@ -38,7 +39,9 @@ async function aMessaging(prefix: string | null = 'staging') {
   );
   onTestFinished(async () => {
     const closing = started.close();
-    await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
+    for (const queue of [orders.notifyQueue, orders.chargeQueue]) {
+      await wakeEach(connecting.sqs, [queue]).catch(() => undefined);
+    }
     await closing.catch(() => undefined);
   });
   return { ...started, connecting, orders };
@@ -63,5 +66,64 @@ describe('consuming over sqs()', () => {
       'notifyOnCreated {"orderId":"o-1"}',
       'notifyOnCreated {"orderId":"o-3"}',
     ]);
+  });
+
+  test('consume rejects naming each Durable consumer whose queue does not exist', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    await arrangeTopic(connecting.sns, 'staging_orders-service');
+    const { consume } = await messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
+    const orders = anOrders('staging');
+
+    const consuming = consume(handlersOf([]), {});
+
+    await expect(consuming).rejects.toMatchObject({
+      message: expect.stringContaining(
+        `The Durable consumer ${orders.notifyDurable} has no queue ${orders.notifyQueue}: apply the Service's Broker plan`,
+      ),
+    });
+    await expect(consuming).rejects.toMatchObject({
+      message: expect.stringContaining(
+        `The Durable consumer ${orders.chargeDurable} has no queue ${orders.chargeQueue}: apply the Service's Broker plan`,
+      ),
+    });
+  });
+
+  test('consume with one queue missing receives from none: the Message in the other stays in its queue', async () => {
+    const { sender, consume, connecting, orders } = await aMessaging();
+    await dropQueue(connecting.sqs, orders.notifyQueue);
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    const received: Received[] = [];
+
+    const consuming = consume(handlersOf(received), {});
+
+    await expect(consuming).rejects.toThrow(
+      `The Durable consumer ${orders.notifyDurable} has no queue`,
+    );
+    await expect(queueCountsOf(connecting.sqs, orders.chargeQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 0,
+    });
+    expect(received).toEqual([]);
+  });
+
+  test('any other error of the queue check rejects consume unchanged, and nothing is received', async () => {
+    const working = anAwsConnecting(moto.url);
+    await arrangeOrders(working, { prefix: 'staging' });
+    const broken = anAwsConnecting(moto.url, { sqsUrl: await aClosedUrl() });
+    const { sender, consume } = await messaging(
+      ordersContract,
+      sqs({ ...broken, prefix: 'staging' }),
+    );
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    const received: Received[] = [];
+
+    const consuming = consume(handlersOf(received), {});
+
+    await expect(consuming).rejects.toMatchObject({ code: 'ECONNREFUSED' });
+    await expect(queueCountsOf(working.sqs, anOrders('staging').chargeQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 0,
+    });
+    expect(received).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-sns';
 import {
   CreateQueueCommand,
+  DeleteQueueCommand,
   SendMessageCommand,
   SetQueueAttributesCommand,
   type SQSClient,
@@ -125,4 +126,10 @@ export async function wakeEach(sqs: SQSClient, queues: readonly string[]): Promi
   for (const queue of queues) {
     await storeIn(sqs, queue, 'wake');
   }
+}
+
+/** Deletes the queue named `name`, as the organization's tooling would. */
+export async function dropQueue(sqs: SQSClient, name: string): Promise<void> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  await sqs.send(new DeleteQueueCommand({ QueueUrl }));
 }

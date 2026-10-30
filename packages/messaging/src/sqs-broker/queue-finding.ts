@@ -1,7 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
 import { GetQueueAttributesCommand } from '@aws-sdk/client-sqs';
 import { prefixedNameOf } from '@cf-loom/contract/internal';
-import type { DurableConsumer } from '../broker/index.ts';
+import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
 import { queueNameOf } from './queue-names.ts';
 import { queueUrlOf } from './queue-url.ts';
 import type { Working } from './sqs-connection.ts';
@@ -27,21 +27,34 @@ export async function queuesFoundOf(
   durableConsumers: readonly DurableConsumer[],
 ): Promise<Found> {
   const queues: FoundQueue[] = [];
+  const lines: string[] = [];
   for (const durableConsumer of durableConsumers) {
-    queues.push(await queueFoundOf(working, durableConsumer));
+    const finding = await queueFoundOf(working, durableConsumer);
+    if (finding.kind === 'found') {
+      queues.push(finding.queue);
+    } else {
+      lines.push(finding.line);
+    }
   }
-  return { kind: 'found', queues };
+  return lines.length > 0 ? { kind: 'refused', lines } : { kind: 'found', queues };
 }
+
+type Finding =
+  | { readonly kind: 'found'; readonly queue: FoundQueue }
+  | { readonly kind: 'refused'; readonly line: string };
 
 async function queueFoundOf(
   { sqs, prefix }: Working,
   durableConsumer: DurableConsumer,
-): Promise<FoundQueue> {
+): Promise<Finding> {
   const durable = prefixedNameOf(prefix, durableConsumer.durable);
   const name = queueNameOf(durable);
   const url = await queueUrlOf(sqs, name);
   if (url === undefined) {
-    throw new Error(`The Durable consumer ${durable} has no queue ${name}`);
+    return {
+      kind: 'refused',
+      line: shapeRefusalOf(`The Durable consumer ${durable}`, [`has no queue ${name}`]),
+    };
   }
   const read = await sqs.send(
     new GetQueueAttributesCommand({
@@ -52,12 +65,13 @@ async function queueFoundOf(
   const attributes = read.Attributes ?? {};
   const visibilityTimeout = Number(attributes['VisibilityTimeout']);
   const redrive = JSON.parse(attributes['RedrivePolicy'] ?? '{}');
-  return {
+  const queue = {
     durableConsumer,
     durable,
     name,
     url,
     waits: [visibilityTimeout * 1_000],
     maxReceiveCount: redrive.maxReceiveCount,
-  };
+  } as const;
+  return { kind: 'found', queue };
 }
