@@ -1,4 +1,4 @@
-/** A broker as `connect` takes it: what an adapter returns, `jetstream()`, `memory()` or an organization's own. */
+/** A broker as `connect` takes it: what an adapter returns, `jetstream()`, `sqs()` or an organization's own. */
 export type Broker = {
   readonly connect: (serviceStream: ServiceStream) => Promise<BrokerConnection>;
 };

@@ -115,3 +115,58 @@ export async function receivedFrom(
     subject: message.MessageAttributes?.[snsSubjectAttribute]?.StringValue,
   }));
 }
+
+/** The string value of each message attribute of the Messages waiting in the queue named `name`. */
+export async function attributesReceivedFrom(
+  sqs: SQSClient,
+  name: string,
+): Promise<Record<string, string | undefined>[]> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  const received = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl,
+      MaxNumberOfMessages: 10,
+      MessageAttributeNames: ['All'],
+    }),
+  );
+  return (received.Messages ?? []).map((message) => {
+    const attributes = Object.entries(message.MessageAttributes ?? {});
+    return Object.fromEntries(
+      attributes.map(([attribute, { StringValue }]) => [attribute, StringValue]),
+    );
+  });
+}
+
+/** How many Messages the queue named `name` holds, ready to be received and in flight, received and not yet deleted or visible again. */
+export async function queueCountsOf(
+  sqs: SQSClient,
+  name: string,
+): Promise<{ readonly visible: number; readonly inFlight: number }> {
+  const attributes = await queueAttributesOf(sqs, name);
+  return {
+    visible: Number(attributes['ApproximateNumberOfMessages']),
+    inFlight: Number(attributes['ApproximateNumberOfMessagesNotVisible']),
+  };
+}
+
+/** The Messages waiting in the queue named `name`, each with its body and the string value of each message attribute it carries. */
+export async function messagesWithAttributesIn(
+  sqs: SQSClient,
+  name: string,
+): Promise<{ readonly body: string; readonly attributes: Record<string, string | undefined> }[]> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  const received = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl,
+      MaxNumberOfMessages: 10,
+      MessageAttributeNames: ['All'],
+    }),
+  );
+  return (received.Messages ?? []).map((message) => {
+    const entries = Object.entries(message.MessageAttributes ?? {});
+    const attributes = Object.fromEntries(
+      entries.map(([attribute, { StringValue }]) => [attribute, StringValue]),
+    );
+    return { body: message.Body ?? '', attributes };
+  });
+}
