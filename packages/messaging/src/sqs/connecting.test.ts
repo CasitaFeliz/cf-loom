@@ -1,6 +1,6 @@
 import { defineService } from '@cf-loom/contract';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { aClosedUrl, anAwsConnecting } from '../../test/aws-clients.ts';
+import { aClosedUrl, anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { arrangeOrders, ordersContract } from '../../test/orders.ts';
 import { messaging } from '../index.ts';
@@ -89,4 +89,25 @@ describe('sqs()', () => {
       expect(broker).toThrow(`connecting.account '${account}' is not a 12-digit AWS account id`);
     },
   );
+
+  test('the SNS client’s region decides the topic ARN’s partition', async () => {
+    const connecting = anAwsConnecting(moto.url, { region: 'us-gov-west-1' });
+    await arrangeOrders(connecting);
+
+    const opening = messaging(ordersContract, sqs(connecting));
+
+    await expect(opening).resolves.toBeDefined();
+  });
+
+  test('SNS and SQS clients in different regions reject messaging() naming both regions, before any call to AWS', async () => {
+    const connecting = anAwsConnecting(moto.url, { sqsRegion: 'us-east-1' });
+    const calls = countCommands(connecting.sns, 'GetTopicAttributesCommand');
+
+    const opening = messaging(ordersContract, sqs(connecting));
+
+    await expect(opening).rejects.toThrow(
+      'connecting.sns is in the region eu-west-1 and connecting.sqs in us-east-1: they must be in one region',
+    );
+    expect(calls.sent()).toBe(0);
+  });
 });
