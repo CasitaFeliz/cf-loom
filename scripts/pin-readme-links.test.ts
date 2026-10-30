@@ -103,6 +103,10 @@ describe('pinnedReadme', () => {
       'a link to a repository whose name starts with its own',
       `[x](https://github.com/CasitaFeliz/cf-loom-x/blob/main/README.md)`,
     ],
+    [
+      'a link to a repository whose owner ends with its own',
+      `[x](https://github.com/my-CasitaFeliz/cf-loom/blob/main/README.md)`,
+    ],
     ['an anchor link', '[x](#not-allowed-in-a-contract)'],
     [
       'a link to another host',
@@ -271,7 +275,7 @@ describe('pin-readme-links', () => {
       'packages/a/package.json': own,
       'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
       'packages/b/package.json': own,
-      'packages/b/README.md': `[b](${atMain}/CONTEXT.md)\n[up](../up.md)`,
+      'packages/b/README.md': '[up](../up.md)\n[here](./here.md)',
       'packages/c/package.json': own,
       'packages/c/README.md': `\n\n<${atMain}/CONTEXT.md>`,
     });
@@ -280,6 +284,7 @@ describe('pin-readme-links', () => {
     const run = runPin(checkout, commit);
 
     expect(run.status).toBe(1);
+    expect(run.stderr).toContain('packages/b/README.md: line 1: ');
     expect(run.stderr).toContain('packages/b/README.md: line 2: ');
     expect(run.stderr).toContain('packages/c/README.md: line 3: ');
     expect(filesOf(checkout)).toEqual(before);
