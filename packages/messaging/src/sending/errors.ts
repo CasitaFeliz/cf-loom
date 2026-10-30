@@ -1,5 +1,6 @@
 import {
   issueLineOf,
+  linesTextOf,
   maxBrokerHeaderBytes,
   type TransportHeaderFit,
 } from '@cf-loom/contract/internal';
@@ -25,7 +26,7 @@ export class InvalidMessageError extends Error {
   readonly invalid: readonly InvalidPart[];
 
   constructor(invalid: readonly InvalidPart[]) {
-    super(invalid.flatMap(linesOf).join('\n'));
+    super(linesTextOf(invalid.flatMap(linesOf)));
     this.invalid = invalid;
   }
 }

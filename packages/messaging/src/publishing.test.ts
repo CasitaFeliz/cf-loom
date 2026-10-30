@@ -9,6 +9,7 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../test/line-breaks.ts';
 import {
   type Broker,
   InvalidMessageError,
@@ -469,6 +470,41 @@ describe('publisher.publish', () => {
         invalid: [{ kind: 'id', at: 'factId' }],
       });
       expect(published).toEqual([]);
+    },
+  );
+
+  test.for(lineBreaks)(
+    'a Message refused for a header name and a body key holding %s is told on one line each, the break written escaped',
+    async ([, code, visible]) => {
+      const key = `a${String.fromCharCode(code)}b`;
+      const tallied = defineEvent({
+        name: 'Tallied',
+        version: 1,
+        visibility: 'internal',
+        description: 'Counts were tallied',
+        body: z.object({ counts: z.record(z.string(), z.number()) }),
+      });
+      const tallies = defineService({
+        name: 'tally-service',
+        groups: [defineGroup({ name: 'tallies', description: 'Tallies', events: [tallied] })],
+      });
+      const { publisher } = await memory(tallies);
+      const headers = { [`Cf-Loom-${key}`]: 'x' };
+
+      const error = await rejectionOf(
+        publisher.publish(
+          'Tallied',
+          { v1: { counts: { [key]: 'x' } } as never },
+          { ...fact, headers },
+        ),
+      );
+
+      expect(error).toBeInstanceOf(InvalidMessageError);
+      const name = `Cf-Loom-a${visible}b`;
+      expect((error as Error).message.split(lineBreakPattern)).toEqual([
+        expect.stringContaining(`headers.${name}: The transport header ${name} takes a name`),
+        `Tallied@1: body.counts.a${visible}b invalid_type: Invalid input: expected number, received string`,
+      ]);
     },
   );
 
