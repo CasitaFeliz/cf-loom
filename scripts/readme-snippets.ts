@@ -78,7 +78,7 @@ export function writeReadmeService(directory: string, repository: string = root)
 export function readmeServiceProblems(directory: string, repository: string = root): string[] {
   if (!existsSync(join(directory, 'tsconfig.json'))) {
     throw new Error(
-      `The README Service is not written out: ${directory} is written when Vitest loads vitest.config.ts`,
+      `The README Service is not written out: ${directory} is written when Vitest starts a project that vitest.config.ts gives it to`,
     );
   }
   const { problems, project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
