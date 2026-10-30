@@ -2583,7 +2583,7 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
     const gainsY = !isWhole && leaf.crossing.at(-1) !== 'key';
     const added: readonly Piece[] = gainsY ? [{ text: 'y', isField: true }] : [];
     const pieces = [...placeSteps, ...written.flatMap(({ piece }) => piece ?? []), ...added];
-    return { path: pathTextOf(pieces), isWhole };
+    return { path: pathTextOf(pieces), isWhole, gainsY };
   }
 
   function stepsOf({ difference }: Change): readonly Step[] {
@@ -2629,7 +2629,7 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
         deepestOwnSteps = Math.max(deepestOwnSteps, stepsOf(change).length - place.root.length);
       }
       changesAtNodes += drawn.filter(({ isWhole }) => isWhole).length;
-      changesThroughRefs += hasIds ? drawn.filter(({ isWhole }) => !isWhole).length : 0;
+      changesThroughRefs += hasIds ? drawn.filter(({ gainsY }) => gainsY).length : 0;
     }
 
     expect(wrong).toEqual([]);
