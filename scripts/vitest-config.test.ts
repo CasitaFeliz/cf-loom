@@ -11,38 +11,72 @@ import {
 
 const root = join(import.meta.dirname, '..');
 const configUrl = JSON.stringify(pathToFileURL(join(root, 'vitest.config.ts')).href);
-const configAgainUrl = JSON.stringify(
-  `${pathToFileURL(join(root, 'vitest.config.ts')).href}?again`,
+const vitestNode = JSON.stringify(
+  pathToFileURL(join(root, 'node_modules', 'vitest', 'dist', 'node.js')).href,
 );
 const vitestBin = join(root, 'node_modules', 'vitest', 'vitest.mjs');
 
-/** What a Node process needs to read the folder that the `tooling` project gets its README Service from, in the configuration it loads. */
-const toolingFolderOf = `
-const toolingFolderOf = (config) =>
-  config.test.projects.find((project) => project.test?.name === 'tooling').test.provide?.readmeService;
+/** What a Node process needs to start a Vitest through its API on this checkout's configuration, and to read the folder its `tooling` project gets the README Service from. */
+const startsVitest = `
+const { createVitest } = await import(${vitestNode});
+const { existsSync } = await import('node:fs');
+const { join } = await import('node:path');
+const startVitest = (options = {}) =>
+  createVitest('test', { watch: true, reporters: [{}], config: ${configUrl}, ...options }, {}, { stdout: process.stderr });
+const folderOf = (vitest) =>
+  vitest.projects.find(({ name }) => name === 'tooling').config.provide.readmeService;
 `;
 
-/** A Vitest process: it loads the configuration, reports its folder and lives until SIGTERM, which ends it as Vitest's own signal handlers do. */
-const reportsItsFolder = `${toolingFolderOf}
-const { default: config } = await import(${configUrl});
-console.log(toolingFolderOf(config));
-process.once('SIGTERM', () => process.exit());
+/** A Vitest process: it reports its folder once Vitest has started, and lives until SIGTERM, which Vitest's own handler ends with process.exit. */
+const reportsItsFolder = `${startsVitest}
+console.log(folderOf(await startVitest()));
 setInterval(() => {}, 2 ** 30);
 `;
 
-/** A Vitest process that Vitest restarts for a change of its configuration: it loads the configuration a second time and reports what that load did. */
-const loadsTheConfigTwice = `${toolingFolderOf}
-const { existsSync } = await import('node:fs');
-const { join } = await import('node:path');
-const { default: first } = await import(${configUrl});
-const listenersAfterFirst = process.listenerCount('exit');
-const { default: second } = await import(${configAgainUrl});
-const folder = toolingFolderOf(second);
+/** A Vitest process that restarts twice, as watch mode does for a change of its configuration, then closes. */
+const restartsThenCloses = `${startsVitest}
+const vitest = await startVitest();
+const first = folderOf(vitest);
+await vitest.vite.restart();
+const second = folderOf(vitest);
+const afterFirstRestart = {
+  moved: second !== first,
+  rewritten: existsSync(join(second, 'tsconfig.json')),
+  oldRemoved: !existsSync(first),
+};
+const listeners = process.listenerCount('exit');
+await vitest.vite.restart();
+const addedListeners = process.listenerCount('exit') - listeners;
+const third = folderOf(vitest);
+await vitest.close();
+console.log(JSON.stringify({ ...afterFirstRestart, addedListeners, removedOnClose: !existsSync(third) }));
+process.exit();
+`;
+
+/** A Vitest process with two Vitest instances: it closes the first and reports what is left of each folder. */
+const closesOneOfTwo = `${startsVitest}
+const first = await startVitest();
+const second = await startVitest();
+const folders = [folderOf(first), folderOf(second)];
+await first.close();
 console.log(JSON.stringify({
-  sameFolder: folder === toolingFolderOf(first),
-  addedListeners: process.listenerCount('exit') - listenersAfterFirst,
-  written: existsSync(join(folder, 'tsconfig.json')),
+  distinct: folders[0] !== folders[1],
+  firstRemoved: !existsSync(folders[0]),
+  secondKept: existsSync(join(folders[1], 'tsconfig.json')),
 }));
+await second.close();
+process.exit();
+`;
+
+/** A Vitest process that runs only projects of packages, which are given no README Service: it reports the projects it ran and whether it wrote a folder. */
+const runsOnlyPackages = `${startsVitest}
+const { readdirSync } = await import('node:fs');
+const vitest = await startVitest({ project: ['@cf-loom/contract', '@cf-loom/client'] });
+const folders = existsSync('.readme-service') ? readdirSync('.readme-service') : [];
+const wrote = folders.some((name) => name.startsWith(\`\${process.pid}-\`));
+await vitest.close();
+console.log(JSON.stringify({ projects: vitest.projects.map(({ name }) => name), wrote }));
+process.exit();
 `;
 
 const started: TestProcess[] = [];
@@ -84,15 +118,40 @@ describe('the Vitest configuration', () => {
     expect(existsSync(second.folder)).toBe(false);
   });
 
-  test('a second load of the configuration in one process keeps the folder of the first and adds no removal of its own', async () => {
-    const vitest = startNode('--input-type=module', '--eval', loadsTheConfigTwice);
+  test('a restart of Vitest writes a new README Service and removes the old one, adds no removal of its own, and its close removes the last', async () => {
+    const vitest = startNode('--input-type=module', '--eval', restartsThenCloses);
 
     await vitest.exited;
 
     expect(JSON.parse(vitest.stdout())).toEqual({
-      sameFolder: true,
+      moved: true,
+      rewritten: true,
+      oldRemoved: true,
       addedListeners: 0,
-      written: true,
+      removedOnClose: true,
+    });
+  });
+
+  test('two Vitest instances in one process each write a README Service of their own, and closing one leaves the other', async () => {
+    const vitest = startNode('--input-type=module', '--eval', closesOneOfTwo);
+
+    await vitest.exited;
+
+    expect(JSON.parse(vitest.stdout())).toEqual({
+      distinct: true,
+      firstRemoved: true,
+      secondKept: true,
+    });
+  });
+
+  test('a Vitest that runs no project given the README Service writes none', async () => {
+    const vitest = startNode('--input-type=module', '--eval', runsOnlyPackages);
+
+    await vitest.exited;
+
+    expect(JSON.parse(vitest.stdout())).toEqual({
+      projects: ['@cf-loom/contract', '@cf-loom/client'],
+      wrote: false,
     });
   });
 
@@ -102,7 +161,7 @@ describe('the Vitest configuration', () => {
 
     await vitest.exited;
 
-    const own = `\\[readme-service\\] \\.readme-service/${vitest.child.pid}-[\\d.]+/test/`;
+    const own = `\\[readme-service\\] \\.readme-service/${vitest.child.pid}-[0-9a-f-]+/test/`;
     expect(vitest.stdout().trim().split('\n').toSorted()).toEqual(
       readmeTests.toSorted().map((name) => expect.stringMatching(new RegExp(`^${own}${name}$`))),
     );

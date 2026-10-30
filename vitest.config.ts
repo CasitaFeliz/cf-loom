@@ -1,11 +1,13 @@
-import { existsSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
 import { writeReadmeService } from './scripts/readme-snippets.ts';
 
 declare module 'vitest' {
   interface ProvidedContext {
-    /** The folder this Vitest process wrote the README Service to. */
+    /** The folder this Vitest wrote the README Service to. */
     readmeService: string;
   }
 }
@@ -13,27 +15,38 @@ declare module 'vitest' {
 /** The lint plugin tests each spawn Biome, and some script tests spawn Node, which takes seconds on a CI runner with shared cores. */
 const spawningTimeout = 30_000;
 
-/**
- * Written before any test file is collected, since a project's own setup runs after: see CLAUDE.md.
- * Each Vitest process writes a folder of its own, so a second process in the checkout never replaces
- * the files this one's tests read, and removes it when it exits. Vitest loads this file again, in the
- * same process, when it restarts for a change to it: that load rewrites the folder, which only an
- * earlier load can have made, and registers no second removal.
- */
+/** The folder of this Vitest's README Service, named anew each time Vitest reads this file, so each Vitest and each restart of one has a folder of its own. */
 const readmeService = join(
   import.meta.dirname,
   '.readme-service',
-  `${process.pid}-${performance.timeOrigin}`,
+  `${process.pid}-${randomUUID()}`,
 );
-const loadedBefore = existsSync(readmeService);
-if (!loadedBefore) {
-  process.on('exit', () => rmSync(readmeService, { recursive: true, force: true }));
-}
-writeReadmeService(readmeService);
+
+/**
+ * Writes the README Service when Vitest starts a project it is provided to, before any test file is
+ * collected, since a project's own setup runs after (see CLAUDE.md), and removes it when that Vitest
+ * closes, or when the process exits first.
+ */
+const readmeServiceOwner: Plugin = {
+  name: 'cf-loom:readme-service',
+  configureVitest({ vitest, project }) {
+    if (project !== vitest.projects.find(({ config }) => config.provide.readmeService)) {
+      return;
+    }
+    const remove = () => rmSync(readmeService, { recursive: true, force: true });
+    process.once('exit', remove);
+    vitest.onClose(() => {
+      process.off('exit', remove);
+      remove();
+    });
+    writeReadmeService(readmeService);
+  },
+};
 
 const provide = { readmeService };
 
 export default defineConfig({
+  plugins: [readmeServiceOwner],
   test: {
     projects: [
       'packages/*',
