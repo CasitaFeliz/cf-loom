@@ -1,10 +1,58 @@
-import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import { pinnedReadme, repositoryOf } from './pin-readme-links.ts';
 
 const repository = 'CasitaFeliz/cf-loom';
 const commit = '0123456789abcdef0123456789abcdef01234567';
 const atMain = `https://github.com/${repository}/blob/main`;
 const atCommit = `https://github.com/${repository}/blob/${commit}`;
+
+const checkouts: string[] = [];
+
+afterEach(() => {
+  for (const checkout of checkouts.splice(0)) {
+    rmSync(checkout, { recursive: true, force: true });
+  }
+});
+
+function aCheckoutWith(files: Record<string, string>): string {
+  const checkout = mkdtempSync(join(tmpdir(), 'pin-readme-links-'));
+  checkouts.push(checkout);
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(checkout, path)), { recursive: true });
+    writeFileSync(join(checkout, path), text);
+  }
+  return checkout;
+}
+
+function filesOf(checkout: string): Record<string, string> {
+  const paths = readdirSync(checkout, { recursive: true, encoding: 'utf8' }).sort();
+  const files = paths.filter((path) => statSync(join(checkout, path)).isFile());
+  return Object.fromEntries(
+    files.map((path) => [path, readFileSync(join(checkout, path), 'utf8')]),
+  );
+}
+
+function manifestOf(url: string): string {
+  return JSON.stringify({ repository: { type: 'git', url } });
+}
+
+function runPin(checkout: string, ...args: string[]): { status: number | null; stderr: string } {
+  const script = join(import.meta.dirname, 'pin-readme-links.ts');
+  const run = spawnSync('node', [script, ...args], { cwd: checkout, encoding: 'utf8' });
+  return { status: run.status, stderr: run.stderr };
+}
 
 describe('pinnedReadme', () => {
   it('points a link to a repository file at main at the commit, keeping its path and anchor', () => {
@@ -159,5 +207,66 @@ describe('repositoryOf', () => {
     const repository = () => repositoryOf(manifest);
 
     expect(repository).toThrow(/^repository\.url must be /);
+  });
+});
+
+describe('pin-readme-links', () => {
+  it('pins each package README with its own repository and leaves every other file as it is', () => {
+    const own = 'git+https://github.com/CasitaFeliz/cf-loom.git';
+    const checkout = aCheckoutWith({
+      'README.md': `[root](${atMain}/CONTEXT.md)`,
+      'packages/a/package.json': manifestOf(own),
+      'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
+      'packages/a/ARCHITECTURE.md': `[architecture](${atMain}/CONTEXT.md)`,
+      'packages/b/package.json': manifestOf('git+https://github.com/other/b-repo.git'),
+      'packages/b/README.md': '[b](https://github.com/other/b-repo/blob/main/x.md#y)',
+      'packages/no-readme/package.json': manifestOf(own),
+    });
+    const before = filesOf(checkout);
+
+    const run = runPin(checkout, commit);
+
+    expect(run).toEqual({ status: 0, stderr: '' });
+    expect(filesOf(checkout)).toEqual({
+      ...before,
+      'packages/a/README.md': `[a](${atCommit}/CONTEXT.md)`,
+      'packages/b/README.md': `[b](https://github.com/other/b-repo/blob/${commit}/x.md#y)`,
+    });
+  });
+
+  it('prints the file and line of each README it refuses and writes none', () => {
+    const own = manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git');
+    const checkout = aCheckoutWith({
+      'packages/a/package.json': own,
+      'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
+      'packages/b/package.json': own,
+      'packages/b/README.md': `[b](${atMain}/CONTEXT.md)\n[up](../up.md)`,
+      'packages/c/package.json': own,
+      'packages/c/README.md': `\n\n<${atMain}/CONTEXT.md>`,
+    });
+    const before = filesOf(checkout);
+
+    const run = runPin(checkout, commit);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('packages/b/README.md: line 2: ');
+    expect(run.stderr).toContain('packages/c/README.md: line 3: ');
+    expect(filesOf(checkout)).toEqual(before);
+  });
+
+  it('prints the manifest of a package that declares no GitHub repository and writes none', () => {
+    const checkout = aCheckoutWith({
+      'packages/a/package.json': manifestOf('git+https://github.com/CasitaFeliz/cf-loom.git'),
+      'packages/a/README.md': `[a](${atMain}/CONTEXT.md)`,
+      'packages/b/package.json': JSON.stringify({ name: 'b' }),
+      'packages/b/README.md': '',
+    });
+    const before = filesOf(checkout);
+
+    const run = runPin(checkout, commit);
+
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('packages/b/package.json: repository.url must be ');
+    expect(filesOf(checkout)).toEqual(before);
   });
 });

@@ -1,3 +1,6 @@
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 /** `pattern` as a regular expression source that matches it literally. */
 function literally(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -69,4 +72,59 @@ export function repositoryOf(manifest: { readonly repository?: unknown }): strin
     throw new Error('repository.url must be "git+https://github.com/<owner>/<name>.git"');
   }
   return match[1];
+}
+
+/** The error `step` throws, with `path` in front of each line of its message. */
+function atPath<Value>(path: string, step: () => Value): Value {
+  try {
+    return step();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message.replaceAll(/^/gm, `${path}: `), { cause: error });
+  }
+}
+
+type PinnedReadme = { readonly path: string; readonly text: string };
+
+/** The README of a package folder, pinned with the repository its `package.json` declares. */
+function pinnedReadmeOf(folder: string, commit: string): PinnedReadme {
+  const manifestPath = join(folder, 'package.json');
+  const manifest = atPath(manifestPath, () => JSON.parse(readFileSync(manifestPath, 'utf8')));
+  const repository = atPath(manifestPath, () => repositoryOf(manifest));
+  const path = join(folder, 'README.md');
+  const text = atPath(path, () => pinnedReadme(readFileSync(path, 'utf8'), repository, commit));
+  return { path, text };
+}
+
+/** The folders of `packages/` that hold a README. */
+function packagesWithReadme(): string[] {
+  const names = readdirSync('packages').sort();
+  return names
+    .map((name) => join('packages', name))
+    .filter((folder) => existsSync(join(folder, 'README.md')));
+}
+
+/** Pins every package README of the current directory to `commit`, all or none. */
+function pinPackageReadmes(commit: string): void {
+  const pinned: PinnedReadme[] = [];
+  const problems: string[] = [];
+  for (const folder of packagesWithReadme()) {
+    try {
+      pinned.push(pinnedReadmeOf(folder, commit));
+    } catch (error) {
+      problems.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (problems.length > 0) {
+    console.error(problems.join('\n'));
+    process.exitCode = 1;
+    return;
+  }
+  for (const { path, text } of pinned) {
+    writeFileSync(path, text);
+  }
+}
+
+if (import.meta.main) {
+  pinPackageReadmes(process.argv[2] ?? '');
 }
