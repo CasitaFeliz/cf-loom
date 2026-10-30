@@ -1,0 +1,42 @@
+/** The code points of every character some reader ends a line at: those of `str.splitlines`. */
+const lineBreakCodes = [0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029] as const;
+
+const lineBreakPattern = new RegExp(
+  `[${lineBreakCodes.map((code) => String.fromCharCode(code)).join('')}]`,
+  'g',
+);
+
+/** The visible text of a line break's escape: `\n` and `\r` for LF and CR, `\u` and four hex digits for the others. */
+function escapeOf(lineBreak: string): string {
+  const code = lineBreak.charCodeAt(0);
+  if (code === 0x0a) {
+    return '\\n';
+  }
+  if (code === 0x0d) {
+    return '\\r';
+  }
+  return `\\u${code.toString(16).padStart(4, '0')}`;
+}
+
+/**
+ * A text as one line, as cf-loom writes every line: each line break inside it, CR, LF, VT, FF, FS,
+ * GS, RS, U+0085, U+2028 and U+2029, written as the visible text of its escape, so no reader splits
+ * it there.
+ */
+export function unbrokenLineOf(text: string): string {
+  return text.replace(lineBreakPattern, escapeOf);
+}
+
+/** Lines as one message: each written by `unbrokenLineOf`, joined by LF, so each problem stays one line. */
+export function linesTextOf(lines: readonly string[]): string {
+  return lines.map(unbrokenLineOf).join('\n');
+}
+
+/**
+ * A line as the console logs it: the line written by `unbrokenLineOf`, then its `cause` when it has
+ * one, behind a `%s` so the console never reads the line as a format of the cause.
+ */
+export function logOf(line: string, cause?: unknown): readonly unknown[] {
+  const written = unbrokenLineOf(line);
+  return cause === undefined ? [written] : ['%s', written, cause];
+}

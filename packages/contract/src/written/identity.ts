@@ -1,4 +1,5 @@
 import { isMessageVersion, isMethod } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import { textOf } from './written.ts';
 
 /** The segments between the slashes of a path, a leading or trailing slash dropped. */
@@ -65,7 +66,7 @@ export function nameAndVersionOf(identity: string): {
 } {
   const message = readMessageIdentity(identity);
   if (message === undefined) {
-    throw new Error(`${identity} is no Message Version’s identity: a bug.`);
+    throw new Error(unbrokenLineOf(`${identity} is no Message Version’s identity: a bug.`));
   }
   return message;
 }
@@ -80,7 +81,7 @@ export function endpointSegmentsOf(identity: string): {
 } {
   const read = readEndpointIdentity(identity);
   if (read === undefined) {
-    throw new Error(`${identity} is no Endpoint’s identity: a bug.`);
+    throw new Error(unbrokenLineOf(`${identity} is no Endpoint’s identity: a bug.`));
   }
   const segments = segmentsOf(read.identityPath).map(
     (segment): PathSegment =>

@@ -1,5 +1,6 @@
+import { logOf } from '@cf-loom/contract/internal';
 import type { Fault } from '../outcomes/index.ts';
-import { faultLineOf, logOf } from './errors.ts';
+import { faultLineOf } from './errors.ts';
 import type { Handled } from './handled.ts';
 
 /**

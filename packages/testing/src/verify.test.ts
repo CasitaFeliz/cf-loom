@@ -9,6 +9,7 @@ import {
 import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
@@ -206,6 +207,31 @@ describe('fake.verify()', () => {
       ].join('\n'),
     );
   });
+
+  test.for(lineBreaks)(
+    'an AggregateError of two mistakes naming a code holding %s is a count line and one line each',
+    async ([, code, visible]) => {
+      const scripted = `A${String.fromCharCode(code)}B`;
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.unknownRejection(scripted));
+      payments.on('getSummary').otherwise((r) => r.unknownRejection(scripted));
+      await caughtFrom(payments.fetch(new Request(requests.getPayment)));
+      await caughtFrom(payments.fetch(new Request(requests.getSummary)));
+
+      const thrown = verifiedBy(() => payments.verify());
+
+      const refused = `A${visible}B is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it`;
+      expect((thrown as Error).message.split(lineBreakPattern)).toEqual([
+        '2 mistakes:',
+        `payments-service: getPayment: ${refused}`,
+        `payments-service: getSummary: ${refused}`,
+      ]);
+      expect(errorsOf(thrown).map((error) => error.message.split(lineBreakPattern))).toEqual([
+        [`payments-service: getPayment: ${refused}`],
+        [`payments-service: getSummary: ${refused}`],
+      ]);
+    },
+  );
 
   test('reports everything again on a second call, forgetting nothing', async () => {
     const payments = fakeProvider(paymentsDependency);

@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   arrangeQueue,
   arrangeTopic,
@@ -1096,6 +1097,31 @@ describe('applyBrokerPlan', () => {
       `The Durable consumer ${orders.chargeDurable} has no maxDeliver, retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
   });
+
+  test.for(lineBreaks)(
+    'an account that is not 12 digits and limits keyed with %s are refused in one error, a line each, the break written escaped',
+    async ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const orders = anOrders();
+      const connecting = anAwsConnecting(moto.url, { account: '1234' });
+      const limits = readFromJson({
+        ...testLimits,
+        durableConsumerDefaults: {
+          ...testLimits.durableConsumerDefaults,
+          [`max${character}x`]: 1,
+        },
+        [`other${character}key`]: {},
+      });
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+      expect(error.message.split(lineBreakPattern)).toEqual([
+        "connecting.account '1234' is not a 12-digit AWS account id",
+        `limits.durableConsumerDefaults.max${visible}x is a key SqsBrokerLimits does not define`,
+        `limits.other${visible}key is a key SqsBrokerLimits does not define`,
+      ]);
+    },
+  );
 
   test('clients in two regions are refused naming both, creating nothing', async () => {
     const orders = anOrders();

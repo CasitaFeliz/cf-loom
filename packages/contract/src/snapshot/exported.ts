@@ -1,4 +1,5 @@
 import type { Endpoint } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import { identityOf, type TextPartNodes } from '../written/index.ts';
 import type { CodeSnapshot, EndpointSnapshot, ExportedCut } from './types.ts';
 
@@ -14,7 +15,7 @@ export function exportedEntryOf(
   const identity = identityOf(endpoint.method, endpoint.path);
   const entry = cut.endpoints[identity];
   if (entry === undefined) {
-    throw new Error(`The exported Snapshot of ${provider} has no ${identity}`);
+    throw new Error(unbrokenLineOf(`The exported Snapshot of ${provider} has no ${identity}`));
   }
   return entry;
 }
@@ -26,7 +27,7 @@ export function exportedEntryOf(
 export function exportedCodeOf(provider: string, cut: ExportedCut, code: string): CodeSnapshot {
   const entry = Object.hasOwn(cut.codes, code) ? cut.codes[code] : undefined;
   if (entry === undefined) {
-    throw new Error(`The exported Snapshot of ${provider} has no code ${code}`);
+    throw new Error(unbrokenLineOf(`The exported Snapshot of ${provider} has no code ${code}`));
   }
   return entry;
 }

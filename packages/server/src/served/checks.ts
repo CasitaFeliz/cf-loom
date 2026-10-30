@@ -2,6 +2,7 @@ import type { Endpoint, Guard, ServiceContract } from '@cf-loom/contract';
 import {
   failureLineOf,
   isServiceContract,
+  linesTextOf,
   type TextPartNodes,
   walkedTextPartsOf,
 } from '@cf-loom/contract/internal';
@@ -46,7 +47,7 @@ export function checkedTextPartsOf(
   const walked = walkedTextPartsOf(contract);
   if (walked.kind === 'invalid') {
     const lines = walked.failures.map(failureLineOf);
-    throw new Error(`serve() takes a Contract generate accepts:\n${lines.join('\n')}`);
+    throw new Error(linesTextOf(['serve() takes a Contract generate accepts:', ...lines]));
   }
   return walked.nodes;
 }

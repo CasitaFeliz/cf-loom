@@ -4,6 +4,7 @@ import {
   internalError,
   type RetryAfterGiven,
   sendableRetryAfterOf,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 
 /** What every Fault carries: whether the change was committed, its message and its `cause`. */
@@ -48,7 +49,7 @@ export function fault<const Given extends FaultGiven & { readonly retryAfter?: n
 export function fault({ committed, retryable, message, cause, retryAfter }: FaultFields): Fault {
   const sendable = sendableRetryAfterOf({ retryable, retryAfter });
   if (sendable.kind === 'refused') {
-    throw new Error(`fault(): ${sendable.message}`);
+    throw new Error(unbrokenLineOf(`fault(): ${sendable.message}`));
   }
   const built: Fault = { kind: 'fault', committed, retryable, message: message ?? internalError };
   const caused = cause === undefined ? built : { ...built, cause };

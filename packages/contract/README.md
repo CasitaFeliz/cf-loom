@@ -241,7 +241,7 @@ type InvalidInputBody = {
 
 `code` is one of a set cf-loom owns, not zod's issue codes: `required`, `invalid_type`, `invalid_value`, `invalid_format`, `too_small`, `too_big`, `not_multiple`, `unrecognized_key` and `malformed` (an unparseable body, a wrong content type or a value nested too deeply to read). An Issue is `required` when nothing is at its path: a key the value does not hold itself, a hole of a list, or `undefined`. `in` and `code` are Open Enums, which a Caller reads through its Provider's Contract Package with their Unknown case, so a part or a code a later cf-loom adds is an Additive Change. An Issue never carries the received value.
 
-Wherever cf-loom writes an Issue on one line, in an error, a log or a Fake Provider's Mistake, it writes `<source>: <part>.<path> <code>: <message>`, the path joined by dots and left out when the Issue is at the part itself: `orders: body.orderId invalid_format: Invalid UUID`.
+Wherever cf-loom writes an Issue on one line, in an error, a log or a Fake Provider's Mistake, it writes `<source>: <part>.<path> <code>: <message>`, the path joined by dots and left out when the Issue is at the part itself, and any line break in it written as its escape (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md): `orders: body.orderId invalid_format: Invalid UUID`.
 
 ## Guards
 
