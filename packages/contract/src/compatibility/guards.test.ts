@@ -746,6 +746,17 @@ describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reac
     expect(changes).toEqual([neutral(guardSite, { kind: 'context-changed' })]);
   });
 
+  test('a Guard’s Context naming a def that neither side holds is a Neutral context-changed', () => {
+    const context = anOpenObject({ at: required(aRef('missing')) });
+    const guards = { authenticated: aGuard({ context }) };
+    const baseline = aBaselineDefinitions({ guards });
+    const proposed = aDefinitions({ guards });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'context-changed' })]);
+  });
+
   test('a Guard’s Context naming another def of the same text is a Neutral context-changed', () => {
     const defs = (): Defs => ({
       first: anOpenObject({ value: required(aString) }),
