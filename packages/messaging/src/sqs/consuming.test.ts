@@ -18,10 +18,11 @@ import {
   handlersOf,
   ordersContract,
   type Received,
+  testLimits,
 } from '../../test/orders.ts';
 import { until } from '../../test/until.ts';
 import { messaging } from '../index.ts';
-import { type SqsConnecting, sqs } from './index.ts';
+import { type Duration, type SqsConnecting, sqs } from './index.ts';
 
 let moto: MotoServer;
 
@@ -265,6 +266,37 @@ describe('consuming over sqs()', () => {
       await expect(consuming).rejects.toThrow(line);
     },
   );
+
+  test('consume reads the widest backoff tag, 256 characters of entries, and finds cf-loom’s tags beside the organization’s tags named __proto__, constructor and toString', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    const widest: Duration[] = [
+      '30s',
+      ...Array.from({ length: 36 }, (): Duration => '10000s'),
+      '999s',
+    ];
+    await arrangeOrders(connecting, {
+      prefix: 'staging',
+      limits: {
+        durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: widest },
+      },
+    });
+    const orders = anOrders('staging');
+    for (const queue of [orders.notifyQueue, orders.chargeQueue]) {
+      await tagByHand(
+        connecting.sqs,
+        queue,
+        fromJson('{"__proto__":"a","constructor":"b","toString":"c"}'),
+      );
+    }
+    const started = await messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
+    closedWhenDone(started, connecting);
+    await started.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    const received: Received[] = [];
+
+    await started.consume(handlersOf(received), {});
+
+    await until(() => expect(received).toHaveLength(1));
+  });
 });
 
 /** Removes the redrive policy of a queue, as the organization's tooling would. */
@@ -286,3 +318,8 @@ function answeringAttributes(sqsClient: SQSClient, attributes: Record<string, st
 
 const redriveOf = (maxReceiveCount: number, queue: string) =>
   JSON.stringify({ deadLetterTargetArn: deadLetterArnOf(queue), maxReceiveCount });
+
+/** A tag set as JSON text holds it, so a key such as `__proto__` is an own key of the value. */
+function fromJson(text: string): Record<string, string> {
+  return JSON.parse(text);
+}
