@@ -374,6 +374,37 @@ describe('consuming over sqs()', () => {
     expect(new Set(samples.map(({ visible }) => visible))).toEqual(new Set([0]));
   });
 
+  test('a visibility change that fails before a later delivery leaves its Handler unrun, reaches onBrokerTrouble once as pull-failed with the client’s error, and the Message comes back after the visibility timeout; the next answered pull reaches it as recovered', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { publisher, consume, connecting } = await aMessaging({
+      limits: limitsWith({ ackWait: ['1s', '2s'], maxDeliver: 5 }),
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    const refusal = new Error('SQS refused the visibility change');
+    failingCommand(connecting.sqs, {
+      command: 'ChangeMessageVisibilityCommand',
+      error: refusal,
+      times: 1,
+    });
+    const received: Received[] = [];
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await consume(handlersOf(received, { notify: throwingOnce }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() =>
+      expect(troubles.map(({ kind }) => kind)).toEqual(['pull-failed', 'recovered']),
+    );
+    await until(() => expect(received).toHaveLength(2));
+    expect(troubles[0]).toMatchObject({ kind: 'pull-failed', cause: refusal });
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 3]);
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
