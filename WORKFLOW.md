@@ -251,7 +251,8 @@ its cost for v1. Its findings, each verified by a second agent, become issues of
 An issue that changes only documents or configuration keeps the plan, the Definition of Ready, the fix loop, the
 Definition of Done and the merge, without the items that do not apply (a public API, a test list). The main session
 makes the change itself, since it holds the design context, and one `cf-doc-reviewer` agent reads the PR for
-fidelity, consistency across the documents, and links; a mechanical change (a rename, a find and replace) gets the
+fidelity, consistency across the documents, and links, and follows every procedure the PR adds or changes as a reader
+would; a mechanical change (a rename, a find and replace) gets the
 same reviewer on Sonnet. The main session fixes the findings, and the same reviewer reads the whole PR again each
 round, at most two rounds. The reviewer reads once the change passes locally.
 
