@@ -27,9 +27,13 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Require a changeset for a change to a package
+      - name: Require a changeset for a change to a package, and a bump that follows the title
         if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != github.repository)
-        run: pnpm changeset status --since=origin/main
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pnpm changeset status --since=origin/main --output="$RUNNER_TEMP/changeset-status.json"
+          node scripts/check-changeset-bump.ts "$PR_TITLE" "$RUNNER_TEMP/changeset-status.json"
       - name: Install nats-server
         if: runner.arch == 'X64'
         env:
