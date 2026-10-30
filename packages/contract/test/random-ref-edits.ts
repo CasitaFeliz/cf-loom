@@ -53,11 +53,9 @@ function nodelessRefsIn(node: Draft): Draft[] {
 /** A `ref` made to name another def, one a nodeless path from a def may name only if lower. */
 export function retargeted(draft: DraftGraph, nodes: Draft[], next: Next): boolean {
   const limits = limitsOf(draft);
-  const total = Object.keys(draft.defs).length;
+  const names = Object.keys(draft.defs);
   const options = (ref: Draft) =>
-    Array.from({ length: limits.get(ref) ?? total }, (_, index) => `d${index}`).filter(
-      (name) => name !== ref.name,
-    );
+    names.slice(0, limits.get(ref) ?? names.length).filter((name) => name !== ref.name);
   const movable = nodes.filter(isRef).filter((ref) => options(ref).length > 0);
   const ref = pickFrom(movable, next);
   if (ref === undefined) {

@@ -31,6 +31,8 @@ type Draw = {
   readonly next: () => number;
   readonly pick: <Value>(values: readonly Value[]) => Value;
   readonly count: number;
+  /** The def names, in the order of the defs. */
+  readonly names: readonly string[];
 };
 
 const wrappers: readonly Wrapper[] = ['union', 'tuple', 'tuple with rest', 'allOf'];
@@ -40,9 +42,15 @@ export function defPairOf(seed: number): DefPair {
   const next = seededNext(seed);
   const pick = <Value>(values: readonly Value[]): Value =>
     values[Math.floor(next() * values.length)] as Value;
-  const draw: Draw = { next, pick, count: 2 + Math.floor(next() * 6) };
-  const indexes = Array.from({ length: draw.count }, (_, index) => index);
-  const defs = Object.fromEntries(indexes.map((index) => [`d${index}`, defAt(draw, index)]));
+  const count = 2 + Math.floor(next() * 6);
+  const names = Array.from({ length: count }, (_, index) =>
+    index === 0 && next() < 0.1 ? 'constructor' : `d${index}`,
+  );
+  const draw: Draw = { next, pick, count, names };
+  const indexes = names.map((_, index) => index);
+  const defs = Object.fromEntries(
+    indexes.map((index) => [nameAt(draw, index), defAt(draw, index)]),
+  );
   const held = indexes.map((index) => {
     const wrapper = pick(wrappers);
     return { name: `e${index}`, wrapper, node: wrappedAt(draw, wrapper, index) };
@@ -54,6 +62,11 @@ export function defPairOf(seed: number): DefPair {
     return [name, { wrapper, baseline: node, proposed }];
   });
   return { baseline: defs, proposed: copy.defs, exports: Object.fromEntries(pairs), edit };
+}
+
+/** The name of the def at an index: `d` and the index, or `constructor` where a draw names the first so. */
+function nameAt(draw: Draw, index: number): string {
+  return draw.names[index] as string;
 }
 
 /** A node with the Neutral annotations drawn for it, each with `chance`. */
@@ -84,7 +97,7 @@ function leaf(draw: Draw): SchemaNode {
 /** A node of the format; `below` bounds the defs a `ref` may name where no node would stand between it and its def. */
 function inline(draw: Draw, depth: number, below: number | undefined): SchemaNode {
   if (depth >= 2 || draw.next() < 0.3) {
-    const named = `d${Math.floor(draw.next() * (below ?? draw.count))}`;
+    const named = nameAt(draw, Math.floor(draw.next() * (below ?? draw.count)));
     return below === 0 || draw.next() < 0.5 ? leaf(draw) : useOf(draw, named);
   }
   const nested = (): SchemaNode => inline(draw, depth + 1, undefined);
@@ -125,7 +138,7 @@ function variantOf(draw: Draw, inner: () => SchemaNode): ObjectNode {
 function defAt(draw: Draw, index: number): SchemaNode {
   const roll = draw.next();
   if (index > 0 && roll < 0.2) {
-    const lower = `d${Math.floor(draw.next() * index)}`;
+    const lower = nameAt(draw, Math.floor(draw.next() * index));
     return annotated(draw, { type: 'ref', name: lower }, 0.35);
   }
   if (roll < 0.4) {
@@ -145,7 +158,7 @@ function defAt(draw: Draw, index: number): SchemaNode {
 
 /** The export of a def: the def's `ref` and one more node, held as the wrapper holds its parts. */
 function wrappedAt(draw: Draw, wrapper: Wrapper, index: number): SchemaNode {
-  const held = useOf(draw, `d${index}`);
+  const held = useOf(draw, nameAt(draw, index));
   const other: SchemaNode =
     wrapper.startsWith('tuple') && draw.next() < 0.3
       ? { type: 'enum', values: ['a', 'b'], open: true }

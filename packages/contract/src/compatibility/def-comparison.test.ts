@@ -324,6 +324,9 @@ describe('compatibilityReportOf, a plain union, a tuple or an allOf over a seede
         ),
       ),
       'a wrapper tuple with rest': countOf((_, held) => held.wrapper === 'tuple with rest'),
+      'a def named like an Object member': pairs.filter((pair) =>
+        Object.hasOwn(pair.baseline, 'constructor'),
+      ).length,
     };
 
     expect([...new Set(everyNode.map((node) => node.type))].sort()).toEqual(
