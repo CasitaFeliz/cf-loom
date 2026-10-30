@@ -8,7 +8,7 @@ import {
   readFileSync,
   writeFileSync,
 } from 'node:fs';
-import { delimiter, dirname, join, sep } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { canonicalTextOf } from '@cf-loom/contract/internal';
 import { describe, expect } from 'vitest';
@@ -19,10 +19,11 @@ import {
   type RegistryOptions,
   tarballPathOf,
 } from '../../test/fake-registry.ts';
-import { inheritedPath, loginTo, token } from '../../test/npm-environment.ts';
+import { loginTo, token } from '../../test/npm-environment.ts';
 import { type Lab, test } from '../../test/npm-lab.ts';
 import { aPublishedSnapshot, orders, ordersPackage } from '../../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../../test/served-version.ts';
+import { aStubNpm, developersNpm } from '../../test/stub-npm.ts';
 import {
   aPackageTarball,
   aTarball,
@@ -95,6 +96,9 @@ async function readOrders(lab: Lab, served: RegistryOptions) {
   return { read, registry };
 }
 
+/** What `npm view @org/contract-orders-service@1.0.0` prints for a version cf-loom published, as JSON. */
+const viewedMetadata = `{"version":"1.0.0","cfLoom":{"kind":"service"},"dist":{"tarball":"http://x/y.tgz","integrity":"sha512-${'A'.repeat(86)}=="}}`;
+
 function ordersWith(...versions: readonly ServedVersion[]): RegistryOptions {
   return { packages: { [ordersPackage]: { versions } } };
 }
@@ -129,27 +133,17 @@ function setEnvironment(name: string, value: string | undefined): void {
 }
 
 function aRecordingNpm(lab: Lab) {
-  const folder = lab.aFolder();
-  const log = join(folder, 'calls.log');
-  const script = `#!/bin/sh\nprintf '%s\\n' "$*" >> '${log}'\nPATH='${inheritedPath}'\nexport PATH\nexec npm "$@"\n`;
-  writeFileSync(join(folder, 'npm'), script);
-  chmodSync(join(folder, 'npm'), 0o755);
+  const log = join(lab.aFolder(), 'calls.log');
+  const path = aStubNpm(lab, `printf '%s\\n' "$*" >> '${log}'\n${developersNpm}`);
   const calls = () =>
     readFileSync(log, 'utf8')
       .split('\n')
       .filter((line) => line !== '');
-  return { path: `${folder}${delimiter}${inheritedPath}`, calls };
-}
-
-function aStubNpm(lab: Lab, body: string): string {
-  const folder = lab.aFolder();
-  writeFileSync(join(folder, 'npm'), `#!/bin/sh\n${body}\n`);
-  chmodSync(join(folder, 'npm'), 0o755);
-  return `${folder}${delimiter}${inheritedPath}`;
+  return { path, calls };
 }
 
 function aPackLockingNpm(lab: Lab, folder: string): string {
-  const body = `PATH='${inheritedPath}'\nexport PATH\nnpm "$@"\nstatus=$?\ncase "$1" in pack) chmod 555 '${folder}';; esac\nexit $status`;
+  const body = `${developersNpm}\nstatus=$?\ncase "$1" in pack) chmod 555 '${folder}';; esac\nexit $status`;
   return aStubNpm(lab, body);
 }
 
@@ -1827,8 +1821,7 @@ describe('baselineOf and its temporary folder', () => {
   });
 
   test('a tarball npm names but did not write fails rather than throws', async ({ lab }) => {
-    const metadata = `{"version":"1.0.0","cfLoom":{"kind":"service"},"dist":{"tarball":"http://x/y.tgz","integrity":"sha512-${'A'.repeat(86)}=="}}`;
-    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${metadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '[{"filename":"missing.tgz"}]';;\nesac`;
+    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${viewedMetadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '[{"filename":"missing.tgz"}]';;\nesac`;
     const npm = lab.aPlace({ path: aStubNpm(lab, body) });
 
     const read = await baselineOf(npm, {
@@ -1847,8 +1840,7 @@ describe('baselineOf and what npm prints', () => {
   test('npm pack reporting no package fails the Baseline read with printed no tarball', async ({
     lab,
   }) => {
-    const metadata = `{"version":"1.0.0","cfLoom":{"kind":"service"},"dist":{"tarball":"http://x/y.tgz","integrity":"sha512-${'A'.repeat(86)}=="}}`;
-    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${metadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '{}';;\nesac`;
+    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${viewedMetadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '{}';;\nesac`;
     const npm = lab.aPlace({ path: aStubNpm(lab, body) });
 
     const read = await baselineOf(npm, {
@@ -1873,5 +1865,36 @@ describe('baselineOf and what npm prints', () => {
     });
 
     expect(failureIn(read)).toBe(`npm view ${ordersPackage} dist-tags printed no dist-tags`);
+  });
+
+  test('a version that npm view prints as a list of two fails with printed no metadata', async ({
+    lab,
+  }) => {
+    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '[${viewedMetadata},${viewedMetadata}]';; *) echo '["1.0.0"]';; esac;;\nesac`;
+    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(failureIn(read)).toBe(`npm view ${ordersPackage}@1.0.0 printed no metadata`);
+  });
+
+  test('a versions print that is no list fails as a package that lists no version', async ({
+    lab,
+  }) => {
+    const npm = lab.aPlace({ path: aStubNpm(lab, `echo '"1.0.0"'`) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(failureIn(read)).toBe(
+      `${ordersPackage} lists no version, or has no latest dist-tag, which npm view needs to list them`,
+    );
   });
 });

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot, publishedSnapshotOf, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
@@ -21,12 +21,13 @@ import { lineBreaks } from '../../contract/test/line-breaks.ts';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
-import { defaultLoginTo, inheritedPath, loginTo, token } from '../test/npm-environment.ts';
+import { defaultLoginTo, loginTo, token } from '../test/npm-environment.ts';
 import { type Lab, test } from '../test/npm-lab.ts';
 import { anNpmRecording } from '../test/npm-recording.ts';
 import { installedPayments, paymentsSource, paymentsSpecifier } from '../test/payments-package.ts';
 import { ordersPackage } from '../test/published-snapshot.ts';
 import { aVersion, type ServedVersion } from '../test/served-version.ts';
+import { aStubNpm, developersNpm } from '../test/stub-npm.ts';
 import { entriesOf } from '../test/tarball.ts';
 import { usage } from '../test/usage.ts';
 import { peerRangesOf } from './internal/index.ts';
@@ -4921,18 +4922,8 @@ const ownFilesOfDefinitions = ['dist/index.d.ts', 'dist/index.js', 'package.json
 
 /** The PATH of an `npm` that prints what is given for `pack --dry-run` and runs the developer's npm for every other call. */
 function aStubNpmPrintingForDryRun(lab: Lab, printed: string): string {
-  const folder = lab.aFolder();
-  const body = [
-    '#!/bin/sh',
-    `case " $* " in *" --dry-run "*) echo '${printed}'; exit 0;; esac`,
-    `PATH='${inheritedPath}'`,
-    'export PATH',
-    'exec npm "$@"',
-    '',
-  ].join('\n');
-  writeFileSync(join(folder, 'npm'), body);
-  chmodSync(join(folder, 'npm'), 0o755);
-  return `${folder}${delimiter}${inheritedPath}`;
+  const printing = `case " $* " in *" --dry-run "*) echo '${printed}'; exit 0;; esac`;
+  return aStubNpm(lab, `${printing}\n${developersNpm}`);
 }
 
 /** The entries of a project's top level that `generate` and the test's own files make. */

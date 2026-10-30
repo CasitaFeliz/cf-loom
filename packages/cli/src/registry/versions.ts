@@ -51,7 +51,7 @@ export function expectedSnapshotOf(
  * a key that is no semantic version, is a failure, since the Baseline cannot be chosen.
  */
 export function versionsFrom(packageName: string, printed: unknown): Versions | Failed {
-  const items = keysPrintedIn(printed);
+  const items = Array.isArray(printed) ? printed : [];
   const unreadable = items.find((item) => !isSemanticVersion(item));
   if (unreadable !== undefined) {
     const key = typeof unreadable === 'string' ? unreadable : JSON.stringify(unreadable);
@@ -63,14 +63,6 @@ export function versionsFrom(packageName: string, printed: unknown): Versions | 
     return failed(none);
   }
   return { kind: 'versions', listing: { packageName, versions } };
-}
-
-/** The keys npm printed for `versions`: none when it printed nothing, one when the package lists one version. */
-function keysPrintedIn(printed: unknown): readonly unknown[] {
-  if (printed === undefined) {
-    return [];
-  }
-  return Array.isArray(printed) ? printed : [printed];
 }
 
 /** Tells a version cf-loom published from one it did not, since only the first can be the Baseline, and fails on a malformed `cfLoom` rather than passing over it. */
