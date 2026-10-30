@@ -31,8 +31,11 @@ export function linesTextOf(lines: readonly string[]): string {
   return lines.map(unbrokenLineOf).join('\n');
 }
 
-/** A line as the console logs it: the line written by `unbrokenLineOf`, then its `cause` when it has one. */
+/**
+ * A line as the console logs it: the line written by `unbrokenLineOf`, then its `cause` when it has
+ * one, behind a `%s` so the console never reads the line as a format of the cause.
+ */
 export function logOf(line: string, cause?: unknown): readonly unknown[] {
   const written = unbrokenLineOf(line);
-  return cause === undefined ? [written] : [written, cause];
+  return cause === undefined ? [written] : ['%s', written, cause];
 }

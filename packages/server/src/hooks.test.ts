@@ -1,3 +1,4 @@
+import { format, inspect } from 'node:util';
 import {
   defineDefinitions,
   defineEndpoint,
@@ -195,7 +196,7 @@ describe('serve: onServiceFault', () => {
 
     await serve(contract, handlers, {})(get('/orders/thrown'));
 
-    expect(logged).toHaveBeenCalledWith('getOrder: the Handler threw', new Error('a bug'));
+    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: the Handler threw', new Error('a bug'));
   });
 
   test('without it, the console names the Guard whose Handler failed', async () => {
@@ -246,6 +247,49 @@ describe('serve: onServiceFault', () => {
       expect(lines.map((line) => line.split(lineBreakPattern))).toEqual([
         [`tally: success.body.a${visible}b invalid_type: ${expectedMessage}`],
         [`tally: success.body.other invalid_type: ${expectedMessage}`],
+      ]);
+    },
+  );
+
+  test.for(['%o', '%c', '%s'])(
+    'without it, a Fault whose message holds the console format specifier %s is printed as its line, then its cause',
+    async (specifier) => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const cause = new Error('gateway said no');
+      const charge = defineEndpoint({
+        name: 'charge',
+        method: 'POST',
+        path: '/charge',
+        visibility: 'public',
+        description: 'Charges a card',
+        success: { status: 204 },
+      });
+      const chargeContract = defineService({
+        name: 'orders-service',
+        groups: [defineGroup({ name: 'charges', description: 'Charges', endpoints: [charge] })],
+      });
+      const chargeHandlers = {
+        endpoints: {
+          charge: handle(charge, () =>
+            fault({
+              committed: 'no',
+              retryable: false,
+              message: `card ${specifier} declined`,
+              cause,
+            }),
+          ),
+        },
+        guards: {},
+      };
+
+      await serve(
+        chargeContract,
+        chargeHandlers,
+        {},
+      )(new Request('http://test/charge', { method: 'POST' }));
+
+      expect(logged.mock.calls.map((args) => format(...args))).toEqual([
+        `charge: card ${specifier} declined ${inspect(cause)}`,
       ]);
     },
   );
@@ -354,7 +398,7 @@ describe('serve: a hook that fails', () => {
 
     await serve(contract, handlers, { onServiceFault: throwing })(get('/orders/down'));
 
-    expect(logged).toHaveBeenCalledWith('getOrder: onServiceFault threw', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onServiceFault threw', broken);
   });
 
   test('an onServiceFault of a Guard’s Fault that throws is logged naming the Guard', async () => {
@@ -363,7 +407,7 @@ describe('serve: a hook that fails', () => {
 
     await serve(contract, guarded, { onServiceFault: throwing })(get('/orders/o-1'));
 
-    expect(logged).toHaveBeenCalledWith('getOrder apiKey: onServiceFault threw', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'getOrder apiKey: onServiceFault threw', broken);
   });
 
   test('an onServiceFault that rejects is awaited and logged, and the Http resolves', async () => {
@@ -374,7 +418,7 @@ describe('serve: a hook that fails', () => {
     );
 
     expect(response.status).toBe(503);
-    expect(logged).toHaveBeenCalledWith('getOrder: onServiceFault threw', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onServiceFault threw', broken);
   });
 
   test('onAnswered still receives the record when onServiceFault throws', async () => {
@@ -401,7 +445,7 @@ describe('serve: a hook that fails', () => {
     const response = await serve(contract, handlers, { onAnswered })(get('/orders/o-1'));
 
     expect(response.status).toBe(200);
-    expect(logged).toHaveBeenCalledWith('getOrder: onAnswered threw', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'getOrder: onAnswered threw', broken);
   });
 
   test('an onAnswered that throws for a request no Endpoint matched is logged as serve’s', async () => {
@@ -409,7 +453,7 @@ describe('serve: a hook that fails', () => {
 
     await serve(contract, handlers, { onAnswered: throwing })(get('/customers'));
 
-    expect(logged).toHaveBeenCalledWith('serve: onAnswered threw', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'serve: onAnswered threw', broken);
   });
 
   test('serve waits for an async onAnswered before it resolves', async () => {

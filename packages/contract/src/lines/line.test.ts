@@ -1,3 +1,4 @@
+import { format, inspect } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
 import { lineBreaksIn, linePool } from '../../test/line-breaks.ts';
@@ -125,14 +126,26 @@ describe('linesTextOf', () => {
 });
 
 describe('logOf', () => {
-  test('a line is logged on one line, then its cause, the same object, when it has one', () => {
+  test('a line is logged on one line as a %s argument, then its cause, the same object, when it has one', () => {
     const cause = new Error('boom');
     const lines = linePool();
 
     const logged = lines.map((line) => logOf(line, cause));
 
-    expect(logged).toEqual(lines.map((line) => [unbrokenLineOf(line), cause]));
-    expect(logged.every((args) => args[1] === cause)).toBe(true);
+    expect(logged).toEqual(lines.map((line) => ['%s', unbrokenLineOf(line), cause]));
+    expect(logged.every((args) => args[2] === cause)).toBe(true);
+  });
+
+  test('a line holding console format specifiers is printed as it is, then its cause', () => {
+    const cause = new Error('boom');
+    const specifiers = ['%s', '%d', '%i', '%f', '%j', '%o', '%O', '%c', '%%'];
+    const lines = specifiers.map((specifier) => `card ${specifier} declined`);
+
+    const printed = lines.map((line) => format(...logOf(line, cause)));
+    const alone = lines.map((line) => format(...logOf(line)));
+
+    expect(printed).toEqual(lines.map((line) => `${line} ${inspect(cause)}`));
+    expect(alone).toEqual(lines);
   });
 
   test('a line with no cause is logged alone, and one with an undefined cause too', () => {

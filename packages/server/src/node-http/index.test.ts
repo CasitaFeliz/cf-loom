@@ -680,7 +680,7 @@ describe('nodeHttp', () => {
     expect(await rejected.json()).toEqual({
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
-    expect(logged).toHaveBeenCalledWith('nodeListener: the handler rejected', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'nodeListener: the handler rejected', broken);
     expect(after.status).toBe(204);
   });
 
