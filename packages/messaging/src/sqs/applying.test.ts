@@ -1051,6 +1051,23 @@ describe('applyBrokerPlan', () => {
     expect(listings.sent()).toBe(1);
   });
 
+  test.each([
+    ['seven digits', ['1', '2', '3', '4', '5', '6', '7'], "[ '1', '2', '3', '4', '5', '6', '7' ]"],
+    [
+      'three strings of thirty characters',
+      ['x'.repeat(30), 'y'.repeat(30), 'z'.repeat(30)],
+      `[ '${'x'.repeat(30)}', '${'y'.repeat(30)}', '${'z'.repeat(30)}' ]`,
+    ],
+    ['a string of sixty line breaks', 'a\n'.repeat(60), `'${'a\\n'.repeat(60)}'`],
+  ])('an account of %s is refused on one line, as written', async (_, account, shown) => {
+    const orders = anOrders();
+    const connecting = { ...anAwsConnecting(moto.url), account: account as string };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(`connecting.account ${shown} is not a 12-digit AWS account id`);
+  });
+
   test('an account that is not 12 digits and a setting left unset are refused in one error, a line each', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url, { account: '1234' });
