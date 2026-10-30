@@ -2267,7 +2267,7 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  describe('random graphs that enter a schema while it is on the path twice', () => {
+  describe('random graphs that meet a schema while it is on the path twice', () => {
     const graphCount = 10_000;
     const offCycleId = /^\.meta\(\{ id: "n(\d+)" \}\) on a schema that lies on no cycle$/;
 
@@ -2341,13 +2341,13 @@ describe('walkSchemas: recursion', () => {
       expect(wrong).toEqual([]);
     });
 
-    test('the graphs enter schemas already on the path, and fail a def inside another', () => {
+    test('the graphs meet schemas their path holds twice, and fail a def inside another', () => {
       const graphs = graphsOf(graphCount);
 
-      const reentering = graphs.filter((graph) => cycleMeetingsOf(graph).reentries > 0);
+      const meetingTwice = graphs.filter((graph) => cycleMeetingsOf(graph).metOnPathTwice > 0);
       const failingInside = graphs.filter(failsInsideGroup);
 
-      expect(reentering.length).toBeGreaterThan(1_000);
+      expect(meetingTwice.length).toBeGreaterThan(1_000);
       expect(failingInside.length).toBeGreaterThan(1_000);
     });
   });

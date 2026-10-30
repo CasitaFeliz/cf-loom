@@ -138,12 +138,12 @@ export function failsInsideGroup(graph: ReentryGraph): boolean {
   );
 }
 
-/** The cycles no id names that a plain walk of the graph meets, and how often it enters a schema already on its path. */
+/** The cycles no id names that a plain walk of the graph meets, and how often it meets a schema its path holds twice. */
 export type CycleMeetings = {
   /** The exports the roots are walked as, `r0`, `r1` and `r2`, and the locations, `exports.r0 e0.e2`, where the walk refuses a cycle. */
   readonly lines: ReadonlySet<string>;
-  /** How many times the walk enters a schema without an id that is already on its path. */
-  readonly reentries: number;
+  /** How many times the walk meets a schema while its path already holds that schema twice. */
+  readonly metOnPathTwice: number;
 };
 
 type Meeting = {
@@ -153,7 +153,7 @@ type Meeting = {
   readonly path: number[];
   /** The root being walked, as its site is named. */
   site: string;
-  reentries: number;
+  metOnPathTwice: number;
 };
 
 /**
@@ -169,19 +169,22 @@ export function cycleMeetingsOf(graph: ReentryGraph): CycleMeetings {
     remembered: new Set(),
     path: [],
     site: '',
-    reentries: 0,
+    metOnPathTwice: 0,
   };
   for (const [position, root] of graph.roots.entries()) {
     meeting.site = `exports.r${position}`;
     meet(meeting, root, '');
   }
-  return { lines: meeting.lines, reentries: meeting.reentries };
+  return { lines: meeting.lines, metOnPathTwice: meeting.metOnPathTwice };
 }
 
 function meet(meeting: Meeting, index: number, location: string): void {
   const { graph, path, remembered } = meeting;
   if (remembered.has(index)) {
     return;
+  }
+  if (path.filter((held) => held === index).length >= 2) {
+    meeting.metOnPathTwice++;
   }
   const closing = path.lastIndexOf(index);
   if (closing >= 0 && graph.hasId[index] === true) {
@@ -193,9 +196,6 @@ function meet(meeting: Meeting, index: number, location: string): void {
       remembered.add(held);
     }
     return;
-  }
-  if (closing >= 0) {
-    meeting.reentries++;
   }
   path.push(index);
   for (const [field, { to, wrap }] of (graph.holds[index] ?? []).entries()) {
