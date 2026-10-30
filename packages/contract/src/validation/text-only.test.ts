@@ -1216,4 +1216,19 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
 
     expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
+
+  test('an enum value that cannot travel and the same value as its example are named once', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.enum([' x', 'a']).meta({ examples: [' x'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" x"'),
+      ),
+    );
+  });
 });

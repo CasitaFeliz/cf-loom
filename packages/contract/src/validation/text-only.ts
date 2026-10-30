@@ -131,7 +131,8 @@ function unsendableTextFailures(
   values: readonly unknown[],
 ): readonly DeclarationFailure[] {
   const { isCarried, travelsAs } = textTravel[part];
-  const unsendable = values.filter(isTextValue).filter((value) => !isCarried(textOfValue(value)));
+  const distinct = [...new Set(values.filter(isTextValue))];
+  const unsendable = distinct.filter((value) => !isCarried(textOfValue(value)));
   if (unsendable.length === 0) {
     return [];
   }
