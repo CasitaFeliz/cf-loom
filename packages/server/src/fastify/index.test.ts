@@ -700,6 +700,32 @@ describe('fastifyServe', () => {
       expect(signals[0]?.aborted).toBe(true);
     });
 
+    test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and never onResponse, over HTTP/1.1', async () => {
+      const hooks: string[] = [];
+      const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+      const waiting = handle(getOrder, async ({ params }, { request }) => {
+        started();
+        await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+        return success(getOrder, { id: params.orderId });
+      });
+      const { url } = await served({
+        handlers: withEndpoints({ getOrder: waiting }),
+        before: (app) =>
+          app.addHook('onRequestAbort', async (request) => void hooks.push(`abort ${request.url}`)),
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void hooks.push(`response ${request.url}`)),
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n');
+      await handlerStarted;
+      socket.destroy();
+      await waitFor(200);
+
+      expect(hooks).toEqual(['abort /orders/o-1']);
+    });
+
     test('a Handler’s signal is not aborted once its response has finished', async () => {
       const signals: AbortSignal[] = [];
       const watching = handle(getOrder, ({ params }, { request }) => {
@@ -1253,6 +1279,39 @@ describe('fastifyServe', () => {
 
         expect(aborted).toBe(true);
         expect(closing).toBe('closed');
+      });
+
+      test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and then onResponse, over HTTP/2, as every Fastify HTTP/2 route does', async () => {
+        const hooks: string[] = [];
+        const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+        const waiting = handle(getOrder, async ({ params }, { request }) => {
+          started();
+          await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: waiting }),
+          before: (app) =>
+            app.addHook(
+              'onRequestAbort',
+              async (request) => void hooks.push(`abort ${request.url}`),
+            ),
+          after: (app) =>
+            app.addHook(
+              'onResponse',
+              async (request) => void hooks.push(`response ${request.url}`),
+            ),
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await handlerStarted;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await waitFor(200);
+
+        expect(hooks).toEqual(['abort /orders/o-1', 'response /orders/o-1']);
       });
 
       test('a Handler’s signal is not aborted once its response has finished', async () => {
