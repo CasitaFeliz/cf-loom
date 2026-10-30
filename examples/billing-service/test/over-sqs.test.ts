@@ -25,6 +25,8 @@ let reader: ReturnType<typeof motoClientsAt>;
 let orders: RunningService | undefined;
 let billing: RunningService | undefined;
 let consoleErrors: MockInstance<typeof console.error>;
+/** The lines written with `console.error` since both Services started; Vitest clears a spy's own record before each test. */
+const linesWritten: unknown[][] = [];
 
 beforeAll(async () => {
   const server = await aMotoServer();
@@ -37,7 +39,11 @@ beforeAll(async () => {
   await applyPlanOf(billingDir, reader, brokerPrefix);
   orders = await ordersOver(sqs({ ...ordersConnecting, prefix: brokerPrefix }));
   billing = await billingOver(sqs({ ...billingConnecting, prefix: brokerPrefix }), orders.url);
-  consoleErrors = vi.spyOn(console, 'error');
+  const writeError = console.error;
+  consoleErrors = vi.spyOn(console, 'error').mockImplementation((...line) => {
+    linesWritten.push(line);
+    writeError(...line);
+  });
 });
 
 afterAll(async () => {
@@ -90,5 +96,17 @@ describe('orders-service and billing-service over SNS/SQS', () => {
     await until(() => expect(chargesOf(orderId)).toEqual([{ orderId, total: TOTAL }]));
     await untilDeleted(ordersCharging);
     await untilDeleted(ordersHandlingCharge);
+  });
+
+  test('neither Service writes a console line about the order’s Messages', async () => {
+    const orderId = await placeAnOrder();
+
+    await until(() => expect(draftsOf(orderId)).toHaveLength(1));
+    await until(() => expect(chargesOf(orderId)).toHaveLength(1));
+    await untilDeleted(billingDrafting);
+    await untilDeleted(ordersCharging);
+    await untilDeleted(ordersHandlingCharge);
+
+    expect(linesWritten).toEqual([]);
   });
 });
