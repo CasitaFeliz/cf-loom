@@ -256,4 +256,55 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
   });
+
+  it('report an Error’s message that is neither a literal nor unbrokenLineOf or linesTextOf, AggregateError’s and super’s included, but not the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'declare const text: string;',
+      'declare function unbrokenLineOf(line: string): string;',
+      'declare function linesTextOf(lines: readonly string[]): string;',
+      "export const literal = new Error('plain');",
+      'export const bare = new Error(`plain`);',
+      'export const unwrapped = new Error(text);',
+      'export const called = Error(text);',
+      `export const template = new TypeError(\`plain ${'$'}{text}\`);`,
+      `export const wrapped = new RangeError(unbrokenLineOf(\`x ${'$'}{text}\`));`,
+      'export const joined = new SyntaxError(linesTextOf([text]));',
+      'export const aggregate = new AggregateError([], text);',
+      "export const aggregated = new AggregateError([], 'ok');",
+      "export const concatenated = new URIError('a' + text);",
+      'export const multi = new EvalError(',
+      '  text,',
+      ');',
+      'export const reference = new ReferenceError(text);',
+      'export class Mine extends Error {',
+      '  constructor() {',
+      '    super(text);',
+      '  }',
+      '}',
+      'export class Fine extends Error {',
+      '  constructor() {',
+      "    super('fine');",
+      '  }',
+      '}',
+      'export class Wrapped extends Error {',
+      '  constructor() {',
+      '    super(unbrokenLineOf(text), { cause: text });',
+      '  }',
+      '}',
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/client/src/probe.ts')).toEqual([
+      'C1@6',
+      'C1@7',
+      'C1@8',
+      'C1@11',
+      'C1@13',
+      'C1@14',
+      'C1@17',
+      'C1@20',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+  });
 });
