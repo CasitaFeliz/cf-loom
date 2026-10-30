@@ -274,7 +274,7 @@ describe('decodeSnapshot, many defs', () => {
     fields: { self: { required: false, schema: ref(name) } },
   });
 
-  /** `count` defs, the first on a cycle of its own, each later one `linkOf` the one before it, which is on a cycle of its own too. */
+  /** `count` defs named `link0`, `link1` and so on, each what `linkOf` makes of its index. */
   function aChainOf(count: number, linkOf: (index: number) => SchemaNode): Defs {
     const entries = Array.from({ length: count }, (_, index): [string, SchemaNode] => [
       `link${index}`,
@@ -342,34 +342,21 @@ describe('decodeSnapshot, many defs', () => {
     expect(growth).toBeLessThan(linearGrowth);
   });
 
-  test('one union def of many options, each naming another def, is decoded in time that grows with its options', {
+  test('many union defs, each naming the head of one chain of alias defs, are decoded in time that grows with their number and the chain’s length', {
     timeout: growthTimeout,
   }, () => {
-    const wideOf = (count: number): Defs => {
-      const named = Array.from({ length: count }, (_, index) => `option${index}`);
-      const options = named.map(ref);
-      const entries = named.map((name): [string, SchemaNode] => [name, holdingBack(name)]);
-      return { wide: { type: 'union', options }, ...Object.fromEntries(entries) };
-    };
-
-    const { decoded, growth } = decodedGrowth(wideOf);
-
-    expect(decoded.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
-  });
-
-  test('many union defs, each naming one shared def, are decoded in time that grows with their number', {
-    timeout: growthTimeout,
-  }, () => {
-    const sharedBy = (count: number): Defs => {
-      const entries = Array.from({ length: count }, (_, index): [string, SchemaNode] => [
+    const unionsNamingTheChainHead = (count: number): Defs => {
+      const chain = aChainOf(count, (index) =>
+        index === 0 ? holdingBack('link0') : ref(`link${index - 1}`),
+      );
+      const unions = Array.from({ length: count }, (_, index): [string, SchemaNode] => [
         `union${index}`,
-        { type: 'union', options: [ref('shared'), { type: 'boolean' }] },
+        { type: 'union', options: [ref(`link${count - 1}`), { type: 'boolean' }] },
       ]);
-      return { shared: holdingBack('shared'), ...Object.fromEntries(entries) };
+      return { ...chain, ...Object.fromEntries(unions) };
     };
 
-    const { decoded, growth } = decodedGrowth(sharedBy);
+    const { decoded, growth } = decodedGrowth(unionsNamingTheChainHead);
 
     expect(decoded.kind).toBe('decoded');
     expect(growth).toBeLessThan(linearGrowth);
