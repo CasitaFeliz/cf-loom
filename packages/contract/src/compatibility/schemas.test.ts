@@ -2577,7 +2577,9 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
     const isWhole = wholeAt !== -1;
     const above = isWhole ? constructs.slice(0, wholeAt) : constructs;
     const written = above.filter(({ construct }) => construct !== 'intersection');
-    const placeSteps = place.root.map((text): Piece => ({ text, isField: true }));
+    const placeSteps = place.root.map(
+      (segment): Piece => ({ text: String(segment), isField: true }),
+    );
     const gainsY = !isWhole && leaf.crossing.at(-1) !== 'key';
     const added: readonly Piece[] = gainsY ? [{ text: 'y', isField: true }] : [];
     const pieces = [...placeSteps, ...written.flatMap(({ piece }) => piece ?? []), ...added];
