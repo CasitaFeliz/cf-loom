@@ -28,4 +28,14 @@ describe('sqs()', () => {
 
     await expect(opening).resolves.toBeDefined();
   });
+
+  test('messaging() rejects naming the stream and its topic ARN, saying to apply the Broker plan, when the topic does not exist', async () => {
+    const connecting = anAwsConnecting(moto.url);
+
+    const opening = messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
+
+    await expect(opening).rejects.toThrow(
+      `The stream staging_orders-service has no SNS topic arn:aws:sns:eu-west-1:123456789012:staging_orders-service: apply the Service's Broker plan`,
+    );
+  });
 });
