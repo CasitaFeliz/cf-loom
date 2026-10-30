@@ -57,6 +57,7 @@ jobs:
             "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/$archive.tar.gz"
           echo "${UV_SHA256}  $RUNNER_TEMP/$archive.tar.gz" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/$archive/uv" python install --compile-bytecode
           "$RUNNER_TEMP/$archive/uv" venv "$RUNNER_TEMP/moto"
           "$RUNNER_TEMP/$archive/uv" pip install --python "$RUNNER_TEMP/moto/bin/python" --require-hashes --no-build \
             --compile-bytecode -r packages/messaging/test/moto-requirements.txt

@@ -1,7 +1,7 @@
-import { inspect } from 'node:util';
 import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { partition } from '@aws-sdk/core/client';
+import { oneLineOf } from '../broker-limits/index.ts';
 
 /** How cf-loom reaches SNS and SQS: the organization's own clients, of one account and one region, which cf-loom never destroys. */
 export type SqsConnecting = {
@@ -78,7 +78,7 @@ function accountLinesOf(account: unknown): readonly string[] {
   const isAccount = typeof account === 'string' && /^\d{12}$/.test(account);
   return isAccount
     ? []
-    : [`connecting.account ${inspect(account)} is not a 12-digit AWS account id`];
+    : [`connecting.account ${oneLineOf(account)} is not a 12-digit AWS account id`];
 }
 
 function regionLinesOf(snsRegion: string, sqsRegion: string): readonly string[] {

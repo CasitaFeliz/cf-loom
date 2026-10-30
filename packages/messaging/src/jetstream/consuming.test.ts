@@ -1234,7 +1234,7 @@ describe('consuming over jetstream()', () => {
         `NATS answered a pull from ${prefix}_orders-service_notify-on-created with 409 Server Shutdown`,
       ],
     ]);
-  }, 10_000);
+  });
 
   test('the Service closing its own connection while consuming reaches onBrokerTrouble once per Durable consumer as pull-failed, the connection closed', async () => {
     const prefix = aPrefix();
