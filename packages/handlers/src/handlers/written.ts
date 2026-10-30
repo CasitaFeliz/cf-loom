@@ -1,5 +1,5 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
-import { isEndpoint, isGuard } from '@cf-loom/contract/internal';
+import { isEndpoint, isGuard, unbrokenLineOf } from '@cf-loom/contract/internal';
 import {
   type Handled,
   isMessageHandled,
@@ -28,7 +28,9 @@ export function writtenOf<Kind extends AnyWritten>(
 ): Kind {
   const written = writtenByHandler.get(handler);
   if (written === undefined || !isKind(written)) {
-    throw new Error(`Not a Handler returned by handle(): ${String(handler.declaration?.name)}`);
+    throw new Error(
+      unbrokenLineOf(`Not a Handler returned by handle(): ${String(handler.declaration?.name)}`),
+    );
   }
   return written;
 }

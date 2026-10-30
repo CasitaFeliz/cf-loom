@@ -46,7 +46,7 @@ async function checkStreamOrDrain(
     const manager = await managerOf(natsConnection, options);
     const refusal = refusalOf(stream, await checkedStreamOf(manager, stream));
     if (refusal !== undefined) {
-      throw new Error(refusal);
+      throw new Error(unbrokenLineOf(refusal));
     }
   } catch (error) {
     await drainOrClose(natsConnection);

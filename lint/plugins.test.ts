@@ -203,4 +203,111 @@ describe('lint plugins', () => {
 
     expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
   });
+
+  it('report a join on LF in a library package’s source, optional calls and each quote included, but not another separator, the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'const lines = ["a", "b"];',
+      "export const single = lines.join('\\n');",
+      'export const double = lines.join("\\n");',
+      'export const template = lines.join(`\\n`);',
+      "export const optional = lines?.join('\\n');",
+      "export const comma = lines.join(', ');",
+      "export const empty = lines.join('');",
+      "export const spelled = lines.join('\\\\n');",
+      "export const space = lines.join(' ');",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@5',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+  });
+
+  it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'declare const cause: unknown;',
+      'declare function logOf(line: string, cause?: unknown): readonly unknown[];',
+      "console.error('plain');",
+      "console.warn('plain', cause);",
+      "console.error(...logOf('spread', cause));",
+      "console?.error('optional');",
+      "console['error']('computed');",
+      "console.log(...logOf('spread'), 'extra');",
+      "console.info(logOf('not spread'));",
+      'console.debug();',
+      "console.warn(...logOf('spread'));",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/server/src/probe.ts')).toEqual([
+      'C1@3',
+      'C1@4',
+      'C1@6',
+      'C1@7',
+      'C1@8',
+      'C1@9',
+      'C1@10',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+  });
+
+  it('report an Error’s message that is neither a literal nor unbrokenLineOf or linesTextOf, AggregateError’s and super’s included, but not the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'declare const text: string;',
+      'declare function unbrokenLineOf(line: string): string;',
+      'declare function linesTextOf(lines: readonly string[]): string;',
+      "export const literal = new Error('plain');",
+      'export const bare = new Error(`plain`);',
+      'export const unwrapped = new Error(text);',
+      'export const called = Error(text);',
+      `export const template = new TypeError(\`plain ${'$'}{text}\`);`,
+      `export const wrapped = new RangeError(unbrokenLineOf(\`x ${'$'}{text}\`));`,
+      'export const joined = new SyntaxError(linesTextOf([text]));',
+      'export const aggregate = new AggregateError([], text);',
+      "export const aggregated = new AggregateError([], 'ok');",
+      "export const concatenated = new URIError('a' + text);",
+      'export const multi = new EvalError(',
+      '  text,',
+      ');',
+      'export const reference = new ReferenceError(text);',
+      'export class Mine extends Error {',
+      '  constructor() {',
+      '    super(text);',
+      '  }',
+      '}',
+      'export class Fine extends Error {',
+      '  constructor() {',
+      "    super('fine');",
+      '  }',
+      '}',
+      'export class Wrapped extends Error {',
+      '  constructor() {',
+      '    super(unbrokenLineOf(text), { cause: text });',
+      '  }',
+      '}',
+      'export const aggregateCalled = AggregateError([], text);',
+      "export const aggregateCalledLiteral = AggregateError([], 'ok');",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/client/src/probe.ts')).toEqual([
+      'C1@6',
+      'C1@7',
+      'C1@8',
+      'C1@11',
+      'C1@13',
+      'C1@14',
+      'C1@17',
+      'C1@20',
+      'C1@33',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+  });
 });

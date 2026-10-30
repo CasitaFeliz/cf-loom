@@ -7,6 +7,7 @@ import {
   pathSegmentsOf,
   standardRejectionsOf,
   type TextPartNodes,
+  unbrokenLineOf,
   writtenTextOf,
 } from '@cf-loom/contract/internal';
 import {
@@ -86,7 +87,9 @@ function bodyLimitOf(given: unknown): number {
     return given;
   }
   throw new Error(
-    `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${writtenTextOf(given)}`,
+    unbrokenLineOf(
+      `maxBodyBytes must be a whole number of bytes from 0, or 'unlimited': got ${writtenTextOf(given)}`,
+    ),
   );
 }
 

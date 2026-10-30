@@ -1,7 +1,9 @@
 import {
   issueLineOf,
+  linesTextOf,
   maxBrokerHeaderBytes,
   type TransportHeaderFit,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 
@@ -25,7 +27,7 @@ export class InvalidMessageError extends Error {
   readonly invalid: readonly InvalidPart[];
 
   constructor(invalid: readonly InvalidPart[]) {
-    super(invalid.flatMap(linesOf).join('\n'));
+    super(linesTextOf(invalid.flatMap(linesOf)));
     this.invalid = invalid;
   }
 }
@@ -42,7 +44,8 @@ export class MessageNotSentError extends Error {
     cause: unknown,
   ) {
     const sent = attempted.sent.length === 0 ? 'none' : attempted.sent.join(', ');
-    super(`${name} with Fact id ${attempted.factId} was not sent whole; sent: ${sent}`, { cause });
+    const message = `${name} with Fact id ${attempted.factId} was not sent whole; sent: ${sent}`;
+    super(unbrokenLineOf(message), { cause });
     this.factId = attempted.factId;
     this.sent = attempted.sent;
   }

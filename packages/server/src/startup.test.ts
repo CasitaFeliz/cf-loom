@@ -10,6 +10,7 @@ import {
 import { admit, handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
 import { serve } from './index.ts';
 
 const apiKey = defineGuard({
@@ -19,6 +20,16 @@ const apiKey = defineGuard({
 });
 
 const legacyKey = defineGuard({ name: 'legacyKey', description: 'An old key' });
+
+/** The message of the Error a call throws. */
+function refusalOf(call: () => unknown): string {
+  try {
+    call();
+  } catch (e) {
+    return (e as Error).message;
+  }
+  throw new Error('the call did not throw');
+}
 
 const getOrder = defineEndpoint({
   name: 'getOrder',
@@ -220,6 +231,38 @@ describe('serve: what it checks before the first request', () => {
 
     expect(serving).toThrow(` ${rule}: `);
   });
+
+  test.for(lineBreaks)(
+    'an Endpoint with two header names holding %s throws one line per failure, the break written escaped',
+    ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const odd = defineEndpoint({
+        name: 'odd',
+        method: 'GET',
+        path: '/odd',
+        visibility: 'public',
+        description: 'An odd one',
+        input: {
+          headers: z.object({ [`x${character}y`]: z.string(), [`p${character}q`]: z.string() }),
+        },
+        success: { status: 204 },
+      });
+      const withOdd = defineService({
+        name: 'orders-service',
+        groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
+      });
+
+      const serving = () =>
+        serve(withOdd, { endpoints: { odd: handle(odd, () => success(odd)) }, guards: {} }, {});
+
+      const lines = refusalOf(serving).split(lineBreakPattern);
+      expect(lines).toEqual([
+        'serve() takes a Contract generate accepts:',
+        expect.stringContaining(`x${visible}y`),
+        expect.stringContaining(`p${visible}q`),
+      ]);
+    },
+  );
 
   test('an Endpoint that answers a Rejection with a header name the host owns throws, as generate words it', () => {
     const clobbering = defineRejection({

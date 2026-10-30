@@ -1,6 +1,7 @@
 import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { partition } from '@aws-sdk/core/client';
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import { oneLineOf } from '../broker-limits/index.ts';
 
 /** How cf-loom reaches SNS and SQS: the organization's own clients, of one account and one region, which cf-loom never destroys. */
@@ -62,7 +63,7 @@ export function arnMismatchOf(answered: AnsweredArn, built: string): string | un
 export function confirmArn(answered: AnsweredArn, built: string): void {
   const mismatch = arnMismatchOf(answered, built);
   if (mismatch !== undefined) {
-    throw new Error(mismatch);
+    throw new Error(unbrokenLineOf(mismatch));
   }
 }
 

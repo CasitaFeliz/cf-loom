@@ -1,4 +1,4 @@
-import type { BrokerPlan, Closed } from '@cf-loom/contract/internal';
+import { type BrokerPlan, type Closed, linesTextOf } from '@cf-loom/contract/internal';
 import { applyInOrder, throwIfRefused } from '../broker-applying/index.ts';
 import { type DefaultsFields, plannedOf } from '../broker-limits/index.ts';
 import { type Place, placeOf, type SqsConnecting, topicArnOf } from './connecting.ts';
@@ -16,7 +16,7 @@ export async function applyBrokerPlan<const Given = unknown, const GivenLimits =
 ): Promise<void> {
   const checked = await checkedOf(connecting, plan, limits);
   if (checked.kind === 'refused') {
-    throw new Error(checked.message);
+    throw new Error(linesTextOf(checked.lines));
   }
   const { sns, sqs } = connecting;
   const { place } = checked;
@@ -37,7 +37,7 @@ function streamToApplyOf(place: Place, name: string) {
   return { name, arn: topicArnOf(place, name) };
 }
 
-/** The place of the clients, the plan and the limits read, or one message with a line for each place they break their shape. */
+/** The place of the clients, the plan and the limits read, or a line for each place they break their shape. */
 async function checkedOf(connecting: SqsConnecting, plan: unknown, limits: unknown) {
   const located = await placeOf(connecting);
   const planned = plannedOf(plan, limits, {
@@ -48,6 +48,6 @@ async function checkedOf(connecting: SqsConnecting, plan: unknown, limits: unkno
     return { ...planned, place: located.place };
   }
   const locating = located.kind === 'refused' ? located.lines : [];
-  const planning = planned.kind === 'refused' ? [planned.message] : [];
-  return { kind: 'refused' as const, message: [...locating, ...planning].join('\n') };
+  const planning = planned.kind === 'refused' ? planned.lines : [];
+  return { kind: 'refused' as const, lines: [...locating, ...planning] };
 }
