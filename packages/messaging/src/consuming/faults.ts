@@ -1,5 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import { issueLineOf } from '@cf-loom/contract/internal';
+import { issueLineOf, logOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -7,7 +7,6 @@ import {
   type HandlerFailure,
   type HandlerFaultBase,
   hookFailureOf,
-  logOf,
   nameOf,
 } from '@cf-loom/handlers/internal';
 import type { Delivery } from '../broker/index.ts';
