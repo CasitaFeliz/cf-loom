@@ -90,6 +90,25 @@ const requests = {
   invalid: `${at}/payments/ab`,
 } as const;
 
+/** Each character a reader may end a line at, with its name and the text that shows its escape. */
+const lineBreaks = [
+  ['LF', 0x0a, '\\n'],
+  ['CR', 0x0d, '\\r'],
+  ['U+0085', 0x85, '\\u0085'],
+  ['U+2028', 0x2028, '\\u2028'],
+  ['U+2029', 0x2029, '\\u2029'],
+  ['U+000B', 0x0b, '\\u000b'],
+  ['U+000C', 0x0c, '\\u000c'],
+  ['U+001C', 0x1c, '\\u001c'],
+  ['U+001D', 0x1d, '\\u001d'],
+  ['U+001E', 0x1e, '\\u001e'],
+] as const;
+
+/** Splits a text where any reader would end a line. */
+const lineBreakPattern = new RegExp(
+  `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,
+);
+
 /** What a request threw, as the code under test that catches everything would swallow it. */
 async function caughtFrom(fetching: Promise<unknown>): Promise<unknown> {
   return await fetching.then(
@@ -206,6 +225,27 @@ describe('fake.verify()', () => {
       ].join('\n'),
     );
   });
+
+  test.for(lineBreaks)(
+    'an AggregateError of two mistakes naming a code holding %s is a count line and one line each',
+    async ([, code, visible]) => {
+      const scripted = `A${String.fromCharCode(code)}B`;
+      const payments = fakeProvider(paymentsDependency);
+      payments.on('getPayment').otherwise((r) => r.unknownRejection(scripted));
+      payments.on('getSummary').otherwise((r) => r.unknownRejection(scripted));
+      await caughtFrom(payments.fetch(new Request(requests.getPayment)));
+      await caughtFrom(payments.fetch(new Request(requests.getSummary)));
+
+      const thrown = verifiedBy(() => payments.verify());
+
+      const refused = `A${visible}B is no UPPER_SNAKE_CASE of at most 64 characters, so no Contract can declare it`;
+      expect((thrown as Error).message.split(lineBreakPattern)).toEqual([
+        '2 mistakes:',
+        `payments-service: getPayment: ${refused}`,
+        `payments-service: getSummary: ${refused}`,
+      ]);
+    },
+  );
 
   test('reports everything again on a second call, forgetting nothing', async () => {
     const payments = fakeProvider(paymentsDependency);
