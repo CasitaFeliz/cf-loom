@@ -122,6 +122,25 @@ const handlers = {
 
 const downFault = { committed: 'no', retryable: true } as const;
 
+/** Each character a reader may end a line at, with its name and the text that shows its escape. */
+const lineBreaks = [
+  ['LF', 0x0a, '\\n'],
+  ['CR', 0x0d, '\\r'],
+  ['U+0085', 0x85, '\\u0085'],
+  ['U+2028', 0x2028, '\\u2028'],
+  ['U+2029', 0x2029, '\\u2029'],
+  ['U+000B', 0x0b, '\\u000b'],
+  ['U+000C', 0x0c, '\\u000c'],
+  ['U+001C', 0x1c, '\\u001c'],
+  ['U+001D', 0x1d, '\\u001d'],
+  ['U+001E', 0x1e, '\\u001e'],
+] as const;
+
+/** Splits a text where any reader would end a line. */
+const lineBreakPattern = new RegExp(
+  `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,
+);
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -189,6 +208,47 @@ describe('serve: onServiceFault', () => {
       /^getOrder apiKey: context\.callerId invalid_type: /,
     );
   });
+
+  test.for(lineBreaks)(
+    'without it, a Caller’s record key holding %s, echoed into a body that breaks the Success, is logged on one line per Issue',
+    async ([, code, visible]) => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const key = `a${String.fromCharCode(code)}b`;
+      const tally = defineEndpoint({
+        name: 'tally',
+        method: 'POST',
+        path: '/tally',
+        visibility: 'public',
+        description: 'Echoes the counts as words',
+        input: { body: z.record(z.string(), z.number()) },
+        success: { status: 200, body: z.record(z.string(), z.string()) },
+      });
+      const tallyContract = defineService({
+        name: 'orders-service',
+        groups: [defineGroup({ name: 'tallies', description: 'Tallies', endpoints: [tally] })],
+      });
+      const tallyHandlers = {
+        endpoints: { tally: handle(tally, ({ body }) => success(tally, body as never)) },
+        guards: {},
+      };
+      const expectedMessage = 'Invalid input: expected string, received number';
+      const headers = { 'content-type': 'application/json' };
+      const body = JSON.stringify({ [key]: 1, other: 2 });
+
+      const response = await serve(
+        tallyContract,
+        tallyHandlers,
+        {},
+      )(new Request('http://test/tally', { method: 'POST', headers, body }));
+
+      expect(response.status).toBe(500);
+      const lines = logged.mock.calls.map(([line]) => String(line));
+      expect(lines.map((line) => line.split(lineBreakPattern))).toEqual([
+        [`tally: success.body.a${visible}b invalid_type: ${expectedMessage}`],
+        [`tally: success.body.other invalid_type: ${expectedMessage}`],
+      ]);
+    },
+  );
 
   test('without it, the console receives a returned Fault with its message', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
