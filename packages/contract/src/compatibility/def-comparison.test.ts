@@ -150,6 +150,42 @@ function nodesIn(value: Json): Node[] {
   return found;
 }
 
+/**
+ * Every node of a graph's defs and exports, found by the place a Snapshot puts a node in, so a
+ * node that lost its `type` is found too, which a search for nodes by their `type` would miss.
+ */
+function placedNodesIn(roots: readonly Json[]): Json[] {
+  const placed: Json[] = [];
+  const pending = [...roots];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    placed.push(next);
+    for (const inner of nodesPlacedIn(next)) {
+      pending.push(inner);
+    }
+  }
+  return placed;
+}
+
+/** The nodes a node holds directly: its fields' schemas, key, value, rest, items, options and variants. */
+function nodesPlacedIn(node: Json): Json[] {
+  if (!isRecordValue(node)) {
+    return [];
+  }
+  const fields = Object.values(isRecordValue(node.fields) ? node.fields : {});
+  const variants = Object.values(isRecordValue(node.variants) ? node.variants : {});
+  const lists = [node.items, node.options].flatMap((list) => (Array.isArray(list) ? list : []));
+  const held = [
+    ...fields.map((field) => (isRecordValue(field) ? field.schema : undefined)),
+    ...variants,
+    ...lists,
+    node.items,
+    node.key,
+    node.value,
+    node.rest,
+  ];
+  return held.filter(isRecordValue);
+}
+
 function refsIn(value: Json): string[] {
   const refs = nodesIn(value).filter((node) => node.type === 'ref');
   return refs.map((node) => String(node.name));
@@ -347,6 +383,20 @@ describe('compatibilityReportOf, a plain union, a tuple or an allOf over a seede
     for (const [fact, count] of Object.entries(facts)) {
       expect(count, fact).toBeGreaterThanOrEqual(100);
     }
+  });
+
+  test('every node of every proposed copy the generator draws has a type a Snapshot node has', () => {
+    const types: readonly unknown[] = Object.keys(nodeTypes);
+    const untyped = pairs.flatMap((pair, seed) => {
+      const proposedExports = exportsOf(pair).map((held) => held.proposed);
+      const nodes = placedNodesIn([...Object.values(pair.proposed), ...proposedExports]);
+      return nodes
+        .filter((node) => !isRecordValue(node) || !types.includes(node.type))
+        .map((node) => `draw ${seed} (${pair.edit}): ${textOf(node, false)}`);
+    });
+
+    expect(untyped.slice(0, 3)).toEqual([]);
+    expect(untyped).toHaveLength(0);
   });
 
   test('every Baseline it draws decodes', () => {
