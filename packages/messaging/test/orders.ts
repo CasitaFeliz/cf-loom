@@ -61,6 +61,27 @@ export const ordersWithoutSubscription = defineService({
   ],
 });
 
+const orderCreatedV2 = defineEvent({
+  name: 'OrderCreated',
+  version: 2,
+  visibility: 'internal',
+  description: 'An order was created, with its total',
+  body: z.object({ orderId: z.string(), total: z.number() }),
+});
+
+/** A Service that publishes two live versions of an Event. */
+export const ordersWithTwoVersions = defineService({
+  name: 'orders-service',
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      events: [orderCreatedV1, orderCreatedV2],
+      commands: [chargeCardV1],
+    }),
+  ],
+});
+
 const readers = readersOf({
   commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },

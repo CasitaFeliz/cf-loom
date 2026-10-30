@@ -1,9 +1,14 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { anAwsConnecting } from '../../test/aws-clients.ts';
-import { receivedFrom } from '../../test/aws-reading.ts';
+import { anAwsConnecting, failingCommand } from '../../test/aws-clients.ts';
+import { attributesReceivedFrom, receivedFrom } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
-import { anOrders, arrangeOrders, ordersContract } from '../../test/orders.ts';
-import { messaging } from '../index.ts';
+import {
+  anOrders,
+  arrangeOrders,
+  ordersContract,
+  ordersWithTwoVersions,
+} from '../../test/orders.ts';
+import { MessageNotSentError, messaging } from '../index.ts';
 import { sqs } from './index.ts';
 
 let moto: MotoServer;
@@ -40,5 +45,84 @@ describe('publishing over sqs()', () => {
     const received = await receivedFrom(connecting.sqs, orders.notifyQueue);
     expect(received).toEqual([{ body: '{"orderId":"o-1"}', subject: orders.created }]);
     await expect(receivedFrom(connecting.sqs, orders.chargeQueue)).resolves.toEqual([]);
+  });
+
+  test('the Broker message id, Fact id and Transport headers arrive as ASCII JSON in their attributes', async () => {
+    const { publisher, connecting, orders } = await aMessaging();
+
+    await publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'o-1:created', headers: { traceparent: '00-abc-def-01' } },
+    );
+
+    await expect(attributesReceivedFrom(connecting.sqs, orders.notifyQueue)).resolves.toEqual([
+      {
+        'cf-loom-subject': orders.created,
+        'cf-loom-message-id': '"event.OrderCreated.v1:o-1:created"',
+        'cf-loom-fact-id': '"o-1:created"',
+        'cf-loom-headers': '{"traceparent":"00-abc-def-01"}',
+      },
+    ]);
+  });
+
+  test('a Message with no Transport headers carries cf-loom-headers {}', async () => {
+    const { publisher, connecting, orders } = await aMessaging();
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'o-1' });
+
+    const [attributes] = await attributesReceivedFrom(connecting.sqs, orders.notifyQueue);
+    expect(attributes?.['cf-loom-headers']).toBe('{}');
+  });
+
+  test('publish and send resolve with no duplicates, and publishing the same Fact id again delivers the Message again', async () => {
+    const { publisher, sender, connecting, orders } = await aMessaging();
+
+    const first = await publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f' },
+    );
+    const again = await publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'f' },
+    );
+    const sent = await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f' });
+
+    expect([first, again]).toEqual([
+      { factId: 'f', duplicates: [] },
+      { factId: 'f', duplicates: [] },
+    ]);
+    expect(sent).toEqual({ factId: 'f', duplicate: false });
+    const received = await receivedFrom(connecting.sqs, orders.notifyQueue);
+    expect(received.map(({ body }) => body)).toEqual(['{"orderId":"o-1"}', '{"orderId":"o-1"}']);
+  });
+
+  test('the body reaches the queue as its UTF-8 JSON text, astral characters included', async () => {
+    const { publisher, connecting, orders } = await aMessaging();
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-\u{1f600}-é' } }, { factId: 'f' });
+
+    const received = await receivedFrom(connecting.sqs, orders.notifyQueue);
+    expect(received.map(({ body }) => body)).toEqual(['{"orderId":"o-\u{1f600}-é"}']);
+  });
+
+  test('an SNS client that fails rejects publish with MessageNotSentError naming the versions already sent, with the client’s error as cause', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    const refusal = new Error('SNS is down');
+    await arrangeOrders(connecting, { contract: ordersWithTwoVersions });
+    failingCommand(connecting.sns, { command: 'PublishCommand', error: refusal, after: 1 });
+    const { publisher } = await messaging(ordersWithTwoVersions, sqs(connecting));
+    const bodies = { v1: { orderId: 'o-1' }, v2: { orderId: 'o-1', total: 12 } };
+
+    const error = await publisher.publish('OrderCreated', bodies, { factId: 'f' }).then(
+      () => undefined,
+      (rejected: unknown) => rejected,
+    );
+
+    expect(error).toBeInstanceOf(MessageNotSentError);
+    expect(error).toMatchObject({ factId: 'f', sent: ['OrderCreated@2'] });
+    expect((error as Error).cause).toBe(refusal);
   });
 });

@@ -115,3 +115,25 @@ export function inAccount(client: SNSClient | SQSClient, account: string): void 
     { step: 'build', name: `in-account-${account}` },
   );
 }
+
+/** Makes the commands of one kind a client sends fail with `error`, as an AWS that refused them would, after letting `after` of them through. */
+export function failingCommand(
+  client: SNSClient | SQSClient,
+  failing: { readonly command: string; readonly error: Error; readonly after?: number },
+): void {
+  let allowed = failing.after ?? 0;
+  const stack = (client as SNSClient).middlewareStack;
+  stack.add(
+    (next, context) => (args) => {
+      if (context.commandName !== failing.command) {
+        return next(args);
+      }
+      if (allowed > 0) {
+        allowed -= 1;
+        return next(args);
+      }
+      return Promise.reject(failing.error);
+    },
+    { step: 'initialize', name: `fail-${failing.command}` },
+  );
+}

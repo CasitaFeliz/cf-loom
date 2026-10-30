@@ -115,3 +115,24 @@ export async function receivedFrom(
     subject: message.MessageAttributes?.[snsSubjectAttribute]?.StringValue,
   }));
 }
+
+/** The string value of each message attribute of the Messages waiting in the queue named `name`. */
+export async function attributesReceivedFrom(
+  sqs: SQSClient,
+  name: string,
+): Promise<Record<string, string | undefined>[]> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  const received = await sqs.send(
+    new ReceiveMessageCommand({
+      QueueUrl,
+      MaxNumberOfMessages: 10,
+      MessageAttributeNames: ['All'],
+    }),
+  );
+  return (received.Messages ?? []).map((message) => {
+    const attributes = Object.entries(message.MessageAttributes ?? {});
+    return Object.fromEntries(
+      attributes.map(([attribute, { StringValue }]) => [attribute, StringValue]),
+    );
+  });
+}
