@@ -21,7 +21,7 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { collected } from '../../../contract/test/collected.ts';
+import { collected, heldOf } from '../../../contract/test/collected.ts';
 import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
 import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
 import {
@@ -1382,8 +1382,9 @@ describe('fastifyServe', () => {
           await new Promise((resolve) => stream.once('data', resolve));
           stream.pause();
           await collected();
+          const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
           stream.close(constants.NGHTTP2_CANCEL);
-          await waitFor(100);
+          await aborted;
         } finally {
           session.destroy();
         }
@@ -1407,15 +1408,14 @@ describe('fastifyServe', () => {
         stream.on('error', () => undefined);
         await new Promise((resolve) => stream.once('data', resolve));
         stream.pause();
-        await waitFor(50);
         await collected();
+        const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
         stream.close(constants.NGHTTP2_NO_ERROR);
-        await waitFor(100);
-        const aborted = signals[0]?.aborted;
+        await aborted;
         session.destroy();
         await app.close();
 
-        expect(aborted).toBe(true);
+        expect(signals[0]?.aborted).toBe(true);
       });
 
       test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and then onResponse, over HTTP/2, as every Fastify HTTP/2 route does', async () => {
@@ -1793,9 +1793,4 @@ async function answeredOnOneConnection(version: 'HTTP/1.1' | 'HTTP/2', url: stri
   });
   socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n'.repeat(count));
   await vi.waitFor(() => expect(statusLinesOf(received)).toHaveLength(count));
-}
-
-/** How many of the Requests `requests` refers to are still reachable. */
-function heldOf(requests: readonly WeakRef<Request>[]): number {
-  return requests.filter((request) => request.deref() !== undefined).length;
 }

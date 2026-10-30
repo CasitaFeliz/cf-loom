@@ -5,7 +5,7 @@ import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loo
 import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { collected } from '../../../contract/test/collected.ts';
+import { collected, heldOf } from '../../../contract/test/collected.ts';
 import {
   bodyOf,
   callerSocket,
@@ -991,8 +991,3 @@ describe('nodeHttp after a garbage collection', () => {
     },
   );
 });
-
-/** How many of the Requests `requests` refers to are still reachable. */
-function heldOf(requests: readonly WeakRef<Request>[]): number {
-  return requests.filter((request) => request.deref() !== undefined).length;
-}

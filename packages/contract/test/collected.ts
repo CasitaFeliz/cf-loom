@@ -17,3 +17,8 @@ export async function collected(): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
+
+/** How many of the objects `refs` refers to are still reachable. */
+export function heldOf(refs: readonly WeakRef<object>[]): number {
+  return refs.filter((ref) => ref.deref() !== undefined).length;
+}

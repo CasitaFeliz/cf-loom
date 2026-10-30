@@ -13,7 +13,7 @@ import { handle, success } from '@cf-loom/handlers';
 import { serve } from '@cf-loom/server';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { collected } from '../../contract/test/collected.ts';
+import { collected, heldOf } from '../../contract/test/collected.ts';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
@@ -968,13 +968,14 @@ function abortOf(signal: AbortSignal): Promise<never> {
   });
 }
 
-/** A body that errors with `signal`'s reason once it aborts, telling `reading` once it is answered. */
+/** A body that errors with `signal`'s reason once it aborts, telling `reading` when it is first read. */
 function bodyUntilAbortOf(signal: AbortSignal, reading: () => void): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>(
     {
-      start: (streamController) => {
+      pull: (streamController) => {
         signal.addEventListener('abort', () => streamController.error(signal.reason));
         reading();
+        return new Promise(() => undefined);
       },
     },
     { highWaterMark: 0 },
@@ -989,11 +990,6 @@ function recording(answer: () => Promise<Response>) {
     return answer();
   };
   return { requests, fetch };
-}
-
-/** How many of the Requests `requests` refers to are still reachable. */
-function heldOf(requests: readonly WeakRef<Request>[]): number {
-  return requests.filter((request) => request.deref() !== undefined).length;
 }
 
 describe('a Caller’s signal after a garbage collection', () => {
