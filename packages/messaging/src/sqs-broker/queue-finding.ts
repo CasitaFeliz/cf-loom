@@ -8,8 +8,8 @@ import {
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
 import { oneLineOf } from '../broker-limits/index.ts';
-import { isAwsError } from './aws-errors.ts';
-import { queueArnOf, topicArnOf } from './connecting.ts';
+import { answeredWith, isAwsError } from './aws-errors.ts';
+import { arnMismatchOf, queueArnOf, topicArnOf } from './connecting.ts';
 import { queueNameOf } from './queue-names.ts';
 import { type QueueHeld, queueReadingOf } from './queue-reading.ts';
 import { queueUrlOf } from './queue-url.ts';
@@ -66,14 +66,16 @@ async function queueFoundOf(working: Working, durableConsumer: DurableConsumer):
   if (url === undefined) {
     return refusedFor(`The Durable consumer ${durable}`, [`has no queue ${name}`]);
   }
-  const reading = queueReadingOf(await heldBy(sqs, url));
+  const held = await heldBy(sqs, url);
+  const reading = queueReadingOf(held);
+  const queueArn = queueArnOf(place, name);
   const shape = subscriptionShapeOf({
     topicArn: topicArnOf(place, prefixedNameOf(prefix, durableConsumer.stream)),
-    queueArn: queueArnOf(place, name),
+    queueArn,
     subject: prefixedSubjectOf(prefix, durableConsumer.subject),
   });
   const subscribed = await subscriptionDifferencesFor(sns, reading.subscriptionArn, shape);
-  const differences = [...reading.differences, ...subscribed];
+  const differences = [...reading.differences, ...arnDifferencesOf(held, queueArn), ...subscribed];
   if (differences.length > 0 || reading.read === undefined) {
     return refusedFor(`The queue ${name} of the Durable consumer ${durable}`, differences);
   }
@@ -90,11 +92,18 @@ async function heldBy(sqs: SQSClient, url: string): Promise<QueueHeld> {
   const attributes = await sqs.send(
     new GetQueueAttributesCommand({
       QueueUrl: url,
-      AttributeNames: ['VisibilityTimeout', 'RedrivePolicy'],
+      AttributeNames: ['VisibilityTimeout', 'RedrivePolicy', 'QueueArn'],
     }),
   );
   const tags = await sqs.send(new ListQueueTagsCommand({ QueueUrl: url }));
   return { attributes: attributes.Attributes ?? {}, tags: tags.Tags ?? {} };
+}
+
+/** That the queue's own ARN is not the one built, which a client of another account or region makes it. */
+function arnDifferencesOf({ attributes }: QueueHeld, built: string): readonly string[] {
+  const arn = answeredWith(attributes['QueueArn'], 'QueueArn');
+  const mismatch = arnMismatchOf({ from: 'GetQueueAttributes', arn }, built);
+  return mismatch === undefined ? [] : [`has a QueueArn other than the one built: ${mismatch}`];
 }
 
 /** How the subscription the queue is tagged with differs from the shape, or that the tag names none; any other error is thrown. */

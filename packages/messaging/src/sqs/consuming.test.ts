@@ -170,6 +170,20 @@ describe('consuming over sqs()', () => {
     expect(received).toEqual([]);
   });
 
+  test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
+    const { consume, connecting, orders } = await aMessaging();
+    const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
+    const other = `arn:aws:sqs:eu-west-1:210987654321:${orders.chargeQueue}`;
+    answeringAttributes(connecting.sqs, { QueueArn: other });
+
+    const consuming = consume(handlersOf([]), {});
+
+    const mismatch = `GetQueueAttributes gave ${other}, not ${built}: 210987654321 is another account than connecting.account 123456789012`;
+    await expect(consuming).rejects.toThrow(
+      `The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} has a QueueArn other than the one built: ${mismatch}: apply the Service's Broker plan`,
+    );
+  });
+
   test('consume called again once the queues exist starts consuming', async () => {
     const connecting = anAwsConnecting(moto.url);
     await arrangeTopic(connecting.sns, 'staging_orders-service');

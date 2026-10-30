@@ -44,10 +44,10 @@ export async function placeOf(connecting: SqsConnecting): Promise<Located> {
 /** An ARN AWS answered, and the call that answered it. */
 export type AnsweredArn = { readonly from: string; readonly arn: string };
 
-/** Refuses an ARN AWS answered otherwise than the one built, naming both, and the other account when the account part differs, as a wrong `connecting.account` makes it. */
-export function confirmArn(answered: AnsweredArn, built: string): void {
+/** Why an ARN AWS answered is not the one built, naming both, and the other account when the account part differs, as a wrong `connecting.account` makes it; `undefined` when it is the one built. */
+export function arnMismatchOf(answered: AnsweredArn, built: string): string | undefined {
   if (answered.arn === built) {
-    return;
+    return undefined;
   }
   const given = `${answered.from} gave ${answered.arn}, not ${built}`;
   const [builtAccount, givenAccount] = [accountOf(built), accountOf(answered.arn)];
@@ -55,7 +55,15 @@ export function confirmArn(answered: AnsweredArn, built: string): void {
     givenAccount === builtAccount
       ? 'check the region of the clients'
       : `${givenAccount} is another account than connecting.account ${builtAccount}`;
-  throw new Error(`${given}: ${why}`);
+  return `${given}: ${why}`;
+}
+
+/** Refuses an ARN AWS answered otherwise than the one built, with the text of `arnMismatchOf`. */
+export function confirmArn(answered: AnsweredArn, built: string): void {
+  const mismatch = arnMismatchOf(answered, built);
+  if (mismatch !== undefined) {
+    throw new Error(mismatch);
+  }
 }
 
 /** The account part of an ARN, whose name part holds no `:`. */
