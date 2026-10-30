@@ -8,6 +8,7 @@ import {
 import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
+import { plainUnionFindingsOf } from './def-comparison.ts';
 import { enumFindingsOf } from './enums.ts';
 import { objectFindingsOf } from './fields.ts';
 import {
@@ -20,7 +21,7 @@ import {
 } from './findings.ts';
 import { type Entered, hasEntered, hopOf } from './refs.ts';
 import type { Difference, EndpointPosition, Position } from './report.ts';
-import { plainUnionFindingsOf, taggedFindingsOf } from './unions.ts';
+import { taggedFindingsOf } from './unions.ts';
 
 /** Where a schema sits: the Position it is read in, and its steps from the site. */
 export type SchemaPlace = { readonly position: Position; readonly at: readonly Step[] };
