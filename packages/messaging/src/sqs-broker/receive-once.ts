@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
 import { type Message, ReceiveMessageCommand, type SQSClient } from '@aws-sdk/client-sqs';
 import { snsAttributeNames } from '@cf-loom/contract/internal';
+import { receiveCountAttribute } from './received-reading.ts';
 
 /** How long, in seconds, one receive waits for a Message, SQS's longest long poll. */
 const longPollSeconds = 20;
@@ -19,7 +20,7 @@ export async function receiveOnce(sqs: SQSClient, queueUrl: string): Promise<Pul
         QueueUrl: queueUrl,
         MaxNumberOfMessages: 1,
         WaitTimeSeconds: longPollSeconds,
-        MessageSystemAttributeNames: ['ApproximateReceiveCount'],
+        MessageSystemAttributeNames: [receiveCountAttribute],
         MessageAttributeNames: [...snsAttributeNames],
       }),
     );

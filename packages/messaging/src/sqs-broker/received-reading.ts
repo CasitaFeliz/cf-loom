@@ -13,7 +13,8 @@ export type ReceivedReading =
   | { readonly kind: 'readable'; readonly delivery: Delivery; readonly waitMs: number }
   | { readonly kind: 'unreadable'; readonly names: readonly string[] };
 
-const receiveCountAttribute = 'ApproximateReceiveCount';
+/** The system attribute SQS counts a Message's receives in. */
+export const receiveCountAttribute = 'ApproximateReceiveCount';
 
 /** Reads the Message by the wire and by SQS's receive count; one that lacks or cannot read any of them is unreadable, naming each. */
 export function readingOf({ queue, message }: ReceivedMessage): ReceivedReading {

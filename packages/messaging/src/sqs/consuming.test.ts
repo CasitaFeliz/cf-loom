@@ -694,8 +694,9 @@ describe('consuming over sqs()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(hooked).toEqual([]);
     expect(written).not.toHaveBeenCalled();
+    const closing = close();
     await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
-    await expect(close()).resolves.toBeUndefined();
+    await expect(closing).resolves.toBeUndefined();
   });
 
   test('a queue deleted while consuming reaches onBrokerTrouble once as pull-failed with SQS’s error, and the queue created again reaches it as recovered and its Messages reach their Handler', async () => {
