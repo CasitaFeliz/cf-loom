@@ -7,6 +7,7 @@ export type {
   ReadOf,
   SetLimits,
 } from './container.ts';
+export { deliveryWaitOf } from './delivery-wait.ts';
 export { type Duration, durationText, millisecondsOf } from './duration.ts';
 export {
   type AdapterLimits,

@@ -3,9 +3,6 @@ import { type JetStreamManager, type JetStreamOptions, jetstreamManager } from '
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { ServiceStream } from '../broker/index.ts';
 
-/** What a refusal tells whoever reads it to do, when the Broker lacks what the Service's plan lists or holds it differently. */
-export const planRemedy = "apply the Service's Broker plan";
-
 /** The Service's stream and the subjects it must hold, named as they are on the Broker, prefix included. */
 export type PrefixedStream = { readonly name: string; readonly subjects: readonly string[] };
 

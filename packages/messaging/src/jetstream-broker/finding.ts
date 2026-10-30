@@ -1,11 +1,10 @@
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type ConsumerInfo, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
-import type { DurableConsumer } from '../broker/index.ts';
+import { type DurableConsumer, planRemedy, shapeRefusalOf } from '../broker/index.ts';
 import { isApiError } from './api-error.ts';
 import { shapeDifferencesOf } from './durable-consumer-shape.ts';
 import { type PullRequest, pullRequestOf } from './pull-once.ts';
-import { planRemedy } from './stream-check.ts';
-import { type Waits, waitsOf } from './waits.ts';
+import { waitsOf } from './waits.ts';
 
 /**
  * The `DurableConsumer` handed to `consume`, with its pull request on the Broker, the waits NATS
@@ -14,7 +13,7 @@ import { type Waits, waitsOf } from './waits.ts';
 export type FoundDurableConsumer = {
   readonly durableConsumer: DurableConsumer;
   readonly request: PullRequest;
-  readonly waits: Waits;
+  readonly waits: readonly [number, ...number[]];
   readonly maxDeliver: number;
 };
 
@@ -71,7 +70,7 @@ async function pullableOf(search: Search, durableConsumer: DurableConsumer): Pro
   const subject = prefixedSubjectOf(prefix, durableConsumer.subject);
   const differences = shapeDifferencesOf(consumerInfo.config, subject);
   if (differences.length > 0) {
-    const line = `The Durable consumer ${durableName} ${differences.join(' and ')}: ${planRemedy}`;
+    const line = shapeRefusalOf(`The Durable consumer ${durableName}`, differences);
     return { kind: 'refused', line };
   }
   const request = pullRequestOf(consumerInfo, apiPrefix, inboxPrefix);

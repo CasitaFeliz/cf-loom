@@ -1,8 +1,8 @@
 import { receivedHeadersOf } from '@cf-loom/contract/internal';
 import type { Settlement } from '../broker/index.ts';
+import { deliveryWaitOf } from '../broker-limits/index.ts';
 import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
-import { waitOf } from './waits.ts';
 
 /**
  * Hands one Message to its Handler with the wait NATS gives that delivery, and applies the
@@ -17,7 +17,7 @@ export async function deliver(message: PulledMessage, found: FoundDurableConsume
   const { messageId, factId, headers } = read;
   const { deliveryCount } = message;
   const lastAttempt = isLastDelivery(found.maxDeliver, deliveryCount);
-  const waitMs = waitOf(found.waits, deliveryCount);
+  const waitMs = deliveryWaitOf(found.waits, deliveryCount);
   const delivered = { messageId, factId, deliveryCount, lastAttempt, waitMs };
   const delivery = { ...delivered, headers, body: message.data };
   applySettlement(message, await found.durableConsumer.receive(delivery));
