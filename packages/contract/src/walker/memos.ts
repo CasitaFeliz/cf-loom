@@ -27,8 +27,10 @@ export type Memos = {
   readonly reached: (schema: core.$ZodType, at: Reached) => void;
   /** Refusals the walk returns, the first time each is returned being where it was raised. */
   readonly raised: (tree: FailureTree) => void;
+  /** An `allOf` or a `union` node the walk built, whose refusal joins those no remembered schema has claimed. */
+  readonly built: (composition: Composition) => void;
   readonly start: () => Start;
-  /** A remembered schema's walk closed: it claims what was raised and reached during it, since `start`. */
+  /** A remembered schema's walk closed: it claims what was raised and reached during it that no schema inside it claimed. */
   readonly close: (closed: ReachedSchema, start: Start) => void;
   /** A schema walked afresh from now on: later reaches of it belong to its next walk. */
   readonly forget: (schema: core.$ZodType) => void;
@@ -45,13 +47,10 @@ type State = {
   readonly logged: Set<NotAllowed | FailureTree>;
   /** The reaches no remembered schema has claimed yet, the latest on top. */
   readonly reaches: Reach[];
-  readonly compositions: readonly Composition[];
-  /** How many of the compositions are on `raised`. */
-  absorbed: number;
 };
 
-/** The records of one walk, which reads the compositions it builds as they grow. */
-export function startMemos(compositions: readonly Composition[]): Memos {
+/** The records of one walk. */
+export function startMemos(): Memos {
   const state: State = {
     memoBySchema: new Map(),
     earlyReaches: new Map(),
@@ -59,13 +58,14 @@ export function startMemos(compositions: readonly Composition[]): Memos {
     raised: [],
     logged: new Set(),
     reaches: [],
-    compositions,
-    absorbed: 0,
   };
   return {
     reached: (schema, at) => reached(state, schema, at),
     raised: (tree) => logRaised(state, tree),
-    start: () => startedAt(state),
+    built: ({ refusal }) => {
+      state.raised.push(refusal);
+    },
+    start: () => ({ raised: state.raised.length, reaches: state.reaches.length }),
     close: (closed, start) => close(state, closed, start),
     forget: (schema) => {
       state.memoBySchema.delete(schema);
@@ -95,21 +95,6 @@ function logRaised(state: State, tree: FailureTree): void {
   }
 }
 
-function startedAt(state: State): Start {
-  absorbCompositions(state);
-  return { raised: state.raised.length, reaches: state.reaches.length };
-}
-
-/** The compositions the walk built since the last call join the refusals, in the order they were built. */
-function absorbCompositions(state: State): void {
-  for (; state.absorbed < state.compositions.length; state.absorbed++) {
-    const composition = state.compositions[state.absorbed];
-    if (composition !== undefined) {
-      state.raised.push(composition.refusal);
-    }
-  }
-}
-
 /**
  * A remembered schema's memo is made where its walk entered it; it claims what was raised during
  * that walk and the reaches made during it that no schema inside it claimed, then its own entry
@@ -119,7 +104,6 @@ function close(state: State, closed: ReachedSchema, start: Start): void {
   const memo: Memo = { at: closed.at, reaches: state.earlyReaches.get(closed.schema) ?? [] };
   state.memoBySchema.set(closed.schema, memo);
   state.earlyReaches.delete(closed.schema);
-  absorbCompositions(state);
   for (const refusal of state.raised.splice(start.raised)) {
     state.memoOf.set(refusal, memo);
   }

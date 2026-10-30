@@ -25,25 +25,28 @@ export type Recursion = {
   readonly defs: () => Readonly<Record<string, SchemaNode>>;
   /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
   readonly forgetUnnamedCycles: () => void;
+  /** A composition the walk built, whose refusal is raised inside the remembered schema it is built in. */
+  readonly built: (composition: Composition) => void;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
 
 /** The recursion state shared by every schema of one Snapshot, so ids are unique across it. */
-export function startRecursion(compositions: readonly Composition[]): Recursion {
+export function startRecursion(): Recursion {
   const state: State = {
     ancestors: [],
     open: [],
     remembered: startRemembered(),
     schemaById: new Map(),
     defById: new Map(),
-    memos: startMemos(compositions),
+    memos: startMemos(),
     count: 0,
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
     defs: () => Object.fromEntries(state.defById),
     forgetUnnamedCycles: () => forgetUnnamedCycles(state),
+    built: (composition) => state.memos.built(composition),
     memoOf: state.memos.memoOf,
   };
 }
