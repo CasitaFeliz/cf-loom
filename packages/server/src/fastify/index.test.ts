@@ -1,14 +1,18 @@
+import type { Http2SecureServer, Http2Server } from 'node:http2';
 import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import Fastify, {
+  type FastifyHttp2Options,
+  type FastifyHttp2SecureOptions,
   type FastifyInstance,
   type FastifyPluginAsync,
   type FastifyServerOptions,
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { closeSessions, h2, h2Session } from '../../test/h2.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -178,7 +182,10 @@ type Config = {
     readonly maxBodyBytes?: number;
     readonly onAnswered?: (record: AnsweredRequest) => void;
   };
-  readonly fastify?: FastifyServerOptions;
+  readonly fastify?:
+    | FastifyServerOptions
+    | FastifyHttp2Options<Http2Server>
+    | FastifyHttp2SecureOptions<Http2SecureServer>;
   readonly before?: (app: FastifyInstance, reached: string[]) => void;
   readonly after?: (app: FastifyInstance, reached: string[]) => void;
 };
@@ -188,6 +195,7 @@ const servers: ReturnType<typeof nodeHttp>[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  closeSessions();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -199,7 +207,7 @@ afterEach(async () => {
 /** A Fastify app with its own routes, serving the Contract beside them, listening on a free port. */
 async function served(config: Config = {}): Promise<Served> {
   const reached: string[] = [];
-  const app = Fastify(config.fastify);
+  const app = Fastify(config.fastify as FastifyServerOptions);
   apps.push(app);
   app.get('/healthz', async () => {
     reached.push('GET /healthz');
@@ -214,7 +222,8 @@ async function served(config: Config = {}): Promise<Served> {
   config.after?.(app, reached);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as AddressInfo;
-  return { app, url: `http://127.0.0.1:${port}`, reached };
+  const scheme = config.fastify !== undefined && 'https' in config.fastify ? 'https' : 'http';
+  return { app, url: `${scheme}://127.0.0.1:${port}`, reached };
 }
 
 /** An app route that answers `answer` and records the request it answered. */
@@ -854,15 +863,6 @@ describe('fastifyServe', () => {
       await expect(registering).rejects.toThrow(/fastifyServe.*encapsulated/);
     });
 
-    test('registering it on an HTTP/2 app throws, naming fastifyServe', async () => {
-      const app = Fastify({ http2: true });
-      apps.push(app);
-
-      const registering = app.register(fastifyServe(contract, handlers, {}));
-
-      await expect(registering).rejects.toThrow(/fastifyServe.*HTTP\/2/);
-    });
-
     test('a Handler map missing a Handler throws when fastifyServe is called, before register', () => {
       const { getSummary: _, ...missing } = handlers.endpoints;
 
@@ -870,6 +870,27 @@ describe('fastifyServe', () => {
       const calling = () => fastifyServe(contract, { ...handlers, endpoints: missing }, {});
 
       expect(calling).toThrow(/getSummary/);
+    });
+  });
+
+  describe('over HTTP/2', () => {
+    test('on an h2c app, a declared Endpoint is answered by cf-loom, the app’s own route answers beside it, and the app’s onResponse hook sees the Endpoint’s request', async () => {
+      const responded: string[] = [];
+      const { url, reached } = await served({
+        fastify: { http2: true },
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void responded.push(request.url)),
+      });
+      const session = h2Session(url);
+
+      const order = await h2(session, { ':path': '/orders/o-1' });
+      const health = await h2(session, { ':path': '/healthz' });
+      await waitFor(50);
+
+      expect([order.status, JSON.parse(order.body)]).toEqual([200, { id: 'o-1' }]);
+      expect([health.status, health.body]).toEqual([200, 'ok']);
+      expect(reached).toEqual(['GET /healthz']);
+      expect(responded).toEqual(['/orders/o-1', '/healthz']);
     });
   });
 });

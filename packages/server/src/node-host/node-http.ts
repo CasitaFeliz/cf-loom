@@ -9,13 +9,8 @@ import type { Http } from '@cf-loom/contract';
 import { reservedResponseOf } from '@cf-loom/contract/internal';
 import { faultLineOf } from '@cf-loom/handlers/internal';
 import { answeredOf } from '../answering/index.ts';
-import {
-  closedSignalOf,
-  incomingRequestOf,
-  incomingUrlOf,
-  unreadableResponse,
-} from '../incoming/index.ts';
-import { respondedWith } from '../outgoing/index.ts';
+import { incomingRequestOf, incomingUrlOf, unreadableResponse } from '../incoming/index.ts';
+import { respondedWith, takenOf } from '../outgoing/index.ts';
 
 /** The line a handler that rejects is logged on. */
 const rejectedLine = faultLineOf('nodeListener', { message: 'the handler rejected' });
@@ -37,7 +32,7 @@ export function nodeHttp(http: Http): Server {
 
 /** Answers an incoming message with what `http` returns, written as `outgoing` does. */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const taken = { incoming, outgoing, closed: closedSignalOf(outgoing) };
+  const taken = takenOf(incoming, outgoing);
   await respondedWith(taken, answeredFor(http, incoming, taken.closed));
 }
 

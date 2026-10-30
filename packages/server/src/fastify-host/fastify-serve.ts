@@ -1,8 +1,14 @@
-import type { IncomingMessage } from 'node:http';
 import type { Http, ServiceContract } from '@cf-loom/contract';
 import { allowedMethodsOf, type Closed, type Matchable } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import type {
+  FastifyInstance,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  RawServerBase,
+  RouteGenericInterface,
+} from 'fastify';
 import {
   type ServedHandlers,
   type ServeOptions,
@@ -10,12 +16,12 @@ import {
   servingOf,
 } from '../answering/index.ts';
 import {
-  closedSignalOf,
+  type Incoming,
   incomingRequestOf,
   incomingUrlOf,
   unreadableResponse,
 } from '../incoming/index.ts';
-import { respondedWith, type Taken } from '../outgoing/index.ts';
+import { respondedWith, type Taken, takenOf } from '../outgoing/index.ts';
 
 /**
  * A Fastify plugin that answers a Contract's Endpoints with their Handlers inside the app, taking
@@ -40,7 +46,10 @@ export function fastifyServe(
   options: Omit<ServeOptions<object>, 'fallback'>,
 ): FastifyPluginAsync {
   const serving = servingOf(contract, handlers, options);
-  const plugin: FastifyPluginAsync = async (instance, registration) => {
+  const plugin: FastifyPluginAsync<Record<never, never>, RawServerBase> = async (
+    instance,
+    registration,
+  ) => {
     refusedBy(instance, registration);
     instance.addHook('onRequest', async (request, reply) => {
       await answeredWhenServed(serving, request, reply);
@@ -52,8 +61,11 @@ export function fastifyServe(
   });
 }
 
-/** Throws unless the plugin is registered on the app itself, with no prefix, over HTTP/1. */
-function refusedBy(instance: FastifyInstance, registration: { readonly prefix?: unknown }) {
+/** Throws unless the plugin is registered on the app itself, with no prefix. */
+function refusedBy(
+  instance: FastifyInstance<RawServerBase>,
+  registration: { readonly prefix?: unknown },
+) {
   if (registration.prefix) {
     throw new Error(
       `fastifyServe: registered with the prefix ${String(registration.prefix)}; register it with none: an Endpoint's path is its whole path`,
@@ -64,24 +76,23 @@ function refusedBy(instance: FastifyInstance, registration: { readonly prefix?: 
       'fastifyServe: registered inside an encapsulated plugin, where its hook would cover only that plugin; register it on the app',
     );
   }
-  if (instance.initialConfig.http2) {
-    throw new Error('fastifyServe: the app serves HTTP/2, which fastifyServe does not serve');
-  }
 }
 
 /**
  * Takes the request from Fastify and answers it when a declared Endpoint has its method and path;
  * any other goes on to the app.
  */
-async function answeredWhenServed(serving: Serving, request: FastifyRequest, reply: FastifyReply) {
+async function answeredWhenServed(
+  serving: Serving,
+  request: FastifyRequest<RouteGenericInterface, RawServerBase>,
+  reply: FastifyReply<RouteGenericInterface, RawServerBase>,
+) {
   const url = servedUrlOf(serving.endpoints, request.raw);
   if (url === undefined) {
     return;
   }
   reply.hijack();
-  const outgoing = reply.raw;
-  const closed = closedSignalOf(outgoing);
-  const taken = { incoming: request.raw, outgoing, closed, hostHeaders: reply.getHeaders() };
+  const taken = takenOf(request.raw, reply.raw, reply.getHeaders());
   await respondedWith(taken, answeredFor(serving.http, taken, url));
 }
 
@@ -92,7 +103,7 @@ async function answeredFor(http: Http, { incoming, closed }: Taken, url: URL): P
 }
 
 /** The URL of a request whose method and path a declared Endpoint has, or none. */
-function servedUrlOf(endpoints: readonly Matchable[], incoming: IncomingMessage): URL | undefined {
+function servedUrlOf(endpoints: readonly Matchable[], incoming: Incoming): URL | undefined {
   const read = incomingUrlOf(incoming);
   if (read.kind !== 'url') {
     return undefined;
