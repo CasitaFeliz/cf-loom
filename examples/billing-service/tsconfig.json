@@ -11,8 +11,14 @@
     "test",
     "cf-loom.config.ts",
     "vitest.config.ts",
+    "../../packages/messaging/test/aws-arranging.ts",
+    "../../packages/messaging/test/aws-connecting.ts",
+    "../../packages/messaging/test/aws-reading.ts",
+    "../../packages/messaging/test/moto-server.ts",
     "../../packages/messaging/test/nats-server.ts",
-    "../../packages/messaging/test/test-process.ts"
+    "../../packages/messaging/test/test-process.ts",
+    "../../packages/messaging/test/until.ts",
+    "../orders-service/src"
   ],
   "references": [
     {
