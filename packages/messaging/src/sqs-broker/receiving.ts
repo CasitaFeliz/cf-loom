@@ -1,6 +1,12 @@
 import type { ConsumeRun } from '../broker/index.ts';
 import { pause, troubleReportingOf } from '../broker/index.ts';
-import { deliver, type QueueRun } from './delivering.ts';
+import {
+  deliver,
+  type Prepared,
+  preparedFrom,
+  type QueueRun,
+  type ReceivedMessage,
+} from './delivering.ts';
 import type { FoundQueue } from './queue-finding.ts';
 import { receiveOnce } from './receive-once.ts';
 
@@ -11,11 +17,11 @@ export type Receiving = QueueRun & Pick<ConsumeRun, 'troubled'>;
 export async function receiveFrom(queue: FoundQueue, run: Receiving): Promise<void> {
   const reporting = troubleReportingOf(queue.durableConsumer, run.troubled);
   while (!run.closing.aborted) {
-    const pull = await receiveOnce(run.sqs, queue.url);
-    reporting.pulled(pull);
-    switch (pull.kind) {
-      case 'message':
-        await deliver(run, { queue, message: pull.message });
+    const pulled = await pulledFrom(queue, run);
+    reporting.pulled(pulled.kind === 'ready' ? { kind: 'message' } : pulled);
+    switch (pulled.kind) {
+      case 'ready':
+        await deliver(run, pulled.received, pulled.delivery);
         break;
       case 'none':
         break;
@@ -24,4 +30,19 @@ export async function receiveFrom(queue: FoundQueue, run: Receiving): Promise<vo
         break;
     }
   }
+}
+
+type Pulled =
+  | (Extract<Prepared, { kind: 'ready' }> & { readonly received: ReceivedMessage })
+  | Exclude<Prepared, { kind: 'ready' }>;
+
+/** One pull: the receive and, for a Message that is one of cf-loom's, the visibility change that comes before its Handler. */
+async function pulledFrom(queue: FoundQueue, run: Receiving): Promise<Pulled> {
+  const pull = await receiveOnce(run.sqs, queue.url);
+  if (pull.kind !== 'message') {
+    return pull;
+  }
+  const received = { queue, message: pull.message };
+  const prepared = await preparedFrom(run, received);
+  return prepared.kind === 'ready' ? { ...prepared, received } : prepared;
 }

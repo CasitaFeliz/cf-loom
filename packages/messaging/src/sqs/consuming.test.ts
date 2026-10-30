@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 
 import { createHash } from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { fault, handle } from '@cf-loom/handlers';
 import {
@@ -45,7 +46,7 @@ import {
   testLimits,
 } from '../../test/orders.ts';
 import { until } from '../../test/until.ts';
-import { type BrokerTrouble, type ConsumedFault, messaging } from '../index.ts';
+import { type BrokerTrouble, type ConsumedFault, type DeadlineError, messaging } from '../index.ts';
 import {
   type Duration,
   type SqsBrokerLimits,
@@ -346,6 +347,31 @@ describe('consuming over sqs()', () => {
       [2, false],
       [3, true],
     ]);
+  });
+
+  test('delivery 1 waits the queue’s visibility timeout, and with a backoff tag each later delivery waits its entry, the last repeating, the queue showing the Message in flight while each Handler waits', async () => {
+    const faults: ConsumedFault[] = [];
+    const { publisher, consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: ['1s', '2s'], maxDeliver: 3 }),
+      onServiceFault: (consumed) => void faults.push(consumed),
+    });
+    const samples: { visible: number; inFlight: number }[] = [];
+    const watching = async ({ meta }: Received) => {
+      while (!meta.signal.aborted) {
+        samples.push(await queueCountsOf(connecting.sqs, orders.notifyQueue));
+        await sleep(100);
+      }
+      return undefined;
+    };
+    await consume(handlersOf([], { notify: watching }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(faults).toHaveLength(3));
+    const waited = faults.map((consumed) => (consumed as { cause: DeadlineError }).cause.waitMs);
+    expect(waited).toEqual([1_000, 2_000, 2_000]);
+    expect(samples.length).toBeGreaterThan(0);
+    expect(new Set(samples.map(({ visible }) => visible))).toEqual(new Set([0]));
   });
 
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {

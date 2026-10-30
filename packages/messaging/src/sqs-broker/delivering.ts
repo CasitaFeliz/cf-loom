@@ -11,7 +11,7 @@ import {
   snsHeadersAttribute,
   snsMessageIdAttribute,
 } from '@cf-loom/contract/internal';
-import type { Settlement } from '../broker/index.ts';
+import type { Delivery, Settlement } from '../broker/index.ts';
 import { deliveryWaitOf } from '../broker-limits/index.ts';
 import type { FoundQueue } from './queue-finding.ts';
 
@@ -21,8 +21,23 @@ export type QueueRun = { readonly sqs: SQSClient; readonly closing: AbortSignal 
 /** A Message received from a Durable consumer's queue. */
 export type ReceivedMessage = { readonly queue: FoundQueue; readonly message: Message };
 
-/** Hands one received Message to its Handler and applies the Settlement it comes back with. */
-export async function deliver(run: QueueRun, { queue, message }: ReceivedMessage): Promise<void> {
+/** A received Message made ready for its Handler, or why it is not: none to deliver, or a failure of the visibility change that comes before it. */
+export type Prepared =
+  | { readonly kind: 'ready'; readonly delivery: Delivery }
+  | { readonly kind: 'none' }
+  | { readonly kind: 'failed'; readonly cause: unknown };
+
+/** Reads the Message into the Delivery its Handler runs with, and gives it the wait of a later delivery on a queue with a backoff; one cf-loom cannot read is none. */
+export async function preparedFrom(run: QueueRun, received: ReceivedMessage): Promise<Prepared> {
+  const delivery = deliveryOf(received);
+  if (delivery === undefined) {
+    return { kind: 'none' };
+  }
+  const changed = await changedVisibility(run, received, delivery);
+  return changed.kind === 'failed' ? changed : { kind: 'ready', delivery };
+}
+
+function deliveryOf({ queue, message }: ReceivedMessage): Delivery | undefined {
   const attributes = {
     [snsMessageIdAttribute]: message.MessageAttributes?.[snsMessageIdAttribute]?.StringValue,
     [snsFactIdAttribute]: message.MessageAttributes?.[snsFactIdAttribute]?.StringValue,
@@ -30,10 +45,10 @@ export async function deliver(run: QueueRun, { queue, message }: ReceivedMessage
   };
   const read = receivedSnsAttributesOf(attributes);
   if (read.kind === 'missing') {
-    return;
+    return undefined;
   }
   const deliveryCount = Number(message.Attributes?.['ApproximateReceiveCount']);
-  const delivery = {
+  return {
     messageId: read.messageId,
     factId: read.factId,
     deliveryCount,
@@ -42,8 +57,40 @@ export async function deliver(run: QueueRun, { queue, message }: ReceivedMessage
     headers: read.headers,
     body: new TextEncoder().encode(message.Body ?? ''),
   };
-  const settlement = await queue.durableConsumer.receive(delivery);
-  await settle(run, { queue, message }, settlement);
+}
+
+/** Gives a delivery after the first the wait of its backoff entry, which the queue's own visibility timeout does not know. */
+async function changedVisibility(
+  { sqs }: QueueRun,
+  { queue, message }: ReceivedMessage,
+  delivery: Delivery,
+): Promise<{ readonly kind: 'changed' } | { readonly kind: 'failed'; readonly cause: unknown }> {
+  if (delivery.deliveryCount === 1 || queue.waits.length === 1) {
+    return { kind: 'changed' };
+  }
+  const seconds = (delivery.waitMs ?? 0) / 1_000;
+  try {
+    await sqs.send(
+      new ChangeMessageVisibilityCommand({
+        QueueUrl: queue.url,
+        ReceiptHandle: message.ReceiptHandle,
+        VisibilityTimeout: seconds,
+      }),
+    );
+    return { kind: 'changed' };
+  } catch (cause) {
+    return { kind: 'failed', cause };
+  }
+}
+
+/** Hands a Delivery to its Handler and applies the Settlement it comes back with. */
+export async function deliver(
+  run: QueueRun,
+  received: ReceivedMessage,
+  delivery: Delivery,
+): Promise<void> {
+  const settlement = await received.queue.durableConsumer.receive(delivery);
+  await settle(run, received, settlement);
 }
 
 async function settle(
