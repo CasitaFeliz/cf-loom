@@ -617,6 +617,24 @@ describe('validateRoot: a composition reaching an Open Enum through every kind o
     },
   );
 
+  test.each(cases)(
+    '$around.label whose operand is $holder.label holding what reaches an Open Enum through $way.label is not allowed, at the composition',
+    ({ around, way, holder }) => {
+      const { operand } = way.reaching(openEnum(['a']));
+
+      const validated = validatedWithBody(around.composed(holder.holding(operand)));
+
+      const insides = holder.inside.map(([kind, at]) => ({
+        ...(kind === 'union' ? unionRefusal : refusal),
+        location: `${bodyAt}${around.operandAt}${at}`,
+      }));
+      expect(validated).toEqual({
+        kind: 'invalid',
+        failures: [...insides, { ...around.refusal, location: bodyAt }],
+      });
+    },
+  );
+
   test('a union or an intersection beside an Open Enum it does not reach is allowed', () => {
     const closed: z.ZodType = z
       .object({
