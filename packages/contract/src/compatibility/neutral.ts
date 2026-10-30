@@ -7,8 +7,9 @@ import type {
   MessageTombstone,
 } from '../snapshot/index.ts';
 import { canonicalJson, type Defs, reachedDefsOf, type SchemaNode } from '../walker/index.ts';
+import { reachesOnlyUnchanged } from './def-comparison.ts';
 import type { BothDefs } from './findings.ts';
-import { comparedShapesOf, type Pair, retiredShapesOf } from './pairs.ts';
+import { type Compared, comparedShapesOf, type Pair, retiredShapesOf } from './pairs.ts';
 import type { Difference } from './report.ts';
 
 /** What an Element or a Subscription says of itself besides its shapes: its description and Group. */
@@ -103,12 +104,10 @@ export function guardNeutralOf(
   if (differ(baseline.guards, proposed.guards)) {
     differences.push({ kind: 'guards-changed' });
   }
-  if (
-    nodeKeyOf(baseline.qualifier, defs.baseline) !== nodeKeyOf(proposed.qualifier, defs.proposed)
-  ) {
+  if (!isSameNode(baseline.qualifier, proposed.qualifier, defs)) {
     differences.push({ kind: 'qualifier-changed' });
   }
-  if (nodeKeyOf(baseline.context, defs.baseline) !== nodeKeyOf(proposed.context, defs.proposed)) {
+  if (!isSameNode(baseline.context, proposed.context, defs)) {
     differences.push({ kind: 'context-changed' });
   }
   return [...differences, ...originDifferencesOf(baseline, proposed)];
@@ -173,9 +172,25 @@ function retiredDifferencesOf(pair: Pair<Declaration>, defs: BothDefs): readonly
   return before === after ? [] : [{ kind: 'retired-changed' }];
 }
 
-/** A schema, or none, as text with every def it reaches, so a change in a def shows in the schema. */
-function nodeKeyOf(node: SchemaNode | null, defs: Defs): string {
-  return canonicalJson([node, reachedKeyOf(node === null ? [] : [node], defs)]);
+/**
+ * Whether two values are the same canonical text and every def their schema nodes reach is the
+ * same on both sides; the nodes are the Baseline's, whose `ref`s the proposed one writes alike.
+ */
+function isSameReaching(
+  { baseline, proposed }: Compared<unknown>,
+  nodes: readonly SchemaNode[],
+  defs: BothDefs,
+): boolean {
+  return !differ(baseline, proposed) && reachesOnlyUnchanged(nodes, defs);
+}
+
+/** Whether two schemas, or none, are the same text and reach the same defs. */
+function isSameNode(
+  baseline: SchemaNode | null,
+  proposed: SchemaNode | null,
+  defs: BothDefs,
+): boolean {
+  return isSameReaching({ baseline, proposed }, baseline === null ? [] : [baseline], defs);
 }
 
 /** What moves with an Element's lifecycle, which the lifecycle's own Change already reports. */
