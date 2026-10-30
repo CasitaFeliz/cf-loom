@@ -347,29 +347,38 @@ describe('pin-readme-links', () => {
 });
 
 describe('the package READMEs', () => {
-  const root = join(import.meta.dirname, '..');
-  const packageNames = readdirSync(join(root, 'packages'), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name);
+  const packages = join(import.meta.dirname, '..', 'packages');
 
   function countOf(text: string, needle: string): number {
     return text.split(needle).length - 1;
   }
 
-  it.each(packageNames)(
-    'of %s are pinned to a commit with none of its links left at main',
-    (name) => {
-      const folder = join(root, 'packages', name);
-      const readme = readFileSync(join(folder, 'README.md'), 'utf8');
-      const manifest = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
-      const named = repositoryOf(manifest);
-      const links = countOf(readme, `github.com/${named}`);
+  it('are all pinned to a commit by the command, with none of their links left at main', () => {
+    const copied: Record<string, string> = {};
+    const linksByFolder: Record<string, number> = {};
+    for (const folder of readdirSync(packages)) {
+      const manifest = readFileSync(join(packages, folder, 'package.json'), 'utf8');
+      const readme = readFileSync(join(packages, folder, 'README.md'), 'utf8');
+      copied[`packages/${folder}/package.json`] = manifest;
+      copied[`packages/${folder}/README.md`] = readme;
+      linksByFolder[folder] = countOf(readme, `github.com/${repositoryOf(JSON.parse(manifest))}`);
+    }
+    const checkout = aCheckoutWith(copied);
 
-      const pinned = pinnedReadme(readme, named, commit);
-      const text = pinned.kind === 'pinned' ? pinned.text : '';
+    const run = runPin(checkout, commit);
 
-      expect(countOf(text, `github.com/${named}/blob/${commit}/`)).toBe(links);
-      expect(countOf(text, `github.com/${named}/blob/main`)).toBe(0);
-    },
-  );
+    const written = filesOf(checkout);
+    const atCommit: Record<string, number> = {};
+    const atMain: Record<string, number> = {};
+    for (const folder of Object.keys(linksByFolder)) {
+      const readme = written[`packages/${folder}/README.md`] ?? '';
+      atCommit[folder] = countOf(readme, `/blob/${commit}/`);
+      atMain[folder] = countOf(readme, '/blob/main');
+    }
+    expect(run).toEqual({ status: 0, stderr: '' });
+    expect(atCommit).toEqual(linksByFolder);
+    expect(atMain).toEqual(
+      Object.fromEntries(Object.keys(linksByFolder).map((folder) => [folder, 0])),
+    );
+  });
 });
