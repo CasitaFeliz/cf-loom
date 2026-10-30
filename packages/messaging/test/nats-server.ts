@@ -18,11 +18,9 @@ export type NatsServer = {
 export async function aNatsServer(): Promise<NatsServer> {
   const directory = await mkdtemp(join(tmpdir(), 'cf-loom-nats-'));
   const options = ['-p', '-1', '-a', '127.0.0.1', '-js', '-sd', directory];
-  const server = startProcess(
-    'nats-server',
-    [...options, '--ports_file_dir', directory],
+  const server = startProcess('nats-server', [...options, '--ports_file_dir', directory], {
     notOnPath,
-  );
+  });
   try {
     const url = await untilListening(server, 'nats-server', () => portsFileUrlOf(directory));
     return {
