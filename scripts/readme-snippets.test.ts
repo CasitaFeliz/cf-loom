@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -388,6 +389,168 @@ describe('the README Service written out', () => {
     expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:10: error TS2304.*shared/)]);
   });
 });
+
+/** The Service written from one block of the handlers README, which the scope's `src/service-code.ts` completes. */
+function blockWrittenOut(code: string, serviceCode: string): string {
+  const repository = aRepository(
+    { handlers: aReadme('packages/handlers/README.md', `// src/use.ts\n${code}`).markdown },
+    { 'src/service-code.ts': serviceCode },
+  );
+  const directory = join(repository, '.readme-service');
+  writeReadmeService(directory, repository);
+  return fileOf(directory, 'src/use.ts');
+}
+
+describe('the names a block leaves out', () => {
+  test.each([
+    ['an object key', 'export const shape = { orders: 1 };', ['orders']],
+    ['a member after a dot', 'export const size = [].length;', ['length']],
+    ['a member after ?.', 'export const size = [1]?.length;', ['length']],
+    ['a type member', 'export type Shape = { orders: number };', ['orders']],
+    [
+      'a name every object has, used as a key',
+      'export const shape = { toString: 1, constructor: 2 };',
+      ['toString', 'constructor'],
+    ],
+    ['a class member that nothing reads bare', 'export class Holder { orders = 1; }', ['orders']],
+    ['a global the scope also exports', 'export const request = fetch;', ['fetch', 'Request']],
+    [
+      'a parameter that shadows a scope name',
+      'export function handle({ body }: { body: number }) { return body; }',
+      ['body'],
+    ],
+  ])('a word a block does not use as a reference is no import: %s', (_, code, names) => {
+    const serviceCode = names.map((name) => `export const ${name} = 1;`).join('\n');
+
+    const source = blockWrittenOut(code, serviceCode);
+
+    for (const name of names) {
+      expect(source).not.toContain(`import { ${name} }`);
+    }
+  });
+
+  test.each([
+    { position: 'a value', code: 'export const total = ref + 1;', exported: 'const ref = 1' },
+    { position: 'a type', code: 'export let total: ref;', exported: 'type ref = string' },
+    {
+      position: 'a shorthand property',
+      code: 'export const total = { ref };',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a namespace qualifier',
+      code: 'export let total: ref.Inner;',
+      exported: 'const ref = {}',
+    },
+    {
+      position: 'typeof in a type',
+      code: 'export let total: typeof ref;',
+      exported: 'const ref = 1',
+    },
+    { position: 'a spread', code: 'export const total = [...ref];', exported: 'const ref = [1]' },
+    {
+      position: 'a ternary branch',
+      code: 'export const total = Math.random() > 0.5 ? ref : 2;',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a case label',
+      code: 'switch (Math.random()) { case ref: break; }',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a base class',
+      code: 'export class Derived extends ref {}',
+      exported: 'class ref {}',
+    },
+    {
+      position: 'a non-null assertion',
+      code: 'export const total = ref!;',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'an optional chain',
+      code: 'export const total = ref?.length;',
+      exported: 'const ref = ""',
+    },
+    {
+      position: 'a default parameter',
+      code: 'export function total(count = ref) { return count; }',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a template expression',
+      code: `export const total = \`\${ref}\`;`,
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a name close to one the block declares',
+      code: 'const refs = [];\nexport const first = ref;',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a bare name that an instance member has',
+      code: 'export class Holder { ref = 1; read() { return ref; } }',
+      exported: 'const ref = 1',
+    },
+    {
+      position: 'a bare name that a static member has',
+      code: 'export class Holder { static ref = 1; read() { return ref; } }',
+      exported: 'const ref = 1',
+    },
+  ])('a name a block references as $position is imported from the scope', (row) => {
+    const source = blockWrittenOut(row.code, `export ${row.exported};`);
+
+    expect(source).toContain("import { ref } from './service-code.ts';");
+  });
+
+  test('no import the completion adds to the README Service is reported unused', () => {
+    const service = join(root, '.readme-service');
+
+    const unused = unusedCompletedImports(service);
+
+    expect(unused).toEqual([]);
+  });
+});
+
+const unusedLocal = /^(.+?)\((\d+),\d+\): error TS(?:6133|6192|6196): /;
+const importOfOneName = /^import \{ [\w$]+ \} from '[^']+';$/;
+
+/** The imports the completion adds to a file, which it writes right above the file's last line, as rows. */
+function completedImportRows(source: string): number[] {
+  const lines = source.split('\n');
+  const rows: number[] = [];
+  const completedFile = lines.at(-2)?.startsWith('export {') === true;
+  for (
+    let row = lines.length - 2;
+    completedFile && importOfOneName.test(lines[row - 1] ?? '');
+    row--
+  ) {
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** The imports the completion added that `tsc` reports unused, as `path:row`. */
+function unusedCompletedImports(service: string): string[] {
+  const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
+  const ran = spawnSync(
+    process.execPath,
+    [tsc, '-p', '.', '--noUnusedLocals', '--pretty', 'false'],
+    {
+      cwd: service,
+      encoding: 'utf8',
+    },
+  );
+  const unused: string[] = [];
+  for (const line of ran.stdout.split('\n')) {
+    const [, path, row] = unusedLocal.exec(line) ?? [];
+    if (path !== undefined && completedImportRows(fileOf(service, path)).includes(Number(row))) {
+      unused.push(`${path}:${row}`);
+    }
+  }
+  return unused;
+}
 
 describe('the READMEs', () => {
   test('Vitest writes the README Service when it loads its configuration', () => {

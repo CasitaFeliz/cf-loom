@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { type Block, serviceOf } from './readme-blocks.ts';
-import { declaredNames, exportedNames, mentionedNames, ownNames } from './readme-names.ts';
+import { exportedNames, ownNames } from './readme-names.ts';
 
 /** The files of the Service the READMEs describe that no README block shows, by path. */
 export type Scope = Readonly<Record<string, string>>;
@@ -110,23 +110,43 @@ function isImportable(file: ProjectFile): boolean {
   return file.block?.named !== false;
 }
 
+/** Whether the check completes the file with imports: a `.ts` file that is no test, which is written in full. */
+export function isCompleted(path: string): boolean {
+  return path.endsWith('.ts') && !path.startsWith('test/');
+}
+
 /**
- * The file with an import of each name it mentions and does not declare, after its code so lines
- * stay. A snippet no path names also exports what it declares, for the tests that run it; a test
- * is written in full and left as it is.
+ * The module each of the names TypeScript cannot find in a file is imported from, for those a
+ * provider has: a sibling file of its package, `zod` or `@cf-loom/contract`.
  */
-export function completed(path: string, file: ProjectFile, providers: Providers): string {
-  if (!path.endsWith('.ts') || path.startsWith('test/')) {
-    return file.source;
-  }
-  const own = declaredNames(file.source);
-  const lines: string[] = [];
-  for (const name of mentionedNames(file.source)) {
-    const specifier = own.has(name) ? undefined : specifierOf(name, path, providers);
+export function importsOf(
+  path: string,
+  free: ReadonlySet<string>,
+  providers: Providers,
+): Map<string, string> {
+  const imports = new Map<string, string>();
+  for (const name of free) {
+    const specifier = specifierOf(name, path, providers);
     if (specifier !== undefined) {
-      lines.push(`import { ${name} } from '${specifier}';`);
+      imports.set(name, specifier);
     }
   }
+  return imports;
+}
+
+/**
+ * The file with the imports, after its code so lines stay. A snippet no path names also exports
+ * what it declares, for the tests that run it; a test is written in full and left as it is.
+ */
+export function completed(
+  path: string,
+  file: ProjectFile,
+  imports: ReadonlyMap<string, string>,
+): string {
+  if (!isCompleted(path)) {
+    return file.source;
+  }
+  const lines = [...imports].map(([name, specifier]) => `import { ${name} } from '${specifier}';`);
   const exports = file.block?.named === false ? ownNames(file.source) : [];
   return `${file.source}\n${lines.join('\n')}\nexport { ${exports.join(', ')} };\n`;
 }

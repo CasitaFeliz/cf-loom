@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -14,17 +13,17 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
 import { cfLoomProblemsOf, contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
+import { type Compiled, compile, freeNamesOf } from './readme-compile.ts';
 import {
   completed,
   declaredTwice,
+  importsOf,
   type Project,
   packagesAt,
   projectOf,
   providersOf,
   type Scope,
 } from './readme-project.ts';
-
-type Compiled = { readonly failed: boolean; readonly lines: string[] };
 
 const root = join(import.meta.dirname, '..');
 const packagesWithReadmes = ['contract', 'handlers', 'messaging', 'server', 'client', 'testing'];
@@ -139,6 +138,10 @@ function scopePackagesOf(paths: readonly string[]): [string, string][] {
   return [...standing, ...contractPackagesOf(paths)];
 }
 
+/**
+ * Writes the project twice: with no import added, to learn from `tsc` the names each file leaves
+ * out, then with an import for each such name a provider has.
+ */
 function writeProject(directory: string, project: Project, repository: string): void {
   const providers = providersOf(project, contractNames(repository));
   mkdirSync(directory, { recursive: true });
@@ -148,9 +151,19 @@ function writeProject(directory: string, project: Project, repository: string): 
   );
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
   writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfigOf(project)));
+  writeFiles(directory, project, () => new Map());
+  const free = freeNamesOf(compile(directory), project);
+  writeFiles(directory, project, (path) => importsOf(path, free.get(path) ?? new Set(), providers));
+}
+
+function writeFiles(
+  directory: string,
+  project: Project,
+  importsFor: (path: string) => ReadonlyMap<string, string>,
+): void {
   for (const [path, file] of project) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
-    writeFileSync(join(directory, path), completed(path, file, providers));
+    writeFileSync(join(directory, path), completed(path, file, importsFor(path)));
   }
 }
 
@@ -172,20 +185,6 @@ function tsconfigOf(project: Project) {
     },
     include: ['**/*.ts'],
   };
-}
-
-/** What `tsc` printed over the project, and whether it ended in failure. */
-function compile(directory: string): Compiled {
-  const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
-  const ran = spawnSync(process.execPath, [tsc, '-p', '.', '--pretty', 'false'], {
-    cwd: directory,
-    encoding: 'utf8',
-  });
-  if (ran.error) {
-    throw ran.error;
-  }
-  const lines = ran.stdout.split('\n').filter((line) => line !== '');
-  return { failed: ran.status !== 0, lines: lines.length > 0 ? lines : [ran.stderr] };
 }
 
 function problemsOf(compiled: Compiled, project: Project): string[] {
