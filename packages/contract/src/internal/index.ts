@@ -248,6 +248,7 @@ export {
 export type {
   DurableConsumed,
   EndpointPath,
+  HeldRequest,
   InputIssue,
   InvalidInputBody,
   Match,
@@ -284,6 +285,7 @@ export {
   faultStatusOf,
   headerTextsOf,
   headerValuesOf,
+  heldRequestOf,
   internalError,
   invalidInputBodyOf,
   invalidInputResponseOf,
