@@ -21,6 +21,7 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { collected, heldOf } from '../../../contract/test/collected.ts';
 import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
 import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
 import {
@@ -32,7 +33,15 @@ import {
   resetFrame,
   windowFrame,
 } from '../../test/h2-raw.ts';
-import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
+import {
+  bodyOf,
+  callerSocket,
+  closeCallerSockets,
+  raw,
+  rawFor,
+  statusLineOf,
+  statusLinesOf,
+} from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
 import { fastifyServe } from './index.ts';
@@ -231,6 +240,7 @@ afterEach(async () => {
   for (const server of servers.splice(0)) {
     server.close();
   }
+  closeCallerSockets();
   await Promise.all(
     apps.splice(0).map((app) => Promise.resolve(app.close()).catch(() => undefined)),
   );
@@ -1353,13 +1363,15 @@ describe('fastifyServe', () => {
         expect(next).toMatchObject({ status: 200, body: '{"count":3}' });
       });
 
-      test('a Caller that resets its stream once the whole response is written, but before flow control let it out, aborts the request’s signal', async () => {
-        const requests: Request[] = [];
-        const small = handle(getReport, () => success(getReport, { data: 'x'.repeat(5000) }));
+      test('after a garbage collection, a Caller that resets its stream once the whole response is written, but before flow control let it out, aborts the signal the Handler kept', async () => {
+        const signals: AbortSignal[] = [];
+        const small = handle(getReport, (_input, { request }) => {
+          signals.push(request.signal);
+          return success(getReport, { data: 'x'.repeat(5000) });
+        });
         const { url } = await served({
           fastify: { http2: true },
           handlers: withEndpoints({ getReport: small }),
-          options: { onAnswered: (_record, request) => void requests.push(request) },
         });
         const session = connectHttp2(url, { settings: { initialWindowSize: 1024 } });
         session.on('error', () => undefined);
@@ -1369,20 +1381,26 @@ describe('fastifyServe', () => {
           stream.on('error', () => undefined);
           await new Promise((resolve) => stream.once('data', resolve));
           stream.pause();
+          await collected();
+          const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
           stream.close(constants.NGHTTP2_CANCEL);
-          await waitFor(100);
+          await aborted;
         } finally {
           session.destroy();
         }
 
-        expect(requests[0]?.signal.aborted).toBe(true);
+        expect(signals[0]?.aborted).toBe(true);
       });
 
-      test('a Caller that resets its stream with NO_ERROR while a large Success is written aborts the request’s signal, and the server closes once the session is gone', async () => {
-        const requests: Request[] = [];
+      test('after a garbage collection, a Caller that resets its stream with NO_ERROR while a large Success is written aborts the signal the Handler kept, and the server closes once the session is gone', async () => {
+        const signals: AbortSignal[] = [];
+        const large = handle(getReport, (_input, { request }) => {
+          signals.push(request.signal);
+          return success(getReport, { data: bigData });
+        });
         const { app, url } = await served({
           fastify: { http2: true },
-          options: { onAnswered: (_record, request) => void requests.push(request) },
+          handlers: withEndpoints({ getReport: large }),
         });
         const session = h2Session(url);
 
@@ -1390,14 +1408,14 @@ describe('fastifyServe', () => {
         stream.on('error', () => undefined);
         await new Promise((resolve) => stream.once('data', resolve));
         stream.pause();
-        await waitFor(50);
+        await collected();
+        const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
         stream.close(constants.NGHTTP2_NO_ERROR);
-        await waitFor(100);
-        const aborted = requests[0]?.signal.aborted;
+        await aborted;
         session.destroy();
         await app.close();
 
-        expect(aborted).toBe(true);
+        expect(signals[0]?.aborted).toBe(true);
       });
 
       test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and then onResponse, over HTTP/2, as every Fastify HTTP/2 route does', async () => {
@@ -1591,3 +1609,188 @@ describe('fastifyServe', () => {
     });
   });
 });
+
+describe('fastifyServe after a garbage collection', () => {
+  const versions = [
+    { version: 'HTTP/1.1', fastify: {} },
+    { version: 'HTTP/2', fastify: { http2: true } },
+  ] as const;
+
+  test.each(versions)(
+    'over $version, a Caller who leaves while the EndpointHandler waits on its signal aborts it, the Handler’s cleanup runs, and onAnswered records it aborted',
+    async ({ version, fastify }) => {
+      const events: string[] = [];
+      const records: AnsweredRequest[] = [];
+      const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+      const { promise: answered, resolve: recorded } = Promise.withResolvers<void>();
+      const waiting = handle(getOrder, async ({ params }, { request: { signal } }) => {
+        events.push('started');
+        started();
+        try {
+          await new Promise((resolve) => signal.addEventListener('abort', resolve));
+          events.push('saw abort');
+          return success(getOrder, { id: params.orderId });
+        } finally {
+          events.push('finally');
+        }
+      });
+      const onAnswered = (record: AnsweredRequest) => {
+        records.push(record);
+        recorded();
+      };
+      const { url } = await served({
+        fastify,
+        handlers: withEndpoints({ getOrder: waiting }),
+        options: { onAnswered },
+      });
+
+      const caller = callerOver(version, url, { method: 'GET', path: '/orders/o-1' });
+      await handlerStarted;
+      await collected();
+      caller.leave();
+      await answered;
+
+      expect(events).toEqual(['started', 'saw abort', 'finally']);
+      expect(records.map((record) => record.aborted)).toEqual([true]);
+    },
+  );
+
+  test.each(versions)(
+    'over $version, a Caller who leaves while a GuardHandler waits on its signal aborts it',
+    async ({ version, fastify }) => {
+      const { promise: guardStarted, resolve: started } = Promise.withResolvers<void>();
+      const { promise: sawAbort, resolve: saw } = Promise.withResolvers<string>();
+      const waiting = handle(apiKey, async ({ headers }, { request: { signal } }) => {
+        started();
+        await new Promise((resolve) => signal.addEventListener('abort', resolve));
+        saw('saw abort');
+        return admit(apiKey, { callerId: headers['x-api-key'] });
+      });
+      const { url } = await served({
+        fastify,
+        handlers: { ...handlers, guards: { apiKey: waiting } },
+      });
+
+      const caller = callerOver(version, url, {
+        method: 'POST',
+        path: '/orders',
+        headers: { 'x-api-key': 'k-1', 'content-type': 'application/json' },
+        body: '{"quantity":1}',
+      });
+      await guardStarted;
+      await collected();
+      caller.leave();
+
+      expect(await sawAbort).toBe('saw abort');
+    },
+  );
+
+  test.each(versions)(
+    'over $version, a Caller who leaves while a large Success is written aborts the signal the Handler kept',
+    async ({ version, fastify }) => {
+      const signals: AbortSignal[] = [];
+      const large = handle(getReport, (_input, { request }) => {
+        signals.push(request.signal);
+        return success(getReport, { data: bigData });
+      });
+      const { url } = await served({ fastify, handlers: withEndpoints({ getReport: large }) });
+
+      const caller = callerOver(version, url, { method: 'GET', path: '/report' });
+      await caller.firstData;
+      caller.pause();
+      await collected();
+      const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
+      caller.leave();
+      await aborted;
+
+      expect(signals[0]?.aborted).toBe(true);
+    },
+  );
+
+  test.each([
+    { count: 1, ...versions[0] },
+    { count: 50, ...versions[0] },
+    { count: 1, ...versions[1] },
+    { count: 50, ...versions[1] },
+  ])(
+    'over $version, once $count responses have finished on a kept-open connection, none of their Requests is held',
+    async ({ count, version, fastify }) => {
+      const requests: WeakRef<Request>[] = [];
+      const onAnswered = (_record: AnsweredRequest, request: Request) =>
+        void requests.push(new WeakRef(request));
+      const { url } = await served({ fastify, options: { onAnswered } });
+
+      await answeredOnOneConnection(version, url, count);
+
+      expect(requests).toHaveLength(count);
+      await vi.waitFor(async () => {
+        await collected();
+        expect(heldOf(requests)).toBe(0);
+      });
+    },
+  );
+});
+
+/** A request a test sends raw, so its Caller can stop reading or leave at any time. */
+type Sent = {
+  readonly method: string;
+  readonly path: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
+};
+
+/** A Caller with one request in flight: its first bytes of response, and how it stops reading or leaves its request. */
+type Caller = {
+  readonly firstData: Promise<unknown>;
+  readonly pause: () => void;
+  readonly leave: () => void;
+};
+
+/** A Caller that sent `sent` to `url` over `version`, a raw socket for HTTP/1.1, a stream of its own session for HTTP/2. */
+function callerOver(version: 'HTTP/1.1' | 'HTTP/2', url: string, sent: Sent): Caller {
+  if (version === 'HTTP/2') {
+    const session = h2Session(url);
+    const stream = session.request(
+      { ':method': sent.method, ':path': sent.path, ...sent.headers },
+      { endStream: sent.body === undefined },
+    );
+    stream.on('error', () => undefined);
+    stream.end(sent.body);
+    return {
+      firstData: once(stream, 'data'),
+      pause: () => stream.pause(),
+      leave: () => stream.close(constants.NGHTTP2_CANCEL),
+    };
+  }
+  const socket = callerSocket(url);
+  const headerLines = Object.entries(sent.headers ?? {}).map(
+    ([name, value]) => `${name}: ${value}\r\n`,
+  );
+  const length =
+    sent.body === undefined ? '' : `content-length: ${Buffer.byteLength(sent.body)}\r\n`;
+  socket.write(
+    `${sent.method} ${sent.path} HTTP/1.1\r\nHost: test\r\n${headerLines.join('')}${length}\r\n${sent.body ?? ''}`,
+  );
+  return {
+    firstData: once(socket, 'data'),
+    pause: () => socket.pause(),
+    leave: () => socket.destroy(),
+  };
+}
+
+/** Sends `count` GETs on one connection over `version`, which stays open, and waits for every response. */
+async function answeredOnOneConnection(version: 'HTTP/1.1' | 'HTTP/2', url: string, count: number) {
+  if (version === 'HTTP/2') {
+    const session = h2Session(url);
+    const asked = Array.from({ length: count }, () => h2(session, { ':path': '/orders/o-1' }));
+    await Promise.all(asked);
+    return;
+  }
+  const socket = callerSocket(url);
+  let received = '';
+  socket.on('data', (chunk: Buffer) => {
+    received += chunk.toString('latin1');
+  });
+  socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n'.repeat(count));
+  await vi.waitFor(() => expect(statusLinesOf(received)).toHaveLength(count));
+}
