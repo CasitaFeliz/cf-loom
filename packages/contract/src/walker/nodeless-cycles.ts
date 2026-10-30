@@ -25,37 +25,37 @@ export function leadsBackWithNoNode(
   return cycleMembersFrom([name], defOf).has(name);
 }
 
-/** What the search has read: the order it met each def in, and the lowest each steps back to. */
-type Search = {
-  readonly defOf: (name: string) => SchemaNode | undefined;
-  readonly order: Map<string, number>;
-  /** Kept only for the defs of a group still open, which is how the search tells one. */
-  readonly lowest: Map<string, number>;
-  readonly open: string[];
-  readonly onCycle: Set<string>;
+/** A def met by the search: its order, the lowest order it steps back to, and its steps. */
+type Entry = {
+  readonly name: string;
+  readonly index: number;
+  low: number;
+  isOpen: boolean;
+  readonly steps: readonly string[];
+  /** How many of the steps are read. */
+  next: number;
 };
 
-/** A def being read, with the defs it steps to and how many of them are read. */
-type Frame = { readonly name: string; readonly targets: readonly string[]; next: number };
+type Search = {
+  readonly defOf: (name: string) => SchemaNode | undefined;
+  readonly entries: Map<string, Entry>;
+  /** The defs of the groups not closed yet, in the order they were met. */
+  readonly open: Entry[];
+  readonly onCycle: Set<string>;
+};
 
 /**
  * Every def on a cycle of the steps with no node between, among those reached from the starts:
  * a strongly connected group of two or more, or a def stepping to itself; read with an explicit
- * stack, one frame per def, and a name `defOf` gives no def for leads nowhere.
+ * stack, one frame per def, and a name `defOf` gives no def for has no steps and leads nowhere.
  */
 function cycleMembersFrom(
   starts: Iterable<string>,
   defOf: (name: string) => SchemaNode | undefined,
 ): ReadonlySet<string> {
-  const search: Search = {
-    defOf,
-    order: new Map(),
-    lowest: new Map(),
-    open: [],
-    onCycle: new Set(),
-  };
+  const search: Search = { defOf, entries: new Map(), open: [], onCycle: new Set() };
   for (const start of starts) {
-    if (!search.order.has(start)) {
+    if (!search.entries.has(start)) {
       readFrom(start, search);
     }
   }
@@ -65,71 +65,66 @@ function cycleMembersFrom(
 function readFrom(start: string, search: Search): void {
   const frames = [enter(start, search)];
   for (let frame = frames.at(-1); frame !== undefined; frame = frames.at(-1)) {
-    const target = frame.targets[frame.next++];
-    if (target !== undefined) {
-      const entered = stepTo(frame, target, search);
+    const step = frame.steps[frame.next++];
+    if (step !== undefined) {
+      const entered = stepTo(frame, step, search);
       if (entered !== undefined) {
         frames.push(entered);
       }
       continue;
     }
     frames.pop();
-    close(frame, frames.at(-1), search);
+    const parent = frames.at(-1);
+    if (parent !== undefined) {
+      parent.low = Math.min(parent.low, frame.low);
+    }
+    closeGroup(frame, search);
   }
 }
 
-/** Meets a def for the first time: its place in the order, and the defs it steps to that exist. */
-function enter(name: string, search: Search): Frame {
-  const order = search.order.size;
-  search.order.set(name, order);
-  search.lowest.set(name, order);
-  search.open.push(name);
+/** A def met for the first time, in an open group of its own. */
+function enter(name: string, search: Search): Entry {
+  const index = search.entries.size;
   const def = search.defOf(name);
   const steps = def === undefined ? [] : nodelessDefsFrom(def);
-  return { name, targets: steps.filter((step) => search.defOf(step) !== undefined), next: 0 };
+  const entry: Entry = { name, index, low: index, isOpen: true, steps, next: 0 };
+  search.entries.set(name, entry);
+  search.open.push(entry);
+  return entry;
 }
 
-/** Reads one step of a def: a def met first is entered, one in an open group is reached. */
-function stepTo(frame: Frame, target: string, search: Search): Frame | undefined {
-  if (target === frame.name) {
-    search.onCycle.add(target);
+/** One step of a def: a def met first is entered, one in an open group is stepped back to. */
+function stepTo(from: Entry, name: string, search: Search): Entry | undefined {
+  if (name === from.name) {
+    search.onCycle.add(name);
     return undefined;
   }
-  if (!search.order.has(target)) {
-    return enter(target, search);
+  const met = search.entries.get(name);
+  if (met === undefined) {
+    return enter(name, search);
   }
-  if (search.lowest.has(target)) {
-    lowerTo(frame.name, search.order.get(target), search);
+  if (met.isOpen) {
+    from.low = Math.min(from.low, met.index);
   }
   return undefined;
 }
 
-function lowerTo(name: string, reach: number | undefined, search: Search): void {
-  const lowest = search.lowest.get(name);
-  if (lowest !== undefined && reach !== undefined && reach < lowest) {
-    search.lowest.set(name, reach);
-  }
-}
-
-/** A def read to its last step passes its reach on to its parent and closes the group it opened. */
-function close(frame: Frame, parent: Frame | undefined, search: Search): void {
-  if (parent !== undefined) {
-    lowerTo(parent.name, search.lowest.get(frame.name), search);
-  }
-  if (search.lowest.get(frame.name) !== search.order.get(frame.name)) {
+/** A def that steps back to nothing above it closes its group: every def met since it. */
+function closeGroup(entry: Entry, search: Search): void {
+  if (entry.low !== entry.index) {
     return;
   }
-  const group: string[] = [];
+  const group: Entry[] = [];
   for (let member = search.open.pop(); member !== undefined; member = search.open.pop()) {
-    search.lowest.delete(member);
+    member.isOpen = false;
     group.push(member);
-    if (member === frame.name) {
+    if (member === entry) {
       break;
     }
   }
   if (group.length > 1) {
     for (const member of group) {
-      search.onCycle.add(member);
+      search.onCycle.add(member.name);
     }
   }
 }
