@@ -39,7 +39,7 @@ type Held = { readonly server: TestProcess; readonly cleanup: () => Promise<void
 const owners: Held[][] = [];
 const waiting = new Map<TestProcess, string>();
 
-/** Spawns `command` with stdout and stderr piped, owned by the running test, or by the file when a hook spawns it. */
+/** Spawns `command` with stdout and stderr piped, owned by the running test, or by the file when a hook spawns it; it throws when neither is running. */
 export function startProcess(
   command: string,
   args: readonly string[],

@@ -15,13 +15,15 @@ const vitestCli = join(
 type Run = {
   /** What the fixture's Vitest wrote to stdout and stderr. */
   readonly output: string;
-  readonly exitCode: number;
+  /** Whether every test of the fixture passed. */
+  readonly passed: boolean;
   /** The pids the stub servers logged, one each as they started. */
   readonly pids: readonly number[];
   /** The `-sd` stores the stub servers logged. */
   readonly stores: readonly string[];
 };
 
+/** What a stub server does: `silent` never listens, `serves` listens, `deaf` listens and ignores SIGTERM. */
 type Stub = 'silent' | 'serves' | 'deaf';
 
 function isRunning(pid: number): boolean {
@@ -33,7 +35,7 @@ function isRunning(pid: number): boolean {
   }
 }
 
-/** The environment of this run for a nested Vitest, without the variables that make it pick another reporter. */
+/** This run's environment for a nested Vitest, without the variables that make it pick another reporter. */
 function environmentWithout(names: readonly string[]): Record<string, string> {
   const kept = Object.entries(process.env).filter(
     ([name, value]) => value !== undefined && !names.includes(name) && !name.startsWith('VITEST'),
@@ -46,35 +48,46 @@ async function linesOf(file: string): Promise<readonly string[]> {
   return written.split('\n').filter((line) => line !== '');
 }
 
+/** Writes into `directory` an executable named `command` that runs the stub server in `mode`, logging to `logs`. */
+async function writeStub(directory: string, command: string, mode: Stub): Promise<void> {
+  const stub = join(fixtures, 'stub-server.ts');
+  const logs = `"${join(directory, 'pids')}" "${join(directory, 'stores')}"`;
+  const executable = join(directory, command);
+  await writeFile(
+    executable,
+    `#!/bin/sh\nexec "${process.execPath}" "${stub}" ${mode} ${logs} "$@"\n`,
+  );
+  await chmod(executable, 0o755);
+}
+
+/** Runs `fixture` in a Vitest of its own, with `directory` first on PATH. */
+function runVitestOn(fixture: string, directory: string): Promise<Pick<Run, 'output' | 'passed'>> {
+  const { PATH: path = '' } = process.env;
+  const env = {
+    ...environmentWithout(['AI_AGENT', 'CLAUDECODE']),
+    PATH: [directory, path].join(delimiter),
+  };
+  const args = [vitestCli, 'run', '--reporter=default', fixture];
+  return new Promise((resolve) => {
+    execFile(process.execPath, args, { cwd: fixtures, env }, (error, stdout, stderr) => {
+      resolve({ output: `${stdout}\n${stderr}`, passed: error === null });
+    });
+  });
+}
+
 describe('a process a test spawns through test-process.ts', () => {
   const directories: string[] = [];
 
-  /** Runs one fixture in a Vitest of its own, with `stubs` on PATH as the executables they stand in for. */
+  /** Runs one fixture, with `stubs` on PATH as the executables they stand in for. */
   async function runFixture(fixture: string, stubs: Readonly<Record<string, Stub>>): Promise<Run> {
     const directory = await mkdtemp(join(tmpdir(), 'cf-loom-test-processes-'));
     directories.push(directory);
-    const pidsFile = join(directory, 'pids');
-    const storesFile = join(directory, 'stores');
-    const stub = join(fixtures, 'stub-server.ts');
     for (const [command, mode] of Object.entries(stubs)) {
-      const executable = join(directory, command);
-      const script = `#!/bin/sh\nexec "${process.execPath}" "${stub}" ${mode} "${pidsFile}" "${storesFile}" "$@"\n`;
-      await writeFile(executable, script);
-      await chmod(executable, 0o755);
+      await writeStub(directory, command, mode);
     }
-    const { PATH: path = '' } = process.env;
-    const env = {
-      ...environmentWithout(['AI_AGENT', 'CLAUDECODE']),
-      PATH: [directory, path].join(delimiter),
-    };
-    const args = [vitestCli, 'run', '--reporter=default', fixture];
-    const finished = await new Promise<{ output: string; exitCode: number }>((resolve) => {
-      execFile(process.execPath, args, { cwd: fixtures, env }, (error, stdout, stderr) => {
-        resolve({ output: `${stdout}\n${stderr}`, exitCode: error === null ? 0 : 1 });
-      });
-    });
-    const pids = (await linesOf(pidsFile)).map(Number);
-    return { ...finished, pids, stores: await linesOf(storesFile) };
+    const finished = await runVitestOn(fixture, directory);
+    const pids = (await linesOf(join(directory, 'pids'))).map(Number);
+    return { ...finished, pids, stores: await linesOf(join(directory, 'stores')) };
   }
 
   afterEach(async () => {
@@ -119,7 +132,7 @@ describe('a process a test spawns through test-process.ts', () => {
   test('a server started in a beforeAll is alive in every test of its file and gone after the file', async () => {
     const run = await runFixture('server-for-file.fixture.ts', { moto_server: 'serves' });
 
-    expect(run.exitCode).toBe(0);
+    expect(run.passed).toBe(true);
     expect(run.pids).toHaveLength(1);
     expect(isRunning(run.pids[0]!)).toBe(false);
   });
@@ -127,7 +140,7 @@ describe('a process a test spawns through test-process.ts', () => {
   test('a process started outside any test or hook fails naming why', async () => {
     const run = await runFixture('outside-any-test.fixture.ts', {});
 
-    expect(run.exitCode).toBe(1);
+    expect(run.passed).toBe(false);
     expect(run.output).toContain('no test or hook owns');
   });
 });
