@@ -119,3 +119,10 @@ export async function tagByHand(
   const QueueUrl = await queueUrlOf(sqs, name);
   await sqs.send(new TagQueueCommand({ QueueUrl, Tags: tags }));
 }
+
+/** Puts one raw Message into each queue named, so a long poll open on it returns at once; after `closing` aborted, the adapter hands it back unread. */
+export async function wakeEach(sqs: SQSClient, queues: readonly string[]): Promise<void> {
+  for (const queue of queues) {
+    await storeIn(sqs, queue, 'wake');
+  }
+}

@@ -136,3 +136,15 @@ export async function attributesReceivedFrom(
     );
   });
 }
+
+/** How many Messages the queue named `name` holds, ready to be received and in flight, received and not yet deleted or visible again. */
+export async function queueCountsOf(
+  sqs: SQSClient,
+  name: string,
+): Promise<{ readonly visible: number; readonly inFlight: number }> {
+  const attributes = await queueAttributesOf(sqs, name);
+  return {
+    visible: Number(attributes['ApproximateNumberOfMessages']),
+    inFlight: Number(attributes['ApproximateNumberOfMessagesNotVisible']),
+  };
+}

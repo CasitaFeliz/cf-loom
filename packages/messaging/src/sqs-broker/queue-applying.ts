@@ -2,14 +2,14 @@
 import {
   CreateQueueCommand,
   GetQueueAttributesCommand,
-  GetQueueUrlCommand,
   SetQueueAttributesCommand,
   type SQSClient,
   TagQueueCommand,
   UntagQueueCommand,
 } from '@aws-sdk/client-sqs';
-import { answeredWith, isAwsError } from './aws-errors.ts';
+import { answeredWith } from './aws-errors.ts';
 import { confirmArn } from './connecting.ts';
+import { queueUrlOf } from './queue-url.ts';
 
 /** A queue or dead-letter queue as the plan wants it: the ARN its name has in the place of the clients, its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds. */
 export type QueueToApply = {
@@ -26,7 +26,7 @@ export type AppliedQueue = { readonly url: string; readonly arn: string };
 
 /** Creates the queue with everything it needs at once, or sets the attributes and tags of the one that exists and keeps every other attribute and tag; either way SQS must give it the ARN built, which a wrong account or region does not. */
 export async function applyQueue(sqs: SQSClient, queue: QueueToApply): Promise<AppliedQueue> {
-  const url = await urlOf(sqs, queue.name);
+  const url = await queueUrlOf(sqs, queue.name);
   return url === undefined ? await create(sqs, queue) : await update(sqs, url, queue);
 }
 
@@ -37,18 +37,6 @@ export async function tagQueue(
   tags: Readonly<Record<string, string>>,
 ): Promise<void> {
   await sqs.send(new TagQueueCommand({ QueueUrl: url, Tags: { ...tags } }));
-}
-
-async function urlOf(sqs: SQSClient, name: string): Promise<string | undefined> {
-  try {
-    const found = await sqs.send(new GetQueueUrlCommand({ QueueName: name }));
-    return found.QueueUrl;
-  } catch (error) {
-    if (isAwsError(error, 'QueueDoesNotExist')) {
-      return undefined;
-    }
-    throw error;
-  }
 }
 
 /** Creates the queue with its attributes, policy and tags in one request, since SQS takes up to a minute to propagate an attribute set afterwards. */
