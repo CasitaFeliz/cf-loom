@@ -17,6 +17,7 @@ import {
   durableConsumerConfigOf,
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
+import { jsonKindOf, jsonValues } from '../../test/json-values.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
@@ -1012,6 +1013,12 @@ describe('what applyBrokerPlan refuses', () => {
       expect(service.opened).toHaveLength(0);
     },
   );
+
+  test('the values a refusal is drawn from hold every kind JSON has', () => {
+    const kinds = new Set(jsonValues.map(jsonKindOf));
+
+    expect([...kinds].sort()).toEqual(['boolean', 'list', 'null', 'number', 'object', 'string']);
+  });
 
   test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();
