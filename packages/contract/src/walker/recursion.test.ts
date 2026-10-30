@@ -1538,7 +1538,10 @@ describe('walkSchemas: recursion', () => {
   /** How many times longer a ring twice as long may take to walk: about 2 for a walk of each schema once. */
   const ringWalkedOnceGrowth = 8;
 
-  test('a ring of 255 schemas walks each once', () => {
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  test('a ring of 255 schemas walks each once', { timeout: growthTimeout }, () => {
     const walkOf = (count: number) => {
       const ring = aRingOf(count);
       return () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
@@ -1736,7 +1739,9 @@ describe('walkSchemas: recursion', () => {
    */
   const failingDefWalkedOnceGrowth = 8;
 
-  test('a failing def met by many paths is reported once and walked once', () => {
+  test('a failing def met by many paths is reported once and walked once', {
+    timeout: growthTimeout,
+  }, () => {
     const walkOf = (count: number) => {
       const steps: z.ZodType[] = [];
       const nextOf = (index: number) => steps[(index + 1) % (count + 1)];

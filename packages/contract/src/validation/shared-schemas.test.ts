@@ -322,6 +322,7 @@ describe('failure lines: defs that hold defs', () => {
     ],
   ] as const)(
     '%s in the last of 24 defs, each holding the next twice, is told once',
+    { timeout: growthTimeout },
     ([, leaf, told]) => {
       const toldAt = (depth: number) => {
         const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(depth, leaf()) });
