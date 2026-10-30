@@ -683,6 +683,21 @@ describe('publisher.publish', () => {
     });
   });
 
+  test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
+    'a Message not sent whole, whose Fact id holds %s, is told on one line, the break written escaped',
+    async ([, code, visible]) => {
+      const { publisher } = await opened(2);
+      const factId = `o-1${String.fromCharCode(code)}created`;
+
+      const thrown = await rejectionOf(publisher.publish('OrderCreated', { v2, v3 }, { factId }));
+
+      expect(thrown).toMatchObject({
+        message: `OrderCreated with Fact id o-1${visible}created was not sent whole; sent: OrderCreated@3`,
+        factId,
+      });
+    },
+  );
+
   test('retrying with the same Fact id sends the same broker message ids', async () => {
     const { publisher, published } = await opened(2);
     await publisher.publish('OrderCreated', { v2, v3 }, { factId: 'o-1' }).catch(() => undefined);
@@ -703,6 +718,42 @@ describe('publisher.publish', () => {
 
     await expect(publishing).rejects.toThrow('OrderShipped is no Event the Contract publishes');
   });
+
+  test.for(lineBreaks)(
+    'a name holding %s that the Root does not publish is refused on one line, the break written escaped',
+    async ([, code, visible]) => {
+      const { publisher } = await opened();
+
+      const publishing = publisher.publish(
+        `Order${String.fromCharCode(code)}Shipped` as never,
+        {} as never,
+        fact,
+      );
+
+      await expect(publishing).rejects.toThrow(
+        new Error(`Order${visible}Shipped is no Event the Contract publishes`),
+      );
+    },
+  );
+
+  test.for(lineBreaks)(
+    'a name holding %s that is no Command of one Active version is refused on one line, the break written escaped',
+    async ([, code, visible]) => {
+      const { sender } = await opened();
+
+      const sending = sender.send(
+        `Charge${String.fromCharCode(code)}Card` as never,
+        {} as never,
+        fact,
+      );
+
+      await expect(sending).rejects.toThrow(
+        new Error(
+          `send() takes a Command with one Active version, which Charge${visible}Card is not`,
+        ),
+      );
+    },
+  );
 
   test('bodies missing a live version throw InvalidMessageError at runtime', async () => {
     const { publisher, published } = await opened();
