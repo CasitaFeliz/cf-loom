@@ -1,6 +1,6 @@
 import { defineService } from '@cf-loom/contract';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { anAwsConnecting } from '../../test/aws-clients.ts';
+import { aClosedUrl, anAwsConnecting } from '../../test/aws-clients.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { arrangeOrders, ordersContract } from '../../test/orders.ts';
 import { messaging } from '../index.ts';
@@ -45,6 +45,36 @@ describe('sqs()', () => {
     const quiet = defineService({ name: 'quiet-service' });
 
     const opening = messaging(quiet, sqs(connecting));
+
+    await expect(opening).resolves.toBeDefined();
+  });
+
+  test('any other error of the topic check rejects messaging() unchanged', async () => {
+    const connecting = anAwsConnecting(await aClosedUrl(), { sqsUrl: moto.url });
+
+    const opening = messaging(ordersContract, sqs(connecting));
+
+    await expect(opening).rejects.toMatchObject({ code: 'ECONNREFUSED' });
+  });
+
+  test.each(['stag_ing', 'a.b', 'Staging', '', 'a'.repeat(65)])(
+    'sqs() refuses the prefix "%s", which is not a Broker prefix, naming it and saying to leave it undefined for none',
+    (prefix) => {
+      const connecting = anAwsConnecting(moto.url);
+
+      const broker = () => sqs({ ...connecting, prefix });
+
+      expect(broker).toThrow(
+        `The broker prefix "${prefix}" is not kebab-case of at most 64 characters, such as staging: leave prefix undefined for none`,
+      );
+    },
+  );
+
+  test('without a prefix, messaging() checks the topic named after the Service', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    await arrangeOrders(connecting);
+
+    const opening = messaging(ordersContract, sqs(connecting));
 
     await expect(opening).resolves.toBeDefined();
   });
