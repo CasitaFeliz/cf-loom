@@ -1,43 +1,20 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import { createServer } from 'node:net';
-import { SNSClient } from '@aws-sdk/client-sns';
-import { SQSClient } from '@aws-sdk/client-sqs';
+import type { SNSClient } from '@aws-sdk/client-sns';
+import type { SQSClient } from '@aws-sdk/client-sqs';
 import { onTestFinished } from 'vitest';
 import type { SqsConnecting } from '../src/sqs/index.ts';
+import { type MotoPlace, motoClientsAt } from './aws-connecting.ts';
 import { aGate } from './gate.ts';
 
-/** The account moto holds topics and queues under unless a test says another. */
-export const motoAccount = '123456789012';
-
-/** The region a test's clients are in unless it says another. */
-export const testRegion = 'eu-west-1';
-
 /** SNS and SQS clients pointed at a moto server with dummy credentials and no retries, so a failing call fails at once; destroyed when the test ends. */
-export function anAwsConnecting(
-  url: string,
-  place: {
-    readonly region?: string;
-    readonly sqsRegion?: string;
-    readonly account?: string;
-    readonly sqsUrl?: string;
-  } = {},
-): SqsConnecting {
-  const settings = {
-    region: place.region ?? testRegion,
-    credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
-    maxAttempts: 1,
-  };
-  const sns = new SNSClient({ ...settings, endpoint: url });
-  const sqs = new SQSClient({
-    ...settings,
-    region: place.sqsRegion ?? settings.region,
-    endpoint: place.sqsUrl ?? url,
-  });
+export function anAwsConnecting(url: string, place: MotoPlace = {}): SqsConnecting {
+  const connecting = motoClientsAt(url, place);
   onTestFinished(() => {
-    sns.destroy();
-    sqs.destroy();
+    connecting.sns.destroy();
+    connecting.sqs.destroy();
   });
-  return { sns, sqs, account: place.account ?? motoAccount };
+  return connecting;
 }
 
 /** The middleware stack of an SNS or SQS client, which both have, to add what a test watches or changes. */

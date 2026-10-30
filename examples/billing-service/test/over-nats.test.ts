@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { billingEnvironment, brokerPrefix, ordersEnvironment } from './environments.ts';
@@ -8,18 +7,20 @@ import {
   durableConsumerStateOf,
   lastMessageOn,
 } from './nats-broker.ts';
+import {
+  billingDir,
+  billingDrafting,
+  ordersCharging,
+  ordersDir,
+  ordersHandlingCharge,
+  placeAnOrder,
+} from './order-scenario.ts';
 import { aServiceProcess, type ServiceProcess } from './service-process.ts';
 
-const ordersDir = join(import.meta.dirname, '../../orders-service');
-const billingDir = join(import.meta.dirname, '..');
 const stream = `${brokerPrefix}_orders-service`;
 const createdSubject = `${brokerPrefix}.orders-service.event.OrderCreated.v1`;
 const chargeSubject = `${brokerPrefix}.orders-service.command.ChargeCard.v1`;
-const billingDrafting = `${brokerPrefix}_billing-service_draft-invoice-on-created`;
-const ordersCharging = `${brokerPrefix}_orders-service_charge-on-created`;
-const ordersHandlingCharge = `${brokerPrefix}_orders-service_command_ChargeCard_v1`;
 const patience = { interval: 50, timeout: 15_000 };
-const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 let nats: NatsServer | undefined;
 let orders: ServiceProcess | undefined;
 let billing: ServiceProcess | undefined;
@@ -39,17 +40,6 @@ afterAll(async () => {
   await Promise.all([billing?.stop(), orders?.stop()]);
   await nats?.stop();
 });
-
-/** Places an order over HTTP, as a Caller would, and answers its id. */
-async function placeAnOrder(): Promise<string> {
-  const response = await fetch(`${ordersUrl}/orders`, {
-    method: 'POST',
-    headers: { 'x-api-key': 'billing-key', 'content-type': 'application/json' },
-    body: JSON.stringify({ customerId: CUSTOMER_ID, total: { amount: 990, currency: 'EUR' } }),
-  });
-  const placed = (await response.json()) as { readonly id: string };
-  return placed.id;
-}
 
 /** What the Services wrote to stderr, to show with a wait that timed out. */
 function stderrOfServices(): string {
@@ -82,7 +72,7 @@ function stateOnceSettled(durable: string, sequence: number): Promise<DurableCon
 
 describe('orders-service and billing-service over NATS JetStream', () => {
   test('an order placed over HTTP reaches billing’s Subscription through the Broker', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(ordersUrl);
 
     const created = await sequenceOf(createdSubject, `${orderId}:created`);
     const drafting = await stateOnceSettled(billingDrafting, created);
@@ -91,7 +81,7 @@ describe('orders-service and billing-service over NATS JetStream', () => {
   });
 
   test('orders’ own Subscription sends ChargeCard and orders’ Message Handler handles it', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(ordersUrl);
 
     const created = await sequenceOf(createdSubject, `${orderId}:created`);
     const charge = await sequenceOf(chargeSubject, `${orderId}:charge`);
@@ -103,7 +93,7 @@ describe('orders-service and billing-service over NATS JetStream', () => {
   });
 
   test('neither Service writes a line about the order’s Messages to stderr', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(ordersUrl);
 
     const created = await sequenceOf(createdSubject, `${orderId}:created`);
     const charge = await sequenceOf(chargeSubject, `${orderId}:charge`);

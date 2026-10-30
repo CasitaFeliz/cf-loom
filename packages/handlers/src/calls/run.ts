@@ -9,7 +9,7 @@ import {
   type Issue,
 } from '../checks/index.ts';
 import {
-  type CheckedAdmission,
+  type Admission,
   type CheckedOutcome,
   type Fault,
   fault,
@@ -51,7 +51,7 @@ export type EndpointRun = Run<CheckedOutcome<Endpoint>>;
  * `context` or `qualifier` is the runtime's own bug, which `serve` answers as a Fault and reports
  * to `onServiceFault`.
  */
-export type GuardRun = Run<CheckedAdmission<Guard>>;
+export type GuardRun = Run<Admission<Guard>>;
 
 /** What every call carries past its check: the request and the Resources, passed on unchecked. */
 type RequestAndResources = { readonly request: HandledRequest; readonly resources: unknown };
