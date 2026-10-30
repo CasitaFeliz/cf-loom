@@ -11,7 +11,6 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import type {
   Admission,
-  CheckedAdmission,
   CheckedOutcome,
   DirectMeta,
   EndpointCall,
@@ -216,21 +215,6 @@ describe('what a Handler builds and a direct call returns', () => {
 
   test('an Admission holds the admitted Context, a Rejection’s declaration, headers and body, and a Fault’s keys, and no more', () => {
     expectTypeOf<KeysOfEach<Admission<typeof permission>>>().toEqualTypeOf<
-      | 'kind'
-      | 'context'
-      | 'rejection'
-      | 'headers'
-      | 'body'
-      | 'committed'
-      | 'retryable'
-      | 'retryAfter'
-      | 'message'
-      | 'cause'
-    >();
-  });
-
-  test('a CheckedAdmission holds the same ten as an Admission', () => {
-    expectTypeOf<KeysOfEach<CheckedAdmission<typeof permission>>>().toEqualTypeOf<
       | 'kind'
       | 'context'
       | 'rejection'
