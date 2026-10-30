@@ -72,17 +72,19 @@ function http1Of(incoming: IncomingMessage, outgoing: ServerResponse): Protocol 
 }
 
 /**
- * HTTP/2's steps: a body read only in part, as one over `maxBodyBytes`, cut off by resetting the
- * stream with `NO_ERROR` once the response's END_STREAM is sent, and the stream reset with an
- * error on failure. Node itself ends a stream whose body nobody read.
+ * HTTP/2's steps: a body read in part whose Caller has not sent its END_STREAM, as one over
+ * `maxBodyBytes`, cut off by resetting the stream with `NO_ERROR` once the response's END_STREAM
+ * is sent, and the stream reset with an error on failure. Node itself ends a stream whose body
+ * nobody read.
  */
 function http2Of(incoming: Http2ServerRequest, outgoing: Http2ServerResponse): Protocol {
   const { stream } = outgoing;
   return {
     framed: () => undefined,
     ended: () => {
+      const cut = incoming.readableDidRead && stream.state.remoteClose !== 1;
       outgoing.end();
-      if (isReadInPart(incoming)) {
+      if (cut) {
         resetOnceEnded(stream);
       }
     },
@@ -90,24 +92,31 @@ function http2Of(incoming: Http2ServerRequest, outgoing: Http2ServerResponse): P
   };
 }
 
-/** Whether a request's body was read, but not to its end, so Node leaves its exchange open. */
-function isReadInPart(incoming: Taken['incoming']): boolean {
+/** Whether a request's body was read, but not to its end, so Node leaves its connection open. */
+function isReadInPart(incoming: IncomingMessage): boolean {
   return incoming.readableDidRead && !incoming.readableEnded;
 }
 
 /**
  * Resets a stream with `NO_ERROR` once its END_STREAM is on the wire, which Node marks in the
- * stream's state and announces by no event, so it is polled.
+ * stream's state and announces by no event, so it is polled, backing off to once a second while
+ * the Caller's window holds the response back, until the stream closes.
  */
 function resetOnceEnded(stream: ServerHttp2Stream): void {
-  if (stream.destroyed) {
+  if (stream.closed || stream.destroyed) {
     return;
   }
-  if (stream.state.localClose === 1) {
-    stream.destroy();
-    return;
-  }
-  setTimeout(() => resetOnceEnded(stream), 1);
+  let delay = 1;
+  const check = () => {
+    if (stream.state.localClose === 1) {
+      stream.destroy();
+      return;
+    }
+    timer = setTimeout(check, delay);
+    delay = Math.min(delay * 2, 1000);
+  };
+  let timer = setTimeout(check, 0);
+  stream.once('close', () => clearTimeout(timer));
 }
 
 /**

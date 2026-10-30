@@ -30,6 +30,7 @@ import {
   type RawCaller,
   rawCaller,
   resetFrame,
+  windowFrame,
 } from '../../test/h2-raw.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
@@ -1236,6 +1237,30 @@ describe('fastifyServe', () => {
 
     describe('a body serve answers before reading whole', () => {
       const upload = JSON.stringify({ text: 'x'.repeat(1_000_000) });
+
+      test('a BODY_TOO_LARGE held back until the Caller opens its window still ends with END_STREAM, then a reset, and the server closes', async () => {
+        const { app, url } = await served({
+          fastify: { http2: true },
+          options: { maxBodyBytes: 1000 },
+        });
+        const caller = rawCaller(url, { window: 0 });
+
+        caller.send(
+          postFrame(1, '/notes'),
+          dataFrame(1, JSON.stringify({ text: 'x'.repeat(3000) })),
+        );
+        await waitFor(300);
+        const held = [...caller.framesOf(1)];
+        caller.send(windowFrame(1, 1 << 20), windowFrame(0, 1 << 20));
+        while (!caller.framesOf(1).some((frame) => frame.startsWith('RST'))) {
+          await waitFor(5);
+        }
+        caller.drop();
+        await app.close();
+
+        expect(held).toEqual(['HEADERS']);
+        expect(wireEndOf(caller.framesOf(1))).toBe('end, then RST(0)');
+      });
 
       test.each([
         {
