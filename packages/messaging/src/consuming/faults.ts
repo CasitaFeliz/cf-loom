@@ -1,5 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import { issueLinesOf, logOf } from '@cf-loom/contract/internal';
+import { listedIssueLinesOf, logOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -51,7 +51,7 @@ export function consumedFaultLinesOf(fault: ConsumedFault): readonly string[] {
   const source = sourceOf(fault);
   switch (fault.kind) {
     case 'invalid-body':
-      return issueLinesOf(source, fault.issues);
+      return listedIssueLinesOf(source, fault.issues);
     case 'returned':
     case 'thrown':
       return [failureLineOf(source, fault)];

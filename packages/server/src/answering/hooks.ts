@@ -1,5 +1,5 @@
 import type { Endpoint, Guard, Method } from '@cf-loom/contract';
-import { isMethod, issueLinesOf, logOf } from '@cf-loom/contract/internal';
+import { isMethod, listedIssueLinesOf, logOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -123,7 +123,7 @@ function logServedFault(servedFault: ServedFault): void {
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
-      for (const line of issueLinesOf(where, servedFault.issues)) {
+      for (const line of listedIssueLinesOf(where, servedFault.issues)) {
         console.error(...logOf(line));
       }
   }

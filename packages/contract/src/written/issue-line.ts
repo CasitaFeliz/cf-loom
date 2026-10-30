@@ -12,7 +12,7 @@ export function issueLineOf(source: string, { part, path, code, message }: Issue
  * invalid-input body lists, one line each as `issueLineOf` writes it, then a line counting the
  * others when any is left out.
  */
-export function issueLinesOf(source: string, issues: readonly Issue[]): readonly string[] {
+export function listedIssueLinesOf(source: string, issues: readonly Issue[]): readonly string[] {
   const { listed, omittedIssues } = listedIssuesOf(issues, (issue) => lineOf(source, issue), 0);
   if (omittedIssues === 0) {
     return listed;

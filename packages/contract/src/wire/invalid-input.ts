@@ -21,11 +21,7 @@ export type InvalidInputBody = {
   readonly omittedIssues: number;
 };
 
-/**
- * The body of the invalid-input Rejection: the Issues in the order they were read, each with the
- * part of the request it read, up to the first that would pass the count or the size of JSON that
- * `listedIssuesOf` bounds; that one and every later one counted in `omittedIssues`.
- */
+/** The body of the invalid-input Rejection: the Issues `listedIssuesOf` lists, each with the part of the request it read. */
 export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputBody {
   const { listed, omittedIssues } = listedIssuesOf(issues, listedOf, '['.length);
   return { issues: listed, omittedIssues };

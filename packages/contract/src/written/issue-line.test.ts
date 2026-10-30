@@ -3,7 +3,7 @@ import { growthOf } from '../../test/growth.ts';
 import { lineBreaks, lineBreaksIn } from '../../test/line-breaks.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import type { Issue } from '../index.ts';
-import { issueLineOf, issueLinesOf } from '../internal/index.ts';
+import { issueLineOf, listedIssueLinesOf, unbrokenLineOf } from '../internal/index.ts';
 
 const source = 'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1';
 
@@ -23,8 +23,9 @@ function totalBytesOf(lines: readonly string[]): number {
   return total;
 }
 
+/** Each Issue's line as the console writes it, on one line: the oracle the lines are checked against. */
 function linesOf(issues: readonly Issue[], sourceText = source): readonly string[] {
-  return issues.map((issue) => issueLineOf(sourceText, issue));
+  return issues.map((issue) => unbrokenLineOf(issueLineOf(sourceText, issue)));
 }
 
 describe('issueLineOf', () => {
@@ -50,13 +51,13 @@ describe('issueLineOf', () => {
   });
 });
 
-describe('issueLinesOf: the count and the order', () => {
+describe('listedIssueLinesOf: the count and the order', () => {
   test.for([0, 1, 100])(
     'the Issues of a Fault are one line each, in order, with no count line when all %i are listed',
     (count) => {
       const issues = Array.from({ length: count }, (_, index) => anIssue({ path: [index] }));
 
-      const lines = issueLinesOf(source, issues);
+      const lines = listedIssueLinesOf(source, issues);
 
       expect(lines).toEqual(linesOf(issues));
     },
@@ -68,7 +69,7 @@ describe('issueLinesOf: the count and the order', () => {
   ] as const)('%i Issues list the first 100 and end with the line %s', ([count, counted]) => {
     const issues = Array.from({ length: count }, (_, index) => anIssue({ path: [index] }));
 
-    const lines = issueLinesOf(source, issues);
+    const lines = listedIssueLinesOf(source, issues);
 
     expect(lines).toHaveLength(101);
     expect(lines.slice(0, 100)).toEqual(linesOf(issues.slice(0, 100)));
@@ -85,12 +86,12 @@ function anIssueFilling(bytes: number, before: readonly Issue[], character = 'k'
   return anIssue({ message: `${message}${'k'.repeat(room % characterBytes)}` });
 }
 
-describe('issueLinesOf: the size', () => {
+describe('listedIssueLinesOf: the size', () => {
   test('lines filling exactly 64 KiB are all listed', () => {
     const first = anIssue({ path: [0] });
     const issues = [first, anIssueFilling(65_536, [first])];
 
-    const lines = issueLinesOf(source, issues);
+    const lines = listedIssueLinesOf(source, issues);
 
     expect(lines).toEqual(linesOf(issues));
     expect(totalBytesOf(lines)).toBe(65_536);
@@ -100,7 +101,7 @@ describe('issueLinesOf: the size', () => {
     const first = anIssue({ path: [0] });
     const issues = [first, anIssueFilling(65_537, [first])];
 
-    const lines = issueLinesOf(source, issues);
+    const lines = listedIssueLinesOf(source, issues);
 
     expect(lines).toEqual([...linesOf([first]), `${source}: 1 more Issue`]);
   });
@@ -109,7 +110,7 @@ describe('issueLinesOf: the size', () => {
     const first = anIssue({ path: [0] });
     const issues = [first, anIssue({ path: ['k'.repeat(65_536)] }), anIssue({ path: [2] })];
 
-    const lines = issueLinesOf(source, issues);
+    const lines = listedIssueLinesOf(source, issues);
 
     expect(lines).toEqual([...linesOf([first]), `${source}: 2 more Issues`]);
   });
@@ -117,7 +118,7 @@ describe('issueLinesOf: the size', () => {
   test('one Issue whose line is larger than 64 KiB alone lists none and counts it', () => {
     const issues = [anIssue({ path: ['k'.repeat(70_000)] })];
 
-    const lines = issueLinesOf(source, issues);
+    const lines = listedIssueLinesOf(source, issues);
 
     expect(lines).toEqual([`${source}: 1 more Issue`]);
   });
@@ -129,7 +130,7 @@ describe('issueLinesOf: the size', () => {
     const fits = anIssueFilling(65_536, [], character);
     const passes = anIssue({ message: `${fits.message}${character}` });
 
-    const counted = [issueLinesOf(source, [fits]), issueLinesOf(source, [passes])];
+    const counted = [listedIssueLinesOf(source, [fits]), listedIssueLinesOf(source, [passes])];
 
     expect(counted).toEqual([linesOf([fits]), [`${source}: 1 more Issue`]]);
   });
@@ -139,7 +140,7 @@ describe('issueLinesOf: the size', () => {
     const fits = anIssue({ path: ['a\nb'], message: 'k'.repeat(65_536 - fixed) });
     const passes = anIssue({ path: ['a\nb'], message: 'k'.repeat(65_537 - fixed) });
 
-    const counted = [issueLinesOf(source, [fits]), issueLinesOf(source, [passes])];
+    const counted = [listedIssueLinesOf(source, [fits]), listedIssueLinesOf(source, [passes])];
 
     expect(counted.map((lines) => lines.length)).toEqual([1, 1]);
     expect(totalBytesOf(counted[0] ?? [])).toBe(65_536);
@@ -147,13 +148,13 @@ describe('issueLinesOf: the size', () => {
   });
 });
 
-describe('issueLinesOf: a line stays a line', () => {
+describe('listedIssueLinesOf: a line stays a line', () => {
   test.for(lineBreaks)(
     'a key holding %s is listed on one line, as the visible text of its escape',
     ([, code, visible]) => {
       const issue = anIssue({ path: [`a${String.fromCharCode(code)}b`] });
 
-      const lines = issueLinesOf(source, [issue]);
+      const lines = listedIssueLinesOf(source, [issue]);
 
       expect(lines).toEqual([`${source}: body.a${visible}b invalid_type: Expected string`]);
       expect(lineBreaksIn(lines.join(''))).toBe(0);
@@ -166,32 +167,29 @@ describe('issueLinesOf: a line stays a line', () => {
       const sourceWithBreak = `a${String.fromCharCode(code)}b`;
       const issues = [anIssue({ path: ['k'.repeat(70_000)] })];
 
-      const lines = issueLinesOf(sourceWithBreak, issues);
+      const lines = listedIssueLinesOf(sourceWithBreak, issues);
 
       expect(lines).toEqual([`a${visible}b: 1 more Issue`]);
     },
   );
 });
 
-describe('issueLinesOf: a source too long, a path too deep, a count too large', () => {
+describe('listedIssueLinesOf: a source too long, a path too deep, a count too large', () => {
   test('a source too long for any line leaves only the count line', () => {
     const longSource = 'f'.repeat(70_000);
     const issues = Array.from({ length: 3 }, (_, index) => anIssue({ path: [index] }));
 
-    const lines = issueLinesOf(longSource, issues);
+    const lines = listedIssueLinesOf(longSource, issues);
 
     expect(lines).toEqual([`${longSource}: 3 more Issues`]);
   });
 
-  test('a path of 1,000 segments is listed as one line, and one of 100,000 segments, past 64 KiB, is counted', () => {
+  test('a path of 1,000 segments is listed as one line', () => {
     const deep = anIssue({ path: Array.from({ length: 1_000 }, (_, index) => index) });
-    const deeper = anIssue({ path: Array.from({ length: 100_000 }, (_, index) => index) });
 
-    const listed = issueLinesOf(source, [deep]);
-    const counted = issueLinesOf(source, [deeper]);
+    const lines = listedIssueLinesOf(source, [deep]);
 
-    expect(listed).toEqual(linesOf([deep]));
-    expect(counted).toEqual([`${source}: 1 more Issue`]);
+    expect(lines).toEqual(linesOf([deep]));
   });
 
   test('telling a Fault’s Issues takes time flat in their count', { timeout: 240_000 }, () => {
@@ -205,32 +203,39 @@ describe('issueLinesOf: a source too long, a path too deep, a count too large', 
     );
     const told = (count: number) => {
       const issues = lists.get(count) ?? [];
-      return () => issueLinesOf(source, issues);
+      return () => listedIssueLinesOf(source, issues);
     };
 
     const growth = growthOf(told, { small, large }, flatGrowth);
 
     expect(growth).toBeLessThan(flatGrowth);
-    expect(issueLinesOf(source, lists.get(large) ?? [])).toHaveLength(101);
+    expect(listedIssueLinesOf(source, lists.get(large) ?? [])).toHaveLength(101);
   });
 });
 
-const keyCharacters = ['k', 'é', '€', '😀', '\ud800', '"', '\\', '.'];
+/** The characters a drawn text is made of: ordinary, multi-byte, a lone surrogate, CR LF and each line break. */
+const textCharacters = [
+  ...['k', 'é', '€', '😀', '\ud800', '"', '\\', '.', String.fromCharCode(0x0d, 0x0a)],
+  ...lineBreaks.map(([, code]) => String.fromCharCode(code)),
+];
 
 const keyNames = ['__proto__', 'constructor', 'toString'];
 
 const keyLengthScales = [0, 100, 1_000, 40_000];
 
+function randomText(next: () => number, length: number): string {
+  const chunk = Array.from(
+    { length: 1 + Math.floor(next() * 8) },
+    () => textCharacters[Math.floor(next() * textCharacters.length)] ?? 'k',
+  ).join('');
+  return chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
+}
+
 function randomKey(next: () => number, longestKey: number): string {
   if (next() < 0.1) {
     return keyNames[Math.floor(next() * keyNames.length)] ?? '';
   }
-  const length = Math.floor(next() ** 2 * longestKey);
-  const chunk = Array.from(
-    { length: 1 + Math.floor(next() * 8) },
-    () => keyCharacters[Math.floor(next() * keyCharacters.length)] ?? 'k',
-  ).join('');
-  return chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
+  return randomText(next, Math.floor(next() ** 2 * longestKey));
 }
 
 function randomPath(next: () => number, longestKey: number): readonly (string | number)[] {
@@ -249,7 +254,7 @@ function randomIssues(next: () => number): readonly Issue[] {
 }
 
 function randomSource(next: () => number): string {
-  return 's'.repeat(Math.floor(next() ** 3 * 2_000));
+  return randomText(next, Math.floor(next() ** 3 * 2_000));
 }
 
 /** Whether the lines hold each invariant of a Fault’s Issues told as lines, for the Issues they were written from. */
@@ -260,7 +265,9 @@ function invariantsOf(lines: readonly string[], sourceText: string, issues: read
     listed++;
   }
   const omitted = issues.length - listed;
-  const countLine = `${sourceText}: ${omitted} more Issue${omitted === 1 ? '' : 's'}`;
+  const countLine = unbrokenLineOf(
+    `${sourceText}: ${omitted} more Issue${omitted === 1 ? '' : 's'}`,
+  );
   return {
     withinCount: listed <= 100,
     withinBytes: totalBytesOf(written.slice(0, listed)) <= 65_536,
@@ -279,7 +286,7 @@ const heldInvariants = {
   countsTheRestOnce: true,
 };
 
-describe('issueLinesOf: any Issues and source', () => {
+describe('listedIssueLinesOf: any Issues and source', () => {
   test.for([17, 2026, 4099, 65_537, 99_991, 271_828, 314_159, 1_000_003])(
     'seed %i: a prefix of their lines within 100 and 64 KiB of UTF-8, the rest counted',
     (seed) => {
@@ -290,7 +297,7 @@ describe('issueLinesOf: any Issues and source', () => {
       }));
 
       const invariants = cases.map(({ sourceText, issues }) =>
-        invariantsOf(issueLinesOf(sourceText, issues), sourceText, issues),
+        invariantsOf(listedIssueLinesOf(sourceText, issues), sourceText, issues),
       );
 
       expect(invariants).toEqual(cases.map(() => heldInvariants));
