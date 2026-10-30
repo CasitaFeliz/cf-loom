@@ -98,6 +98,17 @@ afterEach(() => {
   }
 });
 
+/** A node:http server over nodeListener that keeps each response it was handed, to look at what is left on it. */
+function serverKeeping(http: Http) {
+  const responses: ServerResponse[] = [];
+  const listener = nodeListener(http);
+  const server = createServer((incoming, outgoing) => {
+    responses.push(outgoing);
+    listener(incoming, outgoing);
+  });
+  return { server, responses };
+}
+
 /** The Service listening on a free port, and the URL it answers at. */
 async function listening(server = nodeHttp(serve(contract, handlers, {}))): Promise<string> {
   servers.push(server);
@@ -121,6 +132,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
     statusCode: 0,
     appendHeader: () => outgoing,
     setHeader: () => outgoing,
+    removeHeader: () => outgoing,
     writeHead: () => outgoing,
   });
   const finished = new Promise((resolve) => written.on('finish', resolve));
@@ -477,6 +489,107 @@ describe('nodeHttp', () => {
     ]);
 
     expect(outcome).toBe('cancelled');
+  });
+
+  test.each([
+    { name: 'with data ready', ready: true },
+    { name: 'with none yet', ready: false },
+  ])(
+    'a Caller that leaves before a streaming Response resolves cancels its stream, $name, and leaves nothing waiting',
+    async ({ ready }) => {
+      const { promise: cancelled, resolve: wasCancelled } = Promise.withResolvers<string>();
+      const streaming: Http = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (ready) {
+                controller.enqueue(new Uint8Array(1024));
+                return;
+              }
+              return new Promise(() => undefined);
+            },
+            cancel() {
+              wasCancelled('cancelled');
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        return new Response(body);
+      };
+      const { server, responses } = serverKeeping(streaming);
+      const url = await listening(server);
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write('GET /events HTTP/1.1\r\nHost: test\r\n\r\n');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      socket.destroy();
+      const outcome = await Promise.race([
+        cancelled,
+        new Promise<string>((resolve) => setTimeout(() => resolve('still open'), 1500)),
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(outcome).toBe('cancelled');
+      expect(responses[0]?.listenerCount('drain')).toBe(0);
+    },
+  );
+
+  test('a Caller that leaves while the writer waits for drain cancels the body, and leaves nothing waiting', async () => {
+    const { promise: cancelled, resolve: wasCancelled } = Promise.withResolvers<string>();
+    const chunk = new Uint8Array(1_048_576);
+    let produced = 0;
+    const streaming: Http = async () => {
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            produced += 1;
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            wasCancelled('cancelled');
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return new Response(body);
+    };
+    const { server, responses } = serverKeeping(streaming);
+    const url = await listening(server);
+    const socket = connect(Number(new URL(url).port), '127.0.0.1');
+    socket.on('error', () => undefined);
+    socket.pause();
+
+    socket.write('GET /big HTTP/1.1\r\nHost: test\r\n\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const producedWhileWaiting = produced;
+    socket.destroy();
+    const outcome = await Promise.race([
+      cancelled,
+      new Promise<string>((resolve) => setTimeout(() => resolve('still open'), 1500)),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(producedWhileWaiting).toBeGreaterThan(0);
+    expect(outcome).toBe('cancelled');
+    expect(responses[0]?.listenerCount('drain')).toBe(0);
+  });
+
+  test('an answer nodeHttp gives itself to a request with no body keeps the connection alive', async () => {
+    const url = await listening();
+    const traced = 'TRACE /orders HTTP/1.1\r\nHost: test\r\n\r\n';
+    const unreadable = 'OPTIONS * HTTP/1.1\r\nHost: test\r\n\r\n';
+    const last = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
+
+    const answer = await raw(url, traced + unreadable + last);
+
+    expect(statusLinesOf(answer)).toEqual([
+      'HTTP/1.1 404 Not Found',
+      'HTTP/1.1 400 Bad Request',
+      'HTTP/1.1 200 OK',
+    ]);
+    expect(answer.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
   });
 
   test('a GET reaches serve with no body, a DELETE with the body it carries', async () => {

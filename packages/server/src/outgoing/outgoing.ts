@@ -1,10 +1,13 @@
+import { once } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
-/** A request taken from its host: the messages to answer it on, and the headers the host set before. */
+/** A request taken from its host: the messages to answer it on, the Caller's departure, and the headers the host set before. */
 export type Taken = {
   readonly incoming: IncomingMessage;
   readonly outgoing: ServerResponse;
-  /** The host's headers, which the Response's replace; its `content-length` frames a body that is not the Response's, so it is dropped. */
+  /** Aborts when the Caller is gone before the response finished, which stops the body being read or written. */
+  readonly closed: AbortSignal;
+  /** The host's headers, which the Response's replace; a `content-length`, the host's or already on `outgoing`, frames a body that is not the Response's, so it is dropped. */
   readonly hostHeaders?: Readonly<Record<string, number | string | string[] | undefined>>;
 };
 
@@ -17,26 +20,39 @@ type BodyReader = ReadableStreamDefaultReader<Uint8Array>;
  * waiting.
  */
 export async function respondedWith(taken: Taken, answer: Promise<Response>): Promise<void> {
-  const { outgoing } = taken;
+  const { outgoing, closed } = taken;
   try {
     const response = await answer;
     const reader = response.body?.getReader();
-    outgoing.once('close', () => void reader?.cancel().catch(() => undefined));
+    cancelledWhenClosed(reader, closed);
     outgoing.strictContentLength = true;
     headWritten(taken, response);
-    await bodyWritten(outgoing, reader);
+    await bodyWritten(taken, reader);
   } catch {
     outgoing.destroy();
+  }
+}
+
+function cancelledWhenClosed(reader: BodyReader | undefined, closed: AbortSignal) {
+  if (reader === undefined) {
+    return;
+  }
+  const cancel = () => void reader.cancel().catch(() => undefined);
+  if (closed.aborted) {
+    cancel();
+  } else {
+    closed.addEventListener('abort', cancel, { once: true });
   }
 }
 
 function headWritten({ incoming, outgoing, hostHeaders = {} }: Taken, response: Response) {
   outgoing.statusCode = response.status;
   for (const [name, value] of Object.entries(hostHeaders)) {
-    if (value !== undefined && name !== 'content-length') {
+    if (value !== undefined) {
       outgoing.setHeader(name, value);
     }
   }
+  outgoing.removeHeader('content-length');
   const named = new Set<string>();
   for (const [name, value] of response.headers) {
     if (named.has(name)) {
@@ -51,35 +67,15 @@ function headWritten({ incoming, outgoing, hostHeaders = {} }: Taken, response: 
   }
 }
 
-async function bodyWritten(outgoing: ServerResponse, reader: BodyReader | undefined) {
+async function bodyWritten({ outgoing, closed }: Taken, reader: BodyReader | undefined) {
   if (reader === undefined) {
     outgoing.end();
     return;
   }
   for (let read = await reader.read(); !read.done; read = await reader.read()) {
-    await accepted(outgoing, read.value);
+    if (!outgoing.write(read.value)) {
+      await once(outgoing, 'drain', { signal: closed });
+    }
   }
   outgoing.end();
-}
-
-async function accepted(outgoing: ServerResponse, chunk: Uint8Array) {
-  if (outgoing.write(chunk)) {
-    return;
-  }
-  await new Promise<void>((resolve, reject) => {
-    if (outgoing.destroyed) {
-      reject(new Error('the response closed before its body was written'));
-      return;
-    }
-    const onDrain = () => {
-      outgoing.off('close', onClose);
-      resolve();
-    };
-    const onClose = () => {
-      outgoing.off('drain', onDrain);
-      reject(new Error('the response closed before its body was written'));
-    };
-    outgoing.once('drain', onDrain);
-    outgoing.once('close', onClose);
-  });
 }

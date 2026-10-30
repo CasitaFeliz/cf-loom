@@ -43,8 +43,14 @@ export function unreadableResponse(): Response {
   return new Response(null, { status: 400 });
 }
 
-/** A signal that aborts when the response closes before it finished, as when the Caller goes away. */
+/**
+ * The Caller's departure as a signal: aborted at once when the response is already closed
+ * unfinished, else when it closes so. Every part of a taken request that must stop derives from it.
+ */
 export function closedSignalOf(outgoing: ServerResponse): AbortSignal {
+  if (outgoing.destroyed && !outgoing.writableFinished) {
+    return AbortSignal.abort();
+  }
   const controller = new AbortController();
   outgoing.once('close', () => {
     if (!outgoing.writableFinished) {

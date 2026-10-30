@@ -748,6 +748,75 @@ describe('fastifyServe', () => {
     });
   });
 
+  describe('when the Caller leaves or something fails before the response is written', () => {
+    test('a Caller that leaves during an earlier async app onRequest hook aborts the Handler’s signal, and onAnswered records it', async () => {
+      const startedAborted: boolean[] = [];
+      const records: AnsweredRequest[] = [];
+      const reading = handle(getOrder, ({ params }, { request }) => {
+        startedAborted.push(request.signal.aborted);
+        return success(getOrder, { id: params.orderId });
+      });
+      const { promise: hookRunning, resolve: running } = Promise.withResolvers<void>();
+      const { url } = await served({
+        handlers: withEndpoints({ getOrder: reading }),
+        options: { onAnswered: (record) => void records.push(record) },
+        before: (app) =>
+          app.addHook('onRequest', async () => {
+            running();
+            await waitFor(300);
+          }),
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write(requestText('GET', '/orders/o-1'));
+      await hookRunning;
+      socket.destroy();
+      await waitFor(600);
+
+      expect(startedAborted).toEqual([true]);
+      expect(records.map((record) => record.aborted)).toEqual([true]);
+    });
+
+    test('a content-length an earlier app hook set on the raw response never reaches the Caller either', async () => {
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (_request, reply) => {
+            reply.raw.setHeader('content-length', '5');
+          }),
+      });
+
+      const answer = await raw(url, requestText('GET', '/orders/o-1'));
+
+      const [head = ''] = answer.split('\r\n\r\n');
+      expect(head).not.toMatch(/^content-length:/im);
+      expect(bodyOf(answer)).toBe('{"id":"o-1"}');
+    });
+
+    test('a write that fails after serve answered still records the status serve answered, and reaches onRequestAbort, never onResponse', async () => {
+      const records: AnsweredRequest[] = [];
+      const hooks: string[] = [];
+      const { url } = await served({
+        options: { onAnswered: (record) => void records.push(record) },
+        before: (app) => {
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('x-bad', 'a\u0001b');
+            }
+          });
+          app.addHook('onRequestAbort', async (_request) => void hooks.push('onRequestAbort'));
+        },
+        after: (app) => app.addHook('onResponse', async () => void hooks.push('onResponse')),
+      });
+
+      await rawFor(url, requestText('GET', '/orders/o-1'), 1000);
+      await waitFor(100);
+
+      expect(records.map((record) => record.status)).toEqual([200]);
+      expect(hooks).toEqual(['onRequestAbort']);
+    });
+  });
+
   describe('registration', () => {
     test('inside a plugin that skips encapsulation, it serves the Contract', async () => {
       const app = Fastify();

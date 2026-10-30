@@ -79,13 +79,15 @@ async function answeredWhenServed(serving: Serving, request: FastifyRequest, rep
     return;
   }
   reply.hijack();
-  const taken = { incoming: request.raw, outgoing: reply.raw, hostHeaders: reply.getHeaders() };
+  const outgoing = reply.raw;
+  const closed = closedSignalOf(outgoing);
+  const taken = { incoming: request.raw, outgoing, closed, hostHeaders: reply.getHeaders() };
   await respondedWith(taken, answeredFor(serving.http, taken, url));
 }
 
 /** What answers a request taken from Fastify: `serve`'s Response, or 400 when no `Request` can be built. */
-async function answeredFor(http: Http, { incoming, outgoing }: Taken, url: URL): Promise<Response> {
-  const asked = incomingRequestOf(incoming, url, closedSignalOf(outgoing));
+async function answeredFor(http: Http, { incoming, closed }: Taken, url: URL): Promise<Response> {
+  const asked = incomingRequestOf(incoming, url, closed);
   return asked === undefined ? unreadableResponse() : await http(asked);
 }
 

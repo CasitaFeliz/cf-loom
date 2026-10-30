@@ -37,8 +37,8 @@ export function nodeHttp(http: Http): Server {
 
 /** Answers an incoming message with what `http` returns, written as `outgoing` does. */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const answer = answeredFor(http, incoming, closedSignalOf(outgoing));
-  await respondedWith({ incoming, outgoing }, answer);
+  const taken = { incoming, outgoing, closed: closedSignalOf(outgoing) };
+  await respondedWith(taken, answeredFor(http, incoming, taken.closed));
 }
 
 /**
