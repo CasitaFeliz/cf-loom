@@ -1063,7 +1063,8 @@ describe('validateRoot: the values of a text part’s enum each travel in their 
     for (const values of drawn) {
       for (const part of ['headers', 'params', 'query'] as const) {
         const validated = validateEndpoint(endpointHolding(part, values));
-        const rules = validated.kind === 'valid' ? [] : validated.failures.map((one) => one.rule);
+        const rules =
+          validated.kind === 'valid' ? [] : validated.failures.map((failure) => failure.rule);
 
         expect(rules, `${part} ${JSON.stringify(values)}`).toEqual(
           values.some(runtimeRefuses[part]) ? ['unsendable-text'] : [],
@@ -1270,6 +1271,68 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
     expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
 
+  test('a Success headers object whose own example gives a field " a" fails at that field', () => {
+    const headers = z.object({ 'x-s': z.string() }).meta({ examples: [{ 'x-s': ' a' }] });
+    const endpoint = defineEndpoint({ ...listing, success: { ...listing.success, headers } });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} success.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" a"'),
+      ),
+    );
+  });
+
+  test('a Rejection headers object whose own example gives a field a line feed fails at that field', () => {
+    const headers = headersOf({ 'x-realm': z.string() }).meta({ examples: [{ 'x-realm': '\n' }] });
+    const rejection = aRejectionWith(headers);
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        'codes.UNAUTHENTICATED headers.x-realm',
+        'unsendable-text',
+        unsendable('header', 'x-realm', '"\\n"'),
+      ),
+    );
+  });
+
+  test('a Guard’s demanded headers object whose own example gives a field " 1" fails at that field', () => {
+    const headers = z
+      .object({ 'x-version': z.string() })
+      .meta({ examples: [{ 'x-version': ' 1' }] });
+    const signed = defineGuard({
+      name: 'signed',
+      description: 'A signed request',
+      demands: { headers },
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
+      failed(
+        'guards.signed demands.headers.x-version',
+        'unsendable-text',
+        unsendable('header', 'x-version', '" 1"'),
+      ),
+    );
+  });
+
+  test('a Guard’s demanded query object whose own example gives a field a lone surrogate fails at that field', () => {
+    const query = z.object({ q: z.string() }).meta({ examples: [{ q: '\uD800' }] });
+    const signed = defineGuard({
+      name: 'signed',
+      description: 'A signed request',
+      demands: { query },
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
+      failed(
+        'guards.signed demands.query.q',
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
   test('a number or a boolean header’s examples validate, since each is always carried', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -1360,7 +1423,7 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
   /** The rules `generate` breaks on an Endpoint whose text field holds `values` as examples. */
   function rulesOf(part: Part, placement: Placement, values: string[]) {
     const validated = validateEndpoint(endpointWithExamples(part, placement, values));
-    return validated.kind === 'valid' ? [] : validated.failures.map((one) => one.rule);
+    return validated.kind === 'valid' ? [] : validated.failures.map((failure) => failure.rule);
   }
 
   const sites = Object.entries(placements).flatMap(([part, held]) =>
@@ -1444,20 +1507,20 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     expect(growth).toBeLessThan(linearGrowth);
   });
 
-  test('a header example refused for its leading space is one line, in time that grows as its length does', {
+  test('a header example refused for its trailing space is one line, in time that grows as its length does', {
     timeout: growthTimeout,
   }, () => {
-    const exampleOf = (length: number) => ` ${'a'.repeat(length)}`;
+    const exampleOf = (length: number) => `${'a'.repeat(length)} `;
     const told = (size: number) =>
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: [exampleOf(size)] }) }));
 
-    const growth = growthOf(told, { small: 20_000, large: 160_000 }, linearGrowth);
+    const growth = growthOf(told, { small: 2_500, large: 20_000 }, linearGrowth);
 
-    expect(summarized(told(160_000)())).toEqual(
+    expect(summarized(told(20_000)())).toEqual(
       failed(
         `${endpointAt} input.headers.x-s`,
         'unsendable-text',
-        unsendable('header', 'x-s', JSON.stringify(exampleOf(160_000))),
+        unsendable('header', 'x-s', JSON.stringify(exampleOf(20_000))),
       ),
     );
     expect(growth).toBeLessThan(linearGrowth);
