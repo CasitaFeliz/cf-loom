@@ -36,4 +36,44 @@ describe('pinnedReadme', () => {
       ].join('\n'),
     );
   });
+
+  it.each([
+    [
+      'a link to another repository',
+      `[x](https://github.com/CasitaFeliz/other/blob/main/README.md)`,
+    ],
+    [
+      'a link to a repository whose name starts with its own',
+      `[x](https://github.com/CasitaFeliz/cf-loom-x/blob/main/README.md)`,
+    ],
+    ['an anchor link', '[x](#not-allowed-in-a-contract)'],
+    [
+      'a link to another host',
+      '[names](https://fetch.spec.whatwg.org/#forbidden-request-header) and [docs](https://zod.dev/api)',
+    ],
+    [
+      'prose and code with no repository reference',
+      'Run `cf-loom verify`.\n\n```ts\nconst a = pinned(1);\n```',
+    ],
+  ])('leaves %s as it is', (_name, readme) => {
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toBe(readme);
+  });
+
+  it('matches the repository literally, so its dot is no wildcard', () => {
+    const readme = [
+      `[other](https://github.com/axb/c/blob/main/x.md)`,
+      `[own](https://github.com/a.b/c/blob/main/x.md)`,
+    ].join('\n');
+
+    const pinned = pinnedReadme(readme, 'a.b/c', commit);
+
+    expect(pinned).toBe(
+      [
+        `[other](https://github.com/axb/c/blob/main/x.md)`,
+        `[own](https://github.com/a.b/c/blob/${commit}/x.md)`,
+      ].join('\n'),
+    );
+  });
 });
