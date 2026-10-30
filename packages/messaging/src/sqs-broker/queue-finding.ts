@@ -1,15 +1,25 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
+import { GetSubscriptionAttributesCommand, type SNSClient } from '@aws-sdk/client-sns';
 import {
   GetQueueAttributesCommand,
   ListQueueTagsCommand,
   type SQSClient,
 } from '@aws-sdk/client-sqs';
-import { prefixedNameOf } from '@cf-loom/contract/internal';
+import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
+import { oneLineOf } from '../broker-limits/index.ts';
+import { isAwsError } from './aws-errors.ts';
+import { queueArnOf, topicArnOf } from './connecting.ts';
 import { queueNameOf } from './queue-names.ts';
 import { type QueueHeld, queueReadingOf } from './queue-reading.ts';
 import { queueUrlOf } from './queue-url.ts';
 import type { Working } from './sqs-connection.ts';
+import {
+  type SubscriptionShape,
+  subscriptionMismatchesOf,
+  subscriptionShapeOf,
+} from './subscription-shape.ts';
+import { subscriptionTag } from './tags.ts';
 
 /** A Durable consumer's queue as `consume` found it: where it is, the waits of its first deliveries in milliseconds and the receives its redrive allows. */
 export type FoundQueue = {
@@ -49,7 +59,7 @@ type Finding =
   | { readonly kind: 'refused'; readonly line: string };
 
 async function queueFoundOf(working: Working, durableConsumer: DurableConsumer): Promise<Finding> {
-  const { sqs, prefix } = working;
+  const { sqs, sns, prefix, place } = working;
   const durable = prefixedNameOf(prefix, durableConsumer.durable);
   const name = queueNameOf(durable);
   const url = await queueUrlOf(sqs, name);
@@ -57,10 +67,17 @@ async function queueFoundOf(working: Working, durableConsumer: DurableConsumer):
     return refusedFor(`The Durable consumer ${durable}`, [`has no queue ${name}`]);
   }
   const reading = queueReadingOf(await heldBy(sqs, url));
-  if (reading.kind === 'differs') {
-    return refusedFor(`The queue ${name} of the Durable consumer ${durable}`, reading.differences);
+  const shape = subscriptionShapeOf({
+    topicArn: topicArnOf(place, prefixedNameOf(prefix, durableConsumer.stream)),
+    queueArn: queueArnOf(place, name),
+    subject: prefixedSubjectOf(prefix, durableConsumer.subject),
+  });
+  const subscribed = await subscriptionDifferencesFor(sns, reading.subscriptionArn, shape);
+  const differences = [...reading.differences, ...subscribed];
+  if (differences.length > 0 || reading.read === undefined) {
+    return refusedFor(`The queue ${name} of the Durable consumer ${durable}`, differences);
   }
-  const { waits, maxReceiveCount } = reading;
+  const { waits, maxReceiveCount } = reading.read;
   return { kind: 'found', queue: { durableConsumer, durable, name, url, waits, maxReceiveCount } };
 }
 
@@ -78,4 +95,26 @@ async function heldBy(sqs: SQSClient, url: string): Promise<QueueHeld> {
   );
   const tags = await sqs.send(new ListQueueTagsCommand({ QueueUrl: url }));
   return { attributes: attributes.Attributes ?? {}, tags: tags.Tags ?? {} };
+}
+
+/** How the subscription the queue is tagged with differs from the shape, or that the tag names none; any other error is thrown. */
+async function subscriptionDifferencesFor(
+  sns: SNSClient,
+  arn: string | undefined,
+  shape: SubscriptionShape,
+): Promise<readonly string[]> {
+  if (arn === undefined) {
+    return [];
+  }
+  try {
+    const read = await sns.send(new GetSubscriptionAttributesCommand({ SubscriptionArn: arn }));
+    return subscriptionMismatchesOf(read.Attributes ?? {}, shape).map(
+      (text) => `its subscription ${text}`,
+    );
+  } catch (error) {
+    if (isAwsError(error, 'NotFoundException') || isAwsError(error, 'InvalidParameterException')) {
+      return [`has the ${subscriptionTag} tag ${oneLineOf(arn)}, which names no subscription`];
+    }
+    throw error;
+  }
 }

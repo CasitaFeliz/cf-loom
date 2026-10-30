@@ -5,12 +5,15 @@ import {
   arrangeTopic,
   dropQueue,
   setQueueAttributes,
+  setSubscriptionAttribute,
+  subscribeByHand,
   tagByHand,
+  unsubscribe,
   untagByHand,
   wakeEach,
 } from '../../test/aws-arranging.ts';
 import { aClosedUrl, alteringAnswers, anAwsConnecting } from '../../test/aws-clients.ts';
-import { queueCountsOf } from '../../test/aws-reading.ts';
+import { queueCountsOf, queueTagsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
@@ -61,6 +64,9 @@ async function aMessaging() {
   closedWhenDone(started, connecting);
   return { ...started, connecting, orders: anOrders('staging') };
 }
+
+/** What `aMessaging` gives a test. */
+type AMessaging = Awaited<ReturnType<typeof aMessaging>>;
 
 describe('consuming over sqs()', () => {
   test('consume finds the prefixed queue of each Subscription and Command Version, and a Message published before or after reaches its Handler', async () => {
@@ -296,6 +302,130 @@ describe('consuming over sqs()', () => {
     await started.consume(handlersOf(received), {});
 
     await until(() => expect(received).toHaveLength(1));
+  });
+
+  describe('a queue’s subscription', () => {
+    const chargeFilter = (subject: string) => `{"cf-loom-subject":["${subject}"]}`;
+
+    /** The ARN of the subscription `applyBrokerPlan` tagged the queue with. */
+    async function subscriptionOf(sqsClient: SQSClient, queue: string): Promise<string> {
+      return (await queueTagsOf(sqsClient, queue))['cf-loom:subscription'] ?? '';
+    }
+
+    test.each([
+      {
+        name: 'a subscription that was deleted',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+          await unsubscribe(connecting.sns, arn);
+          return `has the cf-loom:subscription tag '${arn}', which names no subscription`;
+        },
+      },
+      {
+        name: 'text that is no ARN',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          await tagByHand(connecting.sqs, orders.chargeQueue, {
+            'cf-loom:subscription': 'garbage',
+          });
+          return "has the cf-loom:subscription tag 'garbage', which names no subscription";
+        },
+      },
+      {
+        name: 'raw delivery turned off',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+          await setSubscriptionAttribute(connecting.sns, arn, {
+            name: 'RawMessageDelivery',
+            value: 'false',
+          });
+          return 'its subscription has RawMessageDelivery false, not true';
+        },
+      },
+      {
+        name: 'another filter policy',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+          const other = chargeFilter('staging.orders-service.command.Other.v1');
+          await setSubscriptionAttribute(connecting.sns, arn, {
+            name: 'FilterPolicy',
+            value: other,
+          });
+          return `its subscription has FilterPolicy ${other}, not ${chargeFilter(orders.charge)}`;
+        },
+      },
+      {
+        name: 'another filter policy scope',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+          await setSubscriptionAttribute(connecting.sns, arn, {
+            name: 'FilterPolicyScope',
+            value: 'MessageBody',
+          });
+          return 'its subscription has FilterPolicyScope MessageBody, not MessageAttributes';
+        },
+      },
+      {
+        name: 'a subscription of another topic',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const topicArn = await arrangeTopic(connecting.sns, 'another-topic');
+          const queueArn = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
+          const arn = await subscribeByHand(connecting.sns, { topicArn, queueArn });
+          const attributes = {
+            RawMessageDelivery: 'true',
+            FilterPolicy: chargeFilter(orders.charge),
+            FilterPolicyScope: 'MessageAttributes',
+          };
+          for (const [name, value] of Object.entries(attributes)) {
+            await setSubscriptionAttribute(connecting.sns, arn, { name, value });
+          }
+          await tagByHand(connecting.sqs, orders.chargeQueue, { 'cf-loom:subscription': arn });
+          const ordersTopic = 'arn:aws:sns:eu-west-1:123456789012:staging_orders-service';
+          return `its subscription has TopicArn ${topicArn}, not ${ordersTopic}`;
+        },
+      },
+      {
+        name: 'the subscription of another queue',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const notifies = await subscriptionOf(connecting.sqs, orders.notifyQueue);
+          await tagByHand(connecting.sqs, orders.chargeQueue, { 'cf-loom:subscription': notifies });
+          const [endpoint, filter] = [
+            `arn:aws:sqs:eu-west-1:123456789012:${orders.notifyQueue}`,
+            chargeFilter(orders.created),
+          ];
+          return `its subscription has Endpoint ${endpoint}, not arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue} and its subscription has FilterPolicy ${filter}, not ${chargeFilter(orders.charge)}`;
+        },
+      },
+    ])('consume rejects naming the queue and the difference of $name', async ({ arrange }) => {
+      const messagingOf = await aMessaging();
+      const { consume, orders } = messagingOf;
+      const difference = await arrange(messagingOf);
+
+      const consuming = consume(handlersOf([]), {});
+
+      const line = `The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} ${difference}: apply the Service's Broker plan`;
+      await expect(consuming).rejects.toMatchObject({ message: line });
+    });
+
+    test('a filter policy equal as JSON but written otherwise is no difference', async () => {
+      const messagingOf = await aMessaging();
+      const { consume, connecting, orders } = messagingOf;
+      const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+      const spaced = `{\n  "cf-loom-subject": [ "${orders.charge}" ]\n}`;
+      await setSubscriptionAttribute(connecting.sns, arn, { name: 'FilterPolicy', value: spaced });
+
+      const consuming = consume(handlersOf([]), {});
+
+      await expect(consuming).resolves.toBeUndefined();
+    });
+
+    test('a subscription applyBrokerPlan left passes the check, run once or again', async () => {
+      const { consume, connecting } = await aMessaging();
+      await arrangeOrders(connecting, { prefix: 'staging' });
+
+      const consuming = consume(handlersOf([]), {});
+
+      await expect(consuming).resolves.toBeUndefined();
+    });
   });
 });
 

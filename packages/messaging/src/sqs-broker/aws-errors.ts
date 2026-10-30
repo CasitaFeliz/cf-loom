@@ -1,5 +1,5 @@
 /** The AWS errors cf-loom tells by name, which is how the SDK says that a queue or a topic does not exist. */
-type AwsErrorName = 'QueueDoesNotExist' | 'NotFoundException';
+type AwsErrorName = 'QueueDoesNotExist' | 'NotFoundException' | 'InvalidParameterException';
 
 /** Whether the AWS client failed with this error, by the error's name, since a second copy of the SDK in the tree makes `instanceof` miss. */
 export function isAwsError(error: unknown, name: AwsErrorName): boolean {

@@ -8,15 +8,18 @@ export type QueueHeld = {
   readonly tags: Readonly<Record<string, string>>;
 };
 
-/** What the queue holds that cf-loom reads: its waits in milliseconds, its `maxReceiveCount` and its subscription's ARN; or how each differs from what `applyBrokerPlan` writes. */
-export type QueueReading =
-  | {
-      readonly kind: 'read';
-      readonly waits: readonly [number, ...number[]];
-      readonly maxReceiveCount: number;
-      readonly subscriptionArn: string;
-    }
-  | { readonly kind: 'differs'; readonly differences: readonly string[] };
+/** What the queue holds that cf-loom reads: how each differs from what `applyBrokerPlan` writes, its subscription's ARN when it has one, and its waits in milliseconds and `maxReceiveCount` when it differs in neither. */
+export type QueueReading = {
+  readonly differences: readonly string[];
+  readonly subscriptionArn: string | undefined;
+  readonly read: QueueRead | undefined;
+};
+
+/** The waits of a queue's first deliveries in milliseconds and the receives its redrive allows. */
+export type QueueRead = {
+  readonly waits: readonly [number, ...number[]];
+  readonly maxReceiveCount: number;
+};
 
 type Read<Value> =
   | { readonly kind: 'read'; readonly value: Value }
@@ -28,21 +31,13 @@ export function queueReadingOf({ attributes, tags }: QueueHeld): QueueReading {
   const redrive = maxReceiveCountOf(attributes['RedrivePolicy']);
   const backoff = backoffOf(tags[backoffTag]);
   const subscription = subscriptionArnOf(tags[subscriptionTag]);
-  if (
-    visibility.kind === 'read' &&
-    redrive.kind === 'read' &&
-    backoff.kind === 'read' &&
-    subscription.kind === 'read'
-  ) {
-    return {
-      kind: 'read',
-      waits: [milliseconds(visibility.value), ...backoff.value.map(milliseconds)],
-      maxReceiveCount: redrive.value,
-      subscriptionArn: subscription.value,
-    };
-  }
   const differences = [visibility, redrive, backoff, subscription].flatMap(differenceOf);
-  return { kind: 'differs', differences };
+  const subscriptionArn = subscription.kind === 'read' ? subscription.value : undefined;
+  if (visibility.kind === 'read' && redrive.kind === 'read' && backoff.kind === 'read') {
+    const waits = [milliseconds(visibility.value), ...backoff.value.map(milliseconds)] as const;
+    return { differences, subscriptionArn, read: { waits, maxReceiveCount: redrive.value } };
+  }
+  return { differences, subscriptionArn, read: undefined };
 }
 
 function milliseconds(seconds: number): number {

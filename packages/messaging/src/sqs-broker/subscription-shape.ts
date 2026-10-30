@@ -95,8 +95,27 @@ function differenceTextOf(
   held: string | undefined,
   shape: SubscriptionShape,
 ): string {
-  const expected = shape.attributes[attribute];
+  return differenceText(attribute, held, shape.attributes[attribute]);
+}
+
+function differenceText(name: string, held: string | undefined, expected: string): string {
   return held === undefined
-    ? `has no ${attribute}, not ${expected}`
-    : `has ${attribute} ${held}, not ${expected}`;
+    ? `has no ${name}, not ${expected}`
+    : `has ${name} ${held}, not ${expected}`;
+}
+
+/** How an existing subscription differs from the shape: first the topic it is on and the queue it delivers to, then each attribute; none when it is the shape's. */
+export function subscriptionMismatchesOf(
+  held: Readonly<Record<string, string>>,
+  shape: SubscriptionShape,
+): readonly string[] {
+  const identity = [
+    ['TopicArn', shape.topicArn],
+    ['Endpoint', shape.endpoint],
+  ] as const;
+  const identityDifferences = identity
+    .filter(([name, expected]) => held[name] !== expected)
+    .map(([name, expected]) => differenceText(name, held[name], expected));
+  const attributeDifferences = subscriptionDifferencesOf(held, shape).map(({ text }) => text);
+  return [...identityDifferences, ...attributeDifferences];
 }
