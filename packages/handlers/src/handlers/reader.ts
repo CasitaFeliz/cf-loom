@@ -1,5 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import type { Closed } from '@cf-loom/contract/internal';
+import { type Closed, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { isPairing, type Pairing } from '../calls/index.ts';
 
 /** Each Command's Message Version and Subscription with its Reader, keyed as the Handler map keys their Handlers. */
@@ -15,7 +15,9 @@ export function readersOf<const Table extends Readers>(table: Closed<Table, Read
   const refused = refusedKeyOf(table);
   if (refused !== undefined) {
     throw new Error(
-      `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${refused}`,
+      unbrokenLineOf(
+        `readersOf() takes commands and subscriptions, each a Command or Subscription declared with @cf-loom/contract and a zod schema: ${refused}`,
+      ),
     );
   }
   for (const key of tableKeys) {

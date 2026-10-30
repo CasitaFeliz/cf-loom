@@ -1,4 +1,4 @@
-import { brokerHeadersOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
+import { brokerHeadersOf, linesTextOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type JetStreamOptions, jetstream as jetStreamClientOf } from '@nats-io/jetstream';
 import { headers, type NatsConnection } from '@nats-io/nats-core';
 import type { NatsConnectionImpl } from '@nats-io/nats-core/internal';
@@ -26,7 +26,7 @@ export function jetStreamConnectionOf(
       const search = { manager, prefix, apiPrefix: client.apiPrefix, inboxPrefix };
       const found = await durableConsumersFoundOf(search, durableConsumers);
       if (found.kind === 'refused') {
-        throw new Error(found.lines.join('\n'));
+        throw new Error(linesTextOf(found.lines));
       }
       const stopping = AbortSignal.any([closing, closedSignalOf(natsConnection)]);
       for (const foundDurableConsumer of found.durableConsumers) {

@@ -1,6 +1,12 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
 import { notImplemented } from '@cf-loom/contract';
-import { isCommand, isEndpoint, isGuard, type Refusal } from '@cf-loom/contract/internal';
+import {
+  isCommand,
+  isEndpoint,
+  isGuard,
+  type Refusal,
+  unbrokenLineOf,
+} from '@cf-loom/contract/internal';
 import {
   answerOf,
   type DirectMeta,
@@ -205,6 +211,8 @@ const notImplementedStub: Implementation = () => reject(notImplemented);
 
 function messageStubOf(declaration: MessageHandled): Implementation {
   return () => {
-    throw new Error(`${nameOf(declaration)}'s Handler is a Stub, which consume never runs`);
+    throw new Error(
+      unbrokenLineOf(`${nameOf(declaration)}'s Handler is a Stub, which consume never runs`),
+    );
   };
 }

@@ -1,5 +1,5 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
-import { isCommand, issueLineOf, messageIdentityOf } from '@cf-loom/contract/internal';
+import { isCommand, issueLineOf, linesTextOf, messageIdentityOf } from '@cf-loom/contract/internal';
 import type { Issue } from '../checks/index.ts';
 import type { Fault } from '../outcomes/index.ts';
 import type { Handled, MessageHandled } from './handled.ts';
@@ -12,7 +12,7 @@ export class InvalidCallError extends Error {
   readonly issues: readonly Issue[];
 
   constructor(declaration: Handled, issues: readonly Issue[]) {
-    super(messageOf(declaration, issues));
+    super(linesTextOf(issueLinesOf(declaration, issues)));
     this.issues = issues;
   }
 }
@@ -23,7 +23,7 @@ export class InvalidOutcomeError extends Error {
   readonly issues: readonly Issue[];
 
   constructor(declaration: Handled, issues: readonly Issue[]) {
-    super(messageOf(declaration, issues));
+    super(linesTextOf(issueLinesOf(declaration, issues)));
     this.issues = issues;
   }
 }
@@ -73,20 +73,7 @@ export function faultLineOf(source: string, fault: { readonly message: string })
   return `${source}: ${fault.message}`;
 }
 
-/** A line as the console logs it: the line, then its `cause` when it has one. */
-export function logOf(line: string, cause: unknown): readonly unknown[] {
-  return cause === undefined ? [line] : [line, cause];
-}
-
-/** A Fault as the console logs it, after what it came from: its message, then its `cause` when it has one. */
-export function faultLogOf(
-  source: string,
-  fault: { readonly message: string; readonly cause?: unknown },
-): readonly unknown[] {
-  return logOf(faultLineOf(source, fault), fault.cause);
-}
-
 /** One line per Issue, naming the declaration. */
-function messageOf(declaration: Handled, issues: readonly Issue[]): string {
-  return issues.map((issue) => issueLineOf(nameOf(declaration), issue)).join('\n');
+function issueLinesOf(declaration: Handled, issues: readonly Issue[]): readonly string[] {
+  return issues.map((issue) => issueLineOf(nameOf(declaration), issue));
 }

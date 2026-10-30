@@ -184,7 +184,11 @@ describe('the Deprecation warning', () => {
     const outcome = await orders.listOrders();
 
     expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
-    expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
+    expect(logged).toHaveBeenCalledWith(
+      '%s',
+      'orders-service: listOrders: onDeprecation threw',
+      error,
+    );
   });
 
   test('what an async onDeprecation rejects with is caught and written to the console, and the Outcome returned', async () => {
@@ -203,7 +207,11 @@ describe('the Deprecation warning', () => {
 
     expect(outcome).toEqual({ kind: 'success', status: 200, body: { ids: ['o-1'] } });
     await vi.waitFor(() => {
-      expect(logged).toHaveBeenCalledWith('orders-service: listOrders: onDeprecation threw', error);
+      expect(logged).toHaveBeenCalledWith(
+        '%s',
+        'orders-service: listOrders: onDeprecation threw',
+        error,
+      );
     });
   });
 

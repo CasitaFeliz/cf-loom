@@ -1,6 +1,7 @@
 import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { partition } from '@aws-sdk/core/client';
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import { oneLineOf } from '../broker-limits/index.ts';
 
 /** How cf-loom reaches SNS and SQS: the organization's own clients, of one account and one region, which cf-loom never destroys. */
@@ -55,7 +56,7 @@ export function confirmArn(answered: AnsweredArn, built: string): void {
     givenAccount === builtAccount
       ? 'check the region of the clients'
       : `${givenAccount} is another account than connecting.account ${builtAccount}`;
-  throw new Error(`${given}: ${why}`);
+  throw new Error(unbrokenLineOf(`${given}: ${why}`));
 }
 
 /** The account part of an ARN, whose name part holds no `:`. */

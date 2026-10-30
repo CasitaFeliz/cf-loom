@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { Applied } from './applied.ts';
 
 /** What an adapter applies, in the order the Broker plan lists it. */
@@ -35,6 +36,6 @@ export async function applyInOrder<Stream, DurableConsumer>(
 /** Rejects `applyBrokerPlan` with the refusal, the Broker client's error as its `cause`. */
 export function throwIfRefused(applied: Applied): void {
   if (applied.kind === 'refused') {
-    throw new Error(applied.message, { cause: applied.cause });
+    throw new Error(unbrokenLineOf(applied.message), { cause: applied.cause });
   }
 }

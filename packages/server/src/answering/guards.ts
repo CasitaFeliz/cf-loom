@@ -1,5 +1,5 @@
 import type { Endpoint, Guard } from '@cf-loom/contract';
-import { contextProvidersOf, type ReadingSource } from '@cf-loom/contract/internal';
+import { contextProvidersOf, type ReadingSource, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { runGuard } from '@cf-loom/handlers/internal';
 import type { ServedContract } from '../served/index.ts';
 import { type Call, handledRequestOf } from './call.ts';
@@ -24,7 +24,7 @@ export function guardRunsOf(
   const admit: GuardRuns['admit'] = async (index, demands) => {
     const attachment = call.endpoint.attachments[index];
     if (attachment === undefined) {
-      throw new Error(`${endpoint.name} has no Attachment at ${index}`);
+      throw new Error(unbrokenLineOf(`${endpoint.name} has no Attachment at ${index}`));
     }
     const context = contextOf(attachment.guard, contexts);
     const { qualifier } = attachment;

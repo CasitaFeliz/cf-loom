@@ -13,6 +13,7 @@ import {
   streamNameOf,
   subjectOf,
   subscriptionsOf,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 
 /** A live version of one of the Service's own Events and the subject it is published on. */
@@ -66,7 +67,7 @@ export function subjectsOf(root: unknown): Subjects {
 export function publishedVersionsOf(subjects: Subjects, name: string): readonly PublishedVersion[] {
   const published = subjects.published.filter((version) => version.message.name === name);
   if (published.length === 0) {
-    throw new Error(`${name} is no Event the Contract publishes`);
+    throw new Error(unbrokenLineOf(`${name} is no Event the Contract publishes`));
   }
   return published;
 }
@@ -75,7 +76,9 @@ export function publishedVersionsOf(subjects: Subjects, name: string): readonly 
 export function sentVersionOf(subjects: Subjects, name: string): SentVersion {
   const [sent, ...others] = subjects.sent.filter((version) => version.message.name === name);
   if (sent === undefined || others.length > 0) {
-    throw new Error(`send() takes a Command with one Active version, which ${name} is not`);
+    throw new Error(
+      unbrokenLineOf(`send() takes a Command with one Active version, which ${name} is not`),
+    );
   }
   return sent;
 }
@@ -101,7 +104,7 @@ function routeOf(contract: ServiceContract, subscription: Subscription): Subscri
   const provider = eventServiceOf(contract, subscription.event);
   if (provider === undefined) {
     const message = `${subscription.name} subscribes to an Event neither a Group lists nor another Service's Contract Package exports`;
-    throw new Error(message);
+    throw new Error(unbrokenLineOf(message));
   }
   return {
     kind: 'subscription',

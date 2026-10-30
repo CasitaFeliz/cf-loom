@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '../lines/index.ts';
 import type {
   AllOfNode,
   Field,
@@ -64,7 +65,9 @@ function inShapeOrder(items: readonly SchemaNode[]): readonly SchemaNode[] {
 function withChild(node: SchemaNode, step: Step, child: SchemaNode): SchemaNode {
   const replaced = replacedAt(node, step, child);
   if (replaced === undefined) {
-    throw new Error(`A ${node.type} has no place for a ${child.type} at ${step.kind}: a bug.`);
+    throw new Error(
+      unbrokenLineOf(`A ${node.type} has no place for a ${child.type} at ${step.kind}: a bug.`),
+    );
   }
   return replaced;
 }
@@ -143,7 +146,7 @@ function isVariant(node: SchemaNode): node is ObjectNode | RefNode {
 /** A node with a field put at a name of its, whether it held one there or not: an object's only. */
 function withField(node: SchemaNode, name: string, field: Field): SchemaNode {
   if (node.type !== 'object') {
-    throw new Error(`A ${node.type} has no fields: a bug.`);
+    throw new Error(unbrokenLineOf(`A ${node.type} has no fields: a bug.`));
   }
   return { ...node, fields: { ...node.fields, [name]: field } };
 }
@@ -154,7 +157,7 @@ function refNamed(
   chain: { readonly name: string; readonly nullable: boolean },
 ): SchemaNode {
   if (node.type !== 'ref') {
-    throw new Error(`A ${node.type} is no \`ref\` to rename: a bug.`);
+    throw new Error(unbrokenLineOf(`A ${node.type} is no \`ref\` to rename: a bug.`));
   }
   const { nullable: _nullable, ...annotations } = node;
   const named = { ...annotations, name: chain.name } as const;
