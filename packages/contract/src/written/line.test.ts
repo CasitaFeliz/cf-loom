@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
+import { growthOf } from '../../test/growth.ts';
 import { linePool } from '../../test/line-breaks.ts';
 import { unbrokenLineOf } from '../internal/index.ts';
+
+/** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
+const linearGrowth = 30;
 
 const lineBreaks = [
   ['CR', 0x0d, '\\r'],
@@ -43,5 +47,18 @@ describe('unbrokenLineOf', () => {
     );
 
     expect(changed).toEqual([]);
+  });
+
+  test('writing a line takes time that grows as its line breaks do', () => {
+    const count = 100_000;
+    const written = (size: number) => {
+      const text = 'a\n'.repeat(size);
+      return () => unbrokenLineOf(text);
+    };
+
+    const growth = growthOf(written, { small: count / 10, large: count }, linearGrowth);
+
+    expect(growth).toBeLessThan(linearGrowth);
+    expect(unbrokenLineOf('a\n'.repeat(count))).toBe('a\\n'.repeat(count));
   });
 });
