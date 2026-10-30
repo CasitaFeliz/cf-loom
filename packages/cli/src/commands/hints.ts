@@ -1,7 +1,6 @@
 import type { Change, ChangeSite, ShapeDifference } from '@cf-loom/contract/internal';
 
 const makeOptionalHint = 'make it optional';
-const openEnumHint = 'declare it with openEnum, so readers take values added later';
 const newMessageVersionHint = 'make the change in a new Message Version';
 
 /** What to do about a Change, from a closed table of the moves that fix one; none for a Change the table has no row for. */
@@ -63,18 +62,12 @@ export function hintOf(change: Change): string | null {
 }
 
 /** How a Breaking change to a shape is avoided. */
-function shapeHintOf(
-  { site, class: changeClass, verdict }: Change,
-  shape: ShapeDifference,
-): string | null {
+function shapeHintOf({ site, class: changeClass }: Change, shape: ShapeDifference): string | null {
   if (changeClass !== 'breaking') {
     return null;
   }
   if (shape.kind === 'field-added' && shape.required) {
     return makeOptionalHint;
-  }
-  if (shape.kind === 'value-added' && shape.enum === 'closed' && verdict === 'approval-needed') {
-    return openEnumHint;
   }
   return isMessage(site) ? newMessageVersionHint : null;
 }
