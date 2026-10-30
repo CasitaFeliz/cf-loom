@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { edits } from '../../test/random-def-edits.ts';
 import { type DefPair, defPairOf, type ExportPair } from '../../test/random-def-pairs.ts';
+import { drawFrom } from '../../test/random-draft.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
@@ -40,6 +42,7 @@ type Node = {
   value?: unknown;
   rest?: unknown;
   schema?: unknown;
+  values?: unknown;
   [key: string]: unknown;
 };
 type Neutral = 'description' | 'examples' | 'origin';
@@ -862,6 +865,163 @@ describe('compatibilityReportOf, the defs a Guard’s schemas and a Retired Elem
           problems.push(
             `draw ${seed} (${pair.edit}): reported ${reported.join(' ')}, expected ${expected.join(' ')}`,
           );
+        }
+      } catch (error) {
+        problems.push(`draw ${seed}: ${String(error)}`);
+      }
+    }
+
+    expect(problems.slice(0, 3)).toEqual([]);
+    expect(problems).toHaveLength(0);
+  });
+});
+
+/** The node types that carry a constraint a rule reads. */
+type ConstrainedType = 'string' | 'number' | 'array' | 'enum';
+
+/** The attributes of a node type besides its `type`, its annotations and the node an array holds. */
+type AttributeOf<Type extends ConstrainedType> = Exclude<
+  keyof Extract<SchemaNode, { type: Type }>,
+  'type' | 'nullable' | 'items' | Neutral
+>;
+
+/**
+ * The values a draw gives each attribute a rule reads, by node type. Each node type's keys are
+ * listed through `satisfies`, so an attribute added to a node later fails to compile this table
+ * until it is listed and drawn.
+ */
+const attributeValues = {
+  string: {
+    format: ['email', 'uuid'],
+    formatOptions: [{ abort: true }, { version: 'v4' }],
+    regex: [
+      { source: '^a', flags: 'i' },
+      { source: 'b$', flags: '' },
+    ],
+    min: [1, 2],
+    max: [8, 9],
+  },
+  number: {
+    int: [true],
+    min: [0, 1],
+    max: [9, 10],
+    exclusiveMin: [0, 1],
+    exclusiveMax: [9, 10],
+    multipleOf: [2, 5],
+  },
+  array: { min: [1, 2], max: [3, 4] },
+  enum: {
+    values: [
+      ['a', 'b'],
+      [1, 2],
+      ['a', 1, true],
+    ],
+    open: [true, false],
+  },
+} satisfies {
+  readonly [Type in ConstrainedType]: {
+    readonly [Attribute in AttributeOf<Type>]: readonly unknown[];
+  };
+};
+
+function isConstrainedType(type: unknown): type is ConstrainedType {
+  return typeof type === 'string' && Object.hasOwn(attributeValues, type);
+}
+
+/** The defs with, on each string, number, array and enum, a draw of the attributes a rule reads. */
+function constrainedDefsOf(defs: Defs, seed: number): Defs {
+  const next = seededNext(seed);
+  const copy = structuredClone(defs);
+  const keys = new Set(
+    nodesIn(copy).map((node) => (node.type === 'record' ? node.key : undefined)),
+  );
+  for (const node of nodesIn(copy)) {
+    if (isConstrainedType(node.type) && !keys.has(node)) {
+      for (const [attribute, values] of Object.entries(attributeValues[node.type])) {
+        if (node.type === 'enum' || next() < 0.5) {
+          node[attribute] = drawFrom(values, next);
+        }
+      }
+    }
+  }
+  return copy;
+}
+
+describe('compatibilityReportOf, a def compared with a copy of itself, over a seeded def graph', () => {
+  const graphs = pairs.map((pair, seed) => constrainedDefsOf(pair.baseline, seed));
+
+  test('the generator gives the strings, numbers, arrays and enums in defs every attribute a rule reads, and open and mixed enums', () => {
+    const nodes = graphs.flatMap((defs) => nodesIn(defs));
+    const facts = Object.fromEntries(
+      Object.entries(attributeValues).flatMap(([type, attributes]) =>
+        Object.keys(attributes).map((attribute) => [
+          `${type} ${attribute}`,
+          nodes.filter((node) => node.type === type && node[attribute] !== undefined).length,
+        ]),
+      ),
+    );
+    const enums = nodes.filter((node) => node.type === 'enum');
+    const mixedEnums = enums.filter(
+      (node) =>
+        new Set(Array.isArray(node.values) ? node.values.map((value) => typeof value) : []).size >
+        1,
+    );
+
+    for (const [fact, count] of Object.entries(facts)) {
+      expect(count, fact).toBeGreaterThanOrEqual(100);
+    }
+    expect(enums.filter((node) => node.open === true).length).toBeGreaterThanOrEqual(100);
+    expect(mixedEnums.length).toBeGreaterThanOrEqual(100);
+  });
+
+  /** A Definitions Package that exports every def as it is written, and a Service whose Endpoints take and answer it. */
+  function snapshotsOf(defs: Defs, nodes: readonly SchemaNode[]) {
+    const exported = Object.fromEntries(nodes.map((node, index) => [`inline${index}`, node]));
+    const endpoint = (body: SchemaNode): EndpointFields & { lifecycle: 'active' } => ({
+      name: 'getOrder',
+      group: 'orders',
+      visibility: 'public',
+      description: 'One order',
+      params: [],
+      guards: [],
+      input: { params: null, query: emptyPart, headers: emptyPart, body },
+      success: { status: 200, headers: emptyPart, body },
+      rejections: [],
+      lifecycle: 'active',
+    });
+    const endpoints = Object.fromEntries(
+      nodes.map((node, index) => [`GET /inline${index}`, endpoint(node)]),
+    );
+    const definitions: DefinitionsSnapshot = {
+      ...definitionsHeading,
+      defs,
+      exports: schemaExports(exported),
+    };
+    const service = { ...serviceHeading, defs, endpoints, codes: {} };
+    return { definitions, service };
+  }
+
+  test('every def of a seeded graph, written inline as an export, an Input body and a Success body, reports no Change against a copy of itself', () => {
+    const problems: string[] = [];
+
+    for (const [seed, defs] of graphs.entries()) {
+      const nodes = Object.values(defs);
+      const baseline = snapshotsOf(defs, nodes);
+      const proposed = snapshotsOf(structuredClone(defs), structuredClone(nodes));
+      try {
+        const reports = [
+          compatibilityReportOf(
+            { ...baseline.definitions, ...publishedAt('1.0.0') },
+            proposed.definitions,
+          ),
+          compatibilityReportOf(
+            { ...baseline.service, ...publishedAt('3.4.0'), formerInputs: [] },
+            proposed.service,
+          ),
+        ];
+        const reported = reports.flatMap((report) => report.changes);
+        if (reported.length > 0) {
+          problems.push(`draw ${seed}: ${JSON.stringify(reported.slice(0, 2))}`);
         }
       } catch (error) {
         problems.push(`draw ${seed}: ${String(error)}`);
