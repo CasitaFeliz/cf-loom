@@ -117,7 +117,7 @@ const businessCodes = resolved.filter(isBusinessRejection);
 
 **C29. A read whose depth the author controls uses an explicit stack, never recursion.** A walk of zod schemas,
 nested through defs, lazies or wrappers, of Snapshot nodes through `ref`s, of failure trees or of nested JSON keeps
-the parts it has still to read in an array and loops over it, as `leadsBackWithNoNode` and `refusalsIn` do; a walk that
+the parts it has still to read in an array and loops over it, as `cycleMembersFrom` and `refusalsIn` do; a walk that
 must return to a part after reading what it holds keeps one frame per part on that array, as the walker's driver
 does. Nor does it pass a list read from a file or a request, or an author's value such as an example or an enum, as the
 arguments of one call: a call's arguments sit on the same stack. It adds a list to another item by item, never as a
