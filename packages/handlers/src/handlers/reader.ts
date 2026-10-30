@@ -1,6 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import type { Closed } from '@cf-loom/contract/internal';
-import { unbrokenLineOf } from '@cf-loom/contract/internal';
+import { type Closed, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { isPairing, type Pairing } from '../calls/index.ts';
 
 /** Each Command's Message Version and Subscription with its Reader, keyed as the Handler map keys their Handlers. */

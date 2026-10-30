@@ -37,8 +37,8 @@ export function durableConsumersOf(
     ...mappedMessageHandlerOf(handlers, consumed.at, consumed.declaration),
   }));
   for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
-    const stub = `${nameOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`;
-    console.warn(...logOf(stub));
+    const notPulled = `${nameOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`;
+    console.warn(...logOf(notPulled));
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))
