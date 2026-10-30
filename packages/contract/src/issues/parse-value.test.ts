@@ -271,20 +271,6 @@ describe('parseValue', () => {
     },
   );
 
-  test('a throw that is no stack overflow still throws', () => {
-    const broken = new Error('getter broke');
-    const value = Object.defineProperty({}, 'id', {
-      enumerable: true,
-      get(): string {
-        throw broken;
-      },
-    });
-
-    const parse = () => parseValue(z.object({ id: z.string() }), value);
-
-    expect(parse).toThrow(broken);
-  });
-
   test('a value of any depth is parsed or one malformed issue, never a throw', () => {
     const next = seededNext(219);
     const answers = new Set<string>();
@@ -346,5 +332,58 @@ describe('encodedValueOf', () => {
     const encoded = encodedValueOf(tree, nestedTo(5000, asObject));
 
     expect(encoded).toEqual({ kind: 'issues', issues: [nestedTooDeeply] });
+  });
+});
+
+/** A value whose `id` getter throws `thrown`, as code a parse calls may. */
+function valueThatThrows(thrown: unknown): unknown {
+  return Object.defineProperty({}, 'id', {
+    enumerable: true,
+    get(): string {
+      throw thrown;
+    },
+  });
+}
+
+/** SpiderMonkey's error class, which is no global outside Firefox, so an error that is named so. */
+function internalError(message: string): Error {
+  return Object.assign(new Error(message), { name: 'InternalError' });
+}
+
+function thrownBy(read: () => unknown): unknown {
+  try {
+    read();
+  } catch (thrown) {
+    return thrown;
+  }
+  return undefined;
+}
+
+describe.for([
+  ['parseValue', (value: unknown) => parseValue(z.object({ id: z.string() }), value)],
+  ['encodedValueOf', (value: unknown) => encodedValueOf(z.object({ id: z.string() }), value)],
+] as const)('%s of a value whose read throws', ([, read]) => {
+  test.for([
+    ['an InternalError, as Firefox throws past the stack', internalError('too much recursion')],
+    [
+      'a RangeError with a period, as Safari words it',
+      new RangeError('Maximum call stack size exceeded.'),
+    ],
+  ])('%s, is one malformed issue at its root', ([, overflow]) => {
+    const parsed = read(valueThatThrows(overflow));
+
+    expect(parsed).toEqual({ kind: 'issues', issues: [nestedTooDeeply] });
+  });
+
+  test.for([
+    ['a RangeError that is no overflow', new RangeError('Invalid array length')],
+    ['an InternalError that is no overflow', internalError('allocation size overflow')],
+    ['a TypeError', new TypeError('getter broke')],
+    ['a plain Error', new Error('getter broke')],
+    ['a value that is no error', { reason: 'getter broke' }],
+  ])('%s still throws', ([, thrown]) => {
+    const rethrown = thrownBy(() => read(valueThatThrows(thrown)));
+
+    expect(rethrown).toBe(thrown);
   });
 });
