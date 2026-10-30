@@ -144,3 +144,20 @@ export function failingCommand(
     { step: 'initialize', name: `fail-${failing.command}` },
   );
 }
+
+/** Holds the commands of one kind a client sends from now on until the test opens the gate, as a slow AWS would; opened when the test ends too. */
+export function holdingCommand(client: SNSClient | SQSClient, commandName: string) {
+  const gate = Promise.withResolvers<undefined>();
+  const open = () => gate.resolve(undefined);
+  onTestFinished(open);
+  (client as SNSClient).middlewareStack.add(
+    (next, context) => async (args) => {
+      if (context.commandName === commandName) {
+        await gate.promise;
+      }
+      return next(args);
+    },
+    { step: 'initialize', name: `hold-${commandName}` },
+  );
+  return { open };
+}

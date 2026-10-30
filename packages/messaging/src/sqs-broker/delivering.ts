@@ -15,8 +15,40 @@ import type { Delivery, Settlement } from '../broker/index.ts';
 import { deliveryWaitOf } from '../broker-limits/index.ts';
 import type { FoundQueue } from './queue-finding.ts';
 
-/** What one Durable consumer's loop works with: the SQS client and `closing`, which aborts when the core starts closing. */
-export type QueueRun = { readonly sqs: SQSClient; readonly closing: AbortSignal };
+/** What one Durable consumer's loop works with: the SQS client, `closing`, which aborts when the core starts closing, and where a Settlement SQS refused at closing is noted. */
+export type QueueRun = {
+  readonly sqs: SQSClient;
+  readonly closing: AbortSignal;
+  readonly refusals: Refusals;
+};
+
+/** The Durable consumers of Messages that SQS refused to settle once closing started, which `close` rejects for. */
+export type Refusals = {
+  readonly refused: (durable: string, error: unknown) => void;
+  /** The error `close` rejects with, or `undefined` when SQS refused nothing. */
+  readonly error: () => Error | undefined;
+};
+
+/** A record of the Settlements SQS refused once closing started: each Durable consumer once, the first error of all as the cause. */
+export function refusalsOf(): Refusals {
+  const causes = new Map<string, unknown>();
+  return {
+    refused: (durable, error) => {
+      if (!causes.has(durable)) {
+        causes.set(durable, error);
+      }
+    },
+    error: () => {
+      const [cause] = causes.values();
+      const durables = [...causes.keys()].join(', ');
+      return causes.size === 0
+        ? undefined
+        : new Error(`SQS refused to settle Messages of the Durable consumers ${durables}`, {
+            cause,
+          });
+    },
+  };
+}
 
 /** A Message received from a Durable consumer's queue. */
 export type ReceivedMessage = { readonly queue: FoundQueue; readonly message: Message };
@@ -127,7 +159,12 @@ export async function deliver(
   await settle(run, received, settlement);
 }
 
-/** Applies the Settlement with SQS's calls; one SQS refuses is told to nobody, as a JetStream acknowledgement is never heard of: the Message comes back after its wait. */
+/** Hands a Message back to the queue unread, as one received once closing started is. */
+export function handBack(run: QueueRun, received: ReceivedMessage): Promise<void> {
+  return settle(run, received, 'handed-back');
+}
+
+/** Applies the Settlement with SQS's calls; one SQS refuses is told to nobody before closing started, as a JetStream acknowledgement is never heard of, and the Message comes back after its wait, and noted for `close` after. */
 async function settle(
   run: QueueRun,
   received: ReceivedMessage,
@@ -135,8 +172,10 @@ async function settle(
 ): Promise<void> {
   try {
     await settlementApplied(run, received, settlement);
-  } catch {
-    return;
+  } catch (error) {
+    if (run.closing.aborted) {
+      run.refusals.refused(received.queue.durable, error);
+    }
   }
 }
 

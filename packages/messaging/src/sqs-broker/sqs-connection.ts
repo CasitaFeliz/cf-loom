@@ -4,6 +4,7 @@ import type { SQSClient } from '@aws-sdk/client-sqs';
 import { prefixedSubjectOf, snsAttributesOf } from '@cf-loom/contract/internal';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
 import type { Place } from './connecting.ts';
+import { refusalsOf } from './delivering.ts';
 import { queuesFoundOf } from './queue-finding.ts';
 import { receiveFrom } from './receiving.ts';
 
@@ -18,6 +19,7 @@ export type Working = {
 /** The connection `messaging()` publishes, consumes and closes through, over the clients the Service gave. */
 export function sqsConnectionOf(working: Working, topicArn: string): BrokerConnection {
   const running: Promise<void>[] = [];
+  const refusals = refusalsOf();
   return {
     publish: async (message) => {
       await publishOn(working, topicArn, message);
@@ -29,11 +31,15 @@ export function sqsConnectionOf(working: Working, topicArn: string): BrokerConne
         throw new Error(found.lines.join('\n'));
       }
       for (const queue of found.queues) {
-        running.push(receiveFrom(queue, { sqs: working.sqs, closing, troubled }));
+        running.push(receiveFrom(queue, { sqs: working.sqs, closing, troubled, refusals }));
       }
     },
     close: async () => {
       await Promise.all(running);
+      const refusal = refusals.error();
+      if (refusal !== undefined) {
+        throw refusal;
+      }
     },
   };
 }
