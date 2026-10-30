@@ -25,7 +25,7 @@ export function leadsBackWithNoNode(
   return cycleMembersFrom([name], defOf).has(name);
 }
 
-/** What the search has read: the order it met each def in, and the lowest order each can step back to. */
+/** What the search has read: the order it met each def in, and the lowest each steps back to. */
 type Search = {
   readonly defOf: (name: string) => SchemaNode | undefined;
   readonly order: Map<string, number>;
@@ -78,7 +78,7 @@ function readFrom(start: string, search: Search): void {
   }
 }
 
-/** Meets a def for the first time: its place in the order, and the defs it steps to that have a def. */
+/** Meets a def for the first time: its place in the order, and the defs it steps to that exist. */
 function enter(name: string, search: Search): Frame {
   const order = search.order.size;
   search.order.set(name, order);
@@ -89,7 +89,7 @@ function enter(name: string, search: Search): Frame {
   return { name, targets: steps.filter((step) => search.defOf(step) !== undefined), next: 0 };
 }
 
-/** Reads one step of a def: a def met for the first time is entered, one in an open group lowers the def's reach. */
+/** Reads one step of a def: a def met first is entered, one in an open group is reached. */
 function stepTo(frame: Frame, target: string, search: Search): Frame | undefined {
   if (target === frame.name) {
     search.onCycle.add(target);
@@ -111,7 +111,7 @@ function lowerTo(name: string, reach: number | undefined, search: Search): void 
   }
 }
 
-/** A def read to its last step passes its reach to the def that stepped to it, and closes its group when it is the group's first. */
+/** A def read to its last step passes its reach on to its parent and closes the group it opened. */
 function close(frame: Frame, parent: Frame | undefined, search: Search): void {
   if (parent !== undefined) {
     lowerTo(parent.name, search.lowest.get(frame.name), search);
@@ -150,7 +150,7 @@ function nodelessDefsFrom(def: SchemaNode): readonly string[] {
   return [...names];
 }
 
-/** The nodes a path with no node between steps to from a node that is no `ref`: options or items. */
+/** The nodes a path with no node between steps to from a node that is no `ref`. */
 function nodelessStepsFrom(node: SchemaNode): readonly SchemaNode[] {
   switch (node.type) {
     case 'union':

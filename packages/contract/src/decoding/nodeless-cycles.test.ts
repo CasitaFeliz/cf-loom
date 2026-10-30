@@ -194,6 +194,22 @@ function namesItself(name: string, def: SchemaNode | undefined): boolean {
   return holdsAnother && nodesIn(def).some((node) => node.type === 'ref' && node.name === name);
 }
 
+const nodeTypes = {
+  string: true,
+  number: true,
+  boolean: true,
+  enum: true,
+  object: true,
+  record: true,
+  array: true,
+  tuple: true,
+  union: true,
+  tagged: true,
+  allOf: true,
+  json: true,
+  ref: true,
+} as const satisfies Record<SchemaNode['type'], true>;
+
 const reason = 'leads back to itself through refs, unions and allOfs alone';
 const seeds = Array.from({ length: 3_000 }, (_, index) => index + 1);
 const graphs = seeds.map((seed) => ({ seed, defs: nodelessDefsOf(seed) }));
@@ -211,21 +227,7 @@ describe('decodeSnapshot, the defs that lead back to themselves with no node bet
     }
 
     const rare = [...counts].filter(([, count]) => count < 100);
-    expect([...typesDrawn].sort()).toEqual([
-      'allOf',
-      'array',
-      'boolean',
-      'enum',
-      'json',
-      'number',
-      'object',
-      'record',
-      'ref',
-      'string',
-      'tagged',
-      'tuple',
-      'union',
-    ]);
+    expect([...typesDrawn].sort()).toEqual(Object.keys(nodeTypes).sort());
     expect(rare).toEqual([]);
   });
 
