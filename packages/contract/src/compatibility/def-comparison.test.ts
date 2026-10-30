@@ -4,6 +4,8 @@ import { type DefPair, defPairOf, type ExportPair } from '../../test/random-def-
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
+  type ChangeSite,
+  type CommandSnapshot,
   type ComparedReport,
   canonicalTextOf,
   compatibilityReportOf,
@@ -12,7 +14,9 @@ import {
   type Difference,
   decodeSnapshot,
   type EndpointFields,
+  type EndpointSnapshot,
   type Field,
+  type GuardSnapshot,
   type ObjectNode,
   type PublishedCode,
   type PublishedDefinitionsSnapshot,
@@ -30,6 +34,12 @@ type Node = {
   nullable?: unknown;
   options?: unknown;
   items?: unknown;
+  fields?: unknown;
+  variants?: unknown;
+  key?: unknown;
+  value?: unknown;
+  rest?: unknown;
+  schema?: unknown;
   [key: string]: unknown;
 };
 type Neutral = 'description' | 'examples' | 'origin';
@@ -78,6 +88,22 @@ const definitionsHeading = {
   },
 } as const;
 
+const serviceHeading = {
+  format: 1,
+  kind: 'service',
+  name: 'orders-service',
+  standardRejections,
+  groups: {},
+  guards: {},
+  events: {},
+  commands: {},
+  subscriptions: {},
+  dependencies: {},
+} as const;
+
+/** The seeded pairs of def graphs every test over a seeded graph draws from. */
+const pairs = Array.from({ length: 3_000 }, (_, seed) => defPairOf(seed));
+
 /** The Baseline and the proposed Snapshot of a Definitions Package that exports each def in its wrapper. */
 function snapshotsOf(pair: DefPair) {
   const held = Object.entries(pair.exports);
@@ -107,7 +133,7 @@ function isNode(value: Json): value is Node {
   );
 }
 
-function isRecordValue(value: Json): value is Record<string, unknown> {
+function isRecordValue(value: Json): value is Node {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -339,7 +365,6 @@ function sortedTexts(changes: readonly Expected[]): string[] {
 }
 
 describe('compatibilityReportOf, a plain union, a tuple or an allOf over a seeded def graph', () => {
-  const pairs = Array.from({ length: 3_000 }, (_, seed) => defPairOf(seed));
   const exportsOf = (pair: DefPair) => Object.values(pair.exports);
 
   /** The draws that meet a condition, out of every export drawn. */
@@ -481,19 +506,6 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
     };
   }
 
-  const heading = {
-    format: 1,
-    kind: 'service',
-    name: 'orders-service',
-    standardRejections,
-    groups: {},
-    guards: {},
-    events: {},
-    commands: {},
-    subscriptions: {},
-    dependencies: {},
-  } as const;
-
   /**
    * A Service whose Baseline holds a kept code and a removed one with defs of its own, the
    * removed one declared again, and the codes' changes the Check finds.
@@ -505,7 +517,7 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
   }) {
     const removed: RemovedCode = { ...aCode(), removedIn: '3.2.0', defs: { tree: defs.goneWas } };
     const baseline: PublishedServiceSnapshot = {
-      ...heading,
+      ...serviceHeading,
       ...publishedAt('3.4.0'),
       formerInputs: [],
       defs: { tree: defs.baseline },
@@ -513,7 +525,7 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
       codes: { [gone]: removed, [taken]: aCode() },
     };
     const proposed: ServiceSnapshot = {
-      ...heading,
+      ...serviceHeading,
       defs: { tree: defs.proposed },
       endpoints: { [identity]: anEndpoint([gone, taken]) },
       codes: { [gone]: aCode(), [taken]: aCode() },
@@ -639,5 +651,224 @@ describe('compatibilityReportOf, a plain union whose reached def and option both
     const changes = compatibilityReportOf(baseline, proposed).changes;
 
     expect(changes).toEqual([neutralAt('description'), neutralAt('examples')]);
+  });
+});
+
+/** The keys of a Guard that hold a schema: its Qualifier and Context, and its demands, which hold two. */
+type SchemaKeyOfGuard = {
+  [Key in keyof GuardSnapshot]: GuardSnapshot[Key] extends
+    | SchemaNode
+    | null
+    | { readonly headers: SchemaNode; readonly query: SchemaNode }
+    ? Key
+    : never;
+}[keyof GuardSnapshot];
+
+/**
+ * How a Guard names a def in each schema it holds. Its demands are text parts, which hold no
+ * recursive schema in any Snapshot, so they name none.
+ */
+const guardsNaming = {
+  qualifier: (ref) => ({ qualifier: ref }),
+  context: (ref) => ({
+    context: { type: 'object', fields: { at: { required: true, schema: ref } } },
+  }),
+  demands: () => ({}),
+} satisfies Record<SchemaKeyOfGuard, (ref: SchemaNode) => Partial<GuardSnapshot>>;
+
+function aGuardNaming(name: string): GuardSnapshot {
+  const ref: SchemaNode = { type: 'ref', name };
+  let guard: GuardSnapshot = {
+    origin: 'local',
+    description: 'Authenticates the Caller',
+    guards: [],
+    qualifier: null,
+    demands: { headers: emptyPart, query: emptyPart },
+    context: null,
+    rejections: [],
+  };
+  for (const naming of Object.values(guardsNaming)) {
+    guard = { ...guard, ...naming(ref) };
+  }
+  return guard;
+}
+
+/** A value of a Service Snapshot that a Neutral rule reads with the defs it reaches, on both sides. */
+type Site = {
+  /** What the Check tells when the site differs. */
+  readonly change: string;
+  readonly baseline: Json;
+  readonly proposed: Json;
+};
+
+/** What moves with an Element's lifecycle, which a Retired Element's declaration is compared without. */
+const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'];
+
+function declaredWithoutHistory(declaration: object): Json {
+  const kept = Object.entries(declaration).filter(([key]) => !historyKeys.includes(key));
+  return Object.fromEntries(kept);
+}
+
+/** A Change as the sites below tell it: what differs, and where, by name or identity. */
+function changeTextOf(kind: string, site: ChangeSite): string {
+  if ('identity' in site) {
+    return `${kind} at ${site.kind} ${site.identity}`;
+  }
+  return 'name' in site ? `${kind} at ${site.kind} ${site.name}` : `${kind} at ${site.kind}`;
+}
+
+/**
+ * A Service Snapshot on each side of a seeded graph: for each def, a Guard whose Qualifier names
+ * it and whose Context holds it in a field, and a Command and an Endpoint Retired on both sides
+ * whose bodies name it, the Endpoint in its Input and its Success; and each export of the draw as
+ * the body of one more Retired Command, so every def of both sides is reached.
+ */
+function servicesOf(pair: DefPair) {
+  const names = Object.keys(pair.baseline);
+  const named = (name: string): SchemaNode => ({
+    type: 'object',
+    fields: { at: { required: true, schema: { type: 'ref', name } } },
+  });
+  const commandOf = (body: SchemaNode, retiredIn: object): CommandSnapshot => ({
+    group: 'orders',
+    description: 'Charge a card',
+    body,
+    lifecycle: 'retired',
+    ...retiredIn,
+  });
+  const endpointOf = (body: SchemaNode, retiredIn: object): EndpointSnapshot => ({
+    name: 'getOrder',
+    group: 'orders',
+    visibility: 'public',
+    description: 'One order',
+    params: [],
+    guards: [],
+    input: { params: null, query: emptyPart, headers: emptyPart, body },
+    success: { status: 200, headers: emptyPart, body },
+    rejections: [],
+    lifecycle: 'retired',
+    ...retiredIn,
+  });
+  const sideOf = (side: 'baseline' | 'proposed', retiredIn: object) => {
+    const guards = names.map((name, index) => [`g${index}`, aGuardNaming(name)]);
+    const retiredCommands = names.map((name, index) => [
+      `Retired${index}@1`,
+      commandOf(named(name), retiredIn),
+    ]);
+    const exportCommands = Object.entries(pair.exports).map(([name, held]) => [
+      `Export${name}@1`,
+      commandOf(held[side], retiredIn),
+    ]);
+    const endpoints = names.map((name, index) => [
+      `GET /retired${index}`,
+      endpointOf(named(name), retiredIn),
+    ]);
+    return {
+      ...serviceHeading,
+      defs: pair[side],
+      guards: Object.fromEntries(guards),
+      commands: Object.fromEntries([...retiredCommands, ...exportCommands]),
+      endpoints: Object.fromEntries(endpoints),
+      codes: {},
+    };
+  };
+  const baseline: PublishedServiceSnapshot = {
+    ...sideOf('baseline', { retiredIn: '3.0.0' }),
+    ...publishedAt('3.4.0'),
+    formerInputs: [],
+  };
+  const proposed: ServiceSnapshot = sideOf('proposed', {});
+  return { baseline, proposed, sites: sitesOf(baseline, proposed) };
+}
+
+function sitesOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot): Site[] {
+  const guards = Object.entries(baseline.guards).flatMap(([name, guard]): Site[] => {
+    const after = proposed.guards[name] as GuardSnapshot;
+    const change = (kind: string) => `${kind} at guard ${name}`;
+    return [
+      { change: change('qualifier-changed'), baseline: guard.qualifier, proposed: after.qualifier },
+      { change: change('context-changed'), baseline: guard.context, proposed: after.context },
+    ];
+  });
+  const retired = (kind: 'command' | 'endpoint', held: object, after: object): Site[] =>
+    Object.entries(held).map(([identity, declaration]) => ({
+      change: `retired-changed at ${kind} ${identity}`,
+      baseline: declaredWithoutHistory(declaration),
+      proposed: declaredWithoutHistory(Reflect.get(after, identity)),
+    }));
+  return [
+    ...guards,
+    ...retired('command', baseline.commands, proposed.commands),
+    ...retired('endpoint', baseline.endpoints, proposed.endpoints),
+  ];
+}
+
+/**
+ * A site's value as text with, in the order a walk of its `ref`s meets them, every def it reaches
+ * and that def's text: it differs exactly when the value or a def it reaches does.
+ */
+function keyOf(value: Json, defs: Defs): string {
+  const reached = closureOf(refsIn(value), defs);
+  return textOf([value, reached.map((name) => [name, defs[name]])], false);
+}
+
+describe('compatibilityReportOf, the defs a Guard’s schemas and a Retired Element reach, over a seeded def graph', () => {
+  const services = pairs.map((pair) => ({ pair, ...servicesOf(pair) }));
+  const sites = services.flatMap(({ pair, sites: held }) => held.map((site) => ({ pair, site })));
+  const differs = ({ pair, site }: (typeof sites)[number]) =>
+    keyOf(site.baseline, pair.baseline) !== keyOf(site.proposed, pair.proposed);
+  const hasSameText = ({ site }: (typeof sites)[number]) =>
+    textOf(site.baseline, false) === textOf(site.proposed, false);
+
+  /** Whether the defs a site reaches are the same names and the same shapes on both sides. */
+  function reachesSameShapes({ pair, site }: (typeof sites)[number]): boolean {
+    const before = closureOf(refsIn(site.baseline), pair.baseline);
+    const after = closureOf(refsIn(site.proposed), pair.proposed);
+    const hasSameShape = (name: string) =>
+      textOf(pair.baseline[name], true) === textOf(pair.proposed[name], true);
+    return (
+      before.length === after.length &&
+      before.every((name) => after.includes(name) && hasSameShape(name))
+    );
+  }
+
+  test('the generator draws sites that differ only in a def they reach, only in an annotation within one, through a cycle, and not at all', () => {
+    const facts = {
+      'differ only in a def they reach': sites.filter((held) => hasSameText(held) && differs(held)),
+      'differ only in a Neutral annotation within a def they reach': sites.filter(
+        (held) => hasSameText(held) && differs(held) && reachesSameShapes(held),
+      ),
+      'reach a cycle': sites.filter(({ pair, site }) =>
+        holdsCycle(pair, closureOf(refsIn(site.baseline), pair.baseline)),
+      ),
+      'do not differ': sites.filter((held) => !differs(held)),
+    };
+
+    for (const [fact, held] of Object.entries(facts)) {
+      expect(held.length, fact).toBeGreaterThanOrEqual(100);
+    }
+  });
+
+  test('a Guard’s Qualifier and Context and a Retired Element’s declaration give their Neutral Change exactly when they or a def they reach differ in their text', () => {
+    const problems: string[] = [];
+
+    for (const [seed, { pair, baseline, proposed, sites: held }] of services.entries()) {
+      try {
+        const reported = compatibilityReportOf(baseline, proposed).changes.map(
+          ({ site, difference }) => changeTextOf(difference.kind, site),
+        );
+        const expected = held.filter((site) => differs({ pair, site })).map(({ change }) => change);
+        if (reported.sort().join() !== expected.sort().join()) {
+          problems.push(
+            `draw ${seed} (${pair.edit}): reported ${reported.join(' ')}, expected ${expected.join(' ')}`,
+          );
+        }
+      } catch (error) {
+        problems.push(`draw ${seed}: ${String(error)}`);
+      }
+    }
+
+    expect(problems.slice(0, 3)).toEqual([]);
+    expect(problems).toHaveLength(0);
   });
 });
