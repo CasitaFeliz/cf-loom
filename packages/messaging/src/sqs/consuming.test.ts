@@ -705,6 +705,30 @@ describe('consuming over sqs()', () => {
     expect(written).not.toHaveBeenCalled();
   });
 
+  test('a queue deleted while consuming reaches onBrokerTrouble once as pull-failed with SQS’s error, and the queue created again reaches it as recovered and its Messages reach their Handler', async () => {
+    const troubles: BrokerTrouble[] = [];
+    const { publisher, consume, connecting, orders } = await aMessaging({
+      onBrokerTrouble: (trouble) => void troubles.push(trouble),
+    });
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+
+    await dropQueue(connecting.sqs, orders.notifyQueue);
+    await until(() => expect(troubles.map(({ kind }) => kind)).toEqual(['pull-failed']));
+    await arrangeOrders(connecting, { prefix: 'staging' });
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() =>
+      expect(troubles.map(({ kind }) => kind)).toEqual(['pull-failed', 'recovered']),
+    );
+    await until(() => expect(received).toHaveLength(1));
+    expect(troubles[0]).toMatchObject({
+      kind: 'pull-failed',
+      durable: 'orders-service_notify-on-created',
+    });
+    expect(troubles[0]).toMatchObject({ cause: { name: 'QueueDoesNotExist' } });
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
