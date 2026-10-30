@@ -85,7 +85,8 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [];
   }
   if (!successStatuses.includes(success.status)) {
-    const message = `A Success status is ${joinedOf(successStatuses.map(String), 'or')}: ${writtenTextOf(success.status)}`;
+    const statuses = joinedOf(successStatuses.map(String), 'or');
+    const message = `A Success status is ${statuses}: ${writtenTextOf(success.status)}`;
     return [failure(inFields(at, 'success', 'status'), 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');

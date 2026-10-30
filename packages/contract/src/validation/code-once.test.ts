@@ -360,7 +360,6 @@ describe('validateRoot and snapshotOf: a valid Root’s Snapshot says what its E
       const validated = summarized(validateRoot(root, aRootPackage(root, { packages })));
 
       if (named.length > 1) {
-        // ' and ' alone is the sentence only for a pair: the test of three sources pins the list.
         const line = named.map(({ source }) => sourceNames[source]).join(' and ');
         expect(validated).toEqual({ kind: 'invalid', failures: [codeOnce(code, line)] });
         return;
