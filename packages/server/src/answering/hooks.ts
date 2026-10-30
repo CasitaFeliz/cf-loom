@@ -1,5 +1,5 @@
 import type { Endpoint, Guard, Method } from '@cf-loom/contract';
-import { isMethod, issueLineOf, logOf } from '@cf-loom/contract/internal';
+import { isMethod, issueLinesOf, logOf } from '@cf-loom/contract/internal';
 import type { Issue } from '@cf-loom/handlers';
 import {
   failureCauseOf,
@@ -113,7 +113,7 @@ export async function recordAnswered(
   }
 }
 
-/** A Service's Fault on the console: each Issue's part, path, code and message, or the Fault and its cause. */
+/** A Service's Fault on the console: its Issues listed and counted, or the Fault and its cause. */
 function logServedFault(servedFault: ServedFault): void {
   const where = sourceOf(servedFault);
   switch (servedFault.kind) {
@@ -123,8 +123,8 @@ function logServedFault(servedFault: ServedFault): void {
       return;
     case 'invalid-outcome':
     case 'runtime-bug':
-      for (const issue of servedFault.issues) {
-        console.error(...logOf(issueLineOf(where, issue)));
+      for (const line of issueLinesOf(where, servedFault.issues)) {
+        console.error(...logOf(line));
       }
   }
 }
