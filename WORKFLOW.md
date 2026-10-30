@@ -234,7 +234,7 @@ A PR is done when all of these hold; the main session checks them and lists them
 ## 5. Merge
 
 A done PR is squash-merged without asking once CI passed on its head, with
-[`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for the `check` job and for GitHub to judge the
+[`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for every job of CI and for GitHub to judge the
 PR mergeable, refuses while the last CI run on `main` failed, except for the PR that fixes it (run with `--fixes-main`),
 and merges only the head it was given; the subject is the PR title with `(#<PR>)`, the branch is deleted and the issue
 closes. A timeout is reported apart from a failure and the script is run again. A PR whose title changed after its
@@ -290,7 +290,7 @@ round, at most two rounds. The reviewer reads once the change passes locally.
 - Never use `git stash`: every worktree shares one stash list. Commit work in progress to your own branch instead.
 - Stop only the processes you started, by their PID; never by a pattern (`pkill`, `killall`).
 - Never load the machine on purpose to reproduce a timing failure; report it as a test that bounds time.
-- Run commands with the Node and npm [CLAUDE.md](CLAUDE.md#repository) names first on `PATH`, as CI does.
+- Run commands with the Node [CLAUDE.md](CLAUDE.md#repository) names first on `PATH`, as CI does.
 - Commit, push or open a PR only when your role says so, with no attribution lines.
 
 [`.claude/settings.json`](.claude/settings.json) denies reading `~/.npmrc` through Claude Code's file tools and running

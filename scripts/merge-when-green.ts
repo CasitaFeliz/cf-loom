@@ -1,6 +1,6 @@
 /**
  * Merges a done PR once its CI passed on its head, as WORKFLOW.md's Merge says:
- * `node scripts/merge-when-green.ts <pr> <head sha> [--fixes-main]`. It waits for the `check` job on the head to finish
+ * `node scripts/merge-when-green.ts <pr> <head sha> [--fixes-main]`. It waits for every job of CI on the head to finish
  * and for GitHub to judge the PR mergeable, refuses while the last CI run on `main` failed (unless the PR is the one
  * that fixes it, `--fixes-main`), then squash-merges with the PR title and `(#<pr>)` as the subject, only if the head is
  * still `<head sha>`; GitHub deletes the merged branch. A PR already merged counts as merged, so a run that exits 2 is
@@ -8,7 +8,7 @@
  */
 import { execFileSync } from 'node:child_process';
 
-/** What the script sees of the PR, its head's `check` job and `main`'s last CI run. */
+/** What the script sees of the PR, the jobs of CI on its head and `main`'s last CI run. */
 export type MergeState = {
   readonly check: 'pending' | 'success' | 'failure';
   readonly mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
@@ -20,6 +20,27 @@ export type MergeStep =
   | { readonly kind: 'wait' }
   | { readonly kind: 'merge' }
   | { readonly kind: 'refuse'; readonly reason: string };
+
+/** A check run of GitHub Actions as GitHub reports it: its name, its status, and its conclusion once it completed. */
+export type CheckRun = {
+  readonly name: string;
+  readonly status: string;
+  readonly conclusion: string | null;
+};
+
+/**
+ * What the check runs whose name starts with `prefix` say of CI: a run that completed with
+ * anything but success fails it, even while others still run; no run yet, or one not completed,
+ * leaves it pending; and it passed when every run completed with success.
+ */
+export function ciOf(runs: readonly CheckRun[], prefix = ''): MergeState['check'] {
+  const counted = runs.filter(({ name }) => name.startsWith(prefix));
+  if (counted.some((run) => run.status === 'completed' && run.conclusion !== 'success')) {
+    return 'failure';
+  }
+  const isSettling = counted.length === 0 || counted.some((run) => run.status !== 'completed');
+  return isSettling ? 'pending' : 'success';
+}
 
 /** The step for a state: a failure refuses at once, anything still settling waits, and only all green merges. */
 export function stepOf(state: MergeState): MergeStep {
@@ -49,27 +70,24 @@ function gh(args: readonly string[]): string {
   return execFileSync('gh', [...args], { encoding: 'utf8' }).trim();
 }
 
-/** The check run a PR's CI reports, and the one `main`'s, which runs it through the release workflow. */
-const prCheckName = 'check';
-const mainCheckName = 'checks / check';
+/** The prefix of the check runs of CI on `main`, which the release workflow calls `checks`; its other jobs are not CI. */
+const mainRunPrefix = 'checks / ';
 
-function checkOf(sha: string, name: string): MergeState['check'] {
-  const runs = gh([
+function checkRunsAt(sha: string): readonly CheckRun[] {
+  const printed = gh([
     'api',
-    `repos/${repository}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}`,
+    `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
+    '--paginate',
     '-q',
-    '[.check_runs[] | .status + ":" + (.conclusion // "")] | join(",")',
+    '.check_runs[] | select(.app.slug == "github-actions") | {name, status, conclusion} | @json',
   ]);
-  if (runs === '' || runs.includes('queued') || runs.includes('in_progress')) {
-    return 'pending';
-  }
-  return runs.split(',').every((run) => run === 'completed:success') ? 'success' : 'failure';
+  return printed === '' ? [] : printed.split('\n').map((line) => JSON.parse(line));
 }
 
 function stateOf(pr: string, sha: string, fixesMain: boolean): MergeState {
   const mainSha = gh(['api', `repos/${repository}/commits/main`, '-q', '.sha']);
   return {
-    check: checkOf(sha, prCheckName),
+    check: ciOf(checkRunsAt(sha)),
     mergeable: gh([
       'pr',
       'view',
@@ -81,7 +99,7 @@ function stateOf(pr: string, sha: string, fixesMain: boolean): MergeState {
       '-q',
       '.mergeable',
     ]) as MergeState['mergeable'],
-    mainCheck: fixesMain ? 'success' : checkOf(mainSha, mainCheckName),
+    mainCheck: fixesMain ? 'success' : ciOf(checkRunsAt(mainSha), mainRunPrefix),
   };
 }
 

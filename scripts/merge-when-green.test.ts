@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type MergeState, stepOf } from './merge-when-green.ts';
+import { type CheckRun, ciOf, type MergeState, stepOf } from './merge-when-green.ts';
 
 const green: MergeState = { check: 'success', mergeable: 'MERGEABLE', mainCheck: 'success' };
 
@@ -37,3 +37,57 @@ describe('when a done PR merges', () => {
     });
   });
 });
+
+const passed = (name: string): CheckRun => ({ name, status: 'completed', conclusion: 'success' });
+const running = (name: string, status = 'in_progress'): CheckRun => ({
+  name,
+  status,
+  conclusion: null,
+});
+
+describe('what the check runs say of CI', () => {
+  it('CI passed when every run on the head completed with success', () => {
+    const runs = [passed('check'), passed('cli-npm (npm 11.13.0)'), passed('cli-npm (npm 12.2.1)')];
+
+    expect(ciOf(runs)).toBe('success');
+  });
+
+  it.for([
+    ['no run exists yet', []],
+    ['a run is queued', [passed('check'), running('cli-npm (npm 12.2.1)', 'queued')]],
+    ['a run is in progress', [passed('check'), running('cli-npm (npm 12.2.1)')]],
+  ] as const)('CI is pending while %s', ([, runs]) => {
+    expect(ciOf(runs)).toBe('pending');
+  });
+
+  it.for([
+    ['a leg of a matrix failed', [passed('check'), conclusionOf('cli-npm (npm 12.2.1)', 'failure')]],
+    ['a run was cancelled', [passed('check'), conclusionOf('cli-npm (npm 11.13.0)', 'cancelled')]],
+    ['a run was skipped', [passed('check'), conclusionOf('cli-npm (npm 11.13.0)', 'skipped')]],
+    [
+      'one run failed while another still runs',
+      [running('check'), conclusionOf('cli-npm (npm 12.2.1)', 'failure')],
+    ],
+  ] as const)('CI failed when %s', ([, runs]) => {
+    expect(ciOf(runs)).toBe('failure');
+  });
+
+  it('on main only the runs named checks / … count', () => {
+    const runs = [
+      passed('checks / check'),
+      passed('checks / cli-npm (npm 12.2.1)'),
+      conclusionOf('publish', 'skipped'),
+      running('version'),
+    ];
+
+    expect(ciOf(runs, 'checks / ')).toBe('success');
+    expect(ciOf([conclusionOf('checks / cli-npm (npm 12.2.1)', 'failure'), ...runs], 'checks / ')).toBe(
+      'failure',
+    );
+    expect(ciOf([conclusionOf('publish', 'skipped')], 'checks / ')).toBe('pending');
+  });
+});
+
+function conclusionOf(name: string, conclusion: string): CheckRun {
+  return { name, status: 'completed', conclusion };
+}
