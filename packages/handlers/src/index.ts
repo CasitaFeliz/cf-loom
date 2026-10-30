@@ -24,7 +24,6 @@ export type {
 export { handle, readersOf } from './handlers/index.ts';
 export type {
   Admission,
-  CheckedAdmission,
   CheckedOutcome,
   Committed,
   Fault,
