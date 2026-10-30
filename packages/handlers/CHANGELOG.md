@@ -1,5 +1,19 @@
 # @cf-loom/handlers
 
+## 1.0.0-rc.2
+
+### Major Changes
+
+- 39ac3c9: `CheckedAdmission` is removed: a GuardHandler's Direct call returns `Admission<typeof apiKey>`, the type its implementation builds, which `CheckedAdmission` always equalled. Code that names `CheckedAdmission` names `Admission` instead; nothing changes at run time.
+
+### Patch Changes
+
+- Updated dependencies [dbab5a7]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes
