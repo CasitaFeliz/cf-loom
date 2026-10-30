@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -11,30 +10,34 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, sep } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
-import { cfLoomProblemsOf, contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
+import { cfLoomProblemsOf, runCfLoom } from './readme-cf-loom.ts';
+import { type Compiled, compile, describe, freeNamesOf } from './readme-compile.ts';
 import {
   completed,
   declaredTwice,
+  importsOf,
   type Project,
-  packagesAt,
   projectOf,
   providersOf,
   type Scope,
 } from './readme-project.ts';
 
-type Compiled = { readonly failed: boolean; readonly lines: string[] };
-
 const root = join(import.meta.dirname, '..');
 const packagesWithReadmes = ['contract', 'handlers', 'messaging', 'server', 'client', 'testing'];
 const scopeAt = 'scripts/readme-service';
-const diagnostic = /^(.+?)\((\d+),\d+\): (error TS\d+: .*)$/;
+const typeCheckSkipped =
+  'tsc: not run: cf-loom stopped a Service, so the files it writes are missing';
+
+/** The place a report names for the file `path` of the Service, at `row`. */
+type Locate = (path: string, row: number) => string;
 
 /**
  * Why the TypeScript blocks of the READMEs do not compile, as `README:line: error TS…`, empty when
  * they do. A block leaves out the imports of zod, `@cf-loom/contract` and the files of its own
- * package; the check adds them, then type-checks each block as the file its path comment names.
+ * package; the check adds an import of each name `tsc` cannot find that one of them provides,
+ * then type-checks each block as the file its path comment names.
  * The project is written to a temporary folder, so the READMEs are the caller's own.
  */
 export function snippetProblems(readmes: readonly Readme[], scope: Scope): string[] {
@@ -45,7 +48,8 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
       return problems;
     }
     writeProject(directory, project, root);
-    return [...problems, ...problemsOf(compile(directory), project)];
+    const locate = locatorOf(project, '');
+    return [...problems, ...problemsOf(compile(directory), locate)];
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -54,9 +58,9 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
 /**
  * Writes the Service the READMEs describe to `directory`: the blocks of the READMEs of
  * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows, then
- * what `cf-loom generate` and `cf-loom package` write for its other Services, so it needs the CLI
- * built; what cf-loom refuses is kept for `readmeServiceProblems`. It replaces what the directory
- * held.
+ * what `cf-loom generate` and `cf-loom package` write for each Service the scope gives a
+ * package.json, so it needs the CLI built; what stops a Service is kept for
+ * `readmeServiceProblems`. It replaces what the directory held.
  */
 export function writeReadmeService(directory: string, repository: string = root): void {
   const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
@@ -66,9 +70,10 @@ export function writeReadmeService(directory: string, repository: string = root)
 }
 
 /**
- * Why the Service written to `directory` does not compile, as `snippetProblems` reports it, and
- * what cf-loom refused in its other Services, each at its README line. It compiles `directory`
- * where it is and never writes to it.
+ * What stopped cf-loom in the Services of the Service written to `directory`, each at its README
+ * line, else why it does not compile, as `snippetProblems` reports it: `tsc` checks the blocks
+ * against the files cf-loom writes, so it does not run while a Service is stopped. It compiles
+ * `directory` where it is and never writes to it.
  */
 export function readmeServiceProblems(directory: string, repository: string = root): string[] {
   if (!existsSync(join(directory, 'tsconfig.json'))) {
@@ -77,10 +82,24 @@ export function readmeServiceProblems(directory: string, repository: string = ro
     );
   }
   const { problems, project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
-  const refused = cfLoomProblemsOf(directory).map(({ path, row, message }) =>
-    path === undefined ? `cf-loom: ${message}` : `${locationOf(path, row, project)}: ${message}`,
+  const locate = locatorOf(project, writtenAtOf(directory, repository));
+  const refused = refusalsAt(directory, locate);
+  if (refused.length > 0) {
+    return [...problems, ...refused, typeCheckSkipped];
+  }
+  return [...problems, ...problemsOf(compile(directory), locate)];
+}
+
+/** What stopped cf-loom in the Services of the Service written to `directory`, each at its README line. */
+export function readmeServiceRefusals(directory: string, repository: string = root): string[] {
+  const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
+  return refusalsAt(directory, locatorOf(project, writtenAtOf(directory, repository)));
+}
+
+function refusalsAt(directory: string, locate: Locate): string[] {
+  return cfLoomProblemsOf(directory).map(({ path, row, message }) =>
+    path === undefined ? message : `${locate(path, row)}: ${message}`,
   );
-  return [...problems, ...refused, ...problemsOf(compile(directory), project)];
 }
 
 function projectOfReadmes(readmes: readonly Readme[], scope: Scope) {
@@ -116,98 +135,94 @@ function contractNames(repository: string): string[] {
   return names.filter((name) => /^\w+$/.test(name));
 }
 
-/** The scope's packages by name, as the files of `directory` that stand for them. */
-export function readmeServiceAliases(
-  directory: string,
-  repository: string = root,
-): Record<string, string> {
-  const paths = Object.keys(scopeOf(repository));
-  return Object.fromEntries(
-    scopePackagesOf(paths).map(([name, path]) => [name, join(directory, path)]),
-  );
-}
-
 /**
- * The packages the scope stands for, a file under `scope-packages/` the package of its path, and
- * the Contract Packages `cf-loom package` writes there.
+ * Writes the project twice: with no import added, to learn from TypeScript the names each file
+ * leaves out, then with an import for each such name a provider has.
  */
-function scopePackagesOf(paths: readonly string[]): [string, string][] {
-  const prefix = `${packagesAt}/`;
-  const standing = paths
-    .filter((path) => path.startsWith(prefix))
-    .map((path): [string, string] => [path.slice(prefix.length).replace(/\.ts$/, ''), path]);
-  return [...standing, ...contractPackagesOf(paths)];
-}
-
 function writeProject(directory: string, project: Project, repository: string): void {
   const providers = providersOf(project, contractNames(repository));
   mkdirSync(directory, { recursive: true });
-  symlinkSync(
-    join(repository, 'examples', 'billing-service', 'node_modules'),
-    join(directory, 'node_modules'),
-  );
+  linkDependencies(directory, repository);
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
-  writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfigOf(project)));
+  writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfig));
+  writeFiles(directory, project, () => new Map());
+  const freeNamesByPath = freeNamesOf(directory, project);
+  writeFiles(directory, project, (path) =>
+    importsOf(path, freeNamesByPath.get(path) ?? new Set(), providers),
+  );
+}
+
+function writeFiles(
+  directory: string,
+  project: Project,
+  importsFor: (path: string) => ReadonlyMap<string, string>,
+): void {
   for (const [path, file] of project) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
-    writeFileSync(join(directory, path), completed(path, file, providers));
+    writeFileSync(join(directory, path), completed(path, file, importsFor(path)));
   }
 }
 
-/** The compiler options the root README recommends, with the scope's packages found where they sit. */
-function tsconfigOf(project: Project) {
-  const aliases = scopePackagesOf([...project.keys()]).map(([name, path]) => [name, [`./${path}`]]);
-  return {
-    compilerOptions: {
-      allowImportingTsExtensions: true,
-      erasableSyntaxOnly: true,
-      lib: ['ES2024'],
-      module: 'nodenext',
-      noEmit: true,
-      paths: Object.fromEntries(aliases),
-      skipLibCheck: true,
-      strict: true,
-      target: 'ES2024',
-      types: ['node'],
-    },
-    include: ['**/*.ts'],
-  };
-}
+/** The compiler options the root README recommends. */
+const tsconfig = {
+  compilerOptions: {
+    allowImportingTsExtensions: true,
+    erasableSyntaxOnly: true,
+    lib: ['ES2024'],
+    module: 'nodenext',
+    noEmit: true,
+    skipLibCheck: true,
+    strict: true,
+    target: 'ES2024',
+    types: ['node'],
+  },
+  include: ['**/*.ts'],
+};
 
-/** What `tsc` printed over the project, and whether it ended in failure. */
-function compile(directory: string): Compiled {
-  const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
-  const ran = spawnSync(process.execPath, [tsc, '-p', '.', '--pretty', 'false'], {
-    cwd: directory,
-    encoding: 'utf8',
-  });
-  if (ran.error) {
-    throw ran.error;
-  }
-  const lines = ran.stdout.split('\n').filter((line) => line !== '');
-  return { failed: ran.status !== 0, lines: lines.length > 0 ? lines : [ran.stderr] };
-}
-
-function problemsOf(compiled: Compiled, project: Project): string[] {
-  const problems: string[] = [];
-  for (const line of compiled.lines) {
-    const [, path, row, message] = diagnostic.exec(line) ?? [];
-    if (path !== undefined && row !== undefined && message !== undefined) {
-      problems.push(`${locationOf(path, Number(row), project)}: ${message}`);
-    } else if (/^error TS\d+:/.test(line)) {
-      problems.push(`tsc: ${line}`);
+/** Installs what the Services depend on as billing-service has them, but the organization's own packages, which the scope installs. */
+function linkDependencies(directory: string, repository: string): void {
+  const installed = join(repository, 'examples', 'billing-service', 'node_modules');
+  mkdirSync(join(directory, 'node_modules'));
+  for (const name of readdirSync(installed)) {
+    if (!name.startsWith('.') && name !== '@org') {
+      symlinkSync(join(installed, name), join(directory, 'node_modules', name));
     }
   }
+}
+
+function problemsOf(compiled: Compiled, locate: Locate): string[] {
+  const problems = compiled.diagnostics.map((diagnostic) => {
+    const { path, row } = diagnostic;
+    return path === undefined
+      ? `tsc: ${describe(diagnostic)}`
+      : `${locate(path, row)}: ${describe(diagnostic)}`;
+  });
   if (compiled.failed && problems.length === 0) {
-    throw new Error(`tsc failed with no diagnostic: ${compiled.lines.join('\n')}`);
+    throw new Error(`tsc failed with no diagnostic: ${compiled.output}`);
   }
   return problems;
 }
 
-/** The README line a diagnostic in a block's file is, or the file and line of one in the scope. */
-function locationOf(path: string, row: number, project: Project): string {
-  const block = project.get(path)?.block;
-  return block === undefined
-    ? `${scopeAt}/${path}:${row}`
-    : `${block.readme}:${block.line + row - 1}`;
+/**
+ * Names a file of the Service by the README line it is, for a block, or by its file and line: in
+ * the scope for a file of the scope, else in the written-out Service, as `writtenAt` says where
+ * that is, for one cf-loom wrote.
+ */
+function locatorOf(project: Project, writtenAt: string): Locate {
+  return (path, row) => {
+    const file = project.get(path);
+    if (file === undefined) {
+      return `${posix.join(writtenAt, path)}:${row}`;
+    }
+    const { block } = file;
+    return block === undefined
+      ? `${scopeAt}/${path}:${row}`
+      : `${block.readme}:${block.line + row - 1}`;
+  };
+}
+
+/** Where `directory` is in `repository`, or nothing when it is not inside it. */
+function writtenAtOf(directory: string, repository: string): string {
+  const at = relative(repository, directory);
+  return at.startsWith('..') || isAbsolute(at) ? '' : at.split(sep).join('/');
 }

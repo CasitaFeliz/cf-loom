@@ -145,7 +145,7 @@ Every Endpoint, Event's or Command's Message Version, and Subscription belongs t
 export const ordersGroup = defineGroup({
   name: 'orders',
   description: 'Order lifecycle',
-  endpoints: [getOrder, createOrder, settlePayment],
+  endpoints: [getOrder, createOrder, settlePayment, editOrder, listOrders],
   events: [orderCreatedV1, orderCreatedV2],
   commands: [chargeCardV1],
   subscriptions: [notifyOnSettled],
