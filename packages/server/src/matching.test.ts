@@ -353,6 +353,6 @@ describe('serve: the fallback', () => {
     expect(await response.json()).toEqual({
       fault: { committed: 'unknown', retryable: false, message: 'Internal error' },
     });
-    expect(logged).toHaveBeenCalledWith('serve: the fallback rejected', broken);
+    expect(logged).toHaveBeenCalledWith('%s', 'serve: the fallback rejected', broken);
   });
 });

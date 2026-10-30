@@ -12,10 +12,8 @@ export {
   failureCauseOf,
   failureLineOf,
   faultLineOf,
-  faultLogOf,
   firstAttempt,
   hookFailureOf,
-  logOf,
   nameOf,
 } from '../calls/index.ts';
 export type { EndpointRead, GuardRead } from '../checks/index.ts';

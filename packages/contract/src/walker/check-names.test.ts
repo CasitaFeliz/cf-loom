@@ -18,7 +18,7 @@ import { refusalsIn, walkSchemas } from '../internal/index.ts';
 const bodyAt = {
   site: { kind: 'export', name: 'body' },
   declaration: undefined,
-  steps: [],
+  steps: undefined,
 } as const;
 
 /** The constructs a walk refuses a schema as, in the order it raises them. */

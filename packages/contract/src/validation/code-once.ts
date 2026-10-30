@@ -1,4 +1,4 @@
-import type { Place } from '../walker/index.ts';
+import { joinedOf, type Place } from '../walker/index.ts';
 import {
   type Declarations,
   type ResolvedStandard,
@@ -74,7 +74,8 @@ function listOf(named: readonly string[]): string {
   for (const source of named) {
     counts.set(source, (counts.get(source) ?? 0) + 1);
   }
-  return [...counts].map(([source, count]) => `${source}${timesOf(count)}`).join(' and ');
+  const entries = [...counts].map(([source, count]) => `${source}${timesOf(count)}`);
+  return joinedOf(entries, 'and');
 }
 
 function timesOf(count: number): string {

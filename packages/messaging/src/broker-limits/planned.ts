@@ -36,7 +36,7 @@ export function everySetOf<Read, Name extends keyof Read>(
     : { kind: 'unset', names: [first, ...later] };
 }
 
-type Refused = { readonly kind: 'refused'; readonly message: string };
+type Refused = { readonly kind: 'refused'; readonly lines: readonly string[] };
 
 type Unset = { readonly name: string; readonly names: readonly [string, ...string[]] };
 
@@ -55,7 +55,7 @@ function decodedOf(
   if (decoded.kind === 'malformed') {
     const shape =
       'The value is not the Broker plan of the document cf-loom broker-plan --json prints';
-    return { kind: 'refused', message: `${shape}: ${decoded.reason}` };
+    return { kind: 'refused', lines: [`${shape}: ${decoded.reason}`] };
   }
   return decoded;
 }
@@ -169,7 +169,7 @@ export type AdapterLimits<
   >;
 };
 
-/** The plan's Streams and Durable consumers with the settings their limits resolve to, or the one message that refuses them. */
+/** The plan's Streams and Durable consumers with the settings their limits resolve to, or the lines that refuse them. */
 export function plannedOf<
   StreamReaders extends Readers,
   DurableConsumerReaders extends Readers,
@@ -202,7 +202,7 @@ export function plannedOf<
   };
   const read = readContainer(readers, limits, adapter.definer);
   if (read.kind === 'refused') {
-    return { kind: 'refused', message: read.lines.join('\n') };
+    return { kind: 'refused', lines: read.lines };
   }
   const streams = streamsOf(decoded.plan, read.limits, adapter.stream);
   const durableConsumers = durableConsumersOf(decoded.plan, read.limits, adapter.durableConsumer);
@@ -212,7 +212,7 @@ export function plannedOf<
     ...durableConsumers.unset.map(unsetDurableConsumerLine),
   ];
   if (lines.length > 0) {
-    return { kind: 'refused', message: lines.join('\n') };
+    return { kind: 'refused', lines };
   }
   return {
     kind: 'planned',

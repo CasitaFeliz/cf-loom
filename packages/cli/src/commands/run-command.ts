@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { brokerPrefixRule, isBrokerPrefix } from '@cf-loom/contract/internal';
+import { isAsyncApiBroker } from '../asyncapi/index.ts';
 import { isRootKind, oneLineOf } from '../loading/index.ts';
 import { asyncApiCommand } from './asyncapi.ts';
 import { brokerPlanCommand } from './broker-plan.ts';
@@ -23,6 +24,7 @@ export type Called = {
   readonly positionals: readonly string[];
   readonly out?: string;
   readonly prefix?: string;
+  readonly broker?: string;
   readonly against?: string;
   readonly output: Output;
   readonly force: boolean;
@@ -84,7 +86,7 @@ function askedAboutOf({ help, version, positionals }: Called): Exit | undefined 
 
 /** The usage error of an option given to a command that does not take it. */
 function misplacedOptionIn(
-  { out, prefix, against, force, prerelease, dryRun }: Called,
+  { out, prefix, broker, against, force, prerelease, dryRun }: Called,
   command: string | undefined,
 ): Exit | undefined {
   if (out !== undefined && command !== 'package') {
@@ -95,6 +97,9 @@ function misplacedOptionIn(
   }
   if (prefix !== undefined && command !== 'broker-plan' && command !== 'asyncapi') {
     return usageError('Only broker-plan and asyncapi take --prefix');
+  }
+  if (broker !== undefined && command !== 'asyncapi') {
+    return usageError('Only asyncapi takes --broker');
   }
   if (dryRun && command !== 'publish') {
     return usageError('Only publish takes --dry-run');
@@ -131,13 +136,20 @@ async function brokerPlanExitOf(
 
 async function asyncApiExitOf(
   rest: readonly string[],
-  { prefix }: Called,
+  { prefix, broker = 'jetstream' }: Called,
   run: Run,
 ): Promise<Exit> {
   if (rest.length > 0) {
     return usageError('asyncapi takes no argument');
   }
-  return invalidPrefixExitOf(prefix) ?? (await asyncApiCommand(run, prefix ?? null));
+  const invalidPrefix = invalidPrefixExitOf(prefix);
+  if (invalidPrefix !== undefined) {
+    return invalidPrefix;
+  }
+  if (!isAsyncApiBroker(broker)) {
+    return usageError('--broker takes jetstream or sqs');
+  }
+  return await asyncApiCommand(run, { broker, prefix: prefix ?? null });
 }
 
 /** The usage error of a prefix a Broker's names cannot carry, if it is one. */

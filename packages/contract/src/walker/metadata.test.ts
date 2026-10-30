@@ -8,7 +8,7 @@ import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 const bodyAt = {
   site: { kind: 'export', name: 'body' },
   declaration: undefined,
-  steps: [],
+  steps: undefined,
 } as const;
 
 function walkBody(schema: core.$ZodType) {

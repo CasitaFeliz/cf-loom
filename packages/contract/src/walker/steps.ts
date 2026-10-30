@@ -28,6 +28,42 @@ export type Step =
   | { readonly kind: 'value' }
   | { readonly kind: 'variant'; readonly discriminator: string; readonly value: string };
 
+/**
+ * The steps from a site to a place, as a place holds them: its last step and the chain of the
+ * place it is inside, with how many steps they make, so a place one step further costs one step,
+ * whatever its depth; none at the site itself.
+ */
+export type StepChain =
+  | { readonly above: StepChain; readonly step: Step; readonly count: number }
+  | undefined;
+
+/** The chain continued down `more`, sharing the chain given. */
+export function chainDown(chain: StepChain, more: readonly Step[]): StepChain {
+  let down = chain;
+  for (const step of more) {
+    down = { above: down, step, count: (down?.count ?? 0) + 1 };
+  }
+  return down;
+}
+
+/** The steps from the site, in order, as a line or a record that names them reads them. */
+export function stepListOf(chain: StepChain): readonly Step[] {
+  const steps: Step[] = [];
+  for (let link = chain; link !== undefined; link = link.above) {
+    steps.push(link.step);
+  }
+  return steps.reverse();
+}
+
+/** The steps of `held` below `from`, a place it sits inside, in order: what a place moved elsewhere keeps. */
+export function stepsBelow(held: StepChain, from: StepChain): readonly Step[] {
+  const below: Step[] = [];
+  for (let link = held; link !== undefined && link.count > (from?.count ?? 0); link = link.above) {
+    below.push(link.step);
+  }
+  return below.reverse();
+}
+
 /** The steps down the named parts of an Endpoint, a Guard or a Rejection, in order. */
 export function partsOf(...names: readonly PartName[]): readonly Step[] {
   return names.map((name) => ({ kind: 'part', name }));

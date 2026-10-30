@@ -7,6 +7,8 @@ import {
   type Site,
   siteLocationOf,
   siteTextOf,
+  stepListOf,
+  stepsBelow,
 } from '../walker/index.ts';
 import { type PlacedReach, popReach, pushReach } from './reach-heap.ts';
 
@@ -97,7 +99,7 @@ function frontierOf(memos: ReadonlySet<Memo>) {
     },
     offerInside: (outer: PlacedReach, held: readonly HeldReach[]) => {
       for (const { memo, reach } of held.filter((entry) => !settled.has(entry.memo))) {
-        const below = reach.at.steps.slice(outer.memo.at.steps.length);
+        const below = stepsBelow(reach.at.steps, outer.memo.at.steps);
         offer(
           memo,
           movedFrom(reach.at, outer.memo.at, outer.at),
@@ -181,5 +183,5 @@ export function byLocation(left: Place, right: Place): number {
 
 /** The text a line names a place by: its site and the steps under it. */
 export function locationTextOf({ site, steps }: Place): string {
-  return siteLocationOf(site, steps);
+  return siteLocationOf(site, stepListOf(steps));
 }

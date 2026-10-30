@@ -6,18 +6,19 @@ export {
   indentedCanonicalJson,
   isJsonValue,
 } from './canonical-json.ts';
-export type { Child, ResolvedRef } from './children.ts';
-export {
-  childrenOf,
-  defsReachedOf,
-  leadsBackWithNoNode,
-  nodesReachedFrom,
-  nodesWithin,
-  reachedDefsOf,
-  resolvedRefOf,
-} from './children.ts';
+export type { Child } from './children.ts';
+export { childrenOf, nodesWithin } from './children.ts';
+export { closureFactsOf } from './closure-facts.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
+export type { ResolvedRef } from './def-graph.ts';
+export {
+  defsReachedOf,
+  nodesReachedFrom,
+  reachedDefsOf,
+  refsWrittenIn,
+  resolvedRefOf,
+} from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
@@ -25,6 +26,7 @@ export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export type { NodeEdit } from './held-node.ts';
 export { heldNodeOf, withoutNullable } from './held-node.ts';
+export { joinedOf } from './joined-names.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
   inFields,
@@ -36,6 +38,7 @@ export {
   siteLocationOf,
   siteTextOf,
 } from './location.ts';
+export { defsLeadingBackWithNoNodeOf } from './nodeless-cycles.ts';
 export type {
   EnumNode,
   Field,
@@ -56,9 +59,10 @@ export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { byShape, shapeKey, shapeOf } from './shapes.ts';
-export type { PartName, Step } from './steps.ts';
+export type { PartName, Step, StepChain } from './steps.ts';
 export {
   authorPathOf,
+  chainDown,
   fieldStep,
   indexStep,
   itemsStep,
@@ -67,6 +71,8 @@ export {
   partsOf,
   restStep,
   snapshotPathOf,
+  stepListOf,
+  stepsBelow,
   tokenOf,
   valueStep,
   variantStep,

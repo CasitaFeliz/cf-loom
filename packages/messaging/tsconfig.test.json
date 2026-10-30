@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "${configDir}",
+    "rootDir": "${configDir}/..",
     "tsBuildInfoFile": "${configDir}/node_modules/.cache/tsc/test.tsbuildinfo",
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "vitest.config.ts"],
+  "include": ["src", "test", "vitest.config.ts", "../contract/test/line-breaks.ts"],
   "references": [
     {
       "path": "../contract/tsconfig.build.json"

@@ -1,8 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its attributes in PascalCase
-import { GetTopicAttributesCommand, type SNSClient } from '@aws-sdk/client-sns';
+import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { type Applied, refusedBy } from '../broker-applying/index.ts';
-import { isAwsError } from './aws-errors.ts';
 import { type Place, queueArnOf, topicArnOf } from './connecting.ts';
 import { type AppliedQueue, applyQueue, tagQueue } from './queue-applying.ts';
 import { deadLetterQueueNameOf, queueNameOf } from './queue-names.ts';
@@ -11,6 +10,7 @@ import type { PlannedQueue } from './reading-limits.ts';
 import type { Subscribing } from './subscribing.ts';
 import { subscriptionShapeOf } from './subscription-shape.ts';
 import { backoffTag, deadLetterQueueTagsOf, queueTagsOf, subscriptionTag } from './tags.ts';
+import { isTopic } from './topic-exists.ts';
 
 /** What applying works with: the SNS and SQS clients, their place, and the subscriptions made so far. */
 export type Applier = {
@@ -46,18 +46,6 @@ async function createOrUpdate(applier: Applier, planned: PlannedQueue): Promise<
   const subscription = await applier.subscribing.subscribe(subscriptionShapeOf(queueOnTopic));
   await tagQueue(sqs, queue.url, { [subscriptionTag]: subscription });
   return { kind: 'applied' };
-}
-
-async function isTopic(sns: SNSClient, topicArn: string): Promise<boolean> {
-  try {
-    await sns.send(new GetTopicAttributesCommand({ TopicArn: topicArn }));
-    return true;
-  } catch (error) {
-    if (isAwsError(error, 'NotFoundException')) {
-      return false;
-    }
-    throw error;
-  }
 }
 
 function applyDeadLetterQueue(

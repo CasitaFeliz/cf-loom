@@ -1026,6 +1026,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(logged).toHaveBeenCalledWith(
+      '%s',
       'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       hook,
     );
@@ -1234,7 +1235,7 @@ describe('consuming over jetstream()', () => {
         `NATS answered a pull from ${prefix}_orders-service_notify-on-created with 409 Server Shutdown`,
       ],
     ]);
-  }, 10_000);
+  });
 
   test('the Service closing its own connection while consuming reaches onBrokerTrouble once per Durable consumer as pull-failed, the connection closed', async () => {
     const prefix = aPrefix();

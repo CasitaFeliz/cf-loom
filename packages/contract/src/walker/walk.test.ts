@@ -4,7 +4,7 @@ import * as zm from 'zod/mini';
 import { z as z3 } from 'zod/v3';
 import type * as core from 'zod/v4/core';
 import { refusalsOf } from '../../test/failures.ts';
-import { type DefTypes, type Step, walkSchemas } from '../internal/index.ts';
+import { chainDown, type DefTypes, type Step, walkSchemas } from '../internal/index.ts';
 
 /** The steps down the named parts of an Endpoint, as the Check names them. */
 function partsOf(...names: readonly ('input' | 'success' | 'body')[]): readonly Step[] {
@@ -16,12 +16,12 @@ function noOrigin() {
 }
 
 function exportAt(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 function endpointAt(identity: string, name: string, steps: readonly Step[]) {
   const site = { kind: 'endpoint', identity, name } as const;
-  return { site, declaration: undefined, steps };
+  return { site, declaration: undefined, steps: chainDown(undefined, steps) };
 }
 
 function walkedAs(value: unknown) {

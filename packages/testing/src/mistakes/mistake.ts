@@ -1,5 +1,5 @@
 import type { Issue } from '@cf-loom/contract';
-import { issueLineOf } from '@cf-loom/contract/internal';
+import { issueLineOf, linesTextOf } from '@cf-loom/contract/internal';
 
 /**
  * A mistake in a test, never an Outcome: thrown out of a fake's `fetch` under its own name, which
@@ -29,7 +29,7 @@ export function mistakeOf({
 }: Mistake): FakeProviderError {
   const who = endpoint === undefined ? provider : `${provider}: ${endpoint}`;
   const lines = [`${who}: ${what}`, ...issues.map((issue) => issueLineOf(who, issue))];
-  const message = lines.join('\n');
+  const message = linesTextOf(lines);
   return cause === undefined
     ? new FakeProviderError(message)
     : new FakeProviderError(message, { cause });

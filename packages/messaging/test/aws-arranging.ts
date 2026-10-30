@@ -9,10 +9,12 @@ import {
 } from '@aws-sdk/client-sns';
 import {
   CreateQueueCommand,
+  DeleteQueueCommand,
   SendMessageCommand,
   SetQueueAttributesCommand,
   type SQSClient,
   TagQueueCommand,
+  UntagQueueCommand,
 } from '@aws-sdk/client-sqs';
 import { snsSubjectAttribute } from '@cf-loom/contract/internal';
 import { queueUrlOf } from './aws-reading.ts';
@@ -68,10 +70,33 @@ export async function setQueueAttributes(
   await sqs.send(new SetQueueAttributesCommand({ QueueUrl, Attributes: attributes }));
 }
 
-/** Puts a Message into the queue named `name`, as a Message already stored in it. */
-export async function storeIn(sqs: SQSClient, name: string, body: string): Promise<void> {
+/** A raw Message as a test stores it: its body, and the message attributes it carries. */
+export type RawMessage = {
+  readonly body: string;
+  readonly attributes?: Readonly<
+    Record<
+      string,
+      {
+        readonly DataType: string;
+        readonly StringValue?: string;
+        readonly BinaryValue?: Uint8Array;
+      }
+    >
+  >;
+};
+
+/** Puts a Message into the queue named `name`, as a Message already stored in it, with the message attributes it is given; answers its SQS MessageId. */
+export async function storeIn(
+  sqs: SQSClient,
+  name: string,
+  stored: string | RawMessage,
+): Promise<string> {
   const QueueUrl = await queueUrlOf(sqs, name);
-  await sqs.send(new SendMessageCommand({ QueueUrl, MessageBody: body }));
+  const { body, attributes = {} } = typeof stored === 'string' ? { body: stored } : stored;
+  const sent = await sqs.send(
+    new SendMessageCommand({ QueueUrl, MessageBody: body, MessageAttributes: { ...attributes } }),
+  );
+  return sent.MessageId ?? '';
 }
 
 /** Subscribes a queue to a topic with no attribute, as the organization's tooling would, and answers the subscription's ARN. */
@@ -118,4 +143,27 @@ export async function tagByHand(
 ): Promise<void> {
   const QueueUrl = await queueUrlOf(sqs, name);
   await sqs.send(new TagQueueCommand({ QueueUrl, Tags: tags }));
+}
+
+/** Puts one raw Message into each queue named, so a long poll open on it returns at once; after `closing` aborted, the adapter hands it back unread. */
+export async function wakeEach(sqs: SQSClient, queues: readonly string[]): Promise<void> {
+  for (const queue of queues) {
+    await storeIn(sqs, queue, 'wake');
+  }
+}
+
+/** Deletes the queue named `name`, as the organization's tooling would. */
+export async function dropQueue(sqs: SQSClient, name: string): Promise<void> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  await sqs.send(new DeleteQueueCommand({ QueueUrl }));
+}
+
+/** Removes tags from the queue named `name`, as the organization's tooling would. */
+export async function untagByHand(
+  sqs: SQSClient,
+  name: string,
+  keys: readonly string[],
+): Promise<void> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  await sqs.send(new UntagQueueCommand({ QueueUrl, TagKeys: [...keys] }));
 }

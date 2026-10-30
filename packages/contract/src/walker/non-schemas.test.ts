@@ -8,7 +8,7 @@ import { authorPathOf, type Def, type Step, walkSchemas } from '../internal/inde
 const notZod4 = 'a value that is no zod 4 schema (zod/v3 is not read)';
 
 function exportAt(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 function walkBody(schema: unknown) {

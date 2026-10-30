@@ -22,7 +22,7 @@ The wire rules the client shares with `serve` and `@cf-loom/testing` live in `@c
 
 1. The headers given to `client()` that the Endpoint declares and the call did not pass are added, a function among them called now with the call's options and raced against its signal; none is called once the signal is aborted, and an abort stops the wait whatever the function does after.
 2. The Input is read as the Provider reads the request it would send, every Guard admitting it and a declared body left out sent with no content type, and its text checked that it can travel; what fails returns the Provider's invalid-input Rejection, marked `source: 'client'`, its body read with the Provider's Reader as a received one is, and nothing is sent. A signal aborted by the end of this step returns its Fault, `committed: 'no'`, whatever the Input or what a header function or the read threw.
-3. `fetch` is called with the Request; neither it nor `inferFault` is ever called as a method. What `fetch` throws is inferred as a Fault, or reaches the Caller unchanged when it is no network failure, abort or timeout.
+3. `fetch` is called with the Request, held from the call's signal until the call settles; neither it nor `inferFault` is ever called as a method. What `fetch` throws is inferred as a Fault, or reaches the Caller unchanged when it is no network failure, abort or timeout.
 4. The response is decoded, then its `Deprecation` is told the first time a method sees it; what `onDeprecation` throws or rejects with goes to the console, and it is not awaited.
 
 Each method returns its decoded Outcome typed by its Endpoint: the decoding is one function for every Endpoint, and each typed Outcome is its decoded form narrowed, so the methods are cast to `Client` once, in `client()`.

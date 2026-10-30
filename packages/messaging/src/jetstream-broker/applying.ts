@@ -1,4 +1,4 @@
-import type { BrokerPlan, Closed } from '@cf-loom/contract/internal';
+import { type BrokerPlan, type Closed, linesTextOf } from '@cf-loom/contract/internal';
 import type { JetStreamManager } from '@nats-io/jetstream';
 import { type Applied, applyInOrder, throwIfRefused } from '../broker-applying/index.ts';
 import type { DefaultsFields } from '../broker-limits/index.ts';
@@ -21,7 +21,7 @@ export async function applyBrokerPlan<const Given = unknown, const GivenLimits =
 ): Promise<void> {
   const checked = checkedOf(plan, limits);
   if (checked.kind === 'refused') {
-    throw new Error(checked.message);
+    throw new Error(linesTextOf(checked.lines));
   }
   throwIfRefused(await appliedOn(connecting, checked));
 }

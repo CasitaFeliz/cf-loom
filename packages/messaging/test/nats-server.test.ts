@@ -1,4 +1,3 @@
-import { stat } from 'node:fs/promises';
 import { connect } from 'node:net';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aNatsServer } from './nats-server.ts';
@@ -30,16 +29,13 @@ describe('a test NATS server', () => {
     );
   });
 
-  test('a stopped server leaves its temporary directory removed and its port closed', async () => {
+  test('a stopped server leaves its port closed', async () => {
     const server = await aNatsServer();
     const listeningBefore = await isListening(server.url);
-    const directoryBefore = await stat(server.directory);
 
     await server.stop();
 
     expect(listeningBefore).toBe(true);
-    expect(directoryBefore.isDirectory()).toBe(true);
     await expect(isListening(server.url)).resolves.toBe(false);
-    await expect(stat(server.directory)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

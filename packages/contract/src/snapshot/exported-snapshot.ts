@@ -1,4 +1,5 @@
 import { isLive } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import { defsReachedOf } from '../walker/index.ts';
 import { type EndpointPath, endpointPathOf, matchedOf, sharedUrlOf } from '../wire/index.ts';
 import { reachedCodesOf } from '../written/index.ts';
@@ -52,7 +53,7 @@ export function exportedCutOf(
   const exported = exportedOf(snapshot.endpoints);
   const entry = Object.hasOwn(exported, identity) ? exported[identity] : undefined;
   if (entry === undefined) {
-    throw new Error(`${identity} is no Endpoint a Contract Package exports`);
+    throw new Error(unbrokenLineOf(`${identity} is no Endpoint a Contract Package exports`));
   }
   const { format, defs, endpoints, guards, codes } = cutOf(snapshot, {
     endpoints: { [identity]: entry },

@@ -1,7 +1,8 @@
-import { inspect } from 'node:util';
 import type { SNSClient } from '@aws-sdk/client-sns';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { partition } from '@aws-sdk/core/client';
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
+import { oneLineOf } from '../broker-limits/index.ts';
 
 /** How cf-loom reaches SNS and SQS: the organization's own clients, of one account and one region, which cf-loom never destroys. */
 export type SqsConnecting = {
@@ -41,13 +42,21 @@ export async function placeOf(connecting: SqsConnecting): Promise<Located> {
   return { kind: 'located', place };
 }
 
+/** The SNS and SQS side of a connection: the clients of the Service, where they are, and the Broker prefix of every name it uses. */
+export type SqsSide = {
+  readonly sns: SNSClient;
+  readonly sqs: SQSClient;
+  readonly place: Place;
+  readonly prefix: string | null;
+};
+
 /** An ARN AWS answered, and the call that answered it. */
 export type AnsweredArn = { readonly from: string; readonly arn: string };
 
-/** Refuses an ARN AWS answered otherwise than the one built, naming both, and the other account when the account part differs, as a wrong `connecting.account` makes it. */
-export function confirmArn(answered: AnsweredArn, built: string): void {
+/** Why an ARN AWS answered is not the one built, naming both, and the other account when the account part differs, as a wrong `connecting.account` makes it; `undefined` when it is the one built. */
+export function arnMismatchOf(answered: AnsweredArn, built: string): string | undefined {
   if (answered.arn === built) {
-    return;
+    return undefined;
   }
   const given = `${answered.from} gave ${answered.arn}, not ${built}`;
   const [builtAccount, givenAccount] = [accountOf(built), accountOf(answered.arn)];
@@ -55,7 +64,15 @@ export function confirmArn(answered: AnsweredArn, built: string): void {
     givenAccount === builtAccount
       ? 'check the region of the clients'
       : `${givenAccount} is another account than connecting.account ${builtAccount}`;
-  throw new Error(`${given}: ${why}`);
+  return `${given}: ${why}`;
+}
+
+/** Refuses an ARN AWS answered otherwise than the one built, with the text of `arnMismatchOf`. */
+export function confirmArn(answered: AnsweredArn, built: string): void {
+  const mismatch = arnMismatchOf(answered, built);
+  if (mismatch !== undefined) {
+    throw new Error(unbrokenLineOf(mismatch));
+  }
 }
 
 /** The account part of an ARN, whose name part holds no `:`. */
@@ -74,11 +91,11 @@ export function topicArnOf(place: Place, name: string): string {
 }
 
 /** The lines refusing an account that is not 12 digits, which only untyped code can pass; whether it is the clients' own is AWS's to answer. */
-function accountLinesOf(account: unknown): readonly string[] {
+export function accountLinesOf(account: unknown): readonly string[] {
   const isAccount = typeof account === 'string' && /^\d{12}$/.test(account);
   return isAccount
     ? []
-    : [`connecting.account ${inspect(account)} is not a 12-digit AWS account id`];
+    : [`connecting.account ${oneLineOf(account)} is not a 12-digit AWS account id`];
 }
 
 function regionLinesOf(snsRegion: string, sqsRegion: string): readonly string[] {

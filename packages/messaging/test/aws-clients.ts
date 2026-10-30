@@ -4,6 +4,7 @@ import { SNSClient } from '@aws-sdk/client-sns';
 import { SQSClient } from '@aws-sdk/client-sqs';
 import { onTestFinished } from 'vitest';
 import type { SqsConnecting } from '../src/sqs/index.ts';
+import { aGate } from './gate.ts';
 
 /** The account moto holds topics and queues under unless a test says another. */
 export const motoAccount = '123456789012';
@@ -39,10 +40,15 @@ export function anAwsConnecting(
   return { sns, sqs, account: place.account ?? motoAccount };
 }
 
+/** The middleware stack of an SNS or SQS client, which both have, to add what a test watches or changes. */
+function middlewareStackOf(client: SNSClient | SQSClient) {
+  return (client as SNSClient).middlewareStack;
+}
+
 /** Counts the commands of one kind a client sends from now on, such as `SetSubscriptionAttributesCommand`. */
-export function countCommands(client: SNSClient, commandName: string) {
+export function countCommands(client: SNSClient | SQSClient, commandName: string) {
   let sent = 0;
-  client.middlewareStack.add(
+  middlewareStackOf(client).add(
     (next, context) => (args) => {
       sent += context.commandName === commandName ? 1 : 0;
       return next(args);
@@ -72,7 +78,7 @@ export function alteringAnswers(
   commandName: string,
   alter: (output: Record<string, unknown>) => void,
 ): void {
-  const stack = (client as SNSClient).middlewareStack;
+  const stack = middlewareStackOf(client);
   stack.add(
     (next, context) => async (args) => {
       const answered = await next(args);
@@ -89,7 +95,7 @@ export function alteringAnswers(
 /** Records the inputs of the commands of one kind an SQS client sends from now on, such as `CreateQueueCommand`. */
 export function recordingInputs(sqs: SQSClient, commandName: string) {
   const inputs: Record<string, unknown>[] = [];
-  sqs.middlewareStack.add(
+  middlewareStackOf(sqs).add(
     (next, context) => (args) => {
       if (context.commandName === commandName && isRecord(args.input)) {
         inputs.push(args.input);
@@ -103,7 +109,7 @@ export function recordingInputs(sqs: SQSClient, commandName: string) {
 
 /** Makes a client act as another account of the moto server, as an AWS whose credentials belong to it would. */
 export function inAccount(client: SNSClient | SQSClient, account: string): void {
-  const stack = (client as SNSClient).middlewareStack;
+  const stack = middlewareStackOf(client);
   stack.add(
     (next) => (args) => {
       const request: unknown = args.request;
@@ -114,4 +120,50 @@ export function inAccount(client: SNSClient | SQSClient, account: string): void 
     },
     { step: 'build', name: `in-account-${account}` },
   );
+}
+
+/** Makes the commands of one kind a client sends fail with `error`, as an AWS that refused them would, after letting `after` of them through and `times` of them at most. */
+export function failingCommand(
+  client: SNSClient | SQSClient,
+  failing: {
+    readonly command: string;
+    readonly error: Error;
+    readonly after?: number;
+    readonly times?: number;
+  },
+): void {
+  let allowed = failing.after ?? 0;
+  let failures = failing.times ?? Number.POSITIVE_INFINITY;
+  const stack = middlewareStackOf(client);
+  stack.add(
+    (next, context) => (args) => {
+      if (context.commandName !== failing.command) {
+        return next(args);
+      }
+      if (allowed > 0 || failures === 0) {
+        allowed -= 1;
+        return next(args);
+      }
+      failures -= 1;
+      return Promise.reject(failing.error);
+    },
+    { step: 'initialize', name: `fail-${failing.command}` },
+  );
+}
+
+/** Holds the commands of one kind a client sends from now on until the test opens the gate, as a slow AWS would, and says when the first is held; opened when the test ends too. */
+export function holdingCommand(client: SNSClient | SQSClient, commandName: string) {
+  const gate = aGate();
+  const reached = Promise.withResolvers<undefined>();
+  middlewareStackOf(client).add(
+    (next, context) => async (args) => {
+      if (context.commandName === commandName) {
+        reached.resolve(undefined);
+        await gate.opened;
+      }
+      return next(args);
+    },
+    { step: 'initialize', name: `hold-${commandName}` },
+  );
+  return { open: gate.open, reached: reached.promise };
 }

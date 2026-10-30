@@ -3,22 +3,24 @@ import { definedOf, type JsonSchema, jsonSchemaOf } from '../json-schema/index.t
 import { brokerHeadersRef } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
 
-/** A Message Version the Service's EventPublisher publishes: its identity and name, the subject it travels on and its Snapshot entry. */
+/** A Message Version the Service's EventPublisher publishes: its identity and name, the subject it travels on, the bindings of its channel and its Snapshot entry. */
 export type PublishedVersion = {
   readonly identity: string;
   readonly name: string;
   readonly address: string;
+  readonly bindings: AsyncApiObject | undefined;
   readonly event: EventSnapshot;
 };
 
-/** The channel of a Message Version: its address, its Visibility and its one message. */
+/** The channel of a Message Version: its address, its Visibility, its one message and its bindings, where its wire has any. */
 export function channelOf(publishedVersion: PublishedVersion): AsyncApiObject {
-  const { identity, address, event } = publishedVersion;
-  return {
+  const { identity, address, bindings, event } = publishedVersion;
+  return definedOf({
     address,
     'x-cf-loom-visibility': event.visibility,
     messages: { [identity]: messageOf(publishedVersion) },
-  };
+    bindings,
+  });
 }
 
 /** The operation by which the Service sends the message of a Message Version on its channel, tagged with its Group. */

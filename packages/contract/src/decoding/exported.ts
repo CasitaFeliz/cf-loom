@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { carriedCutOf, type Endpoint, providerOf } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import {
   type ExportedCut,
   nestingProblemOf,
@@ -27,7 +28,9 @@ export function providedSnapshotOf(endpoint: Endpoint): ExportedCut {
   const provider = providerOf(endpoint);
   if (provider === undefined) {
     throw new Error(
-      `${endpoint.name} is no Endpoint a Contract Package exports, so it carries no exported Snapshot`,
+      unbrokenLineOf(
+        `${endpoint.name} is no Endpoint a Contract Package exports, so it carries no exported Snapshot`,
+      ),
     );
   }
   const carried = carriedCutOf(endpoint);
@@ -49,18 +52,22 @@ function decodedFrom(provider: string, carried: unknown): ExportedCut {
   switch (named.kind) {
     case 'newer-format':
       throw new Error(
-        `${exported} is in format ${named.format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
+        unbrokenLineOf(
+          `${exported} is in format ${named.format}, newer than this cf-loom reads: upgrade the @cf-loom packages`,
+        ),
       );
     case 'malformed':
-      throw new Error(`${exported} is malformed: ${problemLineOf(named)}`);
+      throw new Error(unbrokenLineOf(`${exported} is malformed: ${problemLineOf(named)}`));
     case 'known': {
       const tooDeep = nestingProblemOf(carried);
       if (tooDeep !== undefined) {
-        throw new Error(`${exported} is malformed: ${problemLineOf(tooDeep)}`);
+        throw new Error(unbrokenLineOf(`${exported} is malformed: ${problemLineOf(tooDeep)}`));
       }
       const structured = readWith(structures[named.format], carried, formatDefiner);
       if (structured.kind === 'refused') {
-        throw new Error(`${exported} is malformed: ${problemLineOf(structured.problems[0])}`);
+        throw new Error(
+          unbrokenLineOf(`${exported} is malformed: ${problemLineOf(structured.problems[0])}`),
+        );
       }
       return structured.value;
     }

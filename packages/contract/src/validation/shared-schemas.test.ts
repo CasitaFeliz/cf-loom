@@ -197,6 +197,25 @@ describe('failure lines: an open union or intersection, reached from several sit
     ]);
   });
 
+  test('a union that is the last field of a def used by two Endpoints is one line at the first Endpoint, never at the def', () => {
+    const tree: z.ZodType = z
+      .object({
+        get children() {
+          return z.array(tree);
+        },
+        k: z.union([openEnum(['a']), z.number()]),
+      })
+      .meta({ id: 'tree' });
+    const endpoints = [
+      anEndpoint('zed', 'GET /z', { t: tree }),
+      anEndpoint('alpha', 'GET /a', { t: tree }),
+    ];
+
+    expect(linesOf(serviceWith(endpoints))).toEqual([
+      `endpoints.GET /a (alpha) success.body.t.k ${unionIsRefused} (also in endpoints.GET /z (zed))`,
+    ]);
+  });
+
   test('an intersection shared by two Endpoints is one line naming the other', () => {
     const both = z.intersection(
       z.object({ status: openEnum(['a']) }),
