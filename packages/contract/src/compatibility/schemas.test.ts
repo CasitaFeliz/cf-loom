@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { growthOf } from '../../test/growth.ts';
 import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
@@ -2395,6 +2396,123 @@ describe('compatibilityReportOf, depth', () => {
     expect(snapshotPathsOf(report.changes)).toEqual([
       changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
     ]);
+  });
+});
+
+describe('compatibilityReportOf, a long chain of ids', () => {
+  const sizes = { small: 2_000, large: 16_000 };
+
+  /**
+   * How many times longer a check of a chain eight times as long may take: about 8 for a check that
+   * reads each link once, and 64 for one that copies the steps down to a link at each link.
+   */
+  const chainGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  /** `count` defs, each an object on a cycle of its own that holds the next by `next`, the first a string. */
+  function aChainOf(count: number, descriptionOf: (index: number) => string): Defs {
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count; index++) {
+      const next = index === 0 ? aString : aRef(`link${index - 1}`);
+      const link = anObject({
+        self: optional(aRef(`link${index}`)),
+        next: required(next),
+      });
+      entries.push([`link${index}`, { ...link, description: descriptionOf(index) }]);
+    }
+    return Object.fromEntries(entries);
+  }
+
+  /** The check of a chain of `count` defs, as an organization's Definitions Package declares it, against its Baseline. */
+  function checkOfChain(proposedDescriptionOf: (index: number) => string) {
+    return (count: number) => {
+      const top = aRef(`link${count - 1}`);
+      const baseline = shared.baseline(
+        top,
+        aChainOf(count, () => 'a'),
+      );
+      const proposed = shared.proposed(top, aChainOf(count, proposedDescriptionOf));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  test('a chain of ids, each on a cycle of its own, is checked in time that grows with its length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkChain = checkOfChain(() => 'a');
+
+    const report = checkChain(sizes.large)();
+    const growth = growthOf(checkChain, sizes, chainGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(chainGrowth);
+  });
+
+  test('a description changed in the first def of a chain is one Change, at its depth, in time that grows with the chain', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
+
+    const report = checkChain(sizes.large)();
+    const growth = growthOf(checkChain, sizes, chainGrowth);
+
+    const atFirstDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atFirstDef)),
+    ]);
+    expect(growth).toBeLessThan(chainGrowth);
+  });
+
+  test('an object of many fields, each changed, is checked in time that grows with their number', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkFields = (count: number) => {
+      const fieldsOf = (description: string) =>
+        anObject(
+          Object.fromEntries(
+            Array.from({ length: count }, (_, index) => [
+              `field${index}`,
+              required({ type: 'string', description }),
+            ]),
+          ),
+        );
+      const baseline = shared.baseline(fieldsOf('a'), noDefs);
+      const proposed = shared.proposed(fieldsOf('b'), noDefs);
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkFields(sizes.large)();
+    const growth = growthOf(checkFields, sizes, chainGrowth);
+
+    expect(report.changes).toHaveLength(sizes.large);
+    expect(growth).toBeLessThan(chainGrowth);
+  });
+
+  test('a def that many fields reach, changed, is one Change, at the first field, in time that grows with their number', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkFields = (count: number) => {
+      const fields = Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`field${index}`, required(aRef('money'))]),
+      );
+      const defsOf = (description: string): Defs => ({ money: { type: 'string', description } });
+      const baseline = shared.baseline(anObject(fields), defsOf('a'));
+      const proposed = shared.proposed(anObject(fields), defsOf('b'));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkFields(sizes.large)();
+    const growth = growthOf(checkFields, sizes, chainGrowth);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(
+        shared,
+        found(annotationChanged('description'), neutralEverywhere, ['fields', 'field0']),
+      ),
+    ]);
+    expect(growth).toBeLessThan(chainGrowth);
   });
 });
 
