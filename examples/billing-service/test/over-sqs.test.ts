@@ -9,6 +9,7 @@ import { until } from '../../../packages/messaging/test/until.ts';
 import { chargesOf } from '../../orders-service/src/charges/charges.ts';
 import { draftsOf } from '../src/billing/drafts.ts';
 import { brokerPrefix } from './environments.ts';
+import { ORDER_TOTAL, placeAnOrder } from './placing-an-order.ts';
 import { billingOver, ordersOver, type RunningService } from './services-over-a-broker.ts';
 import { applyPlanOf } from './sqs-broker.ts';
 
@@ -17,15 +18,13 @@ const billingDir = join(import.meta.dirname, '..');
 const billingDrafting = `${brokerPrefix}_billing-service_draft-invoice-on-created`;
 const ordersCharging = `${brokerPrefix}_orders-service_charge-on-created`;
 const ordersHandlingCharge = `${brokerPrefix}_orders-service_command_ChargeCard_v1`;
-const CUSTOMER_ID = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
-const TOTAL = { amount: 990, currency: 'EUR' };
 let moto: MotoServer | undefined;
 let clients: ReturnType<typeof motoClientsAt>[] = [];
 let reader: ReturnType<typeof motoClientsAt>;
 let orders: RunningService | undefined;
 let billing: RunningService | undefined;
-let consoleErrors: MockInstance<typeof console.error>;
-/** The lines written with `console.error` since both Services started; Vitest clears a spy's own record before each test. */
+let consoleSpies: MockInstance[] = [];
+/** The lines written with `console.error` and `console.warn` since both Services started; Vitest clears a spy's own record before each test. */
 const linesWritten: unknown[][] = [];
 
 beforeAll(async () => {
@@ -39,10 +38,12 @@ beforeAll(async () => {
   await applyPlanOf(billingDir, reader, brokerPrefix);
   orders = await ordersOver(sqs({ ...ordersConnecting, prefix: brokerPrefix }));
   billing = await billingOver(sqs({ ...billingConnecting, prefix: brokerPrefix }), orders.url);
-  const writeError = console.error;
-  consoleErrors = vi.spyOn(console, 'error').mockImplementation((...line) => {
-    linesWritten.push(line);
-    writeError(...line);
+  consoleSpies = (['error', 'warn'] as const).map((method) => {
+    const write = console[method];
+    return vi.spyOn(console, method).mockImplementation((...line) => {
+      linesWritten.push([method, ...line]);
+      write(...line);
+    });
   });
 });
 
@@ -59,20 +60,11 @@ afterAll(async () => {
       connecting.sqs.destroy();
     }
     await moto?.stop();
-    consoleErrors?.mockRestore();
+    for (const spy of consoleSpies) {
+      spy.mockRestore();
+    }
   }
 });
-
-/** Places an order over HTTP, as a Caller would, and answers its id. */
-async function placeAnOrder(): Promise<string> {
-  const response = await fetch(`${orders!.url}/orders`, {
-    method: 'POST',
-    headers: { 'x-api-key': 'billing-key', 'content-type': 'application/json' },
-    body: JSON.stringify({ customerId: CUSTOMER_ID, total: TOTAL }),
-  });
-  const placed = (await response.json()) as { readonly id: string };
-  return placed.id;
-}
 
 /** Waits until the queue named `queue` and its dead-letter queue hold no Message, so every Delivery from it was deleted and none was set aside. */
 function untilDeleted(queue: string): Promise<void> {
@@ -86,22 +78,22 @@ function untilDeleted(queue: string): Promise<void> {
 
 describe('orders-service and billing-service over SNS/SQS', () => {
   test('an order placed over HTTP reaches billing’s Subscription through SNS and SQS, which drafts its invoice and deletes the Message', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(orders!.url);
 
-    await until(() => expect(draftsOf(orderId)).toEqual([{ orderId, total: TOTAL }]));
+    await until(() => expect(draftsOf(orderId)).toEqual([{ orderId, total: ORDER_TOTAL }]));
     await untilDeleted(billingDrafting);
   });
 
   test('orders’ own Subscription sends ChargeCard through SNS and SQS, and orders’ Message Handler charges the order', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(orders!.url);
 
-    await until(() => expect(chargesOf(orderId)).toEqual([{ orderId, total: TOTAL }]));
+    await until(() => expect(chargesOf(orderId)).toEqual([{ orderId, total: ORDER_TOTAL }]));
     await untilDeleted(ordersCharging);
     await untilDeleted(ordersHandlingCharge);
   });
 
   test('neither Service writes a console line about the order’s Messages', async () => {
-    const orderId = await placeAnOrder();
+    const orderId = await placeAnOrder(orders!.url);
 
     await until(() => expect(draftsOf(orderId)).toHaveLength(1));
     await until(() => expect(chargesOf(orderId)).toHaveLength(1));
