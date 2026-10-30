@@ -42,6 +42,14 @@ export async function placeOf(connecting: SqsConnecting): Promise<Located> {
   return { kind: 'located', place };
 }
 
+/** The SNS and SQS side of a connection: the clients of the Service, where they are, and the Broker prefix of every name it uses. */
+export type SqsSide = {
+  readonly sns: SNSClient;
+  readonly sqs: SQSClient;
+  readonly place: Place;
+  readonly prefix: string | null;
+};
+
 /** An ARN AWS answered, and the call that answered it. */
 export type AnsweredArn = { readonly from: string; readonly arn: string };
 

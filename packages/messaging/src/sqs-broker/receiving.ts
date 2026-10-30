@@ -1,15 +1,9 @@
 import type { ConsumeRun } from '../broker/index.ts';
 import { pause, troubleReportingOf } from '../broker/index.ts';
-import {
-  deliver,
-  handBack,
-  type Prepared,
-  preparedFrom,
-  type QueueRun,
-  type ReceivedMessage,
-} from './delivering.ts';
+import { deliver, handBack, type Prepared, preparedFrom, type QueueRun } from './delivering.ts';
 import type { FoundQueue } from './queue-finding.ts';
 import { receiveOnce } from './receive-once.ts';
+import type { ReceivedMessage } from './received-reading.ts';
 
 /** What one Durable consumer's loop runs with: the core's `troubled` besides what delivering needs. */
 export type Receiving = QueueRun & Pick<ConsumeRun, 'troubled'>;

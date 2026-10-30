@@ -85,6 +85,7 @@ export {
 } from './responses.ts';
 export {
   receivedSnsAttributesOf,
+  snsAttributeNames,
   snsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,

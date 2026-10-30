@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: SNS spells its message attribute fields in PascalCase
 import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
@@ -6,6 +7,7 @@ import {
   isIdHeaderValue,
   maxBrokerHeaderBytes,
   receivedSnsAttributesOf,
+  snsAttributeNames,
   snsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,
@@ -117,6 +119,82 @@ function aDrawing(seed: number) {
 
 const printable = /^[\x20-\x7e]+$/;
 
+/** The text of each attribute `snsAttributesOf` writes for a Message, by its name. */
+function textsOf(
+  message: Parameters<typeof snsAttributesOf>[0],
+): Record<string, string | undefined> {
+  const entries = Object.entries(snsAttributesOf(message));
+  return Object.fromEntries(entries.map(([name, { StringValue }]) => [name, StringValue]));
+}
+
+/** The attributes of a received Message as SQS answers them, each of the DataType `String` with the text given; a name with no text is absent. */
+function received(texts: Readonly<Record<string, string | undefined>>) {
+  const attributes: Record<string, { DataType: string; StringValue: string }> = {};
+  for (const [name, text] of Object.entries(texts)) {
+    if (text !== undefined) {
+      attributes[name] = { DataType: 'String', StringValue: text };
+    }
+  }
+  return attributes;
+}
+
+describe('the SNS wire', () => {
+  test('a Message travels in four message attributes of the DataType String, named as the wire says', () => {
+    const attributes = snsAttributesOf(aMessage({ headers: { 'x-trace': 'abc' } }));
+
+    expect(snsAttributeNames).toEqual([
+      snsSubjectAttribute,
+      snsMessageIdAttribute,
+      snsFactIdAttribute,
+      snsHeadersAttribute,
+    ]);
+    expect(Object.keys(attributes)).toEqual([...snsAttributeNames]);
+    expect(Object.values(attributes).map(({ DataType }) => DataType)).toEqual([
+      'String',
+      'String',
+      'String',
+      'String',
+    ]);
+    expect(attributes[snsSubjectAttribute]?.StringValue).toBe(
+      'orders-service.event.OrderCreated.v1',
+    );
+  });
+
+  test.each([
+    ['a Number', { DataType: 'Number', StringValue: '1' }],
+    ['a String.json', { DataType: 'String.json', StringValue: '"fact-1"' }],
+    ['a Binary', { DataType: 'Binary', StringValue: '"fact-1"' }],
+    ['a String with no StringValue', { DataType: 'String' }],
+    ['a String with an empty StringValue', { DataType: 'String', StringValue: '' }],
+    ['an attribute with no DataType', { StringValue: '"fact-1"' }],
+  ])('an id attribute that is %s is listed as not reading back', (_, attribute) => {
+    const attributes = received(textsOf(aMessage()));
+
+    const withMessageId = receivedSnsAttributesOf({
+      ...attributes,
+      [snsMessageIdAttribute]: attribute,
+    });
+    const withFactId = receivedSnsAttributesOf({ ...attributes, [snsFactIdAttribute]: attribute });
+    const withHeaders = receivedSnsAttributesOf({
+      ...attributes,
+      [snsHeadersAttribute]: attribute,
+    });
+
+    expect(withMessageId).toEqual({ kind: 'missing', names: [snsMessageIdAttribute] });
+    expect(withFactId).toEqual({ kind: 'missing', names: [snsFactIdAttribute] });
+    expect(withHeaders).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+  });
+
+  test('a received Message with no message attributes lists the three', () => {
+    const read = receivedSnsAttributesOf(undefined);
+
+    expect(read).toEqual({
+      kind: 'missing',
+      names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
+    });
+  });
+});
+
 describe('snsAttributesOf and receivedSnsAttributesOf', () => {
   test('every Fact id, Broker message id and set of Transport headers the core accepts encodes to printable ASCII and reads back unchanged, __proto__ and constructor headers included', () => {
     const draw = aDrawing(478);
@@ -127,10 +205,11 @@ describe('snsAttributesOf and receivedSnsAttributesOf', () => {
       const attributes = snsAttributesOf({ subject: 's', ...drawn });
       const read = receivedSnsAttributesOf(attributes);
 
-      expect(attributes[snsMessageIdAttribute]).toBe(referenceEncodingOf(drawn.messageId));
-      expect(attributes[snsFactIdAttribute]).toBe(referenceEncodingOf(drawn.factId));
-      expect(attributes[snsHeadersAttribute]).toBe(referenceEncodingOfHeaders(drawn.headers));
-      expect(attributes[snsHeadersAttribute]).toMatch(printable);
+      const texts = textsOf({ subject: 's', ...drawn });
+      expect(texts[snsMessageIdAttribute]).toBe(referenceEncodingOf(drawn.messageId));
+      expect(texts[snsFactIdAttribute]).toBe(referenceEncodingOf(drawn.factId));
+      expect(texts[snsHeadersAttribute]).toBe(referenceEncodingOfHeaders(drawn.headers));
+      expect(texts[snsHeadersAttribute]).toMatch(printable);
       expect(read.kind).toBe('read');
       if (read.kind === 'read') {
         expect(read.messageId).toBe(drawn.messageId);
@@ -199,7 +278,7 @@ describe('the values snsAttributesOf writes', () => {
     ['astral characters and controls', aMessage({ factId: '\u{1f600}\u0001\u007f' })],
     ['a header', aMessage({ headers: { 'x-trace': 'abc' } })],
   ])('%s are written as JSON text SNS accepts, never empty', (_, message) => {
-    const attributes = snsAttributesOf(message);
+    const attributes = textsOf(message);
 
     for (const name of [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute]) {
       const value = attributes[name] ?? '';
@@ -211,20 +290,20 @@ describe('the values snsAttributesOf writes', () => {
 
 describe('receivedSnsAttributesOf', () => {
   test('a received Message lacking an id attribute lists it, and one lacking both lists both', () => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
     const withoutMessageId = { ...attributes, [snsMessageIdAttribute]: undefined };
     const withoutFactId = { ...attributes, [snsFactIdAttribute]: undefined };
     const withoutBoth = { ...withoutMessageId, [snsFactIdAttribute]: undefined };
 
-    expect(receivedSnsAttributesOf(withoutMessageId)).toEqual({
+    expect(receivedSnsAttributesOf(received(withoutMessageId))).toEqual({
       kind: 'missing',
       names: [snsMessageIdAttribute],
     });
-    expect(receivedSnsAttributesOf(withoutFactId)).toEqual({
+    expect(receivedSnsAttributesOf(received(withoutFactId))).toEqual({
       kind: 'missing',
       names: [snsFactIdAttribute],
     });
-    expect(receivedSnsAttributesOf(withoutBoth)).toEqual({
+    expect(receivedSnsAttributesOf(received(withoutBoth))).toEqual({
       kind: 'missing',
       names: [snsMessageIdAttribute, snsFactIdAttribute],
     });
@@ -239,13 +318,17 @@ describe('the ids receivedSnsAttributesOf reads', () => {
     ['a JSON null', 'null'],
     ['an empty JSON string, which the Fact id’s rule refuses', '""'],
   ])('an id attribute holding %s is listed as not reading back', (_, value) => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const withMessageId = receivedSnsAttributesOf({
-      ...attributes,
-      [snsMessageIdAttribute]: value,
-    });
-    const withFactId = receivedSnsAttributesOf({ ...attributes, [snsFactIdAttribute]: value });
+    const withMessageId = receivedSnsAttributesOf(
+      received({
+        ...attributes,
+        [snsMessageIdAttribute]: value,
+      }),
+    );
+    const withFactId = receivedSnsAttributesOf(
+      received({ ...attributes, [snsFactIdAttribute]: value }),
+    );
 
     expect(withMessageId).toEqual({ kind: 'missing', names: [snsMessageIdAttribute] });
     expect(withFactId).toEqual({ kind: 'missing', names: [snsFactIdAttribute] });
@@ -256,13 +339,15 @@ describe('the ids receivedSnsAttributesOf reads', () => {
     ['whitespace around the JSON string', ' \n\t"fact-1" \r\n', 'fact-1'],
     ['upper-case escapes', '"\\u00E9\\uD83D\\uDE00"', 'é\u{1f600}'],
   ])('an id attribute with %s reads back as the id it spells', (_, value, id) => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const read = receivedSnsAttributesOf({
-      ...attributes,
-      [snsMessageIdAttribute]: value,
-      [snsFactIdAttribute]: value,
-    });
+    const read = receivedSnsAttributesOf(
+      received({
+        ...attributes,
+        [snsMessageIdAttribute]: value,
+        [snsFactIdAttribute]: value,
+      }),
+    );
 
     expect(read).toEqual({ kind: 'read', messageId: id, factId: id, headers: {} });
   });
@@ -279,15 +364,15 @@ describe('the Transport headers receivedSnsAttributesOf reads', () => {
     ['an object with a nested object', '{"x-trace":{"a":"b"}}'],
     ['an object with a null', '{"x-trace":null}'],
   ])('a cf-loom-headers that is %s is listed as not reading back', (_, value) => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+    const read = receivedSnsAttributesOf(received({ ...attributes, [snsHeadersAttribute]: value }));
 
     expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
   });
 
   test('a message lacking its ids and its headers lists the three, in attribute order', () => {
-    const read = receivedSnsAttributesOf({});
+    const read = receivedSnsAttributesOf(received({}));
 
     expect(read).toEqual({
       kind: 'missing',
@@ -307,18 +392,18 @@ describe('the Transport headers the core would refuse', () => {
     ['a value with whitespace at its end', '{"x-trace":"abc "}'],
     ['a value with a lone surrogate', '{"x-trace":"\\ud800"}'],
   ])('a cf-loom-headers holding %s is listed as not reading back', (_, value) => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+    const read = receivedSnsAttributesOf(received({ ...attributes, [snsHeadersAttribute]: value }));
 
     expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
   });
 
   test('one refused header among accepted ones lists the attribute and gives no header', () => {
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
     const value = '{"x-trace":"abc","Nats-Msg-Id":"abc"}';
 
-    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+    const read = receivedSnsAttributesOf(received({ ...attributes, [snsHeadersAttribute]: value }));
 
     expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
   });
@@ -328,9 +413,9 @@ describe('the header names every object has', () => {
   test('headers named __proto__, constructor, toString and hasOwnProperty read back as own entries', () => {
     const value =
       '{"__proto__":"a","constructor":"b","toString":"c","hasOwnProperty":"d","valueOf":"e"}';
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+    const read = receivedSnsAttributesOf(received({ ...attributes, [snsHeadersAttribute]: value }));
 
     if (read.kind !== 'read') {
       throw new Error(`the headers did not read back: ${read.names.join(', ')}`);
@@ -347,9 +432,9 @@ describe('the header names every object has', () => {
 
   test('a cf-loom-headers text naming one header twice reads back with the last value, as JSON.parse keeps it', () => {
     const value = '{"x-trace":"first","x-other":"other","x-trace":"last"}';
-    const attributes = snsAttributesOf(aMessage());
+    const attributes = textsOf(aMessage());
 
-    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+    const read = receivedSnsAttributesOf(received({ ...attributes, [snsHeadersAttribute]: value }));
 
     expect(read).toEqual({
       kind: 'read',
@@ -372,21 +457,25 @@ function inUpperCase(json: string): string {
 
 /** The Broker message id an attribute of this JSON text reads back as, with everything else in order; `undefined` when it does not read back. */
 function messageIdReadFrom(json: string): string | undefined {
-  const read = receivedSnsAttributesOf({
-    [snsMessageIdAttribute]: json,
-    [snsFactIdAttribute]: '"fact-1"',
-    [snsHeadersAttribute]: '{}',
-  });
+  const read = receivedSnsAttributesOf(
+    received({
+      [snsMessageIdAttribute]: json,
+      [snsFactIdAttribute]: '"fact-1"',
+      [snsHeadersAttribute]: '{}',
+    }),
+  );
   return read.kind === 'read' ? read.messageId : undefined;
 }
 
 /** The value of the one header an attribute of this JSON text reads back as, with everything else in order; `undefined` when it does not read back. */
 function headerValueReadFrom(json: string): string | undefined {
-  const read = receivedSnsAttributesOf({
-    [snsMessageIdAttribute]: '"event.E.v1:fact-1"',
-    [snsFactIdAttribute]: '"fact-1"',
-    [snsHeadersAttribute]: json,
-  });
+  const read = receivedSnsAttributesOf(
+    received({
+      [snsMessageIdAttribute]: '"event.E.v1:fact-1"',
+      [snsFactIdAttribute]: '"fact-1"',
+      [snsHeadersAttribute]: json,
+    }),
+  );
   return read.kind === 'read' ? Object.values(read.headers)[0] : undefined;
 }
 
@@ -506,10 +595,10 @@ describe('the growth of reading foreign SNS attributes', () => {
     'an id attribute of the largest size SQS carries is read, refused or accepted, in time that grows linearly with its length',
     () => {
       const aReading = (length: number) => {
-        const attributes = {
-          ...snsAttributesOf(aMessage()),
+        const attributes = received({
+          ...textsOf(aMessage()),
           [snsFactIdAttribute]: JSON.stringify('x'.repeat(length)),
-        };
+        });
         return () => receivedSnsAttributesOf(attributes);
       };
       const nearOneMebibyte = 1_000_000;
@@ -539,7 +628,7 @@ describe('the growth of reading foreign SNS attributes', () => {
     () => {
       const aReading = (depth: number) => {
         const nested = `${'{"a":'.repeat(depth)}"x"${'}'.repeat(depth)}`;
-        const attributes = { ...snsAttributesOf(aMessage()), [snsHeadersAttribute]: nested };
+        const attributes = received({ ...textsOf(aMessage()), [snsHeadersAttribute]: nested });
         return () => receivedSnsAttributesOf(attributes);
       };
       const deepest = 100_000;

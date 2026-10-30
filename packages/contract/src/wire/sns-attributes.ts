@@ -1,3 +1,4 @@
+// biome-ignore-all lint/style/useNamingConvention: SNS spells its message attribute fields in PascalCase
 import {
   brokerHeaderBytesOf,
   isIdHeaderValue,
@@ -18,6 +19,23 @@ export const snsFactIdAttribute = 'cf-loom-fact-id';
 /** The SNS message attribute the Message's Broker headers travel in. */
 export const snsHeadersAttribute = 'cf-loom-headers';
 
+/** The four SNS message attributes a Message travels in, which a queue is asked for when it receives one. */
+export const snsAttributeNames = [
+  snsSubjectAttribute,
+  snsMessageIdAttribute,
+  snsFactIdAttribute,
+  snsHeadersAttribute,
+] as const;
+
+/** A message attribute as cf-loom sends it: of the DataType `String`, the one DataType it reads. */
+export type SnsAttribute = { readonly DataType: 'String'; readonly StringValue: string };
+
+/** A message attribute of a received Message as SQS answers it, each part of which may be missing. */
+export type ReceivedAttribute = {
+  readonly DataType?: string | undefined;
+  readonly StringValue?: string | undefined;
+};
+
 /** A value's JSON text with every UTF-16 code unit outside printable ASCII written as a lower-case `\uXXXX` escape, which SNS carries in an attribute and `JSON.parse` reads back. */
 function asciiJsonOf(value: unknown): string {
   return JSON.stringify(value).replace(
@@ -26,19 +44,25 @@ function asciiJsonOf(value: unknown): string {
   );
 }
 
-/** The SNS message attributes a Message travels with: its prefixed subject as is, and its Broker message id, Fact id and Transport headers in ASCII JSON, which SNS carries unchanged. */
+/** The SNS message attributes a Message travels with, all of the DataType `String`: its prefixed subject as is, and its Broker message id, Fact id and Transport headers in ASCII JSON, which SNS carries unchanged. */
 export function snsAttributesOf(message: {
   readonly subject: string;
   readonly messageId: string;
   readonly factId: string;
   readonly headers: Readonly<Record<string, string>>;
-}): Readonly<Record<string, string>> {
+}): Readonly<Record<string, SnsAttribute>> {
+  const text = (StringValue: string): SnsAttribute => ({ DataType: 'String', StringValue });
   return {
-    [snsSubjectAttribute]: message.subject,
-    [snsMessageIdAttribute]: asciiJsonOf(message.messageId),
-    [snsFactIdAttribute]: asciiJsonOf(message.factId),
-    [snsHeadersAttribute]: asciiJsonOf(message.headers),
+    [snsSubjectAttribute]: text(message.subject),
+    [snsMessageIdAttribute]: text(asciiJsonOf(message.messageId)),
+    [snsFactIdAttribute]: text(asciiJsonOf(message.factId)),
+    [snsHeadersAttribute]: text(asciiJsonOf(message.headers)),
   };
+}
+
+/** The text of a received message attribute of the DataType `String`, which is how cf-loom sends them; an attribute of any other DataType, or with no text, counts as absent. */
+function textOf(attribute: ReceivedAttribute | undefined): string | undefined {
+  return attribute?.DataType === 'String' ? attribute.StringValue : undefined;
 }
 
 /** What an attribute's text is as JSON, or `undefined` when the attribute is absent or its text is no JSON, which no JSON text is. */
@@ -72,13 +96,13 @@ function headersOf(text: string | undefined): Readonly<Record<string, string>> |
 
 const attributeNames = [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute];
 
-/** The inverse of `snsAttributesOf` for what a queue received: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */
+/** The inverse of `snsAttributesOf` for the message attributes of a Message a queue received, as SQS answers them: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */
 export function receivedSnsAttributesOf(
-  attributes: Readonly<Record<string, string | undefined>>,
+  attributes: Readonly<Record<string, ReceivedAttribute>> | undefined,
 ): ReceivedHeaders {
-  const messageId = idOf(attributes[snsMessageIdAttribute]);
-  const factId = idOf(attributes[snsFactIdAttribute]);
-  const headers = headersOf(attributes[snsHeadersAttribute]);
+  const messageId = idOf(textOf(attributes?.[snsMessageIdAttribute]));
+  const factId = idOf(textOf(attributes?.[snsFactIdAttribute]));
+  const headers = headersOf(textOf(attributes?.[snsHeadersAttribute]));
   const readings = [messageId, factId, headers];
   if (messageId === undefined || factId === undefined || headers === undefined) {
     return { kind: 'missing', names: attributeNames.filter((_, at) => readings[at] === undefined) };

@@ -1,0 +1,57 @@
+// biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
+import type { Message } from '@aws-sdk/client-sqs';
+import { joinedOf, logOf, receivedSnsAttributesOf } from '@cf-loom/contract/internal';
+import type { Delivery } from '../broker/index.ts';
+import { deliveryWaitOf } from '../broker-limits/index.ts';
+import type { FoundQueue } from './queue-finding.ts';
+
+/** A Message received from a Durable consumer's queue. */
+export type ReceivedMessage = { readonly queue: FoundQueue; readonly message: Message };
+
+/** A received Message read: the Delivery for its Handler and the wait of that Delivery, or the names of what cf-loom cannot read of it. */
+export type ReceivedReading =
+  | { readonly kind: 'readable'; readonly delivery: Delivery; readonly waitMs: number }
+  | { readonly kind: 'unreadable'; readonly names: readonly string[] };
+
+const receiveCountAttribute = 'ApproximateReceiveCount';
+
+/** Reads the Message by the wire and by SQS's receive count; one that lacks or cannot read any of them is unreadable, naming each. */
+export function readingOf({ queue, message }: ReceivedMessage): ReceivedReading {
+  const read = receivedSnsAttributesOf(message.MessageAttributes);
+  const deliveryCount = receiveCountOf(message);
+  if (read.kind === 'missing' || deliveryCount === undefined) {
+    const unreadCount = deliveryCount === undefined ? [receiveCountAttribute] : [];
+    const names = [...(read.kind === 'missing' ? read.names : []), ...unreadCount];
+    return { kind: 'unreadable', names };
+  }
+  const waitMs = deliveryWaitOf(queue.waits, deliveryCount);
+  const delivery = {
+    messageId: read.messageId,
+    factId: read.factId,
+    deliveryCount,
+    lastAttempt: deliveryCount >= queue.maxReceiveCount,
+    waitMs,
+    headers: read.headers,
+    body: new TextEncoder().encode(message.Body ?? ''),
+  };
+  return { kind: 'readable', delivery, waitMs };
+}
+
+/** How many times SQS has received the Message, a whole number from 1 as SQS counts them; `undefined` when it says otherwise. */
+function receiveCountOf(message: Message): number | undefined {
+  const text = message.Attributes?.[receiveCountAttribute];
+  const count = text !== undefined && /^[1-9]\d*$/.test(text) ? Number(text) : Number.NaN;
+  return Number.isSafeInteger(count) ? count : undefined;
+}
+
+/** Says that the Message is left alone, so the redrive moves it intact to the dead-letter queue, and why: it is not one cf-loom published. */
+export function leftForTheDeadLetterQueue(
+  { queue, message }: ReceivedMessage,
+  names: readonly string[],
+): void {
+  console.error(
+    ...logOf(
+      `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names, 'and')}`,
+    ),
+  );
+}

@@ -1,5 +1,6 @@
-import { oneLineOf, oneOrListOf } from '../broker-limits/index.ts';
-import { deliveriesOf, readVisibilityTimeout } from './reading-limits.ts';
+import { ownOf } from '@cf-loom/contract/internal';
+import { type DeliveryWaits, oneLineOf, oneOrListOf } from '../broker-limits/index.ts';
+import { deliveriesOf, readWait } from './reading-limits.ts';
 import { backoffEntriesOf, backoffTag, subscriptionTag } from './tags.ts';
 
 /** What a queue's attributes and tags say, as they came: the values of the three attributes cf-loom asks for and the queue's tags. */
@@ -8,18 +9,19 @@ export type QueueHeld = {
   readonly tags: Readonly<Record<string, string>>;
 };
 
-/** What the queue holds that cf-loom reads: how each differs from what `applyBrokerPlan` writes, its subscription's ARN when it has one, and its waits in milliseconds and `maxReceiveCount` when it differs in neither. */
-export type QueueReading = {
-  readonly differences: readonly string[];
-  readonly subscriptionArn: string | undefined;
-  readonly read: QueueRead | undefined;
-};
-
-/** The waits of a queue's first deliveries in milliseconds and the receives its redrive allows. */
-export type QueueRead = {
-  readonly waits: readonly [number, ...number[]];
-  readonly maxReceiveCount: number;
-};
+/** What the queue holds that cf-loom reads, found as `applyBrokerPlan` writes it: its waits in milliseconds, its `maxReceiveCount` and its subscription's ARN; or how it differs, with the subscription's ARN when it has one. */
+export type QueueReading =
+  | {
+      readonly kind: 'read';
+      readonly waits: DeliveryWaits;
+      readonly maxReceiveCount: number;
+      readonly subscriptionArn: string;
+    }
+  | {
+      readonly kind: 'differs';
+      readonly differences: readonly string[];
+      readonly subscriptionArn: string | undefined;
+    };
 
 type Read<Value> =
   | { readonly kind: 'read'; readonly value: Value }
@@ -31,25 +33,37 @@ export function queueReadingOf({ attributes, tags }: QueueHeld): QueueReading {
   const redrive = maxReceiveCountOf(attributes['RedrivePolicy']);
   const backoff = backoffOf(tags[backoffTag]);
   const subscription = subscriptionArnOf(tags[subscriptionTag]);
-  const differences = [visibility, redrive, backoff, subscription].flatMap(differenceOf);
-  const subscriptionArn = subscription.kind === 'read' ? subscription.value : undefined;
-  if (visibility.kind === 'read' && redrive.kind === 'read' && backoff.kind === 'read') {
+  if (
+    visibility.kind === 'read' &&
+    redrive.kind === 'read' &&
+    backoff.kind === 'read' &&
+    subscription.kind === 'read'
+  ) {
     const waits = [milliseconds(visibility.value), ...backoff.value.map(milliseconds)] as const;
-    return { differences, subscriptionArn, read: { waits, maxReceiveCount: redrive.value } };
+    return {
+      kind: 'read',
+      waits,
+      maxReceiveCount: redrive.value,
+      subscriptionArn: subscription.value,
+    };
   }
-  return { differences, subscriptionArn, read: undefined };
+  const differences = [visibility, redrive, backoff, subscription]
+    .filter(isDifference)
+    .map(({ difference }) => difference);
+  const subscriptionArn = subscription.kind === 'read' ? subscription.value : undefined;
+  return { kind: 'differs', differences, subscriptionArn };
 }
 
 function milliseconds(seconds: number): number {
   return seconds * 1_000;
 }
 
-function differenceOf(read: Read<unknown>): readonly string[] {
-  return read.kind === 'differs' ? [read.difference] : [];
+function isDifference(read: Read<unknown>): read is Extract<Read<unknown>, { kind: 'differs' }> {
+  return read.kind === 'differs';
 }
 
 function visibilityTimeoutOf(attribute: string | undefined): Read<number> {
-  const seconds = attribute === undefined ? undefined : readVisibilityTimeout(`${attribute}s`);
+  const seconds = attribute === undefined ? undefined : readWait(`${attribute}s`);
   if (seconds === undefined) {
     const shown = oneLineOf(attribute);
     return {
@@ -78,10 +92,7 @@ function maxReceiveCountOf(redrivePolicy: string | undefined): Read<number> {
 /** The `maxReceiveCount` a redrive policy's JSON holds, or `undefined` when it is no JSON object with one. */
 function maxReceiveCountIn(redrivePolicy: string): unknown {
   try {
-    const parsed: unknown = JSON.parse(redrivePolicy);
-    return typeof parsed === 'object' && parsed !== null && 'maxReceiveCount' in parsed
-      ? parsed.maxReceiveCount
-      : undefined;
+    return ownOf(JSON.parse(redrivePolicy), 'maxReceiveCount');
   } catch {
     return undefined;
   }
@@ -91,7 +102,7 @@ function backoffOf(tag: string | undefined): Read<readonly number[]> {
   if (tag === undefined) {
     return { kind: 'read', value: [] };
   }
-  const entries = oneOrListOf(readVisibilityTimeout)(backoffEntriesOf(tag));
+  const entries = oneOrListOf(readWait)(backoffEntriesOf(tag));
   if (entries === undefined) {
     return {
       kind: 'differs',

@@ -7,13 +7,12 @@ import {
 } from '@aws-sdk/client-sqs';
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
-import { oneLineOf } from '../broker-limits/index.ts';
+import { type DeliveryWaits, oneLineOf } from '../broker-limits/index.ts';
 import { answeredWith, isAwsError } from './aws-errors.ts';
-import { arnMismatchOf, queueArnOf, topicArnOf } from './connecting.ts';
+import { arnMismatchOf, queueArnOf, type SqsSide, topicArnOf } from './connecting.ts';
 import { queueNameOf } from './queue-names.ts';
-import { type QueueHeld, queueReadingOf } from './queue-reading.ts';
+import { type QueueHeld, type QueueReading, queueReadingOf } from './queue-reading.ts';
 import { queueUrlOf } from './queue-url.ts';
-import type { Working } from './sqs-connection.ts';
 import {
   type SubscriptionShape,
   subscriptionDifferencesWithIdentityOf,
@@ -27,7 +26,7 @@ export type FoundQueue = {
   readonly durable: string;
   readonly name: string;
   readonly url: string;
-  readonly waits: readonly [number, ...number[]];
+  readonly waits: DeliveryWaits;
   readonly maxReceiveCount: number;
 };
 
@@ -38,13 +37,13 @@ export type Found =
 
 /** Asks SQS for the queue of each Durable consumer under its prefixed name, every one before any is received from. */
 export async function queuesFoundOf(
-  working: Working,
+  side: SqsSide,
   durableConsumers: readonly DurableConsumer[],
 ): Promise<Found> {
   const queues: FoundQueue[] = [];
   const lines: string[] = [];
   for (const durableConsumer of durableConsumers) {
-    const finding = await queueFoundOf(working, durableConsumer);
+    const finding = await queueFoundOf(side, durableConsumer);
     if (finding.kind === 'found') {
       queues.push(finding.queue);
     } else {
@@ -58,8 +57,8 @@ type Finding =
   | { readonly kind: 'found'; readonly queue: FoundQueue }
   | { readonly kind: 'refused'; readonly line: string };
 
-async function queueFoundOf(working: Working, durableConsumer: DurableConsumer): Promise<Finding> {
-  const { sqs, sns, prefix, place } = working;
+async function queueFoundOf(side: SqsSide, durableConsumer: DurableConsumer): Promise<Finding> {
+  const { sqs, prefix } = side;
   const durable = prefixedNameOf(prefix, durableConsumer.durable);
   const name = queueNameOf(durable);
   const url = await queueUrlOf(sqs, name);
@@ -68,19 +67,37 @@ async function queueFoundOf(working: Working, durableConsumer: DurableConsumer):
   }
   const held = await heldBy(sqs, url);
   const reading = queueReadingOf(held);
+  const further = await furtherDifferencesOf(side, { durableConsumer, name, held }, reading);
+  const what = `The queue ${name} of the Durable consumer ${durable}`;
+  if (reading.kind === 'differs') {
+    return refusedFor(what, [...reading.differences, ...further]);
+  }
+  if (further.length > 0) {
+    return refusedFor(what, further);
+  }
+  const { waits, maxReceiveCount } = reading;
+  return { kind: 'found', queue: { durableConsumer, durable, name, url, waits, maxReceiveCount } };
+}
+
+/** What the queue's own ARN and the subscription its tag names add to the queue's differences. */
+async function furtherDifferencesOf(
+  { sns, prefix, place }: SqsSide,
+  queue: {
+    readonly durableConsumer: DurableConsumer;
+    readonly name: string;
+    readonly held: QueueHeld;
+  },
+  { subscriptionArn }: QueueReading,
+): Promise<readonly string[]> {
+  const { durableConsumer, name, held } = queue;
   const queueArn = queueArnOf(place, name);
   const shape = subscriptionShapeOf({
     topicArn: topicArnOf(place, prefixedNameOf(prefix, durableConsumer.stream)),
     queueArn,
     subject: prefixedSubjectOf(prefix, durableConsumer.subject),
   });
-  const subscribed = await subscriptionDifferencesFor(sns, reading.subscriptionArn, shape);
-  const differences = [...reading.differences, ...arnDifferencesOf(held, queueArn), ...subscribed];
-  if (differences.length > 0 || reading.read === undefined) {
-    return refusedFor(`The queue ${name} of the Durable consumer ${durable}`, differences);
-  }
-  const { waits, maxReceiveCount } = reading.read;
-  return { kind: 'found', queue: { durableConsumer, durable, name, url, waits, maxReceiveCount } };
+  const subscribed = await subscriptionDifferencesFor(sns, subscriptionArn, shape);
+  return [...arnDifferencesOf(held, queueArn), ...subscribed];
 }
 
 function refusedFor(what: string, differences: readonly string[]): Finding {

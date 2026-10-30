@@ -39,10 +39,10 @@ type Waits = { readonly visibilityTimeout: number; readonly backoff: string | un
 type Wait = { readonly text: string; readonly seconds: number };
 
 /** Reads one wait of a queue, a visibility timeout or an entry of its backoff, as whole seconds under 12 hours: the rule `ackWait` is written by. */
-export const readVisibilityTimeout = secondsBetween(1, longestVisibilityTimeout);
+export const readWait = secondsBetween(1, longestVisibilityTimeout);
 
 function waitOf(input: unknown): Wait | undefined {
-  const seconds = readVisibilityTimeout(input);
+  const seconds = readWait(input);
   return typeof input === 'string' && seconds !== undefined ? { text: input, seconds } : undefined;
 }
 

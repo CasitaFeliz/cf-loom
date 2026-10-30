@@ -315,6 +315,7 @@ export {
   reservedResponseOf,
   segmentOf,
   sendableRetryAfterOf,
+  snsAttributeNames,
   snsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,

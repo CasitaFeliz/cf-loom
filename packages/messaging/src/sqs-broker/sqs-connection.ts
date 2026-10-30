@@ -1,37 +1,28 @@
 // biome-ignore-all lint/style/useNamingConvention: SNS spells its fields in PascalCase
-import { PublishCommand, type SNSClient } from '@aws-sdk/client-sns';
-import type { SQSClient } from '@aws-sdk/client-sqs';
+import { PublishCommand } from '@aws-sdk/client-sns';
 import { linesTextOf, prefixedSubjectOf, snsAttributesOf } from '@cf-loom/contract/internal';
 import type { BrokerConnection, OutgoingMessage } from '../broker/index.ts';
-import type { Place } from './connecting.ts';
-import { refusalsOf } from './delivering.ts';
+import type { SqsSide } from './connecting.ts';
 import { queuesFoundOf } from './queue-finding.ts';
 import { receiveFrom } from './receiving.ts';
-
-/** What a connection works with: the clients of the Service, the place they are in and the Broker prefix of every name. */
-export type Working = {
-  readonly sns: SNSClient;
-  readonly sqs: SQSClient;
-  readonly place: Place;
-  readonly prefix: string | null;
-};
+import { refusalsOf } from './refusals.ts';
 
 /** The connection `messaging()` publishes, consumes and closes through, over the clients the Service gave. */
-export function sqsConnectionOf(working: Working, topicArn: string): BrokerConnection {
+export function sqsConnectionOf(side: SqsSide, topicArn: string): BrokerConnection {
   const running: Promise<void>[] = [];
   const refusals = refusalsOf();
   return {
     publish: async (message) => {
-      await publishOn(working, topicArn, message);
+      await publishOn(side, topicArn, message);
       return { duplicate: false };
     },
     consume: async (durableConsumers, { closing, troubled }) => {
-      const found = await queuesFoundOf(working, durableConsumers);
+      const found = await queuesFoundOf(side, durableConsumers);
       if (found.kind === 'refused') {
         throw new Error(linesTextOf(found.lines));
       }
       for (const queue of found.queues) {
-        running.push(receiveFrom(queue, { sqs: working.sqs, closing, troubled, refusals }));
+        running.push(receiveFrom(queue, { sqs: side.sqs, closing, troubled, refusals }));
       }
     },
     close: async () => {
@@ -45,18 +36,12 @@ export function sqsConnectionOf(working: Working, topicArn: string): BrokerConne
 }
 
 async function publishOn(
-  { sns, prefix }: Working,
+  { sns, prefix }: SqsSide,
   topicArn: string,
   message: OutgoingMessage,
 ): Promise<void> {
   const subject = prefixedSubjectOf(prefix, message.subject);
-  const attributes = snsAttributesOf({ ...message, subject });
-  const MessageAttributes = Object.fromEntries(
-    Object.entries(attributes).map(([name, value]) => [
-      name,
-      { DataType: 'String', StringValue: value },
-    ]),
-  );
+  const MessageAttributes = snsAttributesOf({ ...message, subject });
   const Message = new TextDecoder().decode(message.body);
   await sns.send(new PublishCommand({ TopicArn: topicArn, Message, MessageAttributes }));
 }
