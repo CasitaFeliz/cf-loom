@@ -387,7 +387,7 @@ describe('consuming over sqs()', () => {
       ]);
     });
     const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
-    const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read cf-loom-message-id, cf-loom-fact-id, cf-loom-headers`;
+    const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read cf-loom-message-id, cf-loom-fact-id and cf-loom-headers`;
     expect(lines).toEqual([line, line, line]);
     expect(received).toEqual([]);
     expect(faults).toEqual([]);
@@ -421,7 +421,9 @@ describe('consuming over sqs()', () => {
     const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
     expect(lines).toHaveLength(3);
     expect(
-      lines.every((line) => line.endsWith('cf-loom-message-id, cf-loom-fact-id, cf-loom-headers')),
+      lines.every((line) =>
+        line.endsWith('cf-loom-message-id, cf-loom-fact-id and cf-loom-headers'),
+      ),
     ).toBe(true);
     expect(received).toEqual([]);
   });

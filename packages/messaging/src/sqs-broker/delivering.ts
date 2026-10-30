@@ -6,6 +6,7 @@ import {
   type SQSClient,
 } from '@aws-sdk/client-sqs';
 import {
+  joinedOf,
   receivedSnsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,
@@ -121,7 +122,7 @@ function leftForTheDeadLetterQueue(
   names: readonly string[],
 ): void {
   console.error(
-    `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${names.join(', ')}`,
+    `${queue.name}: left SQS message ${message.MessageId} for the dead-letter queue, since it lacks or cannot read ${joinedOf(names, 'and')}`,
   );
 }
 
