@@ -1,4 +1,3 @@
-export { oneOf } from './closed-values.ts';
 export { exportNamesOf } from './export-names.ts';
 export type { Failure, NotAllowedFailure } from './failures.ts';
 export { failureLineOf } from './failures.ts';

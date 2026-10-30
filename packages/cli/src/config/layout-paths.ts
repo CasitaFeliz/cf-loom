@@ -1,3 +1,4 @@
+import { joinedOf } from '@cf-loom/contract/internal';
 import { contractFolder, isUnderContract, sourceFolder } from '../loading/index.ts';
 import type { Layout } from './config.ts';
 
@@ -133,15 +134,9 @@ function variableRefusalOf(field: LayoutField, path: string): string | undefined
   if (foreign === undefined) {
     return undefined;
   }
-  const takes = taken.length === 0 ? 'takes no variable' : `takes only ${joinedOf(taken)}`;
+  const braced = taken.map((name) => `{${name}}`);
+  const takes = taken.length === 0 ? 'takes no variable' : `takes only ${joinedOf(braced, 'and')}`;
   return `holds {${foreign}}, but ${owner} ${takes}`;
-}
-
-/** Variables as a sentence names them: `{name}`, `{name} and {version}`, `{group}, {name} and {version}`. */
-function joinedOf(taken: readonly Variable[]): string {
-  const written = taken.map((name) => `{${name}}`);
-  const last = written.at(-1) ?? '';
-  return written.length === 1 ? last : `${written.slice(0, -1).join(', ')} and ${last}`;
 }
 
 function segmentRefusalOf(_field: LayoutField, path: string): string | undefined {

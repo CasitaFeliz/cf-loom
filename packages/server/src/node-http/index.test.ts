@@ -129,6 +129,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
   });
   const written = new PassThrough();
   const outgoing = Object.assign(written, {
+    req: incoming,
     statusCode: 0,
     appendHeader: () => outgoing,
     setHeader: () => outgoing,
@@ -746,17 +747,16 @@ describe('nodeHttp', () => {
     expect(statusLineOf(answer)).toBe('HTTP/1.1 413 Payload Too Large');
   });
 
-  test('a body serve leaves unread is answered with connection: close, and the socket closes at once', async () => {
+  test('a body serve never reads is discarded by Node, and the connection answers the next request', async () => {
     const url = await listening();
     const body = 'x'.repeat(300_000);
     const first = `POST /nope HTTP/1.1\r\nHost: test\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
-    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n';
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
 
     const answer = await rawFor(url, first + second, 1000);
 
-    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found']);
-    expect(answer.received).toMatch(/^connection: close$/im);
-    expect(answer.closed).toBe(true);
+    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found', 'HTTP/1.1 200 OK']);
+    expect(answer.received.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
   });
 
   test('after an unread large body to an undeclared path, the next fetches are answered', async () => {
@@ -786,15 +786,15 @@ describe('nodeHttp', () => {
     expect(tooLarge.headers.get('connection')).toBe('close');
   });
 
-  test('a small body serve leaves unread closes the connection too', async () => {
+  test('a small body serve never reads keeps the connection too', async () => {
     const url = await listening();
     const first = 'POST /nope HTTP/1.1\r\nHost: test\r\nContent-Length: 10\r\n\r\n0123456789';
-    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n';
+    const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
 
     const answer = await rawFor(url, first + second, 1000);
 
-    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found']);
-    expect(answer.received).toMatch(/^connection: close$/im);
+    expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 404 Not Found', 'HTTP/1.1 200 OK']);
+    expect(answer.received.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
   });
 
   test('a request whose body serve read keeps its connection alive', async () => {
