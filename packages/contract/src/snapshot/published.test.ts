@@ -185,7 +185,7 @@ describe('the published Snapshot’s types', () => {
       subscriptions: {},
     };
 
-    // @ts-expect-error a declared Snapshot carries no version
+    // @ts-expect-error TS2322 a declared Snapshot carries no version
     const published: PublishedSnapshot = declared;
 
     expect(published).toBe(declared);
@@ -205,7 +205,7 @@ describe('the published Snapshot’s types', () => {
     const subscription: SubscriptionSnapshot = {
       description: 'Receives it',
       event: 'orders-service:OrderPlaced@1',
-      // @ts-expect-error removedIn belongs to the published Snapshot's tombstone
+      // @ts-expect-error TS2353 removedIn belongs to the published Snapshot's tombstone
       removedIn: '3.2.0',
     };
 

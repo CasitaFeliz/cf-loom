@@ -240,14 +240,14 @@ describe('publish and send types', () => {
     const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, fact);
 
     const mistyped = () =>
-      // @ts-expect-error: v3's body requires its currency
+      // @ts-expect-error TS2741 v3's body requires its currency
       publisher.publish('OrderCreated', { v2, v3: { orderId: 'o-1', total: 12 } }, fact);
 
     expect([publishing, mistyped]).toHaveLength(2);
   });
 
   test('leaving out a live version’s body is a type error', () => {
-    // @ts-expect-error: the Deprecated v2 is still published
+    // @ts-expect-error TS2345 the Deprecated v2 is still published
     const leftOut = () => publisher.publish('OrderCreated', { v3 }, fact);
 
     expect(leftOut).toBeTypeOf('function');
@@ -256,16 +256,16 @@ describe('publish and send types', () => {
   test('passing a Retired version’s body is a type error, even from a variable', () => {
     const bodies = { v1: { orderId: 'o-1' }, v2, v3 };
 
-    // @ts-expect-error: v1 is Retired, so it is never published
+    // @ts-expect-error TS2345 v1 is Retired, so it is never published
     const retired = () => publisher.publish('OrderCreated', bodies, fact);
 
     expect(retired).toBeTypeOf('function');
   });
 
   test('an Event whose version is typed number has no body key, so publishing it is a type error', () => {
-    // @ts-expect-error: a version typed number keys no body
+    // @ts-expect-error TS2741 a version typed number keys no body
     const bare = () => publisher.publish('Bar', {}, fact);
-    // @ts-expect-error: a version typed number keys no body, whatever is given
+    // @ts-expect-error TS2353 a version typed number keys no body, whatever is given
     const given = () => publisher.publish('Bar', { v1: { barId: 'b-1' } }, fact);
 
     expect([bare, given]).toHaveLength(2);
@@ -280,9 +280,9 @@ describe('publish and send types', () => {
   });
 
   test('a name the Root does not list, or whose every version is Retired, is a type error', () => {
-    // @ts-expect-error: the Root lists no OrderShipped
+    // @ts-expect-error TS2345 the Root lists no OrderShipped
     const unlisted = () => publisher.publish('OrderShipped', {}, fact);
-    // @ts-expect-error: OrderArchived's every version is Retired
+    // @ts-expect-error TS2345 OrderArchived's every version is Retired
     const archived = () => publisher.publish('OrderArchived', {}, fact);
 
     expect([unlisted, archived]).toHaveLength(2);
@@ -291,7 +291,7 @@ describe('publish and send types', () => {
   test('send takes a Command name with an Active version and that version’s body, whatever Group lists it', () => {
     const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, fact);
 
-    // @ts-expect-error: the Active ChargeCard@2 requires its amount
+    // @ts-expect-error TS2741 the Active ChargeCard@2 requires its amount
     const deprecatedBody = () => sender.send('ChargeCard', { orderId: 'o-1' }, fact);
 
     expect([sending, deprecatedBody]).toHaveLength(2);
@@ -314,14 +314,14 @@ describe('publish and send types', () => {
   });
 
   test('publish without a Fact id is a type error', () => {
-    // @ts-expect-error: every call takes a Fact id
+    // @ts-expect-error TS2345 every call takes a Fact id
     const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, {});
 
     expect(publishing).toBeTypeOf('function');
   });
 
   test('send without a Fact id is a type error', () => {
-    // @ts-expect-error: every call takes a Fact id
+    // @ts-expect-error TS2345 every call takes a Fact id
     const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, {});
 
     expect(sending).toBeTypeOf('function');
@@ -330,7 +330,7 @@ describe('publish and send types', () => {
   test('send to a Command with two Active versions is a type error', () => {
     type Body = Parameters<typeof sender.send<'Ship'>>[1];
 
-    // @ts-expect-error: Ship has two Active versions
+    // @ts-expect-error TS2353 Ship has two Active versions
     const shipping = () => sender.send('Ship', { orderId: 'o-1' }, fact);
 
     expectTypeOf<Body>().toEqualTypeOf<{
@@ -351,7 +351,7 @@ describe('publish and send types', () => {
   });
 
   test('a Command with no Active version is a type error to send', () => {
-    // @ts-expect-error: Refund has no Active version
+    // @ts-expect-error TS2345 Refund has no Active version
     const refunding = () => sender.send('Refund', { orderId: 'o-1' }, fact);
 
     expect(refunding).toBeTypeOf('function');
@@ -413,11 +413,11 @@ describe('publish and send types', () => {
 
     const consuming = () => [
       consume(
-        // @ts-expect-error shipV2 has no Handler
+        // @ts-expect-error TS2741 shipV2 has no Handler
         { commands: withoutShipV2, subscriptions: { notifyOnCreated: notifying }, readers },
         {},
       ),
-      // @ts-expect-error notifyOnCreated has no Handler
+      // @ts-expect-error TS2741 notifyOnCreated has no Handler
       consume({ commands, subscriptions: {}, readers }, {}),
       consume({ commands, subscriptions: { notifyOnCreated: notifying }, readers }, {}),
     ];
@@ -438,9 +438,9 @@ describe('publish and send types', () => {
 
     const consuming = () => [
       consume(handlers, { resources }),
-      // @ts-expect-error the Handler takes notifications
+      // @ts-expect-error TS2345 the Handler takes notifications
       consume(handlers, {}),
-      // @ts-expect-error the Handler takes notifications
+      // @ts-expect-error TS2322 the Handler takes notifications
       consume(handlers, { resources: {} }),
     ];
 
@@ -468,17 +468,17 @@ describe('publish and send types', () => {
 
     const consuming = () => [
       consume(typed, { resources }),
-      // @ts-expect-error the Handlers take the Service's Resources
+      // @ts-expect-error TS2345 the Handlers take the Service's Resources
       consume(typed, {}),
-      // @ts-expect-error the Handlers take the Service's Resources, notifications among them
+      // @ts-expect-error TS2322 the Handlers take the Service's Resources, notifications among them
       consume(typed, { resources: {} }),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2345 the annotation leaves the Resources unspecified
       consume(annotated, {}),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2322 the annotation leaves the Resources unspecified
       consume(annotated, { resources }),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2345 the annotation leaves the Resources unspecified
       consume(neverMap, {}),
-      // @ts-expect-error the annotation leaves the Resources unspecified
+      // @ts-expect-error TS2322 the annotation leaves the Resources unspecified
       consume(neverMap, { resources }),
     ];
 
@@ -504,14 +504,14 @@ describe('publish and send types', () => {
       endpoints: {},
       guards: {},
       commands,
-      // @ts-expect-error the brand alone hides what notifyOnCreated takes
+      // @ts-expect-error TS2322 the brand alone hides what notifyOnCreated takes
       subscriptions: { notifyOnCreated: bare },
       readers,
     });
     const consuming = () => [
-      // @ts-expect-error the brand alone hides what notifyOnCreated takes
+      // @ts-expect-error TS2322 the brand alone hides what notifyOnCreated takes
       consume(inferred, { resources }),
-      // @ts-expect-error never hides what notifyOnCreated takes
+      // @ts-expect-error TS2322 never hides what notifyOnCreated takes
       consume(inferredNever, { resources }),
     ];
 
@@ -542,7 +542,7 @@ describe('publish and send types', () => {
     const consuming = () => [
       consume(handlers, {}),
       consume({ commands, subscriptions: { notifyOnCreated: stubbed }, readers }, {}),
-      // @ts-expect-error consume always takes its options
+      // @ts-expect-error TS2554 consume always takes its options
       consume(handlers),
     ];
 
@@ -555,7 +555,7 @@ describe('the options, typed by what they declare', () => {
     const opened = await messaging(contract, broker);
     const options = { signal: new AbortController().signal, timeoutMs: 1_000 };
 
-    // @ts-expect-error timeoutMs is not a declared field
+    // @ts-expect-error TS2345 timeoutMs is not a declared field
     const closing = () => opened.close(options);
 
     expect(closing).toBeTypeOf('function');
@@ -564,7 +564,7 @@ describe('the options, typed by what they declare', () => {
   test('messaging() refuses an options variable holding a declared hook and a misspelled one', () => {
     const options = { onServiceFault: () => undefined, onBrokerTrubble: () => undefined };
 
-    // @ts-expect-error onBrokerTrubble is not a declared field
+    // @ts-expect-error TS2345 onBrokerTrubble is not a declared field
     const opening = () => messaging(contract, broker, options);
 
     expect(opening).toBeTypeOf('function');
@@ -595,7 +595,7 @@ describe('the options, typed by what they declare', () => {
   test('publish refuses options holding a factId and a misspelled headers', () => {
     const options = { factId: 'o-1', header: { traceparent: '00-abc-def-01' } };
 
-    // @ts-expect-error header is not a declared field
+    // @ts-expect-error TS2345 header is not a declared field
     const publishing = () => publisher.publish('OrderCreated', { v2, v3 }, options);
 
     expect(publishing).toBeTypeOf('function');
@@ -604,7 +604,7 @@ describe('the options, typed by what they declare', () => {
   test('send refuses options holding a factId and a misspelled headers', () => {
     const options = { factId: 'o-1', header: { traceparent: '00-abc-def-01' } };
 
-    // @ts-expect-error header is not a declared field
+    // @ts-expect-error TS2345 header is not a declared field
     const sending = () => sender.send('ChargeCard', { orderId: 'o-1', amount: 12 }, options);
 
     expect(sending).toBeTypeOf('function');
@@ -633,7 +633,7 @@ describe('the options, typed by what they declare', () => {
     const resources: Notifications = { notifications: { send: () => undefined } };
     const options = { resources, onServiceFault: () => undefined };
 
-    // @ts-expect-error onServiceFault is a field of messaging(), not of consume
+    // @ts-expect-error TS2345 onServiceFault is a field of messaging(), not of consume
     const consuming = () => consume(handlers, options);
 
     expect(consuming).toBeTypeOf('function');
@@ -674,12 +674,12 @@ describe('the options, typed by what they declare', () => {
     const overOptions = <O extends ConsumeOptions<Notifications>>(
       map: HandlerMapOf<typeof contract, Notifications>,
       options: O,
-      // @ts-expect-error O may hold a field ConsumeOptions does not declare
+      // @ts-expect-error TS2345 O may hold a field ConsumeOptions does not declare
     ) => consume(map, options);
     const overMap = <const H extends Consumed>(
       map: H,
       options: ConsumeOptions<ResourcesOf<Pick<H, 'commands' | 'subscriptions'>>>,
-      // @ts-expect-error the options of a generic Handler map cannot be checked for undeclared fields
+      // @ts-expect-error TS2379 the options of a generic Handler map cannot be checked for undeclared fields
     ) => consume(map, options);
 
     expect([overOptions, overMap]).toHaveLength(2);

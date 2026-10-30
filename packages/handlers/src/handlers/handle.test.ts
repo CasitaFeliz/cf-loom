@@ -137,9 +137,9 @@ describe('handle', () => {
 
   test('handle() given a bare Command or Subscription is a type error and throws', () => {
     const writes = [
-      // @ts-expect-error a Command is handled only as the readers file pairs it
+      // @ts-expect-error TS2741 a Command is handled only as the readers file pairs it
       () => handle(chargeCardV1, () => undefined),
-      // @ts-expect-error a Subscription is handled only as the readers file pairs it
+      // @ts-expect-error TS2741 a Subscription is handled only as the readers file pairs it
       () => handle.stub(notifyOnPaidV1),
     ];
 
@@ -272,7 +272,7 @@ describe('handle', () => {
   });
 
   test('an implementation returning a value that is no Fault is a type error', () => {
-    // @ts-expect-error a Message Handler returns nothing or a Fault
+    // @ts-expect-error TS2322 a Message Handler returns nothing or a Fault
     const write = () => handle(chargeCard, () => success(getOrder, { id: ORDER_ID }));
 
     expect(write).not.toThrow();
@@ -315,7 +315,7 @@ describe('handle', () => {
   });
 
   test('an implementation returning any value but nothing or a Fault is a type error', () => {
-    // @ts-expect-error a Message Handler returns nothing or a Fault, never a value
+    // @ts-expect-error TS2322 a Message Handler returns nothing or a Fault, never a value
     const write = () => handle(chargeCard, async () => 42);
 
     expect(write).not.toThrow();
@@ -333,7 +333,7 @@ describe('handle', () => {
   test('a Handler of one Endpoint is not a Handler of another', () => {
     const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-    // @ts-expect-error a Handler is nominal over its declaration
+    // @ts-expect-error TS2719 a Handler is nominal over its declaration
     const findOrderHandler: EndpointHandler<typeof findOrder> = getOrderHandler;
 
     expect(findOrderHandler.declaration).toBe(getOrder);
@@ -348,7 +348,7 @@ describe('handle', () => {
     });
     const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
 
-    // @ts-expect-error a Handler is nominal over its Guard
+    // @ts-expect-error TS2322 a Handler is nominal over its Guard
     const tenantKeyHandler: GuardHandler<typeof tenantKey> = apiKeyHandler;
 
     expect(tenantKeyHandler.declaration).toBe(apiKey);
@@ -407,9 +407,9 @@ describe('handle and Resources', () => {
     const input = { params: { orderId: ORDER_ID } };
 
     const calls = () => [
-      // @ts-expect-error the Handler takes orders
+      // @ts-expect-error TS2554 the Handler takes orders
       takes(input, {}),
-      // @ts-expect-error the Handler takes orders
+      // @ts-expect-error TS2741 the Handler takes orders
       takes(input, {}, { resources: {} }),
       takesNone(input, {}),
     ];
@@ -429,7 +429,7 @@ describe('handle and Resources', () => {
     const demands = { headers: { 'x-api-key': 'k' } };
 
     const calls = () => [
-      // @ts-expect-error the Handler takes callers
+      // @ts-expect-error TS2554 the Handler takes callers
       apiKeyHandler(demands, {}),
     ];
 
@@ -480,7 +480,7 @@ describe('handle and Resources', () => {
     const body = { orderId: ORDER_ID, status: 'paid' } as const;
 
     const calls = () => [
-      // @ts-expect-error the Handler takes notifications
+      // @ts-expect-error TS2554 the Handler takes notifications
       chargeCardHandler(body, meta),
     ];
 
@@ -524,7 +524,7 @@ describe('handle and Resources', () => {
 
   test('an unannotated Handler that destructures its resources is a type error naming ResourcesNotAnnotated', () => {
     const write = () =>
-      // @ts-expect-error Property 'orders' does not exist on type 'ResourcesNotAnnotated | undefined'
+      // @ts-expect-error TS2339 Property 'orders' does not exist on type 'ResourcesNotAnnotated | undefined'
       handle(getOrder, (_input, _call, { resources: { orders } }) =>
         orders === undefined ? reject(notFound) : success(getOrder, { id: ORDER_ID }),
       );
@@ -546,9 +546,9 @@ describe('handle and Resources', () => {
     ) => (last.extra === 0 ? reject(notFound) : success(getOrder, { id: ORDER_ID }));
 
     const write = () => [
-      // @ts-expect-error the last parameter holds only resources
+      // @ts-expect-error TS2345 the last parameter holds only resources
       handle(getOrder, written),
-      // @ts-expect-error the last parameter holds only resources
+      // @ts-expect-error TS2345 the last parameter holds only resources
       handle(getOrder, intersected),
     ];
 
@@ -829,11 +829,11 @@ describe('ResourcesOf', () => {
     };
 
     const calls = () => [
-      // @ts-expect-error the last parameter takes Resources with no key
+      // @ts-expect-error TS2554 the last parameter takes Resources with no key
       noKeys.empty(input, {}),
-      // @ts-expect-error the last parameter takes Resources with no key
+      // @ts-expect-error TS2741 the last parameter takes Resources with no key
       noKeys.object(input, {}, { resources: {} }),
-      // @ts-expect-error the last parameter takes Resources with no key
+      // @ts-expect-error TS2554 the last parameter takes Resources with no key
       noKeys.nothing(input, {}),
     ];
 

@@ -91,27 +91,19 @@ const notifyOnPaid = readers.subscriptions.notifyOnPaid;
 describe('runEndpoint', () => {
   const getOrderHandler = handle(getOrder, () => reject(notFound));
 
-  test('Input that breaks the Contract is invalid-call with its issues, never a throw', async () => {
-    const call = {
-      input: { params: { orderId: 'nope' } },
-      context: getContext,
-      request,
-      resources: undefined,
-    };
-
-    const run = await runEndpoint(getOrderHandler, call);
-
-    expect(run).toEqual({
-      kind: 'invalid-call',
-      issues: [
-        {
-          part: 'input.params',
-          path: ['orderId'],
-          code: 'invalid_format',
-          message: expect.any(String),
-        },
-      ],
+  test('runEndpoint hands the implementation the very Input it is given, never parsed again', async () => {
+    const received: unknown[] = [];
+    const inspecting = handle(getOrder, ({ params }) => {
+      received.push(params);
+      return reject(notFound);
     });
+    const params = { orderId: ORDER_ID };
+    const call = { input: { params }, context: getContext, request, resources: undefined };
+
+    await runEndpoint(inspecting, call);
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(params);
   });
 
   test('an Outcome that breaks the Contract is invalid-outcome with its issues', async () => {
@@ -146,33 +138,25 @@ describe('runEndpoint', () => {
 });
 
 describe('runGuard', () => {
-  const permissionHandler = handle(permission, () => admit(permission));
-
-  test('demands, a Context and a Qualifier that break the Contract are invalid-call', async () => {
-    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
+  test('runGuard hands the implementation the very demands it is given, never parsed again', async () => {
+    const received: unknown[] = [];
+    const inspecting = handle(apiKey, ({ headers }) => {
+      received.push(headers);
+      return admit(apiKey, { callerId: 'c-1' });
+    });
+    const headers = { 'x-api-key': 'k' };
     const call = {
-      demands: {},
-      context: { apiKey: {} },
-      qualifier: 'orders:delete',
+      demands: { headers },
+      context: {},
+      qualifier: undefined,
       request,
       resources: undefined,
     };
 
-    const runs = [
-      await runGuard(apiKeyHandler, { ...call, context: {}, qualifier: undefined }),
-      await runGuard(permissionHandler, call),
-    ];
+    await runGuard(inspecting, call);
 
-    expect(runs).toMatchObject([
-      { kind: 'invalid-call', issues: [{ part: 'demands.headers', code: 'required' }] },
-      {
-        kind: 'invalid-call',
-        issues: [
-          { part: 'context', path: ['apiKey', 'callerId'] },
-          { part: 'qualifier', code: 'invalid_value' },
-        ],
-      },
-    ]);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(headers);
   });
 
   test('an admitted Context that breaks the Contract is invalid-outcome', async () => {
@@ -205,6 +189,108 @@ describe('runGuard', () => {
       kind: 'answered',
       answer: { kind: 'rejection', rejection: notImplemented },
     });
+  });
+});
+
+describe('a run given the Context and Qualifier serve built', () => {
+  const permissionHandler = handle(permission, () => admit(permission));
+  const getOrderHandler = handle(getOrder, () => reject(notFound));
+  const brokenContext = { apiKey: {} };
+
+  test('a Context that breaks the Contract is invalid-call at context, in runEndpoint and runGuard', async () => {
+    const endpointCall = {
+      input: { params: { orderId: ORDER_ID } },
+      context: brokenContext,
+      request,
+      resources: undefined,
+    };
+    const guardCall = {
+      demands: {},
+      context: brokenContext,
+      qualifier: 'orders:read',
+      request,
+      resources: undefined,
+    };
+
+    const runs = [
+      await runEndpoint(getOrderHandler, endpointCall),
+      await runGuard(permissionHandler, guardCall),
+    ];
+
+    const atContext = {
+      kind: 'invalid-call',
+      issues: [{ part: 'context', path: ['apiKey', 'callerId'] }],
+    };
+    expect(runs).toMatchObject([atContext, atContext]);
+  });
+
+  test('a Qualifier that breaks its Guard’s schema is invalid-call at qualifier in runGuard', async () => {
+    const call = {
+      demands: {},
+      context: getContext,
+      qualifier: 'orders:delete',
+      request,
+      resources: undefined,
+    };
+
+    const run = await runGuard(permissionHandler, call);
+
+    expect(run).toMatchObject({
+      kind: 'invalid-call',
+      issues: [{ part: 'qualifier', code: 'invalid_value' }],
+    });
+  });
+
+  test('a Context and a Qualifier that both break the Contract are listed in that order in runGuard', async () => {
+    const call = {
+      demands: {},
+      context: brokenContext,
+      qualifier: 'orders:delete',
+      request,
+      resources: undefined,
+    };
+
+    const run = await runGuard(permissionHandler, call);
+
+    expect(run).toMatchObject({
+      kind: 'invalid-call',
+      issues: [
+        { part: 'context', path: ['apiKey', 'callerId'] },
+        { part: 'qualifier', code: 'invalid_value' },
+      ],
+    });
+  });
+
+  test('each Handler run gets its own parsed Context, not the object it was given', async () => {
+    const received: unknown[] = [];
+    const readingEndpoint = handle(getOrder, (_input, { context }) => {
+      received.push(context.apiKey);
+      return reject(notFound);
+    });
+    const readingGuard = handle(permission, (_demands, { context }) => {
+      received.push(context.apiKey);
+      return admit(permission);
+    });
+    const context = { apiKey: { callerId: 'c-1' } };
+    const endpointCall = {
+      input: { params: { orderId: ORDER_ID } },
+      context,
+      request,
+      resources: undefined,
+    };
+    const guardCall = {
+      demands: {},
+      context,
+      qualifier: 'orders:read',
+      request,
+      resources: undefined,
+    };
+
+    await runEndpoint(readingEndpoint, endpointCall);
+    await runGuard(readingGuard, guardCall);
+
+    expect(received).toStrictEqual([context.apiKey, context.apiKey]);
+    expect(new Set([context.apiKey, ...received]).size).toBe(3);
   });
 });
 
@@ -453,15 +539,6 @@ describe('a run given a value nested past the stack', () => {
     commands: { nestV1: { declaration: nestV1, reader: tree } },
     subscriptions: {},
   }).commands.nestV1;
-  const nest = defineEndpoint({
-    name: 'nest',
-    method: 'POST',
-    path: '/nest',
-    visibility: 'public',
-    description: 'A deep body',
-    input: { body: tree },
-    success: { status: 204 },
-  });
   const meta = {
     messageId: 'command.Nest.v1:o-1',
     factId: 'o-1',
@@ -478,29 +555,6 @@ describe('a run given a value nested past the stack', () => {
     }
     return body;
   }
-
-  test('runEndpoint is invalid-call at the root of the part, never thrown', async () => {
-    const nestHandler = handle(nest, () => success(nest));
-
-    const run = await runEndpoint(nestHandler, {
-      input: { body: nestedTo(5000) },
-      context: {},
-      request,
-      resources: undefined,
-    });
-
-    expect(run).toEqual({
-      kind: 'invalid-call',
-      issues: [
-        {
-          part: 'input.body',
-          path: [],
-          code: 'malformed',
-          message: 'The value is nested too deeply to read',
-        },
-      ],
-    });
-  });
 
   test('runMessage is never thrown, and its Handler runs exactly when the body was read', async () => {
     let next = 219;

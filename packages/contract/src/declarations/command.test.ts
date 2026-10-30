@@ -30,7 +30,7 @@ describe('defineCommand', () => {
         version: 1,
         description: 'Charges the order’s card',
         body,
-        // @ts-expect-error a Command is always Private
+        // @ts-expect-error TS2322 a Command is always Private
         visibility: 'private',
       });
 
@@ -44,9 +44,9 @@ describe('defineCommand', () => {
       description: 'Charges the order’s card',
     } as const;
     const declare = () => [
-      // @ts-expect-error a string cannot grow
+      // @ts-expect-error TS2375 a string cannot grow
       defineCommand({ ...base, body: z.string() }),
-      // @ts-expect-error a list cannot grow
+      // @ts-expect-error TS2375 a list cannot grow
       defineCommand({ ...base, body: z.array(z.object({ orderId: z.uuid() })) }),
     ];
 
@@ -57,7 +57,7 @@ describe('defineCommand', () => {
     const declare = () =>
       defineCommand({
         name: 'ChargeCard',
-        // @ts-expect-error versions count from 1
+        // @ts-expect-error TS2322 versions count from 1
         version: -1,
         description: 'Charges the order’s card',
         body,

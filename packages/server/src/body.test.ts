@@ -1,4 +1,4 @@
-import { defineEndpoint, defineGroup, defineService } from '@cf-loom/contract';
+import { defineEndpoint, defineGroup, defineService, openEnum } from '@cf-loom/contract';
 import { handle, success } from '@cf-loom/handlers';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
@@ -366,7 +366,7 @@ describe('serve: maxBodyBytes', () => {
 
   test('maxBodyBytes takes a number or unlimited, and no other text', () => {
     const unlimited: ServeOptions = { maxBodyBytes: 'unlimited' };
-    // @ts-expect-error a number of bytes as text is not a limit
+    // @ts-expect-error TS2322 a number of bytes as text is not a limit
     const text: ServeOptions = { maxBodyBytes: '10' };
 
     expect([unlimited.maxBodyBytes, text.maxBodyBytes]).toEqual(['unlimited', '10']);
@@ -405,4 +405,60 @@ describe('serve: maxBodyBytes', () => {
     expect(faults).toEqual([]);
     expect(ran).toEqual([]);
   });
+});
+
+describe('serve: what it reads', () => {
+  const rows: readonly (readonly [string, z.ZodType, unknown])[] = [
+    [
+      'an object with an optional field and an unknown key',
+      z.object({ id: z.string(), note: z.string().optional() }),
+      { id: 'a', extra: 1 },
+    ],
+    [
+      'a discriminated union',
+      z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('card'), last4: z.string() }),
+        z.object({ kind: z.literal('cash') }),
+      ]),
+      { kind: 'card', last4: '4242', extra: true },
+    ],
+    ['a recursive schema', node, { next: { next: { next: {} } } }],
+    ['an openEnum value', z.object({ status: openEnum(['open', 'paid']) }), { status: 'paid' }],
+  ];
+
+  test.each(rows)(
+    'a served EndpointHandler receives the Input its Direct call receives for the same body: %s',
+    async (_name, schema, sent) => {
+      const echo = defineEndpoint({
+        name: 'echo',
+        method: 'POST',
+        path: '/echo',
+        visibility: 'public',
+        description: 'Reads a body',
+        input: { body: schema },
+        success: { status: 204 },
+      });
+      const received: unknown[] = [];
+      const echoHandler = handle(echo, (input) => {
+        received.push(input);
+        return success(echo);
+      });
+      const echoing = defineService({
+        name: 'echo-service',
+        groups: [defineGroup({ name: 'echoes', description: 'Echoes', endpoints: [echo] })],
+      });
+      const served = serve(echoing, { endpoints: { echo: echoHandler }, guards: {} }, {});
+      const request = new Request('http://test/echo', {
+        method: 'POST',
+        headers: json,
+        body: JSON.stringify(sent),
+      });
+
+      await served(request);
+      await echoHandler({ body: sent }, {});
+
+      expect(received).toHaveLength(2);
+      expect(received[0]).toStrictEqual(received[1]);
+    },
+  );
 });

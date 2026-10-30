@@ -84,7 +84,7 @@ describe('Attachments', () => {
 
   test('listing a Guard with a qualifier bare is a type error', () => {
     const declare = () =>
-      // @ts-expect-error permission needs a qualifier: { guard, qualifier }
+      // @ts-expect-error TS2322 permission needs a qualifier: { guard, qualifier }
       defineEndpoint({ ...endpoint, guards: [userToken, permission] });
 
     expect(declare).not.toThrow();
@@ -94,7 +94,7 @@ describe('Attachments', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error userToken takes no qualifier
+        // @ts-expect-error TS2322 userToken takes no qualifier
         guards: [{ guard: userToken, qualifier: undefined }],
       });
 
@@ -105,7 +105,7 @@ describe('Attachments', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error orders:delete is not a permission the schema accepts
+        // @ts-expect-error TS2322 orders:delete is not a permission the schema accepts
         guards: [userToken, { guard: permission, qualifier: ['orders:delete'] }],
       });
 
@@ -116,7 +116,7 @@ describe('Attachments', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error reason is not a declared field
+        // @ts-expect-error TS2322 reason is not a declared field
         guards: [userToken, { guard: permission, qualifier: ['orders:edit'], reason: 'audit' }],
       });
 
@@ -142,7 +142,7 @@ describe('Attachments', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error tenant is listed twice
+        // @ts-expect-error TS2322 tenant is listed twice
         guards: [
           { guard: tenant, qualifier: 'acme' },
           { guard: tenant, qualifier: 'globex' },
@@ -173,7 +173,7 @@ describe('an object Qualifier', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error extra is not a declared field
+        // @ts-expect-error TS2322 extra is not a declared field
         guards: [{ guard: quota, qualifier: { perMinute: 60, extra: true } }],
       });
 
@@ -184,7 +184,7 @@ describe('an object Qualifier', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error extra is not a declared field
+        // @ts-expect-error TS2322 extra is not a declared field
         guards: [userToken, { guard: quota, qualifier: { perMinute: 60, extra: true } }],
       });
 
@@ -197,7 +197,7 @@ describe('an object Qualifier', () => {
         ...endpoint,
         guards: [
           { guard: tenant, qualifier: 'acme' },
-          // @ts-expect-error extra is not a declared field
+          // @ts-expect-error TS2322 extra is not a declared field
           { guard: quota, qualifier: { perMinute: 60, extra: true } },
         ],
       });
@@ -214,7 +214,7 @@ describe('an object Qualifier', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error extra is not a declared field
+        // @ts-expect-error TS2322 extra is not a declared field
         guards: [{ guard: roles, qualifier: [{ role: 'admin', extra: true }] }],
       });
 
@@ -242,7 +242,7 @@ describe('Attachments and dependent Guards', () => {
     const declare = () =>
       defineEndpoint({
         ...endpoint,
-        // @ts-expect-error audit requires permission earlier in guards
+        // @ts-expect-error TS2322 audit requires permission earlier in guards
         guards: [userToken, audit, { guard: permission, qualifier: ['orders:edit'] }],
       });
 
@@ -307,7 +307,7 @@ describe('Attachments of a Guard whose qualifier is optional', () => {
   });
 
   test('a Guard with an optional qualifier listed twice is listed twice', () => {
-    // @ts-expect-error optional is listed twice
+    // @ts-expect-error TS2322 optional is listed twice
     const declare = () => defineEndpoint({ ...endpoint, guards: [optional, optional] });
 
     expect(declare).not.toThrow();

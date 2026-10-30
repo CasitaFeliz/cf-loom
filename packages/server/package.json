@@ -17,6 +17,10 @@
     "./node-http": {
       "types": "./dist/node-http/index.d.ts",
       "default": "./dist/node-http/index.js"
+    },
+    "./fastify": {
+      "types": "./dist/fastify/index.d.ts",
+      "default": "./dist/fastify/index.js"
     }
   },
   "files": [
@@ -27,12 +31,19 @@
   "devDependencies": {
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
+    "fastify": "catalog:",
     "zod": "catalog:"
   },
   "peerDependencies": {
     "@cf-loom/contract": "workspace:^",
     "@cf-loom/handlers": "workspace:^",
+    "fastify": "catalog:",
     "zod": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "fastify": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=24"

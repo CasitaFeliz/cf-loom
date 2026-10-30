@@ -12,6 +12,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/handlers`](packages/handlers/README.md) | Services | Implementing a Contract's Endpoints, Guards, Commands and Subscriptions, and calling the Handlers directly in tests |
 | [`@cf-loom/server`](packages/server/README.md) | Services with Endpoints | Answering a Contract's Endpoints over HTTP with their Handlers |
 | [`@cf-loom/server/node-http`](packages/server/README.md#node-http) | Services on `node:http` | The server's adapter for `node:http` |
+| [`@cf-loom/server/fastify`](packages/server/README.md#fastify) | Services on Fastify | The server's Fastify plugin, beside the app's own routes |
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a Broker plan |
@@ -172,7 +173,7 @@ await applyBrokerPlan({ connect: () => connect({ servers }) }, plan, limits);
 
 ### Serve
 
-`src/main.ts` connects messaging with the Broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)).
+`src/main.ts` connects messaging with the Broker adapter, builds the Resources, serves the Contract with `serve` through the `node:http` adapter and consumes its Messages (see [Serving](packages/server/README.md#serving)). zod can compile the schemas `serve`, `consume` and `client` parse with; whether to is the organization's choice (see [Compiling schemas](packages/server/README.md#compiling-schemas)).
 
 ### Test
 

@@ -28,7 +28,7 @@ describe('defineSubscription', () => {
 
   test('a Subscription without a description is a type error', () => {
     const declare = () =>
-      // @ts-expect-error a Subscription declares what it is for
+      // @ts-expect-error TS2345 a Subscription declares what it is for
       defineSubscription({ name: 'notifyOnCreated', event: orderCreatedV1 });
 
     expect(declare).not.toThrow();
@@ -37,7 +37,7 @@ describe('defineSubscription', () => {
   test('a Subscription named as every object already has is a type error', () => {
     const declare = () =>
       defineSubscription({
-        // @ts-expect-error valueOf is a name every object already has
+        // @ts-expect-error TS2322 valueOf is a name every object already has
         name: 'valueOf',
         description: 'Notifies the customer of each order created',
         event: orderCreatedV1,
@@ -68,7 +68,7 @@ describe('defineSubscription', () => {
     });
 
     const declare = () =>
-      // @ts-expect-error a Subscription receives an Event, never a Command
+      // @ts-expect-error TS2322 a Subscription receives an Event, never a Command
       defineSubscription({ name: 'charge', description: 'Charges', event: chargeCardV1 });
 
     expect(declare).not.toThrow();
@@ -119,7 +119,7 @@ describe('defineSubscription', () => {
       defineSubscription({
         name: 'notifyOnCreated',
         description: 'Notifies the customer of each order created',
-        // @ts-expect-error a Retired Event is never published
+        // @ts-expect-error TS2322 a Retired Event is never published
         event: retiredV1,
       });
 
