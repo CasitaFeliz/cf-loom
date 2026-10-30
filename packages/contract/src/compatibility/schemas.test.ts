@@ -2421,7 +2421,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
-  /** `count` defs, each an object on a cycle of its own that holds the next by `next`, the first a string. */
+  /** `count` defs, each an object on a cycle of its own that holds the one before it by `next`, and the first holds a string. */
   function aChainOf(count: number, descriptionOf: (index: number) => string): Defs {
     const entries: [string, SchemaNode][] = [];
     for (let index = 0; index < count; index++) {
@@ -2460,7 +2460,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     expect(growth).toBeLessThan(linearGrowth);
   });
 
-  test('a description changed in the first def of a chain is one Change, at its depth, in time that grows with the chain', {
+  test('a description changed in the innermost def of a chain is one Change, at its depth, in time that grows with the chain', {
     timeout: growthTimeout,
   }, () => {
     const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
