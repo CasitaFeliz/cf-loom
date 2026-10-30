@@ -31,8 +31,9 @@ export function sqs<const Given = unknown>(options: Closed<Given, SqsBrokerOptio
     connect: async (serviceStream) => {
       const place = await locatedBy(options);
       const stream = prefixedNameOf(prefix, serviceStream.stream);
-      await checkTopic(options.sns, serviceStream, { stream, arn: topicArnOf(place, stream) });
-      return sqsConnectionOf();
+      const topicArn = topicArnOf(place, stream);
+      await checkTopic(options.sns, serviceStream, { stream, arn: topicArn });
+      return sqsConnectionOf({ sns: options.sns, sqs: options.sqs, place, prefix }, topicArn);
     },
   };
 }
