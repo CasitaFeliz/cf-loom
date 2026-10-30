@@ -445,7 +445,7 @@ describe('cf-loom: help and version', () => {
     ['check', 'check [--json] [--prerelease] [--against <version|dist-tag>]'],
     ['broker-plan', 'broker-plan [--prefix <p>] [--json]'],
     ['openapi', 'openapi'],
-    ['asyncapi', 'asyncapi [--prefix <p>]'],
+    ['asyncapi', 'asyncapi [--prefix <p>] [--broker jetstream|sqs]'],
     ['publish', 'publish [--json] [--dry-run] [--force] [--prerelease]'],
   ] as const)('%s --help and help %s print its usage line and end 0', ([command, syntax]) => {
     const project = aProject({});

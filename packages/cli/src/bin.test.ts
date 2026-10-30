@@ -7965,6 +7965,46 @@ describe('cf-loom', () => {
     });
   });
 
+  test.for([
+    'init',
+    'generate',
+    'verify',
+    'package',
+    'check',
+    'broker-plan',
+    'openapi',
+    'publish',
+    'frobnicate',
+  ] as const)('only asyncapi takes --broker: %s', (command) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, command, '--broker', 'sqs');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Only asyncapi takes --broker. ${usage}\n`,
+    });
+  });
+
+  test.for([
+    ['another value', ['--broker', 'kafka']],
+    ['a value in upper case', ['--broker', 'SQS']],
+    ['an empty value', ['--broker', '']],
+    ['an empty inline value', ['--broker=']],
+    ['no value', ['--broker']],
+  ] as const)('--broker takes jetstream or sqs: asyncapi given %s', ([_case, options]) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'asyncapi', ...options);
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `--broker takes jetstream or sqs. ${usage}\n`,
+    });
+  });
+
   test.for([['--against'], ['--against=']] as const)(
     '--against takes a version or a dist-tag: check %s',
     (flags) => {
