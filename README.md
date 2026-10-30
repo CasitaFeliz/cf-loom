@@ -16,6 +16,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a Broker plan |
+| [`@cf-loom/messaging/sqs`](packages/messaging/README.md#on-snssqs) | Whoever applies a Broker plan on AWS | Applying a Broker plan on Amazon SNS and SQS |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
@@ -157,10 +158,10 @@ A Service with Messages runs only on a Broker that holds its Stream and Durable 
 ```ts
 // scripts/apply-broker-plan.ts
 import { execFileSync } from 'node:child_process';
-import { applyBrokerPlan, type BrokerLimits } from '@cf-loom/messaging/jetstream';
+import { applyBrokerPlan, type JetStreamBrokerLimits } from '@cf-loom/messaging/jetstream';
 import { connect } from '@nats-io/transport-node';
 
-const limits: BrokerLimits = {
+const limits: JetStreamBrokerLimits = {
   streamDefaults: { retention: 'limits', maxAge: '7d', duplicateWindow: '2m', replicas: 1, storage: 'file' },
   durableConsumerDefaults: { deliverPolicy: 'all', ackWait: '30s', maxDeliver: 5, maxAckPending: 100 },
 };
