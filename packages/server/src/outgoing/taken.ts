@@ -41,7 +41,7 @@ export function takenOf(
   hostHeaders: HostHeaders = {},
 ): Taken {
   if (outgoing instanceof Http2ServerResponse) {
-    const protocol = http2Of(outgoing);
+    const protocol = http2Of(outgoing.req, outgoing);
     return { incoming, outgoing, closed: resetSignalOf(outgoing.stream), hostHeaders, protocol };
   }
   const protocol = http1Of(incoming, outgoing);
@@ -60,7 +60,7 @@ function http1Of(
   return {
     framed: () => {
       outgoing.strictContentLength = true;
-      if (!incoming.complete) {
+      if (isReadInPart(incoming)) {
         outgoing.setHeader('connection', 'close');
       }
     },
@@ -70,23 +70,42 @@ function http1Of(
 }
 
 /**
- * HTTP/2's steps: the stream closed once the response is flushed when its request side has not
- * ended, so a body nobody read never leaves it half-open, and reset with an error on failure.
+ * HTTP/2's steps: a body read only in part, as one over `maxBodyBytes`, cut off by resetting the
+ * stream with `NO_ERROR` once the response's END_STREAM is sent, and the stream reset with an
+ * error on failure. Node itself ends a stream whose body nobody read.
  */
-function http2Of(outgoing: Http2ServerResponse): Protocol {
+function http2Of(incoming: Http2ServerRequest, outgoing: Http2ServerResponse): Protocol {
   const { stream } = outgoing;
   return {
     framed: () => undefined,
     ended: () => {
       outgoing.end();
-      stream.once('finish', () => {
-        if (!stream.readableEnded) {
-          stream.destroy();
-        }
-      });
+      if (isReadInPart(incoming)) {
+        resetOnceEnded(stream);
+      }
     },
     failed: () => stream.destroy(new Error('the response could not be written')),
   };
+}
+
+/** Whether a request's body was read, but not to its end, so Node leaves its exchange open. */
+function isReadInPart(incoming: IncomingMessage | Http2ServerRequest): boolean {
+  return incoming.readableDidRead && !incoming.readableEnded;
+}
+
+/**
+ * Resets a stream with `NO_ERROR` once its END_STREAM is on the wire, which Node marks in the
+ * stream's state and announces by no event, so it is polled.
+ */
+function resetOnceEnded(stream: ServerHttp2Stream): void {
+  if (stream.destroyed) {
+    return;
+  }
+  if (stream.state.localClose === 1) {
+    stream.destroy();
+    return;
+  }
+  setTimeout(() => resetOnceEnded(stream), 1);
 }
 
 /**

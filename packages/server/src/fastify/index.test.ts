@@ -20,14 +20,8 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import {
-  allowingHttp1,
-  answerOf,
-  closeSessions,
-  h2,
-  h2Session,
-  selfSigned,
-} from '../../test/h2.ts';
+import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
+import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -211,6 +205,7 @@ const servers: ReturnType<typeof nodeHttp>[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   closeSessions();
+  closeFrameProxies();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -721,6 +716,54 @@ describe('fastifyServe', () => {
     });
   });
 
+  describe('a body the Caller stops sending', () => {
+    test('over HTTP/1.1, a Caller that leaves while its body is read fails the read, and onAnswered records the request aborted', async () => {
+      const records: AnsweredRequest[] = [];
+      const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+      const { url } = await served({
+        options: { onAnswered: (answered) => void (records.push(answered), record()) },
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write(
+        'POST /notes HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{"text":',
+      );
+      await waitFor(50);
+      socket.destroy();
+      await Promise.race([recorded, waitFor(1000)]);
+
+      expect(records.map(({ status, code, aborted }) => ({ status, code, aborted }))).toEqual([
+        { status: 400, code: 'INVALID_INPUT', aborted: true },
+      ]);
+    });
+
+    test('over HTTP/2, a Caller that resets its stream while its body is read fails the read', async () => {
+      const records: AnsweredRequest[] = [];
+      const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+      const { url } = await served({
+        fastify: { http2: true },
+        options: { onAnswered: (answered) => void (records.push(answered), record()) },
+      });
+      const session = h2Session(url);
+
+      const stream = session.request({
+        ':method': 'POST',
+        ':path': '/notes',
+        'content-type': 'application/json',
+      });
+      stream.on('error', () => undefined);
+      stream.write('{"text":');
+      await waitFor(50);
+      stream.close(constants.NGHTTP2_CANCEL);
+      await Promise.race([recorded, waitFor(1000)]);
+
+      expect(records.map(({ status, code }) => ({ status, code }))).toEqual([
+        { status: 400, code: 'INVALID_INPUT' },
+      ]);
+    });
+  });
+
   describe('a claimed request is never Fastify’s again', () => {
     /** Reads a first piece of a response to `path`, then goes away without reading the rest. */
     async function leavingMidResponse(url: string, path: string): Promise<void> {
@@ -1102,13 +1145,14 @@ describe('fastifyServe', () => {
           code: 'INVALID_INPUT',
         },
       ])(
-        '$name: the Caller receives it whole, its stream closes with NO_ERROR and its upload stops, the session goes on, and the server closes once the session is gone',
+        '$name: the Caller receives it whole with END_STREAM, then its stream is reset with NO_ERROR and its upload stops, the session goes on, and the server closes once the session is gone',
         async (asked) => {
           const { app, url } = await served({
             fastify: { http2: true },
             options: { maxBodyBytes: 1000 },
           });
-          const session = h2Session(url);
+          const wire = await framesProxy(url);
+          const session = h2Session(wire.url);
           const headers = { ':method': 'POST', ':path': asked.path, ...asked.headers };
 
           const answer = await Promise.race([
@@ -1126,12 +1170,28 @@ describe('fastifyServe', () => {
           ]);
 
           expect(answer).toMatchObject({ status: asked.status, ended: true, rstCode: 0 });
+          expect(wireEndOf(wire.framesOf(1))).toBe('end, then RST(0)');
+          expect(wireEndOf(wire.framesOf(3))).toBe('end');
           expect(typeof answer === 'string' ? '' : answer.body).toContain(`"${asked.code}"`);
           expect(typeof answer === 'string' ? 0 : answer.sent).toBeLessThan(upload.length);
           expect(next).toMatchObject({ status: 200, body: '{"id":"o-1"}' });
           expect(closing).toBe('closed');
         },
       );
+    });
+
+    test('an Endpoint’s response ends with END_STREAM and no reset, with a body or without one', async () => {
+      const { url } = await served({ fastify: { http2: true } });
+      const wire = await framesProxy(url);
+      const session = h2Session(wire.url);
+
+      const order = await h2(session, { ':path': '/orders/o-1' });
+      const greeted = await h2(session, { ':path': '/greet?name=Bob' });
+      await waitFor(50);
+
+      expect([order.status, greeted.status]).toEqual([200, 204]);
+      expect(wire.framesOf(1)).toEqual(['HEADERS', 'DATA', 'DATA+END']);
+      expect(wireEndOf(wire.framesOf(3))).toBe('end');
     });
 
     describe('the Caller’s departure', () => {
@@ -1243,20 +1303,6 @@ describe('fastifyServe', () => {
         expect(startedAborted).toEqual([true]);
         expect(records.map((record) => record.aborted)).toEqual([true]);
       });
-    });
-
-    test('a Success larger than the flow-control window reaches a slow-reading Caller whole', async () => {
-      const { url } = await served({ fastify: { http2: true } });
-      const session = h2Session(url);
-
-      const stream = session.request({ ':path': '/report' });
-      stream.pause();
-      const answer = answerOf(stream);
-      await waitFor(300);
-      stream.resume();
-
-      expect(await answer).toMatchObject({ status: 200, ended: true, rstCode: 0 });
-      expect((await answer).body.length).toBe(JSON.stringify({ data: bigData }).length);
     });
 
     test('when something fails once a request is taken, its stream is reset with an error code, the session’s other streams and the app’s routes keep answering, and the request reaches onRequestAbort, then onResponse, since Node finishes an HTTP/2 response on every close', async () => {

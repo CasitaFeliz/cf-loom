@@ -60,7 +60,7 @@ export async function h2(
 }
 
 /** What comes back on `stream` once it closes, but the bytes sent. */
-export async function answerOf(stream: ClientHttp2Stream): Promise<Omit<H2Answer, 'sent'>> {
+async function answerOf(stream: ClientHttp2Stream): Promise<Omit<H2Answer, 'sent'>> {
   stream.on('error', () => undefined);
   const chunks: Buffer[] = [];
   let headers: IncomingHttpHeaders = {};

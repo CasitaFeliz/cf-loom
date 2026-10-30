@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { Http2ServerRequest } from 'node:http2';
-import { Readable } from 'node:stream';
+import { lazyBodyOf } from './body.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
 const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
@@ -108,6 +108,6 @@ function newRequestOf(incoming: Incoming, url: URL, signal: AbortSignal): Reques
   if (bodiless.includes(method)) {
     return new Request(url, { method, headers, signal });
   }
-  const body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
+  const body = lazyBodyOf(incoming);
   return new Request(url, { method, headers, body, duplex: 'half', signal } as RequestInit);
 }
