@@ -87,6 +87,8 @@ function enter(state: State, entering: Entering): Entered {
     answer: undefined,
     depth: state.ancestors.length,
     outer: deepestOnPath(state, entering.schema),
+    slot: state.open.length,
+    droppedThrough: undefined,
   };
   state.remembered.enter(entered);
   state.ancestors.push(entered);

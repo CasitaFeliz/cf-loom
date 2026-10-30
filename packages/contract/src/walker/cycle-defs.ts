@@ -65,17 +65,31 @@ function rememberedAs(state: State, entered: Entered, answer: Walked): Walked {
  * Remembers the one failure of a def, and gives it to the defs still open below it, which hold
  * `ref`s to it, so every use of any of them reports that failure; each keeps its group. A def
  * given a failure is no def any more, so a later failure higher up does not replace the first.
+ * It reads each open member once: a member already given a failure marks how far its own pass
+ * went, and a later pass goes on from there.
  */
 function dropOpenGroup(state: State, entered: Entered, failure: Failed): Walked {
   state.remembered.remember(entered, failure);
-  for (const member of state.open) {
-    const name = defNameOf(member.answer);
-    if (member.index > entered.index && name !== undefined) {
-      state.defById.delete(name);
-      state.remembered.remember(member, failure);
+  let slot = entered.slot + 1;
+  for (let member = state.open[slot]; member !== undefined; member = state.open[slot]) {
+    if (member.droppedThrough !== undefined) {
+      slot = member.droppedThrough;
+      continue;
     }
+    giveFailure(state, member, failure);
+    slot++;
   }
+  entered.droppedThrough = state.open.length;
   return failure;
+}
+
+/** A def still open takes the failure of one that fails inside its group, so its `ref`s report it. */
+function giveFailure(state: State, member: Entered, failure: Failed): void {
+  const name = defNameOf(member.answer);
+  if (name !== undefined) {
+    state.defById.delete(name);
+    state.remembered.remember(member, failure);
+  }
 }
 
 /** The name of the def a remembered answer is a `ref` to, none for a failure. */

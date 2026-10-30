@@ -17,12 +17,19 @@ export type Entered = Entering & {
   readonly depth: number;
   /** The same schema's deepest entry on the path when this one was entered, if the schema was on it. */
   readonly outer: Entered | undefined;
+  /** Its position in `open` while its group is open. */
+  readonly slot: number;
   low: number;
   isReached: boolean;
   /** While its group is still being walked, a schema that reaches it reaches that group. */
   isOpen: boolean;
   isOnCycle: boolean;
   answer: Walked | undefined;
+  /**
+   * Once it failed as a def, the end of `open` at that moment: every member between its slot and
+   * here is no def any more, so a later failure passes over them.
+   */
+  droppedThrough: number | undefined;
 };
 
 /** What one walk knows of its cycles: the schemas on its path and in open groups, its defs and what it remembers. */

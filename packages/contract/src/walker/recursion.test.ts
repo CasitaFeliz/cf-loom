@@ -1752,8 +1752,7 @@ describe('walkSchemas: recursion', () => {
   /**
    * How many times longer the chain's walk may take than a walk of as many ids, each on a cycle of
    * its own, that refuses nothing: under 1 when the walk reads each failure tree once, and many times
-   * over 3 when it reads the trees afresh for each id. The walk's memory grows with the square of a
-   * chain of ids, so the chain stays at 7,000.
+   * over 3 when it reads the trees afresh for each id.
    */
   const memoCpuRatio = 3;
 
@@ -1779,6 +1778,155 @@ describe('walkSchemas: recursion', () => {
     expect(constructs.filter((construct) => construct === 'z.bigint()')).toHaveLength(1);
     expect(constructs).toHaveLength(7_001);
     expect(cpuRatio).toBeLessThan(memoCpuRatio);
+  });
+
+  describe('a chain of ids is walked in time that grows with its length', () => {
+    const sizes = { small: 2_000, large: 16_000 };
+
+    /**
+     * How many times longer a chain eight times as long may take: about 8 when each id costs the
+     * same wherever it sits, and over 15 when it costs its depth, as the walk's path, its records
+     * and its places did.
+     */
+    const chainGrowth = 13;
+
+    /** A chain of `count` ids, each holding the next and one leaf all of them share. */
+    function aChainSharingOneLeaf(count: number): z.ZodType {
+      const leaf = z.object({ a: z.string() });
+      let schema: z.ZodType = z.string();
+      for (let index = 0; index < count; index++) {
+        schema = z.object({ next: schema, leaf }).meta({ id: `link${index}` });
+      }
+      return schema;
+    }
+
+    /** A chain of `count` ids, each holding a date, the next and the root of the chain. */
+    function aChainBackToItsRoot(count: number): z.ZodType {
+      let root: z.ZodType | undefined;
+      let schema: z.ZodType = z.string();
+      for (let index = 0; index < count; index++) {
+        const next = schema;
+        schema = z
+          .object({
+            next,
+            at: z.date(),
+            get root() {
+              return root?.optional();
+            },
+          })
+          .meta({ id: `link${index}` });
+      }
+      root = schema;
+      return schema;
+    }
+
+    /** `count` ids, each holding the next and a way back to the one schema with no id that holds the first. */
+    function aChainBackToAnUnnamedRoot(count: number): z.ZodType {
+      let unnamed: z.ZodType | undefined;
+      let schema: z.ZodType | undefined;
+      for (let index = count - 1; index >= 0; index--) {
+        const next = schema;
+        schema = z
+          .object({
+            ...(next && { next }),
+            get back() {
+              return unnamed?.optional();
+            },
+          })
+          .meta({ id: `link${index}` });
+      }
+      unnamed = z.object({ first: schema ?? z.never() });
+      return unnamed;
+    }
+
+    const walkOf = (shape: (count: number) => z.ZodType) => (count: number) => {
+      const schema = shape(count);
+      return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+    };
+
+    test('ids on no cycle, each holding the next', { timeout: growthTimeout }, () => {
+      const walkChain = walkOf((count) => aChainOf(count, z.string()));
+
+      const walked = walkChain(sizes.large)();
+      const growth = growthOf(walkChain, sizes, chainGrowth);
+
+      expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids on no cycle, each also holding a schema all share', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf(aChainSharingOneLeaf);
+
+      const walked = walkChain(sizes.large)();
+      const growth = growthOf(walkChain, sizes, chainGrowth);
+
+      expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids each on a cycle of its own', { timeout: growthTimeout }, () => {
+      const walkChain = walkOf((count) => aLoopedChainOf(count, z.string()));
+
+      const walked = walkChain(sizes.large)();
+      const growth = growthOf(walkChain, sizes, chainGrowth);
+
+      expect(walked.located[0]?.walked.kind).toBe('walked');
+      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids each on a cycle of its own, around a refused schema', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf((count) => aLoopedChainOf(count, z.bigint()));
+
+      const walked = walkChain(sizes.large)();
+      const growth = growthOf(walkChain, sizes, chainGrowth);
+
+      expect(constructsOf(walked).flat()).toEqual(['z.bigint()']);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids each holding a date and reaching back to the first', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf(aChainBackToItsRoot);
+
+      const walked = walkChain(sizes.large)();
+      const growth = growthOf(walkChain, sizes, chainGrowth);
+
+      expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids each reaching back to a schema with no id', { timeout: growthTimeout }, () => {
+      const unnamedSizes = { small: 8_000, large: 64_000 };
+      const walkChain = walkOf(aChainBackToAnUnnamedRoot);
+
+      const walked = walkChain(unnamedSizes.large)();
+      const growth = growthOf(walkChain, unnamedSizes, chainGrowth);
+
+      expect(walked.located[0]?.walked.kind).toBe('walked');
+      expect(Object.keys(walked.defs)).toHaveLength(unnamedSizes.large);
+      expect(growth).toBeLessThan(chainGrowth);
+    });
+
+    test('ids each on a cycle of its own, around a refused schema, validated', {
+      timeout: growthTimeout,
+    }, () => {
+      const validateChain = (count: number) => {
+        const body = aLoopedChainOf(count, z.bigint());
+        return () => validated(body);
+      };
+
+      const result = validateChain(sizes.large)();
+      const growth = growthOf(validateChain, sizes, chainGrowth);
+
+      expect(result.kind).toBe('invalid');
+      expect(growth).toBeLessThan(chainGrowth);
+    });
   });
 
   /**
