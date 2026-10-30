@@ -9,7 +9,7 @@ const writtenTooDeep = { construct: 'a schema nested deeper than 256 schemas as 
 
 /** The place of a schema walked in a declaration of its own: the export of the name given, with no steps. */
 function placeIn(declaration: object, name = 'body') {
-  return { site: { kind: 'export', name }, declaration, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration, steps: undefined } as const;
 }
 
 function walkBody(schema: core.$ZodType) {

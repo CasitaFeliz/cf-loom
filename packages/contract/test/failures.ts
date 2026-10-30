@@ -3,7 +3,10 @@ import {
   authorPathOf,
   type Failure,
   refusalsIn,
+  type Site,
+  type Step,
   siteTextOf,
+  stepListOf,
   type ValidatedRoot,
   type walkSchemas,
 } from '../src/internal/index.ts';
@@ -12,14 +15,19 @@ import {
 const snapshotSegment =
   /(^|[ .])(fields|variants|options)\.|^groups\.[^ ]+\.(endpoints|events|commands|subscriptions)\./;
 
+/** Where a failure sits as a line names it: its site, then its steps in the author's terms. */
+function locationOf(site: Site, steps: readonly Step[]): string {
+  const path = authorPathOf(steps);
+  const where = siteTextOf(site);
+  return path === null ? where : `${where} ${path}`;
+}
+
 /**
  * A failure as a test compares it: where it sits as a line names it, `endpoints.GET /orders
  * (listOrders) success.status`, and what it says, without the declaration it sits in.
  */
 export function summaryOf(failure: Failure) {
-  const path = authorPathOf(failure.steps);
-  const site = siteTextOf(failure.site);
-  const location = path === null ? site : `${site} ${path}`;
+  const location = locationOf(failure.site, failure.steps);
   expect(location).not.toMatch(snapshotSegment);
   switch (failure.kind) {
     case 'declaration':
@@ -60,7 +68,7 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
             kind: walked.kind,
             failures: refusalsIn(walked.tree).map(({ steps, construct, instead }) => ({
               kind: 'not-allowed',
-              at: authorPathOf(steps) ?? '',
+              at: authorPathOf(stepListOf(steps)) ?? '',
               construct,
               ...(instead && { instead }),
             })),
@@ -68,4 +76,21 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
     ),
     defs,
   };
+}
+
+/**
+ * Every refusal of a walk, each once, as the location a line names it by and what it refuses: a
+ * schema the walk remembers keeps the place it was first walked at, whichever root reaches it.
+ */
+export function refusalLocationsOf({ located }: ReturnType<typeof walkSchemas>) {
+  const refusals = new Set<ReturnType<typeof refusalsIn>[number]>();
+  for (const { walked } of located) {
+    for (const refusal of walked.kind === 'walked' ? [] : refusalsIn(walked.tree)) {
+      refusals.add(refusal);
+    }
+  }
+  return [...refusals].map(({ site, steps, construct }) => ({
+    location: locationOf(site, stepListOf(steps)),
+    construct,
+  }));
 }

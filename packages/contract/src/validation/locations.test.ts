@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { pingedV1 } from '../../test/ping-package.ts';
+import {
+  type Construct,
+  constructs,
+  inField,
+  type RandomSchema,
+  randomNested,
+  tailTextOf,
+} from '../../test/random-places.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
@@ -586,6 +594,81 @@ describe('failure lines: a schema several places reach', () => {
     expect(lines).toEqual([
       'endpoints.POST /pay (pay) success.body.amount not allowed: .default() (declared in @org/definitions@4.2.0#money)',
     ]);
+  });
+});
+
+describe('failure lines: a refusal inside a schema reached at two places', () => {
+  const seedCount = 400;
+  const dateLine = 'not allowed: z.date() (use z.iso.datetime())';
+
+  /** A def on a cycle holding a random nested schema under `c`, with a `z.date()` at each leaf. */
+  function aDefAroundDates(next: () => number) {
+    const dated = randomNested({ next, leaf: () => z.date(), keysHoldLeaves: true }, 3);
+    const def: z.ZodType = z
+      .object({
+        c: dated.schema,
+        get self() {
+          return def.optional();
+        },
+      })
+      .meta({ id: 'shared' });
+    return { def, dated };
+  }
+
+  /** A random nested schema that holds `def` once, wherever the draw puts it. */
+  function holding(next: () => number, def: z.ZodType): RandomSchema {
+    let isPlaced = false;
+    const leaf = () => {
+      const held = isPlaced ? undefined : def;
+      isPlaced = true;
+      return held;
+    };
+    return randomNested({ next, leaf, keysHoldLeaves: false }, 3);
+  }
+
+  /** The Endpoint's body holds the def at two places, and the lines the dates inside it are told by. */
+  function reachedTwiceBy(seed: number) {
+    const next = seededNext(seed);
+    const { def, dated } = aDefAroundDates(next);
+    const wrapped = [holding(next, def), holding(next, def)];
+    const [firstName, secondName] = next() < 0.5 ? ['a', 'b'] : ['b', 'a'];
+    const body = z.object({
+      [firstName as string]: wrapped[0]?.schema as z.ZodType,
+      [secondName as string]: wrapped[1]?.schema as z.ZodType,
+    });
+    const places = [
+      `input.body${tailTextOf(inField(firstName as string, wrapped[0]?.leaves[0]?.steps ?? []))}`,
+      `input.body${tailTextOf(inField(secondName as string, wrapped[1]?.leaves[0]?.steps ?? []))}`,
+    ];
+    const [first] = [...places].sort();
+    const site = 'endpoints.POST /things (getThing)';
+    const lines = dated.leaves.map(
+      ({ steps }) => `${site} ${first}${tailTextOf(inField('c', steps))} ${dateLine}`,
+    );
+    const crossed = [...wrapped, dated].flatMap(({ leaves }) =>
+      leaves.flatMap((leaf) => leaf.crossing),
+    );
+    return { body, lines, crossed };
+  }
+
+  test('it is told at the first place, followed by the steps inside the schema, in random nested schemas', () => {
+    const wrong: string[] = [];
+    const crossed = new Set<Construct>();
+
+    for (let seed = 1; seed <= seedCount; seed++) {
+      const { body, lines, crossed: crossing } = reachedTwiceBy(seed);
+      const getThing = oneAnEndpoint('getThing', 'POST /things', { input: { body } });
+      const told = linesOf(serviceOf(getThing));
+      if (JSON.stringify([...told].sort()) !== JSON.stringify([...lines].sort())) {
+        wrong.push(`seed ${seed}: ${JSON.stringify(told)} not ${JSON.stringify(lines)}`);
+      }
+      for (const construct of crossing) {
+        crossed.add(construct);
+      }
+    }
+
+    expect(wrong).toEqual([]);
+    expect([...crossed].sort()).toEqual([...constructs].sort());
   });
 });
 

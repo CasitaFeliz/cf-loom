@@ -3125,7 +3125,7 @@ const formatOneFixture = `{
 
 /** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
 function aPlace(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 describe('walkSchemas and decodeSnapshot agree on bounds', () => {
