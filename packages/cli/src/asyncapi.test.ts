@@ -1,3 +1,4 @@
+import { snsAttributeNames } from '@cf-loom/contract/internal';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   aContractProject,
@@ -723,8 +724,8 @@ describe('cf-loom asyncapi --broker', () => {
     expect(headers).toEqual(identities.map(() => refTo('BrokerHeaders')));
   });
 
-  test('with --broker sqs, the broker headers require cf-loom-subject, cf-loom-message-id, cf-loom-fact-id and cf-loom-headers, each a non-empty string', () => {
-    const names = ['cf-loom-fact-id', 'cf-loom-headers', 'cf-loom-message-id', 'cf-loom-subject'];
+  test('with --broker sqs, the broker headers require each message attribute the adapter sends, in code point order, each a non-empty string', () => {
+    const names = snsAttributeNames.toSorted();
 
     expect(valueAt(sqsHeaders(), 'required')).toEqual(names);
     expect(keysOf(valueAt(sqsHeaders(), 'properties'))).toEqual(names);

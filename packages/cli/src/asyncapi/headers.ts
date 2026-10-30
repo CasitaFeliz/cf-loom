@@ -2,6 +2,7 @@ import {
   brokerMessageIdHeader,
   byCodePoint,
   factIdHeader,
+  snsAttributeNames,
   snsFactIdAttribute,
   snsHeadersAttribute,
   snsMessageIdAttribute,
@@ -50,7 +51,8 @@ const jetstreamBrokerHeaders: JsonSchema = {
   },
 };
 
-const snsAttributes: Readonly<Record<string, JsonSchema>> = {
+/** What each message attribute holds, one entry for each name the contract lists; AsyncAPI describes the attributes as strings, since it has no SNS DataType. */
+const snsAttributes: Readonly<Record<(typeof snsAttributeNames)[number], JsonSchema>> = {
   [snsFactIdAttribute]: {
     type: 'string',
     minLength: 1,
@@ -79,7 +81,7 @@ const snsAttributes: Readonly<Record<string, JsonSchema>> = {
 };
 
 const snsProperties = Object.fromEntries(
-  Object.entries(snsAttributes).toSorted(([left], [right]) => byCodePoint(left, right)),
+  snsAttributeNames.toSorted(byCodePoint).map((name) => [name, snsAttributes[name]]),
 );
 
 /** The broker headers of a Message on SNS/SQS: the four message attributes the adapter sends and no other, all required, in code point order of their names. */
