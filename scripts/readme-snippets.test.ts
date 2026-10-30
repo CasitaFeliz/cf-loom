@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, inject, test } from 'vitest';
 import type { Readme } from './readme-blocks.ts';
 import { cfLoomProblemsOf, runCfLoom } from './readme-cf-loom.ts';
 import { compile } from './readme-compile.ts';
@@ -610,7 +610,7 @@ describe('the names a block leaves out', () => {
   });
 
   test('no import the completion adds to the README Service is reported unused', () => {
-    const service = join(root, '.readme-service');
+    const service = inject('readmeService');
 
     const unused = unusedCompletedImports(service);
 
@@ -681,11 +681,11 @@ function importsOutsideContract(service: string, path: string): string[] {
 
 describe('the READMEs', () => {
   test('Vitest writes the README Service when it loads its configuration', () => {
-    expect(existsSync(join(root, '.readme-service', 'tsconfig.json'))).toBe(true);
+    expect(existsSync(join(inject('readmeService'), 'tsconfig.json'))).toBe(true);
   });
 
   test('every TypeScript block of the contract, handlers, messaging, server, client and testing READMEs type-checks', () => {
-    const problems = readmeServiceProblems(join(root, '.readme-service'));
+    const problems = readmeServiceProblems(inject('readmeService'));
 
     expect(problems).toEqual([]);
   });
@@ -697,7 +697,7 @@ describe('the READMEs', () => {
   ])(
     'the write-out runs cf-loom generate and package over $service and installs its Contract Package',
     ({ folder, name }) => {
-      const service = join(root, '.readme-service');
+      const service = inject('readmeService');
       const installed = join(service, 'node_modules', '@org', `contract-${name}`);
 
       const handlerMap = readFileSync(join(service, folder, 'src/handlers.generated.ts'), 'utf8');
@@ -898,7 +898,7 @@ describe('the READMEs', () => {
   });
 
   test('no Contract file of the README Service imports Service code', () => {
-    const service = join(root, '.readme-service');
+    const service = inject('readmeService');
 
     const outside = contractFilesOf(service).flatMap((file) =>
       importsOutsideContract(service, file),
