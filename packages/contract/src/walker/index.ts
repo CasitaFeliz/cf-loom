@@ -16,6 +16,7 @@ export {
   reachedDefsOf,
   resolvedRefOf,
 } from './children.ts';
+export { closureFactsOf, refsWrittenIn } from './closure-facts.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';

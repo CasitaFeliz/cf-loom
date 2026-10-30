@@ -1,7 +1,7 @@
 import type { ObjectNode, RefNode } from '../walker/index.ts';
 import { variantStep } from '../walker/index.ts';
-import { innerAnnotationFindingsOf } from './annotations.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
+import { innerAnnotationFindingsOf, isUnchanged } from './def-comparison.ts';
 import {
   type BothDefs,
   type Finding,
@@ -10,7 +10,6 @@ import {
   type NodePair,
   type NodePairOf,
 } from './findings.ts';
-import { isUnchanged } from './refs.ts';
 import type { ShapeDifference } from './shape-differences.ts';
 
 /**
