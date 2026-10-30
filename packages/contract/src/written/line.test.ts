@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
-import { linePool } from '../../test/line-breaks.ts';
+import { lineBreaksIn, linePool } from '../../test/line-breaks.ts';
 import { unbrokenLineOf } from '../internal/index.ts';
 
 /** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
@@ -60,5 +60,33 @@ describe('unbrokenLineOf', () => {
 
     expect(growth).toBeLessThan(linearGrowth);
     expect(unbrokenLineOf('a\n'.repeat(count))).toBe('a\\n'.repeat(count));
+  });
+
+  test('the texts a line is written from hold each line break, CR LF, a lone surrogate and the names every object has', () => {
+    const pool = linePool();
+
+    for (const [_, code] of lineBreaks) {
+      expect(pool).toContain(String.fromCharCode(code));
+      expect(pool).toContain(`a${String.fromCharCode(code)}b`);
+    }
+    expect(pool).toContain(String.fromCharCode(0x0d, 0x0a));
+    expect(pool).toContain('\\n');
+    expect(pool).toContain('__proto__');
+    expect(pool).toContain('constructor');
+    expect(pool).toContain('toString');
+    expect(pool.some((text) => text.length > 0 && lineBreaksIn(text) === 0)).toBe(true);
+    expect(pool.some((text) => text.includes(String.fromCharCode(0xd800)))).toBe(true);
+  });
+
+  test('every text of the pool is written with no line break, and one with none as it is', () => {
+    const pool = linePool();
+
+    const broken = pool.filter((text) => lineBreaksIn(unbrokenLineOf(text)) > 0);
+    const changed = pool.filter(
+      (text) => lineBreaksIn(text) === 0 && unbrokenLineOf(text) !== text,
+    );
+
+    expect(broken).toEqual([]);
+    expect(changed).toEqual([]);
   });
 });
