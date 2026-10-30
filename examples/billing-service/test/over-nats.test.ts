@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { billingEnvironment, brokerPrefix, ordersEnvironment } from './environments.ts';
@@ -8,17 +7,19 @@ import {
   durableConsumerStateOf,
   lastMessageOn,
 } from './nats-broker.ts';
-import { placeAnOrder } from './placing-an-order.ts';
+import {
+  billingDir,
+  billingDrafting,
+  ordersCharging,
+  ordersDir,
+  ordersHandlingCharge,
+  placeAnOrder,
+} from './order-scenario.ts';
 import { aServiceProcess, type ServiceProcess } from './service-process.ts';
 
-const ordersDir = join(import.meta.dirname, '../../orders-service');
-const billingDir = join(import.meta.dirname, '..');
 const stream = `${brokerPrefix}_orders-service`;
 const createdSubject = `${brokerPrefix}.orders-service.event.OrderCreated.v1`;
 const chargeSubject = `${brokerPrefix}.orders-service.command.ChargeCard.v1`;
-const billingDrafting = `${brokerPrefix}_billing-service_draft-invoice-on-created`;
-const ordersCharging = `${brokerPrefix}_orders-service_charge-on-created`;
-const ordersHandlingCharge = `${brokerPrefix}_orders-service_command_ChargeCard_v1`;
 const patience = { interval: 50, timeout: 15_000 };
 let nats: NatsServer | undefined;
 let orders: ServiceProcess | undefined;

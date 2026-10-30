@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { sqs } from '@cf-loom/messaging/sqs';
 import { afterAll, beforeAll, describe, expect, type MockInstance, test, vi } from 'vitest';
 import { wakeEach } from '../../../packages/messaging/test/aws-arranging.ts';
@@ -9,15 +8,18 @@ import { until } from '../../../packages/messaging/test/until.ts';
 import { chargesOf } from '../../orders-service/src/charges/charges.ts';
 import { draftsOf } from '../src/billing/drafts.ts';
 import { brokerPrefix } from './environments.ts';
-import { ORDER_TOTAL, placeAnOrder } from './placing-an-order.ts';
+import {
+  billingDir,
+  billingDrafting,
+  ORDER_TOTAL,
+  ordersCharging,
+  ordersDir,
+  ordersHandlingCharge,
+  placeAnOrder,
+} from './order-scenario.ts';
 import { billingOver, ordersOver, type RunningService } from './services-over-a-broker.ts';
 import { applyPlanOf } from './sqs-broker.ts';
 
-const ordersDir = join(import.meta.dirname, '../../orders-service');
-const billingDir = join(import.meta.dirname, '..');
-const billingDrafting = `${brokerPrefix}_billing-service_draft-invoice-on-created`;
-const ordersCharging = `${brokerPrefix}_orders-service_charge-on-created`;
-const ordersHandlingCharge = `${brokerPrefix}_orders-service_command_ChargeCard_v1`;
 let moto: MotoServer | undefined;
 let clients: ReturnType<typeof motoClientsAt>[] = [];
 let reader: ReturnType<typeof motoClientsAt>;
