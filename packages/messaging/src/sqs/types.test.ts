@@ -17,7 +17,7 @@ describe('applyBrokerPlan types', () => {
   test('applyBrokerPlan refuses a connecting variable holding the clients and a misspelled account', () => {
     const given = { ...connecting, acount: '123456789012' };
 
-    // @ts-expect-error acount is not a declared field
+    // @ts-expect-error TS2345 acount is not a declared field
     const applying = () => applyBrokerPlan(given, plan, limits);
 
     expect(applying).toBeTypeOf('function');
@@ -26,7 +26,7 @@ describe('applyBrokerPlan types', () => {
   test('applyBrokerPlan refuses limits given through a variable with stream defaults, which a topic has none of', () => {
     const given = { streamDefaults: { maxAge: '7d' } } as const;
 
-    // @ts-expect-error streamDefaults is not a declared field
+    // @ts-expect-error TS2345 streamDefaults is not a declared field
     const applying = () => applyBrokerPlan(connecting, plan, given);
 
     expect(applying).toBeTypeOf('function');
@@ -35,7 +35,7 @@ describe('applyBrokerPlan types', () => {
   test('applyBrokerPlan refuses Durable consumer defaults given through a variable with a setting SNS/SQS does not have', () => {
     const given = { durableConsumerDefaults: { maxDeliver: 5, maxAckPending: 5 } } as const;
 
-    // @ts-expect-error maxAckPending is not a declared field
+    // @ts-expect-error TS2345 maxAckPending is not a declared field
     const applying = () => applyBrokerPlan(connecting, plan, given);
 
     expect(applying).toBeTypeOf('function');
