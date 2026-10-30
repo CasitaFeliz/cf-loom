@@ -1,6 +1,11 @@
 import type { IncomingMessage } from 'node:http';
 import type { Http, ServiceContract } from '@cf-loom/contract';
-import { allowedMethodsOf, type Closed, type Matchable } from '@cf-loom/contract/internal';
+import {
+  allowedMethodsOf,
+  type Closed,
+  type Matchable,
+  unbrokenLineOf,
+} from '@cf-loom/contract/internal';
 import type { HandlerMapOf, ResourcesOf } from '@cf-loom/handlers';
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import {
@@ -56,7 +61,9 @@ export function fastifyServe(
 function refusedBy(instance: FastifyInstance, registration: { readonly prefix?: unknown }) {
   if (registration.prefix) {
     throw new Error(
-      `fastifyServe: registered with the prefix ${String(registration.prefix)}; register it with none: an Endpoint's path is its whole path`,
+      unbrokenLineOf(
+        `fastifyServe: registered with the prefix ${String(registration.prefix)}; register it with none: an Endpoint's path is its whole path`,
+      ),
     );
   }
   if (Object.getPrototypeOf(instance) !== Object.prototype) {

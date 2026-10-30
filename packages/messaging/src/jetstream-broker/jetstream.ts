@@ -1,4 +1,9 @@
-import { brokerPrefixRule, type Closed, isBrokerPrefix } from '@cf-loom/contract/internal';
+import {
+  brokerPrefixRule,
+  type Closed,
+  isBrokerPrefix,
+  unbrokenLineOf,
+} from '@cf-loom/contract/internal';
 import type { JetStreamOptions } from '@nats-io/jetstream';
 import type { NatsConnection } from '@nats-io/nats-core';
 import type { Broker } from '../broker/index.ts';
@@ -50,7 +55,7 @@ async function checkStreamOrDrain(
     const manager = await managerOf(natsConnection, options);
     const refusal = refusalOf(stream, await checkedStreamOf(manager, stream));
     if (refusal !== undefined) {
-      throw new Error(refusal);
+      throw new Error(unbrokenLineOf(refusal));
     }
   } catch (error) {
     await drainOrClose(natsConnection);
@@ -75,7 +80,9 @@ function checkedPrefixOf(prefix: string | undefined): string | null {
   }
   if (!isBrokerPrefix(prefix)) {
     throw new Error(
-      `The broker prefix "${prefix}" is not ${brokerPrefixRule}: leave prefix undefined for none`,
+      unbrokenLineOf(
+        `The broker prefix "${prefix}" is not ${brokerPrefixRule}: leave prefix undefined for none`,
+      ),
     );
   }
   return prefix;

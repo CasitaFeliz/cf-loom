@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { ConsumerInfo } from '@nats-io/jetstream';
 import { createInbox, type Msg, millis, type NatsConnection, nanos } from '@nats-io/nats-core';
 import { type PulledMessage, pulledMessageOf } from './pulled-message.ts';
@@ -95,14 +96,16 @@ function pullOf(message: Msg, request: PullRequest, inbox: string): Pull {
     return none;
   }
   const status = [code, message.headers?.description].filter(Boolean).join(' ');
-  return failedOf(new Error(`NATS answered a pull from ${request.durable} with ${status}`));
+  return failedOf(
+    new Error(unbrokenLineOf(`NATS answered a pull from ${request.durable} with ${status}`)),
+  );
 }
 
 /** A pull NATS never answered, which a lost request or a pull subject the Service may not publish on leaves unanswered. */
 function unansweredOf(request: PullRequest): Pull {
   const waitedMs = request.expiryMs * lateFactor;
   const cause = new Error(
-    `NATS did not answer a pull from ${request.durable} within ${waitedMs} ms`,
+    unbrokenLineOf(`NATS did not answer a pull from ${request.durable} within ${waitedMs} ms`),
   );
   return failedOf(cause);
 }

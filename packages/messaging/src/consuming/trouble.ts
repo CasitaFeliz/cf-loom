@@ -1,5 +1,5 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import { logOf } from '@cf-loom/contract/internal';
+import { logOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { faultLineOf, type HandlerFaultBase, hookFailureOf } from '@cf-loom/handlers/internal';
 import type { DurableConsumerTrouble } from '../broker/index.ts';
 import type { CoreDurableConsumer } from './details.ts';
@@ -41,7 +41,9 @@ export function troubledOf(
     const handed = byDurable.get(durableConsumer.durable);
     if (handed === undefined) {
       throw new Error(
-        `${durableConsumer.durable} is no Durable consumer messaging handed this Broker`,
+        unbrokenLineOf(
+          `${durableConsumer.durable} is no Durable consumer messaging handed this Broker`,
+        ),
       );
     }
     const { declaration, name, durable, stream } = handed;

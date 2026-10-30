@@ -1,3 +1,5 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
+
 /** The AWS errors cf-loom tells by name, which is how the SDK says that a queue or a topic does not exist. */
 type AwsErrorName = 'QueueDoesNotExist' | 'NotFoundException';
 
@@ -9,7 +11,7 @@ export function isAwsError(error: unknown, name: AwsErrorName): boolean {
 /** What AWS answered for a field it always sends, or an error naming the field it left out. */
 export function answeredWith<Answer>(answer: Answer | undefined, field: string): Answer {
   if (answer === undefined) {
-    throw new Error(`AWS answered no ${field}`);
+    throw new Error(unbrokenLineOf(`AWS answered no ${field}`));
   }
   return answer;
 }

@@ -4,6 +4,7 @@ import {
   isSubscription,
   jsonBytesOf,
   messageIdentityOf,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 import { InvalidCallError } from '@cf-loom/handlers';
 import { defaultedMetaOf, firstAttempt, writtenMessageBody } from '@cf-loom/handlers/internal';
@@ -56,7 +57,7 @@ function reachedBy(
   if (reached.length === 0) {
     const named = messageIdentityOf(message.name, message.version);
     const reason = 'nothing consume()d takes it, or its Handler is a Stub';
-    throw new Error(`${named} has no Durable consumer: ${reason}`);
+    throw new Error(unbrokenLineOf(`${named} has no Durable consumer: ${reason}`));
   }
   return reached;
 }

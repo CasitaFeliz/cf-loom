@@ -4,6 +4,7 @@ import {
   type PathSegment,
   pathSegmentsOf,
   segmentOf,
+  unbrokenLineOf,
 } from '@cf-loom/contract/internal';
 import { type ParsedInput, textOf } from './input.ts';
 
@@ -15,14 +16,18 @@ import { type ParsedInput, textOf } from './input.ts';
 export function baseUrlOf(baseUrl: string | URL): URL {
   const base = new URL(baseUrl);
   if (base.protocol !== 'http:' && base.protocol !== 'https:') {
-    throw new Error(`The baseUrl's scheme ${base.protocol} is no http or https`);
+    throw new Error(unbrokenLineOf(`The baseUrl's scheme ${base.protocol} is no http or https`));
   }
   if (base.username !== '' || base.password !== '') {
     const shown = `${base.protocol}//${base.host}${base.pathname}`;
-    throw new Error(`The baseUrl ${shown} has a username or a password, which fetch refuses`);
+    throw new Error(
+      unbrokenLineOf(`The baseUrl ${shown} has a username or a password, which fetch refuses`),
+    );
   }
   if (base.search !== '' || base.hash !== '' || /[?#]$/.test(base.href)) {
-    throw new Error(`The baseUrl ${base.href} has a query or a fragment, which no Endpoint takes`);
+    throw new Error(
+      unbrokenLineOf(`The baseUrl ${base.href} has a query or a fragment, which no Endpoint takes`),
+    );
   }
   return base;
 }
