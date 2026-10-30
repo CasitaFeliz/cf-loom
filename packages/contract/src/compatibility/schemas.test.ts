@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { growthOf } from '../../test/growth.ts';
+import {
+  type Construct,
+  type Leaf,
+  type Piece,
+  pathTextOf,
+  randomNested,
+} from '../../test/random-places.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
+  authorPathOf,
   type Change,
   type ChangeSite,
   type CommandSnapshot,
@@ -28,6 +37,7 @@ import {
   type ServiceSnapshot,
   type ShapeDifference,
   type Snapshot,
+  type Step,
   type StringNode,
   snapshotPathOf,
   type TaggedNode,
@@ -2513,6 +2523,126 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       ),
     ]);
     expect(growth).toBeLessThan(chainGrowth);
+  });
+});
+
+describe('compatibilityReportOf, the steps of a Change in random nested schemas', () => {
+  const seedCount = 1_000;
+
+  /** What a plain union's options and a tuple's items are reported at: the node, not a step in it. */
+  const reportedWhole: readonly Construct[] = ['index', 'option'];
+
+  /** An object that gains an optional `y` when proposed, on a cycle of its own when it has an id. */
+  function anObjectGainingY(proposed: boolean, id: string | undefined): z.ZodType {
+    const fields = proposed ? { x: z.string(), y: z.string().optional() } : { x: z.string() };
+    if (id === undefined) {
+      return z.object(fields);
+    }
+    const cycle: z.ZodType = z
+      .object({
+        ...fields,
+        get again() {
+          return cycle.optional();
+        },
+      })
+      .meta({ id });
+    return cycle;
+  }
+
+  /**
+   * One random schema drawn twice from a seed, whose every leaf is an object that gains `y`, and a
+   * string whose description changes where it is a record's key.
+   */
+  function aRandomPair(seed: number, hasIds: boolean) {
+    const draw = (proposed: boolean) => {
+      let leafCount = 0;
+      const leaf = (crossing: readonly Construct[]) =>
+        crossing.at(-1) === 'key'
+          ? z.string().describe(proposed ? 'b' : 'a')
+          : anObjectGainingY(proposed, hasIds ? `leaf${leafCount++}` : undefined);
+      return randomNested({ next: seededNext(seed), leaf, keysHoldLeaves: true }, 5);
+    };
+    return { baseline: draw(false), proposed: draw(true) };
+  }
+
+  /**
+   * Where the Change of a leaf is reported, from the steps the generator recorded for it: after the
+   * place's own, at `y` for an object that gains one, without an intersection's `[i]` since its
+   * objects are one, and, across a plain union's option or a tuple's item, at the node before it.
+   */
+  function reportedAtOf(place: Place, leaf: Leaf) {
+    const crossed = leaf.crossing.filter((construct) => construct !== 'optional');
+    const constructs = crossed.map((construct, index) => ({ construct, piece: leaf.steps[index] }));
+    const wholeAt = constructs.findIndex(({ construct }) => reportedWhole.includes(construct));
+    const isWhole = wholeAt !== -1;
+    const above = isWhole ? constructs.slice(0, wholeAt) : constructs;
+    const written = above.filter(({ construct }) => construct !== 'intersection');
+    const placeSteps = place.root.map((text): Piece => ({ text, isField: true }));
+    const gainsY = !isWhole && leaf.crossing.at(-1) !== 'key';
+    const added: readonly Piece[] = gainsY ? [{ text: 'y', isField: true }] : [];
+    const pieces = [...placeSteps, ...written.flatMap(({ piece }) => piece ?? []), ...added];
+    return { path: pathTextOf(pieces), isWhole };
+  }
+
+  function stepsOf({ difference }: Change): readonly Step[] {
+    return 'at' in difference ? difference.at : [];
+  }
+
+  /** A random pair compared at one of the places, hopping through a `ref` at each leaf in half of the draws. */
+  function aDraw(seed: number) {
+    const place = places[seed % places.length] ?? input;
+    const hasIds = Math.floor(seed / places.length) % 2 === 0;
+    const { baseline, proposed } = aRandomPair(seed, hasIds);
+    const from = walkedWithDefsOf(baseline.schema);
+    const to = walkedWithDefsOf(proposed.schema);
+    const report = comparedOf(
+      place.baseline(from.node, from.defs),
+      place.proposed(to.node, to.defs),
+    );
+    const drawn = baseline.leaves.map((leaf) => reportedAtOf(place, leaf));
+    return { place, hasIds, report, drawn };
+  }
+
+  test('every Change sits at the steps its leaf was drawn at, after the place’s own', () => {
+    const wrong: string[] = [];
+    const kinds = new Set<string>();
+    let deepestOwnSteps = 0;
+    let changesAtNodes = 0;
+    let changesThroughRefs = 0;
+
+    for (let seed = 1; seed <= seedCount; seed++) {
+      const { place, hasIds, report, drawn } = aDraw(seed);
+
+      const expected = [...new Set(drawn.map(({ path }) => path))].sort();
+      const reported = report.changes.map((change) => authorPathOf(stepsOf(change)) ?? '').sort();
+      if (JSON.stringify(reported) !== JSON.stringify(expected)) {
+        wrong.push(
+          `seed ${seed} in ${place.name}: ${reported.join(' ')} not ${expected.join(' ')}`,
+        );
+      }
+      for (const { kind } of report.changes.flatMap(stepsOf)) {
+        kinds.add(kind);
+      }
+      for (const change of report.changes) {
+        deepestOwnSteps = Math.max(deepestOwnSteps, stepsOf(change).length - place.root.length);
+      }
+      changesAtNodes += drawn.filter(({ isWhole }) => isWhole).length;
+      changesThroughRefs += hasIds ? drawn.filter(({ isWhole }) => !isWhole).length : 0;
+    }
+
+    expect(wrong).toEqual([]);
+    expect([...kinds].sort()).toEqual([
+      'field',
+      'items',
+      'key',
+      'part',
+      'rest',
+      'value',
+      'variant',
+    ]);
+    expect(deepestOwnSteps).toBeGreaterThanOrEqual(2);
+    expect(changesAtNodes).toBeGreaterThan(0);
+    expect(changesThroughRefs).toBeGreaterThan(0);
   });
 });
 

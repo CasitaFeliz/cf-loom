@@ -37,10 +37,13 @@ export type Leaf = { readonly steps: readonly Piece[]; readonly crossing: readon
 /** A random schema and the leaves the generator put in it. */
 export type RandomSchema = { readonly schema: z.ZodType; readonly leaves: readonly Leaf[] };
 
-/** What a random schema is drawn with: the leaf it puts at the bottom, none for a plain string, and whether a record's key may hold one. */
+/**
+ * What a random schema is drawn with: the leaf it puts at the bottom of a branch that crossed some
+ * constructs, none for a plain string, and whether a record's key may hold one.
+ */
 export type Drawing = {
   readonly next: () => number;
-  readonly leaf: () => z.ZodType | undefined;
+  readonly leaf: (crossing: readonly Construct[]) => z.ZodType | undefined;
   readonly keysHoldLeaves: boolean;
 };
 
@@ -86,7 +89,7 @@ export function randomNested(drawing: Drawing, depth: number): RandomSchema {
 }
 
 function leafOf(drawing: Drawing, via: readonly Piece[], crossing: readonly Construct[]) {
-  const leaf = drawing.leaf();
+  const leaf = drawing.leaf(crossing);
   return leaf === undefined
     ? { schema: z.string(), leaves: [] }
     : { schema: leaf, leaves: [{ steps: via, crossing }] };
