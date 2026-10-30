@@ -220,3 +220,40 @@ describe('receivedSnsAttributesOf', () => {
     });
   });
 });
+
+describe('the ids receivedSnsAttributesOf reads', () => {
+  test.each([
+    ['text that is not JSON', 'fact-1'],
+    ['JSON that is not a string', '42'],
+    ['a JSON object', '{"id":"fact-1"}'],
+    ['a JSON null', 'null'],
+    ['an empty JSON string, which the Fact id’s rule refuses', '""'],
+  ])('an id attribute holding %s is listed as not reading back', (_, value) => {
+    const attributes = snsAttributesOf(aMessage());
+
+    const withMessageId = receivedSnsAttributesOf({
+      ...attributes,
+      [snsMessageIdAttribute]: value,
+    });
+    const withFactId = receivedSnsAttributesOf({ ...attributes, [snsFactIdAttribute]: value });
+
+    expect(withMessageId).toEqual({ kind: 'missing', names: [snsMessageIdAttribute] });
+    expect(withFactId).toEqual({ kind: 'missing', names: [snsFactIdAttribute] });
+  });
+
+  test.each([
+    ['raw non-ASCII characters', '"café \u{1f600}"', 'café \u{1f600}'],
+    ['whitespace around the JSON string', ' \n\t"fact-1" \r\n', 'fact-1'],
+    ['upper-case escapes', '"\\u00E9\\uD83D\\uDE00"', 'é\u{1f600}'],
+  ])('an id attribute with %s reads back as the id it spells', (_, value, id) => {
+    const attributes = snsAttributesOf(aMessage());
+
+    const read = receivedSnsAttributesOf({
+      ...attributes,
+      [snsMessageIdAttribute]: value,
+      [snsFactIdAttribute]: value,
+    });
+
+    expect(read).toEqual({ kind: 'read', messageId: id, factId: id, headers: {} });
+  });
+});

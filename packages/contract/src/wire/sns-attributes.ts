@@ -1,4 +1,4 @@
-import type { ReceivedHeaders } from './broker.ts';
+import { isIdHeaderValue, type ReceivedHeaders } from './broker.ts';
 
 /** The SNS message attribute a Message's subject travels in, which each Durable consumer's subscription filters on. */
 export const snsSubjectAttribute = 'cf-loom-subject';
@@ -35,20 +35,40 @@ export function snsAttributesOf(message: {
   };
 }
 
+/** What an attribute's text is as JSON, or `undefined` when the attribute is absent or its text is no JSON, which no JSON text is. */
+function parsedJsonOf(text: string | undefined): unknown {
+  if (text === undefined) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The id an attribute holds as a JSON string the Fact id's rule accepts. */
+function idOf(text: string | undefined): string | undefined {
+  const id = parsedJsonOf(text);
+  return isIdHeaderValue(id) ? id : undefined;
+}
+
 /** The inverse of `snsAttributesOf` for what a queue received: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */
 export function receivedSnsAttributesOf(
   attributes: Readonly<Record<string, string | undefined>>,
 ): ReceivedHeaders {
-  const names = [snsMessageIdAttribute, snsFactIdAttribute].filter(
-    (name) => attributes[name] === undefined,
+  const messageId = idOf(attributes[snsMessageIdAttribute]);
+  const factId = idOf(attributes[snsFactIdAttribute]);
+  const headers = Object.fromEntries(
+    Object.entries(JSON.parse(attributes[snsHeadersAttribute] ?? '')),
   );
-  if (names.length > 0) {
+  const readings = [
+    [snsMessageIdAttribute, messageId],
+    [snsFactIdAttribute, factId],
+  ] as const;
+  const names = readings.filter(([, read]) => read === undefined).map(([name]) => name);
+  if (messageId === undefined || factId === undefined) {
     return { kind: 'missing', names };
   }
-  return {
-    kind: 'read',
-    messageId: JSON.parse(attributes[snsMessageIdAttribute] ?? ''),
-    factId: JSON.parse(attributes[snsFactIdAttribute] ?? ''),
-    headers: Object.fromEntries(Object.entries(JSON.parse(attributes[snsHeadersAttribute] ?? ''))),
-  };
+  return { kind: 'read', messageId, factId, headers };
 }
