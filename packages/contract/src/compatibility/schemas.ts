@@ -8,7 +8,7 @@ import {
 import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
-import { plainUnionFindingsOf } from './def-comparison.ts';
+import { isUnchangedRefPair, plainUnionFindingsOf } from './def-comparison.ts';
 import { enumFindingsOf } from './enums.ts';
 import { objectFindingsOf } from './fields.ts';
 import {
@@ -57,8 +57,9 @@ type Hop = Met & { readonly kind: 'hop' };
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
  * its path, following each `ref` one hop at a time into its Snapshot's defs. A `ref` is compared
  * where it sits, and the pair it leads to the first time that pair is met, so a def used at
- * several paths reports its differences at the first. A pair holds its steps shared with the pair
- * it is inside and a difference reads them as a list once.
+ * several paths reports its differences at the first. A pair of `ref`s naming one def the def
+ * comparison finds nothing differing in is not followed. A pair holds its steps shared with the
+ * pair it is inside and a difference reads them as a list once.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
@@ -114,7 +115,8 @@ function levelOf(met: Met, defs: BothDefs, place: EnteredPlace): Level {
 /**
  * What comparing a pair finds: its own annotations and def name, its nullability where it is a
  * use (a def is never nullable, each `ref` carries its use's), then its type, or, when a side is a
- * `ref`, the pair one hop on, unless that pair was already entered within the root schema.
+ * `ref`, the pair one hop on, unless that pair was already entered within the root schema or
+ * names on both sides one def nothing differs in.
  */
 function findingsWithin(
   { kind, pair }: Met,
@@ -130,7 +132,7 @@ function findingsWithin(
     return [...own, ...typeFindingsOf(pair, defs)];
   }
   const hop = hopOf(pair, defs);
-  if (hasEntered(place.entered, hop)) {
+  if (isUnchangedRefPair(pair, defs) || hasEntered(place.entered, hop)) {
     return own;
   }
   const proposedEntered = place.entered.get(hop.baseline) ?? new Set<SchemaNode>();

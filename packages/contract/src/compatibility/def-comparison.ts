@@ -107,3 +107,29 @@ function ownFactsOf(
   const pair = { baseline, proposed };
   return [...differingAnnotationsOf(pair), ...annotationsInside(pair)];
 }
+
+/**
+ * Whether every def the nodes' `ref`s name, and every def those reach, is the same on both sides:
+ * the def comparison holds no fact for any of them. A name a side holds no def for is a change.
+ */
+export function reachesOnlyUnchanged(nodes: readonly SchemaNode[], defs: BothDefs): boolean {
+  const reached = nodes.flatMap(refsWrittenIn);
+  if (reached.length === 0) {
+    return true;
+  }
+  const comparison = comparisonOf(defs);
+  return reached.every((name) => comparison.get(name)?.size === 0);
+}
+
+/**
+ * Whether two nodes are `ref`s naming one def that, with every def it reaches, is the same on both
+ * sides, so no rule finds a Difference beyond the two `ref`s themselves.
+ */
+export function isUnchangedRefPair({ baseline, proposed }: NodePair, defs: BothDefs): boolean {
+  return (
+    baseline.type === 'ref' &&
+    proposed.type === 'ref' &&
+    baseline.name === proposed.name &&
+    reachesOnlyUnchanged([baseline], defs)
+  );
+}
