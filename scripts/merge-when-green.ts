@@ -3,7 +3,8 @@
  * `node scripts/merge-when-green.ts <pr> <head sha> [--fixes-main]`. It waits for the `check` job on the head to finish
  * and for GitHub to judge the PR mergeable, refuses while the last CI run on `main` failed (unless the PR is the one
  * that fixes it, `--fixes-main`), then squash-merges with the PR title and `(#<pr>)` as the subject, only if the head is
- * still `<head sha>`. Exit 0 merged, 1 refused, 2 timed out or `gh` failed; a run that exits 2 is run again.
+ * still `<head sha>`; GitHub deletes the merged branch. A PR already merged counts as merged, so a run that exits 2 is
+ * run again safely. Exit 0 merged, 1 refused, 2 timed out or `gh` failed.
  */
 import { execFileSync } from 'node:child_process';
 
@@ -87,6 +88,12 @@ function stateOf(pr: string, sha: string, fixesMain: boolean): MergeState {
 function merge(pr: string, sha: string, fixesMain: boolean): Promise<number> {
   return (async () => {
     for (let attempt = 0; attempt < attempts; attempt++) {
+      if (
+        gh(['pr', 'view', pr, '-R', repository, '--json', 'state', '-q', '.state']) === 'MERGED'
+      ) {
+        process.stdout.write(`#${pr} merged\n`);
+        return 0;
+      }
       const step = stepOf(stateOf(pr, sha, fixesMain));
       if (step.kind === 'refuse') {
         process.stderr.write(`#${pr} not merged: ${step.reason}\n`);
@@ -101,7 +108,6 @@ function merge(pr: string, sha: string, fixesMain: boolean): Promise<number> {
           '-R',
           repository,
           '--squash',
-          '--delete-branch',
           '--subject',
           `${title} (#${pr})`,
           '--match-head-commit',
