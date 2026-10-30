@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { configDefaults, defineConfig } from 'vitest/config';
-import { readmeServiceAliases, writeReadmeService } from './scripts/readme-snippets.ts';
+import { writeReadmeService } from './scripts/readme-snippets.ts';
 
 /** The lint plugin tests each spawn Biome, and some script tests spawn Node, which takes seconds on a CI runner with shared cores. */
 const spawningTimeout = 30_000;
@@ -23,10 +23,10 @@ export default defineConfig({
         },
       },
       {
-        resolve: { alias: readmeServiceAliases(readmeService) },
         test: {
           name: 'readme-service',
           include: ['.readme-service/test/**/*.test.ts'],
+          setupFiles: ['scripts/readme-service-written.ts'],
           testTimeout: spawningTimeout,
         },
       },
