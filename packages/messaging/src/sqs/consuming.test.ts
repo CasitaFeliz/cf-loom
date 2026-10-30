@@ -2,7 +2,7 @@
 
 import { createHash } from 'node:crypto';
 import type { SQSClient } from '@aws-sdk/client-sqs';
-import { handle } from '@cf-loom/handlers';
+import { fault, handle } from '@cf-loom/handlers';
 import {
   afterAll,
   beforeAll,
@@ -30,7 +30,7 @@ import {
   anAwsConnecting,
   failingCommand,
 } from '../../test/aws-clients.ts';
-import { queueCountsOf, queueNamesOf, queueTagsOf } from '../../test/aws-reading.ts';
+import { queueCountsOf, queueNamesOf, queueTagsOf, receivedFrom } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
@@ -45,8 +45,14 @@ import {
   testLimits,
 } from '../../test/orders.ts';
 import { until } from '../../test/until.ts';
-import { messaging } from '../index.ts';
-import { type Duration, type SqsConnecting, sqs } from './index.ts';
+import { type BrokerTrouble, type ConsumedFault, messaging } from '../index.ts';
+import {
+  type Duration,
+  type SqsBrokerLimits,
+  type SqsConnecting,
+  type SqsDurableConsumerLimits,
+  sqs,
+} from './index.ts';
 
 let moto: MotoServer;
 
@@ -77,17 +83,33 @@ function closedWhenDone(
   });
 }
 
+/** What a test of Orders over sqs() may set: its Broker prefix, the limits its queues are made with and the hooks of its messaging. */
+type Settings = {
+  readonly prefix?: string | null;
+  readonly limits?: SqsBrokerLimits;
+  readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
+  readonly onBrokerTrouble?: (trouble: BrokerTrouble) => void | Promise<void>;
+};
+
 /** An Orders messaging over sqs() on the test's moto, closed when the test ends, with the names it works with. */
-async function aMessaging(prefix: string | null = 'staging') {
+async function aMessaging(settings: Settings = {}) {
+  const { prefix = 'staging', limits, onServiceFault, onBrokerTrouble } = settings;
   const connecting = anAwsConnecting(moto.url);
-  await arrangeOrders(connecting, { prefix });
-  const started = await messaging(
-    ordersContract,
-    sqs(prefix === null ? connecting : { ...connecting, prefix }),
-  );
+  await arrangeOrders(connecting, { prefix, ...(limits === undefined ? {} : { limits }) });
+  const hooks = {
+    onServiceFault: onServiceFault ?? (() => undefined),
+    onBrokerTrouble: onBrokerTrouble ?? (() => undefined),
+  };
+  const broker = sqs(prefix === null ? connecting : { ...connecting, prefix });
+  const started = await messaging(ordersContract, broker, hooks);
   const orders = anOrders(prefix);
   closedWhenDone(started, connecting, orders);
   return { ...started, connecting, orders };
+}
+
+/** The limits of the test's queues with these settings of a Durable consumer over the default ones. */
+function limitsWith(settings: Partial<SqsDurableConsumerLimits>): SqsBrokerLimits {
+  return { durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ...settings } };
 }
 
 /** What `aMessaging` gives a test. */
@@ -208,7 +230,7 @@ describe('consuming over sqs()', () => {
   });
 
   test('without a prefix, consume looks for the unprefixed queue names', async () => {
-    const { sender, consume } = await aMessaging(null);
+    const { sender, consume } = await aMessaging({ prefix: null });
     const received: Received[] = [];
     await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
 
@@ -233,6 +255,97 @@ describe('consuming over sqs()', () => {
 
     await until(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
     await expect(queueNamesOf(connecting.sqs)).resolves.toContain(hashed);
+  });
+
+  test('the Handler receives the Message’s Broker message id, Fact id, delivery count 1 and Transport headers', async () => {
+    const { publisher, consume } = await aMessaging();
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+
+    await publisher.publish(
+      'OrderCreated',
+      { v1: { orderId: 'o-1' } },
+      { factId: 'o-1:created', headers: { traceparent: '00-abc-def-01' } },
+    );
+
+    await until(() => expect(received).toHaveLength(1));
+    expect(received[0]?.meta).toEqual({
+      messageId: 'event.OrderCreated.v1:o-1:created',
+      factId: 'o-1:created',
+      deliveryCount: 1,
+      lastAttempt: false,
+      headers: { traceparent: '00-abc-def-01' },
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  test('returning nothing deletes the Message: the queue holds nothing, visible or in flight', async () => {
+    const { publisher, consume, connecting, orders } = await aMessaging();
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(received).toHaveLength(1));
+    await until(async () => {
+      const counts = await queueCountsOf(connecting.sqs, orders.notifyQueue);
+      expect(counts).toEqual({ visible: 0, inFlight: 0 });
+    });
+  });
+
+  test('a Fault that is not retryable deletes the Message: it is not delivered again', async () => {
+    const { publisher, consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s' }),
+    });
+    const received: Received[] = [];
+    const failing = () => fault({ committed: 'no', retryable: false, message: 'cannot be done' });
+    await consume(handlersOf(received, { notify: failing }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(async () => {
+      const counts = await queueCountsOf(connecting.sqs, orders.notifyQueue);
+      expect(counts).toEqual({ visible: 0, inFlight: 0 });
+    });
+    expect(received).toHaveLength(1);
+  });
+
+  test('a throw leaves the Message, and SQS delivers it again after the visibility timeout with delivery count 2', async () => {
+    const { publisher, consume } = await aMessaging({ limits: limitsWith({ ackWait: '1s' }) });
+    const received: Received[] = [];
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await consume(handlersOf(received, { notify: throwingOnce }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(received).toHaveLength(2));
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  });
+
+  test('only the receive the redrive’s maxReceiveCount reaches is the last attempt, and the Message then moves to the dead-letter queue', async () => {
+    const { publisher, consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+    });
+    const received: Received[] = [];
+    const failing = () => fault({ committed: 'no', retryable: true, message: 'card 503' });
+    await consume(handlersOf(received, { notify: failing }), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(async () => {
+      const dead = await receivedFrom(connecting.sqs, `${orders.notifyQueue}_dlq`);
+      expect(dead).toHaveLength(1);
+    });
+    expect(received.map(({ meta }) => [meta.deliveryCount, meta.lastAttempt])).toEqual([
+      [1, false],
+      [2, false],
+      [3, true],
+    ]);
   });
 
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
