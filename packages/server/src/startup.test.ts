@@ -20,6 +20,35 @@ const apiKey = defineGuard({
 
 const legacyKey = defineGuard({ name: 'legacyKey', description: 'An old key' });
 
+/** Each character a reader may end a line at, with its name and the text that shows its escape. */
+const lineBreaks = [
+  ['LF', 0x0a, '\\n'],
+  ['CR', 0x0d, '\\r'],
+  ['U+0085', 0x85, '\\u0085'],
+  ['U+2028', 0x2028, '\\u2028'],
+  ['U+2029', 0x2029, '\\u2029'],
+  ['U+000B', 0x0b, '\\u000b'],
+  ['U+000C', 0x0c, '\\u000c'],
+  ['U+001C', 0x1c, '\\u001c'],
+  ['U+001D', 0x1d, '\\u001d'],
+  ['U+001E', 0x1e, '\\u001e'],
+] as const;
+
+/** Splits a text where any reader would end a line. */
+const lineBreakPattern = new RegExp(
+  `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,
+);
+
+/** The message of the Error a call throws. */
+function refusalOf(call: () => unknown): string {
+  try {
+    call();
+  } catch (e) {
+    return (e as Error).message;
+  }
+  throw new Error('the call did not throw');
+}
+
 const getOrder = defineEndpoint({
   name: 'getOrder',
   method: 'GET',
@@ -220,6 +249,38 @@ describe('serve: what it checks before the first request', () => {
 
     expect(serving).toThrow(` ${rule}: `);
   });
+
+  test.for(lineBreaks)(
+    'an Endpoint with two header names holding %s throws one line per failure, the break written escaped',
+    ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const odd = defineEndpoint({
+        name: 'odd',
+        method: 'GET',
+        path: '/odd',
+        visibility: 'public',
+        description: 'An odd one',
+        input: {
+          headers: z.object({ [`x${character}y`]: z.string(), [`p${character}q`]: z.string() }),
+        },
+        success: { status: 204 },
+      });
+      const withOdd = defineService({
+        name: 'orders-service',
+        groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [odd] })],
+      });
+
+      const serving = () =>
+        serve(withOdd, { endpoints: { odd: handle(odd, () => success(odd)) }, guards: {} }, {});
+
+      const lines = refusalOf(serving).split(lineBreakPattern);
+      expect(lines).toEqual([
+        'serve() takes a Contract generate accepts:',
+        expect.stringContaining(`x${visible}y`),
+        expect.stringContaining(`p${visible}q`),
+      ]);
+    },
+  );
 
   test('an Endpoint that answers a Rejection with a header name the host owns throws, as generate words it', () => {
     const clobbering = defineRejection({
