@@ -4,18 +4,16 @@ import type {
   EndpointSnapshot,
   EventSnapshot,
   GuardSnapshot,
-  MessageTombstone,
 } from '../snapshot/index.ts';
-import { canonicalJson, type Defs, reachedDefsOf, type SchemaNode } from '../walker/index.ts';
+import { canonicalJson, type SchemaNode } from '../walker/index.ts';
+import { isSameReaching } from './def-comparison.ts';
 import type { BothDefs } from './findings.ts';
-import { comparedShapesOf, type Pair, retiredShapesOf } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
+import { retiredDifferencesOf } from './retired-declarations.ts';
 
 /** What an Element or a Subscription says of itself besides its shapes: its description and Group. */
 type Described = { readonly description: string; readonly group: string };
-
-/** What an Element Retired in the proposed Snapshot may still declare. */
-type Declaration = EndpointSnapshot | EventSnapshot | CommandSnapshot;
 
 /** Whether two values differ in their canonical JSON, so the order of keys is no difference. */
 function differ(left: unknown, right: unknown): boolean {
@@ -103,12 +101,10 @@ export function guardNeutralOf(
   if (differ(baseline.guards, proposed.guards)) {
     differences.push({ kind: 'guards-changed' });
   }
-  if (
-    nodeKeyOf(baseline.qualifier, defs.baseline) !== nodeKeyOf(proposed.qualifier, defs.proposed)
-  ) {
+  if (!isSameNode(baseline.qualifier, proposed.qualifier, defs)) {
     differences.push({ kind: 'qualifier-changed' });
   }
-  if (nodeKeyOf(baseline.context, defs.baseline) !== nodeKeyOf(proposed.context, defs.proposed)) {
+  if (!isSameNode(baseline.context, proposed.context, defs)) {
     differences.push({ kind: 'context-changed' });
   }
   return [...differences, ...originDifferencesOf(baseline, proposed)];
@@ -125,18 +121,15 @@ export function guardSourcesOf(
   defs: BothDefs,
 ): readonly Difference[] {
   const differences: Difference[] = [];
-  if (demandsKeyOf(baseline, defs.baseline) !== demandsKeyOf(proposed, defs.proposed)) {
+  const demands = { baseline: baseline.demands, proposed: proposed.demands };
+  const nodes = [baseline.demands.headers, baseline.demands.query];
+  if (!isSameReaching(demands, nodes, defs)) {
     differences.push({ kind: 'demands-changed' });
   }
   if (differ(baseline.rejections, proposed.rejections)) {
     differences.push({ kind: 'rejections-changed' });
   }
   return differences;
-}
-
-/** A Guard's demands as text with the defs they reach, so a change in a def shows in them. */
-function demandsKeyOf({ demands }: GuardSnapshot, defs: Defs): string {
-  return canonicalJson([demands, reachedKeyOf([demands.headers, demands.query], defs)]);
 }
 
 /** A kept code's Neutral differences: its message, then its origin. */
@@ -159,62 +152,11 @@ function originDifferencesOf(
   return [{ kind: 'origin-changed', from: baseline.origin, to: proposed.origin }];
 }
 
-/**
- * Whether an Element Retired in the proposed Snapshot declares anything the Baseline's declaration
- * did not, the defs it reaches included; nothing reads it, so no other rule compares it.
- */
-function retiredDifferencesOf(pair: Pair<Declaration>, defs: BothDefs): readonly Difference[] {
-  const compared = retiredShapesOf(pair);
-  if (compared === undefined) {
-    return [];
-  }
-  const before = declarationKeyOf(compared.baseline, defs.baseline);
-  const after = declarationKeyOf(compared.proposed, defs.proposed);
-  return before === after ? [] : [{ kind: 'retired-changed' }];
-}
-
-/** A schema, or none, as text with every def it reaches, so a change in a def shows in the schema. */
-function nodeKeyOf(node: SchemaNode | null, defs: Defs): string {
-  return canonicalJson([node, reachedKeyOf(node === null ? [] : [node], defs)]);
-}
-
-/** What moves with an Element's lifecycle, which the lifecycle's own Change already reports. */
-const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'] as const satisfies readonly (
-  | keyof EndpointSnapshot
-  | keyof MessageTombstone
-)[];
-
-/** A declaration as text with the defs it reaches, without the history the Baseline keeps of it. */
-function declarationKeyOf(declaration: Declaration, defs: Defs): string {
-  const declared = Object.entries(declaration).filter(
-    ([key]) => !historyKeys.some((history) => history === key),
-  );
-  return canonicalJson([Object.fromEntries(declared), reachedKeyOf(nodesOf(declaration), defs)]);
-}
-
-function reachedKeyOf(
-  nodes: readonly SchemaNode[],
-  defs: Defs,
-): readonly (readonly [string, unknown])[] {
-  return reachedDefsOf(nodes, defs).map((name) => [name, defs[name]]);
-}
-
-function nodesOf(declaration: Declaration): readonly SchemaNode[] {
-  if (!('input' in declaration)) {
-    return [declaration.body];
-  }
-  const { input, success } = declaration;
-  const nodes = [
-    input.params,
-    input.query,
-    input.headers,
-    input.body,
-    success.headers,
-    success.body,
-  ];
-  return nodes.filter(isNode);
-}
-
-function isNode(node: SchemaNode | null): node is SchemaNode {
-  return node !== null;
+/** Whether two schemas, or none, are the same text and reach the same defs. */
+function isSameNode(
+  baseline: SchemaNode | null,
+  proposed: SchemaNode | null,
+  defs: BothDefs,
+): boolean {
+  return isSameReaching({ baseline, proposed }, baseline === null ? [] : [baseline], defs);
 }

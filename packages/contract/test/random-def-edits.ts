@@ -108,10 +108,11 @@ function retyped(nodes: Draft[], next: Next): boolean {
     return false;
   }
   const kept = Object.entries(node).filter(([key]) => key in neutralValues || key === 'nullable');
+  const type = retypedAs[String(node.type)];
   for (const key of Object.keys(node)) {
     delete node[key];
   }
-  Object.assign(node, Object.fromEntries(kept), { type: retypedAs[String(node.type)] });
+  Object.assign(node, Object.fromEntries(kept), { type });
   return true;
 }
 

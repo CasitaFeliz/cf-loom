@@ -2650,6 +2650,171 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       expect(growth).toBeLessThan(linearGrowth);
     },
   );
+
+  /**
+   * The sizes of a shape of `count` roots over a closure of `count` defs: a check that reads the
+   * closure again at each root costs their product, so eight times as large costs about 64 times
+   * as much. At `sizes` that takes minutes a run.
+   */
+  const rootSizes = { small: 125, large: 1_000 };
+
+  const unchangedInnermost = { description: 'a', leaf: aString };
+
+  /** `count` exports named `top0`, `top1`…, each holding `held`. */
+  function exportsOfCount(count: number, held: SchemaNode) {
+    const entries = Array.from({ length: count }, (_, index) => [`top${index}`, held]);
+    return schemaExports(Object.fromEntries(entries));
+  }
+
+  /** The check of `count` exports that each name the head of a chain of `count` defs, against its Baseline. */
+  function checkOfExports(proposedInnermost: { description: string; leaf: SchemaNode }) {
+    return (count: number) => {
+      const exported = exportsOfCount(count, aRef(`c${count - 1}`));
+      const baseline = aBaselineDefinitions({
+        defs: aFanChainOf(count, unchangedInnermost),
+        exports: exported,
+      });
+      const proposed = aDefinitions({
+        defs: aFanChainOf(count, proposedInnermost),
+        exports: exported,
+      });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  /** The Changes of `count` exports that each report `difference`, in the order a report lists them. */
+  function exportChangesOf(count: number, difference: Found) {
+    const names = Array.from({ length: count }, (_, index) => `top${index}`).sort(byCodePoint);
+    return names.map((name) =>
+      changeAt({ ...shared, site: { kind: 'export', name, visibility: 'public' } }, difference),
+    );
+  }
+
+  test('many exports, each naming the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkExports = checkOfExports(unchangedInnermost);
+
+    const report = checkExports(rootSizes.large)();
+    const growth = growthOf(checkExports, rootSizes, linearGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('many exports, each naming one unchanged def of many fields that each name a def of their own, are checked in time that grows with their number and the def’s width', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkWideExports = (count: number) => {
+      const defsOf = (): Defs => {
+        const parts = Array.from({ length: count }, (_, index) => [
+          `part${index}`,
+          anObject({ value: required(aString) }),
+        ]);
+        const fields = parts.map(([name]) => [name, required(aRef(String(name)))]);
+        return { ...Object.fromEntries(parts), wide: anObject(Object.fromEntries(fields)) };
+      };
+      const exported = exportsOfCount(count, aRef('wide'));
+      const baseline = aBaselineDefinitions({ defs: defsOf(), exports: exported });
+      const proposed = aDefinitions({ defs: defsOf(), exports: exported });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkWideExports(rootSizes.large)();
+    const growth = growthOf(checkWideExports, rootSizes, linearGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a change at the end of a chain many exports name is reported at each export, at its own path', () => {
+    const count = 3;
+    const checkExports = checkOfExports({ description: 'a', leaf: aNumber });
+
+    const report = checkExports(count)();
+
+    const atEnd = Array.from({ length: count }, () => ['fields', 'next']).flat();
+    const typeChanged = { kind: 'type-changed', from: 'string', to: 'number' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual(
+      exportChangesOf(count, found(typeChanged, breaksEverywhere, atEnd)),
+    );
+  });
+
+  test('a change to a Neutral annotation at the end of a chain many exports name is reported at each export', () => {
+    const count = 3;
+    const checkExports = checkOfExports({ description: 'b', leaf: aString });
+
+    const report = checkExports(count)();
+
+    const atInnermostDef = Array.from({ length: count - 1 }, () => ['fields', 'next']).flat();
+    const described = found(annotationChanged('description'), neutralEverywhere, atInnermostDef);
+    expect(snapshotPathsOf(report.changes)).toEqual(exportChangesOf(count, described));
+  });
+
+  test('a `ref` to an unchanged def still reports its own description and a use’s added nullability', () => {
+    const exported = (held: SchemaNode) => schemaExports({ money: held });
+    const baseline = aBaselineDefinitions({
+      defs: aFanChainOf(2, unchangedInnermost),
+      exports: exported(aRef('c1')),
+    });
+    const proposed = aDefinitions({
+      defs: aFanChainOf(2, unchangedInnermost),
+      exports: exported({ type: 'ref', name: 'c1', description: 'Money', nullable: true }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('description'), neutralEverywhere)),
+      changeAt(shared, found({ kind: 'nullability-added' }, guaranteesLess)),
+    ]);
+  });
+
+  test('a `ref` pointed at another def of the same text reports the def name it carries', () => {
+    const defs = (): Defs => ({
+      first: anObject({ value: required(aString) }),
+      second: anObject({ value: required(aString) }),
+    });
+    const baseline = aBaselineDefinitions({
+      defs: defs(),
+      exports: schemaExports({ money: aRef('first') }),
+    });
+    const proposed = aDefinitions({
+      defs: defs(),
+      exports: schemaExports({ money: aRef('second') }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('id'), neutralEverywhere)),
+    ]);
+  });
+
+  test('a `ref` pointed at a def of another shape reports the def name it carries and what differs between the two defs', () => {
+    const baseline = aBaselineDefinitions({
+      defs: {
+        first: anObject({ value: required(aString) }),
+        second: anObject({ value: required(aNumber) }),
+      },
+      exports: schemaExports({ money: aRef('first') }),
+    });
+    const proposed = aDefinitions({
+      defs: {
+        first: anObject({ value: required(aString) }),
+        second: anObject({ value: required(aNumber) }),
+      },
+      exports: schemaExports({ money: aRef('second') }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    const typeChanged = { kind: 'type-changed', from: 'string', to: 'number' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('id'), neutralEverywhere)),
+      changeAt(shared, found(typeChanged, breaksEverywhere, ['fields', 'value'])),
+    ]);
+  });
 });
 
 describe('compatibilityReportOf, the steps of a Change in random nested schemas', () => {

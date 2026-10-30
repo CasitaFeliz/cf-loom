@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { growthOf } from '../../test/growth.ts';
 import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
@@ -7,6 +8,7 @@ import {
   type CommandSnapshot,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type Defs,
   type EndpointFields,
   type EndpointLifecycle,
   type EndpointSnapshot,
@@ -16,6 +18,7 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  type SchemaNode,
   type ServiceSnapshot,
   type Snapshot,
   type Verdict,
@@ -629,6 +632,101 @@ describe('compatibilityReportOf, Elements Retired on both sides', () => {
       'retired',
       'retired-changed',
     ]);
+  });
+});
+
+describe('compatibilityReportOf, the defs an Element Retired on both sides reaches', () => {
+  /**
+   * The sizes of `count` Commands over a chain of `count` defs: a check that reads the chain again
+   * for each Command costs their product, so eight times as large costs about 64 times as much.
+   */
+  const sizes = { small: 64, large: 512 };
+
+  /** How many times longer a check of a shape eight times as large may take: about 8 for a check that reads each part once. */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  const stillRetired = { lifecycle: 'retired' } as const;
+
+  function aRef(name: string): SchemaNode {
+    return { type: 'ref', name };
+  }
+
+  /** `count` objects `c0`, `c1`…, each holding the one before it by `next`, the first holding a string described `description`. */
+  function aChainOf(count: number, description: string): Defs {
+    const entries = Array.from({ length: count }, (_, index): [string, SchemaNode] => {
+      const leaf: SchemaNode = { type: 'string', description };
+      const next = index === 0 ? leaf : aRef(`c${index - 1}`);
+      return [`c${index}`, { type: 'object', fields: { next: { required: true, schema: next } } }];
+    });
+    return Object.fromEntries(entries);
+  }
+
+  /** A body that holds the head of a chain of `count` defs in a field. */
+  function bodyNamingHeadOf(count: number): SchemaNode {
+    const at = { required: true, schema: aRef(`c${count - 1}`) };
+    return { type: 'object', fields: { at } };
+  }
+
+  /** The check of the Commands that were Retired on both sides, against their Baseline, by the description at the end of the chain. */
+  function checkOfCommands(proposedDescription: string) {
+    return (count: number) => {
+      const body = bodyNamingHeadOf(count);
+      const identities = Array.from({ length: count }, (_, index) => `Retire${index}@1`);
+      const baselineCommands = identities.map((identity) => [
+        identity,
+        aRetired(aCommand({ body })),
+      ]);
+      const proposedCommands = identities.map((identity) => [
+        identity,
+        aCommand({ ...stillRetired, body }),
+      ]);
+      const baseline = aBaseline({
+        defs: aChainOf(count, 'a'),
+        commands: Object.fromEntries(baselineCommands),
+      });
+      const proposed = aProposed({
+        defs: aChainOf(count, proposedDescription),
+        commands: Object.fromEntries(proposedCommands),
+      });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  test('many Commands Retired on both sides, whose bodies name the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkCommands = checkOfCommands('a');
+
+    const report = checkCommands(sizes.large)();
+    const growth = growthOf(checkCommands, sizes, linearGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a Command Retired on both sides whose body reaches a def that changed at the end of a chain gives one retired-changed', () => {
+    const body = bodyNamingHeadOf(3);
+    const baseline = aBaseline({
+      defs: aChainOf(3, 'a'),
+      commands: { 'ChargeCard@1': aRetired(aCommand({ body })) },
+    });
+    const proposed = aProposed({
+      defs: aChainOf(3, 'b'),
+      commands: { 'ChargeCard@1': aCommand({ ...stillRetired, body }) },
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(
+      report.changes.map(({ difference, class: changeClass, verdict }) => [
+        difference.kind,
+        changeClass,
+        verdict,
+      ]),
+    ).toEqual([['retired-changed', 'neutral', 'allowed']]);
   });
 });
 

@@ -7,5 +7,10 @@
   },
   "exclude": ["scripts/readme-service/**"],
   "extends": "./tsconfig.base.json",
-  "include": ["*.config.ts", "lint/**/*.ts", "scripts/**/*.ts"]
+  "include": [
+    "*.config.ts",
+    "lint/**/*.ts",
+    "packages/messaging/test/test-process.ts",
+    "scripts/**/*.ts"
+  ]
 }
