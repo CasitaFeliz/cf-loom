@@ -108,13 +108,14 @@ function isImportable(file: ProjectFile): boolean {
 }
 
 /** Whether the check completes the file with imports: a `.ts` file that is no test, which is written in full. */
-export function isCompleted(path: string): boolean {
+function isCompleted(path: string): boolean {
   return path.endsWith('.ts') && !path.startsWith('test/');
 }
 
 /**
  * The module each of the names TypeScript cannot find in a file is imported from, for those a
- * provider has: a sibling file of its package, `zod` or `@cf-loom/contract`.
+ * provider has: a sibling file of its package, `zod` or `@cf-loom/contract`. A file the check does
+ * not complete is imported nothing.
  */
 export function importsOf(
   path: string,
@@ -122,7 +123,7 @@ export function importsOf(
   providers: Providers,
 ): Map<string, string> {
   const imports = new Map<string, string>();
-  for (const name of free) {
+  for (const name of isCompleted(path) ? free : []) {
     const specifier = specifierOf(name, path, providers);
     if (specifier !== undefined) {
       imports.set(name, specifier);

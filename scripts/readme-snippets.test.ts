@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
@@ -14,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { Readme } from './readme-blocks.ts';
+import { compile } from './readme-compile.ts';
 import { readmeServiceProblems, snippetProblems, writeReadmeService } from './readme-snippets.ts';
 
 const root = join(import.meta.dirname, '..');
@@ -203,6 +203,89 @@ function serviceWrittenFrom(readme: string): string {
 
 function fileOf(directory: string, path: string): string {
   return readFileSync(join(directory, path), 'utf8');
+}
+
+/** The scope's files of a Service in `folder`, which is `''` for the README's own, whose Contract lists no Group. */
+function aServiceScope(folder: string, name: string): Record<string, string> {
+  return {
+    [`${folder}package.json`]: JSON.stringify({
+      name: `@org/${name}`,
+      version: '0.0.0',
+      type: 'module',
+    }),
+    [`${folder}src/contract/index.ts`]: [
+      "import { defineService } from '@cf-loom/contract';",
+      '',
+      `export const contract = defineService({ name: '${name}', groups: [] });`,
+    ].join('\n'),
+  };
+}
+
+/** The scope's files of the README's own Service, whose Group lists the one Endpoint `anOrdersEndpoint` shows. */
+function anOrdersScope(): Record<string, string> {
+  return {
+    ...aServiceScope('', 'orders-service'),
+    'src/contract/index.ts': [
+      "import { defineService } from '@cf-loom/contract';",
+      "import { ordersGroup } from './groups/orders.group.ts';",
+      '',
+      "export const contract = defineService({ name: 'orders-service', groups: [ordersGroup] });",
+    ].join('\n'),
+    'src/contract/groups/orders.group.ts': [
+      "import { defineGroup } from '@cf-loom/contract';",
+      "import { getOrder } from '../endpoints/orders/get-order.endpoint.ts';",
+      '',
+      "export const ordersGroup = defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] });",
+    ].join('\n'),
+  };
+}
+
+/** The block of the Endpoint of `anOrdersScope`, which leaves out its use of `success` to `successLine`. */
+function anOrdersEndpoint(successLine: string): string {
+  return [
+    '// src/contract/endpoints/orders/get-order.endpoint.ts',
+    "import { defineEndpoint } from '@cf-loom/contract';",
+    '',
+    'export const getOrder = defineEndpoint({',
+    "  name: 'getOrder',",
+    "  method: 'GET',",
+    "  path: '/orders',",
+    "  visibility: 'public',",
+    "  description: 'Gets the orders',",
+    `  ${successLine}`,
+    '});',
+  ].join('\n');
+}
+
+/** The block of an Endpoint at `path` that no Group lists. */
+function anUnlistedEndpoint(path: string): string {
+  return [
+    `// ${path}`,
+    "import { defineEndpoint } from '@cf-loom/contract';",
+    "import { z } from 'zod';",
+    '',
+    'export const unlisted = defineEndpoint({',
+    "  name: 'unlisted',",
+    "  method: 'GET',",
+    "  path: '/unlisted',",
+    "  visibility: 'public',",
+    "  description: 'Listed in no Group',",
+    '  success: { status: 200, body: z.object({}) },',
+    '});',
+  ].join('\n');
+}
+
+/** The repository with the packages `examples/billing-service` installs but zod, whose types a Contract Package needs. */
+function withoutZod(repository: string): string {
+  const installed = join(repository, 'examples/billing-service/node_modules');
+  rmSync(installed);
+  mkdirSync(installed);
+  for (const name of readdirSync(join(root, 'examples/billing-service/node_modules'))) {
+    if (name !== 'zod') {
+      symlinkSync(join(root, 'examples/billing-service/node_modules', name), join(installed, name));
+    }
+  }
+  return repository;
 }
 
 describe('paths', () => {
@@ -524,7 +607,7 @@ describe('the names a block leaves out', () => {
   });
 });
 
-const unusedLocal = /^(.+?)\((\d+),\d+\): error TS(?:6133|6192|6196): /;
+const unusedCodes = new Set([6133, 6192, 6196]);
 const importOfOneName = /^import \{ [\w$]+ \} from '[^']+';$/;
 
 /** The imports the completion adds to a file, which it writes right above the file's last line, as rows. */
@@ -544,34 +627,18 @@ function completedImportRows(source: string): number[] {
 
 /** The imports the completion added that `tsc` reports unused, as `path:row`. */
 function unusedCompletedImports(service: string): string[] {
-  const tsc = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
-  const ran = spawnSync(
-    process.execPath,
-    [tsc, '-p', '.', '--noUnusedLocals', '--pretty', 'false'],
-    {
-      cwd: service,
-      encoding: 'utf8',
-    },
-  );
+  const { diagnostics } = compile(service, ['--noUnusedLocals']);
   const unused: string[] = [];
-  for (const line of ran.stdout.split('\n')) {
-    const [, path, row] = unusedLocal.exec(line) ?? [];
-    if (path !== undefined && completedImportRows(fileOf(service, path)).includes(Number(row))) {
+  for (const { path, row, code } of diagnostics) {
+    if (
+      path !== undefined &&
+      unusedCodes.has(code) &&
+      completedImportRows(fileOf(service, path)).includes(row)
+    ) {
       unused.push(`${path}:${row}`);
     }
   }
   return unused;
-}
-
-/** Each Service the scope holds, the README's own at the root, by its folder and the name of its package. */
-function scopeServices(): { service: string; folder: string; name: string }[] {
-  const scope = join(root, 'scripts/readme-service');
-  const folders = readdirSync(scope).filter((entry) =>
-    existsSync(join(scope, entry, 'package.json')),
-  );
-  const others = folders.filter((folder) => folder !== 'definitions');
-  const own = { service: "the README's own Service", folder: '', name: 'orders-service' };
-  return [own, ...others.map((folder) => ({ service: folder, folder, name: folder }))];
 }
 
 /** The files of the written-out Service under a `src/contract/` folder, by their path. */
@@ -612,7 +679,11 @@ describe('the READMEs', () => {
     expect(problems).toEqual([]);
   });
 
-  test.each(scopeServices())(
+  test.each([
+    { service: "the README's own Service", folder: '', name: 'orders-service' },
+    { service: 'notes-service', folder: 'notes-service', name: 'notes-service' },
+    { service: 'payments-service', folder: 'payments-service', name: 'payments-service' },
+  ])(
     'the write-out runs cf-loom generate and package over $service and installs its Contract Package',
     ({ folder, name }) => {
       const service = join(root, '.readme-service');
@@ -633,34 +704,12 @@ describe('the READMEs', () => {
     { service: "the README's own Service", folder: '', name: 'orders-service' },
     { service: 'another Service', folder: 'payments-service/', name: 'payments-service' },
   ])('a block cf-loom refuses in $service is a problem at its README line', ({ folder, name }) => {
-    const unlisted = [
-      `// ${folder}src/contract/endpoints/payments/unlisted.endpoint.ts`,
-      "import { defineEndpoint } from '@cf-loom/contract';",
-      "import { z } from 'zod';",
-      '',
-      'export const unlisted = defineEndpoint({',
-      "  name: 'unlisted',",
-      "  method: 'GET',",
-      "  path: '/unlisted',",
-      "  visibility: 'public',",
-      "  description: 'Listed in no Group',",
-      '  success: { status: 200, body: z.object({}) },',
-      '});',
-    ].join('\n');
+    const unlisted = anUnlistedEndpoint(
+      `${folder}src/contract/endpoints/payments/unlisted.endpoint.ts`,
+    );
     const repository = aRepository(
       { client: aReadme('packages/client/README.md', unlisted).markdown },
-      {
-        [`${folder}package.json`]: JSON.stringify({
-          name: `@org/${name}`,
-          version: '0.0.0',
-          type: 'module',
-        }),
-        [`${folder}src/contract/index.ts`]: [
-          "import { defineService } from '@cf-loom/contract';",
-          '',
-          `export const contract = defineService({ name: '${name}', groups: [] });`,
-        ].join('\n'),
-      },
+      aServiceScope(folder, name),
     );
     const directory = join(repository, '.readme-service');
     writeReadmeService(directory, repository);
@@ -672,6 +721,84 @@ describe('the READMEs', () => {
         /^packages\/client\/README\.md:4: .*exports unlisted, which no Group lists/,
       ),
     );
+  });
+
+  test('a refusal that names no file is reported with the Service it comes from', () => {
+    const repository = aRepository(
+      {},
+      { 'package.json': aServiceScope('', 'orders-service')['package.json'] ?? '' },
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toContainEqual(
+      expect.stringMatching(
+        /^cf-loom generate: @org\/orders-service: No Root in src\/contract\/index\.ts/,
+      ),
+    );
+  });
+
+  test('a Service after a refused Service is not run, and the check says so', () => {
+    const unlisted = anUnlistedEndpoint(
+      'payments-service/src/contract/endpoints/payments/unlisted.endpoint.ts',
+    );
+    const repository = aRepository(
+      { client: aReadme('packages/client/README.md', unlisted).markdown },
+      {
+        ...aServiceScope('payments-service/', 'payments-service'),
+        ...aServiceScope('', 'orders-service'),
+      },
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toContainEqual(
+      'cf-loom: @org/orders-service: not run: @org/payments-service was refused',
+    );
+    expect(existsSync(join(directory, 'src/handlers.generated.ts'))).toBe(false);
+  });
+
+  test("a Contract Package that fails to build is reported at its file, as the build's", () => {
+    const bodiless = anOrdersEndpoint('success: { status: 204 },');
+    const repository = withoutZod(
+      aRepository(
+        { contract: aReadme('packages/contract/README.md', bodiless).markdown },
+        anOrdersScope(),
+      ),
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toContainEqual(
+      expect.stringMatching(
+        /^\.cf-loom\/contract-package\/src\/\S+\.ts:\d+: building the Contract Package of @org\/orders-service: error TS2307: .*'zod'/,
+      ),
+    );
+  });
+
+  test('a syntax error in one block is the only problem reported', () => {
+    const endpoint = anOrdersEndpoint('success: { status: 200, body: z.object({}) },');
+    const repository = aRepository(
+      {
+        contract: aReadme('packages/contract/README.md', endpoint).markdown,
+        handlers: aReadme('packages/handlers/README.md', 'export const broken = (;').markdown,
+      },
+      anOrdersScope(),
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toEqual([
+      expect.stringMatching(/^packages\/handlers\/README\.md:4: error TS1109/),
+    ]);
   });
 
   test('no Contract file of the README Service imports Service code', () => {

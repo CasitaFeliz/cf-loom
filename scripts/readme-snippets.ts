@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
 import { cfLoomProblemsOf, runCfLoom } from './readme-cf-loom.ts';
-import { type Compiled, compile, freeNamesOf } from './readme-compile.ts';
+import { type Compiled, compile, describe, freeNamesOf, hasSyntaxError } from './readme-compile.ts';
 import {
   completed,
   declaredTwice,
@@ -27,7 +27,6 @@ import {
 const root = join(import.meta.dirname, '..');
 const packagesWithReadmes = ['contract', 'handlers', 'messaging', 'server', 'client', 'testing'];
 const scopeAt = 'scripts/readme-service';
-const diagnostic = /^(.+?)\((\d+),\d+\): (error TS\d+: .*)$/;
 
 /**
  * Why the TypeScript blocks of the READMEs do not compile, as `README:line: error TS…`, empty when
@@ -55,13 +54,15 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
  * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows, then
  * what `cf-loom generate` and `cf-loom package` write for each Service the scope gives a
  * package.json, so it needs the CLI built; what cf-loom refuses is kept for
- * `readmeServiceProblems`. It replaces what the directory held.
+ * `readmeServiceProblems`. It replaces what the directory held. A block with a syntax error
+ * leaves the Service uncompleted, so cf-loom does not run and `tsc`'s problem is the only one.
  */
 export function writeReadmeService(directory: string, repository: string = root): void {
   const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
   rmSync(directory, { recursive: true, force: true });
-  writeProject(directory, project, repository);
-  runCfLoom(directory, [...project.keys()]);
+  if (!hasSyntaxError(writeProject(directory, project, repository))) {
+    runCfLoom(directory, [...project.keys()]);
+  }
 }
 
 /**
@@ -77,7 +78,7 @@ export function readmeServiceProblems(directory: string, repository: string = ro
   }
   const { problems, project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
   const refused = cfLoomProblemsOf(directory).map(({ path, row, message }) =>
-    path === undefined ? `cf-loom: ${message}` : `${locationOf(path, row, project)}: ${message}`,
+    path === undefined ? message : `${locationOf(path, row, project)}: ${message}`,
   );
   return [...problems, ...refused, ...problemsOf(compile(directory), project)];
 }
@@ -117,17 +118,22 @@ function contractNames(repository: string): string[] {
 
 /**
  * Writes the project twice: with no import added, to learn from `tsc` the names each file leaves
- * out, then with an import for each such name a provider has.
+ * out, then with an import for each such name a provider has. It returns what `tsc` printed over
+ * the first.
  */
-function writeProject(directory: string, project: Project, repository: string): void {
+function writeProject(directory: string, project: Project, repository: string): Compiled {
   const providers = providersOf(project, contractNames(repository));
   mkdirSync(directory, { recursive: true });
   linkDependencies(directory, repository);
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
   writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfig));
   writeFiles(directory, project, () => new Map());
-  const free = freeNamesOf(compile(directory), project);
-  writeFiles(directory, project, (path) => importsOf(path, free.get(path) ?? new Set(), providers));
+  const uncompleted = compile(directory);
+  const freeNamesByPath = freeNamesOf(uncompleted, project);
+  writeFiles(directory, project, (path) =>
+    importsOf(path, freeNamesByPath.get(path) ?? new Set(), providers),
+  );
+  return uncompleted;
 }
 
 function writeFiles(
@@ -169,24 +175,28 @@ function linkDependencies(directory: string, repository: string): void {
 }
 
 function problemsOf(compiled: Compiled, project: Project): string[] {
-  const problems: string[] = [];
-  for (const line of compiled.lines) {
-    const [, path, row, message] = diagnostic.exec(line) ?? [];
-    if (path !== undefined && row !== undefined && message !== undefined) {
-      problems.push(`${locationOf(path, Number(row), project)}: ${message}`);
-    } else if (/^error TS\d+:/.test(line)) {
-      problems.push(`tsc: ${line}`);
-    }
-  }
+  const problems = compiled.diagnostics.map((diagnostic) => {
+    const { path, row } = diagnostic;
+    return path === undefined
+      ? `tsc: ${describe(diagnostic)}`
+      : `${locationOf(path, row, project)}: ${describe(diagnostic)}`;
+  });
   if (compiled.failed && problems.length === 0) {
-    throw new Error(`tsc failed with no diagnostic: ${compiled.lines.join('\n')}`);
+    throw new Error(`tsc failed with no diagnostic: ${compiled.output}`);
   }
   return problems;
 }
 
-/** The README line a diagnostic in a block's file is, or the file and line of one in the scope. */
+/**
+ * The README line a diagnostic in a block's file is, the file and line of one in the scope, or the
+ * file and line, in the written-out Service, of one in a file cf-loom wrote.
+ */
 function locationOf(path: string, row: number, project: Project): string {
-  const block = project.get(path)?.block;
+  const file = project.get(path);
+  if (file === undefined) {
+    return `${path}:${row}`;
+  }
+  const { block } = file;
   return block === undefined
     ? `${scopeAt}/${path}:${row}`
     : `${block.readme}:${block.line + row - 1}`;
