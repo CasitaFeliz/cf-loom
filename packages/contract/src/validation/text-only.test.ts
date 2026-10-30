@@ -786,19 +786,19 @@ describe('validateRoot: the values of a text part’s enum each have a text of t
   });
 });
 
+const ordersAt = 'endpoints.GET /orders/{} (listOrders)';
+
+const words = {
+  header: "A header's values each travel as HTTP field text",
+  param: "A path param's values each travel as a URL segment",
+  query: "A query param's values each travel as URL text",
+} as const;
+
+function unsendable(part: keyof typeof words, name: string, values: string) {
+  return `${words[part]}: ${name} has ${values}`;
+}
+
 describe('validateRoot: the values of a text part’s enum each travel in their part', () => {
-  const ordersAt = 'endpoints.GET /orders/{} (listOrders)';
-
-  const words = {
-    header: "A header's values each travel as HTTP field text",
-    param: "A path param's values each travel as a URL segment",
-    query: "A query param's values each travel as URL text",
-  } as const;
-
-  function unsendable(part: keyof typeof words, name: string, values: string) {
-    return `${words[part]}: ${name} has ${values}`;
-  }
-
   test('an Input header literal of " 1" and "é\\n" fails, naming both', () => {
     const endpoint = defineEndpoint({
       ...listing,
@@ -1065,5 +1065,155 @@ describe('validateRoot: the values of a text part’s enum each travel in their 
         );
       }
     }
+  });
+});
+
+describe('validateRoot: a text part’s examples each travel in their part', () => {
+  test('a header string whose example is " a" fails at that header, naming it', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.string().meta({ examples: [' a'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" a"'),
+      ),
+    );
+  });
+
+  test('a header’s examples "€" and "a\\n" fail in one line naming both', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.string().meta({ examples: ['€', 'a\n'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '"€" and "a\\n"'),
+      ),
+    );
+  });
+
+  test('a header’s examples of visible ASCII, a tab inside, "é", "ÿ" and the empty text validate', () => {
+    const examples = ['v1, ~!', 'a\tb', 'é', 'ÿ', ''];
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.string().meta({ examples }) }) },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
+  });
+
+  test('a Success header example that cannot travel fails at that header', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      success: {
+        ...listing.success,
+        headers: z.object({ 'x-s': z.string().meta({ examples: [' a'] }) }),
+      },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} success.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" a"'),
+      ),
+    );
+  });
+
+  test('a Rejection header example that cannot travel fails at that header', () => {
+    const rejection = aRejectionWith(
+      headersOf({ 'x-realm': z.string().meta({ examples: ['\n'] }) }),
+    );
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, rejections: [rejection] }))).toEqual(
+      failed(
+        'codes.UNAUTHENTICATED headers.x-realm',
+        'unsendable-text',
+        unsendable('header', 'x-realm', '"\\n"'),
+      ),
+    );
+  });
+
+  test('a Guard’s demanded header example that cannot travel fails at that header', () => {
+    const signed = defineGuard({
+      name: 'signed',
+      description: 'A signed request',
+      demands: { headers: z.object({ 'x-version': z.string().meta({ examples: [' 1'] }) }) },
+    });
+
+    expect(validateEndpoint(defineEndpoint({ ...listing, guards: [signed] }))).toEqual(
+      failed(
+        'guards.signed demands.headers.x-version',
+        'unsendable-text',
+        unsendable('header', 'x-version', '" 1"'),
+      ),
+    );
+  });
+
+  test('a path param’s examples "", "." and ".." fail, naming all three', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      path: '/orders/:id',
+      input: { params: z.object({ id: z.string().meta({ examples: ['', '.', '..'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${ordersAt} input.params.id`,
+        'unsendable-text',
+        unsendable('param', 'id', '"", "." and ".."'),
+      ),
+    );
+  });
+
+  test('a query param’s example holding a lone surrogate fails', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: z.object({ q: z.string().meta({ examples: ['\uD800'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.query.q`,
+        'unsendable-text',
+        unsendable('query', 'q', '"\\ud800"'),
+      ),
+    );
+  });
+
+  test('an optional header’s example that cannot travel fails as a required one’s does', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: z.object({ 'x-s': z.string().optional().meta({ examples: [' a'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', '" a"'),
+      ),
+    );
+  });
+
+  test('a number or a boolean header’s examples validate, since each is always carried', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: {
+        headers: z.object({
+          'x-n': z.number().meta({ examples: [0, -1.5, 1e21] }),
+          'x-b': z.boolean().meta({ examples: [true, false] }),
+        }),
+      },
+    });
+
+    expect(validateEndpoint(endpoint).kind).toBe('valid');
   });
 });

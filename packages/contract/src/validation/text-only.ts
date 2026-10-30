@@ -90,7 +90,7 @@ function fieldFailures(
     const place = { at: fieldAt, part };
     return [
       ...sharedTextFailures(place, name, items),
-      ...unsendableTextFailures(place, name, items),
+      ...unsendableTextFailures(place, name, valuesOf(items)),
     ];
   }
   const lists = part === 'query' ? ', or a list of those' : '';
@@ -116,25 +116,27 @@ function sharedTextFailures(
   return [failure(at, 'shared-text', message)];
 }
 
+/** Every value `generate` knows a text part's field takes: its enum's values and its examples. */
+function valuesOf(node: SchemaNode): readonly unknown[] {
+  return [...(node.type === 'enum' ? node.values : []), ...(node.examples ?? [])];
+}
+
 /**
- * A text part's enum holding a value whose text its part cannot carry: no Caller can send it and
- * no Outcome holding it is ever valid.
+ * A text part's field holding a value, of its enum or an example, whose text its part cannot
+ * carry: no Caller can send it and no Outcome holding it is ever valid.
  */
 function unsendableTextFailures(
   { at, part }: { readonly at: Place; readonly part: TextIn },
   name: string,
-  node: SchemaNode,
+  values: readonly unknown[],
 ): readonly DeclarationFailure[] {
   const { isCarried, travelsAs } = textTravel[part];
-  const unsendable =
-    node.type === 'enum'
-      ? node.values.filter(isTextValue).filter((value) => !isCarried(textOfValue(value)))
-      : [];
+  const unsendable = values.filter(isTextValue).filter((value) => !isCarried(textOfValue(value)));
   if (unsendable.length === 0) {
     return [];
   }
-  const values = joinedOf(unsendable.map(writtenTextOf), 'and');
-  const message = `${nouns[part]}'s values each travel as ${travelsAs}: ${name} has ${values}`;
+  const written = joinedOf(unsendable.map(writtenTextOf), 'and');
+  const message = `${nouns[part]}'s values each travel as ${travelsAs}: ${name} has ${written}`;
   return [failure(at, 'unsendable-text', message)];
 }
 
