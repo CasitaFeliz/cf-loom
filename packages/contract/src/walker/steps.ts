@@ -58,10 +58,8 @@ export function stepListOf(chain: StepChain): readonly Step[] {
 /** The steps of `held` below `from`, a place it sits inside, in order: what a place moved elsewhere keeps. */
 export function stepsBelow(held: StepChain, from: StepChain): readonly Step[] {
   const below: Step[] = [];
-  let link = held;
-  for (let left = (held?.count ?? 0) - (from?.count ?? 0); left > 0 && link; left--) {
+  for (let link = held; link !== undefined && link.count > (from?.count ?? 0); link = link.above) {
     below.push(link.step);
-    link = link.above;
   }
   return below.reverse();
 }
