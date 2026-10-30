@@ -1,7 +1,7 @@
-import { isPlainObject, isSemanticVersion, ownOf } from '@cf-loom/contract/internal';
+import { isSemanticVersion } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { baselineCandidatesOf } from '../versioning/index.ts';
-import { jsonFromNpm, type NpmPlace, viewedOf } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, viewedDistTags } from './npm.ts';
 import type { Listing } from './versions.ts';
 
 /**
@@ -64,14 +64,14 @@ async function namedVersionOf(
     return { kind: 'unlisted' };
   }
   const label = `npm view ${packageName} dist-tags`;
-  const run = await jsonFromNpm(npm, { label, args: ['view', packageName, 'dist-tags'] });
+  const call = { label, args: ['view', packageName, 'dist-tags'] };
+  const run = await jsonFromNpm(npm, call, viewedDistTags);
   switch (run.kind) {
-    case 'json': {
-      const tags = viewedOf(run.value);
-      return isPlainObject(tags)
-        ? namedByTag(versions, ownOf(tags, against))
-        : failed(`${label} printed no dist-tags`);
-    }
+    case 'json':
+      return namedByTag(
+        versions,
+        Object.hasOwn(run.value, against) ? run.value[against] : undefined,
+      );
     case 'refused':
       return failed(run.message);
     case 'failed':
@@ -79,7 +79,7 @@ async function namedVersionOf(
   }
 }
 
-function namedByTag(versions: readonly string[], tagged: unknown): Named {
-  const isListed = typeof tagged === 'string' && versions.includes(tagged);
+function namedByTag(versions: readonly string[], tagged: string | undefined): Named {
+  const isListed = tagged !== undefined && versions.includes(tagged);
   return isListed ? { kind: 'named', version: tagged } : { kind: 'unlisted' };
 }

@@ -9,7 +9,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { newerFormatTextOf } from '../loading/index.ts';
-import { jsonFromNpm, type NpmPlace, packedOf } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, type PrintedObject, packedReport } from './npm.ts';
 import { fileNamed } from './tar-entries.ts';
 import type { ExpectedSnapshot } from './versions.ts';
 
@@ -45,7 +45,7 @@ export async function packedTarballOf(
 ): Promise<PackedTarball | Failed> {
   const label = `npm pack ${spec}`;
   const args = ['pack', target, '--pack-destination', folder, '--ignore-scripts'];
-  const run = await jsonFromNpm(npm, { label, args });
+  const run = await jsonFromNpm(npm, { label, args }, packedReport);
   switch (run.kind) {
     case 'json': {
       const filename = filenameOf(run.value);
@@ -72,8 +72,8 @@ export function publishedSnapshotIn(
   return text.kind === 'failed' ? text : snapshotFrom(expected, text.text);
 }
 
-function filenameOf(printed: unknown): string | undefined {
-  const filename = ownOf(packedOf(printed), 'filename');
+function filenameOf(packed: PrintedObject): string | undefined {
+  const filename = ownOf(packed, 'filename');
   return typeof filename === 'string' && filename !== '' && basename(filename) === filename
     ? filename
     : undefined;

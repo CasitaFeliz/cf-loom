@@ -3,7 +3,7 @@ import { delimiter, join } from 'node:path';
 import { inheritedPath } from './npm-environment.ts';
 import type { Lab } from './npm-lab.ts';
 
-/** The last lines of a stub's shell script that pass the call on to the npm the developer has. */
+/** The lines that pass the call on to the npm the developer has. */
 export const developersNpm = `PATH='${inheritedPath}'\nexport PATH\nnpm "$@"`;
 
 /** The PATH that finds `script`, written as an executable `npm` in `folder`, before the npm the developer has. */

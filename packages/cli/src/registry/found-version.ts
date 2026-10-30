@@ -1,6 +1,6 @@
 import { type Failed, failed } from '../child-process/index.ts';
 import type { Choice } from './against.ts';
-import { jsonFromNpm, type NpmPlace, viewedOf } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, viewedFields } from './npm.ts';
 import {
   type DeclaredPackage,
   type ExpectedSnapshot,
@@ -77,13 +77,11 @@ async function metadataOf(
 ): Promise<VersionMetadata | NotPublishedByCfLoom | Failed> {
   const { spec } = expected;
   const fields = ['version', 'cfLoom', 'peerDependencies', 'dist'];
-  const run = await jsonFromNpm(npm, {
-    label: `npm view ${spec}`,
-    args: ['view', spec, ...fields],
-  });
+  const call = { label: `npm view ${spec}`, args: ['view', spec, ...fields] };
+  const run = await jsonFromNpm(npm, call, viewedFields);
   switch (run.kind) {
     case 'json':
-      return metadataFrom(expected, viewedOf(run.value));
+      return metadataFrom(expected, run.value);
     case 'refused':
       return failed(run.message);
     case 'failed':

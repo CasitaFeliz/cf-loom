@@ -6545,7 +6545,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(leftBehindIn(project)).toEqual([]);
   });
 
-  test('npm pack reporting no package fails publish with listed no files', async ({ lab }) => {
+  test('npm pack reporting no package fails publish with what it printed', async ({ lab }) => {
     const project = await aGeneratedProject(lab, aBuiltDefinitions());
     const registry = await lab.aRegistry({});
     const path = aStubNpmPrintingForDryRun(lab, '{}');
@@ -6556,7 +6556,7 @@ describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
     expect(ran).toEqual({
       status: 3,
       stdout: `${neverPublished(registry, '@org/definitions')}\n`,
-      stderr: 'npm pack --dry-run listed no files\n',
+      stderr: 'npm pack --dry-run printed {}, not the report of one packed package\n',
     });
     expect(putRequestsOf(registry)).toEqual([]);
     expect(leftBehindIn(project)).toEqual([]);

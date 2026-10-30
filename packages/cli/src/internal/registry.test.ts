@@ -1836,65 +1836,175 @@ describe('baselineOf and its temporary folder', () => {
   });
 });
 
+/** What the stub npm of `aPlaceThatPrints` prints for each call `baselineOf` makes; an empty text prints nothing. */
+type Prints = {
+  readonly versions?: string;
+  readonly tags?: string;
+  readonly fields?: string;
+  readonly pack?: string;
+};
+
+function aPlaceThatPrints(lab: Lab, prints: Prints) {
+  const printing = (text = '') => (text === '' ? 'true' : `echo '${text}'`);
+  const { versions = '["1.0.0"]', tags, fields = viewedMetadata, pack } = prints;
+  const viewing = `case "$3" in versions) ${printing(versions)};; dist-tags) ${printing(tags)};; *) ${printing(fields)};; esac`;
+  const body = `case "$1" in\nview) ${viewing};;\npack) ${printing(pack)};;\nesac`;
+  return lab.aPlace({ path: aStubNpm(lab, body) });
+}
+
+async function readPrinted(lab: Lab, prints: Prints, against?: string) {
+  const npm = aPlaceThatPrints(lab, prints);
+  return await baselineOf(npm, { packageName: ordersPackage, declared: orders, against });
+}
+
 describe('baselineOf and what npm prints', () => {
-  test('npm pack reporting no package fails the Baseline read with printed no tarball', async ({
-    lab,
-  }) => {
-    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${viewedMetadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '{}';;\nesac`;
-    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
+  const twoVersions = `[${viewedMetadata},${viewedMetadata}]`;
+  const viewing = `npm view ${ordersPackage}`;
+  const viewingVersion = `npm view ${ordersPackage}@1.0.0`;
 
-    const read = await baselineOf(npm, {
-      packageName: ordersPackage,
-      declared: orders,
-      against: undefined,
-    });
+  test.for([
+    ['an object', '{}'],
+    ['an object of versions', '{"1.0.0":{}}'],
+    ['a bare version', '"1.0.0"'],
+    ['a number', '7'],
+    ['null', 'null'],
+    ['a list of objects', '[{"a":1},{"b":2}]'],
+  ] as const)(
+    'a versions print that is %s fails with what it printed',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { versions: print });
 
-    expect(failureIn(read)).toBe(`npm pack ${ordersPackage}@1.0.0 printed no tarball`);
-  });
+      expect(failureIn(read)).toBe(`${viewing} printed ${print}, not a list of versions`);
+    },
+  );
 
-  test('a dist-tags print that is no object fails --against with printed no dist-tags', async ({
-    lab,
-  }) => {
-    const body = `case "$1" in\nview) case "$3" in dist-tags) echo '"next"';; *) echo '["1.0.0"]';; esac;;\nesac`;
-    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
-
-    const read = await baselineOf(npm, {
-      packageName: ordersPackage,
-      declared: orders,
-      against: 'next',
-    });
-
-    expect(failureIn(read)).toBe(`npm view ${ordersPackage} dist-tags printed no dist-tags`);
-  });
-
-  test('a version that npm view prints as a list of two fails with printed no metadata', async ({
-    lab,
-  }) => {
-    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '[${viewedMetadata},${viewedMetadata}]';; *) echo '["1.0.0"]';; esac;;\nesac`;
-    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
-
-    const read = await baselineOf(npm, {
-      packageName: ordersPackage,
-      declared: orders,
-      against: undefined,
-    });
-
-    expect(failureIn(read)).toBe(`npm view ${ordersPackage}@1.0.0 printed no metadata`);
-  });
-
-  test('a versions print that is no list fails as a package that lists no version', async ({
-    lab,
-  }) => {
-    const npm = lab.aPlace({ path: aStubNpm(lab, `echo '"1.0.0"'`) });
-
-    const read = await baselineOf(npm, {
-      packageName: ordersPackage,
-      declared: orders,
-      against: undefined,
-    });
+  test('a versions print of nothing is a package with no latest dist-tag', async ({ lab }) => {
+    const read = await readPrinted(lab, { versions: '' });
 
     expect(failureIn(read)).toBe(
       `${ordersPackage} lists no version, or has no latest dist-tag, which npm view needs to list them`,
     );
   });
+
+  test.for([
+    ['text', '"next"'],
+    ['a tag that is no text', '{"next":7}'],
+    ['a tag that holds an object', '{"next":{"v":"1.0.0"}}'],
+    ['a list of text', '["next"]'],
+    ['a list of two maps', '[{"next":"1.0.0"},{"next":"1.0.0"}]'],
+    ['nothing', ''],
+  ] as const)(
+    'a dist-tags print of %s fails --against with what it printed',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { tags: print }, 'next');
+
+      const printed = print === '' ? 'nothing' : print;
+      expect(failureIn(read)).toBe(
+        `${viewing} dist-tags printed ${printed}, not a map of dist-tags`,
+      );
+    },
+  );
+
+  test.for([
+    ['a map without the tag', '{}'],
+    ['a map whose tag points at a version the package does not list', '{"next":"9.9.9"}'],
+  ] as const)(
+    'a dist-tags print of %s is a name the package does not list',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { tags: print }, 'next');
+
+      expect(failureIn(read)).toBe(
+        `${ordersPackage} lists no version or dist-tag next: --against takes one of them`,
+      );
+    },
+  );
+
+  test.for([
+    ['a bare version', '"1.0.0"'],
+    ['an empty list', '[]'],
+    ['a number', '7'],
+    ['nothing', ''],
+  ] as const)(
+    'a print of %s for a version fails with what it printed',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { fields: print });
+
+      const printed = print === '' ? 'nothing' : print;
+      expect(failureIn(read)).toBe(
+        `${viewingVersion} printed ${printed}, not one version's fields`,
+      );
+    },
+  );
+
+  test('a version that npm view prints as a list of two fails with its first 60 characters', async ({
+    lab,
+  }) => {
+    const read = await readPrinted(lab, { fields: twoVersions });
+
+    const cut = `${twoVersions.slice(0, 60)}…`;
+    expect(failureIn(read)).toBe(`${viewingVersion} printed ${cut}, not one version's fields`);
+  });
+
+  test('a print of exactly 60 characters is not cut', async ({ lab }) => {
+    const print = `"${'a'.repeat(58)}"`;
+
+    const read = await readPrinted(lab, { fields: print });
+
+    expect(print).toHaveLength(60);
+    expect(failureIn(read)).toBe(`${viewingVersion} printed ${print}, not one version's fields`);
+  });
+
+  test.for([
+    ['an empty object', '{}'],
+    ['an empty list', '[]'],
+    ['a file name', '"a.tgz"'],
+    ['a number', '7'],
+    ['null', 'null'],
+    ['a list of numbers', '[7]'],
+    ['a map of a file name', '{"p":"a.tgz"}'],
+    ['nothing', ''],
+  ] as const)(
+    'npm pack printing %s fails the Baseline read with what it printed',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { pack: print });
+
+      const printed = print === '' ? 'nothing' : print;
+      expect(failureIn(read)).toBe(
+        `npm pack ${ordersPackage}@1.0.0 printed ${printed}, not the report of one packed package`,
+      );
+    },
+  );
+
+  test.for([
+    ['a report without a file name', '[{}]'],
+    ['a file name that is no text', '[{"filename":7}]'],
+  ] as const)(
+    'npm pack printing %s fails the Baseline read with printed no tarball',
+    async ([, print], { lab }) => {
+      const read = await readPrinted(lab, { pack: print });
+
+      expect(failureIn(read)).toBe(`npm pack ${ordersPackage}@1.0.0 printed no tarball`);
+    },
+  );
+
+  test.for([
+    ['a number', '7', 'printed 7, not a user name'],
+    ['a map', '{"username":"tester"}', 'printed {"username":"tester"}, not a user name'],
+    ['an empty name', '""', 'printed no user name'],
+  ] as const)(
+    'npm whoami printing %s refuses the login, saying what it printed',
+    async ([, print, said], { lab }) => {
+      const registry = await lab.aRegistry({});
+      const printing = `case "$1" in whoami) echo '${print}'; exit 0;; esac\n${developersNpm}`;
+      const npm = lab.aPlace({ userConfig: loginTo(registry), path: aStubNpm(lab, printing) });
+
+      const read = await baselineOf(npm, {
+        packageName: ordersPackage,
+        declared: orders,
+        against: undefined,
+      });
+
+      expect(failureIn(read)).toContain(`npm has no login there it accepts (npm whoami ${said})`);
+    },
+  );
 });
