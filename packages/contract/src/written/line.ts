@@ -25,3 +25,8 @@ function escapeOf(code: number): string {
 export function unbrokenLineOf(text: string): string {
   return text.replace(lineBreak, (character) => escapes.get(character) ?? character);
 }
+
+/** Lines as one message: each written by `unbrokenLineOf`, joined by LF, so each problem stays one line. */
+export function linesTextOf(lines: readonly string[]): string {
+  return lines.map(unbrokenLineOf).join('\n');
+}

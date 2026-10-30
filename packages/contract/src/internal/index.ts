@@ -357,6 +357,7 @@ export {
   isPlainObject,
   isSameRejection,
   issueLineOf,
+  linesTextOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
 import { lineBreaksIn, linePool } from '../../test/line-breaks.ts';
-import { unbrokenLineOf } from '../internal/index.ts';
+import { seededNext } from '../../test/random-schemas.ts';
+import { linesTextOf, unbrokenLineOf } from '../internal/index.ts';
 
 /** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
 const linearGrowth = 30;
@@ -88,5 +89,37 @@ describe('unbrokenLineOf', () => {
 
     expect(broken).toEqual([]);
     expect(changed).toEqual([]);
+  });
+});
+
+describe('linesTextOf', () => {
+  test('writes each line on one line and joins them by LF, so a message has one line per problem', () => {
+    const lines = ['first\nline', 'second', `third${String.fromCharCode(0x2028)}line`];
+
+    const message = linesTextOf(lines);
+
+    expect(message).toBe('first\\nline\nsecond\nthird\\u2028line');
+  });
+
+  test('a message of 1 to 5 lines of the pool splits at LF into those lines and has no other break', () => {
+    const next = seededNext(5);
+    const pool = linePool();
+    const draw = (): string => pool[Math.floor(next() * pool.length)] ?? '';
+    const lists = Array.from({ length: 200 }, () =>
+      Array.from({ length: 1 + Math.floor(next() * 5) }, draw),
+    );
+
+    const wrong = lists.filter((lines) => {
+      const message = linesTextOf(lines);
+      const parts = message.split('\n');
+      const isEachLine = parts.every((part, index) => part === unbrokenLineOf(lines[index] ?? ''));
+      return !(
+        isEachLine &&
+        parts.length === lines.length &&
+        lineBreaksIn(message) === lines.length - 1
+      );
+    });
+
+    expect(wrong).toEqual([]);
   });
 });
