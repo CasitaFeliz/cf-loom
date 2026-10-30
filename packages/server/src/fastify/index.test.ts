@@ -1,6 +1,7 @@
 import { once } from 'node:events';
 import type { IncomingMessage } from 'node:http';
 import {
+  connect as connectHttp2,
   constants,
   type Http2SecureServer,
   type Http2Server,
@@ -55,6 +56,15 @@ const describeOrders = defineEndpoint({
   path: '/orders',
   visibility: 'public',
   description: 'What an order takes',
+  success: { status: 204 },
+});
+
+const describeService = defineEndpoint({
+  name: 'describeService',
+  method: 'OPTIONS',
+  path: '/',
+  visibility: 'public',
+  description: 'What the Service offers',
   success: { status: 204 },
 });
 
@@ -136,6 +146,7 @@ const contract = defineService({
       endpoints: [
         createOrder,
         describeOrders,
+        describeService,
         getSummary,
         getOrder,
         noteOrder,
@@ -159,6 +170,7 @@ const handlers = {
       }),
     ),
     describeOrders: handle(describeOrders, () => success(describeOrders)),
+    describeService: handle(describeService, () => success(describeService)),
     getSummary: handle(getSummary, () => success(getSummary, { count: 3 })),
     getOrder: handle(getOrder, ({ params }) => success(getOrder, { id: params.orderId })),
     noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, body)),
@@ -747,7 +759,12 @@ describe('fastifyServe', () => {
       const records: AnsweredRequest[] = [];
       const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
       const { url } = await served({
-        options: { onAnswered: (answered) => void (records.push(answered), record()) },
+        options: {
+          onAnswered: (answered) => {
+            records.push(answered);
+            record();
+          },
+        },
       });
       const socket = connect(Number(new URL(url).port), '127.0.0.1');
       socket.on('error', () => undefined);
@@ -769,7 +786,12 @@ describe('fastifyServe', () => {
       const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
       const { url } = await served({
         fastify: { http2: true },
-        options: { onAnswered: (answered) => void (records.push(answered), record()) },
+        options: {
+          onAnswered: (answered) => {
+            records.push(answered);
+            record();
+          },
+        },
       });
       const session = h2Session(url);
 
@@ -1141,12 +1163,16 @@ describe('fastifyServe', () => {
       expect(JSON.parse(answer.body)).toEqual({ id: 'a=1; b=2' });
     });
 
-    test('a :scheme other than http or https, and OPTIONS *, go on to the app', async () => {
+    test('a :scheme other than http or https, and OPTIONS *, go on to the app, even beside a declared OPTIONS /', async () => {
       const { url, reached } = await served({ fastify: { http2: true } });
       const session = h2Session(url);
 
       const foreign = await h2(session, { ':path': '/orders/o-1', ':scheme': 'ftp' });
-      const asterisk = await h2(session, { ':method': 'OPTIONS', ':path': '*' });
+      const asterisk = await h2(session, {
+        ':method': 'OPTIONS',
+        ':path': '*',
+        ':authority': 'orders.example',
+      });
 
       expect([foreign.status, asterisk.status]).toEqual([404, 404]);
       expect(reached).toEqual(['GET /orders/o-1', 'OPTIONS *']);
@@ -1253,6 +1279,31 @@ describe('fastifyServe', () => {
         expect(signals[0]?.aborted).toBe(true);
         expect(recorded).toEqual([true]);
         expect(next).toMatchObject({ status: 200, body: '{"count":3}' });
+      });
+
+      test('a Caller that resets its stream once the whole response is written, but before flow control let it out, aborts the request’s signal', async () => {
+        const requests: Request[] = [];
+        const small = handle(getReport, () => success(getReport, { data: 'x'.repeat(5000) }));
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getReport: small }),
+          options: { onAnswered: (_record, request) => void requests.push(request) },
+        });
+        const session = connectHttp2(url, { settings: { initialWindowSize: 1024 } });
+        session.on('error', () => undefined);
+
+        try {
+          const stream = session.request({ ':path': '/report' });
+          stream.on('error', () => undefined);
+          await new Promise((resolve) => stream.once('data', resolve));
+          stream.pause();
+          stream.close(constants.NGHTTP2_CANCEL);
+          await waitFor(100);
+        } finally {
+          session.destroy();
+        }
+
+        expect(requests[0]?.signal.aborted).toBe(true);
       });
 
       test('a Caller that resets its stream with NO_ERROR while a large Success is written aborts the request’s signal, and the server closes once the session is gone', async () => {
