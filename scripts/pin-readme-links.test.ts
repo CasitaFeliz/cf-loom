@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pinnedReadme } from './pin-readme-links.ts';
+import { pinnedReadme, repositoryOf } from './pin-readme-links.ts';
 
 const repository = 'CasitaFeliz/cf-loom';
 const commit = '0123456789abcdef0123456789abcdef01234567';
@@ -117,5 +117,47 @@ describe('pinnedReadme', () => {
     const pin = () => pinnedReadme(readme, repository, commit);
 
     expect(pin).toThrow(/^line 1: .*\nline 3: /);
+  });
+});
+
+describe('repositoryOf', () => {
+  it('returns owner and name from the repository URL of a package manifest', () => {
+    const manifest = {
+      repository: { type: 'git', url: 'git+https://github.com/CasitaFeliz/cf-loom.git' },
+    };
+
+    const repository = repositoryOf(manifest);
+
+    expect(repository).toBe('CasitaFeliz/cf-loom');
+  });
+
+  it('keeps a dot of the name', () => {
+    const manifest = { repository: { url: 'git+https://github.com/some-org/site.js.git' } };
+
+    const repository = repositoryOf(manifest);
+
+    expect(repository).toBe('some-org/site.js');
+  });
+
+  it.each([
+    ['no repository', {}],
+    [
+      'a repository that is a string',
+      { repository: 'git+https://github.com/CasitaFeliz/cf-loom.git' },
+    ],
+    ['a repository with no url', { repository: { type: 'git' } }],
+    ['a url that is not a string', { repository: { url: 42 } }],
+    ['another host', { repository: { url: 'git+https://gitlab.com/CasitaFeliz/cf-loom.git' } }],
+    ['a url with no .git', { repository: { url: 'git+https://github.com/CasitaFeliz/cf-loom' } }],
+    ['the github: shorthand', { repository: { url: 'github:CasitaFeliz/cf-loom' } }],
+    ['an ssh url', { repository: { url: 'git@github.com:CasitaFeliz/cf-loom.git' } }],
+    [
+      'a url with a path in the repository',
+      { repository: { url: 'git+https://github.com/CasitaFeliz/cf-loom/x.git' } },
+    ],
+  ])('refuses a manifest with %s', (_case, manifest) => {
+    const repository = () => repositoryOf(manifest);
+
+    expect(repository).toThrow(/^repository\.url must be /);
   });
 });

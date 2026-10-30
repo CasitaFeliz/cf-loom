@@ -51,3 +51,22 @@ export function pinnedReadme(readme: string, repository: string, commit: string)
   }
   return pinned.join('\n');
 }
+
+const githubRepositoryUrl = /^git\+https:\/\/github\.com\/([\w-]+\/[\w.-]+?)\.git$/;
+
+/**
+ * The `<owner>/<name>` of the GitHub repository a package's manifest declares in `repository.url`
+ * (`git+https://github.com/<owner>/<name>.git`); throws when the field is absent or names another form.
+ */
+export function repositoryOf(manifest: { readonly repository?: unknown }): string {
+  const { repository } = manifest;
+  const url =
+    typeof repository === 'object' && repository !== null && 'url' in repository
+      ? repository.url
+      : undefined;
+  const match = typeof url === 'string' ? githubRepositoryUrl.exec(url) : null;
+  if (match?.[1] === undefined) {
+    throw new Error('repository.url must be "git+https://github.com/<owner>/<name>.git"');
+  }
+  return match[1];
+}
