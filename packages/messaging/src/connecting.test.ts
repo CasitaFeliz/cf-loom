@@ -682,7 +682,11 @@ describe('onBrokerTrouble', () => {
     await close();
 
     expect(logged.mock.calls).toEqual([
-      ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing', cause],
+      [
+        '%s',
+        'notifyOnCreated orders-service_notify-on-created orders-service: pulls are failing',
+        cause,
+      ],
       ['notifyOnCreated orders-service_notify-on-created orders-service: pulls are answered again'],
     ]);
   });
@@ -704,6 +708,7 @@ describe('onBrokerTrouble', () => {
 
     expect(kinds).toEqual(['pull-failed', 'recovered']);
     expect(logged).toHaveBeenCalledWith(
+      '%s',
       'notifyOnCreated orders-service_notify-on-created orders-service: onBrokerTrouble threw',
       error,
     );

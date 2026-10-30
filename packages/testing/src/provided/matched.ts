@@ -1,5 +1,10 @@
 import { basePathOf } from '@cf-loom/client/internal';
-import { allowedMethodsOf, matchOf, type TextSource } from '@cf-loom/contract/internal';
+import {
+  allowedMethodsOf,
+  matchOf,
+  type TextSource,
+  unbrokenLineOf,
+} from '@cf-loom/contract/internal';
 import { mistakeOf } from '../mistakes/index.ts';
 import type { FakedProvider, ListedEndpoint, ShadowingEndpoint } from './provided.ts';
 
@@ -50,7 +55,9 @@ function winnerOf(faked: FakedProvider, routed: Request): Matched {
   const winner = matchOf(faked.declared, routed);
   if (winner.kind !== 'matched') {
     const reached = `${routed.method} ${new URL(routed.url).pathname}`;
-    throw new Error(`${reached} matches a listed Endpoint and no declared one: a bug.`);
+    throw new Error(
+      unbrokenLineOf(`${reached} matches a listed Endpoint and no declared one: a bug.`),
+    );
   }
   const { matched } = winner;
   if (matched.kind === 'shadowing') {

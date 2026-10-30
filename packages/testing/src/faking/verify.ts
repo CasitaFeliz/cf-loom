@@ -1,3 +1,4 @@
+import { linesTextOf } from '@cf-loom/contract/internal';
 import { type FakeProviderError, mistakeOf } from '../mistakes/index.ts';
 import { onceStepsOf } from '../scripting/index.ts';
 import type { Faking } from './fetch.ts';
@@ -16,7 +17,7 @@ export function throwMistakes(faking: Faking): void {
   if (others.length === 0) {
     throw first;
   }
-  throw new AggregateError(mistakes, summaryOf(mistakes));
+  throw new AggregateError(mistakes, linesTextOf(summaryLinesOf(mistakes)));
 }
 
 /** One mistake for each Endpoint with `once` steps no request took. */
@@ -33,7 +34,7 @@ function unusedStepsOf({ faked, scripted }: Faking): readonly FakeProviderError[
 }
 
 /** The count of mistakes, then the first line of each. */
-function summaryOf(mistakes: readonly FakeProviderError[]): string {
-  const lines = mistakes.map((mistake) => mistake.message.split('\n')[0]);
-  return [`${mistakes.length} mistakes:`, ...lines].join('\n');
+function summaryLinesOf(mistakes: readonly FakeProviderError[]): readonly string[] {
+  const lines = mistakes.map((mistake) => mistake.message.split('\n')[0] ?? '');
+  return [`${mistakes.length} mistakes:`, ...lines];
 }

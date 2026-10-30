@@ -1,4 +1,5 @@
 import { type GraftTarget, graftedInputOf } from '../compatibility/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import {
   declaredEndpointsOf,
   type FormerInput,
@@ -23,7 +24,9 @@ export function formerInputProblemsOf(snapshot: PublishedSnapshot): readonly Pro
   for (const [index, former] of heldFormerInputsOf(snapshot).entries()) {
     const input = inputs.get(former.endpoint);
     if (input === undefined) {
-      throw new Error(`A former Input of ${former.endpoint}, which is not declared: a bug.`);
+      throw new Error(
+        unbrokenLineOf(`A former Input of ${former.endpoint}, which is not declared: a bug.`),
+      );
     }
     const reason = graftProblemOf(former, { input, defs: snapshot.defs });
     if (reason !== undefined) {

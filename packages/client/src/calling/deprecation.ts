@@ -1,10 +1,10 @@
-import { deprecatedAtOfHeader, deprecationHeader } from '@cf-loom/contract/internal';
+import { deprecatedAtOfHeader, deprecationHeader, logOf } from '@cf-loom/contract/internal';
 import type { CalledEndpoint } from '../endpoints/index.ts';
 import type { DeprecationNotice, OnDeprecation } from './client-types.ts';
 
 /** Without `onDeprecation`, a Deprecation goes to the console, naming the Provider, the Endpoint and when. */
 export function warnDeprecation({ provider, endpoint, deprecatedAt }: DeprecationNotice): void {
-  console.warn(`${provider}: ${endpoint} is Deprecated as of ${deprecatedAt}`);
+  console.warn(...logOf(`${provider}: ${endpoint} is Deprecated as of ${deprecatedAt}`));
 }
 
 /**
@@ -34,6 +34,6 @@ export function deprecationWatchOf(
 function tellContained(onDeprecation: OnDeprecation, notice: DeprecationNotice): void {
   const telling = async () => onDeprecation(notice);
   telling().catch((error: unknown) => {
-    console.error(`${notice.provider}: ${notice.endpoint}: onDeprecation threw`, error);
+    console.error(...logOf(`${notice.provider}: ${notice.endpoint}: onDeprecation threw`, error));
   });
 }

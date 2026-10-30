@@ -1,3 +1,5 @@
+import { unbrokenLineOf } from '../lines/index.ts';
+
 const semanticVersion =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 
@@ -22,7 +24,7 @@ export function isSemanticVersion(value: unknown): value is string {
 export function semanticVersionPartsOf(version: string): SemanticVersionParts {
   const match = semanticVersion.exec(version);
   if (match === null) {
-    throw new Error(`${version} is no semantic version: a bug.`);
+    throw new Error(unbrokenLineOf(`${version} is no semantic version: a bug.`));
   }
   const [, major = '', minor = '', patch = '', prerelease] = match;
   return {
