@@ -1,5 +1,14 @@
 # @cf-loom/contract
 
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- dbab5a7: `generate`, `check` and `publish` judge whether a plain union or an intersection reaches an Open Enum, and `check` and `publish` refuse a Baseline holding a def that leads back to itself through `ref`s, `union` options and `allOf` items alone; both now take time that grows with the defs, instead of its square.
+- 82776d6: The contract README's orders Group lists `editOrder` and `listOrders`, the Endpoints its examples declare, and the server README's `main.ts` gives its Resources `permissions`, which the handlers README's permission Guard takes, so the Service the READMEs describe is one that `cf-loom generate` accepts.
+- ecd2a47: `sqs()` from `@cf-loom/messaging/sqs` runs a Service's messaging on SNS/SQS, through the organization's SNS and SQS clients: `publish` sends each Message to the Service's SNS topic, and `consume` receives from each Durable consumer's SQS queue, after checking the queue and its subscription against what `applyBrokerPlan` writes. A Message cf-loom cannot read is never deleted, but left for the queue's dead-letter queue. `@cf-loom/contract` gives the wire its ASCII JSON for a Message's ids and Transport headers in SNS message attributes.
+- 7a3d3f9: A value nested past the call stack is one `malformed` Issue at its root in every engine, and no other throw is read as one. In Firefox, whose overflow is an `InternalError`, the client returns the `INVALID_OUTCOME` Fault or its `INVALID_INPUT` Rejection instead of throwing on such a value. A getter or Proxy trap of a value a Caller or a Service builds that throws a `RangeError` for another reason, such as `Invalid array length`, throws as any other error does, instead of being read as `The value is nested too deeply to read`.
+
 ## 1.0.0-rc.1
 
 ### Major Changes

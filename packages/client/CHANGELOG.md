@@ -1,5 +1,15 @@
 # @cf-loom/client
 
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- Updated dependencies [dbab5a7]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes
