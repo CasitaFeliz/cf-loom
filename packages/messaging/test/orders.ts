@@ -82,7 +82,8 @@ export const ordersWithTwoVersions = defineService({
   ],
 });
 
-const readers = readersOf({
+/** The Readers of Orders' Commands and Subscriptions. */
+export const ordersReaders = readersOf({
   commands: { chargeCardV1: { declaration: chargeCardV1, reader: orderBody } },
   subscriptions: { notifyOnCreated: { declaration: notifyOnCreated, reader: orderBody } },
 });
@@ -154,16 +155,16 @@ export function handlersOf(
   return {
     commands: {
       chargeCardV1: handle(
-        readers.commands.chargeCardV1,
+        ordersReaders.commands.chargeCardV1,
         recording('ChargeCard@1', behaviors.charge),
       ),
     },
     subscriptions: {
       notifyOnCreated: handle(
-        readers.subscriptions.notifyOnCreated,
+        ordersReaders.subscriptions.notifyOnCreated,
         recording('notifyOnCreated', behaviors.notify),
       ),
     },
-    readers,
+    readers: ordersReaders,
   };
 }

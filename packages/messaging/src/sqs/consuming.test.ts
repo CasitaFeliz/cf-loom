@@ -1,6 +1,16 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import type { SQSClient } from '@aws-sdk/client-sqs';
-import { afterAll, beforeAll, beforeEach, describe, expect, onTestFinished, test } from 'vitest';
+import { handle } from '@cf-loom/handlers';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from 'vitest';
 import {
   arrangeTopic,
   dropQueue,
@@ -25,6 +35,7 @@ import {
   arrangeOrders,
   handlersOf,
   ordersContract,
+  ordersReaders,
   type Received,
   testLimits,
 } from '../../test/orders.ts';
@@ -50,8 +61,8 @@ beforeEach(async () => {
 function closedWhenDone(
   started: { readonly close: () => Promise<void> },
   connecting: SqsConnecting,
+  orders: ReturnType<typeof anOrders> = anOrders('staging'),
 ): void {
-  const orders = anOrders('staging');
   onTestFinished(async () => {
     const closing = started.close();
     for (const queue of [orders.notifyQueue, orders.chargeQueue]) {
@@ -62,12 +73,16 @@ function closedWhenDone(
 }
 
 /** An Orders messaging over sqs() on the test's moto, closed when the test ends, with the names it works with. */
-async function aMessaging() {
+async function aMessaging(prefix: string | null = 'staging') {
   const connecting = anAwsConnecting(moto.url);
-  await arrangeOrders(connecting, { prefix: 'staging' });
-  const started = await messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
-  closedWhenDone(started, connecting);
-  return { ...started, connecting, orders: anOrders('staging') };
+  await arrangeOrders(connecting, { prefix });
+  const started = await messaging(
+    ordersContract,
+    sqs(prefix === null ? connecting : { ...connecting, prefix }),
+  );
+  const orders = anOrders(prefix);
+  closedWhenDone(started, connecting, orders);
+  return { ...started, connecting, orders };
 }
 
 /** What `aMessaging` gives a test. */
@@ -170,6 +185,33 @@ describe('consuming over sqs()', () => {
     expect(received).toEqual([]);
   });
 
+  test('a stub’s Durable consumer needs no queue: consume looks only for the queues of the Handlers it pulls', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { sender, publisher, consume, connecting, orders } = await aMessaging();
+    await dropQueue(connecting.sqs, orders.chargeQueue);
+    const received: Received[] = [];
+    const handlers = {
+      ...handlersOf(received),
+      commands: { chargeCardV1: handle.stub(ordersReaders.commands.chargeCardV1) },
+    };
+
+    await consume(handlers, {});
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    await until(() => expect(received.map(({ handler }) => handler)).toEqual(['notifyOnCreated']));
+    expect(sender).toBeDefined();
+  });
+
+  test('without a prefix, consume looks for the unprefixed queue names', async () => {
+    const { sender, consume } = await aMessaging(null);
+    const received: Received[] = [];
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+
+    await consume(handlersOf(received), {});
+
+    await until(() => expect(received.map(({ handler }) => handler)).toEqual(['ChargeCard@1']));
+  });
+
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
     const { consume, connecting, orders } = await aMessaging();
     const built = `arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}`;
@@ -187,16 +229,9 @@ describe('consuming over sqs()', () => {
   test('consume called again once the queues exist starts consuming', async () => {
     const connecting = anAwsConnecting(moto.url);
     await arrangeTopic(connecting.sns, 'staging_orders-service');
-    const { sender, consume } = await messaging(
-      ordersContract,
-      sqs({ ...connecting, prefix: 'staging' }),
-    );
-    onTestFinished(async () => {
-      const orders = anOrders('staging');
-      await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]).catch(
-        () => undefined,
-      );
-    });
+    const started = await messaging(ordersContract, sqs({ ...connecting, prefix: 'staging' }));
+    const { sender, consume } = started;
+    closedWhenDone(started, connecting);
     const received: Received[] = [];
     await expect(consume(handlersOf(received), {})).rejects.toThrow('has no queue');
     await arrangeOrders(connecting, { prefix: 'staging' });
