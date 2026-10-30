@@ -4429,7 +4429,7 @@ type JsonChange = {
 };
 
 /** The hint of a Change as `check --json` prints it. */
-const hintOf = ({ hint }: { readonly hint: string | null }): string | null => hint;
+const jsonHintOf = ({ hint }: { readonly hint: string | null }): string | null => hint;
 
 /** The fields a Change line prints as `name=value`, before its class; a `value` stays the JSON it is printed as. */
 function printedFieldsOf(line: string): readonly (readonly [string, string])[] {
@@ -4728,9 +4728,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       const json = await checkedAgainst(lab, changed, '--json');
 
       expect(lines.ran.stdout.split('\n')).toContain(`${line}; ${hint}`);
-      expect(
-        JSON.parse(json.ran.stdout).changes.map((change: { hint: string }) => change.hint),
-      ).toContain(hint);
+      expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toContain(hint);
     },
   );
 
@@ -4757,7 +4755,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
     expect(lines.ran.stdout.split('\n')).toContain(
       `endpoints.GET /ping (ping) schema value-added at success.body.kind value="b" enum=closed: ${needsApproval}`,
     );
-    expect(JSON.parse(json.ran.stdout).changes.map(hintOf)).toEqual([null]);
+    expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toEqual([null]);
   });
 
   test('opening a closed Success enum while adding a value prints enum-opened and value-added with no hint, and both JSON hints are null', async ({
@@ -4776,7 +4774,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
     ]);
-    expect(JSON.parse(json.ran.stdout).changes.map(hintOf)).toEqual([null, null]);
+    expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toEqual([null, null]);
   });
 
   const drifting = [
