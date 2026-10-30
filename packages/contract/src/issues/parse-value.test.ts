@@ -350,6 +350,20 @@ function internalError(message: string): Error {
   return Object.assign(new Error(message), { name: 'InternalError' });
 }
 
+/** An error whose `message` is `message`, whatever type that is. */
+function errorWithMessage(error: Error, message: unknown): Error {
+  return Object.defineProperty(error, 'message', { value: message });
+}
+
+/** An error whose `name` cannot be read. */
+function errorWithBrokenName(message: string): Error {
+  return Object.defineProperty(new Error(message), 'name', {
+    get(): string {
+      throw new Error('name broke');
+    },
+  });
+}
+
 function thrownBy(read: () => unknown): unknown {
   try {
     read();
@@ -381,6 +395,44 @@ describe.for([
     ['a TypeError', new TypeError('getter broke')],
     ['a plain Error', new Error('getter broke')],
     ['a value that is no error', { reason: 'getter broke' }],
+    ["a TypeError with V8's message", new TypeError('Maximum call stack size exceeded')],
+    ["a plain Error with SpiderMonkey's message", new Error('too much recursion')],
+    [
+      "a RangeError with text before V8's message",
+      new RangeError('Uncaught Maximum call stack size exceeded'),
+    ],
+    [
+      "a RangeError with text after V8's message",
+      new RangeError('Maximum call stack size exceeded in a getter'),
+    ],
+    [
+      "an InternalError with text after SpiderMonkey's message",
+      internalError('too much recursion in a getter'),
+    ],
+    ["a RangeError with SpiderMonkey's message", new RangeError('too much recursion')],
+    ["an InternalError with V8's message", internalError('Maximum call stack size exceeded')],
+    [
+      'a RangeError whose message is a Symbol',
+      errorWithMessage(new RangeError('x'), Symbol('overflow')),
+    ],
+    [
+      'a RangeError whose message is an object that cannot be written as text',
+      errorWithMessage(new RangeError('x'), {
+        toString(): string {
+          throw new Error('toString broke');
+        },
+      }),
+    ],
+    [
+      'a RangeError whose message is an object that is written as the overflow',
+      errorWithMessage(new RangeError('x'), {
+        toString: () => 'Maximum call stack size exceeded',
+      }),
+    ],
+    [
+      "an Error with SpiderMonkey's message whose name cannot be read",
+      errorWithBrokenName('too much recursion'),
+    ],
   ])('%s still throws', ([, thrown]) => {
     const rethrown = thrownBy(() => read(valueThatThrows(thrown)));
 
