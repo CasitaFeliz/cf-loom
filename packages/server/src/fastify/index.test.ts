@@ -17,7 +17,7 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { closeSessions, h2, h2Session } from '../../test/h2.ts';
+import { answerOf, closeSessions, h2, h2Session } from '../../test/h2.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -1233,6 +1233,46 @@ describe('fastifyServe', () => {
         expect(startedAborted).toEqual([true]);
         expect(records.map((record) => record.aborted)).toEqual([true]);
       });
+    });
+
+    test('a Success larger than the flow-control window reaches a slow-reading Caller whole', async () => {
+      const { url } = await served({ fastify: { http2: true } });
+      const session = h2Session(url);
+
+      const stream = session.request({ ':path': '/report' });
+      stream.pause();
+      const answer = answerOf(stream);
+      await waitFor(300);
+      stream.resume();
+
+      expect(await answer).toMatchObject({ status: 200, ended: true, rstCode: 0 });
+      expect((await answer).body.length).toBe(JSON.stringify({ data: bigData }).length);
+    });
+
+    test('when something fails once a request is taken, its stream is reset with an error code, and the session’s other streams and the app’s routes keep answering', async () => {
+      const { url } = await served({
+        fastify: { http2: true },
+        before: (app) =>
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('transfer-encoding', 'chunked');
+            }
+          }),
+      });
+      const session = h2Session(url);
+      let failed: Awaited<ReturnType<typeof h2>> | undefined;
+
+      const uncaught = await uncaughtDuring(async () => {
+        failed = await h2(session, { ':path': '/orders/o-1' });
+        await waitFor(50);
+      });
+      const summary = await h2(session, { ':path': '/greet?name=Bob' });
+      const own = await h2(session, { ':path': '/healthz' });
+
+      expect(failed?.ended).toBe(false);
+      expect(failed?.rstCode).toBe(constants.NGHTTP2_INTERNAL_ERROR);
+      expect([summary.status, own.status, own.body]).toEqual([204, 200, 'ok']);
+      expect(uncaught).toEqual([]);
     });
   });
 });

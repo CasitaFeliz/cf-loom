@@ -85,7 +85,7 @@ function http2Of(outgoing: Http2ServerResponse): Version {
         }
       });
     },
-    failed: () => outgoing.destroy(),
+    failed: () => stream.destroy(new Error('the response could not be written')),
   };
 }
 
