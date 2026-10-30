@@ -65,23 +65,30 @@ type Drawn = {
   readonly headers: Readonly<Record<string, string>>;
 };
 
-/** A seeded draw of strings over every range of code units, and of the Messages a Caller can give `publish`. */
-function aDrawing(seed: number) {
+/** A seeded draw of strings over every range of code units, with `extraUnits` drawn as well. */
+function aTextDrawing(seed: number, extraUnits: readonly string[] = []) {
   const next = seededNext(seed);
   const below = (limit: number) => Math.floor(next() * limit);
-  const unitOf = (): string => {
-    const ranges = [
-      () => String.fromCharCode(0x20 + below(0x5f)),
-      () => String.fromCharCode(below(0x20)),
-      () => String.fromCharCode(0x7f + below(0x21)),
-      () => String.fromCharCode(0xa0 + below(0xd800 - 0xa0)),
-      () => String.fromCharCode(0xe000 + below(0x2000)),
-      () => String.fromCodePoint(0x10000 + below(0x100000)),
-      () => ['"', '\\', ' ', '\uffff', '\ufffe'][below(5)] ?? '',
-    ];
-    return ranges[below(ranges.length)]?.() ?? '';
-  };
+  const ranges = [
+    () => String.fromCharCode(0x20 + below(0x5f)),
+    () => String.fromCharCode(below(0x20)),
+    () => String.fromCharCode(0x7f + below(0x21)),
+    () => String.fromCharCode(0xa0 + below(0xd800 - 0xa0)),
+    () => String.fromCharCode(0xe000 + below(0x2000)),
+    () => String.fromCodePoint(0x10000 + below(0x100000)),
+    () => ['"', '\\', ' ', '\uffff', '\ufffe'][below(5)] ?? '',
+  ];
+  if (extraUnits.length > 0) {
+    ranges.push(() => extraUnits[below(extraUnits.length)] ?? '');
+  }
+  const unitOf = (): string => ranges[below(ranges.length)]?.() ?? '';
   const textOf = (): string => Array.from({ length: below(13) }, unitOf).join('');
+  return { below, textOf };
+}
+
+/** A seeded draw of the Messages a Caller can give `publish`: what the core accepts, over every range of code units. */
+function aDrawing(seed: number) {
+  const { below, textOf } = aTextDrawing(seed);
   const idOf = (): string => {
     for (;;) {
       const text = textOf();
@@ -311,5 +318,94 @@ describe('the Transport headers the core would refuse', () => {
     const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
 
     expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
+  });
+});
+
+describe('the header names every object has', () => {
+  test('headers named __proto__, constructor, toString and hasOwnProperty read back as own entries', () => {
+    const value =
+      '{"__proto__":"a","constructor":"b","toString":"c","hasOwnProperty":"d","valueOf":"e"}';
+    const attributes = snsAttributesOf(aMessage());
+
+    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+
+    if (read.kind !== 'read') {
+      throw new Error(`the headers did not read back: ${read.names.join(', ')}`);
+    }
+    expect(Object.getPrototypeOf(read.headers)).toBe(Object.prototype);
+    expect(Object.entries(read.headers)).toEqual([
+      ['__proto__', 'a'],
+      ['constructor', 'b'],
+      ['toString', 'c'],
+      ['hasOwnProperty', 'd'],
+      ['valueOf', 'e'],
+    ]);
+  });
+
+  test('a cf-loom-headers text naming one header twice reads back with the last value, as JSON.parse keeps it', () => {
+    const value = '{"x-trace":"first","x-other":"other","x-trace":"last"}';
+    const attributes = snsAttributesOf(aMessage());
+
+    const read = receivedSnsAttributesOf({ ...attributes, [snsHeadersAttribute]: value });
+
+    expect(read).toEqual({
+      kind: 'read',
+      messageId: 'event.OrderCreated.v1:fact-1',
+      factId: 'fact-1',
+      headers: { 'x-trace': 'last', 'x-other': 'other' },
+    });
+  });
+});
+
+/** The units a Caller's string may hold that the core refuses: CR, LF, whitespace NATS would trim, and a lone surrogate. */
+const refusedUnits = ['\r', '\n', '\t', '\u00a0', '\ufeff', '\u2028', '\ud800', '\udfff'];
+
+/** The same JSON text with its `\uXXXX` escapes in upper case, an escaped backslash kept as it is. */
+function inUpperCase(json: string): string {
+  return json.replace(/\\\\|\\u[0-9a-f]{4}/g, (written) =>
+    written === '\\\\' ? written : `\\u${written.slice(2).toUpperCase()}`,
+  );
+}
+
+/** The Broker message id an attribute of this JSON text reads back as, with everything else in order; `undefined` when it does not read back. */
+function messageIdReadFrom(json: string): string | undefined {
+  const read = receivedSnsAttributesOf({
+    [snsMessageIdAttribute]: json,
+    [snsFactIdAttribute]: '"fact-1"',
+    [snsHeadersAttribute]: '{}',
+  });
+  return read.kind === 'read' ? read.messageId : undefined;
+}
+
+/** The value of the one header an attribute of this JSON text reads back as, with everything else in order; `undefined` when it does not read back. */
+function headerValueReadFrom(json: string): string | undefined {
+  const read = receivedSnsAttributesOf({
+    [snsMessageIdAttribute]: '"event.E.v1:fact-1"',
+    [snsFactIdAttribute]: '"fact-1"',
+    [snsHeadersAttribute]: json,
+  });
+  return read.kind === 'read' ? Object.values(read.headers)[0] : undefined;
+}
+
+describe('what receivedSnsAttributesOf accepts', () => {
+  test('is exactly what the core accepts as an id and as a header, whatever the string and its spelling', () => {
+    const { below, textOf } = aTextDrawing(479, refusedUnits);
+    const names = ['a', 'X-Trace', '__proto__', 'constructor', 'Cf-Loom-A', 'nats-b', 'a b', 'a:b'];
+    const spellings = [JSON.stringify, (value: unknown) => inUpperCase(JSON.stringify(value))];
+    const outcomes = new Set<string>();
+
+    for (let round = 0; round < 4_000; round++) {
+      const text = textOf();
+      const name = names[below(names.length)] ?? '';
+      const spell = spellings[round % 2] ?? JSON.stringify;
+      const isId = isIdHeaderValue(text);
+      const isHeader = transportHeaderFitOf(name, text) === 'travels';
+
+      expect(messageIdReadFrom(spell(text))).toBe(isId ? text : undefined);
+      expect(headerValueReadFrom(spell({ [name]: text }))).toBe(isHeader ? text : undefined);
+      outcomes.add(`id accepted: ${isId}`).add(`header accepted: ${isHeader}`);
+    }
+
+    expect(outcomes.size).toBe(4);
   });
 });
