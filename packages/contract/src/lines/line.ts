@@ -1,13 +1,14 @@
 /** The code points of every character some reader ends a line at: those of `str.splitlines`. */
 const lineBreakCodes = [0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029] as const;
 
-const escapes: ReadonlyMap<string, string> = new Map(
-  lineBreakCodes.map((code) => [String.fromCharCode(code), escapeOf(code)]),
+const lineBreakPattern = new RegExp(
+  `[${lineBreakCodes.map((code) => String.fromCharCode(code)).join('')}]`,
+  'g',
 );
 
-const lineBreak = new RegExp(`[${[...escapes.keys()].join('')}]`, 'g');
-
-function escapeOf(code: number): string {
+/** The visible text of a line break's escape: `\n` and `\r` for LF and CR, `\u` and four hex digits for the others. */
+function escapeOf(lineBreak: string): string {
+  const code = lineBreak.charCodeAt(0);
   if (code === 0x0a) {
     return '\\n';
   }
@@ -23,7 +24,7 @@ function escapeOf(code: number): string {
  * it there.
  */
 export function unbrokenLineOf(text: string): string {
-  return text.replace(lineBreak, (character) => escapes.get(character) ?? character);
+  return text.replace(lineBreakPattern, escapeOf);
 }
 
 /** Lines as one message: each written by `unbrokenLineOf`, joined by LF, so each problem stays one line. */
