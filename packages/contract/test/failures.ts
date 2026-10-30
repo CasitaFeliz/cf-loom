@@ -69,3 +69,21 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
     defs,
   };
 }
+
+/**
+ * Every refusal of a walk, each once, as the location a line names it by and what it refuses: a
+ * schema the walk remembers keeps the place it was first walked at, whichever root reaches it.
+ */
+export function refusalLocationsOf({ located }: ReturnType<typeof walkSchemas>) {
+  const refusals = new Set<ReturnType<typeof refusalsIn>[number]>();
+  for (const { walked } of located) {
+    for (const refusal of walked.kind === 'walked' ? [] : refusalsIn(walked.tree)) {
+      refusals.add(refusal);
+    }
+  }
+  return [...refusals].map(({ site, steps, construct }) => {
+    const path = authorPathOf(steps);
+    const where = siteTextOf(site);
+    return { location: path === null ? where : `${where} ${path}`, construct };
+  });
+}

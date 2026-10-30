@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
-import { refusalsOf, summarized } from '../../test/failures.ts';
+import { refusalLocationsOf, refusalsOf, summarized } from '../../test/failures.ts';
 import { cpuRatioOf, growthOf } from '../../test/growth.ts';
 import {
   idOf,
@@ -10,6 +10,14 @@ import {
   type RandomGraph,
   randomGraph,
 } from '../../test/random-graphs.ts';
+import {
+  cycleMeetingsOf,
+  failsInsideGroup,
+  isOnCycle,
+  type ReentryGraph,
+  reachesDate,
+  reentryGraph,
+} from '../../test/random-reentries.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
@@ -1300,6 +1308,46 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
+  describe('a cycle no id names, met while its schema is on the path twice', () => {
+    /** `n0` holds `n1` twice, `n1` holds itself, `n2` and `n0`, and `n2`, with an id, holds `n0`, `n1` and itself. */
+    function twoCyclesAroundAnId() {
+      const held = [
+        [1, 1],
+        [1, 2, 0],
+        [0, 1, 2],
+      ];
+      const nodes: z.ZodType[] = [];
+      for (const [index, targets] of held.entries()) {
+        const shape = {};
+        for (const [field, target] of targets.entries()) {
+          Object.defineProperty(shape, `e${field}`, {
+            enumerable: true,
+            get: () => nodes[target]?.optional(),
+          });
+        }
+        nodes.push(index === 2 ? z.object(shape).meta({ id: 'n2' }) : z.object(shape));
+      }
+      return nodes;
+    }
+
+    test('both cycles are refused, whichever of two roots reaches them', () => {
+      const [first, , third] = twoCyclesAroundAnId();
+
+      const walked = walkSchemas(
+        [
+          { at: placeAt('a'), schema: first! },
+          { at: placeAt('b'), schema: third! },
+        ],
+        () => undefined,
+      );
+
+      expect(refusalLocationsOf(walked)).toEqual([
+        { location: 'exports.a e0.e0', construct: unnamedCycle.construct },
+        { location: 'exports.a e0.e2', construct: unnamedCycle.construct },
+      ]);
+    });
+  });
+
   test('every schema with an id on a cycle is a def, wherever the walk enters', () => {
     const department = z
       .object({
@@ -2068,6 +2116,142 @@ describe('walkSchemas: recursion', () => {
       }
 
       expect(walkedAgain).toEqual([]);
+    });
+  });
+
+  describe('random graphs that enter a schema while it is on the path twice', () => {
+    const graphCount = 10_000;
+    const offCycleId = /^\.meta\(\{ id: "n(\d+)" \}\) on a schema that lies on no cycle$/;
+
+    function graphsOf(count: number): ReentryGraph[] {
+      return Array.from({ length: count }, (_, index) => reentryGraph(index + 1));
+    }
+
+    /** The graph walked from its three roots, each an export of its own in one declaration. */
+    function walkedFromRoots(graph: ReentryGraph) {
+      const located = graph.roots.map((root, position) => ({
+        at: placeAt(`r${position}`),
+        schema: graph.schemas[root]!,
+      }));
+      return walkSchemas(located, () => undefined);
+    }
+
+    test('a cycle no id names is refused exactly where a plain walk of its graph meets it', () => {
+      const wrong: string[] = [];
+
+      for (const [position, graph] of graphsOf(graphCount).entries()) {
+        const lines = refusalLocationsOf(walkedFromRoots(graph))
+          .filter(({ construct }) => construct === unnamedCycle.construct)
+          .map(({ location }) => location);
+        const expected = [...cycleMeetingsOf(graph).lines];
+        if (lines.length !== expected.length || !expected.every((line) => lines.includes(line))) {
+          wrong.push(
+            `seed ${position + 1}: ${JSON.stringify(lines)} not ${JSON.stringify(expected)}`,
+          );
+        }
+      }
+
+      expect(wrong).toEqual([]);
+    });
+
+    /** The uses a graph reaches a z.date() from that the walk accepted, and the defs it wrote that reach one. */
+    function datedYetAcceptedIn(graph: ReentryGraph, walked: ReturnType<typeof walkSchemas>) {
+      const accepted = walked.located
+        .map(({ walked: located }, position) => ({ located, index: graph.roots[position] ?? 0 }))
+        .filter(({ located, index }) => located.kind === 'walked' && reachesDate(graph, index))
+        .map(({ index }) => `n${index} is accepted`);
+      const defs = Object.keys(walked.defs)
+        .filter((name) => reachesDate(graph, Number(name.slice(1))))
+        .map((name) => `${name} is a def`);
+      return [...accepted, ...defs];
+    }
+
+    test('a schema that reaches a z.date() is refused at every use, and no def of the walk reaches one', () => {
+      const wrong: string[] = [];
+
+      for (const [position, graph] of graphsOf(graphCount).entries()) {
+        for (const problem of datedYetAcceptedIn(graph, walkedFromRoots(graph))) {
+          wrong.push(`seed ${position + 1}: ${problem}`);
+        }
+      }
+
+      expect(wrong).toEqual([]);
+    });
+
+    test('an id is told it lies on no cycle only when its graph puts it on none', () => {
+      const wrong: string[] = [];
+
+      for (const [position, graph] of graphsOf(graphCount).entries()) {
+        for (const { construct } of refusalLocationsOf(walkedFromRoots(graph))) {
+          const index = Number(offCycleId.exec(construct)?.[1] ?? Number.NaN);
+          if (isOnCycle(graph, index)) {
+            wrong.push(`seed ${position + 1}: n${index} is on a cycle`);
+          }
+        }
+      }
+
+      expect(wrong).toEqual([]);
+    });
+
+    test('the graphs enter schemas already on the path, and fail a def inside another', () => {
+      const graphs = graphsOf(graphCount);
+
+      const reentering = graphs.filter((graph) => cycleMeetingsOf(graph).reentries > 0);
+      const failingInside = graphs.filter(failsInsideGroup);
+
+      expect(reentering.length).toBeGreaterThan(1_000);
+      expect(failingInside.length).toBeGreaterThan(1_000);
+    });
+  });
+
+  describe('a failing def whose open group holds a def that failed inside it', () => {
+    /** `n0` holds itself, `n1` and `n2`; `n1`, which holds a date, holds `n0`; `n2` holds `n0`. */
+    function aGroupWhoseInnerDefFails() {
+      const n0: z.ZodType = z
+        .object({
+          get e0() {
+            return z.union([z.string(), n0]).optional();
+          },
+          get e1() {
+            return z.array(n1).optional();
+          },
+          get e2() {
+            return n2.optional();
+          },
+        })
+        .meta({ id: 'n0' });
+      const n1: z.ZodType = z
+        .object({
+          get e0() {
+            return z.array(n0).optional();
+          },
+          d: z.date(),
+        })
+        .meta({ id: 'n1' });
+      const n2: z.ZodType = z
+        .object({
+          get e0() {
+            return z.record(z.string(), n0).optional();
+          },
+        })
+        .meta({ id: 'n2' });
+      return { n0, n1, n2 };
+    }
+
+    test('every def of the group is told failing at every use, with the first failure', () => {
+      const { n0, n1, n2 } = aGroupWhoseInnerDefFails();
+
+      const walked = walkSchemas(
+        [
+          { at: placeAt('first'), schema: n0 },
+          { at: placeAt('second'), schema: n2 },
+          { at: placeAt('third'), schema: n1 },
+        ],
+        () => undefined,
+      );
+
+      const failure = refused([{ at: 'e1[].d', ...dateRefused }]);
+      expect(refusalsOf(walked)).toEqual({ located: [failure, failure, failure], defs: {} });
     });
   });
 

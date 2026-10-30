@@ -1,5 +1,16 @@
 import { describe, expect, test } from 'vitest';
-import { authorPathOf, type Site, type Step, siteTextOf, tokenOf } from '../internal/index.ts';
+import { z } from 'zod';
+import { refusalsOf } from '../../test/failures.ts';
+import { type Construct, constructs, pathTextOf, randomNested } from '../../test/random-places.ts';
+import { seededNext } from '../../test/random-schemas.ts';
+import {
+  authorPathOf,
+  type Site,
+  type Step,
+  siteTextOf,
+  tokenOf,
+  walkSchemas,
+} from '../internal/index.ts';
 
 const field = (name: string): Step => ({ kind: 'field', name });
 const part = (name: 'success' | 'body'): Step => ({ kind: 'part', name });
@@ -55,5 +66,44 @@ describe('authorPathOf', () => {
 
   test('a text on a line is itself when it is plain and JSON otherwise', () => {
     expect([tokenOf('getOrder'), tokenOf('two words')]).toEqual(['getOrder', '"two words"']);
+  });
+});
+
+describe('the steps of a place', () => {
+  const body = {
+    site: { kind: 'export', name: 'body' },
+    declaration: undefined,
+    steps: [],
+  } as const;
+  const seedCount = 1_000;
+
+  /** A random nested schema with a `z.date()` at every leaf, and the steps down to each as they were written. */
+  function datedSchemaOf(seed: number) {
+    const next = seededNext(seed);
+    return randomNested({ next, leaf: () => z.date(), keysHoldLeaves: true }, 4);
+  }
+
+  test('every refusal sits at the steps it was written at, in random nested schemas', () => {
+    const wrong: string[] = [];
+    const crossed = new Set<Construct>();
+
+    for (let seed = 1; seed <= seedCount; seed++) {
+      const { schema, leaves } = datedSchemaOf(seed);
+      const walked = refusalsOf(walkSchemas([{ at: body, schema }], () => undefined));
+      const [located] = walked.located;
+      const refused = located?.kind === 'not-allowed' ? located.failures.map(({ at }) => at) : [];
+      const written = leaves.map(({ steps }) => pathTextOf(steps));
+      if (JSON.stringify([...refused].sort()) !== JSON.stringify([...written].sort())) {
+        wrong.push(`seed ${seed}: ${JSON.stringify(refused)} not ${JSON.stringify(written)}`);
+      }
+      for (const leaf of leaves) {
+        for (const construct of leaf.crossing) {
+          crossed.add(construct);
+        }
+      }
+    }
+
+    expect(wrong).toEqual([]);
+    expect([...crossed].sort()).toEqual([...constructs].sort());
   });
 });
