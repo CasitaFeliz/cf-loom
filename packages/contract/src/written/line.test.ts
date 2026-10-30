@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { linePool } from '../../test/line-breaks.ts';
 import { unbrokenLineOf } from '../internal/index.ts';
 
 const lineBreaks = [
@@ -32,5 +33,15 @@ describe('unbrokenLineOf', () => {
     const line = unbrokenLineOf(text);
 
     expect(line).toBe('a\\r\\nb\t\\n"c');
+  });
+
+  test('a line already written on one line is unchanged when written again', () => {
+    const pool = linePool();
+
+    const changed = pool.filter(
+      (text) => unbrokenLineOf(unbrokenLineOf(text)) !== unbrokenLineOf(text),
+    );
+
+    expect(changed).toEqual([]);
   });
 });
