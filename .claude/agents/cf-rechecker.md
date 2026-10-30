@@ -19,4 +19,5 @@ probe directory.
 - Check each item of the Definition of Done.
 
 Write nothing in the worktree. Your final message is the findings in cf-reviewer's table, then **Done** or **Not done**
-against the Definition of Done, item by item.
+against the Definition of Done, item by item, then each finding that needs the user's decision as a question in final
+form, as [Decisions](../../WORKFLOW.md#decisions) says.

@@ -6,6 +6,7 @@ import {
   type NotAllowed,
   type Place,
   siteTextOf,
+  stepListOf,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
 import {
@@ -122,7 +123,7 @@ function failureOf({ refusal, at, sites }: Told): NotAllowedFailure {
   return {
     kind: 'not-allowed',
     site: at.site,
-    steps: at.steps,
+    steps: stepListOf(at.steps),
     construct,
     ...(instead !== undefined && { instead }),
     declaration: at.declaration,

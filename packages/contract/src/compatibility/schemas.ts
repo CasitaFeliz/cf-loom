@@ -1,4 +1,10 @@
-import type { SchemaNode, Step } from '../walker/index.ts';
+import {
+  chainDown,
+  type SchemaNode,
+  type Step,
+  type StepChain,
+  stepListOf,
+} from '../walker/index.ts';
 import { annotationFindingsOf, renamedFindingsOf } from './annotations.ts';
 import { arrayFindingsOf, recordFindingsOf, tupleFindingsOf } from './collections.ts';
 import { numberFindingsOf, stringFindingsOf } from './constraints.ts';
@@ -28,9 +34,14 @@ export type EndpointPlace = { readonly position: EndpointPosition; readonly at: 
 /**
  * A place with the pairs a `ref` already led to within its root schema, one map shared by every
  * place in it: a `ref` is compared where it sits, and the pair it leads to the first time that
- * pair is met, however many paths reach it.
+ * pair is met, however many paths reach it. Its steps from the site share those of the place it is
+ * inside, so a pair one step further costs one step, however far down it is.
  */
-type EnteredPlace = SchemaPlace & { readonly entered: Entered };
+type EnteredPlace = {
+  readonly position: Position;
+  readonly steps: StepChain;
+  readonly entered: Entered;
+};
 
 /**
  * A pair and how it is met: where a schema is used, or one hop on from a pair holding a `ref`, at
@@ -45,7 +56,8 @@ type Hop = Met & { readonly kind: 'hop' };
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
  * its path, following each `ref` one hop at a time into its Snapshot's defs. A `ref` is compared
  * where it sits, and the pair it leads to the first time that pair is met, so a def used at
- * several paths reports its differences at the first.
+ * several paths reports its differences at the first. A pair holds its steps shared with the pair
+ * it is inside and a difference reads them as a list once.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
@@ -53,7 +65,12 @@ export function schemaDifferencesOf(
   place: SchemaPlace,
 ): readonly Difference[] {
   const differences: Difference[] = [];
-  const levels = [levelOf({ kind: 'use', pair }, defs, { ...place, entered: new Map() })];
+  const entry = {
+    position: place.position,
+    steps: chainDown(undefined, place.at),
+    entered: new Map(),
+  };
+  const levels = [levelOf({ kind: 'use', pair }, defs, entry)];
   for (let level = levels.at(-1); level !== undefined; level = levels.at(-1)) {
     const next = level.findings.next();
     if (next.done === true) {
@@ -66,13 +83,13 @@ export function schemaDifferencesOf(
         differences.push({
           kind: 'schema',
           position: level.place.position,
-          at: [...level.place.at, ...finding.steps],
+          at: stepListOf(chainDown(level.place.steps, finding.steps)),
           shape: finding.shape,
         });
         break;
       case 'inside': {
-        const at = [...level.place.at, ...finding.steps];
-        levels.push(levelOf({ kind: 'use', pair: finding.pair }, defs, { ...level.place, at }));
+        const steps = chainDown(level.place.steps, finding.steps);
+        levels.push(levelOf({ kind: 'use', pair: finding.pair }, defs, { ...level.place, steps }));
         break;
       }
       case 'hop':

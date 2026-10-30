@@ -68,14 +68,26 @@ function rememberedAs(state: State, entered: Entered, answer: Walked): Walked {
  */
 function dropOpenGroup(state: State, entered: Entered, failure: Failed): Walked {
   state.remembered.remember(entered, failure);
-  for (const member of state.open) {
-    const name = defNameOf(member.answer);
-    if (member.index > entered.index && name !== undefined) {
-      state.defById.delete(name);
-      state.remembered.remember(member, failure);
+  let slot = entered.slot + 1;
+  for (let member = state.open[slot]; member !== undefined; member = state.open[slot]) {
+    if (member.droppedThrough !== undefined) {
+      slot = member.droppedThrough;
+      continue;
     }
+    giveFailure(state, member, failure);
+    slot++;
   }
+  entered.droppedThrough = state.open.length;
   return failure;
+}
+
+/** A def still open takes the failure of one that fails inside its group, so its `ref`s report it. */
+function giveFailure(state: State, member: Entered, failure: Failed): void {
+  const name = defNameOf(member.answer);
+  if (name !== undefined) {
+    state.defById.delete(name);
+    state.remembered.remember(member, failure);
+  }
 }
 
 /** The name of the def a remembered answer is a `ref` to, none for a failure. */

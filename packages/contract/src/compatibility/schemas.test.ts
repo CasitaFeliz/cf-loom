@@ -1,7 +1,17 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { growthOf } from '../../test/growth.ts';
+import {
+  type Construct,
+  type Leaf,
+  type Piece,
+  pathTextOf,
+  randomNested,
+} from '../../test/random-places.ts';
+import { seededNext } from '../../test/random-schemas.ts';
 import { publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
+  authorPathOf,
   type Change,
   type ChangeSite,
   type CommandSnapshot,
@@ -27,6 +37,7 @@ import {
   type ServiceSnapshot,
   type ShapeDifference,
   type Snapshot,
+  type Step,
   type StringNode,
   snapshotPathOf,
   type TaggedNode,
@@ -1332,7 +1343,12 @@ describe('compatibilityReportOf, arrays, records and tuples', () => {
 
 function walkedOf(schema: z.ZodType): SchemaNode {
   const { located } = walkSchemas(
-    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    [
+      {
+        at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: undefined },
+        schema,
+      },
+    ],
     () => undefined,
   );
   const [first] = located;
@@ -1753,7 +1769,12 @@ const aliasRows: readonly Row[] = [
 /** A schema as `generate` writes it, with the defs its `ref`s name. */
 function walkedWithDefsOf(schema: z.ZodType): { readonly node: SchemaNode; readonly defs: Defs } {
   const walked = walkSchemas(
-    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    [
+      {
+        at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: undefined },
+        schema,
+      },
+    ],
     () => undefined,
   );
   const [first] = walked.located;
@@ -2385,6 +2406,246 @@ describe('compatibilityReportOf, depth', () => {
     expect(snapshotPathsOf(report.changes)).toEqual([
       changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
     ]);
+  });
+});
+
+describe('compatibilityReportOf, a long chain of ids', () => {
+  const sizes = { small: 2_000, large: 16_000 };
+
+  /**
+   * How many times longer a check of a shape eight times as large may take: about 8 for a check
+   * that reads each part once, and 64 for one that copies the steps down to a part at each part.
+   */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  /** `count` defs, each an object on a cycle of its own that holds the one before it by `next`, and the first holds a string. */
+  function aChainOf(count: number, descriptionOf: (index: number) => string): Defs {
+    const entries: [string, SchemaNode][] = [];
+    for (let index = 0; index < count; index++) {
+      const next = index === 0 ? aString : aRef(`link${index - 1}`);
+      const link = anObject({
+        self: optional(aRef(`link${index}`)),
+        next: required(next),
+      });
+      entries.push([`link${index}`, { ...link, description: descriptionOf(index) }]);
+    }
+    return Object.fromEntries(entries);
+  }
+
+  /** The check of a chain of `count` defs, as an organization's Definitions Package declares it, against its Baseline. */
+  function checkOfChain(proposedDescriptionOf: (index: number) => string) {
+    return (count: number) => {
+      const top = aRef(`link${count - 1}`);
+      const baseline = shared.baseline(
+        top,
+        aChainOf(count, () => 'a'),
+      );
+      const proposed = shared.proposed(top, aChainOf(count, proposedDescriptionOf));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  test('a chain of ids, each on a cycle of its own, is checked in time that grows with its length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkChain = checkOfChain(() => 'a');
+
+    const report = checkChain(sizes.large)();
+    const growth = growthOf(checkChain, sizes, linearGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a description changed in the innermost def of a chain is one Change, at its depth, in time that grows with the chain', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
+
+    const report = checkChain(sizes.large)();
+    const growth = growthOf(checkChain, sizes, linearGrowth);
+
+    const atInnermostDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atInnermostDef)),
+    ]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('an object of many fields, each changed, is checked in time that grows with their number', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkFields = (count: number) => {
+      const fieldsOf = (description: string) =>
+        anObject(
+          Object.fromEntries(
+            Array.from({ length: count }, (_, index) => [
+              `field${index}`,
+              required({ type: 'string', description }),
+            ]),
+          ),
+        );
+      const baseline = shared.baseline(fieldsOf('a'), noDefs);
+      const proposed = shared.proposed(fieldsOf('b'), noDefs);
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkFields(sizes.large)();
+    const growth = growthOf(checkFields, sizes, linearGrowth);
+
+    expect(report.changes).toHaveLength(sizes.large);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a def that many fields reach, changed, is one Change, at the first field, in time that grows with their number', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkFields = (count: number) => {
+      const fields = Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`field${index}`, required(aRef('money'))]),
+      );
+      const defsOf = (description: string): Defs => ({ money: { type: 'string', description } });
+      const baseline = shared.baseline(anObject(fields), defsOf('a'));
+      const proposed = shared.proposed(anObject(fields), defsOf('b'));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkFields(sizes.large)();
+    const growth = growthOf(checkFields, sizes, linearGrowth);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(
+        shared,
+        found(annotationChanged('description'), neutralEverywhere, ['fields', 'field0']),
+      ),
+    ]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+});
+
+describe('compatibilityReportOf, the steps of a Change in random nested schemas', () => {
+  const seedCount = 1_000;
+
+  /** What a plain union's options and a tuple's items are reported at: the node, not a step in it. */
+  const reportedWhole: readonly Construct[] = ['index', 'option'];
+
+  /** An object that gains an optional `y` when proposed, on a cycle of its own when it has an id. */
+  function anObjectGainingY(proposed: boolean, id: string | undefined): z.ZodType {
+    const fields = proposed ? { x: z.string(), y: z.string().optional() } : { x: z.string() };
+    if (id === undefined) {
+      return z.object(fields);
+    }
+    const cycle: z.ZodType = z
+      .object({
+        ...fields,
+        get again() {
+          return cycle.optional();
+        },
+      })
+      .meta({ id });
+    return cycle;
+  }
+
+  /**
+   * One random schema drawn twice from a seed, whose every leaf is an object that gains `y`, and a
+   * string whose description changes where it is a record's key.
+   */
+  function aRandomPair(seed: number, hasIds: boolean) {
+    const draw = (proposed: boolean) => {
+      let leafCount = 0;
+      const leaf = (crossing: readonly Construct[]) =>
+        crossing.at(-1) === 'key'
+          ? z.string().describe(proposed ? 'b' : 'a')
+          : anObjectGainingY(proposed, hasIds ? `leaf${leafCount++}` : undefined);
+      return randomNested({ next: seededNext(seed), leaf, keysHoldLeaves: true }, 5);
+    };
+    return { baseline: draw(false), proposed: draw(true) };
+  }
+
+  /**
+   * Where the Change of a leaf is reported, from the steps the generator recorded for it: after the
+   * place's own, at `y` for an object that gains one, without an intersection's `[i]` since its
+   * objects are one, and, across a plain union's option or a tuple's item, at the node before it.
+   */
+  function reportedAtOf(place: Place, leaf: Leaf) {
+    const crossed = leaf.crossing.filter((construct) => construct !== 'optional');
+    const constructs = crossed.map((construct, index) => ({ construct, piece: leaf.steps[index] }));
+    const wholeAt = constructs.findIndex(({ construct }) => reportedWhole.includes(construct));
+    const isWhole = wholeAt !== -1;
+    const above = isWhole ? constructs.slice(0, wholeAt) : constructs;
+    const written = above.filter(({ construct }) => construct !== 'intersection');
+    const placeSteps = place.root.map(
+      (segment): Piece => ({ text: String(segment), isField: true }),
+    );
+    const gainsY = !isWhole && leaf.crossing.at(-1) !== 'key';
+    const added: readonly Piece[] = gainsY ? [{ text: 'y', isField: true }] : [];
+    const pieces = [...placeSteps, ...written.flatMap(({ piece }) => piece ?? []), ...added];
+    return { path: pathTextOf(pieces), isWhole, gainsY };
+  }
+
+  function stepsOf({ difference }: Change): readonly Step[] {
+    return 'at' in difference ? difference.at : [];
+  }
+
+  /** A random pair compared at one of the places, hopping through a `ref` at each leaf in half of the draws. */
+  function aDraw(seed: number) {
+    const place = places[seed % places.length] ?? input;
+    const hasIds = Math.floor(seed / places.length) % 2 === 0;
+    const { baseline, proposed } = aRandomPair(seed, hasIds);
+    const from = walkedWithDefsOf(baseline.schema);
+    const to = walkedWithDefsOf(proposed.schema);
+    const report = comparedOf(
+      place.baseline(from.node, from.defs),
+      place.proposed(to.node, to.defs),
+    );
+    const drawn = baseline.leaves.map((leaf) => reportedAtOf(place, leaf));
+    const walkedDefs = Object.keys(from.defs).length > 0;
+    return { place, walkedDefs, report, drawn };
+  }
+
+  test('every Change sits at the steps its leaf was drawn at, after the place’s own', () => {
+    const wrong: string[] = [];
+    const kinds = new Set<string>();
+    let deepestOwnSteps = 0;
+    let changesAtNodes = 0;
+    let changesThroughRefs = 0;
+
+    for (let seed = 1; seed <= seedCount; seed++) {
+      const { place, walkedDefs, report, drawn } = aDraw(seed);
+
+      const expected = [...new Set(drawn.map(({ path }) => path))].sort();
+      const reported = report.changes.map((change) => authorPathOf(stepsOf(change)) ?? '').sort();
+      if (JSON.stringify(reported) !== JSON.stringify(expected)) {
+        wrong.push(
+          `seed ${seed} in ${place.name}: ${reported.join(' ')} not ${expected.join(' ')}`,
+        );
+      }
+      for (const { kind } of report.changes.flatMap(stepsOf)) {
+        kinds.add(kind);
+      }
+      for (const change of report.changes) {
+        deepestOwnSteps = Math.max(deepestOwnSteps, stepsOf(change).length - place.root.length);
+      }
+      changesAtNodes += drawn.filter(({ isWhole }) => isWhole).length;
+      changesThroughRefs += walkedDefs ? drawn.filter(({ gainsY }) => gainsY).length : 0;
+    }
+
+    expect(wrong).toEqual([]);
+    expect([...kinds].sort()).toEqual([
+      'field',
+      'items',
+      'key',
+      'part',
+      'rest',
+      'value',
+      'variant',
+    ]);
+    expect(deepestOwnSteps).toBeGreaterThanOrEqual(2);
+    expect(changesAtNodes).toBeGreaterThan(0);
+    expect(changesThroughRefs).toBeGreaterThan(0);
   });
 });
 

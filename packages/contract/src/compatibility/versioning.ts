@@ -5,8 +5,8 @@ import type { Change, ComparedReport } from './report.ts';
 const bumpsInOrder = ['unchanged', 'patch', 'minor', 'major'] as const;
 
 /**
- * The bump a publish takes: the highest of its Changes' classes, Private and refused ones capped at
- * patch, and of the peer rule; `unchanged` with no Change and no peer range moved.
+ * The bump a publish takes: the highest of its Changes' classes, Private ones capped at patch, and
+ * of the peer rule; `unchanged` with no Change and no peer range moved.
  */
 export function versionBumpOf(report: ComparedReport, peers: PeerMove): VersionBump | 'unchanged' {
   return higherOf(changesBumpOf(report.changes), peerBumpOf(peers));
@@ -25,12 +25,9 @@ function higherOf<Bump extends (typeof bumpsInOrder)[number]>(left: Bump, right:
   return bumpsInOrder.indexOf(left) >= bumpsInOrder.indexOf(right) ? left : right;
 }
 
-/**
- * A refused Change never bumps past patch, since `publish` refuses it first; nor does one on a
- * Private site, which no Consumer reads.
- */
-function bumpOf({ site, class: changeClass, verdict }: Change): VersionBump {
-  if (verdict === 'refused' || site.visibility === 'private') {
+/** A Change on a Private site never bumps past patch: no Consumer reads it. */
+function bumpOf({ site, class: changeClass }: Change): VersionBump {
+  if (site.visibility === 'private') {
     return 'patch';
   }
   switch (changeClass) {
