@@ -225,7 +225,7 @@ describe('lint plugins', () => {
     ]);
     expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 
   it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {
@@ -254,7 +254,7 @@ describe('lint plugins', () => {
     ]);
     expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 
   it('report an Error’s message that is neither a literal nor unbrokenLineOf or linesTextOf, AggregateError’s and super’s included, but not the CLI, a test file or the line module (C1)', () => {
@@ -305,6 +305,6 @@ describe('lint plugins', () => {
     ]);
     expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/client/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
   });
 });

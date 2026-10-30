@@ -3,7 +3,7 @@ language js
 predicate library_source() {
   $filename <: r".*/packages/(?:contract|handlers|messaging|server|client|testing)/src/.*",
   $filename <: not r".*\.test\.ts",
-  $filename <: not r".*/packages/contract/src/written/line\.ts"
+  $filename <: not r".*/packages/contract/src/lines/line\.ts"
 }
 
 pattern written_message() {
