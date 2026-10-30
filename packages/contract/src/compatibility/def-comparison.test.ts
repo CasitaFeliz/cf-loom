@@ -36,13 +36,6 @@ type Node = {
   nullable?: unknown;
   options?: unknown;
   items?: unknown;
-  fields?: unknown;
-  variants?: unknown;
-  key?: unknown;
-  value?: unknown;
-  rest?: unknown;
-  schema?: unknown;
-  values?: unknown;
   [key: string]: unknown;
 };
 type Neutral = 'description' | 'examples' | 'origin';
@@ -107,6 +100,33 @@ const serviceHeading = {
 /** The seeded pairs of def graphs every test over a seeded graph draws from. */
 const pairs = Array.from({ length: 3_000 }, (_, seed) => defPairOf(seed));
 
+/** An active Endpoint that reads and answers nothing, with `fields` over its defaults. */
+function anEndpoint(
+  fields: Partial<EndpointFields> = {},
+): EndpointFields & { readonly lifecycle: 'active' } {
+  return {
+    name: 'getOrder',
+    group: 'orders',
+    visibility: 'public',
+    description: 'One order',
+    params: [],
+    guards: [],
+    input: { params: null, query: emptyPart, headers: emptyPart, body: null },
+    success: { status: 200, headers: emptyPart, body: null },
+    rejections: [],
+    ...fields,
+    lifecycle: 'active',
+  };
+}
+
+/** An active Endpoint with the given bodies for its Input and its Success. */
+function anEndpointReading(input: SchemaNode | null, success: SchemaNode | null) {
+  return anEndpoint({
+    input: { params: null, query: emptyPart, headers: emptyPart, body: input },
+    success: { status: 200, headers: emptyPart, body: success },
+  });
+}
+
 /** The Baseline and the proposed Snapshot of a Definitions Package that exports each def in its wrapper. */
 function snapshotsOf(pair: DefPair) {
   const held = Object.entries(pair.exports);
@@ -136,7 +156,7 @@ function isNode(value: Json): value is Node {
   );
 }
 
-function isRecordValue(value: Json): value is Node {
+function isRecordValue(value: Json): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -200,17 +220,19 @@ function nodesPlacedIn(node: Json): Json[] {
   if (!isRecordValue(node)) {
     return [];
   }
-  const fields = Object.values(isRecordValue(node.fields) ? node.fields : {});
-  const variants = Object.values(isRecordValue(node.variants) ? node.variants : {});
-  const lists = [node.items, node.options].flatMap((list) => (Array.isArray(list) ? list : []));
+  const fields = Object.values(isRecordValue(node['fields']) ? node['fields'] : {});
+  const variants = Object.values(isRecordValue(node['variants']) ? node['variants'] : {});
+  const lists = [node['items'], node['options']].flatMap((list) =>
+    Array.isArray(list) ? list : [],
+  );
   const held = [
-    ...fields.map((field) => (isRecordValue(field) ? field.schema : undefined)),
+    ...fields.map((field) => (isRecordValue(field) ? field['schema'] : undefined)),
     ...variants,
     ...lists,
-    node.items,
-    node.key,
-    node.value,
-    node.rest,
+    node['items'],
+    node['key'],
+    node['value'],
+    node['rest'],
   ];
   return held.filter(isRecordValue);
 }
@@ -419,7 +441,7 @@ describe('compatibilityReportOf, a plain union, a tuple or an allOf over a seede
       const proposedExports = exportsOf(pair).map((held) => held.proposed);
       const nodes = placedNodesIn([...Object.values(pair.proposed), ...proposedExports]);
       return nodes
-        .filter((node) => !isRecordValue(node) || !types.includes(node.type))
+        .filter((node) => !isRecordValue(node) || !types.includes(node['type']))
         .map((node) => `draw ${seed} (${pair.edit}): ${textOf(node, false)}`);
     });
 
@@ -494,21 +516,6 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
     return { origin: 'local', status: 409, message: 'Locked', headers: emptyPart, body, ...fields };
   }
 
-  function anEndpoint(rejections: readonly string[]): EndpointFields & { lifecycle: 'active' } {
-    return {
-      name: 'getOrder',
-      group: 'orders',
-      visibility: 'public',
-      description: 'One order',
-      params: [],
-      guards: [],
-      input: { params: null, query: emptyPart, headers: emptyPart, body: null },
-      success: { status: 200, headers: emptyPart, body: null },
-      rejections,
-      lifecycle: 'active',
-    };
-  }
-
   /**
    * A Service whose Baseline holds a kept code and a removed one with defs of its own, the
    * removed one declared again, and the codes' changes the Check finds.
@@ -524,13 +531,13 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
       ...publishedAt('3.4.0'),
       formerInputs: [],
       defs: { tree: defs.baseline },
-      endpoints: { [identity]: anEndpoint([taken]) },
+      endpoints: { [identity]: anEndpoint({ rejections: [taken] }) },
       codes: { [gone]: removed, [taken]: aCode() },
     };
     const proposed: ServiceSnapshot = {
       ...serviceHeading,
       defs: { tree: defs.proposed },
-      endpoints: { [identity]: anEndpoint([gone, taken]) },
+      endpoints: { [identity]: anEndpoint({ rejections: [gone, taken] }) },
       codes: { [gone]: aCode(), [taken]: aCode() },
     };
     return compatibilityReportOf(baseline, proposed).changes.filter(
@@ -744,15 +751,7 @@ function servicesOf(pair: DefPair) {
     bodies: { readonly input: SchemaNode; readonly success: SchemaNode },
     retiredIn: object,
   ): EndpointSnapshot => ({
-    name: 'getOrder',
-    group: 'orders',
-    visibility: 'public',
-    description: 'One order',
-    params: [],
-    guards: [],
-    input: { params: null, query: emptyPart, headers: emptyPart, body: bodies.input },
-    success: { status: 200, headers: emptyPart, body: bodies.success },
-    rejections: [],
+    ...anEndpointReading(bodies.input, bodies.success),
     lifecycle: 'retired',
     ...retiredIn,
   });
@@ -937,11 +936,8 @@ function isConstrainedType(type: unknown): type is ConstrainedType {
 function constrainedDefsOf(defs: Defs, seed: number): Defs {
   const next = seededNext(seed);
   const copy = structuredClone(defs);
-  const keys = new Set(
-    nodesIn(copy).map((node) => (node.type === 'record' ? node.key : undefined)),
-  );
   for (const node of nodesIn(copy)) {
-    if (isConstrainedType(node.type) && !keys.has(node)) {
+    if (isConstrainedType(node.type)) {
       for (const [attribute, values] of Object.entries(attributeValues[node.type])) {
         if (node.type === 'enum' || next() < 0.5) {
           node[attribute] = drawFrom(values, next);
@@ -968,8 +964,8 @@ describe('compatibilityReportOf, a def compared with a copy of itself, over a se
     const enums = nodes.filter((node) => node.type === 'enum');
     const mixedEnums = enums.filter(
       (node) =>
-        new Set(Array.isArray(node.values) ? node.values.map((value) => typeof value) : []).size >
-        1,
+        new Set(Array.isArray(node['values']) ? node['values'].map((value) => typeof value) : [])
+          .size > 1,
     );
 
     for (const [fact, count] of Object.entries(facts)) {
@@ -982,20 +978,8 @@ describe('compatibilityReportOf, a def compared with a copy of itself, over a se
   /** A Definitions Package that exports every def as it is written, and a Service whose Endpoints take and answer it. */
   function snapshotsOf(defs: Defs, nodes: readonly SchemaNode[]) {
     const exported = Object.fromEntries(nodes.map((node, index) => [`inline${index}`, node]));
-    const endpoint = (body: SchemaNode): EndpointFields & { lifecycle: 'active' } => ({
-      name: 'getOrder',
-      group: 'orders',
-      visibility: 'public',
-      description: 'One order',
-      params: [],
-      guards: [],
-      input: { params: null, query: emptyPart, headers: emptyPart, body },
-      success: { status: 200, headers: emptyPart, body },
-      rejections: [],
-      lifecycle: 'active',
-    });
     const endpoints = Object.fromEntries(
-      nodes.map((node, index) => [`GET /inline${index}`, endpoint(node)]),
+      nodes.map((node, index) => [`GET /inline${index}`, anEndpointReading(node, node)]),
     );
     const definitions: DefinitionsSnapshot = {
       ...definitionsHeading,
