@@ -10,17 +10,17 @@ import {
   refusalsIn,
 } from './walked.ts';
 
-/** Where the walk's records stood when a schema was entered: what comes after was raised inside it. */
-export type Start = {
-  readonly raised: number;
-  readonly compositions: number;
-  readonly reaches: number;
-};
+/**
+ * Where the walk's records stood when a schema was entered: what is above it and unclaimed when
+ * the schema closes was raised or reached inside it.
+ */
+export type Start = { readonly raised: number; readonly reaches: number };
 
 /**
  * What the walk records of the schemas it answers from memory: every place each is reached, and
  * which of them each refusal and composition was raised inside, so the fold tells each at the
- * places that schema is reached.
+ * places that schema is reached; each is claimed once, by the innermost remembered schema whose
+ * walk it was raised or reached in.
  */
 export type Memos = {
   /** A remembered schema reached at a place, its first entry aside. */
@@ -40,10 +40,14 @@ type State = {
   /** The reaches of a schema whose walk has not closed yet, which its memo takes when it does. */
   readonly earlyReaches: Map<core.$ZodType, Reach[]>;
   readonly memoOf: Map<NotAllowed, Memo>;
+  /** The refusals and compositions no remembered schema has claimed yet, the latest on top. */
   readonly raised: NotAllowed[];
   readonly logged: Set<NotAllowed | FailureTree>;
+  /** The reaches no remembered schema has claimed yet, the latest on top. */
   readonly reaches: Reach[];
   readonly compositions: readonly Composition[];
+  /** How many of the compositions are on `raised`. */
+  absorbed: number;
 };
 
 /** The records of one walk, which reads the compositions it builds as they grow. */
@@ -56,15 +60,12 @@ export function startMemos(compositions: readonly Composition[]): Memos {
     logged: new Set(),
     reaches: [],
     compositions,
+    absorbed: 0,
   };
   return {
     reached: (schema, at) => reached(state, schema, at),
     raised: (tree) => logRaised(state, tree),
-    start: () => ({
-      raised: state.raised.length,
-      compositions: compositions.length,
-      reaches: state.reaches.length,
-    }),
+    start: () => startedAt(state),
     close: (closed, start) => close(state, closed, start),
     forget: (schema) => {
       state.memoBySchema.delete(schema);
@@ -94,25 +95,36 @@ function logRaised(state: State, tree: FailureTree): void {
   }
 }
 
+function startedAt(state: State): Start {
+  absorbCompositions(state);
+  return { raised: state.raised.length, reaches: state.reaches.length };
+}
+
+/** The compositions the walk built since the last call join the refusals, in the order they were built. */
+function absorbCompositions(state: State): void {
+  for (; state.absorbed < state.compositions.length; state.absorbed++) {
+    const composition = state.compositions[state.absorbed];
+    if (composition !== undefined) {
+      state.raised.push(composition.refusal);
+    }
+  }
+}
+
 /**
- * A remembered schema's memo is made where its walk entered it; it keeps what was raised during
- * that walk that no schema inside it already keeps, and the reaches made during it; then its own
- * entry is one reach of it, for the schema around it.
+ * A remembered schema's memo is made where its walk entered it; it claims what was raised during
+ * that walk and the reaches made during it that no schema inside it claimed, then its own entry
+ * is one reach of it, for the schema around it.
  */
 function close(state: State, closed: ReachedSchema, start: Start): void {
   const memo: Memo = { at: closed.at, reaches: state.earlyReaches.get(closed.schema) ?? [] };
   state.memoBySchema.set(closed.schema, memo);
   state.earlyReaches.delete(closed.schema);
-  const built = state.compositions.slice(start.compositions).map(({ refusal }) => refusal);
-  for (const refusal of [...state.raised.slice(start.raised), ...built]) {
-    if (!state.memoOf.has(refusal)) {
-      state.memoOf.set(refusal, memo);
-    }
+  absorbCompositions(state);
+  for (const refusal of state.raised.splice(start.raised)) {
+    state.memoOf.set(refusal, memo);
   }
-  for (const reach of state.reaches.slice(start.reaches)) {
-    if (reach.within === undefined) {
-      reach.within = memo;
-    }
+  for (const reach of state.reaches.splice(start.reaches)) {
+    reach.within = memo;
   }
   reached(state, closed.schema, closed.at);
 }
