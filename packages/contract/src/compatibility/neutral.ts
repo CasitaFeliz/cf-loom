@@ -4,19 +4,16 @@ import type {
   EndpointSnapshot,
   EventSnapshot,
   GuardSnapshot,
-  MessageTombstone,
 } from '../snapshot/index.ts';
 import { canonicalJson, type SchemaNode } from '../walker/index.ts';
-import { reachesOnlyUnchanged } from './def-comparison.ts';
+import { isSameReaching } from './def-comparison.ts';
 import type { BothDefs } from './findings.ts';
-import { type Compared, comparedShapesOf, type Pair, retiredShapesOf } from './pairs.ts';
+import { comparedShapesOf, type Pair } from './pairs.ts';
 import type { Difference } from './report.ts';
+import { retiredDifferencesOf } from './retired-declarations.ts';
 
 /** What an Element or a Subscription says of itself besides its shapes: its description and Group. */
 type Described = { readonly description: string; readonly group: string };
-
-/** What an Element Retired in the proposed Snapshot may still declare. */
-type Declaration = EndpointSnapshot | EventSnapshot | CommandSnapshot;
 
 /** Whether two values differ in their canonical JSON, so the order of keys is no difference. */
 function differ(left: unknown, right: unknown): boolean {
@@ -155,36 +152,6 @@ function originDifferencesOf(
   return [{ kind: 'origin-changed', from: baseline.origin, to: proposed.origin }];
 }
 
-/**
- * Whether an Element Retired in the proposed Snapshot declares anything the Baseline's declaration
- * did not, the defs it reaches included; nothing reads it, so no other rule compares it.
- */
-function retiredDifferencesOf(pair: Pair<Declaration>, defs: BothDefs): readonly Difference[] {
-  const compared = retiredShapesOf(pair);
-  if (compared === undefined) {
-    return [];
-  }
-  const declared = {
-    baseline: declaredOf(compared.baseline),
-    proposed: declaredOf(compared.proposed),
-  };
-  return isSameReaching(declared, nodesOf(compared.baseline), defs)
-    ? []
-    : [{ kind: 'retired-changed' }];
-}
-
-/**
- * Whether two values are the same canonical text and every def their schema nodes reach is the
- * same on both sides; the nodes are the Baseline's, whose `ref`s the proposed one writes alike.
- */
-function isSameReaching(
-  { baseline, proposed }: Compared<unknown>,
-  nodes: readonly SchemaNode[],
-  defs: BothDefs,
-): boolean {
-  return !differ(baseline, proposed) && reachesOnlyUnchanged(nodes, defs);
-}
-
 /** Whether two schemas, or none, are the same text and reach the same defs. */
 function isSameNode(
   baseline: SchemaNode | null,
@@ -192,38 +159,4 @@ function isSameNode(
   defs: BothDefs,
 ): boolean {
   return isSameReaching({ baseline, proposed }, baseline === null ? [] : [baseline], defs);
-}
-
-/** What moves with an Element's lifecycle, which the lifecycle's own Change already reports. */
-const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'] as const satisfies readonly (
-  | keyof EndpointSnapshot
-  | keyof MessageTombstone
-)[];
-
-/** A declaration without the history the Baseline keeps of it. */
-function declaredOf(declaration: Declaration): unknown {
-  const declared = Object.entries(declaration).filter(
-    ([key]) => !historyKeys.some((history) => history === key),
-  );
-  return Object.fromEntries(declared);
-}
-
-function nodesOf(declaration: Declaration): readonly SchemaNode[] {
-  if (!('input' in declaration)) {
-    return [declaration.body];
-  }
-  const { input, success } = declaration;
-  const nodes = [
-    input.params,
-    input.query,
-    input.headers,
-    input.body,
-    success.headers,
-    success.body,
-  ];
-  return nodes.filter(isNode);
-}
-
-function isNode(node: SchemaNode | null): node is SchemaNode {
-  return node !== null;
 }
