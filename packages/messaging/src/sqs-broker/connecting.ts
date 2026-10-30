@@ -74,7 +74,7 @@ export function topicArnOf(place: Place, name: string): string {
 }
 
 /** The lines refusing an account that is not 12 digits, which only untyped code can pass; whether it is the clients' own is AWS's to answer. */
-function accountLinesOf(account: unknown): readonly string[] {
+export function accountLinesOf(account: unknown): readonly string[] {
   const isAccount = typeof account === 'string' && /^\d{12}$/.test(account);
   return isAccount
     ? []

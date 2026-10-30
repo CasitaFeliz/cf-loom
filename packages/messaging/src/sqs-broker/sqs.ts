@@ -7,7 +7,13 @@ import {
   planRemedy,
   type ServiceStream,
 } from '../broker/index.ts';
-import { type Place, placeOf, type SqsConnecting, topicArnOf } from './connecting.ts';
+import {
+  accountLinesOf,
+  type Place,
+  placeOf,
+  type SqsConnecting,
+  topicArnOf,
+} from './connecting.ts';
 import { sqsConnectionOf } from './sqs-connection.ts';
 import { isTopic } from './topic-exists.ts';
 
@@ -17,6 +23,10 @@ export type SqsBrokerOptions = SqsConnecting & BrokerPrefixed;
 /** A Broker on SNS/SQS: each `messaging()` starts only once the Service's SNS topic exists, and `consume` receives from each Durable consumer's SQS queue, through the organization's clients, which cf-loom never destroys. */
 export function sqs<const Given = unknown>(options: Closed<Given, SqsBrokerOptions>): Broker {
   const prefix = checkedPrefixOf(options.prefix);
+  const accountLines = accountLinesOf(options.account);
+  if (accountLines.length > 0) {
+    throw new Error(accountLines.join('\n'));
+  }
   return {
     connect: async (serviceStream) => {
       const place = await locatedBy(options);

@@ -78,4 +78,15 @@ describe('sqs()', () => {
 
     await expect(opening).resolves.toBeDefined();
   });
+
+  test.each(['1234', '12345678901a', ' 123456789012', '1234567890123', ''])(
+    'sqs() refuses the account "%s", which is not 12 digits, naming it, before any call to AWS',
+    (account) => {
+      const connecting = anAwsConnecting(moto.url);
+
+      const broker = () => sqs({ ...connecting, account });
+
+      expect(broker).toThrow(`connecting.account '${account}' is not a 12-digit AWS account id`);
+    },
+  );
 });
