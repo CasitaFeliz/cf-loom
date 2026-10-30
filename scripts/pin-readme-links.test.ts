@@ -109,6 +109,15 @@ describe('pinnedReadme', () => {
       '[names](https://fetch.spec.whatwg.org/#forbidden-request-header) and [docs](https://zod.dev/api)',
     ],
     [
+      'reference definitions, HTML links and images with a scheme or an anchor',
+      [
+        '[rule]: https://zod.dev/api',
+        '[top]: #contents',
+        '<a href="https://fetch.spec.whatwg.org/">x</a> <a href="#top">y</a>',
+        '<img src="https://img.shields.io/npm/v/x.svg">',
+      ].join('\n'),
+    ],
+    [
       'prose and code with no repository reference',
       'Run `cf-loom verify`.\n\n```ts\nconst a = pinned(1);\n```',
     ],
@@ -159,6 +168,12 @@ describe('pinnedReadme', () => {
     ['a relative link up', '[x](../../COMPATIBILITY.md)'],
     ['a relative link here', '[x](./COMPATIBILITY.md)'],
     ['a relative link by name', '[x](COMPATIBILITY.md#rules)'],
+    ['a relative link target with a title', '[x](../a.md "the rule")'],
+    ['a relative reference definition', '[rule]: ../../COMPATIBILITY.md#rules'],
+    ['a relative reference definition in angle brackets', '  [rule]: <./COMPATIBILITY.md>'],
+    ['a reference definition at main', `[rule]: ${atMain}/CONTEXT.md`],
+    ['a relative HTML href', '<a href="../../COMPATIBILITY.md">x</a>'],
+    ['a relative HTML src', "<img alt='' src='./diagram.png'>"],
   ])('refuses %s, naming its line', (_form, offending) => {
     const readme = [`[ok](${atMain}/CONTEXT.md)`, '', offending].join('\n');
 

@@ -12,6 +12,28 @@ function linkAtMain(repository: string): RegExp {
   return new RegExp(`(\\]\\(${target})main(/[^)\\s]+\\))`, 'g');
 }
 
+/** Where a README gives a link target: an inline link, a reference definition and an HTML attribute. */
+const linkTargets = [
+  /\]\(\s*<?([^)\s>]*)/g,
+  /^\s{0,3}\[[^\]]+\]:\s*<?([^\s>]+)/g,
+  /\b(?:href|src)\s*=\s*["']?([^"'\s>]*)/gi,
+];
+
+const absoluteOrAnchor = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
+
+/** The first link target of a line with no scheme that is not an anchor, or `undefined` when there is none. */
+function relativeTargetIn(line: string): string | undefined {
+  for (const pattern of linkTargets) {
+    for (const match of line.matchAll(pattern)) {
+      const target = match[1] ?? '';
+      if (!absoluteOrAnchor.test(target)) {
+        return target;
+      }
+    }
+  }
+  return undefined;
+}
+
 /** What is wrong with a line once its links to a file at `main` are removed, or `undefined` when nothing is. */
 function problemOf(restOfLine: string, repository: string): string | undefined {
   const reference = new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i');
@@ -19,9 +41,9 @@ function problemOf(restOfLine: string, repository: string): string | undefined {
     const form = `https://github.com/${repository}/blob/main/<path>`;
     return `a reference to ${repository} that is not a link target ${form}`;
   }
-  const relative = /\]\((?![a-z][a-z0-9+.-]*:|#)[^)\s]*\)/i.exec(restOfLine);
-  if (relative !== null) {
-    return `${relative[0]} is a link target with no scheme that is not an anchor`;
+  const target = relativeTargetIn(restOfLine);
+  if (target !== undefined) {
+    return `the link target "${target}" has no scheme and is not an anchor`;
   }
   return undefined;
 }
