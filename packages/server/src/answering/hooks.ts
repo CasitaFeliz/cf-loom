@@ -26,7 +26,8 @@ export type FaultedBy = Pick<ServedFault, 'declaration' | 'name' | 'guard'>;
 
 /**
  * One request answered, for metrics and tracing: its method, and the Endpoint it matched with that
- * Endpoint's path as declared, or neither when none matched.
+ * Endpoint's path as declared, or neither when none matched. It is built before the response is
+ * written, so it records what `serve` answered even when the write fails.
  */
 export type AnsweredRequest = {
   /** The HTTP status sent. */

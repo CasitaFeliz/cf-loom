@@ -1,0 +1,875 @@
+import { type AddressInfo, connect } from 'node:net';
+import { Writable } from 'node:stream';
+import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
+import { admit, handle, success } from '@cf-loom/handlers';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyPluginAsync,
+  type FastifyServerOptions,
+} from 'fastify';
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import { z } from 'zod';
+import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
+import { type AnsweredRequest, serve } from '../index.ts';
+import { nodeHttp } from '../node-http/index.ts';
+import { fastifyServe } from './index.ts';
+
+const apiKey = defineGuard({
+  name: 'apiKey',
+  description: 'A key per Caller',
+  demands: { headers: z.object({ 'x-api-key': z.string() }) },
+  context: z.object({ callerId: z.string() }),
+});
+
+const createOrder = defineEndpoint({
+  name: 'createOrder',
+  method: 'POST',
+  path: '/orders',
+  visibility: 'public',
+  description: 'A new order',
+  guards: [apiKey],
+  input: { body: z.object({ quantity: z.int() }) },
+  success: {
+    status: 201,
+    headers: z.object({ 'x-order-count': z.int() }),
+    body: z.object({ quantity: z.int(), by: z.string() }),
+  },
+});
+
+const describeOrders = defineEndpoint({
+  name: 'describeOrders',
+  method: 'OPTIONS',
+  path: '/orders',
+  visibility: 'public',
+  description: 'What an order takes',
+  success: { status: 204 },
+});
+
+const getSummary = defineEndpoint({
+  name: 'getSummary',
+  method: 'GET',
+  path: '/orders/summary',
+  visibility: 'public',
+  description: 'How many orders there are',
+  success: { status: 200, body: z.object({ count: z.int() }) },
+});
+
+const getOrder = defineEndpoint({
+  name: 'getOrder',
+  method: 'GET',
+  path: '/orders/:orderId',
+  visibility: 'public',
+  description: 'One order',
+  input: { params: z.object({ orderId: z.string() }) },
+  success: { status: 200, body: z.object({ id: z.string() }) },
+});
+
+const noteOrder = defineEndpoint({
+  name: 'noteOrder',
+  method: 'POST',
+  path: '/notes',
+  visibility: 'public',
+  description: 'A note on an order, with no Guard',
+  input: { body: z.object({ text: z.string() }) },
+  success: { status: 200, body: z.object({ text: z.string() }) },
+});
+
+const greet = defineEndpoint({
+  name: 'greet',
+  method: 'GET',
+  path: '/greet',
+  visibility: 'public',
+  description: 'Greets by name',
+  input: { query: z.object({ name: z.string() }) },
+  success: { status: 204, headers: z.object({ 'x-greeted': z.string() }) },
+});
+
+const getReport = defineEndpoint({
+  name: 'getReport',
+  method: 'GET',
+  path: '/report',
+  visibility: 'public',
+  description: 'A report too large for one socket buffer',
+  success: { status: 200, body: z.object({ data: z.string() }) },
+});
+
+const getLegacy = defineEndpoint({
+  name: 'getLegacy',
+  method: 'GET',
+  path: '/legacy',
+  visibility: 'public',
+  description: 'An Endpoint on its way out',
+  lifecycle: 'deprecated',
+  deprecatedAt: '2026-10-17T09:30:00Z',
+  success: { status: 200, body: z.object({ legacy: z.boolean() }) },
+});
+
+const getOldOrders = defineEndpoint({
+  name: 'getOldOrders',
+  method: 'GET',
+  path: '/old-orders',
+  visibility: 'public',
+  description: 'The old orders',
+  lifecycle: 'retired',
+  success: { status: 204 },
+});
+
+const contract = defineService({
+  name: 'orders-service',
+  groups: [
+    defineGroup({
+      name: 'orders',
+      description: 'Orders',
+      endpoints: [
+        createOrder,
+        describeOrders,
+        getSummary,
+        getOrder,
+        noteOrder,
+        greet,
+        getReport,
+        getLegacy,
+        getOldOrders,
+      ],
+    }),
+  ],
+});
+
+const bigData = 'x'.repeat(16_000_000);
+
+const handlers = {
+  endpoints: {
+    createOrder: handle(createOrder, ({ body }, { context: { apiKey: caller } }) =>
+      success(createOrder, {
+        headers: { 'x-order-count': 1 },
+        body: { ...body, by: caller.callerId },
+      }),
+    ),
+    describeOrders: handle(describeOrders, () => success(describeOrders)),
+    getSummary: handle(getSummary, () => success(getSummary, { count: 3 })),
+    getOrder: handle(getOrder, ({ params }) => success(getOrder, { id: params.orderId })),
+    noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, body)),
+    greet: handle(greet, ({ query }) => success(greet, { headers: { 'x-greeted': query.name } })),
+    getReport: handle(getReport, () => success(getReport, { data: bigData })),
+    getLegacy: handle(getLegacy, () => success(getLegacy, { legacy: true })),
+  },
+  guards: {
+    apiKey: handle(apiKey, ({ headers }) => admit(apiKey, { callerId: headers['x-api-key'] })),
+  },
+};
+
+type Handlers = typeof handlers;
+
+/** The Handler map with the Handlers of some Endpoints replaced. */
+function withEndpoints(replaced: Partial<Handlers['endpoints']>): Handlers {
+  return { ...handlers, endpoints: { ...handlers.endpoints, ...replaced } };
+}
+
+type Served = {
+  readonly app: FastifyInstance;
+  readonly url: string;
+  /** Every request that reached the app's own routes or its not-found handler. */
+  readonly reached: string[];
+};
+
+type Config = {
+  readonly handlers?: Handlers;
+  readonly options?: {
+    readonly maxBodyBytes?: number;
+    readonly onAnswered?: (record: AnsweredRequest) => void;
+  };
+  readonly fastify?: FastifyServerOptions;
+  readonly before?: (app: FastifyInstance, reached: string[]) => void;
+  readonly after?: (app: FastifyInstance, reached: string[]) => void;
+};
+
+const apps: { close(): PromiseLike<unknown> }[] = [];
+const servers: ReturnType<typeof nodeHttp>[] = [];
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  for (const server of servers.splice(0)) {
+    server.close();
+  }
+  await Promise.all(
+    apps.splice(0).map((app) => Promise.resolve(app.close()).catch(() => undefined)),
+  );
+});
+
+/** A Fastify app with its own routes, serving the Contract beside them, listening on a free port. */
+async function served(config: Config = {}): Promise<Served> {
+  const reached: string[] = [];
+  const app = Fastify(config.fastify);
+  apps.push(app);
+  app.get('/healthz', async () => {
+    reached.push('GET /healthz');
+    return 'ok';
+  });
+  app.setNotFoundHandler(async (request, reply) => {
+    reached.push(`${request.method} ${request.url}`);
+    return await reply.code(404).send('app: not found');
+  });
+  config.before?.(app, reached);
+  await app.register(fastifyServe(contract, config.handlers ?? handlers, config.options ?? {}));
+  config.after?.(app, reached);
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const { port } = app.server.address() as AddressInfo;
+  return { app, url: `http://127.0.0.1:${port}`, reached };
+}
+
+/** An app route that answers `answer` and records the request it answered. */
+function answering(reached: string[], answer: string) {
+  return async (request: { readonly method: string; readonly url: string }) => {
+    reached.push(`${request.method} ${request.url}`);
+    return answer;
+  };
+}
+
+/** A node:http server serving the same Contract through nodeHttp, to compare with. */
+async function nodeServed(): Promise<string> {
+  const server = nodeHttp(serve(contract, handlers, {}));
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return `http://127.0.0.1:${port}`;
+}
+
+/** One raw HTTP/1.1 request that asks the server to close the connection after it. */
+function requestText(method: string, target: string, extra = ''): string {
+  return `${method} ${target} HTTP/1.1\r\nHost: test\r\n${extra}Connection: close\r\n\r\n`;
+}
+
+/** A raw response without the `Date`, which is the one thing two answers to a request differ in. */
+function withoutDate(received: string): string {
+  return received.replace(/^Date: .*\r\n/im, '');
+}
+
+function waitFor(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Every uncaught exception the process sees while `during` runs. */
+async function uncaughtDuring(during: () => Promise<void>): Promise<Error[]> {
+  const seen: Error[] = [];
+  const listener = (error: Error) => seen.push(error);
+  process.on('uncaughtException', listener);
+  try {
+    await during();
+  } finally {
+    process.off('uncaughtException', listener);
+  }
+  return seen;
+}
+
+describe('fastifyServe', () => {
+  describe('which requests it takes from Fastify', () => {
+    test('a declared Endpoint is answered by cf-loom inside a Fastify app, and the app’s own route answers beside it', async () => {
+      const { url, reached } = await served();
+
+      const order = await fetch(`${url}/orders/o-1`);
+      const health = await fetch(`${url}/healthz`);
+
+      expect(order.status).toBe(200);
+      expect(await order.json()).toEqual({ id: 'o-1' });
+      expect(await health.text()).toBe('ok');
+      expect(reached).toEqual(['GET /healthz']);
+    });
+
+    test('a request to an undeclared path reaches the app’s not-found handler, and onAnswered records nothing for it', async () => {
+      const records: unknown[] = [];
+      const options = { onAnswered: (record: AnsweredRequest) => void records.push(record) };
+      const { url, reached } = await served({ options });
+
+      const response = await fetch(`${url}/customers`);
+
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe('app: not found');
+      expect(reached).toEqual(['GET /customers']);
+      expect(records).toEqual([]);
+    });
+
+    test('a declared Endpoint is cf-loom’s even when an app route, or a catch-all, has the same method and path', async () => {
+      const { url, reached } = await served({
+        before: (app, marks) => {
+          app.post('/orders', answering(marks, 'app route'));
+          app.get('/orders/:orderId', answering(marks, 'app param route'));
+          app.get('/*', answering(marks, 'app catch-all'));
+        },
+      });
+
+      const created = await fetch(`${url}/orders`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'c-1' },
+        body: JSON.stringify({ quantity: 2 }),
+      });
+      const read = await fetch(`${url}/orders/o-1`);
+      const other = await fetch(`${url}/something-else`);
+
+      expect(created.status).toBe(201);
+      expect(await read.json()).toEqual({ id: 'o-1' });
+      expect(await other.text()).toBe('app catch-all');
+      expect(reached).toEqual(['GET /something-else']);
+    });
+
+    test('a Retired Endpoint answers RETIRED even when an app route has its path', async () => {
+      const { url, reached } = await served({
+        before: (app, marks) => void app.get('/old-orders', answering(marks, 'app route')),
+      });
+
+      const response = await fetch(`${url}/old-orders`);
+
+      expect(response.status).toBe(410);
+      expect(await response.json()).toMatchObject({ fault: { code: 'RETIRED' } });
+      expect(reached).toEqual([]);
+    });
+
+    test('another method on a declared path reaches the app, never METHOD_NOT_ALLOWED', async () => {
+      const { url, reached } = await served({
+        before: (app, marks) => void app.put('/notes', answering(marks, 'app put')),
+      });
+
+      const deleted = await fetch(`${url}/orders`, { method: 'DELETE' });
+      const put = await fetch(`${url}/notes`, { method: 'PUT' });
+
+      expect(deleted.status).toBe(404);
+      expect(await deleted.text()).toBe('app: not found');
+      expect(await put.text()).toBe('app put');
+      expect(reached).toEqual(['DELETE /orders', 'PUT /notes']);
+    });
+
+    test('HEAD and an undeclared OPTIONS on a declared path reach the app, and a declared OPTIONS Endpoint is cf-loom’s', async () => {
+      const { url, reached } = await served();
+
+      const head = await fetch(`${url}/orders/o-1`, { method: 'HEAD' });
+      const undeclared = await fetch(`${url}/notes`, { method: 'OPTIONS' });
+      const declared = await fetch(`${url}/orders`, { method: 'OPTIONS' });
+
+      expect([head.status, undeclared.status, declared.status]).toEqual([404, 404, 204]);
+      expect(reached).toEqual(['HEAD /orders/o-1', 'OPTIONS /notes']);
+    });
+
+    test('a path that starts with // is a path, and an absolute-form target routes on its path and query', async () => {
+      const { url, reached } = await served();
+
+      const doubled = await raw(url, requestText('GET', '//orders/o-1'));
+      const absolute = await raw(url, requestText('GET', 'http://other/orders/o-1?x=1'));
+
+      expect(statusLineOf(doubled)).toBe('HTTP/1.1 404 Not Found');
+      expect(bodyOf(doubled)).toBe('app: not found');
+      expect(statusLineOf(absolute)).toBe('HTTP/1.1 200 OK');
+      expect(JSON.parse(bodyOf(absolute))).toEqual({ id: 'o-1' });
+      expect(reached).toEqual(['GET //orders/o-1']);
+    });
+
+    test('an asterisk target, a bad Host and TRACE go on to Fastify, which answers them, with no cf-loom Envelope', async () => {
+      const { url } = await served();
+
+      const answers = [
+        await raw(url, requestText('OPTIONS', '*')),
+        await raw(url, 'GET /orders/o-1 HTTP/1.1\r\nHost: x/orders\r\nConnection: close\r\n\r\n'),
+        await raw(url, requestText('TRACE', '/orders')),
+      ];
+
+      for (const answer of answers) {
+        expect(statusLinesOf(answer)).toHaveLength(1);
+        expect(answer).not.toContain('"fault"');
+      }
+    });
+
+    test('a segment that is not valid percent-encoding is Fastify’s 400', async () => {
+      const { url } = await served();
+
+      const answer = await raw(url, requestText('GET', '/orders/%zz'));
+
+      expect(statusLineOf(answer)).toBe('HTTP/1.1 400 Bad Request');
+      expect(answer).not.toContain('"fault"');
+    });
+  });
+
+  describe('the prefilter and serve agree', () => {
+    const methods = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+    const targets = [
+      '/orders',
+      '/orders/',
+      '/orders/summary',
+      '/orders/o-1',
+      '/orders/o-1/more',
+      '/orders/o%2F1',
+      '/orders/%2e%2e',
+      '/orders//o-1',
+      '//orders',
+      '/Orders',
+      '/orders\\o-1',
+      '/orders?x=1',
+      '/notes',
+      '/greet?name=Bob',
+      '/legacy',
+      '/old-orders',
+      '/report/x',
+      '/',
+    ];
+
+    /** Whether serve, through nodeHttp, handed the request back: it answered that no Endpoint has it, or could not read its URL. */
+    function handedBack(answer: string): boolean {
+      const [status = ''] = statusLinesOf(answer);
+      const unreadable = status.startsWith('HTTP/1.1 400') && bodyOf(answer) === '';
+      return unreadable || /^HTTP\/1\.1 (404|405)/.test(status);
+    }
+
+    test('a request reaches the app exactly when serve answers NO_SUCH_ENDPOINT or METHOD_NOT_ALLOWED, or its URL cannot be read', async () => {
+      const { url, reached } = await served();
+      const nodeUrl = await nodeServed();
+      const disagreements: string[] = [];
+
+      for (const method of methods) {
+        for (const target of targets) {
+          const text = requestText(method, target, 'Content-Length: 0\r\n');
+          reached.length = 0;
+          await raw(url, text);
+          const answeredByServe = await raw(nodeUrl, text);
+          if (reached.length > 0 !== handedBack(answeredByServe)) {
+            disagreements.push(`${method} ${target}`);
+          }
+        }
+      }
+
+      expect(disagreements).toEqual([]);
+    });
+  });
+
+  describe('how it writes the response', () => {
+    test('app onSend hooks, registered before or after the plugin, do not run for an Endpoint, and one that throws leaves a Rejection as serve answered it', async () => {
+      const sent: string[] = [];
+      const throwing = (name: string) => async () => {
+        sent.push(name);
+        throw new Error(`${name} broke`);
+      };
+      const { url } = await served({
+        before: (app) => app.addHook('onSend', throwing('before')),
+        after: (app) => app.addHook('onSend', throwing('after')),
+      });
+      const nodeUrl = await nodeServed();
+      const invalid = requestText(
+        'POST',
+        '/orders',
+        'Content-Type: application/json\r\nX-Api-Key: c-1\r\nContent-Length: 2\r\n',
+      );
+
+      const answered = await raw(url, `${invalid}{}`);
+      const expected = await raw(nodeUrl, `${invalid}{}`);
+      const sentForEndpoint = [...sent];
+      await fetch(`${url}/healthz`);
+
+      expect(statusLineOf(answered)).toBe('HTTP/1.1 400 Bad Request');
+      expect(withoutDate(answered)).toBe(withoutDate(expected));
+      expect(sentForEndpoint).toEqual([]);
+      expect(sent).toContain('before');
+    });
+
+    test.each([
+      {
+        name: 'a Success with a header',
+        method: 'POST',
+        target: '/orders',
+        body: '{"quantity":2}',
+      },
+      { name: 'an invalid-input Rejection', method: 'POST', target: '/orders', body: '{}' },
+      { name: 'a Deprecated Endpoint’s Success', method: 'GET', target: '/legacy', body: '' },
+      { name: 'a Retired Endpoint’s RETIRED', method: 'GET', target: '/old-orders', body: '' },
+      { name: 'a Success with no body', method: 'GET', target: '/greet?name=Bob', body: '' },
+    ])(
+      '$name reaches the Caller as nodeHttp sends it, every header once and its bytes',
+      async (sent) => {
+        const { url } = await served();
+        const nodeUrl = await nodeServed();
+        const headers = `X-Api-Key: c-1\r\nContent-Type: application/json\r\nContent-Length: ${sent.body.length}\r\n`;
+        const text = requestText(sent.method, sent.target, headers) + sent.body;
+
+        const answered = await raw(url, text);
+        const expected = await raw(nodeUrl, text);
+
+        expect(withoutDate(answered)).toBe(withoutDate(expected));
+        expect(answered.match(/^deprecation:/gim)?.length ?? 0).toBeLessThanOrEqual(1);
+      },
+    );
+
+    test('a Success with no body is sent with an empty body', async () => {
+      const { url } = await served();
+
+      const response = await fetch(`${url}/greet?name=Bob`);
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get('x-greeted')).toBe('Bob');
+      expect(await response.text()).toBe('');
+    });
+
+    test('a header an app onRequest hook registered before the plugin set reaches the Caller with an Endpoint’s answer, where serve’s own header wins', async () => {
+      const hooked: string[] = [];
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (_request, reply) => {
+            reply.header('access-control-allow-origin', '*');
+            reply.header('content-type', 'text/plain');
+          }),
+        after: (app) => app.addHook('onRequest', async (request) => void hooked.push(request.url)),
+      });
+
+      const endpoint = await fetch(`${url}/orders/o-1`);
+      const own = await fetch(`${url}/healthz`);
+
+      expect(endpoint.headers.get('access-control-allow-origin')).toBe('*');
+      expect(endpoint.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(own.headers.get('access-control-allow-origin')).toBe('*');
+      expect(hooked).toEqual(['/healthz']);
+    });
+
+    test('the app’s onResponse hook and Fastify’s request log see an Endpoint’s request, with the status serve answered', async () => {
+      const lines: { msg: string; res?: { statusCode: number } }[] = [];
+      const stream = new Writable({
+        write(chunk, _encoding, done) {
+          lines.push(JSON.parse(String(chunk)));
+          done();
+        },
+      });
+      const statuses: number[] = [];
+      const { url } = await served({
+        fastify: { logger: { stream, level: 'info' } },
+        after: (app) =>
+          app.addHook(
+            'onResponse',
+            async (_request, reply) => void statuses.push(reply.statusCode),
+          ),
+      });
+
+      const response = await fetch(`${url}/orders/o-1`);
+      await response.text();
+      await waitFor(50);
+
+      expect(statuses).toEqual([200]);
+      expect(lines.find((line) => line.msg === 'request completed')?.res?.statusCode).toBe(200);
+    });
+  });
+
+  describe('bodies and connections', () => {
+    test('a body larger than the app’s bodyLimit reaches the Handler whole', async () => {
+      const { url } = await served({ fastify: { bodyLimit: 1024 } });
+      const text = 'x'.repeat(100_000);
+
+      const response = await fetch(`${url}/notes`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ text });
+    });
+
+    test('a body over maxBodyBytes is BODY_TOO_LARGE with connection: close, and the connection closes', async () => {
+      const { url } = await served({ options: { maxBodyBytes: 1000 } });
+      const body = JSON.stringify({ text: 'x'.repeat(300_000) });
+      const first = requestText(
+        'POST',
+        '/notes',
+        `Content-Type: application/json\r\nContent-Length: ${body.length}\r\n`,
+      ).replace('Connection: close\r\n', '');
+      const second = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n';
+
+      const answer = await rawFor(url, first + body + second, 1000);
+
+      expect(statusLinesOf(answer.received)).toEqual(['HTTP/1.1 413 Payload Too Large']);
+      expect(answer.received).toMatch(/^connection: close$/im);
+      expect(answer.received).toContain('"BODY_TOO_LARGE"');
+      expect(answer.closed).toBe(true);
+    });
+
+    test('a request whose body serve read keeps its connection alive', async () => {
+      const { url } = await served();
+      const body = JSON.stringify({ quantity: 2 });
+      const first = `POST /orders HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nX-Api-Key: c-1\r\nContent-Length: ${body.length}\r\n\r\n${body}`;
+      const second = requestText('GET', '/orders/o-1');
+
+      const answer = await raw(url, first + second);
+
+      expect(statusLinesOf(answer)).toEqual(['HTTP/1.1 201 Created', 'HTTP/1.1 200 OK']);
+      expect(answer.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
+    });
+
+    test('a Caller that disconnects aborts the signal its EndpointHandler received', async () => {
+      const signals: AbortSignal[] = [];
+      const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+      const waiting = handle(getOrder, async ({ params }, { request }) => {
+        signals.push(request.signal);
+        started();
+        await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+        return success(getOrder, { id: params.orderId });
+      });
+      const { url } = await served({ handlers: withEndpoints({ getOrder: waiting }) });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n');
+      await handlerStarted;
+      socket.destroy();
+      const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
+      await Promise.race([aborted, waitFor(1000)]);
+
+      expect(signals[0]?.aborted).toBe(true);
+    });
+
+    test('a Handler’s signal is not aborted once its response has finished', async () => {
+      const signals: AbortSignal[] = [];
+      const watching = handle(getOrder, ({ params }, { request }) => {
+        signals.push(request.signal);
+        return success(getOrder, { id: params.orderId });
+      });
+      const { url } = await served({ handlers: withEndpoints({ getOrder: watching }) });
+
+      const response = await fetch(`${url}/orders/o-1`);
+      await response.text();
+      await waitFor(50);
+
+      expect(signals[0]?.aborted).toBe(false);
+    });
+  });
+
+  describe('a claimed request is never Fastify’s again', () => {
+    /** Reads a first piece of a response to `path`, then goes away without reading the rest. */
+    async function leavingMidResponse(url: string, path: string): Promise<void> {
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+      const { promise: firstPiece, resolve: gotPiece } = Promise.withResolvers<void>();
+      socket.once('data', () => {
+        socket.pause();
+        gotPiece();
+      });
+      socket.write(requestText('GET', path));
+      await firstPiece;
+      socket.destroy();
+    }
+
+    test('a Caller that goes away while a large Success is written closes the connection, and neither an app route nor the not-found handler runs', async () => {
+      const { app, url, reached } = await served({
+        before: (appInstance, marks) => {
+          appInstance.get('/report', answering(marks, 'app route'));
+        },
+      });
+
+      const uncaught = await uncaughtDuring(async () => {
+        await leavingMidResponse(url, '/report');
+        await waitFor(300);
+      });
+
+      const connections = await new Promise<number>((resolve) => {
+        app.server.getConnections((_, count) => resolve(count));
+      });
+      expect(connections).toBe(0);
+      expect(reached).toEqual([]);
+      expect(uncaught).toEqual([]);
+    });
+
+    test('with handlerTimeout shorter than the Handler, the Caller receives the Endpoint’s answer, never Fastify’s 503: once taken, the request is no longer Fastify’s', async () => {
+      const slow = handle(getOrder, async ({ params }) => {
+        await waitFor(250);
+        return success(getOrder, { id: params.orderId });
+      });
+      const { url } = await served({
+        fastify: { handlerTimeout: 50 },
+        handlers: withEndpoints({ getOrder: slow }),
+      });
+
+      const uncaught = await uncaughtDuring(async () => {
+        const response = await fetch(`${url}/orders/o-1`);
+        expect([response.status, await response.json()]).toEqual([200, { id: 'o-1' }]);
+        await waitFor(100);
+      });
+
+      expect(uncaught).toEqual([]);
+    });
+
+    test('handlerTimeout firing while a large Success is written to a slow-reading Caller neither ends the process nor cuts the response', async () => {
+      const { url } = await served({ fastify: { handlerTimeout: 100 } });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+      const chunks: Buffer[] = [];
+      socket.on('data', (chunk) => chunks.push(chunk));
+      const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()));
+
+      const uncaught = await uncaughtDuring(async () => {
+        socket.pause();
+        socket.write(requestText('GET', '/report'));
+        await waitFor(400);
+        socket.resume();
+        await closed;
+      });
+
+      const received = Buffer.concat(chunks).toString('latin1');
+      expect(uncaught).toEqual([]);
+      expect(statusLineOf(received)).toBe('HTTP/1.1 200 OK');
+      expect(bodyOf(received).length).toBe(JSON.stringify({ data: bigData }).length);
+    });
+  });
+
+  describe('when something fails once a request is taken', () => {
+    test('a header an earlier app hook set that Node refuses destroys the socket for an Endpoint, and the app’s routes keep answering', async () => {
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('x-bad', 'a\u0001b');
+            }
+          }),
+      });
+
+      const uncaught = await uncaughtDuring(async () => {
+        const endpoint = await rawFor(url, requestText('GET', '/orders/o-1'), 1000);
+        expect(endpoint).toEqual({ received: '', closed: true });
+      });
+      const own = await fetch(`${url}/healthz`);
+
+      expect(uncaught).toEqual([]);
+      expect(await own.text()).toBe('ok');
+    });
+
+    test('a content-length an earlier app hook set never reaches the Caller, since the body is framed by Node', async () => {
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (_request, reply) => {
+            reply.header('content-length', '5');
+          }),
+      });
+
+      const answer = await raw(url, requestText('GET', '/orders/o-1'));
+
+      const [head = ''] = answer.split('\r\n\r\n');
+      expect(head).not.toMatch(/^content-length:/im);
+      expect(head).toMatch(/^transfer-encoding: chunked$/im);
+      expect(bodyOf(answer)).toBe('{"id":"o-1"}');
+    });
+  });
+
+  describe('when the Caller leaves or something fails before the response is written', () => {
+    test('a Caller that leaves during an earlier async app onRequest hook aborts the Handler’s signal, and onAnswered records it', async () => {
+      const startedAborted: boolean[] = [];
+      const records: AnsweredRequest[] = [];
+      const reading = handle(getOrder, ({ params }, { request }) => {
+        startedAborted.push(request.signal.aborted);
+        return success(getOrder, { id: params.orderId });
+      });
+      const { promise: hookRunning, resolve: running } = Promise.withResolvers<void>();
+      const { url } = await served({
+        handlers: withEndpoints({ getOrder: reading }),
+        options: { onAnswered: (record) => void records.push(record) },
+        before: (app) =>
+          app.addHook('onRequest', async () => {
+            running();
+            await waitFor(300);
+          }),
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write(requestText('GET', '/orders/o-1'));
+      await hookRunning;
+      socket.destroy();
+      await waitFor(600);
+
+      expect(startedAborted).toEqual([true]);
+      expect(records.map((record) => record.aborted)).toEqual([true]);
+    });
+
+    test('a content-length an earlier app hook set on the raw response never reaches the Caller either', async () => {
+      const { url } = await served({
+        before: (app) =>
+          app.addHook('onRequest', async (_request, reply) => {
+            reply.raw.setHeader('content-length', '5');
+          }),
+      });
+
+      const answer = await raw(url, requestText('GET', '/orders/o-1'));
+
+      const [head = ''] = answer.split('\r\n\r\n');
+      expect(head).not.toMatch(/^content-length:/im);
+      expect(bodyOf(answer)).toBe('{"id":"o-1"}');
+    });
+
+    test('a write that fails after serve answered still records the status serve answered, and reaches onRequestAbort, never onResponse', async () => {
+      const records: AnsweredRequest[] = [];
+      const hooks: string[] = [];
+      const { url } = await served({
+        options: { onAnswered: (record) => void records.push(record) },
+        before: (app) => {
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('x-bad', 'a\u0001b');
+            }
+          });
+          app.addHook('onRequestAbort', async (_request) => void hooks.push('onRequestAbort'));
+        },
+        after: (app) => app.addHook('onResponse', async () => void hooks.push('onResponse')),
+      });
+
+      await rawFor(url, requestText('GET', '/orders/o-1'), 1000);
+      await waitFor(100);
+
+      expect(records.map((record) => record.status)).toEqual([200]);
+      expect(hooks).toEqual(['onRequestAbort']);
+    });
+  });
+
+  describe('registration', () => {
+    test('inside a plugin that skips encapsulation, it serves the Contract', async () => {
+      const app = Fastify();
+      apps.push(app);
+      const wrapper: FastifyPluginAsync = async (instance) => {
+        await instance.register(fastifyServe(contract, handlers, {}));
+      };
+      Object.assign(wrapper, { [Symbol.for('skip-override')]: true });
+      await app.register(wrapper);
+
+      const response = await app.inject({ method: 'GET', url: '/orders/o-1' });
+
+      expect([response.statusCode, response.json()]).toEqual([200, { id: 'o-1' }]);
+    });
+
+    test('registering it with a prefix throws, naming fastifyServe', async () => {
+      const app = Fastify();
+      apps.push(app);
+
+      const registering = app.register(fastifyServe(contract, handlers, {}), { prefix: '/api' });
+
+      await expect(registering).rejects.toThrow(/fastifyServe.*prefix/);
+    });
+
+    test('registering it inside an encapsulated plugin throws, naming fastifyServe', async () => {
+      const app = Fastify();
+      apps.push(app);
+
+      const encapsulated: FastifyPluginAsync = async (child) => {
+        await child.register(fastifyServe(contract, handlers, {}));
+      };
+
+      const registering = app.register(encapsulated);
+
+      await expect(registering).rejects.toThrow(/fastifyServe.*encapsulated/);
+    });
+
+    test('registering it on an HTTP/2 app throws, naming fastifyServe', async () => {
+      const app = Fastify({ http2: true });
+      apps.push(app);
+
+      const registering = app.register(fastifyServe(contract, handlers, {}));
+
+      await expect(registering).rejects.toThrow(/fastifyServe.*HTTP\/2/);
+    });
+
+    test('a Handler map missing a Handler throws when fastifyServe is called, before register', () => {
+      const { getSummary: _, ...missing } = handlers.endpoints;
+
+      // @ts-expect-error getSummary has no Handler
+      const calling = () => fastifyServe(contract, { ...handlers, endpoints: missing }, {});
+
+      expect(calling).toThrow(/getSummary/);
+    });
+  });
+});
