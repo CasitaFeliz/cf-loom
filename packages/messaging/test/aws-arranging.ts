@@ -14,6 +14,7 @@ import {
   SetQueueAttributesCommand,
   type SQSClient,
   TagQueueCommand,
+  UntagQueueCommand,
 } from '@aws-sdk/client-sqs';
 import { snsSubjectAttribute } from '@cf-loom/contract/internal';
 import { queueUrlOf } from './aws-reading.ts';
@@ -132,4 +133,14 @@ export async function wakeEach(sqs: SQSClient, queues: readonly string[]): Promi
 export async function dropQueue(sqs: SQSClient, name: string): Promise<void> {
   const QueueUrl = await queueUrlOf(sqs, name);
   await sqs.send(new DeleteQueueCommand({ QueueUrl }));
+}
+
+/** Removes tags from the queue named `name`, as the organization's tooling would. */
+export async function untagByHand(
+  sqs: SQSClient,
+  name: string,
+  keys: readonly string[],
+): Promise<void> {
+  const QueueUrl = await queueUrlOf(sqs, name);
+  await sqs.send(new UntagQueueCommand({ QueueUrl, TagKeys: [...keys] }));
 }

@@ -1,5 +1,14 @@
+// biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
+import type { SQSClient } from '@aws-sdk/client-sqs';
 import { afterAll, beforeAll, beforeEach, describe, expect, onTestFinished, test } from 'vitest';
-import { arrangeTopic, dropQueue, wakeEach } from '../../test/aws-arranging.ts';
+import {
+  arrangeTopic,
+  dropQueue,
+  setQueueAttributes,
+  tagByHand,
+  untagByHand,
+  wakeEach,
+} from '../../test/aws-arranging.ts';
 import { aClosedUrl, anAwsConnecting } from '../../test/aws-clients.ts';
 import { queueCountsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
@@ -154,4 +163,50 @@ describe('consuming over sqs()', () => {
 
     await until(() => expect(received).toHaveLength(1));
   });
+
+  test.each([
+    ['without a redrive policy', 'has no RedrivePolicy', setRedriveAway],
+    [
+      'with a cf-loom:backoff tag it cannot read',
+      "has the cf-loom:backoff tag 'soon', which cf-loom cannot read",
+      (sqsClient: SQSClient, queue: string) =>
+        tagByHand(sqsClient, queue, { 'cf-loom:backoff': 'soon' }),
+    ],
+    [
+      'without a cf-loom:subscription tag',
+      'has no cf-loom:subscription tag',
+      (sqsClient: SQSClient, queue: string) =>
+        untagByHand(sqsClient, queue, ['cf-loom:subscription']),
+    ],
+  ])(
+    'consume rejects naming the queue and the difference of a queue %s, and receives from none',
+    async (_, difference, change) => {
+      const { sender, consume, connecting, orders } = await aMessaging();
+      await change(connecting.sqs, orders.chargeQueue);
+      await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+      const received: Received[] = [];
+
+      const consuming = consume(handlersOf(received), {});
+
+      await expect(consuming).rejects.toThrow(
+        new RegExp(
+          `^The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} ${difference}: apply the Service's Broker plan$`,
+        ),
+      );
+      await expect(queueCountsOf(connecting.sqs, orders.notifyQueue)).resolves.toEqual({
+        visible: 0,
+        inFlight: 0,
+      });
+      await expect(queueCountsOf(connecting.sqs, orders.chargeQueue)).resolves.toEqual({
+        visible: 1,
+        inFlight: 0,
+      });
+      expect(received).toEqual([]);
+    },
+  );
 });
+
+/** Removes the redrive policy of a queue, as the organization's tooling would. */
+function setRedriveAway(sqsClient: SQSClient, queue: string): Promise<void> {
+  return setQueueAttributes(sqsClient, queue, { RedrivePolicy: '' });
+}

@@ -1,8 +1,13 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
-import { GetQueueAttributesCommand } from '@aws-sdk/client-sqs';
+import {
+  GetQueueAttributesCommand,
+  ListQueueTagsCommand,
+  type SQSClient,
+} from '@aws-sdk/client-sqs';
 import { prefixedNameOf } from '@cf-loom/contract/internal';
 import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
 import { queueNameOf } from './queue-names.ts';
+import { type QueueHeld, queueReadingOf } from './queue-reading.ts';
 import { queueUrlOf } from './queue-url.ts';
 import type { Working } from './sqs-connection.ts';
 
@@ -43,35 +48,34 @@ type Finding =
   | { readonly kind: 'found'; readonly queue: FoundQueue }
   | { readonly kind: 'refused'; readonly line: string };
 
-async function queueFoundOf(
-  { sqs, prefix }: Working,
-  durableConsumer: DurableConsumer,
-): Promise<Finding> {
+async function queueFoundOf(working: Working, durableConsumer: DurableConsumer): Promise<Finding> {
+  const { sqs, prefix } = working;
   const durable = prefixedNameOf(prefix, durableConsumer.durable);
   const name = queueNameOf(durable);
   const url = await queueUrlOf(sqs, name);
   if (url === undefined) {
-    return {
-      kind: 'refused',
-      line: shapeRefusalOf(`The Durable consumer ${durable}`, [`has no queue ${name}`]),
-    };
+    return refusedFor(`The Durable consumer ${durable}`, [`has no queue ${name}`]);
   }
-  const read = await sqs.send(
+  const reading = queueReadingOf(await heldBy(sqs, url));
+  if (reading.kind === 'differs') {
+    return refusedFor(`The queue ${name} of the Durable consumer ${durable}`, reading.differences);
+  }
+  const { waits, maxReceiveCount } = reading;
+  return { kind: 'found', queue: { durableConsumer, durable, name, url, waits, maxReceiveCount } };
+}
+
+function refusedFor(what: string, differences: readonly string[]): Finding {
+  return { kind: 'refused', line: shapeRefusalOf(what, differences) };
+}
+
+/** The attributes of the queue that cf-loom reads, and its tags. */
+async function heldBy(sqs: SQSClient, url: string): Promise<QueueHeld> {
+  const attributes = await sqs.send(
     new GetQueueAttributesCommand({
       QueueUrl: url,
       AttributeNames: ['VisibilityTimeout', 'RedrivePolicy'],
     }),
   );
-  const attributes = read.Attributes ?? {};
-  const visibilityTimeout = Number(attributes['VisibilityTimeout']);
-  const redrive = JSON.parse(attributes['RedrivePolicy'] ?? '{}');
-  const queue = {
-    durableConsumer,
-    durable,
-    name,
-    url,
-    waits: [visibilityTimeout * 1_000],
-    maxReceiveCount: redrive.maxReceiveCount,
-  } as const;
-  return { kind: 'found', queue };
+  const tags = await sqs.send(new ListQueueTagsCommand({ QueueUrl: url }));
+  return { attributes: attributes.Attributes ?? {}, tags: tags.Tags ?? {} };
 }
