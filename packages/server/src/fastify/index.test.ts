@@ -1,14 +1,37 @@
+import { once } from 'node:events';
+import type { IncomingMessage } from 'node:http';
+import {
+  connect as connectHttp2,
+  constants,
+  type Http2SecureServer,
+  type Http2Server,
+  type IncomingHttpHeaders,
+} from 'node:http2';
+import { request as httpsRequest } from 'node:https';
 import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
 import Fastify, {
+  type FastifyHttp2Options,
+  type FastifyHttp2SecureOptions,
   type FastifyInstance,
   type FastifyPluginAsync,
   type FastifyServerOptions,
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { allowingHttp1, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
+import { closeFrameProxies, framesProxy, wireEndOf } from '../../test/h2-frames.ts';
+import {
+  closeRawCallers,
+  dataFrame,
+  postFrame,
+  type RawCaller,
+  rawCaller,
+  resetFrame,
+  windowFrame,
+} from '../../test/h2-raw.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -42,6 +65,15 @@ const describeOrders = defineEndpoint({
   path: '/orders',
   visibility: 'public',
   description: 'What an order takes',
+  success: { status: 204 },
+});
+
+const describeService = defineEndpoint({
+  name: 'describeService',
+  method: 'OPTIONS',
+  path: '/',
+  visibility: 'public',
+  description: 'What the Service offers',
   success: { status: 204 },
 });
 
@@ -123,6 +155,7 @@ const contract = defineService({
       endpoints: [
         createOrder,
         describeOrders,
+        describeService,
         getSummary,
         getOrder,
         noteOrder,
@@ -146,6 +179,7 @@ const handlers = {
       }),
     ),
     describeOrders: handle(describeOrders, () => success(describeOrders)),
+    describeService: handle(describeService, () => success(describeService)),
     getSummary: handle(getSummary, () => success(getSummary, { count: 3 })),
     getOrder: handle(getOrder, ({ params }) => success(getOrder, { id: params.orderId })),
     noteOrder: handle(noteOrder, ({ body }) => success(noteOrder, body)),
@@ -176,9 +210,12 @@ type Config = {
   readonly handlers?: Handlers;
   readonly options?: {
     readonly maxBodyBytes?: number;
-    readonly onAnswered?: (record: AnsweredRequest) => void;
+    readonly onAnswered?: (record: AnsweredRequest, request: Request) => void;
   };
-  readonly fastify?: FastifyServerOptions;
+  readonly fastify?:
+    | FastifyServerOptions
+    | FastifyHttp2Options<Http2Server>
+    | FastifyHttp2SecureOptions<Http2SecureServer>;
   readonly before?: (app: FastifyInstance, reached: string[]) => void;
   readonly after?: (app: FastifyInstance, reached: string[]) => void;
 };
@@ -188,6 +225,9 @@ const servers: ReturnType<typeof nodeHttp>[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
+  closeSessions();
+  closeFrameProxies();
+  closeRawCallers();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -199,7 +239,7 @@ afterEach(async () => {
 /** A Fastify app with its own routes, serving the Contract beside them, listening on a free port. */
 async function served(config: Config = {}): Promise<Served> {
   const reached: string[] = [];
-  const app = Fastify(config.fastify);
+  const app = Fastify(config.fastify as FastifyServerOptions);
   apps.push(app);
   app.get('/healthz', async () => {
     reached.push('GET /healthz');
@@ -214,7 +254,8 @@ async function served(config: Config = {}): Promise<Served> {
   config.after?.(app, reached);
   await app.listen({ port: 0, host: '127.0.0.1' });
   const { port } = app.server.address() as AddressInfo;
-  return { app, url: `http://127.0.0.1:${port}`, reached };
+  const scheme = config.fastify !== undefined && 'https' in config.fastify ? 'https' : 'http';
+  return { app, url: `${scheme}://127.0.0.1:${port}`, reached };
 }
 
 /** An app route that answers `answer` and records the request it answered. */
@@ -242,6 +283,47 @@ function requestText(method: string, target: string, extra = ''): string {
 /** A raw response without the `Date`, which is the one thing two answers to a request differ in. */
 function withoutDate(received: string): string {
   return received.replace(/^Date: .*\r\n/im, '');
+}
+
+/** The headers of a raw HTTP/1.1 response but its framing and connection ones and `Date`, each name once, its values joined as Node joins them. */
+function endToEndHeadersOf(received: string): Record<string, string> {
+  const [head = ''] = received.split('\r\n\r\n');
+  const hopByHop = ['date', 'connection', 'keep-alive', 'transfer-encoding'];
+  const headers: Record<string, string> = {};
+  for (const line of head.split('\r\n').slice(1)) {
+    const [name = '', ...value] = line.split(': ');
+    const key = name.toLowerCase();
+    if (!hopByHop.includes(key)) {
+      headers[key] =
+        headers[key] === undefined ? value.join(': ') : `${headers[key]}, ${value.join(': ')}`;
+    }
+  }
+  return headers;
+}
+
+/** The headers of an HTTP/2 response but its pseudo-headers and `Date`. */
+function http2HeadersOf(headers: IncomingHttpHeaders): Record<string, string> {
+  const named: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (!name.startsWith(':') && name !== 'date' && value !== undefined) {
+      named[name] = String(value);
+    }
+  }
+  return named;
+}
+
+/** Every warning the process emits while `during` runs. */
+async function warningsDuring(during: () => Promise<void>): Promise<string[]> {
+  const seen: string[] = [];
+  const listener = (warning: Error) => seen.push(`${warning.name}: ${warning.message}`);
+  process.on('warning', listener);
+  try {
+    await during();
+    await waitFor(20);
+  } finally {
+    process.off('warning', listener);
+  }
+  return seen;
 }
 
 function waitFor(ms: number): Promise<void> {
@@ -435,6 +517,29 @@ describe('fastifyServe', () => {
 
       expect(disagreements).toEqual([]);
     });
+
+    test('over HTTP/2 too, a request reaches the app exactly when serve answers NO_SUCH_ENDPOINT or METHOD_NOT_ALLOWED, or its URL cannot be read', async () => {
+      const { url, reached } = await served({ fastify: { http2: true } });
+      const nodeUrl = await nodeServed();
+      const session = h2Session(url);
+      const disagreements: string[] = [];
+
+      for (const method of methods) {
+        for (const target of targets) {
+          reached.length = 0;
+          await h2(session, { ':method': method, ':path': target });
+          const answeredByServe = await raw(
+            nodeUrl,
+            requestText(method, target, 'Content-Length: 0\r\n'),
+          );
+          if (reached.length > 0 !== handedBack(answeredByServe)) {
+            disagreements.push(`${method} ${target}`);
+          }
+        }
+      }
+
+      expect(disagreements).toEqual([]);
+    });
   });
 
   describe('how it writes the response', () => {
@@ -617,6 +722,32 @@ describe('fastifyServe', () => {
       expect(signals[0]?.aborted).toBe(true);
     });
 
+    test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and never onResponse, over HTTP/1.1', async () => {
+      const hooks: string[] = [];
+      const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+      const waiting = handle(getOrder, async ({ params }, { request }) => {
+        started();
+        await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+        return success(getOrder, { id: params.orderId });
+      });
+      const { url } = await served({
+        handlers: withEndpoints({ getOrder: waiting }),
+        before: (app) =>
+          app.addHook('onRequestAbort', async (request) => void hooks.push(`abort ${request.url}`)),
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void hooks.push(`response ${request.url}`)),
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n');
+      await handlerStarted;
+      socket.destroy();
+      await waitFor(200);
+
+      expect(hooks).toEqual(['abort /orders/o-1']);
+    });
+
     test('a Handler’s signal is not aborted once its response has finished', async () => {
       const signals: AbortSignal[] = [];
       const watching = handle(getOrder, ({ params }, { request }) => {
@@ -631,6 +762,111 @@ describe('fastifyServe', () => {
 
       expect(signals[0]?.aborted).toBe(false);
     });
+  });
+
+  describe('a body the Caller stops sending', () => {
+    test('over HTTP/1.1, a Caller that leaves while its body is read fails the read, and onAnswered records the request aborted', async () => {
+      const records: AnsweredRequest[] = [];
+      const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+      const { url } = await served({
+        options: {
+          onAnswered: (answered) => {
+            records.push(answered);
+            record();
+          },
+        },
+      });
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write(
+        'POST /notes HTTP/1.1\r\nHost: test\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{"text":',
+      );
+      await waitFor(50);
+      socket.destroy();
+      await recorded;
+
+      expect(records.map(({ status, code, aborted }) => ({ status, code, aborted }))).toEqual([
+        { status: 400, code: 'INVALID_INPUT', aborted: true },
+      ]);
+    });
+
+    test('over HTTP/2, a Caller that ends its body, then resets, has its body read as it ended it', async () => {
+      const records: AnsweredRequest[] = [];
+      const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+      const { url } = await served({
+        fastify: { http2: true },
+        options: {
+          onAnswered: (answered) => {
+            records.push(answered);
+            record();
+          },
+        },
+      });
+      const session = h2Session(url);
+
+      const stream = session.request({
+        ':method': 'POST',
+        ':path': '/notes',
+        'content-type': 'application/json',
+      });
+      stream.on('error', () => undefined);
+      stream.write('{"text":');
+      await waitFor(50);
+      stream.close(constants.NGHTTP2_CANCEL);
+      await recorded;
+
+      expect(records.map(({ status, code }) => ({ status, code }))).toEqual([
+        { status: 400, code: 'INVALID_INPUT' },
+      ]);
+    });
+
+    test.each([
+      {
+        name: 'resets its stream with CANCEL',
+        leave: (caller: RawCaller) => caller.send(resetFrame(1, 8)),
+      },
+      {
+        name: 'resets its stream with NO_ERROR',
+        leave: (caller: RawCaller) => caller.send(resetFrame(1, 0)),
+      },
+      { name: 'loses its connection', leave: (caller: RawCaller) => caller.drop() },
+    ])(
+      'over HTTP/2, a Caller that $name before its END_STREAM, after a whole JSON value, fails the read, and no Handler runs',
+      async ({ leave }) => {
+        const records: AnsweredRequest[] = [];
+        const handled: string[] = [];
+        const { promise: recorded, resolve: record } = Promise.withResolvers<void>();
+        const noting = handle(noteOrder, ({ body }) => {
+          handled.push(body.text);
+          return success(noteOrder, body);
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ noteOrder: noting }),
+          options: {
+            onAnswered: (answered) => {
+              records.push(answered);
+              record();
+            },
+          },
+        });
+        const caller = rawCaller(url);
+
+        caller.send(
+          postFrame(1, '/notes', { 'content-length': '100' }),
+          dataFrame(1, '{"text":"half of what I meant"}'),
+        );
+        await waitFor(100);
+        leave(caller);
+        await recorded;
+
+        expect(records.map(({ status, code }) => ({ status, code }))).toEqual([
+          { status: 400, code: 'INVALID_INPUT' },
+        ]);
+        expect(handled).toEqual([]);
+      },
+    );
   });
 
   describe('a claimed request is never Fastify’s again', () => {
@@ -854,15 +1090,6 @@ describe('fastifyServe', () => {
       await expect(registering).rejects.toThrow(/fastifyServe.*encapsulated/);
     });
 
-    test('registering it on an HTTP/2 app throws, naming fastifyServe', async () => {
-      const app = Fastify({ http2: true });
-      apps.push(app);
-
-      const registering = app.register(fastifyServe(contract, handlers, {}));
-
-      await expect(registering).rejects.toThrow(/fastifyServe.*HTTP\/2/);
-    });
-
     test('a Handler map missing a Handler throws when fastifyServe is called, before register', () => {
       const { getSummary: _, ...missing } = handlers.endpoints;
 
@@ -870,6 +1097,497 @@ describe('fastifyServe', () => {
       const calling = () => fastifyServe(contract, { ...handlers, endpoints: missing }, {});
 
       expect(calling).toThrow(/getSummary/);
+    });
+  });
+
+  describe('over HTTP/2', () => {
+    test('on an h2c app, a declared Endpoint is answered by cf-loom, the app’s own route answers beside it, and the app’s onResponse hook sees the Endpoint’s request', async () => {
+      const responded: string[] = [];
+      const { url, reached } = await served({
+        fastify: { http2: true },
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void responded.push(request.url)),
+      });
+      const session = h2Session(url);
+
+      const order = await h2(session, { ':path': '/orders/o-1' });
+      const health = await h2(session, { ':path': '/healthz' });
+      await waitFor(50);
+
+      expect([order.status, JSON.parse(order.body)]).toEqual([200, { id: 'o-1' }]);
+      expect([health.status, health.body]).toEqual([200, 'ok']);
+      expect(reached).toEqual(['GET /healthz']);
+      expect(responded).toEqual(['/orders/o-1', '/healthz']);
+    });
+
+    test('serve receives the Request on the URL :scheme, :authority and the path make, with the Caller’s headers and no pseudo-header', async () => {
+      const seen: Request[] = [];
+      const reading = handle(getOrder, (_input, { request }) =>
+        success(getOrder, { id: request.headers.get('x-tenant') ?? 'none' }),
+      );
+      const { url } = await served({
+        fastify: { http2: true },
+        handlers: withEndpoints({ getOrder: reading }),
+        options: { onAnswered: (_record, request) => void seen.push(request) },
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, {
+        ':path': '/orders/o-1?x=1',
+        ':scheme': 'https',
+        ':authority': 'orders.example:8443',
+        'x-tenant': 't-1',
+      });
+
+      expect(JSON.parse(answer.body)).toEqual({ id: 't-1' });
+      expect(seen[0]?.url).toBe('https://orders.example:8443/orders/o-1?x=1');
+      expect([...(seen[0]?.headers.keys() ?? [])].filter((name) => name.startsWith(':'))).toEqual(
+        [],
+      );
+    });
+
+    test.each([
+      {
+        name: 'a Success with a header',
+        method: 'POST',
+        target: '/orders',
+        body: '{"quantity":2}',
+      },
+      { name: 'an invalid-input Rejection', method: 'POST', target: '/orders', body: '{}' },
+      { name: 'a Deprecated Endpoint’s Success', method: 'GET', target: '/legacy', body: '' },
+      { name: 'a Retired Endpoint’s RETIRED', method: 'GET', target: '/old-orders', body: '' },
+      { name: 'a Success with no body', method: 'GET', target: '/greet?name=Bob', body: '' },
+    ])(
+      '$name has over HTTP/2 the status, headers and bytes it has over HTTP/1.1, with no connection header and no warning',
+      async (sent) => {
+        const { url } = await served({ fastify: { http2: true } });
+        const nodeUrl = await nodeServed();
+        const session = h2Session(url);
+        const headers = `X-Api-Key: c-1\r\nContent-Type: application/json\r\nContent-Length: ${sent.body.length}\r\n`;
+        const expected = await raw(
+          nodeUrl,
+          requestText(sent.method, sent.target, headers) + sent.body,
+        );
+        let answer: Awaited<ReturnType<typeof h2>> | undefined;
+
+        const warnings = await warningsDuring(async () => {
+          answer = await h2(
+            session,
+            {
+              ':method': sent.method,
+              ':path': sent.target,
+              'x-api-key': 'c-1',
+              'content-type': 'application/json',
+            },
+            sent.method === 'GET' ? undefined : sent.body,
+          );
+        });
+
+        expect(answer?.status).toBe(Number(statusLineOf(expected).split(' ')[1]));
+        expect(http2HeadersOf(answer?.headers ?? {})).toEqual(endToEndHeadersOf(expected));
+        expect(answer?.headers.connection).toBeUndefined();
+        expect(answer?.body).toBe(bodyOf(expected));
+        expect(warnings).toEqual([]);
+      },
+    );
+
+    test('a request with no :authority is on the origin its Host names', async () => {
+      const seen: string[] = [];
+      const { url } = await served({
+        fastify: { http2: true },
+        options: { onAnswered: (_record, request) => void seen.push(request.url) },
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, { ':path': '/orders/o-1', host: 'orders.example' });
+
+      expect(answer.status).toBe(200);
+      expect(seen).toEqual(['http://orders.example/orders/o-1']);
+    });
+
+    test('several Cookie fields reach the Handler as one header, joined by "; "', async () => {
+      const reading = handle(getOrder, (_input, { request }) =>
+        success(getOrder, { id: request.headers.get('cookie') ?? 'none' }),
+      );
+      const { url } = await served({
+        fastify: { http2: true },
+        handlers: withEndpoints({ getOrder: reading }),
+      });
+      const session = h2Session(url);
+
+      const answer = await h2(session, { ':path': '/orders/o-1', cookie: ['a=1', 'b=2'] });
+
+      expect(JSON.parse(answer.body)).toEqual({ id: 'a=1; b=2' });
+    });
+
+    test('a :scheme other than http or https, and OPTIONS *, go on to the app, even beside a declared OPTIONS /', async () => {
+      const { url, reached } = await served({ fastify: { http2: true } });
+      const session = h2Session(url);
+
+      const foreign = await h2(session, { ':path': '/orders/o-1', ':scheme': 'ftp' });
+      const asterisk = await h2(session, {
+        ':method': 'OPTIONS',
+        ':path': '*',
+        ':authority': 'orders.example',
+      });
+
+      expect([foreign.status, asterisk.status]).toEqual([404, 404]);
+      expect(reached).toEqual(['GET /orders/o-1', 'OPTIONS *']);
+    });
+
+    describe('a body serve answers before reading whole', () => {
+      const upload = JSON.stringify({ text: 'x'.repeat(1_000_000) });
+
+      test('a BODY_TOO_LARGE held back until the Caller opens its window still ends with END_STREAM, then a reset, and the server closes', async () => {
+        const { app, url } = await served({
+          fastify: { http2: true },
+          options: { maxBodyBytes: 1000 },
+        });
+        const caller = rawCaller(url, { window: 0 });
+
+        caller.send(
+          postFrame(1, '/notes'),
+          dataFrame(1, JSON.stringify({ text: 'x'.repeat(3000) })),
+        );
+        await waitFor(300);
+        const held = [...caller.framesOf(1)];
+        caller.send(windowFrame(1, 1 << 20), windowFrame(0, 1 << 20));
+        while (!caller.framesOf(1).some((frame) => frame.startsWith('RST'))) {
+          await waitFor(5);
+        }
+        caller.drop();
+        await app.close();
+
+        expect(held).toEqual(['HEADERS']);
+        expect(wireEndOf(caller.framesOf(1))).toBe('end, then RST(0)');
+      });
+
+      test.each([
+        {
+          name: 'a body over maxBodyBytes is BODY_TOO_LARGE',
+          path: '/notes',
+          headers: {},
+          status: 413,
+          code: 'BODY_TOO_LARGE',
+        },
+        {
+          name: 'a Guard’s Rejection, answered before the body is read,',
+          path: '/orders',
+          headers: {},
+          status: 400,
+          code: 'INVALID_INPUT',
+        },
+      ])(
+        '$name: the Caller receives it whole with END_STREAM, then its stream is reset with NO_ERROR and its upload stops, the session goes on, and the server closes once the session is gone',
+        async (asked) => {
+          const { app, url } = await served({
+            fastify: { http2: true },
+            options: { maxBodyBytes: 1000 },
+          });
+          const wire = await framesProxy(url);
+          const session = h2Session(wire.url);
+          const headers = { ':method': 'POST', ':path': asked.path, ...asked.headers };
+
+          const answer = await h2(
+            session,
+            { ...headers, 'content-type': 'application/json' },
+            upload,
+          );
+          const next = await h2(session, { ':path': '/orders/o-1' });
+          session.destroy();
+          await app.close();
+
+          expect(answer).toMatchObject({ status: asked.status, ended: true, rstCode: 0 });
+          expect(wireEndOf(wire.framesOf(1))).toBe('end, then RST(0)');
+          expect(wireEndOf(wire.framesOf(3))).toBe('end');
+          expect(answer.body).toContain(`"${asked.code}"`);
+          expect(answer.sent).toBeLessThan(upload.length);
+          expect(next).toMatchObject({ status: 200, body: '{"id":"o-1"}' });
+        },
+      );
+    });
+
+    test('an Endpoint’s response ends with END_STREAM and no reset, with a body or without one', async () => {
+      const { url } = await served({ fastify: { http2: true } });
+      const wire = await framesProxy(url);
+      const session = h2Session(wire.url);
+
+      const order = await h2(session, { ':path': '/orders/o-1' });
+      const greeted = await h2(session, { ':path': '/greet?name=Bob' });
+      await waitFor(50);
+
+      expect([order.status, greeted.status]).toEqual([200, 204]);
+      expect(wire.framesOf(1)).toEqual(['HEADERS', 'DATA', 'DATA+END']);
+      expect(wireEndOf(wire.framesOf(3))).toBe('end');
+    });
+
+    describe('the Caller’s departure', () => {
+      test('a Caller that resets its stream aborts the signal its EndpointHandler received, onAnswered records it, and the session goes on', async () => {
+        const signals: AbortSignal[] = [];
+        const records: AnsweredRequest[] = [];
+        const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+        const waiting = handle(getOrder, async ({ params }, { request }) => {
+          signals.push(request.signal);
+          started();
+          await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: waiting }),
+          options: { onAnswered: (record) => void records.push(record) },
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await handlerStarted;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
+        await waitFor(50);
+        const recorded = records.map((record) => record.aborted);
+        const next = await h2(session, { ':path': '/orders/summary' });
+
+        expect(signals[0]?.aborted).toBe(true);
+        expect(recorded).toEqual([true]);
+        expect(next).toMatchObject({ status: 200, body: '{"count":3}' });
+      });
+
+      test('a Caller that resets its stream once the whole response is written, but before flow control let it out, aborts the request’s signal', async () => {
+        const requests: Request[] = [];
+        const small = handle(getReport, () => success(getReport, { data: 'x'.repeat(5000) }));
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getReport: small }),
+          options: { onAnswered: (_record, request) => void requests.push(request) },
+        });
+        const session = connectHttp2(url, { settings: { initialWindowSize: 1024 } });
+        session.on('error', () => undefined);
+
+        try {
+          const stream = session.request({ ':path': '/report' });
+          stream.on('error', () => undefined);
+          await new Promise((resolve) => stream.once('data', resolve));
+          stream.pause();
+          stream.close(constants.NGHTTP2_CANCEL);
+          await waitFor(100);
+        } finally {
+          session.destroy();
+        }
+
+        expect(requests[0]?.signal.aborted).toBe(true);
+      });
+
+      test('a Caller that resets its stream with NO_ERROR while a large Success is written aborts the request’s signal, and the server closes once the session is gone', async () => {
+        const requests: Request[] = [];
+        const { app, url } = await served({
+          fastify: { http2: true },
+          options: { onAnswered: (_record, request) => void requests.push(request) },
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/report' });
+        stream.on('error', () => undefined);
+        await new Promise((resolve) => stream.once('data', resolve));
+        stream.pause();
+        await waitFor(50);
+        stream.close(constants.NGHTTP2_NO_ERROR);
+        await waitFor(100);
+        const aborted = requests[0]?.signal.aborted;
+        session.destroy();
+        await app.close();
+
+        expect(aborted).toBe(true);
+      });
+
+      test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and then onResponse, over HTTP/2, as every Fastify HTTP/2 route does', async () => {
+        const hooks: string[] = [];
+        const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+        const waiting = handle(getOrder, async ({ params }, { request }) => {
+          started();
+          await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: waiting }),
+          before: (app) =>
+            app.addHook(
+              'onRequestAbort',
+              async (request) => void hooks.push(`abort ${request.url}`),
+            ),
+          after: (app) =>
+            app.addHook(
+              'onResponse',
+              async (request) => void hooks.push(`response ${request.url}`),
+            ),
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await handlerStarted;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await waitFor(200);
+
+        expect(hooks).toEqual(['abort /orders/o-1', 'response /orders/o-1']);
+      });
+
+      test('a Handler’s signal is not aborted once its response has finished', async () => {
+        const signals: AbortSignal[] = [];
+        const watching = handle(getOrder, ({ params }, { request }) => {
+          signals.push(request.signal);
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: watching }),
+        });
+        const session = h2Session(url);
+
+        const answer = await h2(session, { ':path': '/orders/o-1' });
+        await waitFor(50);
+
+        expect(answer.status).toBe(200);
+        expect(signals[0]?.aborted).toBe(false);
+      });
+
+      test('a Caller that leaves during an earlier async app onRequest hook aborts the Handler’s signal at once, and onAnswered records it', async () => {
+        const startedAborted: boolean[] = [];
+        const records: AnsweredRequest[] = [];
+        const reading = handle(getOrder, ({ params }, { request }) => {
+          startedAborted.push(request.signal.aborted);
+          return success(getOrder, { id: params.orderId });
+        });
+        const { promise: hookRunning, resolve: running } = Promise.withResolvers<void>();
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: reading }),
+          options: { onAnswered: (record) => void records.push(record) },
+          before: (app) =>
+            app.addHook('onRequest', async () => {
+              running();
+              await waitFor(300);
+            }),
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await hookRunning;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await waitFor(600);
+
+        expect(startedAborted).toEqual([true]);
+        expect(records.map((record) => record.aborted)).toEqual([true]);
+      });
+    });
+
+    test('a Success larger than the flow-control window reaches a slow-reading Caller whole, ending with END_STREAM', async () => {
+      const { url } = await served({ fastify: { http2: true } });
+      const wire = await framesProxy(url);
+      const session = h2Session(wire.url);
+
+      const stream = session.request({ ':path': '/report' });
+      stream.pause();
+      const chunks: Buffer[] = [];
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+      const ended = new Promise((resolve) => stream.on('end', resolve));
+      await waitFor(300);
+      stream.resume();
+      await ended;
+      await waitFor(50);
+
+      expect(Buffer.concat(chunks).length).toBe(JSON.stringify({ data: bigData }).length);
+      expect(wireEndOf(wire.framesOf(1))).toBe('end');
+    });
+
+    test('when something fails once a request is taken, its stream is reset with an error code, the session’s other streams and the app’s routes keep answering, and the request reaches onRequestAbort, then onResponse, since Node finishes an HTTP/2 response on every close', async () => {
+      const hooks: string[] = [];
+      const { url } = await served({
+        fastify: { http2: true },
+        before: (app) => {
+          app.addHook('onRequest', async (request, reply) => {
+            if (request.url.startsWith('/orders')) {
+              reply.header('transfer-encoding', 'chunked');
+            }
+          });
+          app.addHook('onRequestAbort', async (request) => void hooks.push(`abort ${request.url}`));
+        },
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void hooks.push(`response ${request.url}`)),
+      });
+      const session = h2Session(url);
+      let failed: Awaited<ReturnType<typeof h2>> | undefined;
+
+      const uncaught = await uncaughtDuring(async () => {
+        failed = await h2(session, { ':path': '/orders/o-1' });
+        await waitFor(50);
+      });
+      const summary = await h2(session, { ':path': '/greet?name=Bob' });
+      const own = await h2(session, { ':path': '/healthz' });
+
+      expect(failed?.ended).toBe(false);
+      expect(failed?.rstCode).toBe(constants.NGHTTP2_INTERNAL_ERROR);
+      expect([summary.status, own.status, own.body]).toEqual([204, 200, 'ok']);
+      expect(uncaught).toEqual([]);
+      expect(hooks).toEqual([
+        'abort /orders/o-1',
+        'response /orders/o-1',
+        'response /greet?name=Bob',
+        'response /healthz',
+      ]);
+    });
+
+    describe('with allowHTTP1 over TLS', () => {
+      const tls = selfSigned();
+      const upload = JSON.stringify({ text: 'x'.repeat(300_000) });
+
+      /** One HTTP/1.1 request over TLS to the server at `url`: its status, headers and body. */
+      async function http1OverTls(url: string, path: string, body?: string) {
+        const request = httpsRequest(`${url}${path}`, {
+          method: body === undefined ? 'GET' : 'POST',
+          ca: tls.cert,
+          servername: 'localhost',
+          agent: false,
+          headers: { 'content-type': 'application/json' },
+        });
+        request.on('error', () => undefined);
+        request.end(body);
+        const [response] = (await once(request, 'response')) as [IncomingMessage];
+        const chunks: Buffer[] = [];
+        for await (const chunk of response) {
+          chunks.push(chunk);
+        }
+        const text = Buffer.concat(chunks).toString();
+        return { status: response.statusCode, headers: response.headers, body: text };
+      }
+
+      test('an HTTP/1.1 request and an HTTP/2 request are each answered by cf-loom, and a body over maxBodyBytes closes the connection over HTTP/1.1 and the stream over HTTP/2', async () => {
+        const { url } = await served({
+          fastify: { http2: true, https: allowingHttp1(tls) },
+          options: { maxBodyBytes: 1000 },
+        });
+        const session = h2Session(url, tls);
+
+        const overHttp1 = await http1OverTls(url, '/orders/o-1');
+        const overHttp2 = await h2(session, { ':path': '/orders/o-1' });
+        const tooLargeOverHttp1 = await http1OverTls(url, '/notes', upload);
+        const tooLargeOverHttp2 = await h2(
+          session,
+          { ':method': 'POST', ':path': '/notes', 'content-type': 'application/json' },
+          upload,
+        );
+
+        expect([overHttp1.status, overHttp1.body]).toEqual([200, '{"id":"o-1"}']);
+        expect([overHttp2.status, overHttp2.body]).toEqual([200, '{"id":"o-1"}']);
+        expect([tooLargeOverHttp1.status, tooLargeOverHttp1.headers.connection]).toEqual([
+          413,
+          'close',
+        ]);
+        expect(tooLargeOverHttp2).toMatchObject({ status: 413, ended: true, rstCode: 0 });
+        expect(tooLargeOverHttp2.headers.connection).toBeUndefined();
+      });
     });
   });
 });
