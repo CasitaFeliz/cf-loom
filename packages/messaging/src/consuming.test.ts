@@ -11,7 +11,7 @@ import {
 import { fault, handle, readersOf, type WithResources } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { planOf } from '../test/streams.ts';
+import { planOf } from '../test/broker-plans.ts';
 import {
   type Broker,
   type ConsumedFault,
@@ -392,7 +392,7 @@ describe('consume', () => {
     };
     const { consume } = await messaging(contract, aBroker().broker);
 
-    // @ts-expect-error notifyOnSettled holds the Handler of notifyOnCreated
+    // @ts-expect-error TS2322 notifyOnSettled holds the Handler of notifyOnCreated
     const swapping = consume({ ...handlers, subscriptions: swapped }, {});
 
     await expect(swapping).rejects.toThrow(

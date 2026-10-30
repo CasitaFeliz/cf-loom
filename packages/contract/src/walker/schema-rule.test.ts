@@ -85,7 +85,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['input']['body'];
 
-    // @ts-expect-error a Contract declares no defaults
+    // @ts-expect-error TS2345 a Contract declares no defaults
     const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
@@ -99,7 +99,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['input']['query'];
 
-    // @ts-expect-error a Contract declares no coercion
+    // @ts-expect-error TS2345 a Contract declares no coercion
     const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
@@ -113,7 +113,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['body'];
 
-    // @ts-expect-error a date travels as a string
+    // @ts-expect-error TS2345 a date travels as a string
     const endpoint = defineEndpoint(written);
 
     expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.date() (use z.iso.datetime())'>>();
@@ -137,7 +137,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['headers'];
 
-    // @ts-expect-error a Map is not JSON
+    // @ts-expect-error TS2345 a Map is not JSON
     const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
@@ -148,7 +148,7 @@ describe('schema types in every declaration', () => {
     const written = { ...base, body: z.object({ total: z.string().transform(Number) }) } as const;
     type Slot = Parameters<typeof defineEvent<typeof written>>[0]['body'];
 
-    // @ts-expect-error what a transform produces is not what travels
+    // @ts-expect-error TS2345 what a transform produces is not what travels
     const declare = () => defineEvent(written);
 
     expect(declare).not.toThrow();
@@ -162,7 +162,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineCommand<typeof written>>[0]['body'];
 
-    // @ts-expect-error a Contract declares no defaults, whichever zod it is written with
+    // @ts-expect-error TS2345 a Contract declares no defaults, whichever zod it is written with
     const declare = () => defineCommand(written);
 
     expect(declare).not.toThrow();
@@ -178,7 +178,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineRejection<typeof written>>[0]['body'];
 
-    // @ts-expect-error a bigint is not JSON
+    // @ts-expect-error TS2345 a bigint is not JSON
     const declare = () => defineRejection(written);
 
     expect(declare).not.toThrow();
@@ -194,7 +194,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineRejection<typeof written>>[0]['body'];
 
-    // @ts-expect-error cf-loom reads zod 4 schemas
+    // @ts-expect-error TS2345 cf-loom reads zod 4 schemas
     const rejection = defineRejection(written);
     const endpoint = defineEndpoint({ ...createOrder, rejections: [rejection] });
 
@@ -220,7 +220,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineGuard<typeof written>>[0]['demands']['query'];
 
-    // @ts-expect-error a Contract declares no coercion
+    // @ts-expect-error TS2345 a Contract declares no coercion
     const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
@@ -231,7 +231,7 @@ describe('schema types in every declaration', () => {
     const written = { ...apiKey, context: z.object({ since: z.date() }) } as const;
     type Slot = Parameters<typeof defineGuard<typeof written>>[0]['context'];
 
-    // @ts-expect-error a date travels as a string
+    // @ts-expect-error TS2345 a date travels as a string
     const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
@@ -245,7 +245,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineGuard<typeof written>>[0]['qualifier'];
 
-    // @ts-expect-error a Contract declares no defaults
+    // @ts-expect-error TS2345 a Contract declares no defaults
     const declare = () => defineGuard(written);
 
     expect(declare).not.toThrow();
@@ -259,7 +259,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['body'];
 
-    // @ts-expect-error a date travels as a string
+    // @ts-expect-error TS2345 a date travels as a string
     const declare = () => defineEndpoint(written);
 
     expect(declare).not.toThrow();
@@ -270,7 +270,7 @@ describe('schema types in every declaration', () => {
     const written = { ...base, body: z.object({ f: z.union([z.string(), z.null()]) }) } as const;
     type Slot = Parameters<typeof defineEvent<typeof written>>[0]['body'];
 
-    // @ts-expect-error null is written .nullable()
+    // @ts-expect-error TS2345 null is written .nullable()
     const declare = () => defineEvent(written);
     const json = defineEvent({ ...base, body: z.object({ f: z.json() }) });
 
@@ -282,7 +282,7 @@ describe('schema types in every declaration', () => {
   test('a refused construct at the tenth schema is a type error, and at the eleventh it is left to generate', () => {
     const tenth = defineEvent({
       ...base,
-      // @ts-expect-error a date travels as a string
+      // @ts-expect-error TS2375 a date travels as a string
       body: aDateAtTheTenthSchema,
     });
     const eleventh = defineEvent({ ...base, body: aDateAtTheEleventhSchema });
@@ -302,7 +302,7 @@ describe('schema types in every declaration', () => {
     } as const;
     type Slot = Parameters<typeof defineEndpoint<typeof written>>[0]['success']['body'];
 
-    // @ts-expect-error a Reader schema belongs to a Contract Package, built with providedEndpoint
+    // @ts-expect-error TS2345 a Reader schema belongs to a Contract Package, built with providedEndpoint
     const endpoint = defineEndpoint(written);
 
     expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.codec()'>>();
@@ -315,7 +315,7 @@ describe('schema types in every declaration', () => {
     const written = { ...base, body: z.date() } as const;
     type Slot = Parameters<typeof defineEvent<typeof written>>[0]['body'];
 
-    // @ts-expect-error a date travels as a string
+    // @ts-expect-error TS2345 a date travels as a string
     const event = defineEvent(written);
 
     expectTypeOf<Slot>().toExtend<Refusal<'not allowed: z.date() (use z.iso.datetime())'>>();
@@ -329,7 +329,7 @@ describe('schema types in every declaration', () => {
     const written = { ...chargeCard, body: z.date() } as const;
     type Slot = Parameters<typeof defineCommand<typeof written>>[0]['body'];
 
-    // @ts-expect-error a date travels as a string
+    // @ts-expect-error TS2345 a date travels as a string
     const declare = () => defineCommand(written);
 
     expect(declare).not.toThrow();

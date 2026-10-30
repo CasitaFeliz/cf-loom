@@ -35,7 +35,7 @@ describe('defineRejection', () => {
         code: 'UNAUTHENTICATED',
         status: 401,
         message: 'Unauthenticated',
-        // @ts-expect-error header names are lower-case
+        // @ts-expect-error TS2375 header names are lower-case
         headers: z.object({ 'WWW-Authenticate': z.string() }),
       });
 
@@ -52,14 +52,14 @@ describe('defineRejection', () => {
   });
 
   test('a Rejection status of 399 is a type error', () => {
-    // @ts-expect-error a Rejection status is 4xx
+    // @ts-expect-error TS2322 a Rejection status is 4xx
     const declare = () => defineRejection({ code: 'MOVED', status: 399, message: 'Moved' });
 
     expect(declare).not.toThrow();
   });
 
   test('a Rejection status of 500 is a type error', () => {
-    // @ts-expect-error a Rejection status is 4xx
+    // @ts-expect-error TS2322 a Rejection status is 4xx
     const declare = () => defineRejection({ code: 'BROKEN', status: 500, message: 'Broken' });
 
     expect(declare).not.toThrow();
@@ -69,7 +69,7 @@ describe('defineRejection', () => {
 describe('defineRejection fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>
-      // @ts-expect-error bogus is not a field of a Rejection
+      // @ts-expect-error TS2322 bogus is not a field of a Rejection
       defineRejection({ code: 'GONE', status: 410, message: 'Gone', bogus: 1 });
 
     expect(declare).not.toThrow();

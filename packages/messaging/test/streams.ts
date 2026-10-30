@@ -1,13 +1,7 @@
 import type { ServiceContract } from '@cf-loom/contract';
-import {
-  type BrokerPlan,
-  brokerPlanOf,
-  providerOf,
-  snapshotOf,
-  validateRoot,
-} from '@cf-loom/contract/internal';
 import { jetstreamManager, type StreamConfig, type StreamInfo } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
+import { planOf } from './broker-plans.ts';
 
 /** A stream as a test arranges it. */
 export type ArrangedStream = { readonly name: string; readonly subjects: readonly string[] };
@@ -55,11 +49,6 @@ export async function dropStream(url: string, name: string): Promise<void> {
   }
 }
 
-/** The broker plan `cf-loom broker-plan` derives from a Service's Contract under a prefix. */
-export function planOf(contract: ServiceContract, prefix: string | null): BrokerPlan {
-  return brokerPlanOf(serviceSnapshotOf(contract), prefix);
-}
-
 /** Creates the streams of a Service's broker plan under a prefix, as the organization's tooling would from `cf-loom broker-plan`. */
 export async function arrangePlanOf(
   url: string,
@@ -70,34 +59,4 @@ export async function arrangePlanOf(
   for (const [name, stream] of Object.entries(plan.streams)) {
     await arrangeStream(url, { name, subjects: stream.subjects });
   }
-}
-
-/** The Snapshot of a Service's Contract, each Provider whose Events it receives installed as a Contract Package at 1.0.0. */
-function serviceSnapshotOf(contract: ServiceContract) {
-  const received = (contract.groups ?? [])
-    .flatMap((group) => group.subscriptions ?? [])
-    .map(({ event }) => event);
-  const providers = new Set(received.map((event) => providerOf(event)));
-  providers.delete(undefined);
-  const contractPackages = [...providers].map((provider) => ({
-    kind: 'identified' as const,
-    packageName: `@org/contract-${provider}`,
-    version: '1.0.0',
-    elements: received.filter((event) => providerOf(event) === provider),
-    reaches: [],
-  }));
-  const validated = validateRoot(contract, {
-    packageName: contract.name,
-    packages: [],
-    contractPackages,
-    rootExports: {},
-  });
-  if (validated.kind !== 'valid') {
-    throw new Error(`The fixture is invalid: ${JSON.stringify(validated.failures)}`);
-  }
-  const snapshot = snapshotOf(validated);
-  if (snapshot.kind !== 'service') {
-    throw new Error('The fixture is no Service');
-  }
-  return snapshot;
 }

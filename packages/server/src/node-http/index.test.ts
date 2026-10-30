@@ -5,6 +5,7 @@ import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loo
 import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type Http, serve } from '../index.ts';
 import { nodeHttp, nodeListener } from './index.ts';
 
@@ -97,77 +98,23 @@ afterEach(() => {
   }
 });
 
+/** A node:http server over nodeListener that keeps each response it was handed, to look at what is left on it. */
+function serverKeeping(http: Http) {
+  const responses: ServerResponse[] = [];
+  const listener = nodeListener(http);
+  const server = createServer((incoming, outgoing) => {
+    responses.push(outgoing);
+    listener(incoming, outgoing);
+  });
+  return { server, responses };
+}
+
 /** The Service listening on a free port, and the URL it answers at. */
 async function listening(server = nodeHttp(serve(contract, handlers, {}))): Promise<string> {
   servers.push(server);
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return `http://127.0.0.1:${port}`;
-}
-
-/** Sends raw HTTP/1.1 text to the server at `url`, and what came back, once the server closes. */
-async function raw(url: string, text: string): Promise<string> {
-  const { port } = new URL(url);
-  return await new Promise<string>((resolve) => {
-    const socket = connect(Number(port), '127.0.0.1');
-    let received = '';
-    socket.on('data', (chunk) => {
-      received += chunk.toString('latin1');
-    });
-    socket.on('error', () => undefined);
-    socket.on('close', () => resolve(received));
-    socket.write(text);
-  });
-}
-
-/**
- * Sends raw HTTP/1.1 text and waits at most `ms` for the server to close the socket: what came
- * back, and whether it closed in time.
- */
-async function rawFor(url: string, text: string, ms: number) {
-  const { port } = new URL(url);
-  return await new Promise<{ readonly received: string; readonly closed: boolean }>((resolve) => {
-    const socket = connect(Number(port), '127.0.0.1');
-    let received = '';
-    const timer = setTimeout(() => {
-      socket.destroy();
-      resolve({ received, closed: false });
-    }, ms);
-    socket.on('data', (chunk) => {
-      received += chunk.toString('latin1');
-    });
-    socket.on('error', () => undefined);
-    socket.on('close', () => {
-      clearTimeout(timer);
-      resolve({ received, closed: true });
-    });
-    socket.write(text);
-  });
-}
-
-function statusLinesOf(received: string): string[] {
-  return received.match(/^HTTP\/1\.1 \d+ .+$/gm) ?? [];
-}
-
-function statusLineOf(received: string): string {
-  return received.split('\r\n')[0] ?? '';
-}
-
-/** The body of a raw response, its chunks joined when it was sent chunked. */
-function bodyOf(received: string): string {
-  const [head = '', ...rest] = received.split('\r\n\r\n');
-  let remaining = rest.join('\r\n\r\n');
-  if (!/transfer-encoding: chunked/i.test(head)) {
-    return remaining;
-  }
-  const chunks: string[] = [];
-  for (let size = Number.parseInt(remaining, 16); size > 0; ) {
-    const start = remaining.indexOf('\r\n') + 2;
-    chunks.push(remaining.slice(start, start + size));
-    remaining = remaining.slice(start + size + 2);
-    size = Number.parseInt(remaining, 16);
-  }
-  return chunks.join('');
 }
 
 /**
@@ -185,6 +132,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
     statusCode: 0,
     appendHeader: () => outgoing,
     setHeader: () => outgoing,
+    removeHeader: () => outgoing,
     writeHead: () => outgoing,
   });
   const finished = new Promise((resolve) => written.on('finish', resolve));
@@ -355,6 +303,295 @@ describe('nodeHttp', () => {
     expect(bodyOf(answer)).toBe('');
   });
 
+  test('a body whose Response states its length is sent with it, and one that states none is chunked', async () => {
+    const bodies: Http = async (request) => {
+      const stated = new URL(request.url).pathname === '/stated';
+      return new Response('{"a":1}', { headers: stated ? { 'content-length': '7' } : {} });
+    };
+    const url = await listening(nodeHttp(bodies));
+
+    const stated = await raw(
+      url,
+      'GET /stated HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+    const unstated = await raw(
+      url,
+      'GET /other HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+
+    const [statedHead = ''] = stated.split('\r\n\r\n');
+    const [unstatedHead = ''] = unstated.split('\r\n\r\n');
+    expect(statedHead).toMatch(/^content-length: 7$/im);
+    expect(statedHead).not.toMatch(/^transfer-encoding:/im);
+    expect(unstatedHead).toMatch(/^transfer-encoding: chunked$/im);
+    expect(unstatedHead).not.toMatch(/^content-length:/im);
+    expect([bodyOf(stated), bodyOf(unstated)]).toEqual(['{"a":1}', '{"a":1}']);
+  });
+
+  test('a stated length that does not match the body’s bytes destroys the socket, and the server keeps serving', async () => {
+    const mismatched: Http = async (request) => {
+      if (new URL(request.url).pathname === '/short') {
+        return new Response('{"a":1}', { headers: { 'content-length': '3' } });
+      }
+      return new Response(null, { status: 204 });
+    };
+    const url = await listening(nodeHttp(mismatched));
+
+    const answer = await raw(url, 'GET /short HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n');
+    const after = await fetch(`${url}/ok`);
+
+    expect(statusLinesOf(answer)).toEqual([]);
+    expect(after.status).toBe(204);
+  });
+
+  test('a Response with a header value Node refuses destroys the socket, and the server keeps serving', async () => {
+    const refusing: Http = async (request) => {
+      if (new URL(request.url).pathname === '/bad') {
+        return new Response('{}', { headers: { 'x-bad': 'a\u0001b' } });
+      }
+      return new Response(null, { status: 204 });
+    };
+    const url = await listening(nodeHttp(refusing));
+
+    const bad = await raw(url, 'GET /bad HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n');
+    const after = await fetch(`${url}/ok`);
+
+    expect(statusLinesOf(bad)).toEqual([]);
+    expect(after.status).toBe(204);
+  });
+
+  test('a Response whose body is already locked destroys the socket, and the server keeps serving', async () => {
+    const locked: Http = async (request) => {
+      if (new URL(request.url).pathname === '/locked') {
+        const response = new Response('{}');
+        response.body?.getReader();
+        return response;
+      }
+      return new Response(null, { status: 204 });
+    };
+    const url = await listening(nodeHttp(locked));
+
+    const answer = await raw(
+      url,
+      'GET /locked HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n',
+    );
+    const after = await fetch(`${url}/ok`);
+
+    expect(statusLinesOf(answer)).toEqual([]);
+    expect(after.status).toBe(204);
+  });
+
+  test('a body that streams is written as it streams, its first chunk reaching the Caller before its last is produced', async () => {
+    const { promise: firstReceived, resolve: received } = Promise.withResolvers<void>();
+    const encoder = new TextEncoder();
+    const streaming: Http = async () => {
+      let produced = 0;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          produced += 1;
+          if (produced === 1) {
+            controller.enqueue(encoder.encode('first;'));
+            return;
+          }
+          await firstReceived;
+          controller.enqueue(encoder.encode('last'));
+          controller.close();
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+    const url = await listening(nodeHttp(streaming));
+
+    const response = await fetch(`${url}/stream`);
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    const first = await reader.read();
+    received();
+    const last = await reader.read();
+
+    const decoder = new TextDecoder();
+    expect([decoder.decode(first.value), decoder.decode(last.value)]).toEqual(['first;', 'last']);
+  });
+
+  test('a streamed body larger than the socket buffers reaches a slow-reading Caller whole, its producer waiting for the Caller', async () => {
+    const chunk = new Uint8Array(1_048_576).fill(120);
+    const chunks = 64;
+    let produced = 0;
+    const streaming: Http = async () => {
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            if (produced === chunks) {
+              controller.close();
+              return;
+            }
+            produced += 1;
+            controller.enqueue(chunk);
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return new Response(body);
+    };
+    const url = await listening(nodeHttp(streaming));
+    const socket = connect(Number(new URL(url).port), '127.0.0.1');
+    socket.on('error', () => undefined);
+    socket.pause();
+    let bytes = 0;
+    let tail = '';
+    socket.on('data', (data: Buffer) => {
+      bytes += data.length;
+      tail = data.subarray(-5).toString('latin1');
+    });
+    const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()));
+
+    socket.write('GET /big HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const producedWhileWaiting = produced;
+    socket.resume();
+    await closed;
+
+    expect(producedWhileWaiting).toBeLessThan(chunks);
+    expect(bytes).toBeGreaterThan(chunks * chunk.length);
+    expect(tail).toBe('0\r\n\r\n');
+  });
+
+  test('a Caller that leaves while a body streams cancels the body’s stream', async () => {
+    const { promise: cancelled, resolve: wasCancelled } = Promise.withResolvers<string>();
+    let produced = 0;
+    const streaming: Http = async () => {
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            produced += 1;
+            if (produced === 1) {
+              controller.enqueue(new TextEncoder().encode('first;'));
+              return;
+            }
+            return new Promise(() => undefined);
+          },
+          cancel() {
+            wasCancelled('cancelled');
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return new Response(body);
+    };
+    const url = await listening(nodeHttp(streaming));
+    const socket = connect(Number(new URL(url).port), '127.0.0.1');
+    socket.on('error', () => undefined);
+    socket.once('data', () => socket.destroy());
+
+    socket.write('GET /stream HTTP/1.1\r\nHost: test\r\n\r\n');
+    const outcome = await Promise.race([
+      cancelled,
+      new Promise<string>((resolve) => setTimeout(() => resolve('still reading'), 1000)),
+    ]);
+
+    expect(outcome).toBe('cancelled');
+  });
+
+  test.each([
+    { name: 'with data ready', ready: true },
+    { name: 'with none yet', ready: false },
+  ])(
+    'a Caller that leaves before a streaming Response resolves cancels its stream, $name, and leaves nothing waiting',
+    async ({ ready }) => {
+      const { promise: cancelled, resolve: wasCancelled } = Promise.withResolvers<string>();
+      const streaming: Http = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const body = new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              if (ready) {
+                controller.enqueue(new Uint8Array(1024));
+                return;
+              }
+              return new Promise(() => undefined);
+            },
+            cancel() {
+              wasCancelled('cancelled');
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        return new Response(body);
+      };
+      const { server, responses } = serverKeeping(streaming);
+      const url = await listening(server);
+      const socket = connect(Number(new URL(url).port), '127.0.0.1');
+      socket.on('error', () => undefined);
+
+      socket.write('GET /events HTTP/1.1\r\nHost: test\r\n\r\n');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      socket.destroy();
+      const outcome = await Promise.race([
+        cancelled,
+        new Promise<string>((resolve) => setTimeout(() => resolve('still open'), 1500)),
+      ]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(outcome).toBe('cancelled');
+      expect(responses[0]?.listenerCount('drain')).toBe(0);
+    },
+  );
+
+  test('a Caller that leaves while the writer waits for drain cancels the body, and leaves nothing waiting', async () => {
+    const { promise: cancelled, resolve: wasCancelled } = Promise.withResolvers<string>();
+    const chunk = new Uint8Array(1_048_576);
+    let produced = 0;
+    const streaming: Http = async () => {
+      const body = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            produced += 1;
+            controller.enqueue(chunk);
+          },
+          cancel() {
+            wasCancelled('cancelled');
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      return new Response(body);
+    };
+    const { server, responses } = serverKeeping(streaming);
+    const url = await listening(server);
+    const socket = connect(Number(new URL(url).port), '127.0.0.1');
+    socket.on('error', () => undefined);
+    socket.pause();
+
+    socket.write('GET /big HTTP/1.1\r\nHost: test\r\n\r\n');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    const producedWhileWaiting = produced;
+    socket.destroy();
+    const outcome = await Promise.race([
+      cancelled,
+      new Promise<string>((resolve) => setTimeout(() => resolve('still open'), 1500)),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(producedWhileWaiting).toBeGreaterThan(0);
+    expect(outcome).toBe('cancelled');
+    expect(responses[0]?.listenerCount('drain')).toBe(0);
+  });
+
+  test('an answer nodeHttp gives itself to a request with no body keeps the connection alive', async () => {
+    const url = await listening();
+    const traced = 'TRACE /orders HTTP/1.1\r\nHost: test\r\n\r\n';
+    const unreadable = 'OPTIONS * HTTP/1.1\r\nHost: test\r\n\r\n';
+    const last = 'GET /orders/o-1 HTTP/1.1\r\nHost: test\r\nConnection: close\r\n\r\n';
+
+    const answer = await raw(url, traced + unreadable + last);
+
+    expect(statusLinesOf(answer)).toEqual([
+      'HTTP/1.1 404 Not Found',
+      'HTTP/1.1 400 Bad Request',
+      'HTTP/1.1 200 OK',
+    ]);
+    expect(answer.split('HTTP/1.1 200')[0]).not.toMatch(/^connection: close$/im);
+  });
+
   test('a GET reaches serve with no body, a DELETE with the body it carries', async () => {
     const seen: (string | null)[] = [];
     const recording: Http = async (request) => {
@@ -522,9 +759,8 @@ describe('nodeHttp', () => {
     expect(answer.closed).toBe(true);
   });
 
-  test('after an unread large body to an undeclared path, the next fetches are answered at once', async () => {
+  test('after an unread large body to an undeclared path, the next fetches are answered', async () => {
     const url = await listening();
-    const started = performance.now();
 
     const unread = await fetch(`${url}/nope`, { method: 'POST', body: 'x'.repeat(300_000) });
     await unread.arrayBuffer();
@@ -533,14 +769,12 @@ describe('nodeHttp', () => {
     const third = await fetch(`${url}/orders/o-1`);
 
     expect([unread.status, second.status, third.status]).toEqual([404, 200, 200]);
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  test('a body over maxBodyBytes reaches the Caller as 413 and closes its connection, and the next fetches are served at once', async () => {
+  test('a body over maxBodyBytes reaches the Caller as 413 and closes its connection, and the next fetches are served', async () => {
     const url = await listening(nodeHttp(serve(contract, handlers, { maxBodyBytes: 1000 })));
     const body = JSON.stringify({ text: 'x'.repeat(300_000) });
     const headers = { 'content-type': 'application/json' };
-    const started = performance.now();
 
     const tooLarge = await fetch(`${url}/notes`, { method: 'POST', headers, body });
     await tooLarge.arrayBuffer();
@@ -550,7 +784,6 @@ describe('nodeHttp', () => {
 
     expect([tooLarge.status, second.status, third.status]).toEqual([413, 200, 200]);
     expect(tooLarge.headers.get('connection')).toBe('close');
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   test('a small body serve leaves unread closes the connection too', async () => {

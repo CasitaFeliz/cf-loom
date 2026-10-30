@@ -73,9 +73,9 @@ describe('declarationsListedBy', () => {
     const cast = defineGroup({
       name: 'orders',
       description: 'Order lifecycle',
-      // @ts-expect-error an Endpoint list holds Endpoints, and a list is a list
+      // @ts-expect-error TS2322 an Endpoint list holds Endpoints, and a list is a list
       endpoints: [listOrders, orderCreatedV1, 'listArchived'],
-      // @ts-expect-error a list is a list
+      // @ts-expect-error TS2322 a list is a list
       events: 'orderCreatedV1',
     });
 
@@ -88,9 +88,9 @@ describe('declarationsListedBy', () => {
     const cast = defineGroup({
       name: 'orders',
       description: 'Order lifecycle',
-      // @ts-expect-error a Group lists its Contract’s own Elements
+      // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
       endpoints: [listOrders, ping],
-      // @ts-expect-error a Group lists its Contract’s own Elements
+      // @ts-expect-error TS2322 a Group lists its Contract’s own Elements
       events: [pingedV1, orderCreatedV1],
     });
 

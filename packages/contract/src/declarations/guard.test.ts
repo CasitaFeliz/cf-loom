@@ -66,7 +66,7 @@ describe('defineGuard', () => {
       defineGuard({
         name: 'signed',
         description: 'A signed body',
-        // @ts-expect-error a Guard demands only headers and query
+        // @ts-expect-error TS2741 a Guard demands only headers and query
         demands: { body: z.object({ signature: z.string() }) },
       });
 
@@ -78,7 +78,7 @@ describe('defineGuard', () => {
       defineGuard({
         name: 'tenant',
         description: 'A tenant in the path',
-        // @ts-expect-error a Guard demands only headers and query
+        // @ts-expect-error TS2741 a Guard demands only headers and query
         demands: { params: z.object({ tenantId: z.string() }) },
       });
 
@@ -90,7 +90,7 @@ describe('defineGuard', () => {
       defineGuard({
         name: 'tenant',
         description: 'The tenant the Caller acts for',
-        // @ts-expect-error a Guard lists declared Rejections only
+        // @ts-expect-error TS2322 a Guard lists declared Rejections only
         rejections: [notFound],
       });
 
@@ -102,7 +102,7 @@ describe('defineGuard', () => {
       defineGuard({
         name: 'apiKey',
         description: 'A key per Caller',
-        // @ts-expect-error header names are lower-case
+        // @ts-expect-error TS2375 header names are lower-case
         demands: { headers: z.object({ 'X-Api-Key': z.string() }) },
       });
 
@@ -192,7 +192,7 @@ describe('defineGuard names', () => {
   test('a name every object already has is a type error', () => {
     const declare = () =>
       defineGuard({
-        // @ts-expect-error toString is a name every object already has
+        // @ts-expect-error TS2322 toString is a name every object already has
         name: 'toString',
         description: 'A Guard',
       });
@@ -216,7 +216,7 @@ describe('defineGuard demands', () => {
       defineGuard({
         name: 'signed',
         description: 'A signed request',
-        // @ts-expect-error a Guard demands only headers and query
+        // @ts-expect-error TS2322 a Guard demands only headers and query
         demands: { body: 'A Guard demands only headers and query' },
       });
 
@@ -228,7 +228,7 @@ describe('defineGuard demands', () => {
       defineGuard({
         name: 'signed',
         description: 'A signed request',
-        // @ts-expect-error a Guard demands only headers and query
+        // @ts-expect-error TS2322 a Guard demands only headers and query
         demands: { params: 'A Guard demands only headers and query' },
       });
 
@@ -242,7 +242,7 @@ describe('defineGuard fields', () => {
       defineGuard({
         name: 'permission',
         description: 'The user holds a permission',
-        // @ts-expect-error audience is not a declared field
+        // @ts-expect-error TS2375 audience is not a declared field
         audience: z.array(z.string()),
       });
 
@@ -280,7 +280,7 @@ describe('defineGuard Rejections', () => {
       defineGuard({
         name: 'apiKey',
         description: 'A key per Caller',
-        // @ts-expect-error UNAUTHENTICATED is listed twice
+        // @ts-expect-error TS2322 UNAUTHENTICATED is listed twice
         rejections: [unauthenticated, unauthenticated],
       });
 
@@ -300,7 +300,7 @@ describe('defineGuard Rejections with one code', () => {
       defineGuard({
         name: 'apiKey',
         description: 'A key per Caller',
-        // @ts-expect-error UNAUTHENTICATED is listed twice
+        // @ts-expect-error TS2322 UNAUTHENTICATED is listed twice
         rejections: [unauthenticated, unauthenticatedAgain],
       });
 
@@ -316,7 +316,7 @@ describe('defineGuard nested fields', () => {
         description: 'A key per Caller',
         demands: {
           query: z.object({ page: z.int() }),
-          // @ts-expect-error header is not a part of demands
+          // @ts-expect-error TS2375 header is not a part of demands
           header: z.object({ 'x-api-key': z.string() }),
         },
       });

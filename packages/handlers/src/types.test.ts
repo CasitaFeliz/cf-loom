@@ -256,9 +256,9 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     const misspelled = { committed: 'no', retryable: false, messge: 'Try another card' } as const;
     const late = { committed: 'no', retryable: true, retryAftr: 30 } as const;
 
-    // @ts-expect-error messge is not a declared field
+    // @ts-expect-error TS2769 messge is not a declared field
     const building = () => fault(misspelled);
-    // @ts-expect-error retryAftr is not a declared field
+    // @ts-expect-error TS2769 retryAftr is not a declared field
     const buildingLate = () => fault(late);
 
     expect([building, buildingLate]).toHaveLength(2);
@@ -267,7 +267,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
   test('fault given a retryAfter and a misspelled field through a variable is a type error', () => {
     const given = { committed: 'no', retryable: true, retryAfter: 30, messge: 'Busy' } as const;
 
-    // @ts-expect-error messge is not a declared field
+    // @ts-expect-error TS2769 messge is not a declared field
     const building = () => fault(given);
 
     expect(building).toBeTypeOf('function');
@@ -279,7 +279,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
       { committed: 'yes', retryable: false } as const,
     );
 
-    // @ts-expect-error extra is not a declared field
+    // @ts-expect-error TS2769 extra is not a declared field
     const building = () => fault(given);
 
     expect(building).toBeTypeOf('function');
@@ -313,7 +313,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
   test('a Message Handler’s Direct call given meta through a variable with a field it does not declare is a type error', () => {
     const meta = { factId: 'o-1', delivryCount: 2 };
 
-    // @ts-expect-error delivryCount is not a declared field
+    // @ts-expect-error TS2345 delivryCount is not a declared field
     const calling = () => chargeCardHandler({ orderId: 'o-1' }, meta);
 
     expect(calling).toBeTypeOf('function');
@@ -322,7 +322,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
   test('an EndpointHandler’s Direct call given its second argument through a variable with a field it does not declare is a type error', () => {
     const call = { context, rquest: { signal: new AbortController().signal } };
 
-    // @ts-expect-error rquest is not a declared field
+    // @ts-expect-error TS2345 rquest is not a declared field
     const calling = () => getOrderHandler(input, call);
 
     expect(calling).toBeTypeOf('function');
@@ -331,7 +331,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
   test('a GuardHandler’s Direct call given its second argument through a variable with a field it does not declare is a type error', () => {
     const call = { context, qualifier: ['orders:read'], contxt: context };
 
-    // @ts-expect-error contxt is not a declared field
+    // @ts-expect-error TS2345 contxt is not a declared field
     const calling = () => permissionHandler({}, call);
 
     expect(calling).toBeTypeOf('function');
@@ -344,9 +344,9 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
       request: { signal: new AbortController().signal, headrs: new Headers() },
     };
 
-    // @ts-expect-error headrs is not a declared field
+    // @ts-expect-error TS2322 headrs is not a declared field
     const callingWithRequest = () => getOrderHandler(input, { context, request });
-    // @ts-expect-error headrs is not a declared field
+    // @ts-expect-error TS2345 headrs is not a declared field
     const callingWithCall = () => getOrderHandler(input, call);
 
     expect([callingWithRequest, callingWithCall]).toHaveLength(2);
@@ -355,7 +355,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
   test('a GuardHandler’s Direct call given its request through a variable with a field it does not declare is a type error', () => {
     const request = { signal: new AbortController().signal, headrs: new Headers() };
 
-    // @ts-expect-error headrs is not a declared field
+    // @ts-expect-error TS2322 headrs is not a declared field
     const calling = () => permissionHandler({}, { context, qualifier: ['orders:read'], request });
 
     expect(calling).toBeTypeOf('function');
@@ -369,7 +369,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     );
     const last = { resources: { callers: 'c-1' }, resourcs: { callers: 'c-2' } };
 
-    // @ts-expect-error resourcs is not a declared field
+    // @ts-expect-error TS2345 resourcs is not a declared field
     const calling = () => callersHandler({}, { context, qualifier: ['orders:read'] }, last);
 
     expect(calling).toBeTypeOf('function');
@@ -383,7 +383,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     );
     const last = { resources: { cards: 'k-1' }, resourcs: { cards: 'k-2' } };
 
-    // @ts-expect-error resourcs is not a declared field
+    // @ts-expect-error TS2345 resourcs is not a declared field
     const calling = () => chargingHandler({ orderId: 'o-1' }, {}, last);
 
     expect(calling).toBeTypeOf('function');
@@ -397,7 +397,7 @@ describe('a Direct call and fault() refuse a field they do not declare, given th
     );
     const last = { resources: { orders: 'o-1' }, resourcs: { orders: 'o-2' } };
 
-    // @ts-expect-error resourcs is not a declared field
+    // @ts-expect-error TS2345 resourcs is not a declared field
     const calling = () => ordersHandler(input, { context }, last);
 
     expect(calling).toBeTypeOf('function');
@@ -447,11 +447,11 @@ describe('success() and admit() take their declaration first, and check a litera
 
   test('a success literal with a field the Endpoint does not declare is a type error, in a sync and an async Handler', () => {
     const syncHandler = handle(getOrder, ({ params }) =>
-      // @ts-expect-error ordrId is not a declared field
+      // @ts-expect-error TS2561 ordrId is not a declared field
       success(getOrder, { orderId: params.orderId, ordrId: params.orderId }),
     );
     const asyncHandler = handle(getOrder, async ({ params }) =>
-      // @ts-expect-error ordrId is not a declared field
+      // @ts-expect-error TS2561 ordrId is not a declared field
       success(getOrder, { orderId: params.orderId, ordrId: params.orderId }),
     );
 
@@ -461,7 +461,7 @@ describe('success() and admit() take their declaration first, and check a litera
   test('a misspelled optional header in a success literal is a type error', () => {
     const handler = handle(createOrder, ({ body }) =>
       success(createOrder, {
-        // @ts-expect-error x-trace-di is not a declared header
+        // @ts-expect-error TS2353 x-trace-di is not a declared header
         headers: { location: `/orders/${body.orderId}`, 'x-trace-di': 't-1' },
         body,
       }),
@@ -510,7 +510,7 @@ describe('success() and admit() take their declaration first, and check a litera
 
   test('success given a value for an Endpoint that declares neither headers nor a body is a type error', () => {
     const handler = handle(deleteOrder, ({ params }) =>
-      // @ts-expect-error a 204 without headers takes no value
+      // @ts-expect-error TS2554 a 204 without headers takes no value
       success(deleteOrder, { orderId: params.orderId }),
     );
 
@@ -519,7 +519,7 @@ describe('success() and admit() take their declaration first, and check a litera
 
   test('an admit literal with a field the Context does not declare is a type error', () => {
     const handler = handle(apiKey, () =>
-      // @ts-expect-error callrId is not a declared field
+      // @ts-expect-error TS2561 callrId is not a declared field
       admit(apiKey, { callerId: 'c-1', callrId: 'c-1' }),
     );
 
@@ -545,7 +545,7 @@ describe('success() and admit() take their declaration first, and check a litera
 
   test('admit given a Context for a Guard that provides none is a type error', () => {
     const handler = handle(permission, () =>
-      // @ts-expect-error permission provides no Context
+      // @ts-expect-error TS2554 permission provides no Context
       admit(permission, { callerId: 'c-1' }),
     );
 
@@ -557,14 +557,14 @@ describe('readersOf refuses a field its table does not declare', () => {
   test('a table given through a variable with a field beside commands and subscriptions is a type error', () => {
     const table = { commands: {}, subscriptions: {}, subscriptons: {} };
 
-    // @ts-expect-error subscriptons is not a declared field
+    // @ts-expect-error TS2345 subscriptons is not a declared field
     const building = () => readersOf(table);
 
     expect(building).toBeTypeOf('function');
   });
 
   test('a table written as a literal with a field beside commands and subscriptions is a type error', () => {
-    // @ts-expect-error subscriptons is not a declared field
+    // @ts-expect-error TS2741 subscriptons is not a declared field
     const building = () => readersOf({ commands: {}, subscriptions: {}, subscriptons: {} });
 
     expect(building).toBeTypeOf('function');

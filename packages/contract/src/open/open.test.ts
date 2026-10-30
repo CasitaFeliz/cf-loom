@@ -105,14 +105,14 @@ describe('openEnum', () => {
   });
 
   test('an Open Enum type names the enum it holds', () => {
-    // @ts-expect-error a bare OpenEnum would accept no Open Enum
+    // @ts-expect-error TS2314 a bare OpenEnum would accept no Open Enum
     const bare: OpenEnum | undefined = undefined;
 
     expect(bare).toBeUndefined();
   });
 
   test('openEnum takes string values only', () => {
-    // @ts-expect-error an Open Enum's values are strings
+    // @ts-expect-error TS2322 an Open Enum's values are strings
     const declare = () => contract.openEnum([1, 2]);
 
     expect(declare).not.toThrow();

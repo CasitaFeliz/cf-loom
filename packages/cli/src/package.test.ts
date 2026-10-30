@@ -1411,7 +1411,7 @@ describe('cf-loom package: the built package', () => {
       'const total = { amount: 1, currency: "EUR" };',
       'const orderId = "6f1c1b9e-6c1e-4f9b-9d4c-1f2e3d4c5b6a";',
       "export const read: Placed = { orderId, status: { unknown: 'refunded' }, total };",
-      '// @ts-expect-error an undeclared value is read as its Unknown case only',
+      '// @ts-expect-error TS2322 an undeclared value is read as its Unknown case only',
       "export const bare: Placed = { orderId, status: 'refunded', total };",
     ]);
     link(out, join(consumer, 'node_modules/@org/contract-orders-service'));

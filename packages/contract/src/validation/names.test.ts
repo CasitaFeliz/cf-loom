@@ -216,7 +216,7 @@ describe('validateRoot: name grammars', () => {
   });
 
   test('an Endpoint named toJSON, which breaks the words and is a name JavaScript calls, reads both', () => {
-    // @ts-expect-error a literal reserved name is a type error
+    // @ts-expect-error TS2322 a literal reserved name is a type error
     const endpoint = defineEndpoint({ ...listing, name: 'toJSON' });
 
     expect(validateGroups([aGroup('orders', [endpoint])])).toEqual(

@@ -10,7 +10,7 @@ export const storages = ['file', 'memory'] as const;
 export const deliverPolicies = ['all', 'new', 'last', 'last_per_subject'] as const;
 
 /** A stream's settings cf-loom has no opinion on, which the organization chooses. */
-export type StreamLimits = {
+export type JetStreamStreamLimits = {
   /** Which Messages the stream keeps: until its limits drop them, while a Durable consumer still has to read them, or until one acknowledges them. */
   readonly retention: (typeof retentions)[number];
   /** How long the stream keeps a Message. */
@@ -24,7 +24,7 @@ export type StreamLimits = {
 };
 
 /** A Durable consumer's settings cf-loom has no opinion on, which the organization chooses. */
-export type DurableConsumerLimits = {
+export type JetStreamDurableConsumerLimits = {
   /** Where a new Durable consumer starts reading its stream; NATS never changes it once the Durable consumer exists. */
   readonly deliverPolicy: (typeof deliverPolicies)[number];
   /** How long a delivery waits for its acknowledgement before it comes again, or one wait per delivery, the last repeating. */
@@ -36,4 +36,4 @@ export type DurableConsumerLimits = {
 };
 
 /** Every setting of the plan's streams and Durable consumers, keyed by the names the plan prints, with defaults for whatever one does not set. */
-export type BrokerLimits = LimitsOf<StreamLimits, DurableConsumerLimits>;
+export type JetStreamBrokerLimits = LimitsOf<JetStreamStreamLimits, JetStreamDurableConsumerLimits>;

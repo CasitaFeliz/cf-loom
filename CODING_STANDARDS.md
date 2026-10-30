@@ -273,7 +273,9 @@ agree with it, or it is read against nothing.
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
 status of a command. It imports no private module and asserts no call order of mocks. A README test imports the
 README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
-them. *Why:* a test of the mechanics fails on every refactor and passes on every bug.
+them. *Why:* a test of the mechanics fails on every refactor and passes on every bug. A type test that a call is
+refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and `pnpm check` verifies that the line
+below fails with that code **(check)**: a bare `@ts-expect-error` is met by any error, so it proves nothing.
 
 **C24. A test's name states the behavior in plain English.** `"an optional path param fails generate"`, not
 `"handles params"` or `"walk returns not-allowed"`. The `describe` names the seam; the `test` reads as a sentence
@@ -289,6 +291,15 @@ and the public APIs are compatibility we have: their fixtures and tests stay. No
 accepts the old shape" for a shape nothing released, no test that a private helper returns a value. A public record's
 key set is pinned by one type test in its package's `types.test.ts`; a test never asserts the absence of one field.
 *Why:* such a test pins the thing the next change must delete.
+
+**C30. A test that bounds time asserts a ratio, never a clock.** It measures with the growth helpers
+(`growthOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
+`tsconfig.test.json` to import it, as billing does `nats-server.ts`): growth between two sizes of each dimension the plan
+names, or a ratio to a reference doing the same work without the behavior under test. A correctness test gets the
+project's timeout, never one sized on an idle machine. A test file reads no clock: `performance.now()`, `Date.now()`,
+`process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors **(lint)**, and the helpers
+that read one are not test files. *Why:* a shared runner slows a clock several times over; absolute bounds turned CI red
+at least eight times.
 
 ## Reviewing
 
@@ -317,10 +328,14 @@ and `reduceRight` (C12), a single-letter name outside a lambda of one expression
 `boolean` parameter, by type or by default, of an exported function or arrow function (C17), under `walker/`, a read of
 a getter zod derives from the schemas a schema holds (`_zod.propValues`, `values`, `optin`, `optout`), as a member
 read, a destructuring or a cast of `_zod` (a name bound to `_zod` is out of reach), which reaches what the walk has not
-judged (C1), and a spread argument of `push`, `unshift` or `splice` (C29). `scripts/check-tsdoc.ts` fails on an
-exported declaration in a package's `src` with no TSDoc directly above it (C20); `pnpm check` and CI run it.
-`scripts/check-layout.ts` fails on a `src/` that breaks [Package layout](ARCHITECTURE.md#package-layout); `pnpm check`
-and CI run it.
+judged (C1), a spread argument of `push`, `unshift` or `splice` (C29), and, in a `*.test.ts`, a read of a clock
+(`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`, `process.threadCpuUsage`) (C30).
+`scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
+`pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
+[Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`
+type-checks the test projects of the packages and the examples and fails on a `@ts-expect-error` that names no code or
+whose line below does not fail with the code it names (C23); it needs the Contract Package that `pnpm build` writes, so
+CI runs it after the build.
 
 The rest stays judgment, and C27 is where it is exercised: the vague words of C14, every name of C15, a boolean
 parameter of a function that is not exported or is exported through an `export { … }` list (C17), whether a doc

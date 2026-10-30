@@ -3,27 +3,27 @@ import { describe, expect, expectTypeOf, test } from 'vitest';
 import type { Broker } from '../index.ts';
 import {
   applyBrokerPlan,
-  type BrokerLimits,
   type BrokerPlan,
   type BrokerPlanDurableConsumer,
   type BrokerPlanStream,
-  type DurableConsumerLimits,
+  type JetStreamBrokerLimits,
   type JetStreamBrokerOptions,
   type JetStreamConnecting,
+  type JetStreamDurableConsumerLimits,
+  type JetStreamStreamLimits,
   jetstream,
-  type StreamLimits,
 } from './index.ts';
 
 const connect = (): Promise<NatsConnection> => Promise.reject(new Error('no NATS in this test'));
 
 const plan = {} as BrokerPlan;
-const limits = {} as BrokerLimits;
+const limits = {} as JetStreamBrokerLimits;
 
 describe('jetstream() types', () => {
   test('jetstream() returns a Broker, with no apply', () => {
     const broker = jetstream({ connect, prefix: 'staging' });
 
-    // @ts-expect-error: applying a broker plan is applyBrokerPlan, no part of a Broker
+    // @ts-expect-error TS2339 applying a broker plan is applyBrokerPlan, no part of a Broker
     const apply = broker.apply;
 
     expectTypeOf(broker).toEqualTypeOf<Broker>();
@@ -33,7 +33,7 @@ describe('jetstream() types', () => {
   test('jetstream() refuses an options variable holding connect and a misspelled prefix', () => {
     const options = { connect, prefx: 'staging' };
 
-    // @ts-expect-error prefx is not a declared field
+    // @ts-expect-error TS2345 prefx is not a declared field
     const brokerOf = () => jetstream(options);
 
     expect(brokerOf).toBeTypeOf('function');
@@ -51,7 +51,7 @@ describe('jetstream() types', () => {
   test('applyBrokerPlan refuses a connecting variable holding connect and a misspelled jetstream', () => {
     const connecting = { connect, jetstrem: { domain: 'hub' } };
 
-    // @ts-expect-error jetstrem is not a declared field
+    // @ts-expect-error TS2345 jetstrem is not a declared field
     const applying = () => applyBrokerPlan(connecting, plan, limits);
 
     expect(applying).toBeTypeOf('function');
@@ -60,7 +60,7 @@ describe('jetstream() types', () => {
   test('applyBrokerPlan refuses a connecting variable holding a prefix, which the plan names', () => {
     const connecting = { connect, prefix: 'staging' };
 
-    // @ts-expect-error prefix is not a declared field: the plan names the Broker prefix
+    // @ts-expect-error TS2345 prefix is not a declared field: the plan names the Broker prefix
     const applying = () => applyBrokerPlan(connecting, plan, limits);
 
     expect(applying).toBeTypeOf('function');
@@ -72,7 +72,7 @@ describe('jetstream() types', () => {
       durableConsumerDefault: { maxDeliver: 5 },
     } as const;
 
-    // @ts-expect-error durableConsumerDefault is not a declared field
+    // @ts-expect-error TS2345 durableConsumerDefault is not a declared field
     const applying = () => applyBrokerPlan({ connect }, plan, given);
 
     expect(applying).toBeTypeOf('function');
@@ -81,7 +81,7 @@ describe('jetstream() types', () => {
   test('applyBrokerPlan refuses stream defaults given through a variable with a field they do not declare', () => {
     const given = { streamDefaults: { replicas: 1, replica: 3 } } as const;
 
-    // @ts-expect-error replica is not a declared field
+    // @ts-expect-error TS2345 replica is not a declared field
     const applying = () => applyBrokerPlan({ connect }, plan, given);
 
     expect(applying).toBeTypeOf('function');
@@ -90,7 +90,7 @@ describe('jetstream() types', () => {
   test('applyBrokerPlan refuses Durable consumer defaults given through a variable with a field they do not declare', () => {
     const given = { durableConsumerDefaults: { maxDeliver: 5, maxDelivery: 5 } } as const;
 
-    // @ts-expect-error maxDelivery is not a declared field
+    // @ts-expect-error TS2345 maxDelivery is not a declared field
     const applying = () => applyBrokerPlan({ connect }, plan, given);
 
     expect(applying).toBeTypeOf('function');
@@ -142,20 +142,20 @@ describe('the records a JetStream broker takes and plans', () => {
     >();
   });
 
-  test('BrokerLimits hold the Stream and Durable consumer defaults and overrides, and no more', () => {
-    expectTypeOf<keyof BrokerLimits>().toEqualTypeOf<
+  test('JetStreamBrokerLimits hold the Stream and Durable consumer defaults and overrides, and no more', () => {
+    expectTypeOf<keyof JetStreamBrokerLimits>().toEqualTypeOf<
       'streamDefaults' | 'streams' | 'durableConsumerDefaults' | 'durableConsumers'
     >();
   });
 
-  test('StreamLimits hold the retention, storage, replicas, age and duplicate window, and no more', () => {
-    expectTypeOf<keyof StreamLimits>().toEqualTypeOf<
+  test('JetStreamStreamLimits hold the retention, storage, replicas, age and duplicate window, and no more', () => {
+    expectTypeOf<keyof JetStreamStreamLimits>().toEqualTypeOf<
       'retention' | 'storage' | 'replicas' | 'maxAge' | 'duplicateWindow'
     >();
   });
 
-  test('DurableConsumerLimits hold the ack wait, delivery policy, redelivery and pending limits, and no more', () => {
-    expectTypeOf<keyof DurableConsumerLimits>().toEqualTypeOf<
+  test('JetStreamDurableConsumerLimits hold the ack wait, delivery policy, redelivery and pending limits, and no more', () => {
+    expectTypeOf<keyof JetStreamDurableConsumerLimits>().toEqualTypeOf<
       'ackWait' | 'deliverPolicy' | 'maxDeliver' | 'maxAckPending'
     >();
   });

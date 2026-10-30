@@ -389,7 +389,7 @@ describe('fakeProvider: a test’s mistakes', () => {
   test('a bare string where an Open Enum is declared is a mistake: an unknown value is { unknown }', async () => {
     const payments = fakeProvider(paymentsDependency);
     payments.on('getPayment').otherwise((r) =>
-      // @ts-expect-error a value the Open Enum does not declare is written as its Unknown case
+      // @ts-expect-error TS2322 a value the Open Enum does not declare is written as its Unknown case
       r.success({ headers, body: { ...body, stage: 'refunded' } }),
     );
 
@@ -494,7 +494,7 @@ describe('fakeProvider: a test’s mistakes', () => {
 
   test('a body given for a code that declares none is a mistake, never dropped', async () => {
     const payments = fakeProvider(paymentsDependency);
-    // @ts-expect-error NOT_FOUND declares no body
+    // @ts-expect-error TS2345 NOT_FOUND declares no body
     payments.on('getPayment').otherwise((r) => r.reject('NOT_FOUND', { x: 1 }));
 
     const error = await payments
@@ -547,7 +547,7 @@ describe('fakeProvider: a test’s mistakes', () => {
 
   test('a code the Endpoint does not answer, given to r.reject, is a mistake naming r.unknownRejection', async () => {
     const payments = fakeProvider(paymentsDependency);
-    // @ts-expect-error getPayment answers no PAYMENT_LOST
+    // @ts-expect-error TS2345 getPayment answers no PAYMENT_LOST
     payments.on('getPayment').otherwise((r) => r.reject('PAYMENT_LOST'));
 
     const error = await payments

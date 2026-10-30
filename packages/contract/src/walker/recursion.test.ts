@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summarized } from '../../test/failures.ts';
-import { cpuMillisecondsOf, cpuRatioOf, growthOf } from '../../test/growth.ts';
+import { cpuRatioOf, growthOf } from '../../test/growth.ts';
 import {
   idOf,
   type Mix,
@@ -1535,19 +1535,23 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** The CPU time a walk of the ring stays under. */
-  const ringCpuMilliseconds = 1000;
+  /** How many times longer a ring twice as long may take to walk: about 2 for a walk of each schema once. */
+  const ringWalkedOnceGrowth = 8;
 
-  test('a ring of 255 schemas walks fast', () => {
-    const ring = aRingOf(255);
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
 
-    const walk = () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+  test('a ring of 255 schemas walks each once', { timeout: growthTimeout }, () => {
+    const walkOf = (count: number) => {
+      const ring = aRingOf(count);
+      return () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
+    };
 
-    const walked = walk();
-    const cpuMilliseconds = cpuMillisecondsOf(walk, ringCpuMilliseconds);
+    const walked = walkOf(255)();
+    const growth = growthOf(walkOf, { small: 128, large: 255 }, ringWalkedOnceGrowth);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(cpuMilliseconds).toBeLessThan(ringCpuMilliseconds);
+    expect(growth).toBeLessThan(ringWalkedOnceGrowth);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1729,35 +1733,40 @@ describe('walkSchemas: recursion', () => {
     expect(cpuRatio).toBeLessThan(memoCpuRatio);
   });
 
-  /** The CPU time a walk stays under when it walks the failing def once, not once per path. */
-  const manyPathsCpuMilliseconds = 1000;
+  /**
+   * How many times longer a ring of steps twice as long may take: about 2 when the failing def is
+   * walked once, and 2 to the power of the number of steps when it is walked once per path.
+   */
+  const failingDefWalkedOnceGrowth = 8;
 
-  test('a failing def met by many paths is reported once and walked once', () => {
-    const count = 26;
-    const steps: z.ZodType[] = [];
-    const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
-    for (let index = 0; index <= count; index++) {
-      const side = () =>
-        z.object({
-          get next() {
-            return nextOf(index);
-          },
-        });
-      const shape =
-        index === count ? { placedAt: z.date(), a: side(), b: side() } : { a: side(), b: side() };
-      steps.push(z.object(shape).meta({ id: `step${index}` }));
-    }
+  test('a failing def met by many paths is reported once and walked once', {
+    timeout: growthTimeout,
+  }, () => {
+    const walkOf = (count: number) => {
+      const steps: z.ZodType[] = [];
+      const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
+      for (let index = 0; index <= count; index++) {
+        const side = () =>
+          z.object({
+            get next() {
+              return nextOf(index);
+            },
+          });
+        const shape =
+          index === count ? { placedAt: z.date(), a: side(), b: side() } : { a: side(), b: side() };
+        steps.push(z.object(shape).meta({ id: `step${index}` }));
+      }
+      return () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
+    };
 
-    const walk = () => walkSchemas([{ at: placeAt('body'), schema: steps[0]! }], () => undefined);
-
-    const walked = walk();
-    const cpuMilliseconds = cpuMillisecondsOf(walk, manyPathsCpuMilliseconds);
+    const walked = walkOf(26)();
+    const growth = growthOf(walkOf, { small: 8, large: 16 }, failingDefWalkedOnceGrowth);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(cpuMilliseconds).toBeLessThan(manyPathsCpuMilliseconds);
+    expect(growth).toBeLessThan(failingDefWalkedOnceGrowth);
   });
 
   describe('an id on a cycle whose way back runs through a schema answered from memory', () => {
@@ -2656,7 +2665,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
   });
 
   test('an id that is not a string gives its line alone', () => {
-    // @ts-expect-error zod types an id as a string
+    // @ts-expect-error TS2322 zod types an id as a string
     const walked = walkBody(cycleWith((schema) => schema.meta({ id: 5 })));
 
     expect(walked).toEqual({
@@ -2692,7 +2701,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
     },
     {
       what: 'not a string',
-      // @ts-expect-error zod types an id as a string
+      // @ts-expect-error TS2322 zod types an id as a string
       named: (schema: z.ZodObject) => schema.meta({ id: 5 }).describe('A'),
     },
   ])(
@@ -2750,7 +2759,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
       kind: 'refused',
       name: (schema: z.ZodType, index: number) => schema.meta({ id: `m_${index}` }),
     },
-    // @ts-expect-error zod types an id as a string
+    // @ts-expect-error TS2322 zod types an id as a string
     { kind: 'non-string', name: (schema: z.ZodType) => schema.meta({ id: 5 }) },
     {
       kind: 'dropped',

@@ -102,7 +102,7 @@ describe('memory types', () => {
 
   test('memory()’s result is no Broker: messaging(contract, await memory(contract)) is a type error', () => {
     const connecting = () =>
-      // @ts-expect-error: memory() runs the Contract's messaging itself, it has no connect
+      // @ts-expect-error TS2741 memory() runs the Contract's messaging itself, it has no connect
       messaging(contract, inMemory);
 
     expect(connecting).toBeTypeOf('function');
@@ -111,7 +111,7 @@ describe('memory types', () => {
   test('memory() refuses an options variable holding a declared hook and a misspelled one', () => {
     const options = { onServiceFault: () => undefined, onBrokerTrubble: () => undefined };
 
-    // @ts-expect-error onBrokerTrubble is not a declared field
+    // @ts-expect-error TS2345 onBrokerTrubble is not a declared field
     const opening = () => memory(contract, options);
 
     expect(opening).toBeTypeOf('function');
@@ -141,7 +141,7 @@ describe('memory types', () => {
 
   test('deliver takes an Event or a Command and resolves to acked, pending or ended', () => {
     const deliveringSubscription = () =>
-      // @ts-expect-error: a Subscription is no Message Version to deliver, redeliver() retries
+      // @ts-expect-error TS2345 a Subscription is no Message Version to deliver, redeliver() retries
       inMemory.deliver(notifyOnCreated, {});
 
     expectTypeOf(inMemory.deliver).parameter(0).toEqualTypeOf<Event | Command>();
@@ -156,7 +156,7 @@ describe('memory types', () => {
 
   test('deliver takes the body its Message Version’s writer writes: a misspelled field is a type error', () => {
     const delivering = () =>
-      // @ts-expect-error: ordrId is no field of OrderCreated's body
+      // @ts-expect-error TS2561 ordrId is no field of OrderCreated's body
       inMemory.deliver(orderCreatedV1, { ordrId: 'o-1' });
 
     expectTypeOf(inMemory.deliver<typeof orderCreatedV1>)
@@ -168,7 +168,7 @@ describe('memory types', () => {
   test('deliver given meta through a variable with a field it does not declare is a type error', () => {
     const meta = { factId: 'f-1', header: { traceparent: '00-abc-def-01' } };
 
-    // @ts-expect-error header is not a declared field
+    // @ts-expect-error TS2345 header is not a declared field
     const delivering = () => inMemory.deliver(orderCreatedV1, { orderId: 'o-1' }, meta);
 
     expect(delivering).toBeTypeOf('function');
@@ -176,7 +176,7 @@ describe('memory types', () => {
 
   test('deliver of a Command takes its Message Version’s body type', () => {
     const delivering = () =>
-      // @ts-expect-error: amount is no field of ChargeCard's body
+      // @ts-expect-error TS2353 amount is no field of ChargeCard's body
       inMemory.deliver(chargeCardV1, { orderId: 'o-1', amount: 12 });
 
     expectTypeOf(inMemory.deliver<typeof chargeCardV1>)
@@ -200,7 +200,7 @@ describe('memory types', () => {
 
   test('deliver of an own Event refuses an Unknown case of an Open Enum at compile time', () => {
     const delivering = () =>
-      // @ts-expect-error: an own Event's writer writes a declared case, never an Unknown one
+      // @ts-expect-error TS2322 an own Event's writer writes a declared case, never an Unknown one
       inMemory.deliver(orderPlacedV1, { orderId: 'o-1', status: { unknown: 'refunded' } });
 
     expectTypeOf(inMemory.deliver<typeof orderPlacedV1>)
@@ -271,7 +271,7 @@ describe('memory types', () => {
   });
 
   test('memory() has no apply', () => {
-    // @ts-expect-error: no broker plan exists to apply
+    // @ts-expect-error TS2339 no broker plan exists to apply
     const apply = inMemory.apply;
 
     expect(apply).toBeUndefined();

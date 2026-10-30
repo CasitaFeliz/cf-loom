@@ -60,5 +60,5 @@ const durableConsumer: KindLimits<
 
 /** JetStream's limits, read and resolved by `plannedOf`. */
 export function checkedOf(plan: unknown, limits: unknown) {
-  return plannedOf(plan, limits, { definer: 'BrokerLimits', stream, durableConsumer });
+  return plannedOf(plan, limits, { definer: 'JetStreamBrokerLimits', stream, durableConsumer });
 }

@@ -1,12 +1,16 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
-import { applyBrokerPlan, type BrokerLimits, type BrokerPlan } from '@cf-loom/messaging/jetstream';
+import {
+  applyBrokerPlan,
+  type BrokerPlan,
+  type JetStreamBrokerLimits,
+} from '@cf-loom/messaging/jetstream';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
 
 /** Every setting of a test's plans, for one throwaway nats-server, which holds one replica of anything. */
-const testLimits: BrokerLimits = {
+const testLimits: JetStreamBrokerLimits = {
   durableConsumerDefaults: {
     ackWait: '30s',
     deliverPolicy: 'all',

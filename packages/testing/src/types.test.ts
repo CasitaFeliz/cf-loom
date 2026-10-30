@@ -149,9 +149,9 @@ describe('fakeProvider: types', () => {
   test('on and calls take the names of listed Endpoints only', () => {
     const payments = fakeProvider(paymentsDependency);
 
-    // @ts-expect-error listPayments is exported but not listed
+    // @ts-expect-error TS2345 listPayments is exported but not listed
     const unlisted = () => payments.on('listPayments');
-    // @ts-expect-error no Endpoint has this name
+    // @ts-expect-error TS2345 no Endpoint has this name
     const unknown = () => payments.calls('getPayments');
 
     expect([unlisted, unknown]).toHaveLength(2);
@@ -169,11 +169,11 @@ describe('fakeProvider: types', () => {
     type Call = ReturnType<typeof payments.calls<'getPayment'>>[number];
 
     const writingPart = (call: Call) => {
-      // @ts-expect-error a recorded call is never written to
+      // @ts-expect-error TS2540 a recorded call is never written to
       call.params = { paymentId: 'x' };
     };
     const writingParam = (call: Call) => {
-      // @ts-expect-error a recorded call is never written to at any depth
+      // @ts-expect-error TS2540 a recorded call is never written to at any depth
       call.params.paymentId = 'x';
     };
 
@@ -219,11 +219,11 @@ describe('fakeProvider: types', () => {
   });
 
   test('Script, Step and StepBuilder refuse a name the Dependency does not list', () => {
-    // @ts-expect-error listPayments is exported but not listed
+    // @ts-expect-error TS2344 listPayments is exported but not listed
     type UnlistedScript = Script<typeof paymentsDependency, 'listPayments'>;
-    // @ts-expect-error listPayments is exported but not listed
+    // @ts-expect-error TS2344 listPayments is exported but not listed
     type UnlistedStep = Step<typeof paymentsDependency, 'listPayments'>;
-    // @ts-expect-error no Endpoint has this name
+    // @ts-expect-error TS2344 no Endpoint has this name
     type UnlistedBuilder = StepBuilder<typeof paymentsDependency, 'getPayments'>;
 
     expectTypeOf<[UnlistedScript, UnlistedStep, UnlistedBuilder]>().not.toBeNever();
@@ -237,11 +237,11 @@ describe('fakeProvider: types', () => {
       .once((r) => r.reject('NO_PAYMENT'))
       .once((r) => r.reject('PAYMENT_LOCKED', { lockedAt: '2026-10-19T10:00:00Z' }))
       .once((r) => r.unknownRejection('CARD_EXPIRED', { body: { any: 'thing' } }))
-      // @ts-expect-error a declared body is required
+      // @ts-expect-error TS2345 a declared body is required
       .once((r) => r.reject('PAYMENT_LOCKED'))
-      // @ts-expect-error the Provider resolved notFound to NO_PAYMENT
+      // @ts-expect-error TS2345 the Provider resolved notFound to NO_PAYMENT
       .once((r) => r.reject('NOT_FOUND'))
-      // @ts-expect-error the body is the declared one
+      // @ts-expect-error TS2345 the body is the declared one
       .otherwise((r) => r.reject('PAYMENT_LOCKED', { lockedAt: 1 }));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -253,9 +253,9 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('getPayment')
-      // @ts-expect-error a code that may be either is paired with neither body
+      // @ts-expect-error TS2345 a code that may be either is paired with neither body
       .once((r) => r.reject(code))
-      // @ts-expect-error NO_PAYMENT declares no body, so the body fits only one of the two
+      // @ts-expect-error TS2345 NO_PAYMENT declares no body, so the body fits only one of the two
       .once((r) => r.reject(code, { lockedAt: '2026-10-19T10:00:00Z' }))
       .otherwise((r) =>
         code === 'PAYMENT_LOCKED'
@@ -273,15 +273,15 @@ describe('fakeProvider: types', () => {
       .on('refundPayment')
       .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 }, body: { limit: 5 } }))
       .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'Bearer' } }))
-      // @ts-expect-error a code that declares headers takes them
+      // @ts-expect-error TS2345 a code that declares headers takes them
       .once((r) => r.reject('UNAUTHORIZED'))
-      // @ts-expect-error a code that declares headers takes { headers, body }, not a bare body
+      // @ts-expect-error TS2345 a code that declares headers takes { headers, body }, not a bare body
       .once((r) => r.reject('THROTTLED', { limit: 5 }))
-      // @ts-expect-error a code that declares a body takes it beside its headers
+      // @ts-expect-error TS2345 a code that declares a body takes it beside its headers
       .once((r) => r.reject('THROTTLED', { headers: { 'retry-after': 30 } }))
-      // @ts-expect-error a code that declares no body takes none beside its headers
+      // @ts-expect-error TS2345 a code that declares no body takes none beside its headers
       .once((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 'B' }, body: {} }))
-      // @ts-expect-error a header is typed by its Reader
+      // @ts-expect-error TS2345 a header is typed by its Reader
       .otherwise((r) => r.reject('UNAUTHORIZED', { headers: { 'www-authenticate': 3 } }));
 
     expect(payments.calls('refundPayment')).toEqual([]);
@@ -292,7 +292,7 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('getPayment')
-      // @ts-expect-error NO_PAYMENT declares no body, so none is given, not even undefined
+      // @ts-expect-error TS2345 NO_PAYMENT declares no body, so none is given, not even undefined
       .once((r) => r.reject('NO_PAYMENT', undefined));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -305,9 +305,9 @@ describe('fakeProvider: types', () => {
       .on('getPayment')
       .once((r) => r.fault({ committed: 'no', retryable: true, retryAfter: 30 }))
       .once((r) => r.fault({ committed: 'no', retryable: true }))
-      // @ts-expect-error a Fault that is not retryable takes no retryAfter
+      // @ts-expect-error TS2322 a Fault that is not retryable takes no retryAfter
       .once((r) => r.fault({ committed: 'no', retryable: false, retryAfter: 30 }))
-      // @ts-expect-error retryAfter is whole seconds, a number
+      // @ts-expect-error TS2322 retryAfter is whole seconds, a number
       .otherwise((r) => r.fault({ committed: 'no', retryable: true, retryAfter: '30' }));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -320,7 +320,7 @@ describe('fakeProvider: types', () => {
     payments
       .on('getPayment')
       .once((r) => r.fault({ committed: 'no', retryable }))
-      // @ts-expect-error a retryable that may be false takes no retryAfter
+      // @ts-expect-error TS2322 a retryable that may be false takes no retryAfter
       .otherwise((r) => r.fault({ committed: 'no', retryable, retryAfter: 30 }));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -331,9 +331,9 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('getPayment')
-      // @ts-expect-error a Reserved code is no Fault
+      // @ts-expect-error TS2322 a Reserved code is no Fault
       .once((r) => r.fault({ code: 'RETIRED' }))
-      // @ts-expect-error a Fault carries no code
+      // @ts-expect-error TS2322 a Fault carries no code
       .once((r) => r.fault({ committed: 'yes', retryable: true, code: 'RETIRED' }))
       .otherwise((r) => r.reserved('RETIRED'));
 
@@ -347,9 +347,9 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('getPayment')
-      // @ts-expect-error messge is not a declared field
+      // @ts-expect-error TS2345 messge is not a declared field
       .once((r) => r.fault(misspelled))
-      // @ts-expect-error kind and cause are not declared fields: a Handler's Fault is not what r.fault takes
+      // @ts-expect-error TS2379 kind and cause are not declared fields: a Handler's Fault is not what r.fault takes
       .otherwise((r) => r.fault(built));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -361,7 +361,7 @@ describe('fakeProvider: types', () => {
 
     payments
       .on('getPayment')
-      // @ts-expect-error headrs is not a declared field
+      // @ts-expect-error TS2345 headrs is not a declared field
       .otherwise((r) => r.unknownRejection('CARD_EXPIRED', options));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -370,7 +370,7 @@ describe('fakeProvider: types', () => {
   test('fakeProvider given options through a variable with a field they do not declare is a type error', () => {
     const options = { baseUrl: 'https://payments.test', baseUri: 'https://payments.test' };
 
-    // @ts-expect-error baseUri is not a declared field
+    // @ts-expect-error TS2345 baseUri is not a declared field
     const faking = () => fakeProvider(paymentsDependency, options);
 
     expect(faking).toBeTypeOf('function');
@@ -382,11 +382,11 @@ describe('fakeProvider: types', () => {
     payments
       .on('getPayment')
       .once((r) => r.reserved('NO_SUCH_ENDPOINT'))
-      // @ts-expect-error BOGUS is no Reserved code
+      // @ts-expect-error TS2345 BOGUS is no Reserved code
       .once((r) => r.reserved('BOGUS'))
-      // @ts-expect-error a Reserved code is a string
+      // @ts-expect-error TS2345 a Reserved code is a string
       .once((r) => r.reserved(410))
-      // @ts-expect-error a Reserved code is given alone
+      // @ts-expect-error TS2554 a Reserved code is given alone
       .otherwise((r) => r.reserved('RETIRED', { retryAfter: 30 }));
 
     expect(payments.calls('getPayment')).toEqual([]);
@@ -398,15 +398,15 @@ describe('fakeProvider: types', () => {
     payments
       .on('getPayment')
       .once((r) => r.success({ id: 'pay-1', stage: { unknown: 'refunded' } }))
-      // @ts-expect-error a value the Open Enum does not declare is its Unknown case
+      // @ts-expect-error TS2322 a value the Open Enum does not declare is its Unknown case
       .otherwise((r) => r.success({ id: 'pay-1', stage: 'refunded' }));
     const withBody = { headers: { 'x-tag': 'settled' as const }, body: { x: 1 } };
     payments
       .on('tagPayment')
       .once((r) => r.success({ headers: { 'x-tag': 'settled' } }))
-      // @ts-expect-error a headers-only Success takes no body, in a literal or not
+      // @ts-expect-error TS2345 a headers-only Success takes no body, in a literal or not
       .once((r) => r.success(withBody))
-      // @ts-expect-error declared headers are passed with the Success
+      // @ts-expect-error TS2554 declared headers are passed with the Success
       .otherwise((r) => r.success());
 
     expect(payments.calls('tagPayment')).toEqual([]);
@@ -440,7 +440,7 @@ describe('fakeProvider: types', () => {
     const payments = fakeProvider(paymentsDependency);
     const options = { headers: { 'x-api-key': 'k' }, fetch: globalThis.fetch };
 
-    // @ts-expect-error fetch is not a declared field: the fake's own is the client's
+    // @ts-expect-error TS2345 fetch is not a declared field: the fake's own is the client's
     const clientOf = () => payments.client(options);
 
     expect(clientOf).toBeTypeOf('function');
@@ -450,7 +450,7 @@ describe('fakeProvider: types', () => {
     const payments = fakeProvider(paymentsDependency);
     const options = { headers: { 'x-api-key': 'k' }, baseUrl: 'https://elsewhere.test' };
 
-    // @ts-expect-error baseUrl is not a declared field: the fake's is the client's
+    // @ts-expect-error TS2345 baseUrl is not a declared field: the fake's is the client's
     const clientOf = () => payments.client(options);
 
     expect(clientOf).toBeTypeOf('function');
@@ -460,7 +460,7 @@ describe('fakeProvider: types', () => {
     const payments = fakeProvider(paymentsDependency);
     const options = { headers: { 'x-api-key': 'k' }, inferFalt: () => undefined };
 
-    // @ts-expect-error inferFalt is not a declared field
+    // @ts-expect-error TS2345 inferFalt is not a declared field
     const clientOf = () => payments.client(options);
 
     expect(clientOf).toBeTypeOf('function');

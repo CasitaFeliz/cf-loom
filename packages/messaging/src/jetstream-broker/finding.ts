@@ -1,7 +1,7 @@
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
 import { type ConsumerInfo, JetStreamApiCodes, type JetStreamManager } from '@nats-io/jetstream';
 import type { DurableConsumer } from '../broker/index.ts';
-import { isApiError } from './applied.ts';
+import { isApiError } from './api-error.ts';
 import { shapeDifferencesOf } from './durable-consumer-shape.ts';
 import { type PullRequest, pullRequestOf } from './pull-once.ts';
 import { planRemedy } from './stream-check.ts';
