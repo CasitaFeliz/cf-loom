@@ -24,7 +24,7 @@ Organization-agnostic tooling for Service Contracts: HTTP Endpoints and messagin
 
 ## Repository
 
-- pnpm 12 workspaces under `packages/` and `examples/`, every example `private: true`; shared versions in the catalog of `pnpm-workspace.yaml`. Node 24 (`.node-version`).
+- pnpm 12 workspaces under `packages/` and `examples/`, every example `private: true`; shared versions in the catalog of `pnpm-workspace.yaml`. Node 24.16.0 (`.node-version`), with the npm it bundles.
 - ESM only; built with `tsc -b` and project references; tested with Vitest projects; formatted and linted with Biome.
 - Each package has `tsconfig.build.json` (src to dist, no tests) and `tsconfig.test.json` (type-checks tests); `contract` and `client` build without Node types, since Applications run them in browsers.
 - cf-loom packages depend on each other only as peers (plus a devDependency), never as dependencies.
