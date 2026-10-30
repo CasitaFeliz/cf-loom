@@ -919,7 +919,7 @@ describe('consuming over sqs()', () => {
             name: 'RawMessageDelivery',
             value: 'false',
           });
-          return 'its subscription has RawMessageDelivery false, not true';
+          return "its subscription has RawMessageDelivery 'false', not true";
         },
       },
       {
@@ -931,7 +931,20 @@ describe('consuming over sqs()', () => {
             name: 'FilterPolicy',
             value: other,
           });
-          return `its subscription has FilterPolicy ${other}, not ${chargeFilter(orders.charge)}`;
+          return `its subscription has FilterPolicy '${other}', not ${chargeFilter(orders.charge)}`;
+        },
+      },
+      {
+        name: 'a filter policy written over several lines',
+        arrange: async ({ connecting, orders }: AMessaging) => {
+          const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+          const spaced = '{\n  "cf-loom-subject": ["staging.orders-service.command.Other.v1"]\n}';
+          await setSubscriptionAttribute(connecting.sns, arn, {
+            name: 'FilterPolicy',
+            value: spaced,
+          });
+          const shown = String.raw`{\n  "cf-loom-subject": ["staging.orders-service.command.Other.v1"]\n}`;
+          return `its subscription has FilterPolicy '${shown}', not ${chargeFilter(orders.charge)}`;
         },
       },
       {
@@ -942,7 +955,7 @@ describe('consuming over sqs()', () => {
             name: 'FilterPolicyScope',
             value: 'MessageBody',
           });
-          return 'its subscription has FilterPolicyScope MessageBody, not MessageAttributes';
+          return "its subscription has FilterPolicyScope 'MessageBody', not MessageAttributes";
         },
       },
       {
@@ -961,7 +974,7 @@ describe('consuming over sqs()', () => {
           }
           await tagByHand(connecting.sqs, orders.chargeQueue, { 'cf-loom:subscription': arn });
           const ordersTopic = 'arn:aws:sns:eu-west-1:123456789012:staging_orders-service';
-          return `its subscription has TopicArn ${topicArn}, not ${ordersTopic}`;
+          return `its subscription has TopicArn '${topicArn}', not ${ordersTopic}`;
         },
       },
       {
@@ -973,7 +986,7 @@ describe('consuming over sqs()', () => {
             `arn:aws:sqs:eu-west-1:123456789012:${orders.notifyQueue}`,
             chargeFilter(orders.created),
           ];
-          return `its subscription has Endpoint ${endpoint}, not arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue} and its subscription has FilterPolicy ${filter}, not ${chargeFilter(orders.charge)}`;
+          return `its subscription has Endpoint '${endpoint}', not arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue} and its subscription has FilterPolicy '${filter}', not ${chargeFilter(orders.charge)}`;
         },
       },
     ])('consume rejects naming the queue and the difference of $name', async ({ arrange }) => {
@@ -985,6 +998,7 @@ describe('consuming over sqs()', () => {
 
       const line = `The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} ${difference}: apply the Service's Broker plan`;
       await expect(consuming).rejects.toMatchObject({ message: line });
+      await expect(consuming).rejects.toSatisfy((error: Error) => !error.message.includes('\n'));
     });
 
     test('a tag SNS answers as an invalid parameter is refused as naming no subscription', async () => {

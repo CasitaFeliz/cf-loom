@@ -16,7 +16,7 @@ import { queueUrlOf } from './queue-url.ts';
 import type { Working } from './sqs-connection.ts';
 import {
   type SubscriptionShape,
-  subscriptionMismatchesOf,
+  subscriptionDifferencesWithIdentityOf,
   subscriptionShapeOf,
 } from './subscription-shape.ts';
 import { subscriptionTag } from './tags.ts';
@@ -117,7 +117,7 @@ async function subscriptionDifferencesFor(
   }
   try {
     const read = await sns.send(new GetSubscriptionAttributesCommand({ SubscriptionArn: arn }));
-    return subscriptionMismatchesOf(read.Attributes ?? {}, shape).map(
+    return subscriptionDifferencesWithIdentityOf(read.Attributes ?? {}, shape).map(
       (text) => `its subscription ${text}`,
     );
   } catch (error) {

@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: SNS spells its attributes in PascalCase
 import { isDeepStrictEqual } from 'node:util';
 import { snsSubjectAttribute } from '@cf-loom/contract/internal';
+import { oneLineOf } from '../broker-limits/index.ts';
 
 /** The attributes of a subscription that `SetSubscriptionAttributes` sets and cf-loom requires. */
 export type SubscriptionAttributes = {
@@ -79,7 +80,10 @@ export function subscriptionDifferencesOf(
   return Object.keys(comparers)
     .filter(isAttribute)
     .filter((attribute) => !matchesShape(attribute, held[attribute], shape))
-    .map((attribute) => ({ attribute, text: differenceTextOf(attribute, held[attribute], shape) }));
+    .map((attribute) => ({
+      attribute,
+      text: differenceText(attribute, held[attribute], shape.attributes[attribute]),
+    }));
 }
 
 function matchesShape(
@@ -90,22 +94,15 @@ function matchesShape(
   return held !== undefined && comparers[attribute](held, shape.attributes[attribute]);
 }
 
-function differenceTextOf(
-  attribute: keyof SubscriptionAttributes,
-  held: string | undefined,
-  shape: SubscriptionShape,
-): string {
-  return differenceText(attribute, held, shape.attributes[attribute]);
-}
-
+/** One difference of a subscription: the value it holds, shown on one line as `util.inspect` prints it since SNS answers the text as it was written, and the shape's. */
 function differenceText(name: string, held: string | undefined, expected: string): string {
   return held === undefined
     ? `has no ${name}, not ${expected}`
-    : `has ${name} ${held}, not ${expected}`;
+    : `has ${name} ${oneLineOf(held)}, not ${expected}`;
 }
 
 /** How an existing subscription differs from the shape: first the topic it is on and the queue it delivers to, then each attribute; none when it is the shape's. */
-export function subscriptionMismatchesOf(
+export function subscriptionDifferencesWithIdentityOf(
   held: Readonly<Record<string, string>>,
   shape: SubscriptionShape,
 ): readonly string[] {
