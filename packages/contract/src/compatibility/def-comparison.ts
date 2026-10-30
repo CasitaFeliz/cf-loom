@@ -22,7 +22,7 @@ type Fact = 'changed' | Annotation;
 /** Each def's facts together with those of every def it reaches, by name. */
 type DefComparison = ReadonlyMap<string, ReadonlySet<Fact>>;
 
-/** What a name the comparison holds nothing for stands for: a def neither side can be compared by. */
+/** The facts of a def whose shape differs or that a side lacks, and of a name the comparison holds nothing for. */
 const unknownDef: readonly Fact[] = ['changed'];
 
 /**
