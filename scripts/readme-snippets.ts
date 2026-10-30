@@ -12,14 +12,13 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { blocksOf, type Readme } from './readme-blocks.ts';
-import { cfLoomProblemsOf, contractPackagesOf, runCfLoom } from './readme-cf-loom.ts';
+import { cfLoomProblemsOf, runCfLoom } from './readme-cf-loom.ts';
 import { type Compiled, compile, freeNamesOf } from './readme-compile.ts';
 import {
   completed,
   declaredTwice,
   importsOf,
   type Project,
-  packagesAt,
   projectOf,
   providersOf,
   type Scope,
@@ -33,7 +32,8 @@ const diagnostic = /^(.+?)\((\d+),\d+\): (error TS\d+: .*)$/;
 /**
  * Why the TypeScript blocks of the READMEs do not compile, as `README:line: error TS…`, empty when
  * they do. A block leaves out the imports of zod, `@cf-loom/contract` and the files of its own
- * package; the check adds them, then type-checks each block as the file its path comment names.
+ * package; the check adds an import of each name `tsc` cannot find that one of them provides,
+ * then type-checks each block as the file its path comment names.
  * The project is written to a temporary folder, so the READMEs are the caller's own.
  */
 export function snippetProblems(readmes: readonly Readme[], scope: Scope): string[] {
@@ -53,9 +53,9 @@ export function snippetProblems(readmes: readonly Readme[], scope: Scope): strin
 /**
  * Writes the Service the READMEs describe to `directory`: the blocks of the READMEs of
  * `repository`, completed, and the files of `scripts/readme-service/`, which no block shows, then
- * what `cf-loom generate` and `cf-loom package` write for its other Services, so it needs the CLI
- * built; what cf-loom refuses is kept for `readmeServiceProblems`. It replaces what the directory
- * held.
+ * what `cf-loom generate` and `cf-loom package` write for each Service the scope gives a
+ * package.json, so it needs the CLI built; what cf-loom refuses is kept for
+ * `readmeServiceProblems`. It replaces what the directory held.
  */
 export function writeReadmeService(directory: string, repository: string = root): void {
   const { project } = projectOfReadmes(readmesOf(repository), scopeOf(repository));
@@ -66,7 +66,7 @@ export function writeReadmeService(directory: string, repository: string = root)
 
 /**
  * Why the Service written to `directory` does not compile, as `snippetProblems` reports it, and
- * what cf-loom refused in its other Services, each at its README line. It compiles `directory`
+ * what cf-loom refused in its Services, each at its README line. It compiles `directory`
  * where it is and never writes to it.
  */
 export function readmeServiceProblems(directory: string, repository: string = root): string[] {
@@ -115,29 +115,6 @@ function contractNames(repository: string): string[] {
   return names.filter((name) => /^\w+$/.test(name));
 }
 
-/** The scope's packages by name, as the files of `directory` that stand for them. */
-export function readmeServiceAliases(
-  directory: string,
-  repository: string = root,
-): Record<string, string> {
-  const paths = Object.keys(scopeOf(repository));
-  return Object.fromEntries(
-    scopePackagesOf(paths).map(([name, path]) => [name, join(directory, path)]),
-  );
-}
-
-/**
- * The packages the scope stands for, a file under `scope-packages/` the package of its path, and
- * the Contract Packages `cf-loom package` writes there.
- */
-function scopePackagesOf(paths: readonly string[]): [string, string][] {
-  const prefix = `${packagesAt}/`;
-  const standing = paths
-    .filter((path) => path.startsWith(prefix))
-    .map((path): [string, string] => [path.slice(prefix.length).replace(/\.ts$/, ''), path]);
-  return [...standing, ...contractPackagesOf(paths)];
-}
-
 /**
  * Writes the project twice: with no import added, to learn from `tsc` the names each file leaves
  * out, then with an import for each such name a provider has.
@@ -145,12 +122,9 @@ function scopePackagesOf(paths: readonly string[]): [string, string][] {
 function writeProject(directory: string, project: Project, repository: string): void {
   const providers = providersOf(project, contractNames(repository));
   mkdirSync(directory, { recursive: true });
-  symlinkSync(
-    join(repository, 'examples', 'billing-service', 'node_modules'),
-    join(directory, 'node_modules'),
-  );
+  linkDependencies(directory, repository);
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
-  writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfigOf(project)));
+  writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify(tsconfig));
   writeFiles(directory, project, () => new Map());
   const free = freeNamesOf(compile(directory), project);
   writeFiles(directory, project, (path) => importsOf(path, free.get(path) ?? new Set(), providers));
@@ -167,24 +141,31 @@ function writeFiles(
   }
 }
 
-/** The compiler options the root README recommends, with the scope's packages found where they sit. */
-function tsconfigOf(project: Project) {
-  const aliases = scopePackagesOf([...project.keys()]).map(([name, path]) => [name, [`./${path}`]]);
-  return {
-    compilerOptions: {
-      allowImportingTsExtensions: true,
-      erasableSyntaxOnly: true,
-      lib: ['ES2024'],
-      module: 'nodenext',
-      noEmit: true,
-      paths: Object.fromEntries(aliases),
-      skipLibCheck: true,
-      strict: true,
-      target: 'ES2024',
-      types: ['node'],
-    },
-    include: ['**/*.ts'],
-  };
+/** The compiler options the root README recommends. */
+const tsconfig = {
+  compilerOptions: {
+    allowImportingTsExtensions: true,
+    erasableSyntaxOnly: true,
+    lib: ['ES2024'],
+    module: 'nodenext',
+    noEmit: true,
+    skipLibCheck: true,
+    strict: true,
+    target: 'ES2024',
+    types: ['node'],
+  },
+  include: ['**/*.ts'],
+};
+
+/** Installs what the Services depend on as billing-service has them, but the organization's own packages, which the scope installs. */
+function linkDependencies(directory: string, repository: string): void {
+  const installed = join(repository, 'examples', 'billing-service', 'node_modules');
+  mkdirSync(join(directory, 'node_modules'));
+  for (const name of readdirSync(installed)) {
+    if (!name.startsWith('.') && name !== '@org') {
+      symlinkSync(join(installed, name), join(directory, 'node_modules', name));
+    }
+  }
 }
 
 function problemsOf(compiled: Compiled, project: Project): string[] {

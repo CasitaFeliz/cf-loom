@@ -5,8 +5,8 @@ import type { Project } from './readme-project.ts';
 /** What `tsc` printed over a folder, and whether it ended in failure. */
 export type Compiled = { readonly failed: boolean; readonly lines: string[] };
 
-/** The `tsc` of the repository, which type-checks the README Service. */
-const tsc = join(import.meta.dirname, '..', 'node_modules', 'typescript', 'bin', 'tsc');
+/** The `tsc` of the repository, which type-checks the README Service and builds its Contract Packages. */
+export const tsc = join(import.meta.dirname, '..', 'node_modules', 'typescript', 'bin', 'tsc');
 const notFound = /^(.+?)\((\d+),(\d+)\): error TS(?:2304|2552|18004|2503|2662|2663): /;
 const identifier = /^[A-Za-z_$][\w$]*/;
 

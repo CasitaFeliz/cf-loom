@@ -40,6 +40,7 @@ const running = await messaging(contract, jetstream({
 const resources = {      // the Service's own
   orders: await ordersRepository(),
   callers: await mongoCallers(),
+  permissions: await mongoPermissions(),
   payments: client(paymentsDependency, { baseUrl }),
   notifications: await mongoNotifications(),
   publisher: running.publisher,

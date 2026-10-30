@@ -17,9 +17,6 @@ export type Providers = {
   readonly siblings: ReadonlyMap<string, ReadonlyMap<string, string>>;
 };
 
-/** Where the scope's packages sit in the project, found by the compiler options and the aliases. */
-export const packagesAt = 'scope-packages';
-
 /**
  * The project the blocks and the scope make: each block is the file its path names. A path names
  * one file once, so a block whose path an earlier block or the scope already names is left out
@@ -58,9 +55,9 @@ function claimOf(holder: Block | undefined): string {
     : `the snippet at ${at}: snippets are named by their heading, so one of the headings changes`;
 }
 
-/** The package a file belongs to: a scope package its own, a Service's file that Service's, else the Service. */
+/** The package a file belongs to: a Service's file that Service's, else the Service. */
 function packageOf(path: string): string {
-  return path.startsWith(`${packagesAt}/`) ? path : (serviceOf(path) ?? '');
+  return serviceOf(path) ?? '';
 }
 
 /** A name a block and a scope file of one package both export: the scope holds what no block shows. */
