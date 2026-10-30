@@ -4,16 +4,7 @@ import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { fault, handle } from '@cf-loom/handlers';
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  onTestFinished,
-  test,
-  vi,
-} from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   arrangeTopic,
   dropQueue,
@@ -24,7 +15,6 @@ import {
   tagByHand,
   unsubscribe,
   untagByHand,
-  wakeEach,
 } from '../../test/aws-arranging.ts';
 import {
   aClosedUrl,
@@ -53,15 +43,16 @@ import {
   type Received,
   testLimits,
 } from '../../test/orders.ts';
+import {
+  aGate,
+  anOrdersMessaging,
+  closedWhenDone,
+  limitsWith,
+  type Settings,
+} from '../../test/orders-messaging.ts';
 import { until } from '../../test/until.ts';
 import { type BrokerTrouble, type ConsumedFault, type DeadlineError, messaging } from '../index.ts';
-import {
-  type Duration,
-  type SqsBrokerLimits,
-  type SqsConnecting,
-  type SqsDurableConsumerLimits,
-  sqs,
-} from './index.ts';
+import { type Duration, sqs } from './index.ts';
 
 let moto: MotoServer;
 
@@ -77,48 +68,9 @@ beforeEach(async () => {
   await moto.reset();
 });
 
-/** Closes a messaging when the test ends, waking its open polls so the closing does not wait them out. */
-function closedWhenDone(
-  started: { readonly close: () => Promise<void> },
-  connecting: SqsConnecting,
-  orders: ReturnType<typeof anOrders> = anOrders('staging'),
-): void {
-  onTestFinished(async () => {
-    const closing = started.close();
-    for (const queue of [orders.notifyQueue, orders.chargeQueue]) {
-      await wakeEach(connecting.sqs, [queue]).catch(() => undefined);
-    }
-    await closing.catch(() => undefined);
-  });
-}
-
-/** What a test of Orders over sqs() may set: its Broker prefix, the limits its queues are made with and the hooks of its messaging. */
-type Settings = {
-  readonly prefix?: string | null;
-  readonly limits?: SqsBrokerLimits;
-  readonly onServiceFault?: (fault: ConsumedFault) => void | Promise<void>;
-  readonly onBrokerTrouble?: (trouble: BrokerTrouble) => void | Promise<void>;
-};
-
 /** An Orders messaging over sqs() on the test's moto, closed when the test ends, with the names it works with. */
-async function aMessaging(settings: Settings = {}) {
-  const { prefix = 'staging', limits, onServiceFault, onBrokerTrouble } = settings;
-  const connecting = anAwsConnecting(moto.url);
-  await arrangeOrders(connecting, { prefix, ...(limits === undefined ? {} : { limits }) });
-  const hooks = {
-    onServiceFault: onServiceFault ?? (() => undefined),
-    onBrokerTrouble: onBrokerTrouble ?? (() => undefined),
-  };
-  const broker = sqs(prefix === null ? connecting : { ...connecting, prefix });
-  const started = await messaging(ordersContract, broker, hooks);
-  const orders = anOrders(prefix);
-  closedWhenDone(started, connecting, orders);
-  return { ...started, connecting, orders };
-}
-
-/** The limits of the test's queues with these settings of a Durable consumer over the default ones. */
-function limitsWith(settings: Partial<SqsDurableConsumerLimits>): SqsBrokerLimits {
-  return { durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ...settings } };
+function aMessaging(settings: Settings = {}) {
+  return anOrdersMessaging(moto.url, settings);
 }
 
 /** What `aMessaging` gives a test. */
@@ -1053,11 +1005,3 @@ type RawAttribute = {
   readonly StringValue?: string;
   readonly BinaryValue?: Uint8Array;
 };
-
-/** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
-function aGate() {
-  const gate = Promise.withResolvers<undefined>();
-  const open = () => gate.resolve(undefined);
-  onTestFinished(open);
-  return { opened: gate.promise, open };
-}
