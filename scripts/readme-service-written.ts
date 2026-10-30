@@ -1,7 +1,7 @@
-import { join } from 'node:path';
+import { inject } from 'vitest';
 import { readmeServiceRefusals } from './readme-snippets.ts';
 
-const refusals = readmeServiceRefusals(join(import.meta.dirname, '..', '.readme-service'));
+const refusals = readmeServiceRefusals(inject('readmeService'));
 
 if (refusals.length > 0) {
   throw new Error(
