@@ -96,7 +96,7 @@ describe('defineEndpoint names', () => {
     const declare = () =>
       defineEndpoint({
         ...getOrder,
-        // @ts-expect-error then is a name JavaScript calls on its own
+        // @ts-expect-error TS2322 then is a name JavaScript calls on its own
         name: 'then',
       });
 
@@ -107,7 +107,7 @@ describe('defineEndpoint names', () => {
     const declare = () =>
       defineEndpoint({
         ...getOrder,
-        // @ts-expect-error toString is a name every object already has
+        // @ts-expect-error TS2322 toString is a name every object already has
         name: 'toString',
       });
 
@@ -118,13 +118,13 @@ describe('defineEndpoint names', () => {
     const declareClass = () =>
       defineEndpoint({
         ...getOrder,
-        // @ts-expect-error class is an ECMAScript reserved word
+        // @ts-expect-error TS2322 class is an ECMAScript reserved word
         name: 'class',
       });
     const declareHandle = () =>
       defineEndpoint({
         ...getOrder,
-        // @ts-expect-error every stub imports handle
+        // @ts-expect-error TS2322 every stub imports handle
         name: 'handle',
       });
 
@@ -162,7 +162,7 @@ describe('defineEndpoint path params', () => {
       defineEndpoint({
         ...getOrder,
         path: '/orders/:orderId/items/:itemId',
-        // @ts-expect-error itemId is missing
+        // @ts-expect-error TS2375 itemId is missing
         input: { params: orderParams },
       });
 
@@ -173,7 +173,7 @@ describe('defineEndpoint path params', () => {
     const declare = () =>
       defineEndpoint({
         ...getOrder,
-        // @ts-expect-error id is not a :name of the path
+        // @ts-expect-error TS2375 id is not a :name of the path
         input: { params: z.object({ orderId: z.uuid(), id: z.uuid() }) },
       });
 
@@ -183,7 +183,7 @@ describe('defineEndpoint path params', () => {
   test('a path with :names needs params', () => {
     const { input: _input, ...withoutInput } = getOrder;
 
-    // @ts-expect-error the path's :names need params
+    // @ts-expect-error TS2345 the path's :names need params
     const declare = () => defineEndpoint(withoutInput);
 
     expect(declare).not.toThrow();
@@ -193,7 +193,7 @@ describe('defineEndpoint path params', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error the path has no :names
+        // @ts-expect-error TS2375 the path has no :names
         input: { params: orderParams },
       });
 
@@ -214,7 +214,7 @@ describe('defineEndpoint methods', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error HEAD is no Method
+        // @ts-expect-error TS2322 HEAD is no Method
         method: 'HEAD',
       });
 
@@ -227,7 +227,7 @@ describe('defineEndpoint bodies', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error a GET takes no body
+        // @ts-expect-error TS2375 a GET takes no body
         input: { body: z.object({ status: z.string() }) },
       });
 
@@ -238,7 +238,7 @@ describe('defineEndpoint bodies', () => {
     const declare = () =>
       defineEndpoint({
         ...createOrder,
-        // @ts-expect-error a 204 has no body
+        // @ts-expect-error TS2375 a 204 has no body
         success: { status: 204, body: orderBody },
       });
 
@@ -249,7 +249,7 @@ describe('defineEndpoint bodies', () => {
     const declare = () =>
       defineEndpoint({
         ...createOrder,
-        // @ts-expect-error a 201 needs a body
+        // @ts-expect-error TS2322 a 201 needs a body
         success: { status: 201 },
       });
 
@@ -269,7 +269,7 @@ describe('defineEndpoint Success statuses', () => {
 
   test('a Success status of 199 is a type error', () => {
     const declare = () =>
-      // @ts-expect-error 199 is not a Success status
+      // @ts-expect-error TS2322 199 is not a Success status
       defineEndpoint({ ...createOrder, success: { status: 199, body: orderBody } });
 
     expect(declare).not.toThrow();
@@ -277,7 +277,7 @@ describe('defineEndpoint Success statuses', () => {
 
   test('a Success status of 205 is a type error', () => {
     const declare = () =>
-      // @ts-expect-error 205 is not a Success status
+      // @ts-expect-error TS2322 205 is not a Success status
       defineEndpoint({ ...createOrder, success: { status: 205, body: orderBody } });
 
     expect(declare).not.toThrow();
@@ -299,7 +299,7 @@ describe('defineEndpoint Rejections', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error ORDER_LOCKED is listed twice
+        // @ts-expect-error TS2322 ORDER_LOCKED is listed twice
         rejections: [orderLocked, notFound, orderLocked],
       });
 
@@ -313,7 +313,7 @@ describe('defineEndpoint Rejections', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error ORDER_LOCKED is listed twice
+        // @ts-expect-error TS2322 ORDER_LOCKED is listed twice
         rejections: [locked, lockedAgain],
       });
 
@@ -324,7 +324,7 @@ describe('defineEndpoint Rejections', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error notFound is listed twice
+        // @ts-expect-error TS2322 notFound is listed twice
         rejections: [notFound, notFound],
       });
 
@@ -341,14 +341,14 @@ describe('defineEndpoint Rejections', () => {
   });
 
   test('an Endpoint listing invalidInput is a type error', () => {
-    // @ts-expect-error invalidInput is always added
+    // @ts-expect-error TS2322 invalidInput is always added
     const declare = () => defineEndpoint({ ...listOrders, rejections: [invalidInput] });
 
     expect(declare).not.toThrow();
   });
 
   test('an Endpoint listing notImplemented is a type error', () => {
-    // @ts-expect-error notImplemented is always added
+    // @ts-expect-error TS2322 notImplemented is always added
     const declare = () => defineEndpoint({ ...listOrders, rejections: [notImplemented] });
 
     expect(declare).not.toThrow();
@@ -360,7 +360,7 @@ describe('defineEndpoint header names', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error header names are lower-case
+        // @ts-expect-error TS2375 header names are lower-case
         input: { headers: z.object({ 'X-Tenant': z.string() }) },
       });
 
@@ -373,7 +373,7 @@ describe('defineEndpoint header names', () => {
         ...createOrder,
         success: {
           ...createOrder.success,
-          // @ts-expect-error header names are lower-case
+          // @ts-expect-error TS2375 header names are lower-case
           headers: z.object({ 'Content-Location': z.string() }),
         },
       });
@@ -401,7 +401,7 @@ describe('defineEndpoint lifecycle', () => {
   });
 
   test('a Deprecated Endpoint without deprecatedAt is a type error', () => {
-    // @ts-expect-error a Deprecated Endpoint declares deprecatedAt
+    // @ts-expect-error TS2345 a Deprecated Endpoint declares deprecatedAt
     const declare = () => defineEndpoint({ ...listOrders, lifecycle: 'deprecated' });
 
     expect(declare).not.toThrow();
@@ -412,7 +412,7 @@ describe('defineEndpoint lifecycle', () => {
     ['an Active Endpoint', { lifecycle: 'active' }],
     ['a Retired Endpoint', { lifecycle: 'retired' }],
   ] as const)('deprecatedAt on %s is a type error', (_name, lifecycle) => {
-    // @ts-expect-error only a Deprecated Endpoint declares deprecatedAt
+    // @ts-expect-error TS2345 only a Deprecated Endpoint declares deprecatedAt
     const declare = () => defineEndpoint({ ...listOrders, ...lifecycle, deprecatedAt });
 
     expect(declare).not.toThrow();
@@ -421,7 +421,7 @@ describe('defineEndpoint lifecycle', () => {
 
 describe('defineEndpoint fields', () => {
   test('an undeclared field is a type error', () => {
-    // @ts-expect-error group is not a field of an Endpoint
+    // @ts-expect-error TS2322 group is not a field of an Endpoint
     const declare = () => defineEndpoint({ ...listOrders, group: 'orders' });
 
     expect(declare).not.toThrow();
@@ -533,7 +533,7 @@ describe('defineEndpoint nested fields', () => {
         ...listOrders,
         input: {
           headers: z.object({ 'x-tenant': z.string() }),
-          // @ts-expect-error querry is not a part of input
+          // @ts-expect-error TS2375 querry is not a part of input
           querry: z.object({ page: z.int() }),
         },
       });
@@ -545,7 +545,7 @@ describe('defineEndpoint nested fields', () => {
     const declare = () =>
       defineEndpoint({
         ...listOrders,
-        // @ts-expect-error bdy is not a part of a Success
+        // @ts-expect-error TS2375 bdy is not a part of a Success
         success: { status: 200, body: orderBody, bdy: orderBody },
       });
 
@@ -563,7 +563,7 @@ describe('defineEndpoint errors', () => {
         visibility: 'public',
         description: 'Every order',
         input: {
-          // @ts-expect-error querry is not a part of input
+          // @ts-expect-error TS2561 querry is not a part of input
           querry: z.object({ page: z.int() }),
         },
         success: { status: 200, body: z.array(orderBody) },
@@ -577,7 +577,7 @@ describe('defineEndpoint errors', () => {
       defineEndpoint({
         ...listOrders,
         success: {
-          // @ts-expect-error 299 is not a Success status
+          // @ts-expect-error TS2322 299 is not a Success status
           status: 299,
           body: z.array(orderBody),
         },

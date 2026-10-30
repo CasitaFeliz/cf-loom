@@ -12,11 +12,11 @@ import {
 
 describe('defineDefinitions', () => {
   test('guards, schemas and rejections are type errors: what the Root file exports is what a Definitions Package shares', () => {
-    // @ts-expect-error: guards is not a declared field
+    // @ts-expect-error TS2353 guards is not a declared field
     const guards = defineDefinitions({ guards: [] });
-    // @ts-expect-error: schemas is not a declared field
+    // @ts-expect-error TS2353 schemas is not a declared field
     const schemas = defineDefinitions({ schemas: {} });
-    // @ts-expect-error: rejections is not a declared field
+    // @ts-expect-error TS2353 rejections is not a declared field
     const rejections = defineDefinitions({ rejections: [] });
 
     expect([guards, schemas, rejections].map(({ kind }) => kind)).toEqual([
@@ -28,7 +28,7 @@ describe('defineDefinitions', () => {
 
   test('a name is a type error: the package.json a Definitions Package is published from names it', () => {
     const definitions = defineDefinitions({
-      // @ts-expect-error: name is not a declared field
+      // @ts-expect-error TS2353 name is not a declared field
       name: 'definitions',
     });
 
@@ -50,7 +50,7 @@ describe('defineDefinitions', () => {
     const declare = () =>
       defineDefinitions({
         standardRejections: {
-          // @ts-expect-error not implemented is always 501
+          // @ts-expect-error TS2322 not implemented is always 501
           notImplemented: { code: 'NOT_IMPLEMENTED', status: 500, message: 'Not implemented' },
         },
       });
@@ -62,7 +62,7 @@ describe('defineDefinitions', () => {
     const declare = () =>
       defineDefinitions({
         standardRejections: {
-          // @ts-expect-error invalid input is a 4xx
+          // @ts-expect-error TS2322 invalid input is a 4xx
           invalidInput: { code: 'BAD_REQUEST', status: 501, message: 'Bad request' },
         },
       });
@@ -78,7 +78,7 @@ describe('defineDefinitions', () => {
             code: 'NOT_FOUND',
             status: 404,
             message: 'Not found',
-            // @ts-expect-error cf-loom owns the Standard Rejections' bodies
+            // @ts-expect-error TS2375 cf-loom owns the Standard Rejections' bodies
             body: z.object({ resource: z.string() }),
           },
         },
@@ -95,7 +95,7 @@ describe('defineDefinitions', () => {
             code: 'NOT_FOUND',
             status: 404,
             message: 'Not found',
-            // @ts-expect-error a Standard Rejection answers no declared headers
+            // @ts-expect-error TS2375 a Standard Rejection answers no declared headers
             headers: z.object({ 'x-resource': z.string() }),
           },
         },
@@ -108,7 +108,7 @@ describe('defineDefinitions', () => {
 describe('defineDefinitions fields', () => {
   test('an undeclared field is a type error', () => {
     const declare = () =>
-      // @ts-expect-error a Definitions Package owns no Endpoints
+      // @ts-expect-error TS2353 a Definitions Package owns no Endpoints
       defineDefinitions({ endpoints: [] });
 
     expect(declare).not.toThrow();
@@ -132,7 +132,7 @@ describe('defineDefinitions nested fields', () => {
       defineDefinitions({
         standardRejections: {
           invalidInput: { code: 'BAD_REQUEST', status: 400, message: 'Bad request' },
-          // @ts-expect-error notFund is not a Standard Rejection
+          // @ts-expect-error TS2322 notFund is not a Standard Rejection
           notFund: { code: 'NOT_FOUND', status: 404, message: 'Not found' },
         },
       });
@@ -148,7 +148,7 @@ describe('defineDefinitions nested fields', () => {
             code: 'NOT_FOUND',
             status: 404,
             message: 'Not found',
-            // @ts-expect-error detail is not a field of a Standard Rejection
+            // @ts-expect-error TS2322 detail is not a field of a Standard Rejection
             detail: 'More',
           },
         },

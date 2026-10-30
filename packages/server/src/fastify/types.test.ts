@@ -48,9 +48,9 @@ describe('fastifyServe: what it takes', () => {
     const options = { maxBodyBytes: 1_024, fallback: async () => new Response(null) };
 
     const serving = () => [
-      // @ts-expect-error fastifyServe hands the app what no Endpoint has, so it takes no fallback
+      // @ts-expect-error TS2353 fastifyServe hands the app what no Endpoint has, so it takes no fallback
       fastifyServe(contract, handlers, { fallback: async () => new Response(null) }),
-      // @ts-expect-error fastifyServe takes no fallback through a variable either
+      // @ts-expect-error TS2345 fastifyServe takes no fallback through a variable either
       fastifyServe(contract, handlers, options),
     ];
 
@@ -60,14 +60,14 @@ describe('fastifyServe: what it takes', () => {
   test('an options variable holding a declared field and a misspelled one is a type error', () => {
     const options = { onAnswered: () => undefined, onAnswerd: () => undefined };
 
-    // @ts-expect-error onAnswerd is not a declared field
+    // @ts-expect-error TS2345 onAnswerd is not a declared field
     const serving = () => fastifyServe(contract, handlers, options);
 
     expect(serving).toBeTypeOf('function');
   });
 
   test('options are always given', () => {
-    // @ts-expect-error fastifyServe always takes its options
+    // @ts-expect-error TS2554 fastifyServe always takes its options
     const serving = () => fastifyServe(contract, handlers);
 
     expect(serving).toBeTypeOf('function');
@@ -80,9 +80,9 @@ describe('fastifyServe: the Resources, inferred from the Handler map', () => {
 
     const serving = () => [
       fastifyServe(contract, handlersWithClock, { resources: { clock } }),
-      // @ts-expect-error getOrder's Handler takes the clock
+      // @ts-expect-error TS2345 getOrder's Handler takes the clock
       fastifyServe(contract, handlersWithClock, {}),
-      // @ts-expect-error the clock is not what getOrder's Handler takes
+      // @ts-expect-error TS2345 the clock is not what getOrder's Handler takes
       fastifyServe(contract, handlersWithClock, mistyped),
     ];
 

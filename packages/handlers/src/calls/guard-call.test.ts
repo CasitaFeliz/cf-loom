@@ -112,7 +112,7 @@ describe('a GuardHandler’s second argument', () => {
     const permissionHandler = handle.stub(permission);
     const apiKeyHandler = handle.stub(apiKey);
 
-    // @ts-expect-error permission lists userToken, which gives it a Context
+    // @ts-expect-error TS2345 permission lists userToken, which gives it a Context
     const withoutContext = () => permissionHandler({}, { qualifier: ['orders:edit'] });
 
     expectTypeOf(apiKeyHandler).toBeCallableWith(apiKeyDemands, {});
@@ -315,7 +315,7 @@ describe('a GuardHandler’s direct call', () => {
   });
 
   test('a Rejection the Guard does not list is a type error', () => {
-    // @ts-expect-error forbidden is not a Rejection apiKey answers
+    // @ts-expect-error TS2322 forbidden is not a Rejection apiKey answers
     const write = () => handle(apiKey, () => reject(forbidden));
 
     expect(write).not.toThrow();
@@ -352,11 +352,11 @@ describe('a GuardHandler’s direct call', () => {
 
     const call = () => [
       apiKeyHandler(apiKeyDemands, {}),
-      // @ts-expect-error apiKey declares no qualifier
+      // @ts-expect-error TS2322 apiKey declares no qualifier
       apiKeyHandler(apiKeyDemands, {}, { qualifier: ['orders:edit'] }),
-      // @ts-expect-error permission declares a qualifier
+      // @ts-expect-error TS2345 permission declares a qualifier
       permissionHandler({}, userContext),
-      // @ts-expect-error permission declares a qualifier
+      // @ts-expect-error TS2345 permission declares a qualifier
       permissionHandler({}, userContext, {}),
     ];
 
@@ -406,9 +406,9 @@ describe('a GuardHandler’s direct call', () => {
 
   test('admit(guard) without the Context its Guard provides, or with a wrong one, is a type error', () => {
     const write = () => [
-      // @ts-expect-error apiKey provides a Context
+      // @ts-expect-error TS2554 apiKey provides a Context
       handle(apiKey, () => admit(apiKey)),
-      // @ts-expect-error callerId is a string
+      // @ts-expect-error TS2322 callerId is a string
       handle(apiKey, () => admit(apiKey, { callerId: 7 })),
     ];
 

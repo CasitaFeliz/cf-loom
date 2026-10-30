@@ -76,7 +76,7 @@ describe('defineService', () => {
   });
 
   test('definitions is a type error: what a Service’s Contract reaches says which Definitions Packages it uses', () => {
-    // @ts-expect-error: definitions is not a declared field
+    // @ts-expect-error TS2322 definitions is not a declared field
     const contract = defineService({ name: 'orders-service', definitions: [] });
 
     expect(contract.kind).toBe('service');
@@ -140,7 +140,7 @@ describe('defineApplication', () => {
     });
 
     const declare = () =>
-      // @ts-expect-error an Application runs outside the internal network
+      // @ts-expect-error TS2322 an Application runs outside the internal network
       defineApplication({ name: 'web-admin', dependencies: [internalDependency] });
 
     expect(declare).not.toThrow();
@@ -184,7 +184,7 @@ describe('Contract', () => {
 
 describe('the Roots’ fields', () => {
   test('an undeclared field on a Service’s Contract is a type error', () => {
-    // @ts-expect-error a Service’s Contract lists its Endpoints through its Groups
+    // @ts-expect-error TS2322 a Service’s Contract lists its Endpoints through its Groups
     const declare = () => defineService({ name: 'orders-service', endpoints: [] });
 
     expect(declare).not.toThrow();
@@ -193,17 +193,17 @@ describe('the Roots’ fields', () => {
   test.each([
     [
       'events',
-      // @ts-expect-error a Service’s Contract lists its Events through its Groups
+      // @ts-expect-error TS2322 a Service’s Contract lists its Events through its Groups
       () => defineService({ name: 'payments-service', events: [paymentSettledV1] }),
     ],
     [
       'commands',
-      // @ts-expect-error a Service’s Contract lists its Commands through its Groups
+      // @ts-expect-error TS2322 a Service’s Contract lists its Commands through its Groups
       () => defineService({ name: 'payments-service', commands: [refundCardV1] }),
     ],
     [
       'subscriptions',
-      // @ts-expect-error a Service’s Contract lists its Subscriptions through its Groups
+      // @ts-expect-error TS2322 a Service’s Contract lists its Subscriptions through its Groups
       () => defineService({ name: 'payments-service', subscriptions: [auditOnSettled] }),
     ],
   ])('a Service’s Root that lists %s is a type error', (_field, declare) => {
@@ -212,7 +212,7 @@ describe('the Roots’ fields', () => {
 
   test('an undeclared field on an Application is a type error', () => {
     const declare = () =>
-      // @ts-expect-error an Application offers no Endpoints
+      // @ts-expect-error TS2322 an Application offers no Endpoints
       defineApplication({ name: 'web-admin', dependencies: [], groups: [] });
 
     expect(declare).not.toThrow();

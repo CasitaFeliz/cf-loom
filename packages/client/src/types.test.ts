@@ -173,7 +173,7 @@ describe('the client’s types', () => {
     const orders = client(ordersDependency, { baseUrl });
 
     expectTypeOf(orders.getOrder).toEqualTypeOf<Client<typeof ordersDependency>['getOrder']>();
-    // @ts-expect-error ping is exported but not listed
+    // @ts-expect-error TS2339 ping is exported but not listed
     const unlisted = () => orders.ping;
     expect(unlisted).toBeTypeOf('function');
   });
@@ -198,7 +198,7 @@ describe('the client’s types', () => {
     const bare = client(ordersDependency, { baseUrl });
 
     const leftOut = () => configured.listOrders();
-    // @ts-expect-error: without the headers given, they are required, so the Input is too
+    // @ts-expect-error TS2554 without the headers given, they are required, so the Input is too
     const required = () => bare.listOrders();
 
     expectTypeOf(configured.listOrders).toBeCallableWith();
@@ -298,11 +298,11 @@ describe('the client’s types', () => {
   });
 
   test('a Configured name no Input declares is refused, in Client, ClientOptions and CallInput', () => {
-    // @ts-expect-error: no listed Endpoint's Input declares x-api-kee
+    // @ts-expect-error TS2344 no listed Endpoint's Input declares x-api-kee
     expectTypeOf<Client<typeof ordersDependency, 'x-api-kee'>>().toBeObject();
-    // @ts-expect-error: no listed Endpoint's Input declares x-api-kee
+    // @ts-expect-error TS2344 no listed Endpoint's Input declares x-api-kee
     expectTypeOf<ClientOptions<typeof ordersDependency, 'x-api-kee'>>().toBeObject();
-    // @ts-expect-error: getOrder's Input declares no x-api-kee
+    // @ts-expect-error TS2344 getOrder's Input declares no x-api-kee
     expectTypeOf<CallInput<typeof getOrder, 'x-api-kee'>>().toBeObject();
     expectTypeOf<Client<typeof ordersDependency, 'x-api-key'>>().toBeObject();
     expect(standards.notFound.code).toBe('MISSING');
@@ -334,7 +334,7 @@ describe('the client’s types', () => {
     expectTypeOf<Returned>().toEqualTypeOf<
       ReceivedOutcome<typeof ordersDependency, 'listOrders'>
     >();
-    // @ts-expect-error: only an Endpoint the Dependency lists has an Outcome
+    // @ts-expect-error TS2344 only an Endpoint the Dependency lists has an Outcome
     expectTypeOf<ReceivedOutcome<typeof ordersDependency, 'ping'>>().toBeObject();
     expect(ordersDependency.endpoints.map(({ name }) => name)).toContain('listOrders');
   });
@@ -344,7 +344,7 @@ describe('the client’s options, typed by what they declare', () => {
   test('an options variable holding baseUrl and a misspelled inferFault is a type error', () => {
     const options = { baseUrl, inferFalt: () => undefined };
 
-    // @ts-expect-error inferFalt is not a declared field
+    // @ts-expect-error TS2345 inferFalt is not a declared field
     const clientOf = () => client(ordersDependency, options);
 
     expect(clientOf).toBeTypeOf('function');
@@ -353,7 +353,7 @@ describe('the client’s options, typed by what they declare', () => {
   test('an options variable holding headers and a misspelled fetch is a type error', () => {
     const options = { baseUrl, headers: { 'x-api-key': 'k' }, fetc: () => undefined };
 
-    // @ts-expect-error fetc is not a declared field
+    // @ts-expect-error TS2345 fetc is not a declared field
     const clientOf = () => client(ordersDependency, options);
 
     expect(clientOf).toBeTypeOf('function');
@@ -404,7 +404,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
   test('a call’s options, an optional parameter, given through a variable whose type is one object type with a field they do not declare is a type error', () => {
     const call = { signal: new AbortController().signal, signl: 1 };
 
-    // @ts-expect-error signl is not a declared field
+    // @ts-expect-error TS2345 signl is not a declared field
     const calling = () => replacing.putOrder(input, call);
 
     expect(calling).toBeTypeOf('function');
@@ -413,7 +413,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
   test('a call’s Input given through a variable with a part the Endpoint does not declare is a type error', () => {
     const misspelled = { ...input, querry: { page: 1 } };
 
-    // @ts-expect-error querry is not a declared field
+    // @ts-expect-error TS2345 querry is not a declared field
     const calling = () => replacing.putOrder(misspelled);
 
     expect(calling).toBeTypeOf('function');
@@ -422,7 +422,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
   test('client() given options of a union type, one member holding a field they do not declare, is a type error', () => {
     const options = eitherOf({ baseUrl, baseUri: baseUrl }, { baseUrl });
 
-    // @ts-expect-error baseUri is not a declared field
+    // @ts-expect-error TS2345 baseUri is not a declared field
     const clientOf = () => client(replacingDependency, options);
 
     expect(clientOf).toBeTypeOf('function');
@@ -435,7 +435,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
     });
     const misspelled = { query: { page: 1 }, querry: { page: 2 } };
 
-    // @ts-expect-error querry is not a declared field
+    // @ts-expect-error TS2345 querry is not a declared field
     const calling = () => listing.listOrders(misspelled);
 
     expect(calling).toBeTypeOf('function');
@@ -448,7 +448,7 @@ describe('a call’s Input and options, typed by what they declare', () => {
     });
     const call = { signal: new AbortController().signal, signl: 1 };
 
-    // @ts-expect-error signl is not a declared field
+    // @ts-expect-error TS2345 signl is not a declared field
     const calling = () => listing.listOrders(undefined, call);
 
     expect(calling).toBeTypeOf('function');

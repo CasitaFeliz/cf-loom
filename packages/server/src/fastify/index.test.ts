@@ -866,7 +866,7 @@ describe('fastifyServe', () => {
     test('a Handler map missing a Handler throws when fastifyServe is called, before register', () => {
       const { getSummary: _, ...missing } = handlers.endpoints;
 
-      // @ts-expect-error getSummary has no Handler
+      // @ts-expect-error TS2741 getSummary has no Handler
       const calling = () => fastifyServe(contract, { ...handlers, endpoints: missing }, {});
 
       expect(calling).toThrow(/getSummary/);
