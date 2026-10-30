@@ -28,14 +28,12 @@ export type CheckedOutcome<Target extends Endpoint> =
   | BuiltRejection<BuildableOf<Target>>
   | Fault;
 
-/** What a GuardHandler builds: the request admitted with its Context, one of the Guard's Rejections, or a Fault. */
+/**
+ * What a GuardHandler answers: the request admitted with the Context its Guard provides, one of
+ * the Guard's Rejections, or a Fault. Its implementation builds it; its direct call returns it
+ * checked, the Context and a Rejection's headers and body parsed.
+ */
 export type Admission<Target extends Guard> =
-  | BuiltAdmitted<ProvidedContextOf<Target>>
-  | BuiltRejection<RejectionsOf<Target>>
-  | Fault;
-
-/** What a direct call of a GuardHandler returns: the admitted Context, a Rejection as built with its body parsed, or a Fault. */
-export type CheckedAdmission<Target extends Guard> =
   | BuiltAdmitted<ProvidedContextOf<Target>>
   | BuiltRejection<RejectionsOf<Target>>
   | Fault;
