@@ -14,12 +14,16 @@ import {
   type NodePair,
   shapeKeyBesidesNullability,
 } from './findings.ts';
+import type { ShapeDifference } from './shape-differences.ts';
 
 /** What differs in a def or in a def it reaches: its shape, or a Neutral annotation. */
 type Fact = 'changed' | Annotation;
 
 /** Each def's facts together with those of every def it reaches, by name. */
 type DefComparison = ReadonlyMap<string, ReadonlySet<Fact>>;
+
+/** What a name the comparison holds nothing for stands for: a def neither side can be compared by. */
+const unknownDef: readonly Fact[] = ['changed'];
 
 /**
  * The comparison of each pair of `Defs` values, by the Baseline's and then the proposed one: a
@@ -28,36 +32,47 @@ type DefComparison = ReadonlyMap<string, ReadonlySet<Fact>>;
 const comparisons = new WeakMap<Defs, WeakMap<Defs, DefComparison>>();
 
 /**
- * Whether two nodes have the same shape, apart from their own nullability, and every def their
- * `ref`s reach has the same shape on both sides. No def is compared by Position.
+ * The plain-union rule: any change to two nodes' options or items, or to a def their `ref`s reach,
+ * is the one `difference`, Breaking in every Position, since none can be proven compatible. Their
+ * options compare in declared order, and an `allOf`'s items in shape order; a Neutral annotation
+ * changes neither, and is told apart as Neutral.
  */
-export function isUnchanged(pair: NodePair, defs: BothDefs): boolean {
-  const hasSameShape =
-    shapeKeyBesidesNullability(pair.baseline) === shapeKeyBesidesNullability(pair.proposed);
-  const reached = refsWrittenIn(pair.baseline);
-  if (!hasSameShape || reached.length === 0) {
-    return hasSameShape;
+export function plainUnionFindingsOf(
+  pair: NodePair,
+  defs: BothDefs,
+  difference: ShapeDifference,
+): readonly Finding[] {
+  const differing = differencesWithin(pair, defs);
+  if (differing.has('changed')) {
+    return [found(difference)];
   }
-  const comparison = comparisonOf(defs);
-  return reached.every((name) => comparison.get(name)?.has('changed') === false);
+  const inOrder = neutralAnnotations.filter((annotation) => differing.has(annotation));
+  return inOrder.map((annotation) => found({ kind: 'annotation-changed', annotation }));
 }
 
 /**
- * The Neutral annotations that differ anywhere inside two nodes of one shape, such as a plain
- * union's options and the defs they reach, each once, at the nodes' own path; a moved annotation
- * is one that differs.
+ * What differs inside two nodes, apart from their own annotations and nullability, and in every
+ * def their `ref`s reach: `changed` when a shape does, else each Neutral annotation that does.
+ * No def is compared by Position.
  */
-export function innerAnnotationFindingsOf(pair: NodePair, defs: BothDefs): readonly Finding[] {
-  const changed = new Set<Fact>(annotationsInside(pair));
+function differencesWithin(pair: NodePair, defs: BothDefs): ReadonlySet<Fact> {
+  const hasSameShape =
+    shapeKeyBesidesNullability(pair.baseline) === shapeKeyBesidesNullability(pair.proposed);
+  if (!hasSameShape) {
+    return new Set<Fact>(['changed']);
+  }
+  const differing = new Set<Fact>(annotationsInside(pair));
   const reached = refsWrittenIn(pair.baseline);
-  const comparison = reached.length === 0 ? undefined : comparisonOf(defs);
+  if (reached.length === 0) {
+    return differing;
+  }
+  const comparison = comparisonOf(defs);
   for (const name of reached) {
-    for (const fact of comparison?.get(name) ?? []) {
-      changed.add(fact);
+    for (const fact of comparison.get(name) ?? unknownDef) {
+      differing.add(fact);
     }
   }
-  const inOrder = neutralAnnotations.filter((annotation) => changed.has(annotation));
-  return inOrder.map((annotation) => found({ kind: 'annotation-changed', annotation }));
+  return differing;
 }
 
 function comparisonOf({ baseline, proposed }: BothDefs): DefComparison {
@@ -87,8 +102,8 @@ function ownFactsOf(
     proposed === undefined ||
     shapeKey(baseline) !== shapeKey(proposed)
   ) {
-    return ['changed'];
+    return unknownDef;
   }
   const pair = { baseline, proposed };
-  return [...new Set([...differingAnnotationsOf(pair), ...annotationsInside(pair)])];
+  return [...differingAnnotationsOf(pair), ...annotationsInside(pair)];
 }
