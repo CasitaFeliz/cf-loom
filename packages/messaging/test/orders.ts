@@ -168,3 +168,53 @@ export function handlersOf(
     readers: ordersReaders,
   };
 }
+
+/** The name of a Command whose Durable consumer's name, under the prefix `staging`, is longer than a queue's name may be. */
+export const longCommandName = 'ChargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonth';
+
+const chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1 = defineCommand({
+  name: longCommandName,
+  version: 1,
+  description: 'Charges the order’s card',
+  body: orderBody,
+});
+
+/** A Service that sends and handles the one Command of the long name. */
+export const ordersWithLongCommand = defineService({
+  name: 'orders-service',
+  groups: [
+    defineGroup({
+      name: 'messages',
+      description: 'Messages',
+      commands: [chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1],
+    }),
+  ],
+});
+
+const longReaders = readersOf({
+  commands: {
+    chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1: {
+      declaration: chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1,
+      reader: orderBody,
+    },
+  },
+  subscriptions: {},
+});
+
+/** The Handler map of the Service with the long-named Command, its Handler recording what it receives. */
+export function longHandlersOf(received: Received[]) {
+  const record = async (body: unknown, meta: MessageMeta): Promise<undefined> => {
+    received.push({ handler: longCommandName, body, meta });
+    return undefined;
+  };
+  return {
+    commands: {
+      chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1: handle(
+        longReaders.commands.chargeTheCustomersDefaultCardOnTheFirstDayOfEveryMonthV1,
+        record,
+      ),
+    },
+    subscriptions: {},
+    readers: longReaders,
+  };
+}

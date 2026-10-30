@@ -1,4 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
+
+import { createHash } from 'node:crypto';
 import type { SQSClient } from '@aws-sdk/client-sqs';
 import { handle } from '@cf-loom/handlers';
 import {
@@ -28,14 +30,17 @@ import {
   anAwsConnecting,
   failingCommand,
 } from '../../test/aws-clients.ts';
-import { queueCountsOf, queueTagsOf } from '../../test/aws-reading.ts';
+import { queueCountsOf, queueNamesOf, queueTagsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
   arrangeOrders,
   handlersOf,
+  longCommandName,
+  longHandlersOf,
   ordersContract,
   ordersReaders,
+  ordersWithLongCommand,
   type Received,
   testLimits,
 } from '../../test/orders.ts';
@@ -210,6 +215,24 @@ describe('consuming over sqs()', () => {
     await consume(handlersOf(received), {});
 
     await until(() => expect(received.map(({ handler }) => handler)).toEqual(['ChargeCard@1']));
+  });
+
+  test('a Durable consumer whose name is longer than 76 characters finds its hashed queue', async () => {
+    const connecting = anAwsConnecting(moto.url);
+    const contract = ordersWithLongCommand;
+    await arrangeOrders(connecting, { prefix: 'staging', contract });
+    const started = await messaging(contract, sqs({ ...connecting, prefix: 'staging' }));
+    const durable = `staging_orders-service_command_${longCommandName}_v1`;
+    const digest = createHash('sha256').update(durable).digest('hex').slice(0, 12);
+    const hashed = `${durable.slice(0, 63)}-${digest}`;
+    closedWhenDone(started, connecting, { notifyQueue: hashed, chargeQueue: hashed } as never);
+    await started.sender.send(longCommandName, { orderId: 'o-1' }, { factId: 'f-1' });
+    const received: Received[] = [];
+
+    await started.consume(longHandlersOf(received), {});
+
+    await until(() => expect(received.map(({ body }) => body)).toEqual([{ orderId: 'o-1' }]));
+    await expect(queueNamesOf(connecting.sqs)).resolves.toContain(hashed);
   });
 
   test('consume rejects a queue whose QueueArn is not the one built from the connecting object’s account and region, naming both', async () => {
