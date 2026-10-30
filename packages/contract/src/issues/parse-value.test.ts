@@ -355,6 +355,13 @@ function errorWithMessage(error: Error, message: unknown): Error {
   return Object.defineProperty(error, 'message', { value: message });
 }
 
+/** A Proxy that is revoked, so reading anything of it throws. */
+function revokedProxy(): Error {
+  const { proxy, revoke } = Proxy.revocable(new RangeError('x'), {});
+  revoke();
+  return proxy;
+}
+
 /** An error whose `name` cannot be read. */
 function errorWithBrokenName(message: string): Error {
   return Object.defineProperty(new Error(message), 'name', {
@@ -395,6 +402,7 @@ describe.for([
     ['a TypeError', new TypeError('getter broke')],
     ['a plain Error', new Error('getter broke')],
     ['a value that is no error', { reason: 'getter broke' }],
+    ['a revoked Proxy', revokedProxy()],
     ["a TypeError with V8's message", new TypeError('Maximum call stack size exceeded')],
     ["a plain Error with SpiderMonkey's message", new Error('too much recursion')],
     [
