@@ -1067,5 +1067,56 @@ describe('fastifyServe', () => {
       expect([foreign.status, asterisk.status]).toEqual([404, 404]);
       expect(reached).toEqual(['GET /orders/o-1', 'OPTIONS *']);
     });
+
+    describe('a body serve answers before reading whole', () => {
+      const upload = JSON.stringify({ text: 'x'.repeat(1_000_000) });
+
+      test.each([
+        {
+          name: 'a body over maxBodyBytes is BODY_TOO_LARGE',
+          path: '/notes',
+          headers: {},
+          status: 413,
+          code: 'BODY_TOO_LARGE',
+        },
+        {
+          name: 'a Guard’s Rejection, answered before the body is read,',
+          path: '/orders',
+          headers: {},
+          status: 400,
+          code: 'INVALID_INPUT',
+        },
+      ])(
+        '$name: the Caller receives it whole, its stream closes with NO_ERROR and its upload stops, the session goes on, and the server closes once the session is gone',
+        async (asked) => {
+          const { app, url } = await served({
+            fastify: { http2: true },
+            options: { maxBodyBytes: 1000 },
+          });
+          const session = h2Session(url);
+          const headers = { ':method': 'POST', ':path': asked.path, ...asked.headers };
+
+          const answer = await Promise.race([
+            h2(session, { ...headers, 'content-type': 'application/json' }, upload),
+            waitFor(2000).then(() => 'still open'),
+          ]);
+          const next = await Promise.race([
+            h2(session, { ':path': '/orders/o-1' }),
+            waitFor(1000).then(() => 'unanswered'),
+          ]);
+          session.destroy();
+          const closing = await Promise.race([
+            app.close().then(() => 'closed'),
+            waitFor(2000).then(() => 'still open'),
+          ]);
+
+          expect(answer).toMatchObject({ status: asked.status, ended: true, rstCode: 0 });
+          expect(typeof answer === 'string' ? '' : answer.body).toContain(`"${asked.code}"`);
+          expect(typeof answer === 'string' ? 0 : answer.sent).toBeLessThan(upload.length);
+          expect(next).toMatchObject({ status: 200, body: '{"id":"o-1"}' });
+          expect(closing).toBe('closed');
+        },
+      );
+    });
   });
 });

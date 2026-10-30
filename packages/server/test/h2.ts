@@ -77,18 +77,25 @@ export async function answerOf(stream: ClientHttp2Stream): Promise<Omit<H2Answer
   return { status, headers, body, rstCode: stream.rstCode, ended };
 }
 
+/**
+ * Writes `body` until it is sent or the server closes the stream, then ends it, or destroys it
+ * once the server closed it, so a write left waiting for `drain` never holds it open.
+ */
 async function bodySent(stream: ClientHttp2Stream, body: Buffer): Promise<number> {
   const size = 16_384;
   let sent = 0;
-  for (; sent < body.length && !stream.closed && !stream.destroyed; sent += size) {
-    if (!stream.write(body.subarray(sent, sent + size))) {
+  for (; sent < body.length && !stream.closed; sent += size) {
+    if (!stream.write(body.subarray(sent, sent + size)) && !stream.closed) {
       await new Promise((resolve) => {
         stream.once('drain', resolve);
+        stream.once('aborted', resolve);
         stream.once('close', resolve);
       });
     }
   }
-  if (!stream.closed && !stream.destroyed) {
+  if (stream.closed) {
+    stream.destroy();
+  } else {
     stream.end();
   }
   return Math.min(sent, body.length);

@@ -69,9 +69,17 @@ function http1Of(
  * ended, so a body nobody read never leaves it half-open, and reset with an error on failure.
  */
 function http2Of(outgoing: Http2ServerResponse): Version {
+  const { stream } = outgoing;
   return {
     framed: () => undefined,
-    ended: () => outgoing.end(),
+    ended: () => {
+      outgoing.end();
+      stream.once('finish', () => {
+        if (!stream.readableEnded) {
+          stream.destroy();
+        }
+      });
+    },
     failed: () => outgoing.destroy(),
   };
 }
