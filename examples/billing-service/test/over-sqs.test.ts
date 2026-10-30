@@ -49,7 +49,9 @@ beforeAll(async () => {
 afterAll(async () => {
   try {
     const closing = Promise.all([orders?.close(), billing?.close()]);
-    await wakeEach(reader.sqs, [billingDrafting, ordersCharging, ordersHandlingCharge]);
+    if (orders !== undefined) {
+      await wakeEach(reader.sqs, [billingDrafting, ordersCharging, ordersHandlingCharge]);
+    }
     await closing;
   } finally {
     for (const connecting of clients) {

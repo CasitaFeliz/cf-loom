@@ -1,4 +1,3 @@
-// biome-ignore-all lint/style/useNamingConvention: AWS names its settings in PascalCase
 import { applyBrokerPlan, type SqsBrokerLimits, type SqsConnecting } from '@cf-loom/messaging/sqs';
 import { planOf } from './broker-plan-of.ts';
 
