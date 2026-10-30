@@ -1,10 +1,11 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS names its headers, actions and fields in PascalCase, as they travel
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
-import { networkInterfaces, tmpdir } from 'node:os';
+import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { aMotoServer, type MotoServer } from './moto-server.ts';
+import { aTemporaryDirectory } from './test-process.ts';
 
 function isListening(url: string): Promise<boolean> {
   const { hostname, port } = new URL(url);
@@ -47,31 +48,17 @@ async function queueUrls(server: MotoServer): Promise<readonly string[]> {
 }
 
 describe('a test moto server', () => {
-  const started: MotoServer[] = [];
-  const directories: string[] = [];
-
   /** Puts a `moto_server` that runs this Node script alone on PATH, to start a server that fails the way a real one may. */
   async function stubMotoServer(script: string): Promise<void> {
-    const directory = await mkdtemp(join(tmpdir(), 'cf-loom-moto-stub-'));
-    directories.push(directory);
+    const directory = aTemporaryDirectory('cf-loom-moto-stub-');
     const executable = join(directory, 'moto_server');
     await writeFile(executable, `#!${process.execPath}\n${script}`);
     await chmod(executable, 0o755);
     vi.stubEnv('PATH', directory);
   }
 
-  async function aStartedServer(): Promise<MotoServer> {
-    const server = await aMotoServer();
-    started.push(server);
-    return server;
-  }
-
-  afterEach(async () => {
+  afterEach(() => {
     vi.unstubAllEnvs();
-    await Promise.all(started.splice(0).map((server) => server.stop()));
-    await Promise.all(
-      directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })),
-    );
   });
 
   test('starting one without moto_server on PATH fails naming moto_server and where its pinned requirements are', async () => {
@@ -95,7 +82,7 @@ describe('a test moto server', () => {
   });
 
   test('a started server answers on the URL it reports, at 127.0.0.1', async () => {
-    const server = await aStartedServer();
+    const server = await aMotoServer();
 
     const response = await sqs(server, 'ListQueues');
 
@@ -106,7 +93,7 @@ describe('a test moto server', () => {
   test.skipIf(externalAddresses.length === 0)(
     'a started server does not answer on the other IPv4 addresses of the host (skipped on a host with none)',
     async () => {
-      const server = await aStartedServer();
+      const server = await aMotoServer();
       const { port } = new URL(server.url);
 
       const answers = await Promise.all(
@@ -122,7 +109,7 @@ describe('a test moto server', () => {
   );
 
   test('reset empties the queues a test created', async () => {
-    const server = await aStartedServer();
+    const server = await aMotoServer();
     await sqs(server, 'CreateQueue', { QueueName: 'orders' });
     const queuesBefore = await queueUrls(server);
 
@@ -143,7 +130,7 @@ describe('a test moto server', () => {
         process.stderr.write(\` * Running on http://127.0.0.1:\${server.address().port}\\n\`);
       });
     `);
-    const server = await aStartedServer();
+    const server = await aMotoServer();
 
     const resetting = server.reset();
 

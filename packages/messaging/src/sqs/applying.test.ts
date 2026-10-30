@@ -1037,7 +1037,7 @@ describe('applyBrokerPlan', () => {
     expect(subscribes.sent()).toBe(0);
     expect(new Set(endpoints)).toEqual(new Set(names.map(sqsArnOf)));
     expect(endpoints).toHaveLength(130);
-  }, 60_000);
+  });
 
   test('the Durable consumers of one topic share one listing of its subscriptions', async () => {
     const plan = aPlanOfDurables(['long_first', 'long_second']);

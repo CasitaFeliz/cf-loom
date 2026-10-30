@@ -1,8 +1,17 @@
 import { beforeAll, expect, test } from 'vitest';
-import { aNatsServer } from '../nats-server.ts';
+import { aNatsServer, type NatsServer } from '../nats-server.ts';
+import { aStubStarted } from './stub-pids.ts';
+
+let starting: Promise<NatsServer>;
 
 beforeAll(async () => {
-  await aNatsServer();
+  starting = aNatsServer();
+  starting.catch(() => undefined);
+  await aStubStarted();
+});
+
+beforeAll(async () => {
+  await starting;
 }, 2_000);
 
 test('a test of the file', () => {
