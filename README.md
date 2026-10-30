@@ -16,7 +16,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/client`](packages/client/README.md) | Services and Applications (Callers) | Calling another Service's Endpoints through its Contract Package, in Node or in a browser |
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a Broker plan |
-| [`@cf-loom/messaging/sqs`](packages/messaging/README.md#on-snssqs) | Whoever applies a Broker plan on AWS | Applying a Broker plan on Amazon SNS and SQS |
+| [`@cf-loom/messaging/sqs`](packages/messaging/README.md#snssqs) | Services on Amazon SNS and SQS | The Broker adapter for Amazon SNS and SQS, which also applies a Broker plan |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |
@@ -95,7 +95,7 @@ A Service, an Application and a Definitions Package are each a package of their 
 | A Service or a Definitions Package | `typescript` as a devDependency |
 | A Service | `@types/node` as a devDependency |
 | Endpoints | `@cf-loom/handlers` and `@cf-loom/server` |
-| Messages | `@cf-loom/handlers` and `@cf-loom/messaging`; on JetStream also `@nats-io/jetstream`, `@nats-io/nats-core` and a transport such as `@nats-io/transport-node`, all on one version (see [JetStream](packages/messaging/README.md#jetstream)) |
+| Messages | `@cf-loom/handlers` and `@cf-loom/messaging`; on JetStream also `@nats-io/jetstream`, `@nats-io/nats-core` and a transport such as `@nats-io/transport-node`, all on one version (see [JetStream](packages/messaging/README.md#jetstream)); on SNS/SQS also `@aws-sdk/client-sns`, `@aws-sdk/client-sqs` and `@aws-sdk/core` (see [SNS/SQS](packages/messaging/README.md#snssqs)) |
 | Subscribing to another Service's Event | `@cf-loom/handlers` and `@cf-loom/messaging`, and the Provider's Contract Package as an ordinary dependency |
 | Calling a Provider | `@cf-loom/client`, and the Provider's Contract Package as an ordinary dependency |
 | Tests of a Consumer | `@cf-loom/testing` as a devDependency |

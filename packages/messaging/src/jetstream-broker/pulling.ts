@@ -1,12 +1,9 @@
 import type { NatsConnection } from '@nats-io/nats-core';
-import type { ConsumeRun, DurableConsumer } from '../broker/index.ts';
+import { type ConsumeRun, pause, troubleReportingOf } from '../broker/index.ts';
 import { deliver } from './delivering.ts';
 import type { FoundDurableConsumer } from './finding.ts';
-import { type Pull, pullOnce } from './pull-once.ts';
+import { pullOnce } from './pull-once.ts';
 import type { PulledMessage } from './pulled-message.ts';
-
-/** How long a Durable consumer waits before it pulls again after a pull failed, as when it was deleted. */
-const retryPauseMs = 1_000;
 
 /** What one Durable consumer's pulls run with: the core's `troubled`, and `stopping`, which aborts when the core starts closing or the connection closes. */
 export type PullRun = Pick<ConsumeRun, 'troubled'> & { readonly stopping: AbortSignal };
@@ -21,7 +18,8 @@ export async function pullFrom(
   run: PullRun,
 ): Promise<void> {
   const { stopping } = run;
-  const reporting = troubleReportingOf(found.durableConsumer, run);
+  const { durableConsumer } = found;
+  const reporting = troubleReportingOf(durableConsumer, run.troubled);
   while (isPulling(natsConnection, stopping)) {
     const pull = await pullOnce(found.request, natsConnection, stopping);
     if (isPulling(natsConnection, stopping)) {
@@ -38,35 +36,13 @@ export async function pullFrom(
         break;
     }
   }
-  reporting.ended();
-}
-
-/**
- * Tells the core of a Durable consumer's first failed pull, of the first answered one after it, and
- * of a loop that ended while not failing, as a closed connection ends it; the core drops what comes once it is closing.
- */
-function troubleReportingOf(durableConsumer: DurableConsumer, { troubled }: PullRun) {
-  let failing = false;
-  return {
-    pulled: (pull: Pull) => {
-      if (pull.kind === 'failed' && !failing) {
-        troubled({ durableConsumer, kind: 'pull-failed', cause: pull.cause });
-      }
-      if (pull.kind !== 'failed' && failing) {
-        troubled({ durableConsumer, kind: 'recovered' });
-      }
-      failing = pull.kind === 'failed';
-    },
-    ended: () => {
-      if (!failing) {
-        troubled({
-          durableConsumer,
-          kind: 'pull-failed',
-          cause: new Error('The NATS connection closed'),
-        });
-      }
-    },
-  };
+  if (!reporting.isFailing()) {
+    run.troubled({
+      durableConsumer,
+      kind: 'pull-failed',
+      cause: new Error('The NATS connection closed'),
+    });
+  }
 }
 
 function isPulling(natsConnection: NatsConnection, stopping: AbortSignal): boolean {
@@ -84,20 +60,4 @@ async function deliveredOrHandedBack(
     return;
   }
   await deliver(message, found);
-}
-
-/** Waits the retry pause, or less when `stopping` aborts; its timer and listener never outlive it. */
-function pause(stopping: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    const wake = () => {
-      clearTimeout(timer);
-      stopping.removeEventListener('abort', wake);
-      resolve();
-    };
-    const timer = setTimeout(wake, retryPauseMs);
-    stopping.addEventListener('abort', wake);
-    if (stopping.aborted) {
-      wake();
-    }
-  });
 }

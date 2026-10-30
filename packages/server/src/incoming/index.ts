@@ -1,6 +1,5 @@
-export type { IncomingUrl } from './incoming.ts';
+export type { Incoming, IncomingUrl } from './incoming.ts';
 export {
-  closedSignalOf,
   incomingRequestOf,
   incomingUrlOf,
   unreadableResponse,

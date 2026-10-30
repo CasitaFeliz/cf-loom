@@ -15,9 +15,7 @@ import { admit, fault, handle, readersOf, reject, success } from '../index.ts';
 import {
   checkedMessageBody,
   faultLineOf,
-  faultLogOf,
   isStub,
-  logOf,
   mappedHandlerOf,
   runEndpoint,
   runGuard,
@@ -681,31 +679,5 @@ describe('faultLineOf', () => {
     const line = faultLineOf('getOrder', fault);
 
     expect(line).toBe('getOrder: Internal error');
-  });
-});
-
-describe('logOf', () => {
-  test('a line is logged alone, or then its cause when it has one', () => {
-    const error = new Error('gateway down');
-
-    const logs = [
-      logOf('getOrder: Internal error', error),
-      logOf('getOrder: Try again', undefined),
-    ];
-
-    expect(logs).toEqual([['getOrder: Internal error', error], ['getOrder: Try again']]);
-  });
-});
-
-describe('faultLogOf', () => {
-  test('a Fault is logged as its source and message, then its cause when it has one', () => {
-    const error = new Error('gateway down');
-
-    const logs = [
-      faultLogOf('getOrder', { message: 'Internal error', cause: error }),
-      faultLogOf('getOrder apiKey', { message: 'Try again' }),
-    ];
-
-    expect(logs).toEqual([['getOrder: Internal error', error], ['getOrder apiKey: Try again']]);
   });
 });

@@ -1,3 +1,4 @@
+import { logOf } from '@cf-loom/contract/internal';
 import type { HandlerMap } from '@cf-loom/handlers';
 import { isStub, mappedMessageHandlerOf, nameOf } from '@cf-loom/handlers/internal';
 import type { Consumed } from '../subjects/index.ts';
@@ -36,9 +37,8 @@ export function durableConsumersOf(
     ...mappedMessageHandlerOf(handlers, consumed.at, consumed.declaration),
   }));
   for (const { consumed } of pulled.filter(({ handler }) => isStub(handler))) {
-    console.warn(
-      `${nameOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`,
-    );
+    const notPulled = `${nameOf(consumed.declaration)}'s Handler is a Stub: consume does not pull its Messages`;
+    console.warn(...logOf(notPulled));
   }
   return pulled
     .filter(({ handler }) => !isStub(handler))

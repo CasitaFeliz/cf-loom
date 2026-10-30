@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '../lines/index.ts';
 import {
   type Defs,
   type RefNode,
@@ -51,7 +52,7 @@ function resolvedSideOf(node: SchemaNode, defs: Defs): ResolvedSide {
 export function followedRefOf(ref: RefNode, defs: Defs): ResolvedRef {
   const resolved = resolvedRefOf(ref, defs);
   if (resolved === undefined) {
-    throw new Error(`\`ref\` to ${ref.name} reaches no schema: a bug.`);
+    throw new Error(unbrokenLineOf(`\`ref\` to ${ref.name} reaches no schema: a bug.`));
   }
   return resolved;
 }

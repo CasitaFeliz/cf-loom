@@ -2,6 +2,7 @@
 import type * as core from 'zod/v4/core';
 import type { CheckDef } from './check-defs.ts';
 import { formatConstructorsOf, isStringFormat, type RegexBuiltFormat } from './format-schemas.ts';
+import { joinedOf } from './joined-names.ts';
 import { type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 
 /** A check kind this walker was written for: every kind zod declares but those that set metadata. */
@@ -162,7 +163,7 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
   if (format === 'uuid' && version !== undefined) {
     return nameIn(uuidNames, version) ?? `z.uuid({ version: ${JSON.stringify(version)} })`;
   }
-  return orJoined(formatConstructorsOf(format).map(callOf));
+  return joinedOf(formatConstructorsOf(format).map(callOf), 'or');
 }
 
 /**
@@ -171,17 +172,11 @@ function stringFormatName(check: Extract<CheckDef, { readonly check: 'string_for
  */
 export function refusedRegexBuiltFormat(format: string, built: RegexBuiltFormat): Refused {
   const spellings = [...built.calls.map(callOf), refusedStringFormat(format).construct];
-  return { construct: orJoined(spellings), instead: `.regex(z.regexes.${built.regexName})` };
+  return { construct: joinedOf(spellings, 'or'), instead: `.regex(z.regexes.${built.regexName})` };
 }
 
 function callOf(call: string): string {
   return `${call}()`;
-}
-
-/** Names as a sentence lists them: `a`, `a or b`, `a, b or c`. */
-function orJoined(names: readonly string[]): string {
-  const last = names.slice(-1).join('');
-  return names.length < 2 ? last : `${names.slice(0, -1).join(', ')} or ${last}`;
 }
 
 function zodCheckNamed(kind: string): string {

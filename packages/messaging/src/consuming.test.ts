@@ -747,8 +747,13 @@ describe('a Message delivered', () => {
     await deliver(created, body);
 
     expect(logged.mock.calls).toEqual([
-      ['ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1 attempt 1: Card refused', error],
       [
+        '%s',
+        'ChargeCard@2 orders-service.command.ChargeCard.v2 m-1 f-1 attempt 1: Card refused',
+        error,
+      ],
+      [
+        '%s',
         'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: the Handler threw',
         error,
       ],
@@ -771,6 +776,7 @@ describe('a Message delivered', () => {
     expect(settlement).toBe('pending');
     expect(logged.mock.calls).toEqual([
       [
+        '%s',
         'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1: onServiceFault threw',
         error,
       ],

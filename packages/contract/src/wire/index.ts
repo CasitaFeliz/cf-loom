@@ -52,6 +52,8 @@ export {
   travelingFaultOf,
 } from './envelopes.ts';
 export { headerTextsOf } from './header-text.ts';
+export type { HeldRequest } from './held-request.ts';
+export { heldRequestOf } from './held-request.ts';
 export type { Http } from './http.ts';
 export { kebabCaseOf } from './identifiers.ts';
 export type { InputIssue, InvalidInputBody } from './invalid-input.ts';
@@ -84,6 +86,9 @@ export {
   successResponseOf,
 } from './responses.ts';
 export {
+  receivedSnsAttributesOf,
+  snsAttributeNames,
+  snsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,
   snsMessageIdAttribute,

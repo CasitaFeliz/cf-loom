@@ -7,6 +7,7 @@ export type {
   ReadOf,
   SetLimits,
 } from './container.ts';
+export { type DeliveryWaits, deliveryWaitOf } from './delivery-wait.ts';
 export { type Duration, durationText, millisecondsOf } from './duration.ts';
 export {
   type AdapterLimits,
@@ -15,4 +16,4 @@ export {
   plannedOf,
   type Resolution,
 } from './planned.ts';
-export { choice, countOf, oneOrListOf, readAs } from './setting-readers.ts';
+export { choice, countOf, oneLineOf, oneOrListOf, readAs } from './setting-readers.ts';

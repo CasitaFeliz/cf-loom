@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { afterAll, beforeAll, describe, expect, onTestFinished, test, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { aNatsServer, type NatsServer } from '../../../packages/messaging/test/nats-server.ts';
 import { billingEnvironment, brokerPrefix, ordersEnvironment } from './environments.ts';
 import {
@@ -33,12 +33,12 @@ beforeAll(async () => {
   orders = await aServiceProcess(ordersDir, ordersEnvironment(server.url));
   ordersUrl = `http://127.0.0.1:${orders.port}`;
   billing = await aServiceProcess(billingDir, billingEnvironment(server.url, ordersUrl));
-}, 60_000);
+});
 
 afterAll(async () => {
   await Promise.all([billing?.stop(), orders?.stop()]);
   await nats?.stop();
-}, 30_000);
+});
 
 /** Places an order over HTTP, as a Caller would, and answers its id. */
 async function placeAnOrder(): Promise<string> {
@@ -80,7 +80,7 @@ function stateOnceSettled(durable: string, sequence: number): Promise<DurableCon
   }, patience);
 }
 
-describe('orders-service and billing-service over NATS JetStream', { timeout: 20_000 }, () => {
+describe('orders-service and billing-service over NATS JetStream', () => {
   test('an order placed over HTTP reaches billing’s Subscription through the Broker', async () => {
     const orderId = await placeAnOrder();
 
@@ -117,9 +117,6 @@ describe('orders-service and billing-service over NATS JetStream', { timeout: 20
 
   test('orders-service exits with status 0 when it is sent SIGTERM as soon as it listens', async () => {
     const ordersToStop = await aServiceProcess(ordersDir, ordersEnvironment(nats!.url));
-    onTestFinished(async () => {
-      await ordersToStop.stop();
-    });
 
     const exit = await ordersToStop.stop();
 
@@ -131,9 +128,6 @@ describe('orders-service and billing-service over NATS JetStream', { timeout: 20
       billingDir,
       billingEnvironment(nats!.url, ordersUrl),
     );
-    onTestFinished(async () => {
-      await billingToStop.stop();
-    });
 
     const exit = await billingToStop.stop();
 

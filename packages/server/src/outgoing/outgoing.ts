@@ -1,35 +1,27 @@
 import { once } from 'node:events';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-
-/** A request taken from its host: the messages to answer it on, the Caller's departure, and the headers the host set before. */
-export type Taken = {
-  readonly incoming: IncomingMessage;
-  readonly outgoing: ServerResponse;
-  /** Aborts when the Caller is gone before the response finished, which stops the body being read or written. */
-  readonly closed: AbortSignal;
-  /** The host's headers, which the Response's replace; a `content-length`, the host's or already on `outgoing`, frames a body that is not the Response's, so it is dropped. */
-  readonly hostHeaders?: Readonly<Record<string, number | string | string[] | undefined>>;
-};
+import type { Taken } from './taken.ts';
 
 /** The reader of a Response's body, whose chunks are bytes. */
 type BodyReader = ReadableStreamDefaultReader<Uint8Array>;
 
+/** What a body is written to: a response over HTTP/1.1 or HTTP/2. */
+type BodySink = NodeJS.EventEmitter & { write(chunk: Uint8Array): boolean };
+
 /**
- * Writes the Response `answer` resolves to onto a taken request, and destroys its socket if
- * anything fails on the way, so such a request never crashes the process or leaves its Caller
- * waiting.
+ * Writes the Response `answer` resolves to onto a taken request, and fails the exchange as its
+ * protocol does if anything fails on the way, so such a request never crashes the process or
+ * leaves its Caller waiting.
  */
 export async function respondedWith(taken: Taken, answer: Promise<Response>): Promise<void> {
-  const { outgoing, closed } = taken;
   try {
     const response = await answer;
     const reader = response.body?.getReader();
-    cancelledWhenClosed(reader, closed);
-    outgoing.strictContentLength = true;
+    cancelledWhenClosed(reader, taken.closed);
     headWritten(taken, response);
+    taken.protocol.framed();
     await bodyWritten(taken, reader);
   } catch {
-    outgoing.destroy();
+    taken.protocol.failed();
   }
 }
 
@@ -45,7 +37,7 @@ function cancelledWhenClosed(reader: BodyReader | undefined, closed: AbortSignal
   }
 }
 
-function headWritten({ incoming, outgoing, hostHeaders = {} }: Taken, response: Response) {
+function headWritten({ outgoing, hostHeaders }: Taken, response: Response) {
   outgoing.statusCode = response.status;
   for (const [name, value] of Object.entries(hostHeaders)) {
     if (value !== undefined) {
@@ -62,20 +54,18 @@ function headWritten({ incoming, outgoing, hostHeaders = {} }: Taken, response: 
       named.add(name);
     }
   }
-  if (!incoming.complete) {
-    outgoing.setHeader('connection', 'close');
-  }
 }
 
-async function bodyWritten({ outgoing, closed }: Taken, reader: BodyReader | undefined) {
+async function bodyWritten({ outgoing, closed, protocol }: Taken, reader: BodyReader | undefined) {
   if (reader === undefined) {
-    outgoing.end();
+    protocol.ended();
     return;
   }
+  const sink: BodySink = outgoing;
   for (let read = await reader.read(); !read.done; read = await reader.read()) {
-    if (!outgoing.write(read.value)) {
-      await once(outgoing, 'drain', { signal: closed });
+    if (!sink.write(read.value)) {
+      await once(sink, 'drain', { signal: closed });
     }
   }
-  outgoing.end();
+  protocol.ended();
 }

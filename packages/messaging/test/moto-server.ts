@@ -15,13 +15,16 @@ export type MotoServer = {
 
 /** Starts `moto_server -H 127.0.0.1 -p 0` from PATH, reading its port from the line it prints on stderr; never a fixed port or another emulator. */
 export async function aMotoServer(): Promise<MotoServer> {
-  const server = startProcess('moto_server', ['-H', '127.0.0.1', '-p', '0'], notOnPath);
+  const server = startProcess('moto_server', ['-H', '127.0.0.1', '-p', '0'], { notOnPath });
   const url = await untilListening(
     server,
     'moto_server',
     () => listeningLine.exec(server.stderr())?.[1],
   );
-  return { url, reset: () => reset(url), stop: () => stopProcess(server) };
+  const stop = async (): Promise<void> => {
+    await stopProcess(server);
+  };
+  return { url, reset: () => reset(url), stop };
 }
 
 async function reset(url: string): Promise<void> {

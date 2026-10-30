@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot, publishedSnapshotOf, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
+import { lineBreaks } from '../../contract/test/line-breaks.ts';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
@@ -1261,6 +1262,28 @@ describe('cf-loom generate: what it refuses', () => {
     },
   );
 
+  test('a Root file that exports three Roots is a tooling error naming them as a list', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': [
+        "import { defineApplication, defineDefinitions, defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
+        "export const application = defineApplication({ name: 'orders-service' });",
+        'export const definitions = defineDefinitions({});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'src/contract/index.ts exports more than one Root: application, contract and definitions\n',
+    });
+  });
+
   test('a Service’s Root file that exports its Root under two names generates', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     edit(project, 'src/contract/index.ts', (text) =>
@@ -1452,7 +1475,7 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
-  test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
+  test.for(lineBreaks.filter(([name]) => name !== 'LF').map(([, , visible]) => visible))(
     'a Root file that throws a text holding %s reports it as one line, with the line break written escaped',
     (visible) => {
       const project = aProject({
@@ -3128,7 +3151,6 @@ const nothingToPublish = (packageVersion: string) =>
 const approvalNeededLine =
   '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it';
 const refusedLine = 'The check failed: 1 Change(s) refused';
-const openEnumHint = 'declare it with openEnum, so readers take values added later';
 const deletedHint =
   'retire it instead, deprecating it first if it is not, and delete it once the Baseline has it Retired';
 
@@ -3948,9 +3970,9 @@ describe.concurrent('cf-loom check', () => {
     expect(ran.stdout.split('\n')).toEqual([
       checkedAgainstOrders,
       `endpoints.GET /ping (ping) status-changed from=200 to=201: ${approval}`,
-      `${schema} value-added at success.body.code value="1" enum=closed: ${approval}; ${openEnumHint}`,
+      `${schema} value-added at success.body.code value="1" enum=closed: ${approval}`,
       `${schema} value-removed at success.body.code value=1: Additive`,
-      `${schema} value-added at success.body.kind value="c" enum=closed: ${approval}; ${openEnumHint}`,
+      `${schema} value-added at success.body.kind value="c" enum=closed: ${approval}`,
       `${schema} field-removed at success.body.total: ${approval}`,
       'events.OrderCreated@2 added: Additive',
       'commands.ChargeCard@1 retired: Breaking, needs no Approval',
@@ -4049,7 +4071,7 @@ describe.concurrent('cf-loom check', () => {
       const change = 'endpoints.GET /ping (ping) schema value-added at success.body.kind';
       expect(ran.stdout.split('\n')).toEqual([
         checkedAgainstOrders,
-        `${change} value="b${sequence}c" enum=closed: ${approval}; ${openEnumHint}`,
+        `${change} value="b${sequence}c" enum=closed: ${approval}`,
         `Would publish ${ordersPackage}@2.0.0 (major)`,
         '',
       ]);
@@ -4348,6 +4370,16 @@ function aRootReading(input: string): Files {
   return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
 }
 
+/** `aRoot` whose Success body is `body`, which may call `openEnum`. */
+function aRootDeclaringOpenEnums(body: string): Files {
+  const root = aRoot({ body });
+  const endpoint = (root['src/contract/ping.endpoint.ts'] ?? '').replace(
+    'import { defineEndpoint }',
+    'import { defineEndpoint, openEnum }',
+  );
+  return { ...root, 'src/contract/ping.endpoint.ts': endpoint };
+}
+
 /** `aRoot` whose Endpoint answers the Rejections of the codes given. */
 function aRootAnswering(codes: readonly string[]): Files {
   const root = aRoot();
@@ -4418,6 +4450,9 @@ type JsonChange = {
   readonly difference: { readonly shape?: Record<string, unknown> } & Record<string, unknown>;
   readonly path: string | null;
 };
+
+/** The hint of a Change as `check --json` prints it. */
+const jsonHintOf = ({ hint }: { readonly hint: string | null }): string | null => hint;
 
 /** The fields a Change line prints as `name=value`, before its class; a `value` stays the JSON it is printed as. */
 function printedFieldsOf(line: string): readonly (readonly [string, string])[] {
@@ -4661,16 +4696,6 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       'accept any text',
     ],
     [
-      'adding a value to a closed enum',
-      (lab: Lab) =>
-        aChangedProject(lab, {
-          before: aRoot({ body: "z.object({ kind: z.enum(['a']) })" }),
-          after: aRoot({ body: "z.object({ kind: z.enum(['a', 'b']) })" }),
-        }),
-      `endpoints.GET /ping (ping) schema value-added at success.body.kind value="b" enum=closed: ${needsApproval}`,
-      openEnumHint,
-    ],
-    [
       'adding a required field to an Input body',
       (lab: Lab) =>
         aChangedProject(lab, {
@@ -4687,7 +4712,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       'make the change in a new Message Version',
     ],
     [
-      'adding a value to a closed enum of an Event’s body, which openEnum would not allow either',
+      'adding a value to a closed enum of an Event’s body',
       (lab: Lab) =>
         aChangedProject(lab, {
           before: aMessagingRoot({ eventBody: "z.object({ kind: z.enum(['a']) })" }),
@@ -4726,15 +4751,59 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       const json = await checkedAgainst(lab, changed, '--json');
 
       expect(lines.ran.stdout.split('\n')).toContain(`${line}; ${hint}`);
-      expect(
-        JSON.parse(json.ran.stdout).changes.map((change: { hint: string }) => change.hint),
-      ).toContain(hint);
+      expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toContain(hint);
     },
   );
+
+  const addedToClosedEnum = (lab: Lab) =>
+    aChangedProject(lab, {
+      before: aRoot({ body: "z.object({ kind: z.enum(['a']) })" }),
+      after: aRoot({ body: "z.object({ kind: z.enum(['a', 'b']) })" }),
+    });
+
+  const openedWhileAdding = (lab: Lab) =>
+    aChangedProject(lab, {
+      before: aRoot({ body: "z.object({ kind: z.enum(['a']) })" }),
+      after: aRootDeclaringOpenEnums("z.object({ kind: openEnum(['a', 'b']) })"),
+    });
+
+  test('adding a value to a closed Success enum prints the Change with no hint, and its JSON hint is null', async ({
+    lab,
+  }) => {
+    const changed = await addedToClosedEnum(lab);
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    expect(lines.ran.stdout.split('\n')).toContain(
+      `endpoints.GET /ping (ping) schema value-added at success.body.kind value="b" enum=closed: ${needsApproval}`,
+    );
+    expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toEqual([null]);
+  });
+
+  test('opening a closed Success enum while adding a value prints enum-opened and value-added with no hint, and both JSON hints are null', async ({
+    lab,
+  }) => {
+    const changed = await openedWhileAdding(lab);
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    const change = 'endpoints.GET /ping (ping) schema';
+    expect(lines.ran.stdout.split('\n')).toEqual([
+      checkedAgainstOrders,
+      `${change} enum-opened at success.body.kind: ${needsApproval}`,
+      `${change} value-added at success.body.kind value="b" enum=closed: ${needsApproval}`,
+      `Would publish ${ordersPackage}@2.0.0 (major)`,
+      '',
+    ]);
+    expect(JSON.parse(json.ran.stdout).changes.map(jsonHintOf)).toEqual([null, null]);
+  });
 
   const drifting = [
     ['a Service changed in every way', (lab: Lab) => aChangedProject(lab, changedInEveryWay)],
     ['an Endpoint renamed while it is widened', aRenamedAndWidenedProject],
+    ['adding a value to a closed enum', addedToClosedEnum],
     ...hintRows.map(([name, setup]) => [name, setup] as const),
   ] as const;
 

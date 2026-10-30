@@ -1,4 +1,4 @@
-import { ownOf } from '@cf-loom/contract/internal';
+import { ownOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import { type Handled, isPairing, type MessageHandled, nameOf } from '../calls/index.ts';
 import type { HandlerMap } from './handler.ts';
@@ -22,11 +22,13 @@ export function mappedHandlerOf<Declaration extends Handled>(
   const where = `${at.map}.${at.key}`;
   const handler = ownOf(byName, at.key);
   if (handler === undefined) {
-    throw new Error(`${where} has no Handler in the Handler map: run cf-loom generate`);
+    throw new Error(
+      unbrokenLineOf(`${where} has no Handler in the Handler map: run cf-loom generate`),
+    );
   }
   const written = writtenDeclarationOf(handler);
   if (written !== declaration) {
-    throw new Error(`${where} ${mismatchOf(written, declaration)}`);
+    throw new Error(unbrokenLineOf(`${where} ${mismatchOf(written, declaration)}`));
   }
   return handler as { readonly declaration: Declaration };
 }
@@ -60,11 +62,13 @@ export function mappedMessageHandlerOf<Declaration extends MessageHandled>(
   const paired = `readers.${at.map}.${at.key}`;
   const pairing = ownOf(ownOf(map.readers, at.map), at.key);
   if (!isPairing(pairing)) {
-    throw new Error(`${paired} is not in the Handler map: run cf-loom generate`);
+    throw new Error(unbrokenLineOf(`${paired} is not in the Handler map: run cf-loom generate`));
   }
   if (!isWrittenForPairing(handler, pairing)) {
     throw new Error(
-      `${at.map}.${at.key} holds a Handler written for another pairing than ${paired}: run cf-loom generate`,
+      unbrokenLineOf(
+        `${at.map}.${at.key} holds a Handler written for another pairing than ${paired}: run cf-loom generate`,
+      ),
     );
   }
   return { handler, reader: pairing.reader };

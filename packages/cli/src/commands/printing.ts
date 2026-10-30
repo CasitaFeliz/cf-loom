@@ -1,6 +1,6 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import { firstLineOf } from '../child-process/index.ts';
 import type { ExitStatus } from './exit.ts';
-import { printedLineOf } from './printed-line.ts';
 
 /** How writing to a stream ended: written, closed by its reader, or failed. */
 type Printed =
@@ -32,7 +32,7 @@ export function printerTo(stream: NodeJS.WritableStream): Printer {
       if (lines.length === 0 || failure !== undefined) {
         return;
       }
-      const text = lines.map((line) => `${printedLineOf(line)}\n`).join('');
+      const text = lines.map((line) => `${unbrokenLineOf(line)}\n`).join('');
       last = new Promise((resolve) => {
         stream.write(text, (error) => {
           failed(error);

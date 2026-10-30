@@ -9,7 +9,7 @@ import {
   successStatuses,
   visibilities,
 } from '../declarations/index.ts';
-import { inFields } from '../walker/index.ts';
+import { inFields, joinedOf } from '../walker/index.ts';
 import {
   isMissing,
   isWithoutValue,
@@ -17,7 +17,7 @@ import {
   slotAt,
   writtenTextOf,
 } from '../written/index.ts';
-import { type ClosedValue, closedValueFailures, lifecycle, oneOf } from './closed-values.ts';
+import { type ClosedValue, closedValueFailures, lifecycle } from './closed-values.ts';
 import { type DeclarationFailure, failure } from './failures.ts';
 
 /** A closed value of an Endpoint, by the field it sits in. */
@@ -85,7 +85,8 @@ function successFailures({ at, endpoint }: LocatedEndpoint): readonly Declaratio
     return [];
   }
   if (!successStatuses.includes(success.status)) {
-    const message = `A Success status is ${oneOf(successStatuses)}: ${writtenTextOf(success.status)}`;
+    const statuses = joinedOf(successStatuses.map(String), 'or');
+    const message = `A Success status is ${statuses}: ${writtenTextOf(success.status)}`;
     return [failure(inFields(at, 'success', 'status'), 'success-status', message)];
   }
   const bodyAt = slotAt(at, 'success.body');

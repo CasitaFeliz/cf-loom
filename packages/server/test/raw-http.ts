@@ -1,4 +1,6 @@
-import { connect } from 'node:net';
+import { connect, type Socket } from 'node:net';
+
+const callerSockets: Socket[] = [];
 
 /** Sends raw HTTP/1.1 text to the server at `url`, and what came back, once the server closes. */
 export async function raw(url: string, text: string): Promise<string> {
@@ -65,4 +67,19 @@ export function bodyOf(received: string): string {
     size = Number.parseInt(remaining, 16);
   }
   return chunks.join('');
+}
+
+/** A raw socket to the server at `url`, as a Caller who may stop reading or leave at any time; `closeCallerSockets` destroys it. */
+export function callerSocket(url: string): Socket {
+  const socket = connect(Number(new URL(url).port), '127.0.0.1');
+  socket.on('error', () => undefined);
+  callerSockets.push(socket);
+  return socket;
+}
+
+/** Destroys every socket `callerSocket` opened, so no server waits on one. */
+export function closeCallerSockets(): void {
+  for (const socket of callerSockets.splice(0)) {
+    socket.destroy();
+  }
 }

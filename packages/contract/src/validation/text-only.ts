@@ -1,5 +1,6 @@
 import {
   inFields,
+  joinedOf,
   type ObjectNode,
   type Place,
   placeNameOf,
@@ -17,7 +18,6 @@ import {
   textOf,
   writtenTextOf,
 } from '../written/index.ts';
-import { joinedOf } from './closed-values.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { headerNameFailures } from './header-names.ts';
 import type { Nodes, WalkedSlot } from './schemas.ts';
