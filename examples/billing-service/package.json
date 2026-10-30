@@ -23,6 +23,7 @@
   "devDependencies": {
     "@cf-loom/cli": "workspace:*",
     "@cf-loom/testing": "workspace:*",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "fastify": "catalog:"
   }
 }

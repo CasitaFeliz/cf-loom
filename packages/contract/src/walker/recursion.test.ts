@@ -2665,7 +2665,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
   });
 
   test('an id that is not a string gives its line alone', () => {
-    // @ts-expect-error zod types an id as a string
+    // @ts-expect-error TS2322 zod types an id as a string
     const walked = walkBody(cycleWith((schema) => schema.meta({ id: 5 })));
 
     expect(walked).toEqual({
@@ -2701,7 +2701,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
     },
     {
       what: 'not a string',
-      // @ts-expect-error zod types an id as a string
+      // @ts-expect-error TS2322 zod types an id as a string
       named: (schema: z.ZodObject) => schema.meta({ id: 5 }).describe('A'),
     },
   ])(
@@ -2759,7 +2759,7 @@ describe('walkSchemas: the id a cycle’s schema wrote', () => {
       kind: 'refused',
       name: (schema: z.ZodType, index: number) => schema.meta({ id: `m_${index}` }),
     },
-    // @ts-expect-error zod types an id as a string
+    // @ts-expect-error TS2322 zod types an id as a string
     { kind: 'non-string', name: (schema: z.ZodType) => schema.meta({ id: 5 }) },
     {
       kind: 'dropped',

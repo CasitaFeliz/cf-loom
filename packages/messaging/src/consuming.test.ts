@@ -392,7 +392,7 @@ describe('consume', () => {
     };
     const { consume } = await messaging(contract, aBroker().broker);
 
-    // @ts-expect-error notifyOnSettled holds the Handler of notifyOnCreated
+    // @ts-expect-error TS2322 notifyOnSettled holds the Handler of notifyOnCreated
     const swapping = consume({ ...handlers, subscriptions: swapped }, {});
 
     await expect(swapping).rejects.toThrow(

@@ -546,7 +546,7 @@ describe('fakeProvider: steps', () => {
 
   test('a body scripted for a Success that declares none is a mistake at success.body', async () => {
     const payments = fakeProvider(paymentsDependency);
-    // @ts-expect-error cancelPayment's Success declares no body
+    // @ts-expect-error TS2554 cancelPayment's Success declares no body
     payments.on('cancelPayment').otherwise((r) => r.success({ x: 1 }));
 
     const calling = payments.fetch(new Request(at, { method: 'DELETE' }));

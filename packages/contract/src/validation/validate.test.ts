@@ -470,7 +470,7 @@ describe('validateRoot', () => {
       path: '/orders',
       visibility: 'public',
       description: 'Creates an order',
-      // @ts-expect-error z.date() is refused by the types, as generate refuses it
+      // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });
@@ -504,7 +504,7 @@ describe('validateRoot', () => {
       visibility: 'public',
       description: 'Creates an order',
       input: {
-        // @ts-expect-error z.date() is refused by the types, as generate refuses it
+        // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
         body: z.object({ placedAt: z.date() }),
         headers: z.object({ 'x-tenant': z.object({ id: z.string() }) }),
       },
@@ -544,7 +544,7 @@ describe('validateRoot', () => {
       path: '/orders/',
       visibility: 'public',
       description: 'Creates an order',
-      // @ts-expect-error z.date() is refused by the types, as generate refuses it
+      // @ts-expect-error TS2375 z.date() is refused by the types, as generate refuses it
       input: { body: z.object({ placedAt: z.date() }) },
       success: { status: 201, body: z.object({ id: z.uuid() }) },
     });

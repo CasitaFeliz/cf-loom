@@ -9,7 +9,9 @@ catalog:
   '@nats-io/nats-core': ^3.4.0
   '@nats-io/transport-node': ^3.4.0
   '@types/node': ^24.19.2
-  typescript: ^7.0.2
+  fastify: ^5.12.7
+  # Exact: scripts/check-expect-errors.ts uses typescript/unstable/sync, which a minor may change.
+  typescript: 7.0.2
   vite: ^8.3.4
   vitest: ^5.0.5
   zod: ^4.6.7

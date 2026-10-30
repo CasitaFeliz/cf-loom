@@ -155,13 +155,13 @@ describe('serve: Resources', () => {
 
   test('without the Resources its Endpoint and Guard Handlers take is a type error', () => {
     const missing = () => [
-      // @ts-expect-error the Handlers take orders and callers
+      // @ts-expect-error TS2345 the Handlers take orders and callers
       serve(contract, handlers, {}),
-      // @ts-expect-error the options must hold the Resources
+      // @ts-expect-error TS2345 the options must hold the Resources
       serve(contract, handlers, { maxBodyBytes: 1 }),
-      // @ts-expect-error callers is missing
+      // @ts-expect-error TS2322 callers is missing
       serve(contract, handlers, { resources: { orders } }),
-      // @ts-expect-error orders is missing
+      // @ts-expect-error TS2322 orders is missing
       serve(contract, handlers, { resources: { callers } }),
     ];
 

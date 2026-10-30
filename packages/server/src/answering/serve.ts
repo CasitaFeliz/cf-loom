@@ -1,5 +1,5 @@
 import type { Http, ServiceContract } from '@cf-loom/contract';
-import type { Closed } from '@cf-loom/contract/internal';
+import type { Closed, Matchable } from '@cf-loom/contract/internal';
 import type { HandlerMapOf, NoResources, ResourcesOf } from '@cf-loom/handlers';
 import type { ResourcesField } from '@cf-loom/handlers/internal';
 import { type ServedHandlers, servedContractOf } from '../served/index.ts';
@@ -41,6 +41,15 @@ export type ServeOptions<Resources extends object = NoResources> = ResourcesFiel
 };
 
 /**
+ * `serve`'s handler with the declared Endpoints it matches a request against, for an adapter that
+ * decides before `serve` sees the request.
+ */
+export type Serving = {
+  readonly http: Http;
+  readonly endpoints: readonly Matchable[];
+};
+
+/**
  * Answers a Contract's Endpoints with their Handlers over web-standard HTTP, handing each the
  * Service's Resources, after checking the Service is assembled as the Contract says.
  */
@@ -54,8 +63,17 @@ export function serve(
   handlers: ServedHandlers,
   options: ServeOptions<object>,
 ): Http {
+  return servingOf(contract, handlers, options).http;
+}
+
+/** `serve`'s handler, prepared once after the startup checks, with the Endpoints it matches. */
+export function servingOf(
+  contract: ServiceContract,
+  handlers: ServedHandlers,
+  options: ServeOptions<object>,
+): Serving {
   const served = servedContractOf(contract, handlers, options);
-  return async (request) => {
+  const http: Http = async (request) => {
     const started = performance.now();
     const answer = await answerOf(served, request, options.fallback);
     if (answer.kind === 'fallback') {
@@ -70,4 +88,5 @@ export function serve(
     await recordAnswered(record, request, options.onAnswered);
     return answered.response;
   };
+  return { http, endpoints: served.endpoints };
 }
