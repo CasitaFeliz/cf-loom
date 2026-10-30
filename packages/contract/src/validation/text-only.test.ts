@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { summarized } from '../../test/failures.ts';
+import { growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -52,9 +53,13 @@ function aRejectionWith(headers: z.ZodObject) {
   });
 }
 
-function validateEndpoint(endpoint: Endpoint) {
+function rootOf(endpoint: Endpoint) {
   const orders = defineGroup({ name: 'orders', description: 'Orders', endpoints: [endpoint] });
-  return validateInPackage(defineService({ name: 'orders-service', groups: [orders] }));
+  return defineService({ name: 'orders-service', groups: [orders] });
+}
+
+function validateEndpoint(endpoint: Endpoint) {
+  return validateInPackage(rootOf(endpoint));
 }
 
 function failed(location: string, rule: string, message: string) {
@@ -1382,5 +1387,79 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
     }
 
     expect(outcomes.map((seen) => [...seen].sort())).toEqual(sites.map(() => ['refused', 'valid']));
+  });
+});
+
+describe('validateRoot: the time it takes to judge the examples of a text part', () => {
+  /**
+   * How many times longer a shape eight times as large may take: 8 for a read that visits each part once,
+   * which a large object's allocation and collection stretch to 10 to 14, and 64 for one that scans at each part.
+   */
+  const linearGrowth = 24;
+  const growthTimeout = 240_000;
+
+  /** A header object, as the validated Root of an Endpoint taking it, for `growthOf` to time. */
+  function judgingHeaders(headers: z.ZodObject) {
+    const root = rootOf(defineEndpoint({ ...listing, input: { headers } }));
+    return () => validateRoot(root, aRootPackage(root));
+  }
+
+  test('a header with 8,000 refused examples is one line naming each, in time that grows as they do', {
+    timeout: growthTimeout,
+  }, () => {
+    const examplesOf = (count: number) => Array.from({ length: count }, (_, at) => ` e${at}`);
+    const told = (size: number) =>
+      judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: examplesOf(size) }) }));
+
+    const growth = growthOf(told, { small: 1000, large: 8000 }, linearGrowth);
+    const named = examplesOf(8000).map((example) => JSON.stringify(example));
+    const values = `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
+
+    expect(summarized(told(8000)())).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', values),
+      ),
+    );
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('800 optional headers each given a value by 20 examples of their object validate, in time that grows as they do', {
+    timeout: growthTimeout,
+  }, () => {
+    const headersOfWidth = (width: number) => {
+      const names = Array.from({ length: width }, (_, at) => `x-f${at}`);
+      const shape = Object.fromEntries(names.map((name) => [name, z.string().optional()]));
+      const examples = Array.from({ length: 20 }, (_, at) =>
+        Object.fromEntries(names.map((name) => [name, `v${at}`])),
+      );
+      return z.object(shape).meta({ examples });
+    };
+    const told = (size: number) => judgingHeaders(headersOfWidth(size));
+
+    const growth = growthOf(told, { small: 100, large: 800 }, linearGrowth);
+
+    expect(summarized(told(800)()).kind).toBe('valid');
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a header example refused for its leading space is one line, in time that grows as its length does', {
+    timeout: growthTimeout,
+  }, () => {
+    const exampleOf = (length: number) => ` ${'a'.repeat(length)}`;
+    const told = (size: number) =>
+      judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: [exampleOf(size)] }) }));
+
+    const growth = growthOf(told, { small: 20_000, large: 160_000 }, linearGrowth);
+
+    expect(summarized(told(160_000)())).toEqual(
+      failed(
+        `${endpointAt} input.headers.x-s`,
+        'unsendable-text',
+        unsendable('header', 'x-s', JSON.stringify(exampleOf(160_000))),
+      ),
+    );
+    expect(growth).toBeLessThan(linearGrowth);
   });
 });
