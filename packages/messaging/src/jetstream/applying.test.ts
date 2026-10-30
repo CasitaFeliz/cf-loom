@@ -17,6 +17,7 @@ import {
   durableConsumerConfigOf,
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
+import { jsonKindOf, jsonValues } from '../../test/json-values.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
@@ -982,6 +983,16 @@ describe('what applyBrokerPlan refuses', () => {
       "limits.durableConsumerDefaults.ackWait [ '30s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
     [
+      'a list of seven ack waits in which one is no duration',
+      { durableConsumerDefaults: { ackWait: ['1s', '2s', '3s', '4s', '5s', '6s', '0s'] } },
+      "limits.durableConsumerDefaults.ackWait [ '1s', '2s', '3s', '4s', '5s', '6s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+    ],
+    [
+      'a list of seven lists',
+      { streamDefaults: { replicas: [[1], [2], [3], [4], [5], [6], [7]] } },
+      'limits.streamDefaults.replicas [ [ 1 ], [ 2 ], [ 3 ], [ 4 ], [ 5 ], [ 6 ], [ 7 ] ] is not a whole number from 1',
+    ],
+    [
       'a setting broken under each of the four keys, written in reverse, in the order streamDefaults, durableConsumerDefaults, streams, durableConsumers',
       {
         durableConsumers: { charge: { ackWait: '0s' } },
@@ -1012,6 +1023,41 @@ describe('what applyBrokerPlan refuses', () => {
       expect(service.opened).toHaveLength(0);
     },
   );
+
+  test('the values a refusal is drawn from hold every kind JSON has', () => {
+    const kinds = new Set(jsonValues.map(jsonKindOf));
+
+    expect([...kinds].sort()).toEqual(['boolean', 'list', 'null', 'number', 'object', 'string']);
+  });
+
+  test('applyBrokerPlan refuses an ack wait of any JSON value, alone or in a list of 1 to 110 entries, on one line', async () => {
+    const prefix = aPrefix();
+    const connecting = { connect: aConnect().connect };
+    const offending: string[] = [];
+    const refuse = async (ackWait: unknown, label: string) => {
+      const durableConsumerDefaults = { ...testLimits.durableConsumerDefaults, ackWait };
+      const limits = readFromJson({ ...testLimits, durableConsumerDefaults });
+      const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
+      if (error.message.includes('\n')) {
+        offending.push(label);
+      }
+    };
+
+    for (const [at, value] of jsonValues.entries()) {
+      await refuse(value, `alone @${at}`);
+    }
+    for (let length = 1; length <= 110; length++) {
+      for (const at of jsonValues.keys()) {
+        const entries = Array.from(
+          { length: length - 1 },
+          (_, i) => jsonValues[(at + i) % jsonValues.length],
+        );
+        await refuse([...entries, '0s'], `${length} entries @${at}`);
+      }
+    }
+
+    expect(offending).toEqual([]);
+  });
 
   test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();

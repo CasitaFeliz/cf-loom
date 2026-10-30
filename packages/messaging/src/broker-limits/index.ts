@@ -15,4 +15,4 @@ export {
   plannedOf,
   type Resolution,
 } from './planned.ts';
-export { choice, countOf, oneOrListOf, readAs } from './setting-readers.ts';
+export { choice, countOf, oneLineOf, oneOrListOf, readAs } from './setting-readers.ts';

@@ -29,6 +29,7 @@ import {
   topicNamesOf,
 } from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
+import { jsonValues } from '../../test/json-values.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type Duration, type SqsBrokerLimits } from './index.ts';
 
@@ -137,6 +138,10 @@ async function rejectionOf(applying: Promise<void>): Promise<Error> {
 function backoffOf(last: Duration): Duration[] {
   return ['30s', ...Array.from({ length: 36 }, (): Duration => '10000s'), last];
 }
+
+/** What a refusal of an `ackWait` says it is not. */
+const expectedAckWait =
+  'a duration of whole seconds under 12h such as 30s or 5m, or a list of them whose entries after the first take at most 256 characters, joined by a space';
 
 function sqsArnOf(queue: string): string {
   return `arn:aws:sqs:eu-west-1:123456789012:${queue}`;
@@ -825,8 +830,6 @@ describe('applyBrokerPlan', () => {
       },
       durableConsumers: { [orders.chargeDurable]: { ackWait: ['30s', '12h'], maxDeliver: 0 } },
     });
-    const ackWait =
-      'a duration of whole seconds under 12h such as 30s or 5m, or a list of them whose entries after the first take at most 256 characters, joined by a space';
     const retention = 'a duration of whole seconds from 1m to 14d';
     const maxDeliver = 'a whole number from 1 to 1000';
 
@@ -834,11 +837,11 @@ describe('applyBrokerPlan', () => {
 
     expect(error.message.split('\n').sort()).toEqual(
       [
-        `limits.durableConsumerDefaults.ackWait '1500ms' is not ${ackWait}`,
+        `limits.durableConsumerDefaults.ackWait '1500ms' is not ${expectedAckWait}`,
         `limits.durableConsumerDefaults.maxDeliver 1001 is not ${maxDeliver}`,
         `limits.durableConsumerDefaults.retention '30s' is not ${retention}`,
         `limits.durableConsumerDefaults.deadLetterRetention '15d' is not ${retention}`,
-        `limits.durableConsumers.${orders.chargeDurable}.ackWait [ '30s', '12h' ] is not ${ackWait}`,
+        `limits.durableConsumers.${orders.chargeDurable}.ackWait [ '30s', '12h' ] is not ${expectedAckWait}`,
         `limits.durableConsumers.${orders.chargeDurable}.maxDeliver 0 is not ${maxDeliver}`,
       ].sort(),
     );
@@ -881,18 +884,18 @@ describe('applyBrokerPlan', () => {
   test('a backoff whose tag would exceed 256 characters is refused, naming where that ackWait is in limits, creating nothing', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url);
+    const waits = backoffOf('9999s');
 
     const error = await rejectionOf(
       applyBrokerPlan(connecting, orders.plan, {
-        durableConsumerDefaults: {
-          ...testLimits.durableConsumerDefaults,
-          ackWait: backoffOf('9999s'),
-        },
+        durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ackWait: waits },
       }),
     );
 
-    expect(error.message).toMatch(/^limits\.durableConsumerDefaults\.ackWait \[/);
-    expect(error.message).toContain('at most 256 characters');
+    const shown = waits.map((wait) => `'${wait}'`).join(', ');
+    expect(error.message).toBe(
+      `limits.durableConsumerDefaults.ackWait [ ${shown} ] is not ${expectedAckWait}`,
+    );
     expect(await topicNamesOf(connecting.sns)).toEqual([]);
   });
 
@@ -1047,6 +1050,38 @@ describe('applyBrokerPlan', () => {
     await applyBrokerPlan(connecting, plan, testLimits);
 
     expect(listings.sent()).toBe(1);
+  });
+
+  test.each([
+    ['seven digits', ['1', '2', '3', '4', '5', '6', '7'], "[ '1', '2', '3', '4', '5', '6', '7' ]"],
+    [
+      'three strings of thirty characters',
+      ['x'.repeat(30), 'y'.repeat(30), 'z'.repeat(30)],
+      `[ '${'x'.repeat(30)}', '${'y'.repeat(30)}', '${'z'.repeat(30)}' ]`,
+    ],
+    ['a string of sixty line breaks', 'a\n'.repeat(60), `'${'a\\n'.repeat(60)}'`],
+  ])('an account of %s is refused on one line, as written', async (_, account, shown) => {
+    const orders = anOrders();
+    const connecting = { ...anAwsConnecting(moto.url), account: account as string };
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(`connecting.account ${shown} is not a 12-digit AWS account id`);
+  });
+
+  test('an account of any JSON value is refused on one line', async () => {
+    const orders = anOrders();
+    const offending: number[] = [];
+
+    for (const [at, account] of jsonValues.entries()) {
+      const connecting = { ...anAwsConnecting(moto.url), account: account as string };
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+      if (error.message.includes('\n')) {
+        offending.push(at);
+      }
+    }
+
+    expect(offending).toEqual([]);
   });
 
   test('an account that is not 12 digits and a setting left unset are refused in one error, a line each', async () => {
