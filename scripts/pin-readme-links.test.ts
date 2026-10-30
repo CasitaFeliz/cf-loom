@@ -293,3 +293,30 @@ describe('pin-readme-links', () => {
     expect(filesOf(checkout)).toEqual(before);
   });
 });
+
+describe('the package READMEs', () => {
+  const root = join(import.meta.dirname, '..');
+  const packageNames = readdirSync(join(root, 'packages'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+
+  function countOf(text: string, needle: string): number {
+    return text.split(needle).length - 1;
+  }
+
+  it.each(packageNames)(
+    'of %s are pinned to a commit with none of its links left at main',
+    (name) => {
+      const folder = join(root, 'packages', name);
+      const readme = readFileSync(join(folder, 'README.md'), 'utf8');
+      const manifest = JSON.parse(readFileSync(join(folder, 'package.json'), 'utf8'));
+      const named = repositoryOf(manifest);
+      const links = countOf(readme, `github.com/${named}`);
+
+      const pinned = pinnedReadme(readme, named, commit);
+
+      expect(countOf(pinned, `github.com/${named}/blob/${commit}/`)).toBe(links);
+      expect(countOf(pinned, `github.com/${named}/blob/main`)).toBe(0);
+    },
+  );
+});
