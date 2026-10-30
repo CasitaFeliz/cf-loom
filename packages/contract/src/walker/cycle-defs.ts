@@ -123,8 +123,7 @@ export function defsOf(state: State): Readonly<Record<string, SchemaNode>> {
   const defs: [string, SchemaNode][] = [];
   for (const [name, schema] of state.schemaById) {
     const entered = state.remembered.enteredOf(schema);
-    const answer = entered?.answer;
-    if (entered?.def !== undefined && answer?.kind === 'walked' && answer.value.type === 'ref') {
+    if (entered?.def !== undefined && defNameOf(entered.answer) !== undefined) {
       defs.push([name, entered.def]);
     }
   }
@@ -136,27 +135,32 @@ type WrittenDef = { readonly name: string; readonly entered: Entered; readonly d
 
 /**
  * A group of schemas closing: each nodeless cycle among the defs it wrote, a def a failure took
- * the place of included, is refused once, at its def the walk entered first. The group fails with
- * them beside the root's own refusals, and its root, if the walk remembers it, takes this failure
- * in the place of its first, since this is what its callers got. Read once per group, so the
- * walk reads each def once.
+ * the place of included, is refused once, at its def the walk entered first, and the group fails
+ * with them beside its root's own refusals. Read once per group, so the walk reads each def once.
  */
 export function refuseNodelessCycles(state: State, root: Entered, result: Walked): Walked {
   const written = writtenDefsOf(state, root.slot);
-  const defs = new Map(written.map(({ name, def }) => [name, def]));
-  const cycles = nodelessCyclesOf(defs);
+  const cycles = nodelessCyclesOf(new Map(written.map(({ name, def }) => [name, def])));
   if (cycles.length === 0) {
     return result;
   }
-  const byName = new Map(written.map((writtenDef) => [writtenDef.name, writtenDef]));
-  const firsts = cycles.map((names) => firstEnteredOf(names, byName));
-  const inWalkOrder = firsts.toSorted((left, right) => left.entered.index - right.entered.index);
-  const refusals = inWalkOrder.map((first) => refuseCycleAt(state, first));
-  const failure = refusedBeside(failed(refusals), result);
-  failOpenMembers(state, root.slot + 1, failure);
-  if (root.answer !== undefined) {
-    state.remembered.remember(root, failure);
+  const cycleOf = new Map<string, readonly string[]>();
+  for (const names of cycles) {
+    for (const name of names) {
+      cycleOf.set(name, names);
+    }
   }
+  const told = new Set<readonly string[]>();
+  const refusals: FailureTree[] = [];
+  for (const writtenDef of written) {
+    const cycle = cycleOf.get(writtenDef.name);
+    if (cycle !== undefined && !told.has(cycle)) {
+      told.add(cycle);
+      refusals.push(refuseCycleAt(state, writtenDef));
+    }
+  }
+  const failure = refusedBeside(failed(refusals), result);
+  failOpenMembers(state, root.slot, failure);
   return failure;
 }
 
@@ -170,27 +174,6 @@ function writtenDefsOf(state: State, fromSlot: number): readonly WrittenDef[] {
     }
   }
   return written;
-}
-
-/** The def of a nodeless cycle that the walk entered first. */
-function firstEnteredOf(
-  names: readonly string[],
-  byName: ReadonlyMap<string, WrittenDef>,
-): WrittenDef {
-  let first: WrittenDef | undefined;
-  for (const name of names) {
-    const candidate = byName.get(name);
-    if (
-      candidate !== undefined &&
-      (first === undefined || candidate.entered.index < first.entered.index)
-    ) {
-      first = candidate;
-    }
-  }
-  if (first === undefined) {
-    throw new Error('A nodeless cycle names a def its group did not write.');
-  }
-  return first;
 }
 
 /** The refusal of a nodeless cycle at its def, which that def's own memo claims. */
