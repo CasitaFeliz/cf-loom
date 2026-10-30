@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { type Http2ServerRequest, Http2ServerResponse } from 'node:http2';
+import {
+  constants,
+  type Http2ServerRequest,
+  Http2ServerResponse,
+  type ServerHttp2Stream,
+} from 'node:http2';
 
 /** The headers a host set on a request before it was taken. */
 type HostHeaders = Readonly<Record<string, number | string | string[] | undefined>>;
@@ -37,7 +42,7 @@ export function takenOf(
 ): Taken {
   if (outgoing instanceof Http2ServerResponse) {
     const version = http2Of(outgoing);
-    return { incoming, outgoing, closed: new AbortController().signal, hostHeaders, version };
+    return { incoming, outgoing, closed: resetSignalOf(outgoing.stream), hostHeaders, version };
   }
   const version = http1Of(incoming, outgoing);
   return { incoming, outgoing, closed: closedSignalOf(outgoing), hostHeaders, version };
@@ -99,4 +104,26 @@ function closedSignalOf(outgoing: ServerResponse): AbortSignal {
     }
   });
   return controller.signal;
+}
+
+/**
+ * The Caller's departure over HTTP/2: aborted when the stream is, by a reset or a lost connection
+ * before the response ended, or when it closes with an error code.
+ */
+function resetSignalOf(stream: ServerHttp2Stream): AbortSignal {
+  if (stream.aborted || (stream.closed && isReset(stream))) {
+    return AbortSignal.abort();
+  }
+  const controller = new AbortController();
+  stream.once('aborted', () => controller.abort());
+  stream.once('close', () => {
+    if (isReset(stream)) {
+      controller.abort();
+    }
+  });
+  return controller.signal;
+}
+
+function isReset(stream: ServerHttp2Stream): boolean {
+  return stream.rstCode !== constants.NGHTTP2_NO_ERROR;
 }

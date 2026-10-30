@@ -1,4 +1,9 @@
-import type { Http2SecureServer, Http2Server, IncomingHttpHeaders } from 'node:http2';
+import {
+  constants,
+  type Http2SecureServer,
+  type Http2Server,
+  type IncomingHttpHeaders,
+} from 'node:http2';
 import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
@@ -1117,6 +1122,117 @@ describe('fastifyServe', () => {
           expect(closing).toBe('closed');
         },
       );
+    });
+
+    describe('the Caller’s departure', () => {
+      test('a Caller that resets its stream aborts the signal its EndpointHandler received, onAnswered records it, and the session goes on', async () => {
+        const signals: AbortSignal[] = [];
+        const records: AnsweredRequest[] = [];
+        const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+        const waiting = handle(getOrder, async ({ params }, { request }) => {
+          signals.push(request.signal);
+          started();
+          await new Promise((resolve) => request.signal.addEventListener('abort', resolve));
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: waiting }),
+          options: { onAnswered: (record) => void records.push(record) },
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await handlerStarted;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await Promise.race([
+          new Promise((resolve) => signals[0]?.addEventListener('abort', resolve)),
+          waitFor(1000),
+        ]);
+        await waitFor(50);
+        const recorded = records.map((record) => record.aborted);
+        const next = await h2(session, { ':path': '/orders/summary' });
+
+        expect(signals[0]?.aborted).toBe(true);
+        expect(recorded).toEqual([true]);
+        expect(next).toMatchObject({ status: 200, body: '{"count":3}' });
+      });
+
+      test('a Caller that resets its stream with NO_ERROR while a large Success is written aborts the request’s signal, and the server closes once the session is gone', async () => {
+        const requests: Request[] = [];
+        const { app, url } = await served({
+          fastify: { http2: true },
+          options: { onAnswered: (_record, request) => void requests.push(request) },
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/report' });
+        stream.on('error', () => undefined);
+        await new Promise((resolve) => stream.once('data', resolve));
+        stream.pause();
+        await waitFor(50);
+        stream.close(constants.NGHTTP2_NO_ERROR);
+        await waitFor(100);
+        const aborted = requests[0]?.signal.aborted;
+        session.destroy();
+        const closing = await Promise.race([
+          app.close().then(() => 'closed'),
+          waitFor(2000).then(() => 'still open'),
+        ]);
+
+        expect(aborted).toBe(true);
+        expect(closing).toBe('closed');
+      });
+
+      test('a Handler’s signal is not aborted once its response has finished', async () => {
+        const signals: AbortSignal[] = [];
+        const watching = handle(getOrder, ({ params }, { request }) => {
+          signals.push(request.signal);
+          return success(getOrder, { id: params.orderId });
+        });
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: watching }),
+        });
+        const session = h2Session(url);
+
+        const answer = await h2(session, { ':path': '/orders/o-1' });
+        await waitFor(50);
+
+        expect(answer.status).toBe(200);
+        expect(signals[0]?.aborted).toBe(false);
+      });
+
+      test('a Caller that leaves during an earlier async app onRequest hook aborts the Handler’s signal at once, and onAnswered records it', async () => {
+        const startedAborted: boolean[] = [];
+        const records: AnsweredRequest[] = [];
+        const reading = handle(getOrder, ({ params }, { request }) => {
+          startedAborted.push(request.signal.aborted);
+          return success(getOrder, { id: params.orderId });
+        });
+        const { promise: hookRunning, resolve: running } = Promise.withResolvers<void>();
+        const { url } = await served({
+          fastify: { http2: true },
+          handlers: withEndpoints({ getOrder: reading }),
+          options: { onAnswered: (record) => void records.push(record) },
+          before: (app) =>
+            app.addHook('onRequest', async () => {
+              running();
+              await waitFor(300);
+            }),
+        });
+        const session = h2Session(url);
+
+        const stream = session.request({ ':path': '/orders/o-1' });
+        stream.on('error', () => undefined);
+        await hookRunning;
+        stream.close(constants.NGHTTP2_CANCEL);
+        await waitFor(600);
+
+        expect(startedAborted).toEqual([true]);
+        expect(records.map((record) => record.aborted)).toEqual([true]);
+      });
     });
   });
 });
