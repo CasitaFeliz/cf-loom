@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { type Http2ServerRequest, Http2ServerResponse, type ServerHttp2Stream } from 'node:http2';
-import { closedDepartureOf, type Departure, resetDepartureOf } from './departure.ts';
+import { closedDepartureOf, type Departure, resetDepartureOf } from '../departure/index.ts';
 
 /** The headers a host set on a request before it was taken. */
 type HostHeaders = Readonly<Record<string, number | string | string[] | undefined>>;

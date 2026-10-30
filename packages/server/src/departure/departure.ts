@@ -5,7 +5,7 @@ import { constants, type ServerHttp2Stream } from 'node:http2';
 export type Departure = {
   /** Aborts when the Caller is gone before the response finished; every part of the request that must stop derives from it and is held from it until the take ends. */
   readonly closed: AbortSignal;
-  /** Runs `release` once the take ends, after its last chance to abort `closed`, or at once when it ended before it was taken. */
+  /** Runs `release`, given before the take ends, once it ends, after its last chance to abort `closed`, or at once when it ended before it was taken. */
   readonly releaseAtEnd: (release: () => void) => void;
 };
 

@@ -1,6 +1,7 @@
 import type { IncomingMessage } from 'node:http';
 import { Http2ServerRequest } from 'node:http2';
 import { type HeldRequest, heldRequestOf } from '@cf-loom/contract/internal';
+import type { Departure } from '../departure/index.ts';
 import { lazyBodyOf } from './body.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
@@ -26,12 +27,6 @@ export function incomingUrlOf(incoming: Incoming): IncomingUrl {
   const url = urlOf(incoming);
   return url === undefined ? { kind: 'unreadable' } : { kind: 'url', url };
 }
-
-/** The Caller's departure a request follows: its signal, and the end of its take, which releases what follows it. */
-export type Departure = {
-  readonly closed: AbortSignal;
-  readonly releaseAtEnd: (release: () => void) => void;
-};
 
 /**
  * The `Request` of an incoming message on its URL, following the Caller's departure and held from
