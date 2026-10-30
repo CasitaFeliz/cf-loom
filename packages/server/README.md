@@ -92,7 +92,7 @@ Both hooks may be async and are awaited before the response is returned; what on
 
 ## Adapters
 
-An adapter connects the handler `serve` returns to a host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). cf-loom ships two, [node-http](#node-http) and [fastify](#fastify), and both:
+An adapter connects the handler `serve` returns to a host (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md). cf-loom ships two: [node-http](#node-http), which serves HTTP/1.1, and [fastify](#fastify), which serves HTTP/1.1 and HTTP/2; what the list below says of HTTP/2 is fastify's alone. Both:
 
 - hand `serve` every request whose method and path a declared Endpoint has, Retired ones included;
 - route a target in origin form (`/orders/o-1`), or in absolute form with an `http` or `https` scheme and no credentials (`http://host/orders/o-1`, as RFC 9112 requires a server to accept), on its path and query, and read a path that starts with `//` as a path, never a host; the URL is on the origin the `Host` header names, read as sent; an HTTP/2 request is read as the absolute-form target its `:scheme`, its `:authority` (or its `Host` when it has none) and its path make, by the same rule, and its pseudo-headers are not among the `Request`'s headers; several `Cookie` fields reach `serve` as one, joined by `; `;
