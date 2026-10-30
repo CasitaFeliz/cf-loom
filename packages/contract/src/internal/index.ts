@@ -375,5 +375,6 @@ export {
   subscriptionsOf,
   successParts,
   successShapeOf,
+  unbrokenLineOf,
   writtenTextOf,
 } from '../written/index.ts';
