@@ -2413,10 +2413,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
   /**
-   * How many times longer a check of a chain eight times as long may take: about 8 for a check that
-   * reads each link once, and 64 for one that copies the steps down to a link at each link.
+   * How many times longer a check of a shape eight times as large may take: about 8 for a check
+   * that reads each part once, and 64 for one that copies the steps down to a part at each part.
    */
-  const chainGrowth = 13;
+  const linearGrowth = 13;
 
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
@@ -2454,10 +2454,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const checkChain = checkOfChain(() => 'a');
 
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, chainGrowth);
+    const growth = growthOf(checkChain, sizes, linearGrowth);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(chainGrowth);
+    expect(growth).toBeLessThan(linearGrowth);
   });
 
   test('a description changed in the first def of a chain is one Change, at its depth, in time that grows with the chain', {
@@ -2466,13 +2466,13 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
 
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, chainGrowth);
+    const growth = growthOf(checkChain, sizes, linearGrowth);
 
     const atFirstDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
     expect(snapshotPathsOf(report.changes)).toEqual([
       changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atFirstDef)),
     ]);
-    expect(growth).toBeLessThan(chainGrowth);
+    expect(growth).toBeLessThan(linearGrowth);
   });
 
   test('an object of many fields, each changed, is checked in time that grows with their number', {
@@ -2494,10 +2494,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, chainGrowth);
+    const growth = growthOf(checkFields, sizes, linearGrowth);
 
     expect(report.changes).toHaveLength(sizes.large);
-    expect(growth).toBeLessThan(chainGrowth);
+    expect(growth).toBeLessThan(linearGrowth);
   });
 
   test('a def that many fields reach, changed, is one Change, at the first field, in time that grows with their number', {
@@ -2514,7 +2514,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, chainGrowth);
+    const growth = growthOf(checkFields, sizes, linearGrowth);
 
     expect(snapshotPathsOf(report.changes)).toEqual([
       changeAt(
@@ -2522,7 +2522,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
         found(annotationChanged('description'), neutralEverywhere, ['fields', 'field0']),
       ),
     ]);
-    expect(growth).toBeLessThan(chainGrowth);
+    expect(growth).toBeLessThan(linearGrowth);
   });
 });
 
