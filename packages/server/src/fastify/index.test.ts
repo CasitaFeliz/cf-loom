@@ -20,7 +20,14 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { answerOf, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
+import {
+  allowingHttp1,
+  answerOf,
+  closeSessions,
+  h2,
+  h2Session,
+  selfSigned,
+} from '../../test/h2.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -1304,7 +1311,7 @@ describe('fastifyServe', () => {
 
       test('an HTTP/1.1 request and an HTTP/2 request are each answered by cf-loom, and a body over maxBodyBytes closes the connection over HTTP/1.1 and the stream over HTTP/2', async () => {
         const { url } = await served({
-          fastify: { http2: true, https: { allowHTTP1: true, key: tls.key, cert: tls.cert } },
+          fastify: { http2: true, https: allowingHttp1(tls) },
           options: { maxBodyBytes: 1000 },
         });
         const session = h2Session(url, tls);

@@ -13,16 +13,16 @@ type HostHeaders = Readonly<Record<string, number | string | string[] | undefine
 export type Taken = {
   readonly incoming: IncomingMessage | Http2ServerRequest;
   readonly outgoing: ServerResponse | Http2ServerResponse;
-  /** Aborts when the Caller is gone before the response finished, which stops the body being read or written. */
+  /** Aborts when the Caller is gone before the response finished; every part of the request that must stop derives from it. */
   readonly closed: AbortSignal;
   /** The host's headers, which the Response's replace; a `content-length`, the host's or already on `outgoing`, frames a body that is not the Response's, so it is dropped. */
   readonly hostHeaders: HostHeaders;
-  /** The writer's steps the request's HTTP version decides, chosen once when it is taken. */
-  readonly version: Version;
+  /** The writer's steps the request's protocol decides, HTTP/1.1 or HTTP/2, chosen once when it is taken. */
+  readonly protocol: Protocol;
 };
 
 /** The steps of writing a response that differ between HTTP/1.1 and HTTP/2. */
-type Version = {
+type Protocol = {
   /** Readies the response, its head set, for a body Node frames. */
   readonly framed: () => void;
   /** Ends the response once its body is written. */
@@ -32,8 +32,8 @@ type Version = {
 };
 
 /**
- * A request taken from its host, with its version's steps and the Caller's departure, read from
- * the class of its response since a server that allows HTTP/1.1 beside HTTP/2 mixes the two.
+ * A request taken from its host, with its protocol's steps and the Caller's departure, read from
+ * the class of its response, since a server that allows HTTP/1.1 beside HTTP/2 mixes the two.
  */
 export function takenOf(
   incoming: IncomingMessage | Http2ServerRequest,
@@ -41,11 +41,11 @@ export function takenOf(
   hostHeaders: HostHeaders = {},
 ): Taken {
   if (outgoing instanceof Http2ServerResponse) {
-    const version = http2Of(outgoing);
-    return { incoming, outgoing, closed: resetSignalOf(outgoing.stream), hostHeaders, version };
+    const protocol = http2Of(outgoing);
+    return { incoming, outgoing, closed: resetSignalOf(outgoing.stream), hostHeaders, protocol };
   }
-  const version = http1Of(incoming, outgoing);
-  return { incoming, outgoing, closed: closedSignalOf(outgoing), hostHeaders, version };
+  const protocol = http1Of(incoming, outgoing);
+  return { incoming, outgoing, closed: closedSignalOf(outgoing), hostHeaders, protocol };
 }
 
 /**
@@ -56,7 +56,7 @@ export function takenOf(
 function http1Of(
   incoming: IncomingMessage | Http2ServerRequest,
   outgoing: ServerResponse,
-): Version {
+): Protocol {
   return {
     framed: () => {
       outgoing.strictContentLength = true;
@@ -73,7 +73,7 @@ function http1Of(
  * HTTP/2's steps: the stream closed once the response is flushed when its request side has not
  * ended, so a body nobody read never leaves it half-open, and reset with an error on failure.
  */
-function http2Of(outgoing: Http2ServerResponse): Version {
+function http2Of(outgoing: Http2ServerResponse): Protocol {
   const { stream } = outgoing;
   return {
     framed: () => undefined,

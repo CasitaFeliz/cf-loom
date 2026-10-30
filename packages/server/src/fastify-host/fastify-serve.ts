@@ -26,7 +26,8 @@ import { respondedWith, type Taken, takenOf } from '../outgoing/index.ts';
 /**
  * A Fastify plugin that answers a Contract's Endpoints with their Handlers inside the app, taking
  * from Fastify every request whose method and path a declared Endpoint has and leaving the rest
- * to the app's own routes. It takes what `serve` takes but `fallback`.
+ * to the app's own routes. It takes what `serve` takes but `fallback`, and serves HTTP/1.1 and
+ * HTTP/2 alike, each request by its own version.
  */
 export function fastifyServe<
   const C extends ServiceContract,

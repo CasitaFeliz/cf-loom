@@ -8,7 +8,7 @@ const refusedMethods: readonly string[] = ['CONNECT', 'TRACE', 'TRACK'];
 /** The methods whose request never carries a body, which a web-standard `Request` refuses one for. */
 const bodiless: readonly string[] = ['GET', 'HEAD'];
 
-/** A request as Node hands it over HTTP/1.1 or HTTP/2, each request by its own version. */
+/** A request as Node hands it over HTTP/1.1 or over HTTP/2. */
 export type Incoming = IncomingMessage | Http2ServerRequest;
 
 /** How an incoming message reads as a URL: the URL, or why it is none. */

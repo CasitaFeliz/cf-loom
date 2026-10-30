@@ -6,6 +6,7 @@ import {
   connect,
   type IncomingHttpHeaders,
   type OutgoingHttpHeaders,
+  type SecureServerOptions,
 } from 'node:http2';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,4 +121,10 @@ export function selfSigned(): Tls {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+/** The TLS options of a server that serves HTTP/1.1 beside HTTP/2 with `tls`. */
+export function allowingHttp1(tls: Tls): SecureServerOptions {
+  // biome-ignore lint/style/useNamingConvention: Node's option, spelled as Node spells it
+  return { allowHTTP1: true, key: tls.key, cert: tls.cert };
 }

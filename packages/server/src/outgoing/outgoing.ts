@@ -4,13 +4,13 @@ import type { Taken } from './taken.ts';
 /** The reader of a Response's body, whose chunks are bytes. */
 type BodyReader = ReadableStreamDefaultReader<Uint8Array>;
 
-/** What a body is written to, a response of either version. */
+/** What a body is written to: a response over HTTP/1.1 or HTTP/2. */
 type BodySink = NodeJS.EventEmitter & { write(chunk: Uint8Array): boolean };
 
 /**
  * Writes the Response `answer` resolves to onto a taken request, and fails the exchange as its
- * version does if anything fails on the way, so such a request never crashes the process or leaves
- * its Caller waiting.
+ * protocol does if anything fails on the way, so such a request never crashes the process or
+ * leaves its Caller waiting.
  */
 export async function respondedWith(taken: Taken, answer: Promise<Response>): Promise<void> {
   try {
@@ -18,10 +18,10 @@ export async function respondedWith(taken: Taken, answer: Promise<Response>): Pr
     const reader = response.body?.getReader();
     cancelledWhenClosed(reader, taken.closed);
     headWritten(taken, response);
-    taken.version.framed();
+    taken.protocol.framed();
     await bodyWritten(taken, reader);
   } catch {
-    taken.version.failed();
+    taken.protocol.failed();
   }
 }
 
@@ -56,9 +56,9 @@ function headWritten({ outgoing, hostHeaders }: Taken, response: Response) {
   }
 }
 
-async function bodyWritten({ outgoing, closed, version }: Taken, reader: BodyReader | undefined) {
+async function bodyWritten({ outgoing, closed, protocol }: Taken, reader: BodyReader | undefined) {
   if (reader === undefined) {
-    version.ended();
+    protocol.ended();
     return;
   }
   const sink: BodySink = outgoing;
@@ -67,5 +67,5 @@ async function bodyWritten({ outgoing, closed, version }: Taken, reader: BodyRea
       await once(sink, 'drain', { signal: closed });
     }
   }
-  version.ended();
+  protocol.ended();
 }
