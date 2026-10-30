@@ -1261,6 +1261,28 @@ describe('cf-loom generate: what it refuses', () => {
     },
   );
 
+  test('a Root file that exports three Roots is a tooling error naming them as a list', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': [
+        "import { defineApplication, defineDefinitions, defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
+        "export const application = defineApplication({ name: 'orders-service' });",
+        'export const definitions = defineDefinitions({});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'src/contract/index.ts exports more than one Root: application, contract and definitions\n',
+    });
+  });
+
   test('a Service’s Root file that exports its Root under two names generates', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     edit(project, 'src/contract/index.ts', (text) =>

@@ -1,4 +1,5 @@
 import { inspect } from 'node:util';
+import { joinedOf } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 
 /** A JSON value as a refusal shows it, on one line however many entries it holds: `[ '30s', '0s' ]`, `'7 days'`, `0`. */
@@ -24,7 +25,7 @@ export function readAs<Value>(
 
 /** One of `choices`, refused as `one of a, b or c`. */
 export function choice<const Choice extends string>(choices: readonly Choice[]): z.ZodType<Choice> {
-  const expected = `one of ${choices.slice(0, -1).join(', ')} or ${choices.at(-1)}`;
+  const expected = `one of ${joinedOf(choices, 'or')}`;
   return readAs(expected, (input) => choices.find((candidate) => candidate === input));
 }
 
