@@ -1,49 +1,27 @@
-import { seededNext } from './random-schemas.ts';
+/**
+ * The ten characters a reader may end a line at, each with its name and the visible text of its
+ * escape, spelled here on purpose, apart from the code under test: the oracle every package's tests
+ * share.
+ */
+export const lineBreaks = [
+  ['LF', 0x0a, '\\n'],
+  ['CR', 0x0d, '\\r'],
+  ['U+0085', 0x85, '\\u0085'],
+  ['U+2028', 0x2028, '\\u2028'],
+  ['U+2029', 0x2029, '\\u2029'],
+  ['U+000B', 0x0b, '\\u000b'],
+  ['U+000C', 0x0c, '\\u000c'],
+  ['U+001C', 0x1c, '\\u001c'],
+  ['U+001D', 0x1d, '\\u001d'],
+  ['U+001E', 0x1e, '\\u001e'],
+] as const;
 
-/** The code points of the ten characters a reader may end a line at, spelled here on purpose, apart from the code under test. */
-const breakCodes = [0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029];
-
-/** The characters the pool draws from beside the line breaks: ordinary, odd and not a break. */
-const otherCodes = [
-  ...Array.from('aZ0_@/$-." \t\\é😀', (character) => character.codePointAt(0) ?? 0),
-  0xd800,
-];
+/** Splits a text where any reader would end a line. */
+export const lineBreakPattern = new RegExp(
+  `[${lineBreaks.map(([, code]) => String.fromCharCode(code)).join('')}]`,
+);
 
 /** How many characters of `text` are one of the ten line breaks. */
 export function lineBreaksIn(text: string): number {
-  let count = 0;
-  for (let index = 0; index < text.length; index++) {
-    if (breakCodes.includes(text.charCodeAt(index))) {
-      count++;
-    }
-  }
-  return count;
-}
-
-/** The texts a line is written from: each break alone and between letters, the names an object has, a long one, and 200 drawn. */
-export function linePool(): readonly string[] {
-  const characters = breakCodes.map((code) => String.fromCharCode(code));
-  const crLf = String.fromCharCode(0x0d, 0x0a);
-  const breaks = [...characters, crLf];
-  return [
-    '',
-    ...breaks,
-    ...breaks.map((lineBreak) => `a${lineBreak}b`),
-    '\\n',
-    '__proto__',
-    'constructor',
-    'toString',
-    'a\n'.repeat(5_000),
-    ...drawnTexts(200),
-  ];
-}
-
-function drawnTexts(count: number): string[] {
-  const next = seededNext(511);
-  const codes = [...breakCodes, ...otherCodes];
-  return Array.from({ length: count }, () => {
-    const length = Math.floor(next() * 13);
-    const drawn = Array.from({ length }, () => codes[Math.floor(next() * codes.length)] ?? 0);
-    return String.fromCodePoint(...drawn);
-  });
+  return text.split(lineBreakPattern).length - 1;
 }

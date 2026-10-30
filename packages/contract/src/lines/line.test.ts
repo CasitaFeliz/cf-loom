@@ -1,25 +1,13 @@
 import { format, inspect } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
-import { lineBreaksIn, linePool } from '../../test/line-breaks.ts';
+import { lineBreaks, lineBreaksIn } from '../../test/line-breaks.ts';
+import { linePool } from '../../test/line-pool.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { linesTextOf, logOf, unbrokenLineOf } from '../internal/index.ts';
 
 /** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
 const linearGrowth = 30;
-
-const lineBreaks = [
-  ['CR', 0x0d, '\\r'],
-  ['LF', 0x0a, '\\n'],
-  ['U+0085', 0x85, '\\u0085'],
-  ['U+2028', 0x2028, '\\u2028'],
-  ['U+2029', 0x2029, '\\u2029'],
-  ['U+000B', 0x0b, '\\u000b'],
-  ['U+000C', 0x0c, '\\u000c'],
-  ['U+001C', 0x1c, '\\u001c'],
-  ['U+001D', 0x1d, '\\u001d'],
-  ['U+001E', 0x1e, '\\u001e'],
-] as const;
 
 describe('unbrokenLineOf', () => {
   test.for(lineBreaks)(

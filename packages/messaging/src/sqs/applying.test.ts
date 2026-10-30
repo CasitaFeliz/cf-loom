@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   arrangeQueue,
   arrangeTopic,
@@ -30,7 +31,6 @@ import {
 } from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { jsonValues } from '../../test/json-values.ts';
-import { lineBreakPattern, lineBreaks } from '../../test/line-breaks.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type Duration, type SqsBrokerLimits } from './index.ts';
 

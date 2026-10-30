@@ -8,7 +8,7 @@ import {
 import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { lineBreakPattern, lineBreaks } from '../../test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import type { ConsumedFault, Messaging, MessagingOptions } from '../index.ts';
 import { type MemoryMessaging, memory } from './index.ts';
 

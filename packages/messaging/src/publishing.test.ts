@@ -9,7 +9,7 @@ import {
 } from '@cf-loom/contract';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { lineBreakPattern, lineBreaks } from '../test/line-breaks.ts';
+import { lineBreakPattern, lineBreaks } from '../../contract/test/line-breaks.ts';
 import {
   type Broker,
   InvalidMessageError,

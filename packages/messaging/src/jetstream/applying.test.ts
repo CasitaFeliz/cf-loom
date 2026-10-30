@@ -10,6 +10,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
 import {
@@ -18,7 +19,6 @@ import {
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
 import { jsonKindOf, jsonValues } from '../../test/json-values.ts';
-import { lineBreakPattern, lineBreaks } from '../../test/line-breaks.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
