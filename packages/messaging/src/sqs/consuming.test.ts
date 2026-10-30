@@ -12,7 +12,12 @@ import {
   untagByHand,
   wakeEach,
 } from '../../test/aws-arranging.ts';
-import { aClosedUrl, alteringAnswers, anAwsConnecting } from '../../test/aws-clients.ts';
+import {
+  aClosedUrl,
+  alteringAnswers,
+  anAwsConnecting,
+  failingCommand,
+} from '../../test/aws-clients.ts';
 import { queueCountsOf, queueTagsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
@@ -142,6 +147,23 @@ describe('consuming over sqs()', () => {
 
     await expect(consuming).rejects.toMatchObject({ code: 'ECONNREFUSED' });
     await expect(queueCountsOf(working.sqs, anOrders('staging').chargeQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 0,
+    });
+    expect(received).toEqual([]);
+  });
+
+  test('any other error of the subscription check rejects consume unchanged, and nothing is received', async () => {
+    const { sender, consume, connecting, orders } = await aMessaging();
+    const refusal = new Error('SNS is down');
+    failingCommand(connecting.sns, { command: 'GetSubscriptionAttributesCommand', error: refusal });
+    await sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    const received: Received[] = [];
+
+    const consuming = consume(handlersOf(received), {});
+
+    await expect(consuming).rejects.toBe(refusal);
+    await expect(queueCountsOf(connecting.sqs, orders.chargeQueue)).resolves.toEqual({
       visible: 1,
       inFlight: 0,
     });
