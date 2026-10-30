@@ -7,10 +7,14 @@ pattern signal_member() {
   }
 }
 
+pattern literal_with_signal() { JsObjectExpression(members=some signal_member()) }
+
 pattern init_with_signal() {
   or {
-    JsObjectExpression(members=some signal_member()),
-    TsAsExpression(expression=JsObjectExpression(members=some signal_member()))
+    literal_with_signal(),
+    TsAsExpression(expression=literal_with_signal()),
+    TsSatisfiesExpression(expression=literal_with_signal()),
+    JsParenthesizedExpression(expression=literal_with_signal())
   }
 }
 
