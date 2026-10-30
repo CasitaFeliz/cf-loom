@@ -6,7 +6,7 @@ import type {
   GuardSnapshot,
   MessageTombstone,
 } from '../snapshot/index.ts';
-import { canonicalJson, type Defs, reachedDefsOf, type SchemaNode } from '../walker/index.ts';
+import { canonicalJson, type SchemaNode } from '../walker/index.ts';
 import { reachesOnlyUnchanged } from './def-comparison.ts';
 import type { BothDefs } from './findings.ts';
 import { type Compared, comparedShapesOf, type Pair, retiredShapesOf } from './pairs.ts';
@@ -124,18 +124,15 @@ export function guardSourcesOf(
   defs: BothDefs,
 ): readonly Difference[] {
   const differences: Difference[] = [];
-  if (demandsKeyOf(baseline, defs.baseline) !== demandsKeyOf(proposed, defs.proposed)) {
+  const demands = { baseline: baseline.demands, proposed: proposed.demands };
+  const nodes = [baseline.demands.headers, baseline.demands.query];
+  if (!isSameReaching(demands, nodes, defs)) {
     differences.push({ kind: 'demands-changed' });
   }
   if (differ(baseline.rejections, proposed.rejections)) {
     differences.push({ kind: 'rejections-changed' });
   }
   return differences;
-}
-
-/** A Guard's demands as text with the defs they reach, so a change in a def shows in them. */
-function demandsKeyOf({ demands }: GuardSnapshot, defs: Defs): string {
-  return canonicalJson([demands, reachedKeyOf([demands.headers, demands.query], defs)]);
 }
 
 /** A kept code's Neutral differences: its message, then its origin. */
@@ -167,9 +164,13 @@ function retiredDifferencesOf(pair: Pair<Declaration>, defs: BothDefs): readonly
   if (compared === undefined) {
     return [];
   }
-  const before = declarationKeyOf(compared.baseline, defs.baseline);
-  const after = declarationKeyOf(compared.proposed, defs.proposed);
-  return before === after ? [] : [{ kind: 'retired-changed' }];
+  const declared = {
+    baseline: declaredOf(compared.baseline),
+    proposed: declaredOf(compared.proposed),
+  };
+  return isSameReaching(declared, nodesOf(compared.baseline), defs)
+    ? []
+    : [{ kind: 'retired-changed' }];
 }
 
 /**
@@ -199,19 +200,12 @@ const historyKeys = ['lifecycle', 'retiredIn', 'deprecatedAt'] as const satisfie
   | keyof MessageTombstone
 )[];
 
-/** A declaration as text with the defs it reaches, without the history the Baseline keeps of it. */
-function declarationKeyOf(declaration: Declaration, defs: Defs): string {
+/** A declaration without the history the Baseline keeps of it. */
+function declaredOf(declaration: Declaration): unknown {
   const declared = Object.entries(declaration).filter(
     ([key]) => !historyKeys.some((history) => history === key),
   );
-  return canonicalJson([Object.fromEntries(declared), reachedKeyOf(nodesOf(declaration), defs)]);
-}
-
-function reachedKeyOf(
-  nodes: readonly SchemaNode[],
-  defs: Defs,
-): readonly (readonly [string, unknown])[] {
-  return reachedDefsOf(nodes, defs).map((name) => [name, defs[name]]);
+  return Object.fromEntries(declared);
 }
 
 function nodesOf(declaration: Declaration): readonly SchemaNode[] {
