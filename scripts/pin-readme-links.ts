@@ -6,7 +6,7 @@ function literally(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** The one form a README may use for a file of `repository` at `main`: a Markdown link target, anchor allowed. */
+/** The one form a README may use for a file of `repository` at `main`: a link target, anchor allowed. */
 function linkAtMain(repository: string): RegExp {
   const target = `https://github\\.com/${literally(repository)}/blob/`;
   return new RegExp(`(\\]\\(${target})main(/[^)\\s]+\\))`, 'g');
@@ -16,7 +16,8 @@ function linkAtMain(repository: string): RegExp {
 function problemOf(restOfLine: string, repository: string): string | undefined {
   const reference = new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i');
   if (reference.test(restOfLine)) {
-    return `a reference to ${repository} that is not a link target https://github.com/${repository}/blob/main/<path>`;
+    const form = `https://github.com/${repository}/blob/main/<path>`;
+    return `a reference to ${repository} that is not a link target ${form}`;
   }
   const relative = /\]\((?![a-z][a-z0-9+.-]*:|#)[^)\s]*\)/i.exec(restOfLine);
   if (relative !== null) {
@@ -29,7 +30,7 @@ function problemOf(restOfLine: string, repository: string): string | undefined {
  * The README with each link to a file of `repository` at `main` pointing at the same file at `commit`.
  *
  * The one form it pins is a Markdown link target `https://github.com/<repository>/blob/main/<path>`, anchor allowed.
- * It throws, one `line <n>: …` for each README line, on any other reference to `repository` (compared ignoring
+ * It throws, with a `line <n>: …` for each README line, on any other reference to `repository` (compared ignoring
  * case) and on a link target with no scheme that is not an anchor `#…`, so a pinned README holds nothing at `main`.
  *
  * @param readme - The README's text.
@@ -74,13 +75,16 @@ export function repositoryOf(manifest: { readonly repository?: unknown }): strin
   return match[1];
 }
 
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** The error `step` throws, with `path` in front of each line of its message. */
 function atPath<Value>(path: string, step: () => Value): Value {
   try {
     return step();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.replaceAll(/^/gm, `${path}: `), { cause: error });
+    throw new Error(messageOf(error).replaceAll(/^/gm, `${path}: `), { cause: error });
   }
 }
 
@@ -112,7 +116,7 @@ function pinPackageReadmes(commit: string): void {
     try {
       pinned.push(pinnedReadmeOf(folder, commit));
     } catch (error) {
-      problems.push(error instanceof Error ? error.message : String(error));
+      problems.push(messageOf(error));
     }
   }
   if (problems.length > 0) {
