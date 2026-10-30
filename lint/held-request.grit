@@ -1,0 +1,11 @@
+language js
+
+JsNewExpression(callee=`Request`, arguments=JsCallArguments(args=[$_, $init])) as $new where {
+  $init <: or {
+    contains JsShorthandPropertyObjectMember(name=`signal`),
+    contains JsPropertyObjectMember(name=`signal`)
+  },
+  not $filename <: r".*/wire/held-request\.ts$",
+  not $filename <: r".*\.test\.ts$",
+  register_diagnostic(span=$new, message="C1: build a Request that follows a signal with heldRequestOf, which holds it from that signal; undici's Request stops following it once collected.", severity="error")
+}

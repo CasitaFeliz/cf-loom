@@ -203,4 +203,19 @@ describe('lint plugins', () => {
 
     expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
   });
+
+  it('report a web-standard Request built on a signal outside the held one, a cast and `signal: signal` included, but not in the held one’s own file or a test (C1)', () => {
+    const lines = [
+      'declare const signal: AbortSignal;',
+      "export const shorthand = new Request('http://x/', { signal });",
+      "export const named = new Request('http://x/', { signal: signal });",
+      "export const cast = new Request('http://x/', { method: 'POST', signal } as RequestInit);",
+      "export const plain = new Request('http://x/', { method: 'GET' });",
+      "export const bare = new Request('http://x/');",
+    ];
+
+    expect(pluginReportsFor(lines)).toEqual(['C1@2', 'C1@3', 'C1@4']);
+    expect(pluginReportsFor(lines, 'contract/src/wire/held-request.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([]);
+  });
 });
