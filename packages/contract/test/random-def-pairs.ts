@@ -1,6 +1,6 @@
 import type { Defs, ObjectNode, RefNode, SchemaNode } from '../src/internal/index.ts';
 import { type Edit, editedCopy } from './random-def-edits.ts';
-import { inShapeOrder, neutralNames, neutralValues } from './random-draft.ts';
+import { drawFrom, inShapeOrder, type Next, neutralNames, neutralValues } from './random-draft.ts';
 import { seededNext } from './random-schemas.ts';
 
 /** How an export holds a def: a plain union's option, a tuple's item (with `rest` or without) or an `allOf`'s item. */
@@ -28,8 +28,7 @@ export type DefPair = {
 };
 
 type Draw = {
-  readonly next: () => number;
-  readonly pick: <Value>(values: readonly Value[]) => Value;
+  readonly next: Next;
   readonly count: number;
   /** The def names, in the order of the defs. */
   readonly names: readonly string[];
@@ -40,19 +39,17 @@ const wrappers: readonly Wrapper[] = ['union', 'tuple', 'tuple with rest', 'allO
 /** The pair of graphs a seed draws, the same every run, so a failing draw can be replayed. */
 export function defPairOf(seed: number): DefPair {
   const next = seededNext(seed);
-  const pick = <Value>(values: readonly Value[]): Value =>
-    values[Math.floor(next() * values.length)] as Value;
   const count = 2 + Math.floor(next() * 6);
   const names = Array.from({ length: count }, (_, index) =>
     index === 0 && next() < 0.1 ? 'constructor' : `d${index}`,
   );
-  const draw: Draw = { next, pick, count, names };
+  const draw: Draw = { next, count, names };
   const indexes = names.map((_, index) => index);
   const defs = Object.fromEntries(
     indexes.map((index) => [nameAt(draw, index), defAt(draw, index)]),
   );
   const held = indexes.map((index) => {
-    const wrapper = pick(wrappers);
+    const wrapper = drawFrom(wrappers, next);
     return { name: `e${index}`, wrapper, node: wrappedAt(draw, wrapper, index) };
   });
   const exports = Object.fromEntries(held.map(({ name, node }) => [name, node]));
@@ -72,7 +69,7 @@ function nameAt(draw: Draw, index: number): string {
 /** A node with the Neutral annotations drawn for it, each with `chance`. */
 function annotated(draw: Draw, shape: SchemaNode, chance = 0.12): SchemaNode {
   const names = neutralNames.filter(() => draw.next() < chance);
-  const notes = names.map((name) => [name, draw.pick<unknown>(neutralValues[name])]);
+  const notes = names.map((name) => [name, drawFrom<unknown>(neutralValues[name], draw.next)]);
   return { ...shape, ...Object.fromEntries(notes) };
 }
 
@@ -91,7 +88,7 @@ function leaf(draw: Draw): SchemaNode {
     { type: 'number' },
     { type: 'number', min: 1 },
   ];
-  return annotated(draw, draw.pick(shapes));
+  return annotated(draw, drawFrom(shapes, draw.next));
 }
 
 /** A node of the format; `below` bounds the defs a `ref` may name where no node would stand between it and its def. */
@@ -115,7 +112,7 @@ function inline(draw: Draw, depth: number, below: number | undefined): SchemaNod
       variants: { '"a"': variantOf(draw, nested) },
     }),
   ];
-  return annotated(draw, draw.pick(kinds)());
+  return annotated(draw, drawFrom(kinds, draw.next)());
 }
 
 function restOf(draw: Draw, inner: () => SchemaNode): { readonly rest?: SchemaNode } {

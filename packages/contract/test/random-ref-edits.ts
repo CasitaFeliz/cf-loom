@@ -54,14 +54,14 @@ function nodelessRefsIn(node: Draft): Draft[] {
 export function retargeted(draft: DraftGraph, nodes: Draft[], next: Next): boolean {
   const limits = limitsOf(draft);
   const names = Object.keys(draft.defs);
-  const options = (ref: Draft) =>
+  const targetsOf = (ref: Draft) =>
     names.slice(0, limits.get(ref) ?? names.length).filter((name) => name !== ref.name);
-  const movable = nodes.filter(isRef).filter((ref) => options(ref).length > 0);
+  const movable = nodes.filter(isRef).filter((ref) => targetsOf(ref).length > 0);
   const ref = pickFrom(movable, next);
   if (ref === undefined) {
     return false;
   }
-  ref.name = drawFrom(options(ref), next);
+  ref.name = drawFrom(targetsOf(ref), next);
   return true;
 }
 

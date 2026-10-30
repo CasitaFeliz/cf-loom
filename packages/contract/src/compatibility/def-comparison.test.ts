@@ -81,8 +81,12 @@ const definitionsHeading = {
 /** The Baseline and the proposed Snapshot of a Definitions Package that exports each def in its wrapper. */
 function snapshotsOf(pair: DefPair) {
   const held = Object.entries(pair.exports);
-  const baselineExports = Object.fromEntries(held.map(([name, one]) => [name, one.baseline]));
-  const proposedExports = Object.fromEntries(held.map(([name, one]) => [name, one.proposed]));
+  const baselineExports = Object.fromEntries(
+    held.map(([name, exported]) => [name, exported.baseline]),
+  );
+  const proposedExports = Object.fromEntries(
+    held.map(([name, exported]) => [name, exported.proposed]),
+  );
   const baseline: PublishedDefinitionsSnapshot = {
     ...definitionsHeading,
     ...publishedAt('1.0.0'),
@@ -103,16 +107,19 @@ function isNode(value: Json): value is Node {
   );
 }
 
-function isMap(value: Json): value is Node {
+function isRecordValue(value: Json): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** A JSON value as text, its keys in order; a node's Neutral annotations left out when asked. */
+/**
+ * A JSON value as text, its keys in order; a node's Neutral annotations left out when asked. The
+ * oracle's helpers are written apart from the generator's on purpose, so it shares no code with it.
+ */
 function textOf(value: Json, leavesNeutralOut: boolean): string {
   if (Array.isArray(value)) {
     return `[${value.map((item) => textOf(item, leavesNeutralOut)).join(',')}]`;
   }
-  if (!isMap(value)) {
+  if (!isRecordValue(value)) {
     return JSON.stringify(value) ?? 'undefined';
   }
   const isLeftOut = (key: string) =>
@@ -179,7 +186,7 @@ function annotationsDiffering(baseline: Json, proposed: Json, readsTop: boolean)
   }
   if (readsTop && isNode(baseline)) {
     for (const name of neutralNames) {
-      const counterpart = isMap(proposed) ? proposed[name] : undefined;
+      const counterpart = isRecordValue(proposed) ? proposed[name] : undefined;
       if (textOf(baseline[name], false) !== textOf(counterpart, false)) {
         differing.add(name);
       }
@@ -196,13 +203,13 @@ function childPairsOf(baseline: Json, proposed: Json): [Json, Json][] {
       Array.isArray(proposed) ? proposed[index] : undefined,
     ]);
   }
-  if (!isMap(baseline)) {
+  if (!isRecordValue(baseline)) {
     return [];
   }
   const keys = Object.keys(baseline).filter((key) => !neutralNames.some((name) => name === key));
   return keys.map((key): [Json, Json] => [
     baseline[key],
-    isMap(proposed) ? proposed[key] : undefined,
+    isRecordValue(proposed) ? proposed[key] : undefined,
   ]);
 }
 
