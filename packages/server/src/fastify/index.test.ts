@@ -1,4 +1,4 @@
-import type { Http2SecureServer, Http2Server } from 'node:http2';
+import type { Http2SecureServer, Http2Server, IncomingHttpHeaders } from 'node:http2';
 import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
@@ -251,6 +251,47 @@ function requestText(method: string, target: string, extra = ''): string {
 /** A raw response without the `Date`, which is the one thing two answers to a request differ in. */
 function withoutDate(received: string): string {
   return received.replace(/^Date: .*\r\n/im, '');
+}
+
+/** The headers of a raw HTTP/1.1 response but its framing and connection ones and `Date`, each name once, its values joined as Node joins them. */
+function endToEndHeadersOf(received: string): Record<string, string> {
+  const [head = ''] = received.split('\r\n\r\n');
+  const hopByHop = ['date', 'connection', 'keep-alive', 'transfer-encoding'];
+  const headers: Record<string, string> = {};
+  for (const line of head.split('\r\n').slice(1)) {
+    const [name = '', ...value] = line.split(': ');
+    const key = name.toLowerCase();
+    if (!hopByHop.includes(key)) {
+      headers[key] =
+        headers[key] === undefined ? value.join(': ') : `${headers[key]}, ${value.join(': ')}`;
+    }
+  }
+  return headers;
+}
+
+/** The headers of an HTTP/2 response but its pseudo-headers and `Date`. */
+function http2HeadersOf(headers: IncomingHttpHeaders): Record<string, string> {
+  const named: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (!name.startsWith(':') && name !== 'date' && value !== undefined) {
+      named[name] = String(value);
+    }
+  }
+  return named;
+}
+
+/** Every warning the process emits while `during` runs. */
+async function warningsDuring(during: () => Promise<void>): Promise<string[]> {
+  const seen: string[] = [];
+  const listener = (warning: Error) => seen.push(`${warning.name}: ${warning.message}`);
+  process.on('warning', listener);
+  try {
+    await during();
+    await waitFor(20);
+  } finally {
+    process.off('warning', listener);
+  }
+  return seen;
 }
 
 function waitFor(ms: number): Promise<void> {
@@ -941,6 +982,51 @@ describe('fastifyServe', () => {
         [],
       );
     });
+
+    test.each([
+      {
+        name: 'a Success with a header',
+        method: 'POST',
+        target: '/orders',
+        body: '{"quantity":2}',
+      },
+      { name: 'an invalid-input Rejection', method: 'POST', target: '/orders', body: '{}' },
+      { name: 'a Deprecated Endpoint’s Success', method: 'GET', target: '/legacy', body: '' },
+      { name: 'a Retired Endpoint’s RETIRED', method: 'GET', target: '/old-orders', body: '' },
+      { name: 'a Success with no body', method: 'GET', target: '/greet?name=Bob', body: '' },
+    ])(
+      '$name has over HTTP/2 the status, headers and bytes it has over HTTP/1.1, with no connection header and no warning',
+      async (sent) => {
+        const { url } = await served({ fastify: { http2: true } });
+        const nodeUrl = await nodeServed();
+        const session = h2Session(url);
+        const headers = `X-Api-Key: c-1\r\nContent-Type: application/json\r\nContent-Length: ${sent.body.length}\r\n`;
+        const expected = await raw(
+          nodeUrl,
+          requestText(sent.method, sent.target, headers) + sent.body,
+        );
+        let answer: Awaited<ReturnType<typeof h2>> | undefined;
+
+        const warnings = await warningsDuring(async () => {
+          answer = await h2(
+            session,
+            {
+              ':method': sent.method,
+              ':path': sent.target,
+              'x-api-key': 'c-1',
+              'content-type': 'application/json',
+            },
+            sent.method === 'GET' ? undefined : sent.body,
+          );
+        });
+
+        expect(answer?.status).toBe(Number(statusLineOf(expected).split(' ')[1]));
+        expect(http2HeadersOf(answer?.headers ?? {})).toEqual(endToEndHeadersOf(expected));
+        expect(answer?.headers.connection).toBeUndefined();
+        expect(answer?.body).toBe(bodyOf(expected));
+        expect(warnings).toEqual([]);
+      },
+    );
 
     test('a request with no :authority is on the origin its Host names', async () => {
       const seen: string[] = [];
