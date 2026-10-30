@@ -54,8 +54,11 @@ A `cf-root-cause` agent finds the cause before the user sees options. It runs wh
 
 - a second fix lands on the same area or the same kind of defect in one issue;
 - the user rejects every option offered;
-- a plan or a fix adds to cf-loom a config option, a rule whose only job is keeping two sources in step, a
-  safeguard, a special case, or a second name for a concept that already exists;
+- a plan, a vetter's patch, a fix or a decision (the main session's or a root-cause agent's) adds, to cf-loom or to
+  the repository's own tooling and tests, a config option, a safeguard, a special case, a second name for a concept
+  that already exists, or a second statement of something cf-loom already decides or derives (at the type level, in a
+  fake, in root tooling, as a second table, list or pass, or a document defining a term again), unless one is derived
+  from the other or a test compares the two over their whole domain;
 - a finding is the consequence of an earlier decision;
 - a reviewer marks a finding a class or Escalate, or a fixer stops on a possible class.
 
@@ -65,6 +68,17 @@ proposes anything: a missing concept, a concept in two places, reimplementing wh
 the wrong place. It says whether a documented decision causes it, and offers two or three fixes at the level of the
 cause, each with the symptoms it removes and its cost. The main session runs it on Fable when the cause may touch a
 glossary concept or a public API an organization implements, and then asks or decides as [Decisions](#decisions) says.
+
+A trigger that a plan, a vet or a finding names runs before the approval or the fix; it is never deferred to review
+and never waived by an argument, only by the user, as a question. A decision that accepts a special case, a safeguard
+or a copy is never left for the user to overrule later: it runs the check or goes to the user.
+
+The agent prototypes the option it recommends and runs on it the reproductions and every instance found. The main
+session adopts a recommendation only when every unverified fact it rests on has been probed, or is put to the user
+marked unverified; that fact becomes the plan's first failing test. The invariant the adopted option establishes is
+written in the package's ARCHITECTURE.md, with a randomized or exhaustive test, in the same PR. When a check reverses a plan
+decision that other decisions rest on, or an earlier check's option, the plan is rewritten and vetted again before
+more code is written.
 
 An issue gets at most two Root-cause checks, plan and review together; one run covers every trigger raised at once. When
 a third would trigger, the issue is held for the user with its state and what is still open, findings or questions, and
@@ -172,9 +186,11 @@ this way (a gap in the plan, a missing concept, a misread document); and **Escal
 special case or the area was fixed in an earlier round.
 
 The main session merges the reports, removes duplicates, checks each finding against the code and sorts them in C27's
-order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. The main
-session never fixes an Escalate finding without its check on its own judgment: when it believes the finding only
-completes an earlier Root-cause decision, it asks the user before the merge. Once the round's fixes are pushed, it posts
+order. A finding that triggers the [Root-cause check](#root-cause-check) waits for it before it is fixed. An Escalate
+finding waits for its check, except when its fix only deletes code in favor of an owner the code or the documents
+already name, or changes only tests or documents: the round comment then marks it **skipped (deletion only)** or
+**skipped (tests or documents only)**. Any other skip is a question to the user, and an Escalate finding on an issue
+that already used its two checks holds it. Once the round's fixes are pushed, it posts
 one comment on the PR for the round, listing every finding by lens as **fixed**, **asked** (with the user's answer) or
 **dismissed** (with the reason).
 
@@ -183,7 +199,8 @@ one comment on the PR for the round, listing every finding by lens as **fixed**,
 A defect with one evident fix is fixed without asking, removing before adding (C28). A finding that would change a
 public API, a rule or what a document means is put to the user. A `cf-fixer` agent, or the resumed implementer, fixes
 the findings with the user's answers; it writes a failing test for each bug before fixing it, then runs `pnpm test`
-and `pnpm check` and pushes. When a fix lands on an area this PR already fixed, or needs a special case, it stops and
+and `pnpm check` and pushes. When a fix lands on an area this PR already fixed, needs a special case, or adds a second
+table, list, pass or check for what the code already decides, it stops and
 reports a possible class instead.
 
 Round 1 is the first review. Round 2 is one `cf-rechecker` agent, which reads the whole PR with every round's
@@ -200,7 +217,8 @@ A PR is done when all of these hold; the main session checks them and lists them
 - [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head, and actionlint too when the PR
       changes `.github/workflows/`;
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
-- [ ] every finding of every round is marked fixed, asked or dismissed on the PR;
+- [ ] every finding of every round is marked fixed, asked or dismissed on the PR, and every Escalate finding checked,
+      skipped for one of the two reasons of [Review](#3-review), or asked;
 - [ ] the documents changed in the same PR, and every README matches its package's public API;
 - [ ] a PR that changes a package carries a changeset (see [.changeset/README.md](.changeset/README.md));
 - [ ] no `TODO` is left without a linked issue;

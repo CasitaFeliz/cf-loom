@@ -21,6 +21,8 @@ for every role, its [Decisions](../../WORKFLOW.md#decisions), [Root-cause check]
    it compatible means Breaking.
 5. Sort each question: settled by the documents (quote them), a consequence of a decision already made, an
    implementation detail, or a decision for the user. Give the strongest objection to each recommendation.
-6. Flag anything that triggers the Root-cause check, anything v1 does not need, and an issue too large for one PR.
+6. Flag anything that triggers the Root-cause check, anything v1 does not need, and an issue too large for one PR. A
+   trigger is a blocker until the check runs: never classify it as a cost, a v1 cut or an implementation detail. When
+   your strongest objection names a copy or a restatement, say which option removes it, or the probe showing none can.
 
 Write nothing in the worktree. Your final message lists blockers, should-fix and nits, then your answer per question.
