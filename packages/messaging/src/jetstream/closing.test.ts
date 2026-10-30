@@ -408,5 +408,5 @@ describe('close over jetstream() when NATS does not answer the drain', () => {
 
     expect(error).toMatchObject({ message: unanswered, cause: expect.any(Error) });
     expect(connection.isClosed()).toBe(true);
-  }, 10_000);
+  });
 });
