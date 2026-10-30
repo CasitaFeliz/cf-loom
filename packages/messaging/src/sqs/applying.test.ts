@@ -29,6 +29,7 @@ import {
   topicNamesOf,
 } from '../../test/aws-reading.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
+import { jsonValues } from '../../test/json-values.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { applyBrokerPlan, type BrokerPlan, type Duration, type SqsBrokerLimits } from './index.ts';
 
@@ -1066,6 +1067,21 @@ describe('applyBrokerPlan', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toBe(`connecting.account ${shown} is not a 12-digit AWS account id`);
+  });
+
+  test('an account of any JSON value is refused on one line', async () => {
+    const orders = anOrders();
+    const offending: number[] = [];
+
+    for (const [at, account] of jsonValues.entries()) {
+      const connecting = { ...anAwsConnecting(moto.url), account: account as string };
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+      if (error.message.includes('\n')) {
+        offending.push(at);
+      }
+    }
+
+    expect(offending).toEqual([]);
   });
 
   test('an account that is not 12 digits and a setting left unset are refused in one error, a line each', async () => {
