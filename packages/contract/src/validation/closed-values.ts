@@ -1,5 +1,5 @@
 import { lifecycles } from '../declarations/index.ts';
-import type { Place } from '../walker/index.ts';
+import { joinedOf, type Place } from '../walker/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 
@@ -28,16 +28,6 @@ export function closedValueFailures(
   if (typeof value !== 'string' || allowed.includes(value)) {
     return [];
   }
-  return [failure(at, rule, `${noun} is ${oneOf(allowed)}: ${writtenTextOf(value)}`)];
-}
-
-/** Several names in one sentence, closed by a word: `200, 201 or 204`, `"a", "b" and "c"`. */
-export function joinedOf(names: readonly string[], closing: 'and' | 'or'): string {
-  const last = names.at(-1);
-  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} ${closing} ${last}`;
-}
-
-/** Several allowed values in one sentence: `200, 201 or 204`. */
-export function oneOf(allowed: readonly unknown[]): string {
-  return joinedOf(allowed.map(String), 'or');
+  const values = joinedOf(allowed.map(String), 'or');
+  return [failure(at, rule, `${noun} is ${values}: ${writtenTextOf(value)}`)];
 }
