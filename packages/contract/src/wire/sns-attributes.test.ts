@@ -171,3 +171,52 @@ function kindOfUnit(unit: number): string {
   }
   return unit >= 0xd800 && unit <= 0xdfff ? 'astral-half' : 'beyond-ascii';
 }
+
+/** A Message as `publish` hands it to the adapter, with the given ids and headers. */
+function aMessage(given: Partial<Drawn> = {}) {
+  return {
+    subject: 'orders-service.event.OrderCreated.v1',
+    messageId: 'event.OrderCreated.v1:fact-1',
+    factId: 'fact-1',
+    headers: {},
+    ...given,
+  };
+}
+
+describe('the values snsAttributesOf writes', () => {
+  test.each([
+    ['empty ids and no headers', aMessage({ messageId: '', factId: '' })],
+    ['astral characters and controls', aMessage({ factId: '\u{1f600}\u0001\u007f' })],
+    ['a header', aMessage({ headers: { 'x-trace': 'abc' } })],
+  ])('%s are written as JSON text SNS accepts, never empty', (_, message) => {
+    const attributes = snsAttributesOf(message);
+
+    for (const name of [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute]) {
+      const value = attributes[name] ?? '';
+      expect(value).not.toBe('');
+      expect(() => JSON.parse(value)).not.toThrow();
+    }
+  });
+});
+
+describe('receivedSnsAttributesOf', () => {
+  test('a received Message lacking an id attribute lists it, and one lacking both lists both', () => {
+    const attributes = snsAttributesOf(aMessage());
+    const withoutMessageId = { ...attributes, [snsMessageIdAttribute]: undefined };
+    const withoutFactId = { ...attributes, [snsFactIdAttribute]: undefined };
+    const withoutBoth = { ...withoutMessageId, [snsFactIdAttribute]: undefined };
+
+    expect(receivedSnsAttributesOf(withoutMessageId)).toEqual({
+      kind: 'missing',
+      names: [snsMessageIdAttribute],
+    });
+    expect(receivedSnsAttributesOf(withoutFactId)).toEqual({
+      kind: 'missing',
+      names: [snsFactIdAttribute],
+    });
+    expect(receivedSnsAttributesOf(withoutBoth)).toEqual({
+      kind: 'missing',
+      names: [snsMessageIdAttribute, snsFactIdAttribute],
+    });
+  });
+});

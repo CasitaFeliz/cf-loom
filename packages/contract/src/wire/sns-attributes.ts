@@ -39,6 +39,12 @@ export function snsAttributesOf(message: {
 export function receivedSnsAttributesOf(
   attributes: Readonly<Record<string, string | undefined>>,
 ): ReceivedHeaders {
+  const names = [snsMessageIdAttribute, snsFactIdAttribute].filter(
+    (name) => attributes[name] === undefined,
+  );
+  if (names.length > 0) {
+    return { kind: 'missing', names };
+  }
   return {
     kind: 'read',
     messageId: JSON.parse(attributes[snsMessageIdAttribute] ?? ''),
