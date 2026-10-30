@@ -2468,9 +2468,9 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const report = checkChain(sizes.large)();
     const growth = growthOf(checkChain, sizes, linearGrowth);
 
-    const atFirstDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
+    const atInnermostDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
     expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atFirstDef)),
+      changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atInnermostDef)),
     ]);
     expect(growth).toBeLessThan(linearGrowth);
   });
@@ -2602,7 +2602,8 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
       place.proposed(to.node, to.defs),
     );
     const drawn = baseline.leaves.map((leaf) => reportedAtOf(place, leaf));
-    return { place, hasIds, report, drawn };
+    const walkedDefs = Object.keys(from.defs).length > 0;
+    return { place, walkedDefs, report, drawn };
   }
 
   test('every Change sits at the steps its leaf was drawn at, after the place’s own', () => {
@@ -2613,7 +2614,7 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
     let changesThroughRefs = 0;
 
     for (let seed = 1; seed <= seedCount; seed++) {
-      const { place, hasIds, report, drawn } = aDraw(seed);
+      const { place, walkedDefs, report, drawn } = aDraw(seed);
 
       const expected = [...new Set(drawn.map(({ path }) => path))].sort();
       const reported = report.changes.map((change) => authorPathOf(stepsOf(change)) ?? '').sort();
@@ -2629,7 +2630,7 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
         deepestOwnSteps = Math.max(deepestOwnSteps, stepsOf(change).length - place.root.length);
       }
       changesAtNodes += drawn.filter(({ isWhole }) => isWhole).length;
-      changesThroughRefs += hasIds ? drawn.filter(({ gainsY }) => gainsY).length : 0;
+      changesThroughRefs += walkedDefs ? drawn.filter(({ gainsY }) => gainsY).length : 0;
     }
 
     expect(wrong).toEqual([]);
