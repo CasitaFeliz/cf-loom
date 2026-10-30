@@ -1,5 +1,5 @@
 import type { Command, Event } from '@cf-loom/contract';
-import { messageIdentityOf } from '@cf-loom/contract/internal';
+import { messageIdentityOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { OutgoingMessage } from '../broker/index.ts';
 import type { ServiceVersion } from '../subjects/index.ts';
 import { jsonBodyOf } from './bodies.ts';
@@ -43,7 +43,9 @@ export function recordedOf<const M extends Event | Command>(
     const takes =
       'a live version of one of its own Events or the Active version of one of its own Commands';
     const rule = `messagesOf() takes the declaration its Contract holds, ${takes}`;
-    throw new Error(`${named} is no Message Version the Service publishes or sends: ${rule}`);
+    throw new Error(
+      unbrokenLineOf(`${named} is no Message Version the Service publishes or sends: ${rule}`),
+    );
   }
   return messages.filter(isRecordedOn<M>(listed.subject));
 }

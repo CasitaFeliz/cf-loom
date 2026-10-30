@@ -110,6 +110,7 @@ export {
   writtenPartOf,
   writtenShapeOf,
 } from '../issues/index.ts';
+export { linesTextOf, logOf, unbrokenLineOf } from '../lines/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
 export { readingOf } from '../reading/index.ts';
 export type {
@@ -201,7 +202,6 @@ export {
   failureLineOf,
   identityLineOf,
   noVersionLineOf,
-  oneOf,
   packageLabelOf,
   problemLineOf,
   readWith,
@@ -232,19 +232,23 @@ export type {
 export {
   authorPathOf,
   byCodePoint,
+  chainDown,
   formatConstructorOf,
   isJsonValue,
   isSchema,
+  joinedOf,
   reachedDefsOf,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,
+  stepListOf,
   tokenOf,
   walkSchemas,
 } from '../walker/index.ts';
 export type {
   DurableConsumed,
   EndpointPath,
+  HeldRequest,
   InputIssue,
   InvalidInputBody,
   Match,
@@ -281,6 +285,7 @@ export {
   faultStatusOf,
   headerTextsOf,
   headerValuesOf,
+  heldRequestOf,
   internalError,
   invalidInputBodyOf,
   invalidInputResponseOf,
@@ -306,11 +311,14 @@ export {
   receivedBodyOf,
   receivedEnvelopeOf,
   receivedHeadersOf,
+  receivedSnsAttributesOf,
   rejectionResponseOf,
   reservedCodeFaults,
   reservedResponseOf,
   segmentOf,
   sendableRetryAfterOf,
+  snsAttributeNames,
+  snsAttributesOf,
   snsFactIdAttribute,
   snsHeadersAttribute,
   snsMessageIdAttribute,

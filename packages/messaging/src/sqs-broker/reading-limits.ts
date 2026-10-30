@@ -38,10 +38,11 @@ type Waits = { readonly visibilityTimeout: number; readonly backoff: string | un
 
 type Wait = { readonly text: string; readonly seconds: number };
 
-const readVisibilityTimeout = secondsBetween(1, longestVisibilityTimeout);
+/** Reads one wait of a queue, a visibility timeout or an entry of its backoff, as whole seconds under 12 hours: the rule `ackWait` is written by. */
+export const readWait = secondsBetween(1, longestVisibilityTimeout);
 
 function waitOf(input: unknown): Wait | undefined {
-  const seconds = readVisibilityTimeout(input);
+  const seconds = readWait(input);
   return typeof input === 'string' && seconds !== undefined ? { text: input, seconds } : undefined;
 }
 
@@ -55,7 +56,8 @@ function waitsOf(input: unknown): Waits | undefined {
   return isTooLong ? undefined : { visibilityTimeout: first.seconds, backoff };
 }
 
-function deliveriesOf(input: unknown): number | undefined {
+/** Reads a redrive's `maxReceiveCount`, a whole number from 1 to the most SQS accepts: the rule `maxDeliver` is written by. */
+export function deliveriesOf(input: unknown): number | undefined {
   const count = countOf(input);
   return count !== undefined && count <= mostDeliveries ? count : undefined;
 }

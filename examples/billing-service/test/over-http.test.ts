@@ -29,12 +29,12 @@ beforeAll(async () => {
   ordersUrl = `http://127.0.0.1:${orders.port}`;
   const resources = { orders: ordersClientOf(ordersUrl, 'billing-key') };
   billing = serve(contract, handlers, { resources });
-}, 60_000);
+});
 
 afterAll(async () => {
   await orders?.stop();
   await nats?.stop();
-}, 30_000);
+});
 
 function anInvoiceRequest(orderId: string): Request {
   return new Request('http://billing.test/invoices', {

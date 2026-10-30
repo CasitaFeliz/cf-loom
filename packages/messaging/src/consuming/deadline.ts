@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { MessageRun } from '@cf-loom/handlers/internal';
 import type { Settled } from './details.ts';
 
@@ -10,7 +11,7 @@ export class DeadlineError extends Error {
   readonly waitMs: number;
 
   constructor(waitMs: number) {
-    super(`The Handler ran past its delivery's wait of ${waitMs} ms`);
+    super(unbrokenLineOf(`The Handler ran past its delivery's wait of ${waitMs} ms`));
     this.waitMs = waitMs;
   }
 }

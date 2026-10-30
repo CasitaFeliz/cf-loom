@@ -21,7 +21,7 @@ import { type Root, type SchemaNode, validateRoot, walkSchemas } from '../intern
 const bodyPlace = {
   site: { kind: 'export', name: 'body' },
   declaration: undefined,
-  steps: [],
+  steps: undefined,
 } as const;
 
 function walkBody(schema: core.$ZodType) {

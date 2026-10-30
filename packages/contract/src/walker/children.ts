@@ -1,4 +1,4 @@
-import type { RefNode, SchemaNode } from './nodes.ts';
+import type { SchemaNode } from './nodes.ts';
 import {
   fieldStep,
   indexStep,
@@ -10,7 +10,6 @@ import {
   valueStep,
   variantStep,
 } from './steps.ts';
-import type { Defs } from './walk.ts';
 
 /** A node inside another, with the steps that lead to it. */
 export type Child = { readonly steps: readonly Step[]; readonly node: SchemaNode };
@@ -24,148 +23,6 @@ export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonl
     nodesWithin(child, [...at, ...steps]),
   );
   return [{ at, node }, ...inside];
-}
-
-/**
- * Every node within the given nodes and within each def they reach through `ref`s, directly or
- * through other defs; a def is added once.
- */
-export function nodesReachedFrom(nodes: readonly SchemaNode[], defs: Defs): readonly SchemaNode[] {
-  const reached: SchemaNode[] = [];
-  const entered = new Set<string>();
-  const pending: Pending[] = nodes.map((node): Pending => ({ kind: 'node', node })).toReversed();
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    switch (next.kind) {
-      case 'node': {
-        const within = nodesWithin(next.node).map((inner) => inner.node);
-        for (const node of within) {
-          reached.push(node);
-        }
-        for (const ref of within.filter(isRef).toReversed()) {
-          pending.push({ kind: 'def', name: ref.name });
-        }
-        break;
-      }
-      case 'def': {
-        const def = defs[next.name];
-        if (def !== undefined && !entered.has(next.name)) {
-          entered.add(next.name);
-          pending.push({ kind: 'node', node: def });
-        }
-        break;
-      }
-    }
-  }
-  return reached;
-}
-
-/** A node whose nodes come before the defs they reach, or a def entered once. */
-type Pending =
-  | { readonly kind: 'node'; readonly node: SchemaNode }
-  | { readonly kind: 'def'; readonly name: string };
-
-/** The def a `ref` stands for through any alias defs, by name, nullable when a `ref` on the way is. */
-export type ResolvedRef = {
-  readonly name: string;
-  readonly def: SchemaNode;
-  readonly nullable: boolean;
-};
-
-/**
- * The def a `ref` stands for through any alias defs, so every reader follows aliases alike; none
- * when a name on the way has no def or the aliases come back to one already followed.
- */
-export function resolvedRefOf(ref: RefNode, defs: Defs): ResolvedRef | undefined {
-  const followed = new Set<string>();
-  let nullable = false;
-  for (let current = ref; ; ) {
-    const def = defs[current.name];
-    if (def === undefined || followed.has(current.name)) {
-      return undefined;
-    }
-    followed.add(current.name);
-    nullable ||= current.nullable === true;
-    if (def.type !== 'ref') {
-      return { name: current.name, def, nullable };
-    }
-    current = def;
-  }
-}
-
-/**
- * The def names the nodes reference through `ref`s, directly or through the defs those name, each
- * once; a name with no def is included, so a caller can tell it apart.
- */
-export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonly string[] {
-  const refs = nodesReachedFrom(nodes, defs).filter(isRef);
-  return [...new Set(refs.map(({ name }) => name))];
-}
-
-/** The defs the nodes reach through `ref`s, directly or through other defs, keyed and ordered as in `defs`. */
-export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
-  const reached = new Set(reachedDefsOf(nodes, defs));
-  return Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
-}
-
-/**
- * Whether a def leads back to itself through `ref`s, `union` options and `allOf` items alone,
- * with no other node between, which zod's parse never ends on; a `ref` to a name with no def
- * leads nowhere.
- */
-export function leadsBackWithNoNode(
-  name: string,
-  def: SchemaNode,
-  defs: ReadonlyMap<string, SchemaNode>,
-): boolean {
-  const entered = new Set<string>();
-  const pending = [def];
-  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
-    if (node.type === 'ref') {
-      if (node.name === name) {
-        return true;
-      }
-      if (entered.has(node.name)) {
-        continue;
-      }
-      entered.add(node.name);
-    }
-    for (const next of nodelessStepsFrom(node, defs)) {
-      pending.push(next);
-    }
-  }
-  return false;
-}
-
-/** The nodes a path with no node between steps to from a node: a `ref`'s def, options or items. */
-function nodelessStepsFrom(
-  node: SchemaNode,
-  defs: ReadonlyMap<string, SchemaNode>,
-): readonly SchemaNode[] {
-  switch (node.type) {
-    case 'ref': {
-      const named = defs.get(node.name);
-      return named === undefined ? [] : [named];
-    }
-    case 'union':
-      return node.options;
-    case 'allOf':
-      return node.items;
-    case 'string':
-    case 'number':
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'array':
-    case 'tuple':
-    case 'tagged':
-    case 'json':
-      return [];
-  }
-}
-
-function isRef(node: SchemaNode): node is RefNode {
-  return node.type === 'ref';
 }
 
 /** The nodes directly inside a node, each with the steps to it. */

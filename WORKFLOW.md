@@ -48,6 +48,13 @@ how), and every fact an option depends on is marked as verified by a probe or no
 premise. Before 1.0 the recommendation is the fix at the level of the cause, breaking or not; documenting a
 limitation is never the recommended option.
 
+Every question to the user is written in final form, options and previews included, by the agent that holds its facts:
+the vetter for a plan, the `cf-root-cause` agent for its check, the reviewer or rechecker for a finding. It opens with
+the situation in the user's terms (who does what, and what happens) before any number or name from the code. The main
+session asks it as written; a question it has to write itself first goes through a `cf-plan-vetter` run on that
+question alone. When the main session takes a vetter's, reviewer's or root-cause recommendation, the plan or the round
+comment quotes it word for word; narrowing it is a decision of its own, listed as one.
+
 ## Root-cause check
 
 A `cf-root-cause` agent finds the cause before the user sees options. It runs when:
@@ -226,8 +233,12 @@ A PR is done when all of these hold; the main session checks them and lists them
 
 ## 5. Merge
 
-A done PR is squash-merged without asking and without waiting for CI: the subject is the PR title with `(#<PR>)`, the
-branch is deleted and the issue closes. The user's standing approval covers pushing an issue's branch and this merge;
+A done PR is squash-merged without asking once CI passed on its head, with
+[`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for the `check` job and for GitHub to judge the
+PR mergeable, refuses while the last CI run on `main` failed, except for the PR that fixes it (run with `--fixes-main`),
+and merges only the head it was given; the subject is the PR title with `(#<PR>)`, the branch is deleted and the issue
+closes. A timeout is reported apart from a failure and the script is run again. A PR whose title changed after its
+last CI run is pushed again before the merge, so CI checks the title it merges under. The user's standing approval covers pushing an issue's branch and this merge;
 a force push waits for the user, and so does the merge after round 2 found a must-fix or a should-fix ([Fix](#4-fix)).
 A CI failure on `main` is fixed before the next merge.
 
@@ -242,9 +253,17 @@ have brought the machine down.
 
 ## Milestone sweep
 
-When a milestone's last issue merges, a sweep reads the whole repository, not a diff: every rule and fact in one
-place (C1), duplication across packages, every document against the code, and whether each feature is still worth
-its cost for v1. Its findings, each verified by a second agent, become issues of the next milestone.
+The main session starts a sweep, without being asked, when a milestone's last issue merges, once about 30 issues have
+merged since the last sweep, and before each release candidate. The sweep reads the whole repository, not a diff, one
+agent per feature and lens: every rule and fact in one place (C1), duplication across packages, every document against
+the code, whether each feature is still worth its cost for v1, and correctness at the edges, with the list of
+[1. Plan](#1-plan), on the platforms the packages run on (a browser for `contract` and `client`, a real Broker for
+messaging). Its agents build and run tests at most four at once ([6. Next](#6-next)).
+
+Before it proposes a finding, the sweep sorts it against the plan comments of the closed issues in its area and the
+open issues: new, incomplete (naming the issue that left it), decided (naming the decision), or already filed. It
+proposes the new and the incomplete; the decided go to the user in one list, to reopen or not. A second agent verifies
+each proposed finding, and only then does it become an issue of the next milestone.
 
 ## Documentation and chore issues
 

@@ -3,6 +3,7 @@ import {
   type StandardRejectionName,
   standardRejectionNames,
 } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import type { ResolvedDefinitions, ValidatedCode } from '../validation/index.ts';
 import { byCodePoint, inFields, placeOf, type SchemaNode, walkSchemas } from '../walker/index.ts';
 import type { ResolvedStandard } from '../written/index.ts';
@@ -55,7 +56,9 @@ function standardNamed(
 ): ResolvedStandard {
   const standard = standards.find((resolved) => resolved.name === name);
   if (standard === undefined) {
-    throw new Error(`A valid Root resolves every Standard Rejection: ${name} is missing, a bug.`);
+    throw new Error(
+      unbrokenLineOf(`A valid Root resolves every Standard Rejection: ${name} is missing, a bug.`),
+    );
   }
   return standard;
 }

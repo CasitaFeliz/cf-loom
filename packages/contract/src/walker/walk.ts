@@ -84,7 +84,7 @@ export function walkMeetingSchemas(
   originOf: OriginOf,
 ): MeetingWalk {
   const compositions: Composition[] = [];
-  const recursion = startRecursion(compositions);
+  const recursion = startRecursion();
   const walker: Walker = {
     schema: function* (schema, at) {
       return yield { schema, at };
@@ -141,9 +141,11 @@ function* walkSchema(schema: unknown, under: Under, state: WalkState): Walking {
 }
 
 /** A node the walk built that is an `allOf` or a `union`, which a rule judges once the defs are known. */
-function recordComposition(node: Walked, at: Reached, { compositions }: WalkState): void {
+function recordComposition(node: Walked, at: Reached, state: WalkState): void {
   if (node.kind === 'walked' && (node.value.type === 'allOf' || node.value.type === 'union')) {
-    compositions.push(compositionOf(at, node.value));
+    const composition = compositionOf(at, node.value);
+    state.compositions.push(composition);
+    state.recursion.built(composition);
   }
 }
 

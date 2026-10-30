@@ -1,3 +1,5 @@
+import { linesTextOf } from '@cf-loom/contract/internal';
+
 /** What went wrong in a delivery: the lines it reports, and the error behind them, if any. */
 export type Failure = { readonly lines: readonly string[]; readonly cause: unknown };
 
@@ -16,7 +18,7 @@ export class Failures {
     if (first === undefined) {
       return;
     }
-    const message = failures.flatMap(({ lines }) => lines).join('\n');
-    throw new Error(message, { cause: first.cause });
+    const lines = failures.flatMap((failure) => failure.lines);
+    throw new Error(linesTextOf(lines), { cause: first.cause });
   }
 }

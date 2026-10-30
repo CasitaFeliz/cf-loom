@@ -1,8 +1,8 @@
 import type { TupleNode } from '../walker/index.ts';
 import { itemsStep, keyStep, restStep, valueStep } from '../walker/index.ts';
 import { boundFindingsOf } from './constraints.ts';
+import { plainUnionFindingsOf } from './def-comparison.ts';
 import { type BothDefs, type Finding, found, inside, type NodePairOf } from './findings.ts';
-import { plainUnionFindingsOf } from './unions.ts';
 
 /** An array's item counts under the constraint rules, then its items under the field rules. */
 export function arrayFindingsOf({ baseline, proposed }: NodePairOf<'array'>): readonly Finding[] {

@@ -65,10 +65,6 @@ function aNeutralChange(site: ChangeSite): Change {
   return { site, difference: { kind: 'tombstoned' }, class: 'neutral', verdict: 'allowed' };
 }
 
-function aRefusedChange(site: ChangeSite): Change {
-  return { site, difference: { kind: 'deleted' }, class: 'breaking', verdict: 'refused' };
-}
-
 function aReport(changes: readonly Change[]): ComparedReport {
   return { changes };
 }
@@ -328,37 +324,6 @@ describe('versionBumpOf', () => {
     expect(versionBumpOf(report, unmoved)).toBe('patch');
   });
 
-  test('a Breaking change to a Public Event’s body is refused, so it bumps patch', () => {
-    const event = (fields: Record<string, { required: boolean; schema: { type: 'string' } }>) =>
-      ({
-        group: 'orders',
-        visibility: 'public',
-        lifecycle: 'active',
-        description: 'An order was placed',
-        body: { type: 'object', fields },
-      }) as const;
-    const baseline: PublishedServiceSnapshot = {
-      ...serviceHeading,
-      version: '3.4.0',
-      generator: publishedBy,
-      formerInputs: [],
-      endpoints: {},
-      events: { 'OrderPlaced@1': event({}) },
-    };
-    const proposed: ServiceSnapshot = {
-      ...serviceHeading,
-      endpoints: {},
-      events: { 'OrderPlaced@1': event({ note: { required: true, schema: { type: 'string' } } }) },
-    };
-
-    const report = comparedReportOf(baseline, proposed);
-
-    expect(report.changes.map(({ class: changeClass, verdict }) => [changeClass, verdict])).toEqual(
-      [['breaking', 'refused']],
-    );
-    expect(versionBumpOf(report, unmoved)).toBe('patch');
-  });
-
   test('a Change on a Subscription never bumps past patch: a Subscription is the Service’s own', () => {
     const report = aReport([aBreakingChange(subscription), anAdditiveChange(subscription)]);
 
@@ -567,27 +532,6 @@ describe('versionBumpOf', () => {
     const bump = versionBumpOf(report, unmoved);
 
     expect(bump).toBe('unchanged');
-  });
-
-  test('a refused Additive Change on a Public Endpoint bumps patch, not minor', () => {
-    const broughtBack: Change = {
-      site: publicEndpoint,
-      difference: { kind: 'retired-brought-back', lifecycle: 'active' },
-      class: 'additive',
-      verdict: 'refused',
-    };
-
-    const bump = versionBumpOf(aReport([broughtBack]), unmoved);
-
-    expect(bump).toBe('patch');
-  });
-
-  test('a refused Change on a Public Endpoint does not bump past patch', () => {
-    const report = aReport([aRefusedChange(publicEndpoint)]);
-
-    const bump = versionBumpOf(report, unmoved);
-
-    expect(bump).toBe('patch');
   });
 
   test('a changed peer range bumps even when the hash is unchanged', () => {

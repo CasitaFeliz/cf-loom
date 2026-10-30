@@ -6,8 +6,9 @@ import {
   defineSubscription,
 } from '@cf-loom/contract';
 import { fault, handle, type MessageFault, type MessageMeta, readersOf } from '@cf-loom/handlers';
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import type { ConsumedFault, Messaging, MessagingOptions } from '../index.ts';
 import { type MemoryMessaging, memory } from './index.ts';
 
@@ -129,6 +130,10 @@ async function rejectionOf(settling: Promise<void>): Promise<Error | undefined> 
 
 const created = { orderId: 'o-1' };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('settled()', () => {
   test('settled() with nothing in flight resolves', async () => {
     const { inMemory } = await running();
@@ -184,6 +189,27 @@ describe('settled()', () => {
       cause: error,
     });
   });
+
+  test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
+    'two Faults of Messages whose Fact ids hold %s make settled() reject with a line each, and the console get a line each, the break written escaped',
+    async ([, code, visible]) => {
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const character = String.fromCharCode(code);
+      const { inMemory, sender } = await running(() => ({
+        charge: () => fault({ committed: 'no', retryable: true, message: 'card 503' }),
+      }));
+      await sender.send('ChargeCard', created, { factId: `a${character}1` });
+      await sender.send('ChargeCard', created, { factId: `b${character}2` });
+
+      const rejection = await rejectionOf(inMemory.settled());
+
+      const lineOf = (id: string) =>
+        `ChargeCard@1 orders-service.command.ChargeCard.v1 command.ChargeCard.v1:${id} ${id} attempt 1: card 503`;
+      const expected = [lineOf(`a${visible}1`), lineOf(`b${visible}2`)];
+      expect(rejection?.message.split(lineBreakPattern)).toEqual(expected);
+      expect(logged.mock.calls.map(([line]) => line)).toEqual(expected);
+    },
+  );
 
   test.each<[string, Handlers, (connection: Running) => Promise<unknown>]>([
     [

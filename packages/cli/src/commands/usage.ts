@@ -11,7 +11,7 @@ const syntaxes = {
   check: 'check [--json] [--prerelease] [--against <version|dist-tag>]',
   'broker-plan': 'broker-plan [--prefix <p>] [--json]',
   openapi: 'openapi',
-  asyncapi: 'asyncapi [--prefix <p>]',
+  asyncapi: 'asyncapi [--prefix <p>] [--broker jetstream|sqs]',
   publish: 'publish [--json] [--dry-run] [--force] [--prerelease]',
 } as const;
 

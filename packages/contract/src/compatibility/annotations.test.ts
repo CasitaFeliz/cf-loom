@@ -31,7 +31,11 @@ function ordersAnswering(body: SchemaNode): ServiceSnapshot {
 }
 
 function walkedOf(schema: z.ZodType): SchemaNode | undefined {
-  const at = { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  const at = {
+    site: { kind: 'export', name: 'body' },
+    declaration: undefined,
+    steps: undefined,
+  } as const;
   const walk = walkSchemas([{ at, schema }], () => undefined);
   const [located] = walk.located;
   const isPlain = located?.walked.kind === 'walked' && Object.keys(walk.defs).length === 0;

@@ -149,13 +149,15 @@
     }
   ],
   "plugins": [
+    "./lint/held-request.grit",
     "./lint/no-boolean-parameter.grit",
     "./lint/no-clock-in-tests.grit",
     "./lint/no-flatmap-filter.grit",
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit",
     "./lint/no-spread-push.grit",
-    "./lint/no-zod-derived-getters.grit"
+    "./lint/no-zod-derived-getters.grit",
+    "./lint/written-lines.grit"
   ],
   "vcs": {
     "clientKind": "git",

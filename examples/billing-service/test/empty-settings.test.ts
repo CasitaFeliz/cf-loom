@@ -60,4 +60,12 @@ describe('a Service’s main.ts with NATS_URL empty', () => {
     expect(why).toContain('NATS_URL is not set or empty');
     expect(why).not.toContain('tried to open a connection');
   });
+
+  test('a Service that exits before it listens fails its start naming itself and what it wrote on stderr', async () => {
+    const why = await whyNotStarted(ordersDir, ordersEnvironment(''));
+
+    expect(why).toMatch(
+      /^orders-service exited before it listened: .*NATS_URL is not set or empty/s,
+    );
+  });
 });

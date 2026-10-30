@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { decodeSnapshot, publishedSnapshotOf, zodPeerRange } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect } from 'vitest';
+import { lineBreaks } from '../../contract/test/line-breaks.ts';
 import { canonicalTextOf } from '../test/canonical-text.ts';
 import { bin, cfLoomWith } from '../test/cf-loom-run.ts';
 import { type Registry, type RegistryOptions, tarballPathOf } from '../test/fake-registry.ts';
@@ -1261,6 +1262,28 @@ describe('cf-loom generate: what it refuses', () => {
     },
   );
 
+  test('a Root file that exports three Roots is a tooling error naming them as a list', () => {
+    const project = aProject({
+      'cf-loom.config.ts': config,
+      'src/contract/index.ts': [
+        "import { defineApplication, defineDefinitions, defineService } from '@cf-loom/contract';",
+        "export const contract = defineService({ name: 'orders-service' });",
+        "export const application = defineApplication({ name: 'orders-service' });",
+        'export const definitions = defineDefinitions({});',
+        '',
+      ].join('\n'),
+    });
+
+    const ran = cfLoom(project, 'generate');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr:
+        'src/contract/index.ts exports more than one Root: application, contract and definitions\n',
+    });
+  });
+
   test('a Service’s Root file that exports its Root under two names generates', () => {
     const project = aProject({ 'cf-loom.config.ts': config, ...aRoot() });
     edit(project, 'src/contract/index.ts', (text) =>
@@ -1452,7 +1475,7 @@ describe('cf-loom generate: what the user’s code throws', () => {
     });
   });
 
-  test.for(['\\r', '\\u0085', '\\u2028', '\\u2029'])(
+  test.for(lineBreaks.filter(([name]) => name !== 'LF').map(([, , visible]) => visible))(
     'a Root file that throws a text holding %s reports it as one line, with the line break written escaped',
     (visible) => {
       const project = aProject({
@@ -7939,6 +7962,46 @@ describe('cf-loom', () => {
       status: 3,
       stdout: '',
       stderr: `Only check takes --against. ${usage}\n`,
+    });
+  });
+
+  test.for([
+    'init',
+    'generate',
+    'verify',
+    'package',
+    'check',
+    'broker-plan',
+    'openapi',
+    'publish',
+    'frobnicate',
+  ] as const)('only asyncapi takes --broker: %s', (command) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, command, '--broker', 'sqs');
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `Only asyncapi takes --broker. ${usage}\n`,
+    });
+  });
+
+  test.for([
+    ['another value', ['--broker', 'kafka']],
+    ['a value in upper case', ['--broker', 'SQS']],
+    ['an empty value', ['--broker', '']],
+    ['an empty inline value', ['--broker=']],
+    ['no value', ['--broker']],
+  ] as const)('--broker takes jetstream or sqs: asyncapi given %s', ([_case, options]) => {
+    const project = aProject();
+
+    const ran = cfLoom(project, 'asyncapi', ...options);
+
+    expect(ran).toEqual({
+      status: 3,
+      stdout: '',
+      stderr: `--broker takes jetstream or sqs. ${usage}\n`,
     });
   });
 

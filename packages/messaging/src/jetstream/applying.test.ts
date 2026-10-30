@@ -10,6 +10,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
 import {
@@ -17,6 +18,7 @@ import {
   durableConsumerConfigOf,
   durableConsumerInfoOf,
 } from '../../test/durable-consumers.ts';
+import { jsonKindOf, jsonValues } from '../../test/json-values.ts';
 import { aNatsServer, type NatsServer } from '../../test/nats-server.ts';
 import { arrangeStream, streamConfigOf, streamInfoOf } from '../../test/streams.ts';
 import { messaging } from '../index.ts';
@@ -982,6 +984,16 @@ describe('what applyBrokerPlan refuses', () => {
       "limits.durableConsumerDefaults.ackWait [ '30s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
     ],
     [
+      'a list of seven ack waits in which one is no duration',
+      { durableConsumerDefaults: { ackWait: ['1s', '2s', '3s', '4s', '5s', '6s', '0s'] } },
+      "limits.durableConsumerDefaults.ackWait [ '1s', '2s', '3s', '4s', '5s', '6s', '0s' ] is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them",
+    ],
+    [
+      'a list of seven lists',
+      { streamDefaults: { replicas: [[1], [2], [3], [4], [5], [6], [7]] } },
+      'limits.streamDefaults.replicas [ [ 1 ], [ 2 ], [ 3 ], [ 4 ], [ 5 ], [ 6 ], [ 7 ] ] is not a whole number from 1',
+    ],
+    [
       'a setting broken under each of the four keys, written in reverse, in the order streamDefaults, durableConsumerDefaults, streams, durableConsumers',
       {
         durableConsumers: { charge: { ackWait: '0s' } },
@@ -1012,6 +1024,41 @@ describe('what applyBrokerPlan refuses', () => {
       expect(service.opened).toHaveLength(0);
     },
   );
+
+  test('the values a refusal is drawn from hold every kind JSON has', () => {
+    const kinds = new Set(jsonValues.map(jsonKindOf));
+
+    expect([...kinds].sort()).toEqual(['boolean', 'list', 'null', 'number', 'object', 'string']);
+  });
+
+  test('applyBrokerPlan refuses an ack wait of any JSON value, alone or in a list of 1 to 110 entries, on one line', async () => {
+    const prefix = aPrefix();
+    const connecting = { connect: aConnect().connect };
+    const offending: string[] = [];
+    const refuse = async (ackWait: unknown, label: string) => {
+      const durableConsumerDefaults = { ...testLimits.durableConsumerDefaults, ackWait };
+      const limits = readFromJson({ ...testLimits, durableConsumerDefaults });
+      const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
+      if (error.message.includes('\n')) {
+        offending.push(label);
+      }
+    };
+
+    for (const [at, value] of jsonValues.entries()) {
+      await refuse(value, `alone @${at}`);
+    }
+    for (let length = 1; length <= 110; length++) {
+      for (const at of jsonValues.keys()) {
+        const entries = Array.from(
+          { length: length - 1 },
+          (_, i) => jsonValues[(at + i) % jsonValues.length],
+        );
+        await refuse([...entries, '0s'], `${length} entries @${at}`);
+      }
+    }
+
+    expect(offending).toEqual([]);
+  });
 
   test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();
@@ -1089,6 +1136,118 @@ describe('what applyBrokerPlan refuses', () => {
     );
     expect(service.opened).toHaveLength(0);
   });
+});
+
+describe('applyBrokerPlan: a refusal whose places hold a line break', () => {
+  test.for(lineBreaks)(
+    'limits keys holding %s are refused on one line each, the break written escaped',
+    async ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const orders = anOrders(aPrefix());
+      const service = aConnect();
+      const connecting = { connect: service.connect };
+      const limits = readFromJson({
+        ...testLimits,
+        streamDefaults: { ...testLimits.streamDefaults, [`max${character}age`]: '1h' },
+        streams: { [orders.stream]: { [`re${character}plica`]: 1 } },
+        [`other${character}key`]: {},
+      });
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, limits));
+
+      expect(error.message.split(lineBreakPattern).sort()).toEqual(
+        [
+          `limits.other${visible}key is a key JetStreamBrokerLimits does not define`,
+          `limits.streamDefaults.max${visible}age is a key JetStreamBrokerLimits does not define`,
+          `limits.streams.${orders.stream}.re${visible}plica is a key JetStreamBrokerLimits does not define`,
+        ].sort(),
+      );
+      expect(service.opened).toHaveLength(0);
+    },
+  );
+
+  test.for(lineBreaks.filter(([name]) => name === 'U+2028' || name === 'U+2029'))(
+    'an ack wait holding %s, shown as the value is, and another broken setting are refused on one line each',
+    async ([, code, visible]) => {
+      const service = aConnect();
+      const connecting = { connect: service.connect };
+      const limits = readFromJson({
+        ...testLimits,
+        streamDefaults: { ...testLimits.streamDefaults, replicas: 0 },
+        durableConsumerDefaults: {
+          ...testLimits.durableConsumerDefaults,
+          ackWait: `a${String.fromCharCode(code)}b`,
+        },
+      });
+
+      const error = await rejectionOf(
+        applyBrokerPlan(connecting, anOrders(aPrefix()).plan, limits),
+      );
+
+      expect(error.message.split(lineBreakPattern)).toEqual([
+        'limits.streamDefaults.replicas 0 is not a whole number from 1',
+        `limits.durableConsumerDefaults.ackWait 'a${visible}b' is not a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them`,
+      ]);
+      expect(service.opened).toHaveLength(0);
+    },
+  );
+
+  test.for(lineBreaks)(
+    'limits naming a stream and a Durable consumer holding %s the plan does not list are refused on one line each',
+    async ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const prefix = aPrefix();
+      const service = aConnect();
+      const connecting = { connect: service.connect };
+      const limits: JetStreamBrokerLimits = {
+        ...testLimits,
+        streams: { [`${prefix}_ordres${character}service`]: { replicas: 1 } },
+        durableConsumers: { [`${prefix}_charge${character}card`]: { ackWait: '2m' } },
+      };
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
+
+      expect(error.message.split(lineBreakPattern)).toEqual([
+        `limits.streams names ${prefix}_ordres${visible}service, which the plan does not list`,
+        `limits.durableConsumers names ${prefix}_charge${visible}card, which the plan does not list`,
+      ]);
+      expect(service.opened).toHaveLength(0);
+    },
+  );
+
+  test.for(lineBreaks)(
+    'a plan stream and Durable consumer named with %s and left with no settings are refused on one line each',
+    async ([, code, visible]) => {
+      const character = String.fromCharCode(code);
+      const prefix = aPrefix();
+      const stream = `${prefix}_orders-service${character}`;
+      const durableConsumer = `${prefix}_charge${character}`;
+      const plan: BrokerPlan = {
+        prefix,
+        streams: {
+          [stream]: { service: 'orders-service', subjects: [`${prefix}.orders-service.a`] },
+        },
+        durableConsumers: {
+          [durableConsumer]: {
+            service: 'orders-service',
+            stream,
+            subject: `${prefix}.orders-service.a`,
+          },
+        },
+      };
+      const service = aConnect();
+      const connecting = { connect: service.connect };
+
+      const error = await rejectionOf(applyBrokerPlan(connecting, plan, readFromJson({})));
+
+      expect(error.message.split(lineBreakPattern)).toEqual([
+        expect.stringContaining(`The stream ${prefix}_orders-service${visible} has no retention, `),
+        expect.stringContaining(
+          `The Durable consumer ${prefix}_charge${visible} has no deliverPolicy, `,
+        ),
+      ]);
+    },
+  );
 });
 
 describe('the connection applyBrokerPlan uses', () => {

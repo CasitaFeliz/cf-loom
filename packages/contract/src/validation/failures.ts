@@ -1,4 +1,11 @@
-import { type Place, type Site, type Step, siteLocationOf, siteTextOf } from '../walker/index.ts';
+import {
+  type Place,
+  type Site,
+  type Step,
+  siteLocationOf,
+  siteTextOf,
+  stepListOf,
+} from '../walker/index.ts';
 
 /** The rules `generate` enforces on declarations, one id per documented rule, so a caller decides by rule. */
 export type Rule =
@@ -98,7 +105,7 @@ export type Failure = DeclarationFailure | NotAllowedFailure;
 /** One declaration failure, as every rule returns it. */
 export function failure(at: Place, rule: Rule, message: string): DeclarationFailure {
   const { site, steps, declaration } = at;
-  return { kind: 'declaration', site, steps, rule, message, declaration };
+  return { kind: 'declaration', site, steps: stepListOf(steps), rule, message, declaration };
 }
 
 /** One failure on one line, where it sits first, as every tool that reports a Root's rules words it. */

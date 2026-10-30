@@ -9,7 +9,11 @@ import { encodedValueOf, walkSchemas } from '../internal/index.ts';
 type Status = ReturnType<typeof contract.openEnum<readonly ['pending', 'paid']>>;
 
 function aPlace() {
-  return { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  return {
+    site: { kind: 'export', name: 'body' },
+    declaration: undefined,
+    steps: undefined,
+  } as const;
 }
 
 /** Whether the walker reads a schema as an Open Enum: its enum node's `open`, none for any other node. */

@@ -1,0 +1,51 @@
+language js
+
+predicate library_source() {
+  $filename <: r".*/packages/(?:contract|handlers|messaging|server|client|testing)/src/.*",
+  $filename <: not r".*\.test\.ts",
+  $filename <: not r".*/packages/contract/src/lines/line\.ts"
+}
+
+pattern written_message() {
+  or {
+    JsStringLiteralExpression(),
+    JsTemplateExpression(elements=not contains JsTemplateElement()),
+    `unbrokenLineOf($_)`,
+    `linesTextOf($_)`
+  }
+}
+
+pattern built_in_error() {
+  r"(?:Error|TypeError|RangeError|SyntaxError|ReferenceError|EvalError|URIError)"
+}
+
+or {
+  or {
+    `$lines.join($separator)`,
+    `$lines?.join($separator)`
+  } as $join where {
+    $separator <: r"['\"`]\\n['\"`]",
+    library_source(),
+    register_diagnostic(span=$join, message="C1: join lines into a message with linesTextOf, which writes each on one line.", severity="error")
+  },
+  or {
+    `console.$method($arguments)`,
+    JsCallExpression(callee=JsStaticMemberExpression(object=`console`), arguments=JsCallArguments(args=$arguments)),
+    JsCallExpression(callee=JsComputedMemberExpression(object=`console`), arguments=JsCallArguments(args=$arguments))
+  } as $log where {
+    $arguments <: not [JsSpread(argument=`logOf($...)`)],
+    library_source(),
+    register_diagnostic(span=$log, message="C1: log through logOf, console.x(...logOf(line, cause)), which writes the line on one line.", severity="error")
+  },
+  or {
+    JsNewExpression(callee=built_in_error(), arguments=JsCallArguments(args=[$message, ...])),
+    JsCallExpression(callee=built_in_error(), arguments=JsCallArguments(args=[$message, ...])),
+    JsNewExpression(callee=`AggregateError`, arguments=JsCallArguments(args=[$_, $message, ...])),
+    JsCallExpression(callee=`AggregateError`, arguments=JsCallArguments(args=[$_, $message, ...])),
+    JsCallExpression(callee=JsSuperExpression(), arguments=JsCallArguments(args=[$message, ...]))
+  } as $made where {
+    $message <: not written_message(),
+    library_source(),
+    register_diagnostic(span=$made, message="C1: an Error's message is a literal, unbrokenLineOf(text) or linesTextOf(lines).", severity="error")
+  }
+}

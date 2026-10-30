@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import { nameOf } from './errors.ts';
 import type { Handled } from './handled.ts';
 
@@ -20,7 +21,10 @@ export async function returnedOf<Built>(
     return { kind: 'built', built };
   }
   const named = `${nameOf(declaration)}'s Handler returned no ${answeredOf(declaration)}`;
-  return { kind: 'not-built', cause: new TypeError(`${named} but ${describedOf(built)}`) };
+  return {
+    kind: 'not-built',
+    cause: new TypeError(unbrokenLineOf(`${named} but ${describedOf(built)}`)),
+  };
 }
 
 /** What a Handler answers, by its declaration: an EndpointHandler an Outcome, a GuardHandler an Admission, a Message Handler a Fault or nothing. */

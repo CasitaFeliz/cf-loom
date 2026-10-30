@@ -10,8 +10,9 @@ import {
 import { defComponentsOf, type JsonSchema } from '../json-schema/index.ts';
 import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
-import { brokerHeaders, brokerHeadersName } from './headers.ts';
+import { brokerHeadersName, brokerHeadersSchemaOf } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
+import { type AsyncApiWire, channelBindingsOf } from './wire.ts';
 
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
@@ -30,13 +31,13 @@ export type AsyncApiDocument = {
 /** The document of a Service's Events. */
 export type AsyncApiWritten = { readonly kind: 'written'; readonly document: AsyncApiDocument };
 
-/** The AsyncAPI document of the Events a Service publishes at a version, each subject under the prefix, if one is given. */
+/** The AsyncAPI document of the Events a Service publishes at a version, as the wire of a Broker carries them. */
 export function asyncApiDocumentOf(
   snapshot: ServiceSnapshot,
-  prefix: string | null,
+  wire: AsyncApiWire,
   version: string,
 ): AsyncApiWritten {
-  const published = publishedVersionsOf(snapshot, prefix);
+  const published = publishedVersionsOf(snapshot, wire);
   const defs = defComponentsOf(
     published.map(({ event }) => event.body),
     snapshot.defs,
@@ -55,7 +56,7 @@ export function asyncApiDocumentOf(
     defaultContentType: jsonMediaType,
     channels: byIdentity(published, channelOf),
     operations: byIdentity(published, operationOf),
-    components: { schemas: schemasOf(defs, published) },
+    components: { schemas: schemasOf(defs, published, brokerHeadersSchemaOf(wire.broker)) },
   };
   return { kind: 'written', document };
 }
@@ -63,15 +64,16 @@ export function asyncApiDocumentOf(
 /** The Message Versions the Service's EventPublisher publishes, Internal and Private alike, in code point order of their identity. */
 function publishedVersionsOf(
   snapshot: ServiceSnapshot,
-  prefix: string | null,
+  wire: AsyncApiWire,
 ): readonly PublishedVersion[] {
+  const bindings = channelBindingsOf(wire, snapshot.name);
   return Object.entries(snapshot.events)
     .filter(([, event]) => isLive(event))
     .toSorted(([left], [right]) => byCodePoint(left, right))
     .map(([identity, event]) => {
       const { name, version } = nameAndVersionOf(identity);
       const subject = subjectOf(snapshot.name, { kind: 'event', name, version });
-      return { identity, name, address: prefixedSubjectOf(prefix, subject), event };
+      return { identity, name, address: prefixedSubjectOf(wire.prefix, subject), bindings, event };
     });
 }
 
@@ -89,6 +91,7 @@ function byIdentity(
 function schemasOf(
   defs: Readonly<Record<string, JsonSchema>>,
   published: readonly PublishedVersion[],
+  brokerHeaders: JsonSchema,
 ): Readonly<Record<string, JsonSchema>> {
   const schemas = published.length === 0 ? defs : { ...defs, [brokerHeadersName]: brokerHeaders };
   return Object.fromEntries(

@@ -428,7 +428,7 @@ describe('compatibilityReportOf, shadowing agrees with what the author’s schem
     const [located] = walkSchemas(
       [
         {
-          at: { site: { kind: 'export', name: 'param' }, declaration: undefined, steps: [] },
+          at: { site: { kind: 'export', name: 'param' }, declaration: undefined, steps: undefined },
           schema,
         },
       ],

@@ -1,3 +1,4 @@
+import { snsAttributeNames } from '@cf-loom/contract/internal';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import {
   aContractProject,
@@ -626,6 +627,150 @@ describe('cf-loom asyncapi: what it prints', () => {
     const offline = await cfLoomOffline(fixture, 'asyncapi');
 
     expect(offline).toEqual({ status: 0, stdout: ran.stdout, stderr: '' });
+  });
+});
+
+const identities = ['OrderCreated@1', 'OrderCreated@2', 'OrderNoted@1', 'TreeGrown@1'];
+
+/** The document without what the Broker's wire decides: its BrokerHeaders component and its channels' bindings. */
+function withoutWireOf(text: string): unknown {
+  const written = structuredClone(JSON.parse(text));
+  Reflect.deleteProperty(written.components.schemas, 'BrokerHeaders');
+  for (const channel of Object.values(written.channels)) {
+    Reflect.deleteProperty(channel as object, 'bindings');
+  }
+  return written;
+}
+
+describe('cf-loom asyncapi --broker', () => {
+  let sqs: unknown;
+
+  /** The SNS/SQS document's channel of a Message Version. */
+  const sqsChannelOf = (identity: string) => valueAt(sqs, 'channels', identity);
+
+  /** The SNS/SQS document's BrokerHeaders component. */
+  const sqsHeaders = () => valueAt(sqs, 'components', 'schemas', 'BrokerHeaders');
+
+  beforeAll(() => {
+    sqs = JSON.parse(cfLoom(fixture, 'asyncapi', '--broker', 'sqs').stdout);
+  });
+
+  test.for([
+    ['no prefix', []],
+    ['a prefix', ['--prefix', 'staging']],
+  ] as const)(
+    'without --broker and with --broker jetstream, asyncapi prints the same bytes: %s',
+    ([_case, options]) => {
+      const without = cfLoom(fixture, 'asyncapi', ...options);
+
+      const named = cfLoom(fixture, 'asyncapi', '--broker', 'jetstream', ...options);
+
+      expect(without.status).toBe(0);
+      expect(named).toEqual(without);
+    },
+  );
+
+  test('with --broker sqs, the document differs from the JetStream one only in its BrokerHeaders component and its channels’ bindings', () => {
+    const options = ['--prefix', 'staging'];
+    const jetstream = cfLoom(fixture, 'asyncapi', ...options);
+    const bound = cfLoom(fixture, 'asyncapi', '--broker', 'sqs', ...options);
+
+    expect(bound.status).toBe(0);
+    expect(bound.stdout).not.toBe(jetstream.stdout);
+    expect(withoutWireOf(bound.stdout)).toEqual(withoutWireOf(jetstream.stdout));
+  });
+
+  test('with --broker sqs, every channel is bound to one SNS topic, at binding version 0.1.0', () => {
+    const bindings = identities.map((identity) => valueAt(sqsChannelOf(identity), 'bindings'));
+
+    expect(bindings).toEqual(
+      identities.map(() => ({ sns: { name: 'orders-service', bindingVersion: '0.1.0' } })),
+    );
+  });
+
+  test('with --broker sqs, a channel’s keys are address, x-cf-loom-visibility, messages and bindings, in that order', () => {
+    expect(keysOf(sqsChannelOf('OrderCreated@2'))).toEqual([
+      'address',
+      'x-cf-loom-visibility',
+      'messages',
+      'bindings',
+    ]);
+  });
+
+  test.for([
+    ['no prefix', []],
+    ['a prefix', ['--prefix', 'staging']],
+  ] as const)(
+    'with --broker sqs, every channel’s SNS topic is the Stream broker-plan prints: %s',
+    ([_case, options]) => {
+      const { plan } = JSON.parse(cfLoom(fixture, 'broker-plan', '--json', ...options).stdout);
+      const bound = JSON.parse(cfLoom(fixture, 'asyncapi', '--broker', 'sqs', ...options).stdout);
+
+      const topics = identities.map((identity) =>
+        valueAt(bound, 'channels', identity, 'bindings', 'sns', 'name'),
+      );
+
+      const [stream, ...others] = keysOf(valueAt(plan, 'streams'));
+      expect(others).toEqual([]);
+      expect(topics).toEqual(identities.map(() => stream));
+    },
+  );
+
+  test('with --broker sqs, every message’s headers are the BrokerHeaders component', () => {
+    const headers = identities.map((identity) =>
+      valueAt(sqsChannelOf(identity), 'messages', identity, 'headers'),
+    );
+
+    expect(headers).toEqual(identities.map(() => refTo('BrokerHeaders')));
+  });
+
+  test('with --broker sqs, the broker headers require each message attribute the adapter sends, in code point order, each a non-empty string', () => {
+    const names = snsAttributeNames.toSorted();
+
+    expect(valueAt(sqsHeaders(), 'required')).toEqual(names);
+    expect(keysOf(valueAt(sqsHeaders(), 'properties'))).toEqual(names);
+    for (const name of names) {
+      expect(valueAt(sqsHeaders(), 'properties', name)).toMatchObject({
+        type: 'string',
+        minLength: 1,
+      });
+    }
+  });
+
+  test('with --broker sqs, the broker headers admit no other attribute', () => {
+    expect(valueAt(sqsHeaders(), 'additionalProperties')).toBe(false);
+  });
+
+  test('with --broker sqs, cf-loom-message-id is described as event.<Name>.v<version>:<Fact id>, a JSON string in ASCII JSON, and cf-loom-fact-id as a JSON string in ASCII JSON', () => {
+    const messageId = valueAt(sqsHeaders(), 'properties', 'cf-loom-message-id', 'description');
+    const factId = valueAt(sqsHeaders(), 'properties', 'cf-loom-fact-id', 'description');
+
+    expect(messageId).toEqual(expect.stringContaining('event.<Name>.v<version>:<Fact id>'));
+    expect(messageId).toEqual(expect.stringContaining('JSON string'));
+    expect(messageId).toEqual(expect.stringContaining('ASCII JSON'));
+    expect(factId).toEqual(expect.stringContaining('JSON string'));
+    expect(factId).toEqual(expect.stringContaining('ASCII JSON'));
+  });
+
+  test('with --broker sqs, cf-loom-headers is JSON text of the Transport headers', () => {
+    const attribute = valueAt(sqsHeaders(), 'properties', 'cf-loom-headers');
+
+    expect(attribute).toMatchObject({ contentMediaType: 'application/json' });
+    expect(valueAt(attribute, 'description')).toEqual(expect.stringContaining('Transport headers'));
+  });
+
+  test('with --broker sqs, a Service that declares no Event has no BrokerHeaders component and no channel', () => {
+    const project = aGeneratedProject(aServiceWithoutEvents);
+
+    const empty = JSON.parse(cfLoom(project, 'asyncapi', '--broker', 'sqs').stdout);
+
+    expect([valueAt(empty, 'components', 'schemas'), valueAt(empty, 'channels')]).toEqual([{}, {}]);
+  });
+
+  test('with --broker sqs --json, the document is the document of the JSON output', () => {
+    const json = cfLoom(fixture, 'asyncapi', '--broker', 'sqs', '--json');
+
+    expect(JSON.parse(json.stdout)).toEqual({ format: 1, status: 0, document: sqs });
   });
 });
 

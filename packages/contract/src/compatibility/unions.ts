@@ -1,17 +1,7 @@
 import type { ObjectNode, RefNode } from '../walker/index.ts';
 import { variantStep } from '../walker/index.ts';
-import { innerAnnotationFindingsOf } from './annotations.ts';
 import { type Counterpart, counterpartsOf } from './counterparts.ts';
-import {
-  type BothDefs,
-  type Finding,
-  found,
-  inside,
-  type NodePair,
-  type NodePairOf,
-} from './findings.ts';
-import { isUnchanged } from './refs.ts';
-import type { ShapeDifference } from './shape-differences.ts';
+import { type Finding, found, inside, type NodePairOf } from './findings.ts';
 
 /**
  * How two discriminated unions differ. Variants are matched by discriminator value alone, so a
@@ -40,18 +30,4 @@ function variantFindingOf(
     case 'kept':
       return inside(variant.baseline, variant.proposed, steps);
   }
-}
-
-/**
- * The plain-union rule: any change to two nodes' options or items, or to a def their `ref`s reach,
- * is the one `difference`, Breaking in every Position, since none can be proven compatible. Their
- * options compare in declared order, and an `allOf`'s items in shape order; a Neutral annotation
- * changes neither, and is told apart as Neutral.
- */
-export function plainUnionFindingsOf(
-  pair: NodePair,
-  defs: BothDefs,
-  difference: ShapeDifference,
-): readonly Finding[] {
-  return isUnchanged(pair, defs) ? innerAnnotationFindingsOf(pair, defs) : [found(difference)];
 }

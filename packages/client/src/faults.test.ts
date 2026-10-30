@@ -9,8 +9,11 @@ import {
   type ProvidedStandardRejections,
 } from '@cf-loom/contract';
 import { snapshotOf, validateRoot } from '@cf-loom/contract/internal';
+import { handle, success } from '@cf-loom/handlers';
+import { serve } from '@cf-loom/server';
 import { afterEach, describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { collected, heldOf } from '../../contract/test/collected.ts';
 import { type Exportable, providedEndpointsOf } from '../test/provided.ts';
 import { aRootPackage } from '../test/root-package.ts';
 import { providedStandardRejections } from '../test/standard-rejections.ts';
@@ -955,5 +958,163 @@ describe('the network rows against node:http', () => {
       status: 502,
       message: 'The Provider answered 502',
     });
+  });
+});
+
+/** A promise that rejects with `signal`'s reason once it aborts, keeping nothing but the signal. */
+function abortOf(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason));
+  });
+}
+
+/** A body that errors with `signal`'s reason once it aborts, telling `reading` when it is first read. */
+function bodyUntilAbortOf(signal: AbortSignal, reading: () => void): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>(
+    {
+      pull: (streamController) => {
+        signal.addEventListener('abort', () => streamController.error(signal.reason));
+        reading();
+        return new Promise(() => undefined);
+      },
+    },
+    { highWaterMark: 0 },
+  );
+}
+
+/** Weak references to the Requests a `fetch` received, and that `fetch`, answering `answer`. */
+function recording(answer: () => Promise<Response>) {
+  const requests: WeakRef<Request>[] = [];
+  const fetch = (request: Request) => {
+    requests.push(new WeakRef(request));
+    return answer();
+  };
+  return { requests, fetch };
+}
+
+describe('a Caller’s signal after a garbage collection', () => {
+  test.each([
+    {
+      given: 'its own controller’s signal is aborted',
+      source: 'aborted',
+      signalled: () => {
+        const controller = new AbortController();
+        return { signal: controller.signal, abort: () => controller.abort() };
+      },
+    },
+    {
+      given: 'a composite of AbortSignal.any is aborted',
+      source: 'aborted',
+      signalled: () => {
+        const controller = new AbortController();
+        return { signal: AbortSignal.any([controller.signal]), abort: () => controller.abort() };
+      },
+    },
+    {
+      given: 'AbortSignal.timeout fires',
+      source: 'timeout',
+      signalled: () => ({ signal: AbortSignal.timeout(500), abort: () => undefined }),
+    },
+  ])(
+    'when $given, a call whose fetch waits only on its Request’s signal settles as its Fault',
+    async ({ source, signalled }) => {
+      const { signal, abort } = signalled();
+      const { promise: fetchStarted, resolve: started } = Promise.withResolvers<void>();
+      const orders = ordersOver((request) => {
+        started();
+        return abortOf(request.signal);
+      });
+
+      const call = orders.getOrder(input, { signal });
+      await fetchStarted;
+      await collected();
+      abort();
+
+      expect(await call).toMatchObject({ kind: 'fault', source });
+    },
+  );
+
+  test('a Caller who aborts while the body is read settles the call as the aborted Fault, with the status that had arrived', async () => {
+    const controller = new AbortController();
+    const { promise: bodyRead, resolve: reading } = Promise.withResolvers<void>();
+    const json = { 'content-type': 'application/json' };
+    const orders = ordersOver(async (request) => {
+      const body = bodyUntilAbortOf(request.signal, reading);
+      return new Response(body, { status: 200, headers: json });
+    });
+
+    const call = orders.getOrder(input, { signal: controller.signal });
+    await bodyRead;
+    await collected();
+    controller.abort();
+
+    expect(await call).toMatchObject({ kind: 'fault', source: 'aborted', status: 200 });
+  });
+
+  test('a Caller’s abort reaches the Handler of a Provider served in the same process', async () => {
+    const provider = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [getOrder] })],
+    });
+    const { promise: handlerStarted, resolve: started } = Promise.withResolvers<void>();
+    const { promise: sawAbort, resolve: saw } = Promise.withResolvers<string>();
+    const waiting = handle(getOrder, async ({ params }, { request: { signal } }) => {
+      started();
+      await new Promise((resolve) => signal.addEventListener('abort', resolve));
+      saw('saw abort');
+      return success(getOrder, { id: params.orderId });
+    });
+    const orders = ordersOver(
+      serve(provider, { endpoints: { getOrder: waiting }, guards: {} }, {}),
+    );
+    const controller = new AbortController();
+
+    void orders.getOrder(input, { signal: controller.signal });
+    await handlerStarted;
+    await collected();
+    controller.abort();
+
+    expect(await sawAbort).toBe('saw abort');
+  });
+
+  test.each([1, 200])(
+    '%i settled calls leave their Requests unheld by a signal that outlives them',
+    async (count) => {
+      const controller = new AbortController();
+      const json = { 'content-type': 'application/json' };
+      const { requests, fetch } = recording(async () =>
+        Response.json({ id: 'o-1' }, { headers: json }),
+      );
+      const orders = ordersOver(fetch);
+
+      for (let call = 0; call < count; call++) {
+        await orders.getOrder(input, { signal: controller.signal });
+      }
+      await collected();
+
+      expect(requests).toHaveLength(count);
+      expect(heldOf(requests)).toBe(0);
+      expect(controller.signal.aborted).toBe(false);
+    },
+  );
+
+  test.each([
+    {
+      fetching: 'throws at once',
+      answer: () => {
+        throw new TypeError('fetch failed');
+      },
+    },
+    { fetching: 'rejects', answer: () => Promise.reject(new TypeError('fetch failed')) },
+  ])('a fetch that $fetching leaves its Request unheld', async ({ answer }) => {
+    const controller = new AbortController();
+    const { requests, fetch } = recording(answer);
+    const orders = ordersOver(fetch);
+
+    await orders.getOrder(input, { signal: controller.signal });
+    await collected();
+
+    expect(heldOf(requests)).toBe(0);
+    expect(controller.signal.aborted).toBe(false);
   });
 });

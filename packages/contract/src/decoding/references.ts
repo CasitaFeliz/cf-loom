@@ -7,7 +7,7 @@ import {
   type PublishedSnapshot,
 } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
-import { leadsBackWithNoNode, type Path } from '../walker/index.ts';
+import { defsLeadingBackWithNoNodeOf, type Path } from '../walker/index.ts';
 import { readEndpointIdentity, readEventReference, readMessageIdentity } from '../written/index.ts';
 import { paramProblemsOf } from './params.ts';
 import {
@@ -121,8 +121,9 @@ function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[
   const problems: Problem[] = [];
   for (const scope of defScopesOf(snapshot)) {
     const defs = new Map(Object.entries(scope.defs));
-    for (const [name, def] of defs) {
-      if (leadsBackWithNoNode(name, def, defs)) {
+    const leadingBack = defsLeadingBackWithNoNodeOf(defs);
+    for (const name of defs.keys()) {
+      if (leadingBack.has(name)) {
         problems.push({
           at: [...scope.at, name],
           reason: 'leads back to itself through refs, unions and allOfs alone',

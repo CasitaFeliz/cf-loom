@@ -13,9 +13,16 @@ export const subscriptionTag = 'cf-loom:subscription';
 /** The most characters SQS allows in a tag's value. */
 export const longestTagValue = 256;
 
+const backoffSeparator = ' ';
+
 /** The text of the backoff tag: the ack waits after the first, as written, joined by one space. */
 export function backoffTextOf(later: readonly string[]): string {
-  return later.join(' ');
+  return later.join(backoffSeparator);
+}
+
+/** The ack waits after the first, as the backoff tag's text writes them: the inverse of `backoffTextOf`. */
+export function backoffEntriesOf(text: string): readonly string[] {
+  return text.split(backoffSeparator);
 }
 
 /** What a Durable consumer's queue and dead-letter queue are tagged with. */

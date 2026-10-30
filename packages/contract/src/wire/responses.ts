@@ -1,4 +1,5 @@
 import type { ReservedCode } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { jsonContentType } from './content-type.ts';
 import {
@@ -139,7 +140,9 @@ function sentHeaderTextsOf(
   if (headers.kind === 'issues') {
     const names = headers.issues.map(({ path }) => path.join('.')).join(', ');
     throw new Error(
-      `${sentNouns[part]} header that cannot travel was not checked before it was sent: ${names}`,
+      unbrokenLineOf(
+        `${sentNouns[part]} header that cannot travel was not checked before it was sent: ${names}`,
+      ),
     );
   }
   return headers.texts;
