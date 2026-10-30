@@ -116,8 +116,7 @@ function rememberedOf(state: State, entering: Entering): Walked | undefined {
 /**
  * The schema met again inside itself: its `ref` if it wrote an id, a failure if no schema of the
  * cycle wrote one, else nothing, so the walk goes on to one that has. An id the walk refuses
- * still names the cycle, whose schema then fails by that refusal alone. The schema is found by
- * its deepest entry on the walk's path.
+ * still names the cycle, whose schema then fails by that refusal alone.
  */
 function metAgain(state: State, entering: Entering): Walked | undefined {
   const closing = deepestEntryOf(state, entering.schema);
