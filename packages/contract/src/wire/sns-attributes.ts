@@ -1,4 +1,10 @@
-import { isIdHeaderValue, type ReceivedHeaders, transportHeaderFitOf } from './broker.ts';
+import {
+  brokerHeaderBytesOf,
+  isIdHeaderValue,
+  maxBrokerHeaderBytes,
+  type ReceivedHeaders,
+  transportHeaderFitOf,
+} from './broker.ts';
 
 /** The SNS message attribute a Message's subject travels in, which each Durable consumer's subscription filters on. */
 export const snsSubjectAttribute = 'cf-loom-subject';
@@ -64,6 +70,8 @@ function headersOf(text: string | undefined): Readonly<Record<string, string>> |
   return travels ? Object.fromEntries(entries) : undefined;
 }
 
+const attributeNames = [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute];
+
 /** The inverse of `snsAttributesOf` for what a queue received: the Message's ids and Transport headers, or the names of cf-loom's attributes it lacks or that do not read back. */
 export function receivedSnsAttributesOf(
   attributes: Readonly<Record<string, string | undefined>>,
@@ -71,14 +79,12 @@ export function receivedSnsAttributesOf(
   const messageId = idOf(attributes[snsMessageIdAttribute]);
   const factId = idOf(attributes[snsFactIdAttribute]);
   const headers = headersOf(attributes[snsHeadersAttribute]);
-  const readings = [
-    [snsMessageIdAttribute, messageId],
-    [snsFactIdAttribute, factId],
-    [snsHeadersAttribute, headers],
-  ] as const;
-  const names = readings.filter(([, read]) => read === undefined).map(([name]) => name);
+  const readings = [messageId, factId, headers];
   if (messageId === undefined || factId === undefined || headers === undefined) {
-    return { kind: 'missing', names };
+    return { kind: 'missing', names: attributeNames.filter((_, at) => readings[at] === undefined) };
   }
-  return { kind: 'read', messageId, factId, headers };
+  const read = { messageId, factId, headers };
+  return brokerHeaderBytesOf(read) > maxBrokerHeaderBytes
+    ? { kind: 'missing', names: attributeNames }
+    : { kind: 'read', ...read };
 }

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { seededNext } from '../../test/random-schemas.ts';
 import {
+  brokerHeaderBytesOf,
   isIdHeaderValue,
+  maxBrokerHeaderBytes,
   receivedSnsAttributesOf,
   snsAttributesOf,
   snsFactIdAttribute,
@@ -407,5 +409,30 @@ describe('what receivedSnsAttributesOf accepts', () => {
     }
 
     expect(outcomes.size).toBe(4);
+  });
+});
+
+describe('the Broker headers of a Message received', () => {
+  /** A Message whose one header takes the Broker headers to exactly `bytes`, the header holding two-byte characters but for the last, so the count is of bytes and not of characters. */
+  function aMessageOfBrokerHeaderBytes(bytes: number) {
+    const bare = aMessage({ headers: { 'x-pad': '' } });
+    const padding = bytes - brokerHeaderBytesOf(bare);
+    const pad = `${'\u00e9'.repeat(Math.floor(padding / 2))}${'a'.repeat(padding % 2)}`;
+    return aMessage({ headers: { 'x-pad': pad } });
+  }
+
+  test('exactly 65,535 bytes of them read back, and one byte more lists the three attributes', () => {
+    const atTheBound = aMessageOfBrokerHeaderBytes(maxBrokerHeaderBytes);
+    const beyond = aMessageOfBrokerHeaderBytes(maxBrokerHeaderBytes + 1);
+
+    const readAtTheBound = receivedSnsAttributesOf(snsAttributesOf(atTheBound));
+    const readBeyond = receivedSnsAttributesOf(snsAttributesOf(beyond));
+
+    expect(brokerHeaderBytesOf(atTheBound)).toBe(maxBrokerHeaderBytes);
+    expect(readAtTheBound.kind).toBe('read');
+    expect(readBeyond).toEqual({
+      kind: 'missing',
+      names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
+    });
   });
 });
