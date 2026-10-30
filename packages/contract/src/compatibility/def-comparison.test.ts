@@ -498,4 +498,42 @@ describe('compatibilityReportOf, the defs each pair compares', () => {
 
     expect(changes).toEqual([breakingAt(taken)]);
   });
+  /** A Definitions Package whose one export holds a plain union over its recursive `tree` def. */
+  function exportingTree(held: ObjectNode) {
+    return {
+      ...definitionsHeading,
+      defs: { tree: held },
+      exports: schemaExports({ wrapped: unionWithTree }),
+    };
+  }
+
+  test('one Baseline checked against two proposed Snapshots is judged against each one’s own defs: the unchanged one reports nothing, and the one whose tree differs one Breaking Change', () => {
+    const baseline: PublishedDefinitionsSnapshot = {
+      ...exportingTree(aTree()),
+      ...publishedAt('1.0.0'),
+    };
+    const unchanged: DefinitionsSnapshot = exportingTree(aTree());
+    const grown: DefinitionsSnapshot = exportingTree(aTree('label'));
+
+    const reports = [unchanged, grown].map(
+      (proposed) => compatibilityReportOf(baseline, proposed).changes,
+    );
+
+    expect(reports).toEqual([
+      [],
+      [
+        {
+          site: { kind: 'export', name: 'wrapped', visibility: 'public' },
+          difference: {
+            kind: 'schema',
+            position: 'message',
+            at: [],
+            shape: { kind: 'union-changed' },
+          },
+          class: 'breaking',
+          verdict: 'approval-needed',
+        },
+      ],
+    ]);
+  });
 });
