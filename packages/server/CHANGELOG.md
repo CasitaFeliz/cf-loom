@@ -1,5 +1,18 @@
 # @cf-loom/server
 
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- 82776d6: The contract README's orders Group lists `editOrder` and `listOrders`, the Endpoints its examples declare, and the server README's `main.ts` gives its Resources `permissions`, which the handlers README's permission Guard takes, so the Service the READMEs describe is one that `cf-loom generate` accepts.
+- Updated dependencies [dbab5a7]
+- Updated dependencies [39ac3c9]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+  - @cf-loom/handlers@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes

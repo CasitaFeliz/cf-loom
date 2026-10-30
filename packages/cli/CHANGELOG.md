@@ -1,5 +1,19 @@
 # @cf-loom/cli
 
+## 1.0.0-rc.2
+
+### Minor Changes
+
+- 2310f15: `cf-loom asyncapi --broker sqs` describes the SNS/SQS wire: the four message attributes as `BrokerHeaders` and each channel's SNS topic. `--broker jetstream`, the default, prints the document as before.
+
+### Patch Changes
+
+- Updated dependencies [dbab5a7]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes
