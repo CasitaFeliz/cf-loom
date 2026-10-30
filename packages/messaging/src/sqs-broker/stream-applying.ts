@@ -2,6 +2,7 @@
 import { CreateTopicCommand, type SNSClient } from '@aws-sdk/client-sns';
 import { type Applied, refusedBy } from '../broker-applying/index.ts';
 import { answeredWith } from './aws-errors.ts';
+import { confirmArn } from './connecting.ts';
 
 /** A Stream of the plan: the name of its topic, and the ARN that name has in the place of the clients. */
 export type StreamToApply = { readonly name: string; readonly arn: string };
@@ -11,9 +12,7 @@ export async function applyStream(sns: SNSClient, stream: StreamToApply): Promis
   try {
     const created = await sns.send(new CreateTopicCommand({ Name: stream.name }));
     const arn = answeredWith(created.TopicArn, 'TopicArn');
-    if (arn !== stream.arn) {
-      throw new Error(`CreateTopic gave ${arn}, not ${stream.arn}`);
-    }
+    confirmArn({ from: 'CreateTopic', arn }, stream.arn);
     return { kind: 'applied' };
   } catch (error) {
     return refusedBy(`The stream ${stream.name}`, error);

@@ -1097,7 +1097,7 @@ describe('applyBrokerPlan', () => {
     inAccount(connecting.sqs, '210987654321');
     const set = recordingInputs(connecting.sqs, 'SetQueueAttributesCommand');
     const subscribes = countCommands(connecting.sns, 'SubscribeCommand');
-    const refused = `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:${orders.chargeDurable}_dlq, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the clients`;
+    const refused = `The Durable consumer ${orders.chargeDurable} could not be applied: GetQueueAttributes of ${orders.chargeDurable}_dlq gave arn:aws:sqs:eu-west-1:210987654321:${orders.chargeDurable}_dlq, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: 210987654321 is another account than connecting.account 123456789012`;
 
     const runs = [
       await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits)),
@@ -1110,6 +1110,21 @@ describe('applyBrokerPlan', () => {
     expect(subscribes.sent()).toBe(0);
   });
 
+  test('a queue ARN of the account in another region than the clients’ is refused naming both ARNs and the region', async () => {
+    const orders = anOrders();
+    const connecting = anAwsConnecting(moto.url);
+    const deadLetter = `${orders.chargeDurable}_dlq`;
+    alteringAnswers(connecting.sqs, 'GetQueueAttributesCommand', (output) => {
+      output['Attributes'] = { QueueArn: `arn:aws:sqs:us-east-1:123456789012:${deadLetter}` };
+    });
+
+    const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
+
+    expect(error.message).toBe(
+      `The Durable consumer ${orders.chargeDurable} could not be applied: GetQueueAttributes of ${deadLetter} gave arn:aws:sqs:us-east-1:123456789012:${deadLetter}, not ${sqsArnOf(deadLetter)}: check the region of the clients`,
+    );
+  });
+
   test('an account other than the topics’ own is refused as the ARN CreateTopic gave, not the one built', async () => {
     const orders = anOrders();
     const connecting = anAwsConnecting(moto.url, { account: '210987654321' });
@@ -1117,7 +1132,7 @@ describe('applyBrokerPlan', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toBe(
-      `The stream ${orders.stream} could not be applied: CreateTopic gave ${snsArnOf(orders.stream)}, not arn:aws:sns:eu-west-1:210987654321:${orders.stream}`,
+      `The stream ${orders.stream} could not be applied: CreateTopic gave ${snsArnOf(orders.stream)}, not arn:aws:sns:eu-west-1:210987654321:${orders.stream}: 123456789012 is another account than connecting.account 210987654321`,
     );
     expect(await queueNamesOf(connecting.sqs)).toEqual([]);
   });
@@ -1218,7 +1233,7 @@ describe('applyBrokerPlan', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, orders.plan, testLimits));
 
     expect(error.message).toBe(
-      `The Durable consumer ${orders.chargeDurable} could not be applied: SQS gave the queue ${orders.chargeDurable}_dlq the ARN arn:aws:sqs:eu-west-1:210987654321:elsewhere, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: check connecting.account and the region of the clients`,
+      `The Durable consumer ${orders.chargeDurable} could not be applied: GetQueueAttributes of ${orders.chargeDurable}_dlq gave arn:aws:sqs:eu-west-1:210987654321:elsewhere, not ${sqsArnOf(`${orders.chargeDurable}_dlq`)}: 210987654321 is another account than connecting.account 123456789012`,
     );
     expect(await subscriptionsOf(connecting.sns, snsArnOf(orders.stream))).toEqual([]);
   });

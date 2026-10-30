@@ -9,6 +9,7 @@ import {
   UntagQueueCommand,
 } from '@aws-sdk/client-sqs';
 import { answeredWith, isAwsError } from './aws-errors.ts';
+import { confirmArn } from './connecting.ts';
 
 /** A queue or dead-letter queue as the plan wants it: the ARN its name has in the place of the clients, its attributes and tags, the tags it must not carry, and, for a queue that has one, how its policy follows from the policy it holds. */
 export type QueueToApply = {
@@ -57,13 +58,13 @@ async function create(sqs: SQSClient, queue: QueueToApply): Promise<AppliedQueue
     new CreateQueueCommand({ QueueName: queue.name, Attributes, tags: { ...queue.tags } }),
   );
   const url = answeredWith(created.QueueUrl, 'QueueUrl');
-  confirmArn(queue, (await heldOf(sqs, url)).arn);
+  confirmQueueArn(queue, (await heldOf(sqs, url)).arn);
   return { url, arn: queue.arn };
 }
 
 async function update(sqs: SQSClient, url: string, queue: QueueToApply): Promise<AppliedQueue> {
   const held = await heldOf(sqs, url);
-  confirmArn(queue, held.arn);
+  confirmQueueArn(queue, held.arn);
   const Attributes = withPolicy(queue, held.policy);
   await sqs.send(new SetQueueAttributesCommand({ QueueUrl: url, Attributes }));
   await tagQueue(sqs, url, queue.tags);
@@ -84,11 +85,8 @@ async function heldOf(sqs: SQSClient, url: string): Promise<Held> {
 }
 
 /** Refuses a queue whose ARN SQS gives otherwise than built, since its policy, its redrive target and its subscription name the one built. */
-function confirmArn(queue: QueueToApply, arn: string): void {
-  if (arn !== queue.arn) {
-    const given = `SQS gave the queue ${queue.name} the ARN ${arn}, not ${queue.arn}`;
-    throw new Error(`${given}: check connecting.account and the region of the clients`);
-  }
+function confirmQueueArn(queue: QueueToApply, arn: string): void {
+  confirmArn({ from: `GetQueueAttributes of ${queue.name}`, arn }, queue.arn);
 }
 
 /** The queue's attributes with the policy that follows from the one it holds, in the same request. */

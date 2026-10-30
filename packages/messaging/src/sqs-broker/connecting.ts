@@ -41,6 +41,28 @@ export async function placeOf(connecting: SqsConnecting): Promise<Located> {
   return { kind: 'located', place };
 }
 
+/** An ARN AWS answered, and the call that answered it. */
+export type AnsweredArn = { readonly from: string; readonly arn: string };
+
+/** Refuses an ARN AWS answered otherwise than the one built, naming both, and the other account when the account part differs, as a wrong `connecting.account` makes it. */
+export function confirmArn(answered: AnsweredArn, built: string): void {
+  if (answered.arn === built) {
+    return;
+  }
+  const given = `${answered.from} gave ${answered.arn}, not ${built}`;
+  const [builtAccount, givenAccount] = [accountOf(built), accountOf(answered.arn)];
+  const why =
+    givenAccount === builtAccount
+      ? 'check the region of the clients'
+      : `${givenAccount} is another account than connecting.account ${builtAccount}`;
+  throw new Error(`${given}: ${why}`);
+}
+
+/** The account part of an ARN, whose name part holds no `:`. */
+function accountOf(arn: string): string | undefined {
+  return arn.split(':')[4];
+}
+
 /** The ARN of the SQS queue named `name` in the place. */
 export function queueArnOf(place: Place, name: string): string {
   return `arn:${place.partition}:sqs:${place.region}:${place.account}:${name}`;
