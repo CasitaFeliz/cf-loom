@@ -1,7 +1,12 @@
 import { inspect } from 'node:util';
 import { z } from 'zod';
 
-/** A setting read by `read`, which answers undefined for what it refuses, as an issue that shows the value: `<value> is not <expected>`. */
+/** A JSON value as a refusal shows it, on one line however many entries it holds: `[ '30s', '0s' ]`, `'7 days'`, `0`. */
+export function oneLineOf(value: unknown): string {
+  return inspect(value, { breakLength: Infinity, compact: true });
+}
+
+/** A setting read by `read`, which answers undefined for what it refuses, as an issue that shows the value on one line: `<value> is not <expected>`. */
 export function readAs<Value>(
   expected: string,
   read: (input: unknown) => Value | undefined,
@@ -9,7 +14,7 @@ export function readAs<Value>(
   return z.unknown().transform((input, context) => {
     const value = read(input);
     if (value === undefined) {
-      const message = `${inspect(input, { breakLength: Infinity })} is not ${expected}`;
+      const message = `${oneLineOf(input)} is not ${expected}`;
       context.issues.push({ code: 'custom', message, input });
       return z.NEVER;
     }
