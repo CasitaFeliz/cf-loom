@@ -13,8 +13,14 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { Readme } from './readme-blocks.ts';
+import { cfLoomProblemsOf, runCfLoom } from './readme-cf-loom.ts';
 import { compile } from './readme-compile.ts';
-import { readmeServiceProblems, snippetProblems, writeReadmeService } from './readme-snippets.ts';
+import {
+  readmeServiceProblems,
+  readmeServiceRefusals,
+  snippetProblems,
+  writeReadmeService,
+} from './readme-snippets.ts';
 
 const root = join(import.meta.dirname, '..');
 const fence = '```';
@@ -583,6 +589,11 @@ describe('the names a block leaves out', () => {
       exported: 'const ref = 1',
     },
     {
+      position: 'a name after text of more than one byte a character',
+      code: '// café ✓ 😀 ñ\nexport const total = ref + 1;',
+      exported: 'const ref = 1',
+    },
+    {
       position: 'a bare name that an instance member has',
       code: 'export class Holder { ref = 1; read() { return ref; } }',
       exported: 'const ref = 1',
@@ -740,13 +751,18 @@ describe('the READMEs', () => {
     );
   });
 
-  test('a Service after a refused Service is not run, and the check says so', () => {
+  test('a refused Service stops no other Service, and the check does not type-check', () => {
     const unlisted = anUnlistedEndpoint(
-      'payments-service/src/contract/endpoints/payments/unlisted.endpoint.ts',
+      'notes-service/src/contract/endpoints/notes/unlisted.endpoint.ts',
     );
+    const wrongType = aReadme('packages/handlers/README.md', "const quantity: number = 'three';");
     const repository = aRepository(
-      { client: aReadme('packages/client/README.md', unlisted).markdown },
       {
+        client: aReadme('packages/client/README.md', unlisted).markdown,
+        handlers: wrongType.markdown,
+      },
+      {
+        ...aServiceScope('notes-service/', 'notes-service'),
         ...aServiceScope('payments-service/', 'payments-service'),
         ...aServiceScope('', 'orders-service'),
       },
@@ -756,10 +772,61 @@ describe('the READMEs', () => {
 
     const problems = readmeServiceProblems(directory, repository);
 
-    expect(problems).toContainEqual(
-      'cf-loom: @org/orders-service: not run: @org/payments-service was refused',
+    expect(problems).toEqual([
+      expect.stringMatching(
+        /^packages\/client\/README\.md:4: cf-loom generate: @org\/notes-service: exports unlisted, which no Group lists/,
+      ),
+      expect.stringMatching(/^tsc: not run: /),
+    ]);
+    expect(existsSync(join(directory, 'payments-service/src/handlers.generated.ts'))).toBe(true);
+    expect(existsSync(join(directory, 'src/handlers.generated.ts'))).toBe(true);
+  });
+
+  test('the refusals are listed apart from the type check, for the tests that cannot run', () => {
+    const unlisted = anUnlistedEndpoint('src/contract/endpoints/orders/unlisted.endpoint.ts');
+    const repository = aRepository(
+      { client: aReadme('packages/client/README.md', unlisted).markdown },
+      aServiceScope('', 'orders-service'),
     );
-    expect(existsSync(join(directory, 'src/handlers.generated.ts'))).toBe(false);
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const refusals = readmeServiceRefusals(directory, repository);
+
+    expect(refusals).toEqual([
+      expect.stringMatching(
+        /^packages\/client\/README\.md:4: cf-loom generate: @org\/orders-service: exports unlisted/,
+      ),
+    ]);
+  });
+
+  test('a Service whose consumed Contract Package is missing is refused in one line', () => {
+    const unlisted = anUnlistedEndpoint(
+      'payments-service/src/contract/endpoints/payments/unlisted.endpoint.ts',
+    );
+    const consumer = aServiceScope('', 'orders-service');
+    const repository = aRepository(
+      { client: aReadme('packages/client/README.md', unlisted).markdown },
+      {
+        ...aServiceScope('payments-service/', 'payments-service'),
+        ...consumer,
+        'src/contract/index.ts': `import '@org/contract-payments-service';\n${consumer['src/contract/index.ts']}`,
+      },
+    );
+    const directory = join(repository, '.readme-service');
+    writeReadmeService(directory, repository);
+
+    const problems = readmeServiceProblems(directory, repository);
+
+    expect(problems).toEqual([
+      expect.stringMatching(
+        /^packages\/client\/README\.md:4: cf-loom generate: @org\/payments-service: exports unlisted/,
+      ),
+      expect.stringMatching(
+        /^scripts\/readme-service\/src\/contract\/index\.ts:1: cf-loom generate: @org\/orders-service: cannot be loaded: Cannot find package '@org\/contract-payments-service'/,
+      ),
+      expect.stringMatching(/^tsc: not run: /),
+    ]);
   });
 
   test("a Contract Package that fails to build is reported at its file, as the build's", () => {
@@ -777,17 +844,32 @@ describe('the READMEs', () => {
 
     expect(problems).toContainEqual(
       expect.stringMatching(
-        /^\.cf-loom\/contract-package\/src\/\S+\.ts:\d+: building the Contract Package of @org\/orders-service: error TS2307: .*'zod'/,
+        /^\.readme-service\/\.cf-loom\/contract-package\/src\/\S+\.ts:\d+: tsc -p \.cf-loom\/contract-package: @org\/orders-service: error TS2307: .*'zod'/,
       ),
     );
   });
 
-  test('a syntax error in one block is the only problem reported', () => {
+  test.each([
+    { block: 'export const broken = (;', code: 'TS1109', kind: 'a syntax error' },
+    {
+      block: 'export const broken = 1 satisfies string;',
+      code: 'TS1360',
+      kind: 'a failed satisfies',
+    },
+    { block: 'export enum Broken { Red }', code: 'TS1294', kind: 'an enum' },
+    { block: 'export const broken = 1_;', code: 'TS6188', kind: 'a numeric separator' },
+  ])('$kind in one block is the only problem reported', ({ block, code }) => {
     const endpoint = anOrdersEndpoint('success: { status: 200, body: z.object({}) },');
+    const served = [
+      '// src/main.ts',
+      "import handlers from './handlers.generated.ts';",
+      'export const served = handlers;',
+    ];
     const repository = aRepository(
       {
         contract: aReadme('packages/contract/README.md', endpoint).markdown,
-        handlers: aReadme('packages/handlers/README.md', 'export const broken = (;').markdown,
+        handlers: aReadme('packages/handlers/README.md', served.join('\n')).markdown,
+        testing: aReadme('packages/testing/README.md', block).markdown,
       },
       anOrdersScope(),
     );
@@ -797,7 +879,21 @@ describe('the READMEs', () => {
     const problems = readmeServiceProblems(directory, repository);
 
     expect(problems).toEqual([
-      expect.stringMatching(/^packages\/handlers\/README\.md:4: error TS1109/),
+      expect.stringMatching(new RegExp(`^packages/testing/README\\.md:4: error ${code}`)),
+    ]);
+  });
+
+  test('a CLI that exits with a status and no output is reported with its status', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'readme-cli-'));
+    repositories.push(directory);
+    const silent = join(directory, 'silent.js');
+    writeFileSync(silent, 'process.exit(3);');
+    writeFileSync(join(directory, 'package.json'), '{"name":"@org/orders-service"}');
+
+    runCfLoom(directory, ['package.json'], silent);
+
+    expect(cfLoomProblemsOf(directory)).toEqual([
+      { row: 1, message: 'cf-loom generate: @org/orders-service: exited 3 with no output' },
     ]);
   });
 

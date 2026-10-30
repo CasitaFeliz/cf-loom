@@ -1,12 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { API, type Program } from 'typescript/unstable/sync';
 import type { Project } from './readme-project.ts';
 
-/** One diagnostic of `tsc`: the file, row and column it names, when it names one, with its code and message. */
+/** One diagnostic of `tsc`: the file and row it names, when it names one, with its code and message. */
 export type Diagnostic = {
   readonly path: string | undefined;
   readonly row: number;
-  readonly column: number;
   readonly code: number;
   readonly message: string;
 };
@@ -21,7 +21,7 @@ export type Compiled = {
 const tsc = join(import.meta.dirname, '..', 'node_modules', 'typescript', 'bin', 'tsc');
 /** Long enough for a slow runner, short enough that a hung command fails the write-out. */
 export const timeoutMs = 60_000;
-const located = /^(.+?)\((\d+),(\d+)\): error TS(\d+): (.*)$/;
+const located = /^(.+?)\((\d+),\d+\): error TS(\d+): (.*)$/;
 const unlocated = /^error TS(\d+): (.*)$/;
 const notFound = new Set([2304, 2552, 18004, 2503, 2662, 2663]);
 const identifier = /^[A-Za-z_$][\w$]*/;
@@ -47,33 +47,43 @@ export function describe({ code, message }: Diagnostic): string {
 }
 
 /**
- * Whether `tsc` found a syntax error (TS1xxx), after which it reports no other kind: a project
- * that has one is not completed, so what depends on its completion would be refused for it.
+ * The names `tsc` cannot find in each file of the project written to `directory`: each is the
+ * identifier the source holds where `tsc` reports it, never a word of its message. They are read
+ * per file from the TypeScript API, which reports a file's semantic diagnostics whatever another
+ * file holds; the CLI reports none once one file has a syntax error.
  */
-export function hasSyntaxError({ diagnostics }: Compiled): boolean {
-  return diagnostics.some(({ code }) => code >= 1000 && code < 2000);
+export function freeNamesOf(directory: string, project: Project): Map<string, Set<string>> {
+  const api = new API({});
+  try {
+    const config = join(directory, 'tsconfig.json');
+    const program = api.updateSnapshot({ openProjects: [config] }).getProject(config)?.program;
+    if (program === undefined) {
+      throw new Error(`${config} is not a TypeScript project`);
+    }
+    const freeNamesByPath = new Map<string, Set<string>>();
+    for (const [path, { source }] of project) {
+      const names = path.endsWith('.ts')
+        ? namesNotFound(program, join(directory, path), source)
+        : [];
+      if (names.length > 0) {
+        freeNamesByPath.set(path, new Set(names));
+      }
+    }
+    return freeNamesByPath;
+  } finally {
+    api.close();
+  }
 }
 
-/**
- * The names `tsc` cannot find in each file of the project: each is the identifier the source holds
- * where `tsc` reports it, never a word of its message.
- */
-export function freeNamesOf({ diagnostics }: Compiled, project: Project): Map<string, Set<string>> {
-  const freeNamesByPath = new Map<string, Set<string>>();
-  const rowsByPath = new Map<string, string[]>();
-  for (const { path, row, column, code } of diagnostics) {
-    const source = project.get(path ?? '')?.source;
-    if (path === undefined || source === undefined || !notFound.has(code)) {
-      continue;
-    }
-    const rows = rowsByPath.get(path) ?? source.split('\n');
-    rowsByPath.set(path, rows);
-    const name = identifier.exec((rows[row - 1] ?? '').slice(column - 1))?.[0];
+function namesNotFound(program: Program, file: string, source: string): string[] {
+  const names: string[] = [];
+  for (const { code, pos } of program.getSemanticDiagnostics(file)) {
+    const name = notFound.has(code) ? identifier.exec(source.slice(pos))?.[0] : undefined;
     if (name !== undefined) {
-      freeNamesByPath.set(path, (freeNamesByPath.get(path) ?? new Set<string>()).add(name));
+      names.push(name);
     }
   }
-  return freeNamesByPath;
+  return names;
 }
 
 function diagnosticsIn(output: string): Diagnostic[] {
@@ -88,19 +98,13 @@ function diagnosticsIn(output: string): Diagnostic[] {
 }
 
 function diagnosticOf(line: string): Diagnostic | undefined {
-  const [, path, row, column, code, message] = located.exec(line) ?? [];
+  const [, path, row, code, message] = located.exec(line) ?? [];
   if (path !== undefined) {
-    return {
-      path,
-      row: Number(row),
-      column: Number(column),
-      code: Number(code),
-      message: message ?? '',
-    };
+    return { path, row: Number(row), code: Number(code), message: message ?? '' };
   }
   const [, bareCode, bareMessage] = unlocated.exec(line) ?? [];
   if (bareCode === undefined) {
     return undefined;
   }
-  return { path: undefined, row: 0, column: 0, code: Number(bareCode), message: bareMessage ?? '' };
+  return { path: undefined, row: 0, code: Number(bareCode), message: bareMessage ?? '' };
 }

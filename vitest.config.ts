@@ -26,6 +26,7 @@ export default defineConfig({
         test: {
           name: 'readme-service',
           include: ['.readme-service/test/**/*.test.ts'],
+          setupFiles: ['scripts/readme-service-written.ts'],
           testTimeout: spawningTimeout,
         },
       },

@@ -4,8 +4,9 @@ import { dirname, join, posix, relative } from 'node:path';
 import { type Compiled, compile, describe, timeoutMs } from './readme-compile.ts';
 
 /**
- * What stopped one of the README Service's Services: a refusal of cf-loom, or the failed build of
- * its Contract Package. It names a file of the written-out Service and its line, when it can.
+ * What stopped one of the README Service's Services, as `<step>: <package name>: <message>`: a
+ * refusal of cf-loom, or the failed build of its Contract Package. It names a file of the
+ * written-out Service and its line, when it can.
  */
 export type CfLoomProblem = {
   readonly path: string | undefined;
@@ -13,13 +14,19 @@ export type CfLoomProblem = {
   readonly message: string;
 };
 
-/** A Service of the README Service: the folder it sits in, `.` for the README's own, and its package's name. */
-type Service = { readonly folder: string; readonly name: string };
+/** A Service of the README Service: the folder it sits in, `.` for the README's own, where it is written, and its package's name. */
+type Service = { readonly folder: string; readonly at: string; readonly name: string };
+
+/** A command run over a Service, named as its lines say: `cf-loom generate`. */
+type Step = { readonly name: string; readonly args: readonly string[] };
 
 const cli = join(import.meta.dirname, '..', 'packages', 'cli', 'dist', 'bin.js');
 const refusedAt = 'cf-loom-refused.json';
 const definitionsPackage = 'definitions';
 const contractPackageAt = '.cf-loom/contract-package';
+const generate: Step = { name: 'cf-loom generate', args: ['generate'] };
+const pack: Step = { name: 'cf-loom package', args: ['package', '--out', contractPackageAt] };
+const build = `tsc -p ${contractPackageAt}`;
 const cliLine = /^(src\/\S+?\.ts)(?::(\d+))?:? (.*)$/;
 
 /**
@@ -33,24 +40,34 @@ function servicesOf(directory: string, paths: readonly string[]): Service[] {
     (folder): folder is string => folder !== undefined && folder !== definitionsPackage,
   );
   const all = paths.includes('package.json') ? [...others, '.'] : others;
-  return all.map((folder) => ({ folder, name: packageNameOf(join(directory, folder)) }));
+  return all.map((folder) => {
+    const at = join(directory, folder);
+    return { folder, at, name: packageNameOf(at) };
+  });
 }
 
 /**
  * Runs `cf-loom generate`, then `cf-loom package` and a build of its package, over each of the
  * README Service's Services written to `directory`, as a Service of the organization does, each
- * finding the Definitions Package and the Contract Packages the others wrote in `node_modules`.
- * It stops at the first Service cf-loom refuses. What stopped it is kept in `directory` for
- * `cfLoomProblemsOf`, so the check reports it; a CLI not built throws.
+ * finding the Definitions Package and the Contract Packages the others wrote in `node_modules`. A
+ * Service runs whatever another was refused: one that consumes a package that is missing is
+ * refused by cf-loom itself. What stopped each is kept in `directory` for `cfLoomProblemsOf`, so
+ * the check reports it; a CLI not built throws.
  */
-export function runCfLoom(directory: string, paths: readonly string[]): void {
-  if (!existsSync(cli)) {
-    throw new Error(`The README Service needs the CLI built: ${cli} is written by pnpm build`);
+export function runCfLoom(
+  directory: string,
+  paths: readonly string[],
+  program: string = cli,
+): void {
+  if (!existsSync(program)) {
+    throw new Error(`The README Service needs the CLI built: ${program} is written by pnpm build`);
   }
   if (paths.includes(`${definitionsPackage}/package.json`)) {
     installPackage(directory, join(directory, definitionsPackage));
   }
-  const stopped = runServices(directory, servicesOf(directory, paths));
+  const stopped = servicesOf(directory, paths).flatMap((service) =>
+    runOver(directory, service, program),
+  );
   writeFileSync(join(directory, refusedAt), JSON.stringify(stopped));
 }
 
@@ -60,33 +77,15 @@ export function cfLoomProblemsOf(directory: string): CfLoomProblem[] {
   return existsSync(written) ? JSON.parse(readFileSync(written, 'utf8')) : [];
 }
 
-/** Runs the Services in order up to the first that is refused, and says which of the later ones were not run. */
-function runServices(directory: string, services: readonly Service[]): CfLoomProblem[] {
-  for (const [index, service] of services.entries()) {
-    const refused = runOver(directory, service);
-    if (refused.length > 0) {
-      const later = services.slice(index + 1);
-      return [...refused, ...later.map((notRun) => notRunBecause(notRun, service))];
-    }
-  }
-  return [];
-}
-
-function notRunBecause(notRun: Service, refused: Service): CfLoomProblem {
-  const message = `cf-loom: ${notRun.name}: not run: ${refused.name} was refused`;
-  return { path: undefined, row: 1, message };
-}
-
 /** Runs `generate`, `package` and the build, each once the one before stopped nothing, then installs the package. */
-function runOver(directory: string, service: Service): CfLoomProblem[] {
-  const folder = join(directory, service.folder);
-  for (const args of [['generate'], ['package', '--out', contractPackageAt]]) {
-    const refused = run(args, folder, service);
+function runOver(directory: string, service: Service, program: string): CfLoomProblem[] {
+  for (const step of [generate, pack]) {
+    const refused = run(step, service, program);
     if (refused.length > 0) {
       return refused;
     }
   }
-  const packageFolder = join(folder, contractPackageAt);
+  const packageFolder = join(service.at, contractPackageAt);
   const failed = buildProblemsOf(compile(packageFolder), service);
   if (failed.length === 0) {
     installPackage(directory, packageFolder);
@@ -99,16 +98,14 @@ function buildProblemsOf(built: Compiled, service: Service): CfLoomProblem[] {
   if (!built.failed) {
     return [];
   }
-  const build = `building the Contract Package of ${service.name}`;
   const located = built.diagnostics.map((diagnostic): CfLoomProblem => {
-    const path = diagnostic.path;
+    const { path, row } = diagnostic;
     const inService =
       path === undefined ? undefined : posix.join(service.folder, contractPackageAt, path);
-    return { path: inService, row: diagnostic.row, message: `${build}: ${describe(diagnostic)}` };
+    return { path: inService, row, message: stoppedBy(build, service, describe(diagnostic)) };
   });
-  return located.length > 0
-    ? located
-    : [{ path: undefined, row: 1, message: `${build}: ${built.output}` }];
+  const unplaced = { path: undefined, row: 1, message: stoppedBy(build, service, built.output) };
+  return located.length > 0 ? located : [unplaced];
 }
 
 /** The name in the package.json of the package in `folder`. */
@@ -128,29 +125,45 @@ function installPackage(directory: string, folder: string): void {
   symlinkSync(relative(dirname(link), folder), link);
 }
 
-/** Runs the CLI in a folder, and what it refused, each line at the project file it names. */
-function run(args: readonly string[], folder: string, service: Service): CfLoomProblem[] {
-  const command = `cf-loom ${args[0]}`;
-  const ran = spawnSync(process.execPath, [cli, ...args], {
-    cwd: folder,
+/** Runs the CLI over a Service, and what it refused, each line at the project file it names. */
+function run(step: Step, service: Service, program: string): CfLoomProblem[] {
+  const ran = spawnSync(process.execPath, [program, ...step.args], {
+    cwd: service.at,
     encoding: 'utf8',
     timeout: timeoutMs,
   });
   if (ran.error !== undefined) {
-    const message = `${command}: ${service.name}: did not finish: ${ran.error.message}`;
+    const message = stoppedBy(step.name, service, `did not finish: ${ran.error.message}`);
     return [{ path: undefined, row: 1, message }];
   }
   if (ran.status === 0) {
     return [];
   }
   const lines = `${ran.stderr}${ran.stdout}`.split('\n').filter((line) => line !== '');
-  return lines.map((line) => problemOf(line, command, service));
+  if (lines.length === 0) {
+    const message = stoppedBy(
+      step.name,
+      service,
+      `exited ${ran.status ?? ran.signal} with no output`,
+    );
+    return [{ path: undefined, row: 1, message }];
+  }
+  return lines.map((line) => problemOf(line, step, service));
 }
 
-function problemOf(line: string, command: string, service: Service): CfLoomProblem {
+function problemOf(line: string, step: Step, service: Service): CfLoomProblem {
   const [, path, row, message] = cliLine.exec(line) ?? [];
   if (path === undefined || message === undefined) {
-    return { path: undefined, row: 1, message: `${command}: ${service.name}: ${line}` };
+    return { path: undefined, row: 1, message: stoppedBy(step.name, service, line) };
   }
-  return { path: posix.join(service.folder, path), row: Number(row ?? 1), message };
+  return {
+    path: posix.join(service.folder, path),
+    row: Number(row ?? 1),
+    message: stoppedBy(step.name, service, message),
+  };
+}
+
+/** A line that stops a Service: the step, the Service's package and what happened. */
+function stoppedBy(step: string, service: Service, message: string): string {
+  return `${step}: ${service.name}: ${message}`;
 }
