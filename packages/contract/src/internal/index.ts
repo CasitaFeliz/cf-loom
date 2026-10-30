@@ -358,6 +358,7 @@ export {
   isSameRejection,
   issueLineOf,
   linesTextOf,
+  logOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { growthOf } from '../../test/growth.ts';
 import { lineBreaksIn, linePool } from '../../test/line-breaks.ts';
 import { seededNext } from '../../test/random-schemas.ts';
-import { linesTextOf, unbrokenLineOf } from '../internal/index.ts';
+import { linesTextOf, logOf, unbrokenLineOf } from '../internal/index.ts';
 
 /** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
 const linearGrowth = 30;
@@ -121,5 +121,27 @@ describe('linesTextOf', () => {
     });
 
     expect(wrong).toEqual([]);
+  });
+});
+
+describe('logOf', () => {
+  test('a line is logged on one line, then its cause, the same object, when it has one', () => {
+    const cause = new Error('boom');
+    const lines = linePool();
+
+    const logged = lines.map((line) => logOf(line, cause));
+
+    expect(logged).toEqual(lines.map((line) => [unbrokenLineOf(line), cause]));
+    expect(logged.every((args) => args[1] === cause)).toBe(true);
+  });
+
+  test('a line with no cause is logged alone, and one with an undefined cause too', () => {
+    const lines = linePool();
+
+    const alone = lines.map((line) => logOf(line));
+    const undefinedCause = lines.map((line) => logOf(line, undefined));
+
+    expect(alone).toEqual(lines.map((line) => [unbrokenLineOf(line)]));
+    expect(undefinedCause).toEqual(alone);
   });
 });

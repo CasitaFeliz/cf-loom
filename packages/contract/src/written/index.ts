@@ -41,7 +41,7 @@ export {
   subjectVersionOf,
 } from './identity.ts';
 export { issueLineOf } from './issue-line.ts';
-export { linesTextOf, unbrokenLineOf } from './line.ts';
+export { linesTextOf, logOf, unbrokenLineOf } from './line.ts';
 export type {
   LocatedCode,
   LocatedCommand,
