@@ -9,7 +9,7 @@ import {
   untagByHand,
   wakeEach,
 } from '../../test/aws-arranging.ts';
-import { aClosedUrl, anAwsConnecting } from '../../test/aws-clients.ts';
+import { aClosedUrl, alteringAnswers, anAwsConnecting } from '../../test/aws-clients.ts';
 import { queueCountsOf } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
@@ -204,9 +204,85 @@ describe('consuming over sqs()', () => {
       expect(received).toEqual([]);
     },
   );
+
+  test.each([
+    {
+      name: 'a visibility timeout of 0',
+      arrange: (sqsClient: SQSClient, queue: string) =>
+        setQueueAttributes(sqsClient, queue, { VisibilityTimeout: '0' }),
+      difference: "has the VisibilityTimeout '0', which cf-loom cannot read",
+    },
+    {
+      name: 'a negative visibility timeout',
+      arrange: (sqsClient: SQSClient, queue: string) =>
+        setQueueAttributes(sqsClient, queue, { VisibilityTimeout: '-1' }),
+      difference: "has the VisibilityTimeout '-1', which cf-loom cannot read",
+    },
+    {
+      name: 'a visibility timeout of 12 hours',
+      arrange: (sqsClient: SQSClient, queue: string) =>
+        setQueueAttributes(sqsClient, queue, { VisibilityTimeout: '43200' }),
+      difference: "has the VisibilityTimeout '43200', which cf-loom cannot read",
+    },
+    {
+      name: 'a visibility timeout that is not a whole number',
+      arrange: (sqsClient: SQSClient) =>
+        answeringAttributes(sqsClient, { VisibilityTimeout: '1.5' }),
+      difference: "has the VisibilityTimeout '1.5', which cf-loom cannot read",
+    },
+    {
+      name: 'a maxReceiveCount of 0',
+      arrange: (sqsClient: SQSClient, queue: string) =>
+        setQueueAttributes(sqsClient, queue, { RedrivePolicy: redriveOf(0, queue) }),
+      difference: `has the RedrivePolicy '{"deadLetterTargetArn": "${deadLetterArnOf('QUEUE')}", "maxReceiveCount": 0}', whose maxReceiveCount cf-loom cannot read`,
+    },
+    {
+      name: 'a maxReceiveCount of more than 1,000',
+      arrange: (sqsClient: SQSClient, queue: string) =>
+        setQueueAttributes(sqsClient, queue, { RedrivePolicy: redriveOf(1_001, queue) }),
+      difference: `has the RedrivePolicy '{"deadLetterTargetArn": "${deadLetterArnOf('QUEUE')}", "maxReceiveCount": 1001}', whose maxReceiveCount cf-loom cannot read`,
+    },
+    {
+      name: 'a redrive policy with no maxReceiveCount',
+      arrange: (sqsClient: SQSClient) =>
+        answeringAttributes(sqsClient, { RedrivePolicy: '{"deadLetterTargetArn":"arn"}' }),
+      difference: `has the RedrivePolicy '{"deadLetterTargetArn":"arn"}', whose maxReceiveCount cf-loom cannot read`,
+    },
+    {
+      name: 'a redrive policy that is not JSON',
+      arrange: (sqsClient: SQSClient) => answeringAttributes(sqsClient, { RedrivePolicy: 'never' }),
+      difference: "has the RedrivePolicy 'never', whose maxReceiveCount cf-loom cannot read",
+    },
+  ])(
+    'consume rejects naming the queue and $name as a difference, never with a thrown error',
+    async ({ arrange, difference }) => {
+      const { consume, connecting, orders } = await aMessaging();
+      await arrange(connecting.sqs, orders.chargeQueue);
+
+      const consuming = consume(handlersOf([]), {});
+
+      const line = `The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} ${difference.replace('QUEUE', orders.chargeQueue)}: apply the Service's Broker plan`;
+      await expect(consuming).rejects.toThrow(line);
+    },
+  );
 });
 
 /** Removes the redrive policy of a queue, as the organization's tooling would. */
 function setRedriveAway(sqsClient: SQSClient, queue: string): Promise<void> {
   return setQueueAttributes(sqsClient, queue, { RedrivePolicy: '' });
 }
+
+/** The queue's dead-letter queue's ARN, which a redrive policy set by hand names. */
+function deadLetterArnOf(queue: string): string {
+  return `arn:aws:sqs:eu-west-1:123456789012:${queue}_dlq`;
+}
+
+/** Makes the queue answer `GetQueueAttributes` with these attributes over its own, for what moto does not store. */
+function answeringAttributes(sqsClient: SQSClient, attributes: Record<string, string>): void {
+  alteringAnswers(sqsClient, 'GetQueueAttributesCommand', (output) => {
+    output['Attributes'] = { ...(output['Attributes'] as object), ...attributes };
+  });
+}
+
+const redriveOf = (maxReceiveCount: number, queue: string) =>
+  JSON.stringify({ deadLetterTargetArn: deadLetterArnOf(queue), maxReceiveCount });
