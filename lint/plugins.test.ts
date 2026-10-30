@@ -143,6 +143,36 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual(['C14@11', 'C14@14', 'C14@19']);
   });
 
+  it('report a clock read in a test file, not in other files or other time functions (C30)', () => {
+    const lines = [
+      'export const started = performance.now();',
+      'export const stamped = Date.now();',
+      'export const global = globalThis.performance.now();',
+      'export const tick = process.hrtime();',
+      'export const elapsed = process.hrtime(tick);',
+      'export const exact = process.hrtime.bigint();',
+      'export const cpu = process.cpuUsage();',
+      'export const threadCpu = process.threadCpuUsage(cpu);',
+      'export const fixed = new Date(0).getTime();',
+      "export const parsed = Date.parse('2026-01-01');",
+      'export const random = Math.random();',
+      'export const usage = process.memoryUsage();',
+    ];
+
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([
+      'C30@1',
+      'C30@2',
+      'C30@3',
+      'C30@4',
+      'C30@5',
+      'C30@6',
+      'C30@7',
+      'C30@8',
+    ]);
+    expect(pluginReportsFor(lines, 'growth.ts')).toEqual([]);
+    expect(pluginReportsFor(lines)).toEqual([]);
+  });
+
   it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", () => {
     const lines = [
       'declare const schema: { readonly _zod: Record<string, unknown> };',

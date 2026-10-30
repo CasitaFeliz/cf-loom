@@ -83,18 +83,42 @@ plan comment on the issue:
 - what v1 needs, and the smallest version that serves it;
 - the public API: signatures with their TSDoc;
 - every file, with its one responsibility;
-- the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by a
-  randomized or exhaustive test, and the key set of each public record it adds or renames by a type test
-  ([C26](CODING_STANDARDS.md#tests));
+- its inputs and invariants, each part where it applies:
+  - each value the change reads that it did not build (a request, a Message, a file, a generated file, an option, what
+    a hook or a Broker returns), with the cases its tests cover: malformed, absent, wide and deep, a name every object
+    already has, a throw, rejection or hang from what it calls, and what the platform does by default; or why a case
+    does not apply;
+  - for code that reads a structure whose size an author or a Caller controls: its bound in time, memory and output
+    size against each dimension (depth, width, sharing, count), each covered by a growth test
+    ([C30](CODING_STANDARDS.md#tests));
+  - the invariants the code must hold (every generated identifier is valid and distinct in its scope), each covered by
+    a randomized or exhaustive test whose generator draws what the public API lets an author or a Caller produce,
+    including every case where the rule acts and every kind of node the format holds (asserted by the test), checked
+    against an independent oracle where one exists; the plan states what the generator leaves out;
+  - for each public type, type parameter or parameter whose type it adds or changes, its type promise: the rows that
+    must not compile and those that must, each a type test through the public entry point, always including `any`,
+    `never`, `unknown`, each type parameter's default, a union, a widened literal, a variable upcast to the shape, a
+    missing optional field and a generic wrapper; a row the mechanism cannot refuse is listed outside the promise, and
+    no document promises more; the key set of each public record it adds or renames is one row
+    ([C26](CODING_STANDARDS.md#tests));
+  - when one rule applies to many sites (parameters, records, reads), a test that lists the sites from the code, never
+    a hand-written list;
 - the test list: plain-English names, each through a public seam (C23);
 - the document sections it implements, linked, and every change it makes to them;
 - the new terms it adds to [CONTEXT.md](CONTEXT.md), and their existing uses in the documents, which the same PR
   spells as [CLAUDE.md](CLAUDE.md#documents) says;
+- every name, option, command, behavior or term it removes, renames or narrows, and each line of the documents and
+  TSDoc that states it, found by searching the whole repository, not only the sections it implements;
+- when the issue fixes a defect, every other instance of its kind across the packages, each in scope or a follow-up;
+- what it leaves out on purpose, each gap with the issue that holds it, an existing one or one opened before the
+  approval; a rule that judges what an earlier run, publish or version left behind names the record it reads, or
+  lists every input that can change between the two runs;
 - what the documents already settle that the issue relies on, kept apart from what is new;
 - the decisions the main session took itself, and the questions for the user ([Decisions](#decisions)).
 
 A `cf-plan-vetter` agent reads the plan before the user does. It states the problem and sketches its own answer before
-it reads the planner's; probes every fact a decision rests on; checks every option against the design principles; and
+it reads the planner's, its own inputs and invariants among it; probes every fact a decision rests on, checking that
+each probe's or oracle's pool holds the cases the decision changes; checks every option against the design principles; and
 sorts each question into settled by the documents, a decision for the user, or an implementation detail. The user then
 approves the plan or corrects it. Nothing is implemented before the approval.
 
@@ -108,6 +132,8 @@ approval, which completes the Definition of Ready, and says so on the plan comme
 - [ ] the public API is fixed: signatures and TSDoc;
 - [ ] every file is named, with one responsibility each;
 - [ ] the test list covers every behavior the issue asks for, each test through a public seam;
+- [ ] its inputs and invariants are listed as [1. Plan](#1-plan) says, with every item the vet's own list found missing;
+- [ ] what it removes, renames or narrows was searched across the repository, and every gap it leaves out is an issue;
 - [ ] the document sections it implements are linked, and every change to them is written in the plan;
 - [ ] its new terms are in the plan's CONTEXT.md changes;
 - [ ] what the documents already settle is listed apart from what is new;
@@ -138,7 +164,7 @@ and `pnpm-lock.yaml` left out, gets one reviewer with all three lenses.
 | --- | --- |
 | Design | Modules, seams, names, types: C1–C21 and C29 |
 | Fidelity | The code against the plans; CONTEXT.md, COMPATIBILITY.md, SNAPSHOT.md, the ARCHITECTURE.md files and the READMEs (C22); the documents' use of the glossary's terms ([CLAUDE.md](CLAUDE.md#documents)) |
-| Correctness | Bugs, edge cases, probes, and the tests: C23–C26 |
+| Correctness | Bugs, the plan's edges and the ones it left out, growth at two sizes, probes, and the tests: C23–C26 and C30 |
 
 Each finding gives its severity (must-fix, should-fix, nit), file and line, rule, evidence and fix, and three more
 fields: **Kind**, a slip or one instance of a class, with the other instances found; **Cause**, why the code came out

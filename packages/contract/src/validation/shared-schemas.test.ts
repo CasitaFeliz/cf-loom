@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { cpuMillisecondsOf, growthOf } from '../../test/growth.ts';
+import { growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
@@ -306,8 +306,11 @@ describe('failure lines: defs that hold defs', () => {
 
   const levels = 24;
   const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
-  /** The CPU time telling the 2^24 paths stays under when it walks each def once. */
-  const pathsCpuMilliseconds = 2000;
+  /**
+   * How many times longer a chain twice as deep may take to tell: about 2 when each def is told
+   * once, and 2 to the power of its length when each of the paths to it tells it afresh.
+   */
+  const toldOnceGrowth = 8;
 
   test.for([
     ['a valid union', () => z.union([z.string(), z.number()]), []],
@@ -318,16 +321,19 @@ describe('failure lines: defs that hold defs', () => {
       [`endpoints.GET /a (alpha) ${deepest} ${unionIsRefused}`],
     ],
   ] as const)(
-    '%s in the last of 24 defs, each holding the next twice, is told once, quickly',
+    '%s in the last of 24 defs, each holding the next twice, is told once',
+    { timeout: growthTimeout },
     ([, leaf, told]) => {
-      const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(levels, leaf()) });
-      const tell = () => linesOf(serviceWith([endpoint]));
+      const toldAt = (depth: number) => {
+        const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(depth, leaf()) });
+        return () => linesOf(serviceWith([endpoint]));
+      };
 
-      const lines = tell();
-      const cpuMilliseconds = cpuMillisecondsOf(tell, pathsCpuMilliseconds);
+      const lines = toldAt(levels)();
+      const growth = growthOf(toldAt, { small: 8, large: 16 }, toldOnceGrowth);
 
       expect(lines).toEqual(told);
-      expect(cpuMilliseconds).toBeLessThan(pathsCpuMilliseconds);
+      expect(growth).toBeLessThan(toldOnceGrowth);
     },
   );
 });
