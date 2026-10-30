@@ -227,4 +227,33 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
   });
+
+  it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'declare const cause: unknown;',
+      'declare function logOf(line: string, cause?: unknown): readonly unknown[];',
+      "console.error('plain');",
+      "console.warn('plain', cause);",
+      "console.error(...logOf('spread', cause));",
+      "console?.error('optional');",
+      "console['error']('computed');",
+      "console.log(...logOf('spread'), 'extra');",
+      "console.info(logOf('not spread'));",
+      'console.debug();',
+      "console.warn(...logOf('spread'));",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/server/src/probe.ts')).toEqual([
+      'C1@3',
+      'C1@4',
+      'C1@6',
+      'C1@7',
+      'C1@8',
+      'C1@9',
+      'C1@10',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/server/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+  });
 });

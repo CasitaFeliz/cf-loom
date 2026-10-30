@@ -14,5 +14,14 @@ or {
     $separator <: r"['\"`]\\n['\"`]",
     library_source(),
     register_diagnostic(span=$join, message="C1: join lines into a message with linesTextOf, which writes each on one line.", severity="error")
+  },
+  or {
+    `console.$method($arguments)`,
+    JsCallExpression(callee=JsStaticMemberExpression(object=`console`), arguments=JsCallArguments(args=$arguments)),
+    JsCallExpression(callee=JsComputedMemberExpression(object=`console`), arguments=JsCallArguments(args=$arguments))
+  } as $log where {
+    $arguments <: not [JsSpread(argument=`logOf($...)`)],
+    library_source(),
+    register_diagnostic(span=$log, message="C1: log through logOf, console.x(...logOf(line, cause)), which writes the line on one line.", severity="error")
   }
 }
