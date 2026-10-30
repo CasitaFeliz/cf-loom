@@ -30,6 +30,7 @@ import {
   aClosedUrl,
   alteringAnswers,
   anAwsConnecting,
+  countCommands,
   failingCommand,
 } from '../../test/aws-clients.ts';
 import {
@@ -438,6 +439,61 @@ describe('consuming over sqs()', () => {
     expect(lines).toEqual([line, line, line]);
     expect(received).toEqual([]);
     expect(faults).toEqual([]);
+  });
+
+  test('a Message delivered in SNS’s envelope, raw delivery turned off after consume started, is left the same way and reaches the dead-letter queue intact', async () => {
+    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { publisher, consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+    });
+    const received: Received[] = [];
+    await consume(handlersOf(received), {});
+    const arn =
+      (await queueTagsOf(connecting.sqs, orders.notifyQueue))['cf-loom:subscription'] ?? '';
+    await setSubscriptionAttribute(connecting.sns, arn, {
+      name: 'RawMessageDelivery',
+      value: 'false',
+    });
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+    const dead = `${orders.notifyQueue}_dlq`;
+    await until(async () => {
+      const stored = await messagesWithAttributesIn(connecting.sqs, dead);
+      expect(stored).toHaveLength(1);
+      expect(JSON.parse(stored[0]?.body ?? '')).toMatchObject({
+        Type: 'Notification',
+        Message: '{"orderId":"o-1"}',
+      });
+    });
+    const lines = written.mock.calls.map(([line]) => String(line)).filter(isLeftLine);
+    expect(lines).toHaveLength(3);
+    expect(
+      lines.every((line) => line.endsWith('cf-loom-message-id, cf-loom-fact-id, cf-loom-headers')),
+    ).toBe(true);
+    expect(received).toEqual([]);
+  });
+
+  test('an unreadable Message on a queue with a backoff tag gets no visibility change: it is in flight until its next receive, which the visibility timeout brings', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { consume, connecting, orders } = await aMessaging({
+      limits: limitsWith({ ackWait: ['1s', '1s'], maxDeliver: 3 }),
+    });
+    const changes = countCommands(connecting.sqs, 'ChangeMessageVisibilityCommand');
+    await storeIn(connecting.sqs, orders.notifyQueue, 'not cf-loom’s');
+
+    await consume(handlersOf([]), {});
+
+    await until(async () => {
+      const counts = await queueCountsOf(connecting.sqs, orders.notifyQueue);
+      expect(counts).toEqual({ visible: 0, inFlight: 1 });
+    });
+    await until(async () => {
+      expect(
+        await messagesWithAttributesIn(connecting.sqs, `${orders.notifyQueue}_dlq`),
+      ).toHaveLength(1);
+    });
+    expect(changes.sent()).toBe(0);
   });
 
   describe('a Message with cf-loom’s attributes in a form cf-loom cannot read', () => {

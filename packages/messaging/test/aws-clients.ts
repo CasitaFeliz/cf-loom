@@ -40,9 +40,9 @@ export function anAwsConnecting(
 }
 
 /** Counts the commands of one kind a client sends from now on, such as `SetSubscriptionAttributesCommand`. */
-export function countCommands(client: SNSClient, commandName: string) {
+export function countCommands(client: SNSClient | SQSClient, commandName: string) {
   let sent = 0;
-  client.middlewareStack.add(
+  (client as SNSClient).middlewareStack.add(
     (next, context) => (args) => {
       sent += context.commandName === commandName ? 1 : 0;
       return next(args);
