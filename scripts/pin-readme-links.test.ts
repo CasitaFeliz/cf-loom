@@ -76,4 +76,46 @@ describe('pinnedReadme', () => {
       ].join('\n'),
     );
   });
+
+  it.each([
+    ['a bare repository link', `[x](https://github.com/${repository}#readme)`],
+    ['blob/main with no path', `[x](https://github.com/${repository}/blob/main)`],
+    ['blob/main/ with an empty path', `[x](${atMain}/)`],
+    ['tree/main with no path', `[x](https://github.com/${repository}/tree/main)`],
+    ['tree/main with a path', `[x](https://github.com/${repository}/tree/main/packages)`],
+    [
+      'another case of the repository',
+      `[x](https://github.com/casitafeliz/cf-loom/blob/main/CONTEXT.md)`,
+    ],
+    ['blob/HEAD', `[x](https://github.com/${repository}/blob/HEAD/CONTEXT.md)`],
+    ['http instead of https', `[x](http://github.com/${repository}/blob/main/CONTEXT.md)`],
+    ['www.github.com', `[x](https://www.github.com/${repository}/blob/main/CONTEXT.md)`],
+    [
+      'raw.githubusercontent.com',
+      `[x](https://raw.githubusercontent.com/${repository}/main/CONTEXT.md)`,
+    ],
+    ['a link target with a title', `[x](${atMain}/CONTEXT.md "the glossary")`],
+    ['an autolink', `<${atMain}/CONTEXT.md>`],
+    ['an HTML link', `<a href="${atMain}/CONTEXT.md">x</a>`],
+    ['the repository named in prose', `The documents of ${repository} are on GitHub.`],
+    ['a relative link up', '[x](../../COMPATIBILITY.md)'],
+    ['a relative link here', '[x](./COMPATIBILITY.md)'],
+    ['a relative link by name', '[x](COMPATIBILITY.md#rules)'],
+  ])('refuses %s, naming its line', (_form, offending) => {
+    const readme = [`[ok](${atMain}/CONTEXT.md)`, '', offending].join('\n');
+
+    const pin = () => pinnedReadme(readme, repository, commit);
+
+    expect(pin).toThrow(/^line 3: /);
+  });
+
+  it('names every offending line when a README has several', () => {
+    const readme = ['[x](../up.md)', `[ok](${atMain}/CONTEXT.md)`, `<${atMain}/CONTEXT.md>`].join(
+      '\n',
+    );
+
+    const pin = () => pinnedReadme(readme, repository, commit);
+
+    expect(pin).toThrow(/^line 1: .*\nline 3: /);
+  });
 });
