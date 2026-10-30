@@ -1,4 +1,4 @@
-import { offCycle, writeDef } from './cycle-defs.ts';
+import { defsOf, offCycle, refuseNodelessCycles, writeDef } from './cycle-defs.ts';
 import { startMemos } from './memos.ts';
 import { droppedIdOf, hasOwnId, writtenIdOf } from './metadata.ts';
 import type { NotAllowed, SchemaNode } from './nodes.ts';
@@ -38,13 +38,12 @@ export function startRecursion(): Recursion {
     open: [],
     remembered: startRemembered(),
     schemaById: new Map(),
-    defById: new Map(),
     memos: startMemos(),
     count: 0,
   };
   return {
     within: (entering, walk) => within(state, entering, walk),
-    defs: () => Object.fromEntries(state.defById),
+    defs: () => defsOf(state),
     forgetUnnamedCycles: () => forgetUnnamedCycles(state),
     built: (composition) => state.memos.built(composition),
     memoOf: state.memos.memoOf,
@@ -72,8 +71,7 @@ function* within(state: State, entering: Entering, walk: () => Walking): Walking
   if (isRemembered(state, entered.schema)) {
     state.memos.close(entered, start);
   }
-  closeGroup(state, entered);
-  return result;
+  return closeGroup(state, entered, result);
 }
 
 /** A schema entered on the path and in an open group, on a cycle if any earlier walk of it judged so. */
@@ -92,6 +90,7 @@ function enter(state: State, entering: Entering): Entered {
     outer: deepestEntryOf(state, entering.schema),
     slot: state.open.length,
     droppedThrough: undefined,
+    def: undefined,
   };
   state.remembered.enter(entered);
   state.ancestors.push(entered);
@@ -184,15 +183,20 @@ function reachBackTo(state: State, reached: Entered): void {
   reachBack(state, reached.index);
 }
 
-/** A schema that reaches back to nothing above it closes its group: every schema entered since it. */
-function closeGroup(state: State, entered: Entered): void {
+/**
+ * A schema that reaches back to nothing above it closes its group: every schema entered since
+ * it. The group's nodeless cycles are judged first, once every def of it is written.
+ */
+function closeGroup(state: State, entered: Entered, result: Walked): Walked {
   if (entered.low !== entered.index) {
-    return;
+    return result;
   }
+  const judged = refuseNodelessCycles(state, entered, result);
   for (let member = state.open.pop(); member !== undefined; member = state.open.pop()) {
     member.isOpen = false;
     if (member === entered) {
-      return;
+      break;
     }
   }
+  return judged;
 }
