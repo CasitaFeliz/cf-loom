@@ -1,14 +1,18 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, onTestFinished, test } from 'vitest';
 import { anAwsConnecting, failingCommand } from '../../test/aws-clients.ts';
 import { attributesReceivedFrom, receivedFrom } from '../../test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
-  anOrders,
   arrangeOrders,
+  handlersOf,
   ordersContract,
   ordersWithTwoVersions,
+  type Received,
 } from '../../test/orders.ts';
+import { anOrdersMessaging } from '../../test/orders-messaging.ts';
+import { until } from '../../test/until.ts';
 import { MessageNotSentError, messaging } from '../index.ts';
+import { memory } from '../memory/index.ts';
 import { sqs } from './index.ts';
 
 let moto: MotoServer;
@@ -26,14 +30,8 @@ beforeEach(async () => {
 });
 
 /** A messaging() over sqs() whose topic and queues the Service's Broker plan describes, under a prefix. */
-async function aMessaging(prefix: string | null = 'staging') {
-  const connecting = anAwsConnecting(moto.url);
-  await arrangeOrders(connecting, { prefix });
-  const started = await messaging(
-    ordersContract,
-    sqs(prefix === null ? connecting : { ...connecting, prefix }),
-  );
-  return { ...started, connecting, orders: anOrders(prefix) };
+function aMessaging() {
+  return anOrdersMessaging(moto.url);
 }
 
 describe('publishing over sqs()', () => {
@@ -124,5 +122,39 @@ describe('publishing over sqs()', () => {
     expect(error).toBeInstanceOf(MessageNotSentError);
     expect(error).toMatchObject({ factId: 'f', sent: ['OrderCreated@2'] });
     expect((error as Error).cause).toBe(refusal);
+  });
+
+  test('a Fact id and Transport headers holding astral characters, controls, U+FFFE, quotes and backslashes reach the Handler as given, over sqs() as over memory()', async () => {
+    const given = {
+      factId: 'pedido \u{1f600} "1" \\ \u{fffe}\u{ffff} \u0001',
+      headers: {
+        'x-note': 'café  con\tleche "así" \\n',
+        'x-ctl': 'a\u0001b\u001f\u007fc',
+        'x-text': '日本 \u{1f389} \u{fffe}',
+        'x-empty': '',
+        'x-trace': 'A',
+        'X-Trace': 'B',
+        constructor: 'c',
+      },
+    };
+    const { publisher, consume } = await aMessaging();
+    const overSqs: Received[] = [];
+    await consume(handlersOf(overSqs), {});
+    const inMemory = await memory(ordersContract);
+    onTestFinished(() => inMemory.close());
+    const overMemory: Received[] = [];
+    await inMemory.consume(handlersOf(overMemory), {});
+
+    await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, given);
+    await inMemory.settled();
+
+    await until(() => expect(overSqs).toHaveLength(1));
+    const seenOf = (received: Received[]) => ({
+      factId: received[0]?.meta.factId,
+      headers: received[0]?.meta.headers,
+    });
+    expect(seenOf(overMemory)).toEqual(given);
+    expect(seenOf(overSqs)).toEqual(given);
   });
 });
