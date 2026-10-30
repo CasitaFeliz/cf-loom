@@ -25,4 +25,5 @@ for every role, its [Decisions](../../WORKFLOW.md#decisions), [Root-cause check]
    trigger is a blocker until the check runs: never classify it as a cost, a v1 cut or an implementation detail. When
    your strongest objection names a copy or a restatement, say which option removes it, or the probe showing none can.
 
-Write nothing in the worktree. Your final message lists blockers, should-fix and nits, then your answer per question.
+Write nothing in the worktree. Your final message lists blockers, should-fix and nits, then your answer per question,
+then each question for the user in final form, as [Decisions](../../WORKFLOW.md#decisions) says.

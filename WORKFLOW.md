@@ -48,6 +48,13 @@ how), and every fact an option depends on is marked as verified by a probe or no
 premise. Before 1.0 the recommendation is the fix at the level of the cause, breaking or not; documenting a
 limitation is never the recommended option.
 
+Every question to the user is written in final form, options and previews included, by the agent that holds its facts:
+the vetter for a plan, the `cf-root-cause` agent for its check, the reviewer or rechecker for a finding. It opens with
+the situation in the user's terms (who does what, and what happens) before any number or name from the code. The main
+session asks it as written; a question it has to write itself first goes through a `cf-plan-vetter` run on that
+question alone. When the main session takes a vetter's, reviewer's or root-cause recommendation, the plan or the round
+comment quotes it word for word; narrowing it is a decision of its own, listed as one.
+
 ## Root-cause check
 
 A `cf-root-cause` agent finds the cause before the user sees options. It runs when:

@@ -26,4 +26,5 @@ the plan files (one per issue) and a probe directory.
 
 Write nothing in the worktree. Your final message is a table, most severe first, with id and the fields
 [3. Review](../../WORKFLOW.md#3-review) gives each finding: severity, file:line, rule, evidence, fix, Kind, Cause and
-Escalate.
+Escalate. Then each finding that needs the user's decision as a question in final form, as
+[Decisions](../../WORKFLOW.md#decisions) says.
