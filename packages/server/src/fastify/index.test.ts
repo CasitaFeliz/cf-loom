@@ -1,9 +1,12 @@
+import { once } from 'node:events';
+import type { IncomingMessage } from 'node:http';
 import {
   constants,
   type Http2SecureServer,
   type Http2Server,
   type IncomingHttpHeaders,
 } from 'node:http2';
+import { request as httpsRequest } from 'node:https';
 import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
@@ -17,7 +20,7 @@ import Fastify, {
 } from 'fastify';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { answerOf, closeSessions, h2, h2Session } from '../../test/h2.ts';
+import { answerOf, closeSessions, h2, h2Session, selfSigned } from '../../test/h2.ts';
 import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
@@ -1273,6 +1276,57 @@ describe('fastifyServe', () => {
       expect(failed?.rstCode).toBe(constants.NGHTTP2_INTERNAL_ERROR);
       expect([summary.status, own.status, own.body]).toEqual([204, 200, 'ok']);
       expect(uncaught).toEqual([]);
+    });
+
+    describe('with allowHTTP1 over TLS', () => {
+      const tls = selfSigned();
+      const upload = JSON.stringify({ text: 'x'.repeat(300_000) });
+
+      /** One HTTP/1.1 request over TLS to the server at `url`: its status, headers and body. */
+      async function http1OverTls(url: string, path: string, body?: string) {
+        const request = httpsRequest(`${url}${path}`, {
+          method: body === undefined ? 'GET' : 'POST',
+          ca: tls.cert,
+          servername: 'localhost',
+          agent: false,
+          headers: { 'content-type': 'application/json' },
+        });
+        request.on('error', () => undefined);
+        request.end(body);
+        const [response] = (await once(request, 'response')) as [IncomingMessage];
+        const chunks: Buffer[] = [];
+        for await (const chunk of response) {
+          chunks.push(chunk);
+        }
+        const text = Buffer.concat(chunks).toString();
+        return { status: response.statusCode, headers: response.headers, body: text };
+      }
+
+      test('an HTTP/1.1 request and an HTTP/2 request are each answered by cf-loom, and a body over maxBodyBytes closes the connection over HTTP/1.1 and the stream over HTTP/2', async () => {
+        const { url } = await served({
+          fastify: { http2: true, https: { allowHTTP1: true, key: tls.key, cert: tls.cert } },
+          options: { maxBodyBytes: 1000 },
+        });
+        const session = h2Session(url, tls);
+
+        const overHttp1 = await http1OverTls(url, '/orders/o-1');
+        const overHttp2 = await h2(session, { ':path': '/orders/o-1' });
+        const tooLargeOverHttp1 = await http1OverTls(url, '/notes', upload);
+        const tooLargeOverHttp2 = await h2(
+          session,
+          { ':method': 'POST', ':path': '/notes', 'content-type': 'application/json' },
+          upload,
+        );
+
+        expect([overHttp1.status, overHttp1.body]).toEqual([200, '{"id":"o-1"}']);
+        expect([overHttp2.status, overHttp2.body]).toEqual([200, '{"id":"o-1"}']);
+        expect([tooLargeOverHttp1.status, tooLargeOverHttp1.headers.connection]).toEqual([
+          413,
+          'close',
+        ]);
+        expect(tooLargeOverHttp2).toMatchObject({ status: 413, ended: true, rstCode: 0 });
+        expect(tooLargeOverHttp2.headers.connection).toBeUndefined();
+      });
     });
   });
 });

@@ -2,6 +2,7 @@ import { defineEndpoint, defineGroup, defineService } from '@cf-loom/contract';
 import { handle, success, type WithResources } from '@cf-loom/handlers';
 import Fastify, { type FastifyBaseLogger, type FastifyTypeProvider } from 'fastify';
 import { describe, expect, test } from 'vitest';
+import { selfSigned } from '../../test/h2.ts';
 import { fastifyServe } from './index.ts';
 
 const getOrder = defineEndpoint({
@@ -125,5 +126,20 @@ describe('fastifyServe: where it registers', () => {
 
     expect(app.hasPlugin('fastifyServe')).toBe(true);
     await app.close();
+  });
+
+  test('the plugin registers on an HTTP/2 app, plaintext or over TLS with allowHTTP1', async () => {
+    const { key, cert } = selfSigned();
+    const h2c = Fastify({ http2: true });
+    const overTls = Fastify({ http2: true, https: { allowHTTP1: true, key, cert } });
+
+    await h2c.register(fastifyServe(contract, handlers, {}));
+    await overTls.register(fastifyServe(contract, handlers, {}));
+
+    expect([h2c.hasPlugin('fastifyServe'), overTls.hasPlugin('fastifyServe')]).toEqual([
+      true,
+      true,
+    ]);
+    await Promise.all([h2c.close(), overTls.close()]);
   });
 });
