@@ -150,6 +150,7 @@
   ],
   "plugins": [
     "./lint/no-boolean-parameter.grit",
+    "./lint/no-clock-in-tests.grit",
     "./lint/no-flatmap-filter.grit",
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit",
