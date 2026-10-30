@@ -12,7 +12,7 @@ import { type GroupTag, groupTagsOf } from '../tags/index.ts';
 import { channelOf, operationOf, type PublishedVersion } from './channels.ts';
 import { brokerHeadersName, brokerHeadersSchemaOf } from './headers.ts';
 import type { AsyncApiObject } from './objects.ts';
-import type { AsyncApiWire } from './wire.ts';
+import { type AsyncApiWire, channelBindingsOf } from './wire.ts';
 
 /** An AsyncAPI 3.1 document as `cf-loom asyncapi` prints it: a JSON value. */
 export type AsyncApiDocument = {
@@ -37,7 +37,7 @@ export function asyncApiDocumentOf(
   wire: AsyncApiWire,
   version: string,
 ): AsyncApiWritten {
-  const published = publishedVersionsOf(snapshot, wire.prefix);
+  const published = publishedVersionsOf(snapshot, wire);
   const defs = defComponentsOf(
     published.map(({ event }) => event.body),
     snapshot.defs,
@@ -64,15 +64,16 @@ export function asyncApiDocumentOf(
 /** The Message Versions the Service's EventPublisher publishes, Internal and Private alike, in code point order of their identity. */
 function publishedVersionsOf(
   snapshot: ServiceSnapshot,
-  prefix: string | null,
+  wire: AsyncApiWire,
 ): readonly PublishedVersion[] {
+  const bindings = channelBindingsOf(wire, snapshot.name);
   return Object.entries(snapshot.events)
     .filter(([, event]) => isLive(event))
     .toSorted(([left], [right]) => byCodePoint(left, right))
     .map(([identity, event]) => {
       const { name, version } = nameAndVersionOf(identity);
       const subject = subjectOf(snapshot.name, { kind: 'event', name, version });
-      return { identity, name, address: prefixedSubjectOf(prefix, subject), event };
+      return { identity, name, address: prefixedSubjectOf(wire.prefix, subject), bindings, event };
     });
 }
 

@@ -631,6 +631,16 @@ describe('cf-loom asyncapi: what it prints', () => {
 
 const identities = ['OrderCreated@1', 'OrderCreated@2', 'OrderNoted@1', 'TreeGrown@1'];
 
+/** The document without what the Broker's wire decides: its BrokerHeaders component and its channels' bindings. */
+function withoutWireOf(text: string): unknown {
+  const written = structuredClone(JSON.parse(text));
+  Reflect.deleteProperty(written.components.schemas, 'BrokerHeaders');
+  for (const channel of Object.values(written.channels)) {
+    Reflect.deleteProperty(channel as object, 'bindings');
+  }
+  return written;
+}
+
 describe('cf-loom asyncapi --broker', () => {
   let sqs: unknown;
 
@@ -656,6 +666,52 @@ describe('cf-loom asyncapi --broker', () => {
 
       expect(without.status).toBe(0);
       expect(named).toEqual(without);
+    },
+  );
+
+  test('with --broker sqs, the document differs from the JetStream one only in its BrokerHeaders component and its channels’ bindings', () => {
+    const options = ['--prefix', 'staging'];
+    const jetstream = cfLoom(fixture, 'asyncapi', ...options);
+    const bound = cfLoom(fixture, 'asyncapi', '--broker', 'sqs', ...options);
+
+    expect(bound.status).toBe(0);
+    expect(bound.stdout).not.toBe(jetstream.stdout);
+    expect(withoutWireOf(bound.stdout)).toEqual(withoutWireOf(jetstream.stdout));
+  });
+
+  test('with --broker sqs, every channel is bound to one SNS topic, at binding version 0.1.0', () => {
+    const bindings = identities.map((identity) => valueAt(sqsChannelOf(identity), 'bindings'));
+
+    expect(bindings).toEqual(
+      identities.map(() => ({ sns: { name: 'orders-service', bindingVersion: '0.1.0' } })),
+    );
+  });
+
+  test('with --broker sqs, a channel’s keys are address, x-cf-loom-visibility, messages and bindings, in that order', () => {
+    expect(keysOf(sqsChannelOf('OrderCreated@2'))).toEqual([
+      'address',
+      'x-cf-loom-visibility',
+      'messages',
+      'bindings',
+    ]);
+  });
+
+  test.for([
+    ['no prefix', []],
+    ['a prefix', ['--prefix', 'staging']],
+  ] as const)(
+    'with --broker sqs, every channel’s SNS topic is the Stream broker-plan prints: %s',
+    ([_case, options]) => {
+      const { plan } = JSON.parse(cfLoom(fixture, 'broker-plan', '--json', ...options).stdout);
+      const bound = JSON.parse(cfLoom(fixture, 'asyncapi', '--broker', 'sqs', ...options).stdout);
+
+      const topics = identities.map((identity) =>
+        valueAt(bound, 'channels', identity, 'bindings', 'sns', 'name'),
+      );
+
+      const [stream, ...others] = keysOf(valueAt(plan, 'streams'));
+      expect(others).toEqual([]);
+      expect(topics).toEqual(identities.map(() => stream));
     },
   );
 
