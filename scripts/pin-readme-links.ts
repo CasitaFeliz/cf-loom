@@ -21,7 +21,7 @@ const linkTargets = [
 
 const absoluteOrAnchor = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
 
-/** The first link target of a line with no scheme that is not an anchor, or `undefined` when there is none. */
+/** The first link target of a line with no scheme and no `#`, since npm and GitHub resolve it against `main`. */
 function relativeTargetIn(line: string): string | undefined {
   for (const pattern of linkTargets) {
     for (const match of line.matchAll(pattern)) {
@@ -34,10 +34,14 @@ function relativeTargetIn(line: string): string | undefined {
   return undefined;
 }
 
+/** Whether a line names `repository` in any case, as a whole name and not as the end of an owner or the start of a name. */
+function namesRepository(line: string, repository: string): boolean {
+  return new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i').test(line);
+}
+
 /** What is wrong with a line once its links to a file at `main` are removed, or `undefined` when nothing is. */
 function problemOf(restOfLine: string, repository: string): string | undefined {
-  const reference = new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i');
-  if (reference.test(restOfLine)) {
+  if (namesRepository(restOfLine, repository)) {
     const form = `https://github.com/${repository}/blob/main/<path>`;
     return `a reference to ${repository} that is not a link target ${form}`;
   }
@@ -57,11 +61,12 @@ export type ReadmePinning =
   | { readonly kind: 'refused'; readonly problems: readonly ReadmeProblem[] };
 
 /**
- * The README with each link to a file of `repository` at `main` pointing at the same file at `commit`.
+ * The README with each link to a file of `repository` at `main` pointing at the same file at `commit`, or the lines
+ * that keep it from being pinned, so that a pinned README holds nothing at `main`.
  *
- * The one form it pins is a Markdown link target `https://github.com/<repository>/blob/main/<path>`, anchor allowed.
- * It refuses, with the lines, any other reference to `repository` (compared ignoring case) and any link target with
- * no scheme that is not an anchor `#…`, so a pinned README holds nothing at `main`.
+ * It pins the link target `https://github.com/<repository>/blob/main/<path>` and refuses any other reference to
+ * `repository` and any target with no scheme and no `#`. It reads lines, not Markdown, so code that holds `](`,
+ * `href=` or `src=` followed by a relative target refuses a README too.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
