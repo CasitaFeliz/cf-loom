@@ -38,6 +38,7 @@ const restartsThenCloses = `${startsVitest}
 const vitest = await startVitest();
 const first = folderOf(vitest);
 await vitest.vite.restart();
+process.once('SIGTERM', () => process.exit());
 const second = folderOf(vitest);
 const afterFirstRestart = {
   moved: second !== first,

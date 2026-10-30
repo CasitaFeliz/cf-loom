@@ -680,7 +680,7 @@ function importsOutsideContract(service: string, path: string): string[] {
 }
 
 describe('the READMEs', () => {
-  test('Vitest writes the README Service when it loads its configuration', () => {
+  test('Vitest writes the README Service when it starts a project given it', () => {
     expect(existsSync(join(inject('readmeService'), 'tsconfig.json'))).toBe(true);
   });
 
