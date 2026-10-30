@@ -93,7 +93,7 @@ async function answeredWhenServed(
     return;
   }
   reply.hijack();
-  const taken = takenOf(request.raw, reply.raw, reply.getHeaders());
+  const taken = takenOf(reply.raw, reply.getHeaders());
   await respondedWith(taken, answeredFor(serving.http, taken, url));
 }
 

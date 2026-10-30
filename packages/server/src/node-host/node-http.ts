@@ -32,7 +32,7 @@ export function nodeHttp(http: Http): Server {
 
 /** Answers an incoming message with what `http` returns, written as `outgoing` does. */
 async function respond(http: Http, incoming: IncomingMessage, outgoing: ServerResponse) {
-  const taken = takenOf(incoming, outgoing);
+  const taken = takenOf(outgoing);
   await respondedWith(taken, answeredFor(http, incoming, taken.closed));
 }
 

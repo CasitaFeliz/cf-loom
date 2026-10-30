@@ -129,6 +129,7 @@ async function listenedTo(sent: { readonly method: string; readonly url: string 
   });
   const written = new PassThrough();
   const outgoing = Object.assign(written, {
+    req: incoming,
     statusCode: 0,
     appendHeader: () => outgoing,
     setHeader: () => outgoing,

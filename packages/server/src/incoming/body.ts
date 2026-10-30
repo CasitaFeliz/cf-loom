@@ -1,5 +1,4 @@
-import type { IncomingMessage } from 'node:http';
-import type { Http2ServerRequest } from 'node:http2';
+import type { Incoming } from './incoming.ts';
 
 /** What a body's next read finds on its request: a chunk, the end, or why it failed. */
 type Pulled =
@@ -13,9 +12,7 @@ type Pulled =
  * routes: it discards the body over HTTP/1.1 and resets the stream after the response over HTTP/2.
  * A cancel leaves the message as it is, and the writer ends a body read only in part.
  */
-export function lazyBodyOf(
-  incoming: IncomingMessage | Http2ServerRequest,
-): ReadableStream<Uint8Array> {
+export function lazyBodyOf(incoming: Incoming): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>(
     {
       pull: async (controller) => {
@@ -38,7 +35,7 @@ export function lazyBodyOf(
 }
 
 /** The message's next chunk, waiting for one when none is buffered. */
-async function pulledFrom(incoming: IncomingMessage | Http2ServerRequest): Promise<Pulled> {
+async function pulledFrom(incoming: Incoming): Promise<Pulled> {
   for (;;) {
     const chunk: Buffer | null = incoming.read();
     if (chunk !== null) {
@@ -55,7 +52,7 @@ async function pulledFrom(incoming: IncomingMessage | Http2ServerRequest): Promi
 }
 
 /** Waits until the message has a chunk, has ended, failed or closed. */
-function readableAgain(incoming: IncomingMessage | Http2ServerRequest): Promise<void> {
+function readableAgain(incoming: Incoming): Promise<void> {
   return new Promise((resolve) => {
     const events = ['readable', 'end', 'error', 'close'] as const;
     const settled = () => {
