@@ -1259,15 +1259,20 @@ describe('fastifyServe', () => {
       expect((await answer).body.length).toBe(JSON.stringify({ data: bigData }).length);
     });
 
-    test('when something fails once a request is taken, its stream is reset with an error code, and the session’s other streams and the app’s routes keep answering', async () => {
+    test('when something fails once a request is taken, its stream is reset with an error code, the session’s other streams and the app’s routes keep answering, and the request reaches onRequestAbort, then onResponse, since Node finishes an HTTP/2 response on every close', async () => {
+      const hooks: string[] = [];
       const { url } = await served({
         fastify: { http2: true },
-        before: (app) =>
+        before: (app) => {
           app.addHook('onRequest', async (request, reply) => {
             if (request.url.startsWith('/orders')) {
               reply.header('transfer-encoding', 'chunked');
             }
-          }),
+          });
+          app.addHook('onRequestAbort', async (request) => void hooks.push(`abort ${request.url}`));
+        },
+        after: (app) =>
+          app.addHook('onResponse', async (request) => void hooks.push(`response ${request.url}`)),
       });
       const session = h2Session(url);
       let failed: Awaited<ReturnType<typeof h2>> | undefined;
@@ -1283,6 +1288,12 @@ describe('fastifyServe', () => {
       expect(failed?.rstCode).toBe(constants.NGHTTP2_INTERNAL_ERROR);
       expect([summary.status, own.status, own.body]).toEqual([204, 200, 'ok']);
       expect(uncaught).toEqual([]);
+      expect(hooks).toEqual([
+        'abort /orders/o-1',
+        'response /orders/o-1',
+        'response /greet?name=Bob',
+        'response /healthz',
+      ]);
     });
 
     describe('with allowHTTP1 over TLS', () => {
