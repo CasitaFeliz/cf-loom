@@ -65,8 +65,12 @@ export function schemaDifferencesOf(
   place: SchemaPlace,
 ): readonly Difference[] {
   const differences: Difference[] = [];
-  const root = { position: place.position, steps: chainDown(undefined, place.at) };
-  const levels = [levelOf({ kind: 'use', pair }, defs, { ...root, entered: new Map() })];
+  const entry = {
+    position: place.position,
+    steps: chainDown(undefined, place.at),
+    entered: new Map(),
+  };
+  const levels = [levelOf({ kind: 'use', pair }, defs, entry)];
   for (let level = levels.at(-1); level !== undefined; level = levels.at(-1)) {
     const next = level.findings.next();
     if (next.done === true) {
