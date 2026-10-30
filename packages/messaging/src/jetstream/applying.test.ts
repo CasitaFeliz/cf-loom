@@ -1030,6 +1030,35 @@ describe('what applyBrokerPlan refuses', () => {
     expect([...kinds].sort()).toEqual(['boolean', 'list', 'null', 'number', 'object', 'string']);
   });
 
+  test('applyBrokerPlan refuses an ack wait of any JSON value, alone or in a list of 1 to 110 entries, on one line', async () => {
+    const prefix = aPrefix();
+    const connecting = { connect: aConnect().connect };
+    const offending: string[] = [];
+    const refuse = async (ackWait: unknown, label: string) => {
+      const durableConsumerDefaults = { ...testLimits.durableConsumerDefaults, ackWait };
+      const limits = readFromJson({ ...testLimits, durableConsumerDefaults });
+      const error = await rejectionOf(applyBrokerPlan(connecting, anOrders(prefix).plan, limits));
+      if (error.message.includes('\n')) {
+        offending.push(label);
+      }
+    };
+
+    for (const [at, value] of jsonValues.entries()) {
+      await refuse(value, `alone @${at}`);
+    }
+    for (let length = 1; length <= 110; length++) {
+      for (const at of jsonValues.keys()) {
+        const entries = Array.from(
+          { length: length - 1 },
+          (_, i) => jsonValues[(at + i) % jsonValues.length],
+        );
+        await refuse([...entries, '0s'], `${length} entries @${at}`);
+      }
+    }
+
+    expect(offending).toEqual([]);
+  });
+
   test('applyBrokerPlan refuses limits that are missing from untyped code, without calling connect', async () => {
     const service = aConnect();
     const prefix = aPrefix();
