@@ -5,8 +5,8 @@ import {
   follows,
   isJsonValue,
   isReservedCode,
+  joinedOf,
   methodNotAllowedResponseOf,
-  oneOf,
   rejectionResponseOf,
   reservedCodes,
   reservedResponseOf,
@@ -86,7 +86,7 @@ function reservedAnswerOf(
   otherMethods: readonly string[],
 ): Response {
   if (!isReservedCode(code)) {
-    const what = `r.reserved takes a Reserved code, ${oneOf(reservedCodes)}, not ${writtenTextOf(code)}`;
+    const what = `r.reserved takes a Reserved code, ${joinedOf(reservedCodes, 'or')}, not ${writtenTextOf(code)}`;
     throw mistakeOf({ ...whoOf(listed), what });
   }
   return code === 'METHOD_NOT_ALLOWED'

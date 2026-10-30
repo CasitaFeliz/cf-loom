@@ -1,4 +1,4 @@
-import { isPlainObject } from '@cf-loom/contract/internal';
+import { isPlainObject, joinedOf } from '@cf-loom/contract/internal';
 import {
   fieldRules,
   isLayoutField,
@@ -40,7 +40,7 @@ export function layoutOf(written: unknown): LoadedLayout {
   }
   const extra = Object.keys(written).find((key) => !isLayoutField(key));
   if (extra !== undefined) {
-    const takes = `${layoutFields.slice(0, -1).join(', ')} and ${layoutFields.at(-1)}`;
+    const takes = joinedOf(layoutFields, 'and');
     return failed(`layout.${extra} is no field of layout: it takes ${takes}`);
   }
   const paths: Record<LayoutField, string> = { ...defaultLayout };
