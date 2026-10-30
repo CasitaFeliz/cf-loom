@@ -722,9 +722,10 @@ function changeTextOf(kind: string, site: ChangeSite): string {
 
 /**
  * A Service Snapshot on each side of a seeded graph: for each def, a Guard whose Qualifier names
- * it and whose Context holds it in a field, and a Command and an Endpoint Retired on both sides
- * whose bodies name it, the Endpoint in its Input and its Success; and each export of the draw as
- * the body of one more Retired Command, so every def of both sides is reached.
+ * it and whose Context holds it in a field, a Command Retired on both sides whose body names it,
+ * and an Endpoint Retired on both sides whose Input body names it and whose Success body names the
+ * next def, so a body that is left unread shows; and each export of the draw as the body of one
+ * more Retired Command, so every def of both sides is reached.
  */
 function servicesOf(pair: DefPair) {
   const names = Object.keys(pair.baseline);
@@ -739,19 +740,23 @@ function servicesOf(pair: DefPair) {
     lifecycle: 'retired',
     ...retiredIn,
   });
-  const endpointOf = (body: SchemaNode, retiredIn: object): EndpointSnapshot => ({
+  const endpointOf = (
+    bodies: { readonly input: SchemaNode; readonly success: SchemaNode },
+    retiredIn: object,
+  ): EndpointSnapshot => ({
     name: 'getOrder',
     group: 'orders',
     visibility: 'public',
     description: 'One order',
     params: [],
     guards: [],
-    input: { params: null, query: emptyPart, headers: emptyPart, body },
-    success: { status: 200, headers: emptyPart, body },
+    input: { params: null, query: emptyPart, headers: emptyPart, body: bodies.input },
+    success: { status: 200, headers: emptyPart, body: bodies.success },
     rejections: [],
     lifecycle: 'retired',
     ...retiredIn,
   });
+  const nameAfter = (index: number) => names[(index + 1) % names.length] as string;
   const sideOf = (side: 'baseline' | 'proposed', retiredIn: object) => {
     const guards = names.map((name, index) => [`g${index}`, aGuardNaming(name)]);
     const retiredCommands = names.map((name, index) => [
@@ -764,7 +769,7 @@ function servicesOf(pair: DefPair) {
     ]);
     const endpoints = names.map((name, index) => [
       `GET /retired${index}`,
-      endpointOf(named(name), retiredIn),
+      endpointOf({ input: named(name), success: named(nameAfter(index)) }, retiredIn),
     ]);
     return {
       ...serviceHeading,
