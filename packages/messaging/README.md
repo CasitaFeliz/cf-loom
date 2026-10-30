@@ -1,6 +1,6 @@
 # @cf-loom/messaging
 
-`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError` and `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream`, `applyBrokerPlan` and their types, `JetStreamBrokerOptions`, `JetStreamConnecting`, `BrokerPlan` and `JetStreamBrokerLimits` among them, `@cf-loom/messaging/sqs` the `applyBrokerPlan` for Amazon SNS and SQS and its types, `SqsConnecting` and `SqsBrokerLimits` among them, and `@cf-loom/messaging/memory` `memory`, which runs a Contract's messaging in memory for tests, and its types (see [In memory](#in-memory)). What the Broker must hold, and how the adapter applies it, is in [The Broker plan](#the-broker-plan), [Applying the Broker plan](#applying-the-broker-plan) and [Leftover Durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
+`messaging`, which connects a Contract's messaging through a Broker: EventPublisher, CommandSender, `consume` for Subscriptions and Commands, `close`; the errors `InvalidMessageError`, `MessageNotSentError`, `MessagingClosedError`, `CloseAbortedError` and `DeadlineError`; and its types, `ConsumeOptions` and the `Broker` an adapter implements among them (see [Types](#types)). `@cf-loom/messaging/jetstream` is its adapter for NATS JetStream, `jetstream`, `applyBrokerPlan` and their types, `JetStreamBrokerOptions`, `JetStreamConnecting`, `BrokerPlan` and `JetStreamBrokerLimits` among them, `@cf-loom/messaging/sqs` its adapter for Amazon SNS and SQS, `sqs`, `applyBrokerPlan` and their types, `SqsBrokerOptions`, `SqsConnecting` and `SqsBrokerLimits` among them, and `@cf-loom/messaging/memory` `memory`, which runs a Contract's messaging in memory for tests, and its types (see [In memory](#in-memory)). What the Broker must hold, and how the adapter applies it, is in [The Broker plan](#the-broker-plan), [Applying the Broker plan](#applying-the-broker-plan) and [Leftover Durable consumers](#leftover-durable-consumers); how a Message travels is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md. Terms are defined in [CONTEXT.md](https://github.com/CasitaFeliz/cf-loom/blob/main/CONTEXT.md).
 
 The examples follow the layout in [A first Service](https://github.com/CasitaFeliz/cf-loom/blob/main/README.md#a-first-service) and leave out imports of the Contract's declarations.
 
@@ -26,7 +26,7 @@ One `Messaging` is one connection, used in four steps. Each step says what it re
      - each Delivery still settling (its Handler running within its wait, or its `onServiceFault` in flight) is handed back for another process;
      - the connection is closed, and `close` rejects with `CloseAbortedError`, whose `handedBack` names each, `{ name, subject, messageId, factId }`, its `cause` the signal's reason;
      - publishing, sending, `consume` and an `onBrokerTrouble` in flight are no longer waited for, and nothing more reaches `onBrokerTrouble` once closing started.
-   - That signal bounds the wait for what is in flight, not the Broker's closing: how long a Broker that does not answer keeps `close` waiting is the adapter's (see [JetStream](#jetstream)).
+   - That signal bounds the wait for what is in flight, not the Broker's closing: how long a Broker that does not answer keeps `close` waiting is the adapter's (see [JetStream](#jetstream) and [SNS/SQS](#snssqs)).
    - Calling `close()` again returns the same promise, which the signal of any call bounds.
    - Consuming rejects with `MessagingClosedError`, `messaging is closing`, while it waits, and once nothing is in flight, publishing, sending and consuming reject with `MessagingClosedError`, `messaging is closed`.
 
@@ -71,11 +71,11 @@ await sender.send('ChargeCard', { orderId }, { factId: `${meta.factId}:charge`, 
 
 `publish` takes an Event's name and one body for each of its Active and Deprecated versions, whatever Groups its versions sit in: leaving one out, or passing a Retired one, is a type error, so adding a new Message Version flags every place that publishes the Event; publishing an Event whose `version` is typed `number`, which keys no body, is a type error too. `send` takes a Command's name and sends its one Active version. Both validate every body of the call with its version's schema before any leaves, and send the parsed value; a body that breaks it is refused with `InvalidMessageError` (see below), each such version listed by its identity with its `issues` at `body`, and nothing is sent. `publish` sends the versions largest first, by the bytes of their Broker headers and body, versions of the same size in version order, so a Message too large for the organization's limits (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md) is the first refused and none of the call is sent.
 
-Every call takes a Fact id, which all its Messages share and every Message Handler receives to recognize a fact it already handled: a non-empty string that arrives as given on every Broker (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md). The calling code derives it from the fact: from the committed entity, or in a Message Handler from the Message it handles (`meta.factId`), so a retry or a redelivery sends the same id and the Broker drops the copy; a random id would send the fact again.
+Every call takes a Fact id, which all its Messages share and every Message Handler receives to recognize a fact it already handled: a non-empty string that arrives as given on every Broker (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md). The calling code derives it from the fact: from the committed entity, or in a Message Handler from the Message it handles (`meta.factId`), so a retry or a redelivery sends the same id and the Broker drops the copy on JetStream; SNS/SQS drops none (see [SNS/SQS](#snssqs)); a random id would send the fact again.
 
 `headers` are Transport headers, `traceparent` for one, an `undefined` one left out: opaque strings cf-loom passes to the Broker unread and hands to every Message Handler in its meta (see [Message Handlers](#message-handlers)). They are not part of the Contract and never validated against a schema, but one that would not arrive as given on every Broker is refused, a name in cf-loom's `Cf-Loom-` or NATS's `Nats-` namespace among them, in any case, and so are a Fact id and Transport headers that together take more than the 65,535 bytes JetStream stores in a Message's headers (see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md). `publish` and `send` reject with `InvalidMessageError`, whose `invalid` lists each part refused, all at once, the Fact id (`factId`), each Transport header (`headers.<name>`), each version whose headers are too large, then each body, one line each in its message, and send nothing.
 
-Each Message is sent with its Broker message id (`event.OrderCreated.v2:o-1:created`, see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker)), so the Broker drops a duplicate within its deduplication window. The Fact id also travels in its own header, `Cf-Loom-Fact-Id`, and is never parsed out of the id. `publish` resolves to `{ factId, duplicates }`, the identities of the versions the Broker already held and dropped, and `send` to `{ factId, duplicate }`: a duplicate is the expected outcome of a retry, or of a Fact id reused for another fact, which the calling code may log. If the Broker fails, `publish` and `send` reject with a `MessageNotSentError` that names the Fact id (`factId`) and the versions already sent (`sent`, `OrderCreated@1`, always empty for `send`), with the Broker's error as `cause`, and the Handler retries the whole call with the same Fact id: versions already sent are dropped as duplicates. A Message too large for the organization's NATS configuration is refused on every retry, the call sending none of its versions. How long the window lasts is the organization's Broker configuration; beyond it, Handlers still recognize the fact by its id. Publishing within the transaction that commits the change (an outbox) is the organization's.
+Each Message is sent with its Broker message id (`event.OrderCreated.v2:o-1:created`, see [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker)), so the Broker drops a duplicate within its deduplication window on JetStream; SNS/SQS drops none (see [SNS/SQS](#snssqs)). The Fact id also travels in its own header, `Cf-Loom-Fact-Id`, and is never parsed out of the id. `publish` resolves to `{ factId, duplicates }`, the identities of the versions the Broker already held and dropped, and `send` to `{ factId, duplicate }`: a duplicate is the expected outcome of a retry, or of a Fact id reused for another fact, which the calling code may log. If the Broker fails, `publish` and `send` reject with a `MessageNotSentError` that names the Fact id (`factId`) and the versions already sent (`sent`, `OrderCreated@1`, always empty for `send`), with the Broker's error as `cause`, and the Handler retries the whole call with the same Fact id: versions already sent are dropped as duplicates on JetStream; SNS/SQS drops none (see [SNS/SQS](#snssqs)). A Message too large for the organization's NATS configuration is refused on every retry, the call sending none of its versions. How long the window lasts is the organization's Broker configuration; beyond it, Handlers still recognize the fact by its id. Publishing within the transaction that commits the change (an outbox) is the organization's.
 
 ## Message Handlers
 
@@ -97,12 +97,12 @@ export default handle(
 - Returning nothing acknowledges the Message.
 - Throwing, or a Fault with `retryable: true`, leaves it unacknowledged, so the Durable consumer's configuration (ack wait, backoff, max deliveries), the organization's, decides when it comes again and what happens after the last attempt, and both reach `onServiceFault`; `deliveryCount` tells the Handler which attempt this is, and `lastAttempt` whether the Broker will not deliver it again, so the Handler may record the fact before it is dropped.
 - A Message Handler's Fault, `MessageFault`, takes no `retryAfter`: the Durable consumer's configuration decides when the Message comes again.
-- A Fault with `retryable: false` ends it (JetStream `term`): no redelivery, and it is logged.
+- A Fault with `retryable: false` ends it (JetStream `term`, SNS/SQS `DeleteMessage`): no redelivery, and it is logged.
 - Returning anything else counts as a throw.
 
 `headers` are the Transport headers the Message was published with (see [Publishing and sending](#publishing-and-sending)).
 
-A Handler is waited for as long as the Broker waits for the Message's acknowledgement, its Delivery's wait (for JetStream, the Durable consumer's ack wait or that Delivery's backoff entry). Past it:
+A Handler is waited for as long as the Broker waits for the Message's acknowledgement, its Delivery's wait (for JetStream, the Durable consumer's ack wait or that Delivery's backoff entry; for SNS/SQS, the queue's visibility timeout or that Delivery's backoff entry). Past it:
 
 - its `signal` aborts;
 - its Message is left for redelivery, and `onServiceFault` receives `thrown` with a `DeadlineError`, whose `waitMs` is the wait, as `cause`;
@@ -150,10 +150,10 @@ await running.close();
 
 ## Adapters
 
-An adapter is a `Broker` (see [Types](#types)); cf-loom ships the one for [JetStream](#jetstream), and an organization on another Broker may write its own, which obeys these obligations of its methods:
+An adapter is a `Broker` (see [Types](#types)); cf-loom ships the ones for [JetStream](#jetstream) and [SNS/SQS](#snssqs), and an organization on another Broker may write its own, which obeys these obligations of its methods:
 
 1. **`connect`** receives the Service's Stream and the subjects of the Messages it publishes and sends, unprefixed, and returns the connection `messaging` publishes, consumes and closes through. The core computes every subject, Stream and Durable consumer name unprefixed, and the adapter adds the Broker prefix.
-2. **`publish`**, the connection's: an `OutgoingMessage`'s `messageId` is the id the Broker deduplicates by, and `publish` resolves to `{ duplicate }`, whether the Broker dropped the Message as one it already held.
+2. **`publish`**, the connection's: an `OutgoingMessage`'s `messageId` is the id a Broker that deduplicates drops a repeated Message by, and `publish` resolves to `{ duplicate }`, whether the Broker dropped the Message as one it already held; a Broker that deduplicates nothing answers `duplicate: false`.
 3. **`consume`**, the connection's, and the Durable consumers it receives:
    - each `DurableConsumer`, `{ durable, stream, subject, receive }`, names its Durable consumer, and its `receive` runs its Handler and resolves to the `Settlement` the adapter applies, `'acked'`, `'ended'` (JetStream `term`), `'pending'`, left for redelivery, or `'handed-back'`, for redelivery now (JetStream `nak`), which the core answers only once `close`'s signal aborted;
    - each `Delivery` carries `waitMs`, how long the Broker waits for its acknowledgement, which the core waits for its Handler, or `undefined` when there is none to know;
@@ -224,6 +224,62 @@ The Service's NATS permissions must allow the subjects of `messaging()` and `con
 | `messaging()` | `$JS.API.STREAM.NAMES`, requested for the check of the Service's Stream; the Service's prefixed subjects, which it publishes on and whose acknowledgements come back through the connection's inbox | The Service |
 | `consume` | `$JS.API.CONSUMER.INFO` and `$JS.API.CONSUMER.MSG.NEXT` for each prefixed Stream and Durable consumer; the acknowledgement subjects `$JS.ACK.<stream>.<durable>.>`, or `$JS.ACK.<domain>.<account hash>.<stream>.<durable>.>` where NATS writes the longer form; a subscription on the connection's inbox for each pull | The Service |
 | `applyBrokerPlan` | `$JS.API.STREAM.INFO`, `$JS.API.STREAM.CREATE`, `$JS.API.STREAM.UPDATE` and `$JS.API.STREAM.NAMES`, and `$JS.API.CONSUMER.INFO` and `$JS.API.CONSUMER.CREATE`, for the Broker plan's names | Whoever applies the Broker plan |
+
+### SNS/SQS
+
+`sqs({ sns, sqs, account, prefix })` from `@cf-loom/messaging/sqs` connects to Amazon SNS and SQS, in one account and one region per environment, through the organization's own clients, as `jetstream()` connects to NATS:
+
+```ts
+import { messaging } from '@cf-loom/messaging';
+import { sqs } from '@cf-loom/messaging/sqs';
+
+const running = await messaging(contract, sqs({ ...sqsConnecting, prefix: 'staging' }));
+```
+
+#### Options
+
+- `sns`, `sqs` and `account` are the `SqsConnecting` that `applyBrokerPlan` takes too (see [On SNS/SQS](#on-snssqs)): the organization's `SNSClient` and `SQSClient`, of one account and region, and the account's 12-digit id. cf-loom never destroys the clients and sets nothing on them, so their credentials, retries and timeouts are the organization's, and so is how long a call that hangs may take, which only the client's request handler bounds.
+- Its AWS packages, `@aws-sdk/client-sns`, `@aws-sdk/client-sqs` and `@aws-sdk/core`, are optional peer dependencies (see [Runtime](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#runtime) in the root ARCHITECTURE.md).
+- `prefix` is in [Over the Broker](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#over-the-broker) in the root ARCHITECTURE.md, and goes in front of every Stream and Durable consumer name, so the topic and the queues are the ones `applyBrokerPlan` made under the Broker plan's `prefix`.
+- `sqs()` throws on a `prefix` that is not kebab-case of at most 64 characters, `''` included: leave it undefined for none; and on an `account` that is not 12 digits, as `applyBrokerPlan` refuses it.
+
+#### At connect
+
+- `messaging()` rejects, before any call to AWS, when the clients are in two regions, naming both. Then, when the Service publishes or sends anything, it asks SNS for the Service's prefixed topic and rejects when it does not exist, `The stream <prefixed Stream> has no SNS topic <ARN>: apply the Service's Broker plan`; any other error of that check rejects it unchanged. A Service that publishes and sends nothing has no topic and checks none. cf-loom opens no connection of its own, so there is none to drain on a refusal.
+
+#### At publish
+
+- Each Message is one `Publish` to the Service's topic: its body, the UTF-8 JSON text, is the SNS message, and four message attributes of the DataType `String` carry its prefixed subject, Broker message id, Fact id and Transport headers (see [On SNS/SQS](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#on-snssqs) in the root ARCHITECTURE.md). A rejection of the SNS client rejects `publish` and `send` with `MessageNotSentError`, the client's error as `cause`.
+- The topic is standard and SNS deduplicates nothing, so `publish` resolves with no `duplicates`, `send` with `duplicate: false`, and a retried publish delivers again; a Handler recognizes a fact it already handled by its Fact id.
+- The topic's `MaximumMessageSize` is the organization's, and counts the four attributes with the body. The attributes write a value with characters outside printable ASCII as `\uXXXX` escapes, so a control character's byte becomes six characters, and `publish`'s largest-first order, measured as JetStream stores a Message (see [Publishing and sending](#publishing-and-sending)), holds on SNS only up to what the attributes and that growth add. SNS refuses a body holding U+FFFE or U+FFFF on every retry, as NATS `max_payload` refuses a Message too large.
+
+#### At consume
+
+- `consume` asks SQS for the queue of each Subscription and Command Version whose Handler it pulls, by the prefixed Durable consumer's name, before it receives from any, and rejects, receiving from none, with a line for each Durable consumer wrong, naming it and saying to apply the Broker plan:
+  - a queue that does not exist, `The Durable consumer <name> has no queue <queue>`;
+  - a queue or subscription `applyBrokerPlan` would write otherwise, with each difference: no redrive policy, or a `maxReceiveCount`, a visibility timeout or a `cf-loom:backoff` tag cf-loom cannot read by the rule `applyBrokerPlan` writes them with (a whole number from 1 to 1000, whole seconds under 12 hours); no `cf-loom:subscription` tag, or one that names no subscription; a queue ARN that is not the one built from the clients' account and region, naming both and the other account; and the subscription that tag names, which costs one `GetSubscriptionAttributes` for each Durable consumer, on another topic, for another queue, with raw delivery off or with another filter policy or filter policy scope, a filter policy equal as JSON counting as the same.
+- Any other error of that check, an SNS or SQS client that fails, rejects it unchanged. A `consume` that was rejected may be called again once the Broker plan is applied (see [Applying the Broker plan](#applying-the-broker-plan)). The queue's policy is not checked, and a queue or subscription changed after `consume` is found at the next one.
+- Each Durable consumer receives one Message at a time with a long poll of 20 seconds, taking the next only once the last is settled, so no Message waits in the Service. The Service's Durable consumers run side by side, and several processes of the Service may receive from one queue.
+- A Message reaches its Handler as [On SNS/SQS](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#on-snssqs) in the root ARCHITECTURE.md reads it back, with SQS's `ApproximateReceiveCount` as `deliveryCount`; `lastAttempt` is true when it reaches the `maxReceiveCount` of the queue's redrive policy, which every queue `applyBrokerPlan` makes has.
+- A Handler is waited for that Delivery's wait: the queue's visibility timeout, or, with a `cf-loom:backoff` tag, for each Delivery after the first its entry, the last repeating. They are read at `consume`, so a changed visibility timeout, backoff or subscription reaches a running Service the next time it consumes. Before a later Delivery's Handler runs, cf-loom changes the Message's visibility to its entry; when that fails, the Handler is not run, the failure counts as a failed pull, and the Message comes back after the queue's visibility timeout, that receive counting toward `maxReceiveCount`.
+- `acked` and `ended` delete the Message (`DeleteMessage`), `pending` leaves it to SQS, and `handed-back` makes it visible again at once (`ChangeMessageVisibility` to 0). A Settlement SQS refuses while consuming is told to nobody, as a JetStream acknowledgement is never heard of: the Message comes back after its wait.
+- A Message cf-loom cannot read is never deleted by the adapter: one lacking `cf-loom-message-id`, `cf-loom-fact-id` or `cf-loom-headers`, or holding one that does not read back as [On SNS/SQS](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#on-snssqs) in the root ARCHITECTURE.md says, one of any DataType but `String`, SNS's envelope that a subscription whose raw delivery was turned off after `consume` delivers, or one whose receive count SQS did not give. It is left pending, so the redrive moves it intact to the dead-letter queue, `<queue>_dlq`, after `maxReceiveCount` receives. Each such Delivery writes one line to the console, `<queue>: left SQS message <SQS MessageId> for the dead-letter queue, since it lacks or cannot read <names>`, and nothing reaches `onServiceFault`; watching the dead-letter queue is the organization's.
+- A receive that fails, as when the queue is deleted, is tried again a second later; the first such failure and the first answer after it reach `onBrokerTrouble` (see [onBrokerTrouble](#onbrokertrouble)), so consuming resumes once the queue exists again and the Service hears of both.
+
+#### At close
+
+- `close` lets each open receive finish, up to 20 seconds or as long as the SQS client lets a request run, and what it returns is handed back (`ChangeMessageVisibility` to 0) without being read, so the next process of the Service receives it at once; a receive that failed, and its pause, end at once. `close({ signal })` does not shorten that wait (see [Connecting](#connecting)); it hands back each Delivery still settling once its signal aborts, as on any Broker.
+- A Settlement SQS refuses once closing started, a `DeleteMessage` of a Handler that finished after `close()` started or a hand-back, makes `close` reject with an `Error`, `SQS refused to settle Messages of the Durable consumers <a>, <b>`, each prefixed Durable consumer named once and the first client error as `cause`; on AWS a hand-back on a receipt handle whose visibility just ran out may be refused so. The clients are never destroyed.
+
+#### What differs from JetStream
+
+- `duplicate` is never reported and a retried publish delivers again, which a Handler recognizes by its Fact id.
+- `ended` deletes the Message, which never reaches the dead-letter queue.
+- A Delivery cf-loom cannot read reaches the dead-letter queue intact, where JetStream ends it, and that includes one whose `cf-loom-headers` holds a header the core would refuse, where JetStream drops only that header.
+- A Settlement SQS refuses while consuming is heard of by nobody, so a Service missing `sqs:DeleteMessage` handles every Message again each wait until the redrive moves it to the dead-letter queue; once closing started, it rejects `close`.
+- A receive handed back at close, or whose visibility change failed, counts toward the redrive's receives.
+- `close` may wait up to 20 seconds.
+- The queue's policy is not checked.
 
 ## The Broker plan
 
@@ -311,10 +367,12 @@ await applyBrokerPlan(sqsConnecting, plan, {
 
 #### AWS permissions
 
-The permissions of whoever applies the Broker plan must allow `applyBrokerPlan`.
+The Service's AWS permissions must allow `messaging()` and `consume` (see [SNS/SQS](#snssqs)), and the permissions of whoever applies the Broker plan those of `applyBrokerPlan`:
 
 | Operation | IAM actions | Needed by |
 | --- | --- | --- |
+| `messaging()` | `sns:GetTopicAttributes` and `sns:Publish` on the Service's topic | The Service |
+| `consume` | `sqs:GetQueueUrl`, `sqs:GetQueueAttributes`, `sqs:ListQueueTags`, `sqs:ReceiveMessage`, `sqs:DeleteMessage` and `sqs:ChangeMessageVisibility` on the queues of the Durable consumers it pulls, and `sns:GetSubscriptionAttributes` on their subscriptions, which AWS limits to 30 to 3,000 calls a second by region, adjustable, one for each Durable consumer at each `consume` | The Service |
 | `applyBrokerPlan` | `sns:CreateTopic`, `sns:GetTopicAttributes`, `sns:Subscribe`, `sns:ListSubscriptionsByTopic`, `sns:GetSubscriptionAttributes`, `sns:SetSubscriptionAttributes`; `sqs:CreateQueue`, `sqs:GetQueueUrl`, `sqs:GetQueueAttributes`, `sqs:SetQueueAttributes`, `sqs:TagQueue`, `sqs:UntagQueue` | Whoever applies the Broker plan |
 
 ## Leftover Durable consumers
@@ -353,4 +411,4 @@ On SNS/SQS the leftovers are found by the same rule: the queues whose `cf-loom:d
 - `JetStreamBrokerOptions`, `{ connect, prefix?, jetstream? }`: what `jetstream()` takes, a `JetStreamConnecting` and the Broker prefix, and what it returns is a `Broker`.
 - `BrokerPlan`, `{ prefix, streams, durableConsumers }`, with `BrokerPlanStream`, `{ service, subjects }`, and `BrokerPlanDurableConsumer`, `{ service, stream, subject }`: the `plan` of the document `cf-loom broker-plan --json` prints.
 - `JetStreamBrokerLimits`, `{ streamDefaults?, durableConsumerDefaults?, streams?, durableConsumers? }`, with `JetStreamStreamLimits`, `{ retention, maxAge, duplicateWindow, replicas, storage }`, `JetStreamDurableConsumerLimits`, `{ deliverPolicy, ackWait, maxDeliver, maxAckPending }`, and `Duration`: what `applyBrokerPlan` takes besides the Broker plan.
-- `SqsConnecting`, `{ sns, sqs, account }`: the organization's SNS and SQS clients of one account and region, and the account's id; `SqsBrokerLimits`, `{ durableConsumerDefaults?, durableConsumers? }`, with `SqsDurableConsumerLimits`, `{ ackWait, maxDeliver, retention, deadLetterRetention }`: what the `applyBrokerPlan` of `@cf-loom/messaging/sqs` takes besides the Broker plan.
+- `SqsConnecting`, `{ sns, sqs, account }`: the organization's SNS and SQS clients of one account and region, and the account's id; `SqsBrokerOptions`, `{ sns, sqs, account, prefix? }`: what `sqs()` takes, an `SqsConnecting` and the Broker prefix, and what it returns is a `Broker`; `SqsBrokerLimits`, `{ durableConsumerDefaults?, durableConsumers? }`, with `SqsDurableConsumerLimits`, `{ ackWait, maxDeliver, retention, deadLetterRetention }`: what the `applyBrokerPlan` of `@cf-loom/messaging/sqs` takes besides the Broker plan.

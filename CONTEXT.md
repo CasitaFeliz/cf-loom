@@ -153,11 +153,11 @@ The Broker's named, persistent position of one Subscription, or of one Command's
 _Avoid_: subscriber, queue group, cursor, consumer (alone)
 
 **Broker prefix**:
-An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream adapter (`jetstream({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the Broker plan; it is no part of a Contract or a Snapshot.
+An optional kebab-case name of at most 64 characters, as a Service name is, in front of every subject, Stream and Durable consumer name, so several environments can share one Broker. The JetStream and SNS/SQS adapters (`jetstream({ prefix })`, `sqs({ prefix })`) and `broker-plan` and `asyncapi` (`--prefix`) take it, and `applyBrokerPlan` reads it from the Broker plan; it is no part of a Contract or a Snapshot.
 _Avoid_: namespace, environment, prefix (alone)
 
 **Broker message id**:
-The id the Broker deduplicates a Message by, `<event|command>.<Name>.v<version>:<factId>` (`event.OrderCreated.v1:o-1`), which a Message Handler receives as `messageId`.
+The id each Message travels with on the Broker, `<event|command>.<Name>.v<version>:<factId>` (`event.OrderCreated.v1:o-1`), which JetStream deduplicates by and a Message Handler receives as `messageId`.
 _Avoid_: message id, dedup key
 
 **Transport header**:
