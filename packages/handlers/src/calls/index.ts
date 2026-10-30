@@ -3,10 +3,8 @@ export { defaultedMetaOf, firstAttempt } from './direct-meta.ts';
 export {
   answerOf,
   faultLineOf,
-  faultLogOf,
   InvalidCallError,
   InvalidOutcomeError,
-  logOf,
   messageAnswerOf,
   nameOf,
 } from './errors.ts';

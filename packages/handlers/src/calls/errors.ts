@@ -73,19 +73,6 @@ export function faultLineOf(source: string, fault: { readonly message: string })
   return `${source}: ${fault.message}`;
 }
 
-/** A line as the console logs it: the line, then its `cause` when it has one. */
-export function logOf(line: string, cause: unknown): readonly unknown[] {
-  return cause === undefined ? [line] : [line, cause];
-}
-
-/** A Fault as the console logs it, after what it came from: its message, then its `cause` when it has one. */
-export function faultLogOf(
-  source: string,
-  fault: { readonly message: string; readonly cause?: unknown },
-): readonly unknown[] {
-  return logOf(faultLineOf(source, fault), fault.cause);
-}
-
 /** One line per Issue, naming the declaration. */
 function issueLinesOf(declaration: Handled, issues: readonly Issue[]): readonly string[] {
   return issues.map((issue) => issueLineOf(nameOf(declaration), issue));

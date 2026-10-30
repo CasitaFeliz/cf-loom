@@ -1,10 +1,6 @@
 import type { Command, Subscription } from '@cf-loom/contract';
-import {
-  faultLineOf,
-  faultLogOf,
-  type HandlerFaultBase,
-  hookFailureOf,
-} from '@cf-loom/handlers/internal';
+import { logOf } from '@cf-loom/contract/internal';
+import { faultLineOf, type HandlerFaultBase, hookFailureOf } from '@cf-loom/handlers/internal';
 import type { DurableConsumerTrouble } from '../broker/index.ts';
 import type { CoreDurableConsumer } from './details.ts';
 
@@ -66,10 +62,10 @@ async function logBrokerTrouble(trouble: BrokerTrouble): Promise<void> {
   const source = sourceOf(trouble);
   switch (trouble.kind) {
     case 'pull-failed':
-      console.error(...faultLogOf(source, { message: 'pulls are failing', cause: trouble.cause }));
+      console.error(...logOf(faultLineOf(source, { message: 'pulls are failing' }), trouble.cause));
       return;
     case 'recovered':
-      console.error(faultLineOf(source, { message: 'pulls are answered again' }));
+      console.error(...logOf(faultLineOf(source, { message: 'pulls are answered again' })));
       return;
   }
 }
