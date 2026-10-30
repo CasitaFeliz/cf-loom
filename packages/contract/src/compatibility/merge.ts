@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '../lines/index.ts';
 import {
   type ByKey,
   type CodeSnapshot,
@@ -63,7 +64,9 @@ function mergedOf(
 ): PublishedSnapshot {
   if (baseline !== undefined && !isBaselineOf(baseline, proposed)) {
     throw new Error(
-      `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
+      unbrokenLineOf(
+        `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
+      ),
     );
   }
   switch (proposed.kind) {

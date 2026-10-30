@@ -1,4 +1,5 @@
 import type { Lifecycle } from '../declarations/index.ts';
+import { unbrokenLineOf } from '../lines/index.ts';
 import type { ServiceSnapshot } from '../snapshot/index.ts';
 import { byCodePoint } from '../walker/index.ts';
 import {
@@ -104,7 +105,7 @@ function subscriptionOf([name, { event }]: readonly [
 ]): RoutedSubscription {
   const reference = readEventReference(event);
   if (reference === undefined) {
-    throw new Error(`${event} is no Subscription’s Event: a bug.`);
+    throw new Error(unbrokenLineOf(`${event} is no Subscription’s Event: a bug.`));
   }
   const { service: provider, ...version } = reference;
   return { name, provider, event: version };

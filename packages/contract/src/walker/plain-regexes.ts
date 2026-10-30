@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '../lines/index.ts';
 import type { Regex } from './nodes.ts';
 
 const sourceGetter = prototypeGetterOf('source');
@@ -44,7 +45,9 @@ function prototypeGetterOf(key: 'source' | 'flags'): () => string {
   const getter = Object.getOwnPropertyDescriptor(RegExp.prototype, key)?.get;
   if (getter === undefined) {
     throw new Error(
-      `RegExp.prototype has no ${key} getter: this runtime is not one cf-loom supports.`,
+      unbrokenLineOf(
+        `RegExp.prototype has no ${key} getter: this runtime is not one cf-loom supports.`,
+      ),
     );
   }
   return getter;

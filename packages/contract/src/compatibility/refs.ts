@@ -1,3 +1,4 @@
+import { unbrokenLineOf } from '../lines/index.ts';
 import type { Defs, SchemaNode } from '../walker/index.ts';
 import type { BothDefs, NodePair } from './findings.ts';
 
@@ -30,7 +31,7 @@ function defOf(node: SchemaNode, defs: Defs): SchemaNode {
   }
   const def = defs[node.name];
   if (def === undefined) {
-    throw new Error(`\`ref\` to ${node.name} reaches no schema: a bug.`);
+    throw new Error(unbrokenLineOf(`\`ref\` to ${node.name} reaches no schema: a bug.`));
   }
   return def;
 }
