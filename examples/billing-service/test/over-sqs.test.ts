@@ -6,6 +6,7 @@ import { motoClientsAt } from '../../../packages/messaging/test/aws-connecting.t
 import { queueCountsOf } from '../../../packages/messaging/test/aws-reading.ts';
 import { aMotoServer, type MotoServer } from '../../../packages/messaging/test/moto-server.ts';
 import { until } from '../../../packages/messaging/test/until.ts';
+import { chargesOf } from '../../orders-service/src/charges/charges.ts';
 import { draftsOf } from '../src/billing/drafts.ts';
 import { brokerPrefix } from './environments.ts';
 import { billingOver, ordersOver, type RunningService } from './services-over-a-broker.ts';
@@ -81,5 +82,13 @@ describe('orders-service and billing-service over SNS/SQS', () => {
 
     await until(() => expect(draftsOf(orderId)).toEqual([{ orderId, total: TOTAL }]));
     await untilDeleted(billingDrafting);
+  });
+
+  test('orders’ own Subscription sends ChargeCard through SNS and SQS, and orders’ Message Handler charges the order', async () => {
+    const orderId = await placeAnOrder();
+
+    await until(() => expect(chargesOf(orderId)).toEqual([{ orderId, total: TOTAL }]));
+    await untilDeleted(ordersCharging);
+    await untilDeleted(ordersHandlingCharge);
   });
 });
