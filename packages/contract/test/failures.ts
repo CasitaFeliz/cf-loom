@@ -4,6 +4,7 @@ import {
   type Failure,
   refusalsIn,
   siteTextOf,
+  stepListOf,
   type ValidatedRoot,
   type walkSchemas,
 } from '../src/internal/index.ts';
@@ -60,7 +61,7 @@ export function refusalsOf({ located, defs }: ReturnType<typeof walkSchemas>) {
             kind: walked.kind,
             failures: refusalsIn(walked.tree).map(({ steps, construct, instead }) => ({
               kind: 'not-allowed',
-              at: authorPathOf(steps) ?? '',
+              at: authorPathOf(stepListOf(steps)) ?? '',
               construct,
               ...(instead && { instead }),
             })),
@@ -82,7 +83,7 @@ export function refusalLocationsOf({ located }: ReturnType<typeof walkSchemas>) 
     }
   }
   return [...refusals].map(({ site, steps, construct }) => {
-    const path = authorPathOf(steps);
+    const path = authorPathOf(stepListOf(steps));
     const where = siteTextOf(site);
     return { location: path === null ? where : `${where} ${path}`, construct };
   });

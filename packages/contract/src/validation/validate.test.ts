@@ -28,12 +28,12 @@ function validateInPackage(root: Root) {
 
 /** Where the walker is asked to walk a schema here: a site of its own, named, with no steps. */
 function aPlace(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 /** Where a declaration sits: at its site, with the declaration itself and no steps. */
 function sitting(site: Site, declaration: unknown) {
-  return { site, declaration, steps: [] };
+  return { site, declaration, steps: undefined };
 }
 
 function noOrigin() {

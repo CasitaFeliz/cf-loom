@@ -10,7 +10,7 @@ import { type SchemaNode, type StringFormat, walkSchemas } from '../internal/ind
 const bodyAt = {
   site: { kind: 'export', name: 'body' },
   declaration: undefined,
-  steps: [],
+  steps: undefined,
 } as const;
 
 function walkBody(schema: core.$ZodType) {

@@ -1,4 +1,13 @@
-import { authorPathOf, fieldStep, pathTailOf, type Step, tokenOf } from './steps.ts';
+import {
+  authorPathOf,
+  chainDown,
+  fieldStep,
+  pathTailOf,
+  type Step,
+  type StepChain,
+  stepsBelow,
+  tokenOf,
+} from './steps.ts';
 
 /** An Endpoint by identity, with its name. */
 type EndpointSite = { readonly kind: 'endpoint'; readonly identity: string; readonly name: string };
@@ -79,23 +88,24 @@ export function locationBelowOf(text: string, place: Place, below: readonly Step
   if (below.length === 0) {
     return text;
   }
-  return place.steps.length === 0 ? siteLocationOf(place.site, below) : text + pathTailOf(below);
+  return place.steps === undefined ? siteLocationOf(place.site, below) : text + pathTailOf(below);
 }
 
 /**
  * Where something sits: the declaration it is in, that declaration's site and the steps from the
- * site, so a tool that knows the declaration's file can name it.
+ * site, so a tool that knows the declaration's file can name it. A place shares the steps of the
+ * place it is inside, so the walk keeps a place for the cost of one step, never of its depth.
  */
 export type Place = {
   readonly site: Site;
   /** The declaration the place sits in; none when the Snapshot, not a declaration, is judged. */
   readonly declaration: unknown;
-  readonly steps: readonly Step[];
+  readonly steps: StepChain;
 };
 
 /** What a place is called in a sentence: the field it is at, else the name of its site. */
 export function placeNameOf({ site, steps }: Place): string {
-  const last = steps.at(-1);
+  const last = steps?.step;
   if (last?.kind === 'field' || last?.kind === 'part') {
     return last.name;
   }
@@ -104,12 +114,12 @@ export function placeNameOf({ site, steps }: Place): string {
 
 /** The place of a declaration itself, at its site, with no steps. */
 export function placeOf(site: Site, declaration: unknown): Place {
-  return { site, declaration, steps: [] };
+  return { site, declaration, steps: undefined };
 }
 
 /** A place further inside the same declaration, down the steps. */
 export function inside<Held extends Place>(place: Held, ...steps: readonly Step[]): Held {
-  return { ...place, steps: [...place.steps, ...steps] };
+  return { ...place, steps: chainDown(place.steps, steps) };
 }
 
 /** A place down the fields of the same declaration, such as `visibility` or `success`, `status`. */
@@ -119,6 +129,6 @@ export function inFields<Held extends Place>(place: Held, ...names: readonly str
 
 /** What the walk built or reported at `from`, as it stands when the walk enters the same schema at `to`. */
 export function movedFrom<Held extends Place>(held: Held, from: Place, to: Place): Held {
-  const below = held.steps.slice(from.steps.length);
-  return { ...held, site: to.site, declaration: to.declaration, steps: [...to.steps, ...below] };
+  const below = stepsBelow(held.steps, from.steps);
+  return { ...held, site: to.site, declaration: to.declaration, steps: chainDown(to.steps, below) };
 }

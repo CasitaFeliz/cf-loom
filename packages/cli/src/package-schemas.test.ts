@@ -281,7 +281,7 @@ function read(value: unknown): Parsed {
 }
 
 /** Where the walk is told a schema sits: a body of no declaration. */
-const bodyPlace = { site: { kind: 'root' }, declaration: undefined, steps: [] } as const;
+const bodyPlace = { site: { kind: 'root' }, declaration: undefined, steps: undefined } as const;
 
 /** The node a schema walks back to, so a test compares it with the Snapshot's. */
 function walkedOf(schema: core.$ZodType): unknown {

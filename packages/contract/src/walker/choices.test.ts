@@ -7,7 +7,11 @@ import { openEnum } from '../index.ts';
 import { type SchemaNode, walkSchemas } from '../internal/index.ts';
 
 function walkBody(schema: core.$ZodType) {
-  const at = { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] } as const;
+  const at = {
+    site: { kind: 'export', name: 'body' },
+    declaration: undefined,
+    steps: undefined,
+  } as const;
   return refusalsOf(walkSchemas([{ at, schema }], () => undefined));
 }
 

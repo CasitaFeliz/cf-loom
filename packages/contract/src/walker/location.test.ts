@@ -73,7 +73,7 @@ describe('the steps of a place', () => {
   const body = {
     site: { kind: 'export', name: 'body' },
     declaration: undefined,
-    steps: [],
+    steps: undefined,
   } as const;
   const seedCount = 1_000;
 

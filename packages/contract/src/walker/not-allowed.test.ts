@@ -10,7 +10,7 @@ type Located = Parameters<typeof walkSchemas>[0];
 type Place = Located[number]['at'];
 
 function exportAt(name: string): Place {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] };
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined };
 }
 
 const bodyAt = exportAt('body');

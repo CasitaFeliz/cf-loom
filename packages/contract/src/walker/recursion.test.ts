@@ -38,12 +38,12 @@ import {
 
 /** The place of a schema walked on its own: the export of the name given, with no steps. */
 function placeAt(name: string) {
-  return { site: { kind: 'export', name }, declaration: undefined, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration: undefined, steps: undefined } as const;
 }
 
 /** The place of a schema walked in a declaration of its own. */
 function placeIn(name: string, declaration: unknown) {
-  return { site: { kind: 'export', name }, declaration, steps: [] } as const;
+  return { site: { kind: 'export', name }, declaration, steps: undefined } as const;
 }
 
 function walkBody(schema: core.$ZodType) {

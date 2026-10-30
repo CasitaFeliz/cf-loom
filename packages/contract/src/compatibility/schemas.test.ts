@@ -1332,7 +1332,12 @@ describe('compatibilityReportOf, arrays, records and tuples', () => {
 
 function walkedOf(schema: z.ZodType): SchemaNode {
   const { located } = walkSchemas(
-    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    [
+      {
+        at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: undefined },
+        schema,
+      },
+    ],
     () => undefined,
   );
   const [first] = located;
@@ -1753,7 +1758,12 @@ const aliasRows: readonly Row[] = [
 /** A schema as `generate` writes it, with the defs its `ref`s name. */
 function walkedWithDefsOf(schema: z.ZodType): { readonly node: SchemaNode; readonly defs: Defs } {
   const walked = walkSchemas(
-    [{ at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: [] }, schema }],
+    [
+      {
+        at: { site: { kind: 'export', name: 'body' }, declaration: undefined, steps: undefined },
+        schema,
+      },
+    ],
     () => undefined,
   );
   const [first] = walked.located;
