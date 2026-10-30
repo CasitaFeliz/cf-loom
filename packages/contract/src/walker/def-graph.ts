@@ -83,63 +83,6 @@ export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
   return Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
 }
 
-/**
- * Whether a def leads back to itself through `ref`s, `union` options and `allOf` items alone,
- * with no other node between, which zod's parse never ends on; a `ref` to a name with no def
- * leads nowhere.
- */
-export function leadsBackWithNoNode(
-  name: string,
-  def: SchemaNode,
-  defs: ReadonlyMap<string, SchemaNode>,
-): boolean {
-  const entered = new Set<string>();
-  const pending = [def];
-  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
-    if (node.type === 'ref') {
-      if (node.name === name) {
-        return true;
-      }
-      if (entered.has(node.name)) {
-        continue;
-      }
-      entered.add(node.name);
-    }
-    for (const next of nodelessStepsFrom(node, defs)) {
-      pending.push(next);
-    }
-  }
-  return false;
-}
-
-/** The nodes a path with no node between steps to from a node: a `ref`'s def, options or items. */
-function nodelessStepsFrom(
-  node: SchemaNode,
-  defs: ReadonlyMap<string, SchemaNode>,
-): readonly SchemaNode[] {
-  switch (node.type) {
-    case 'ref': {
-      const named = defs.get(node.name);
-      return named === undefined ? [] : [named];
-    }
-    case 'union':
-      return node.options;
-    case 'allOf':
-      return node.items;
-    case 'string':
-    case 'number':
-    case 'boolean':
-    case 'enum':
-    case 'object':
-    case 'record':
-    case 'array':
-    case 'tuple':
-    case 'tagged':
-    case 'json':
-      return [];
-  }
-}
-
 function isRef(node: SchemaNode): node is RefNode {
   return node.type === 'ref';
 }

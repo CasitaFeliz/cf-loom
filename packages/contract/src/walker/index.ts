@@ -14,7 +14,6 @@ export { decimalDigitsOf } from './decimal-digits.ts';
 export type { ResolvedRef } from './def-graph.ts';
 export {
   defsReachedOf,
-  leadsBackWithNoNode,
   nodesReachedFrom,
   reachedDefsOf,
   refsWrittenIn,
@@ -39,6 +38,7 @@ export {
   siteLocationOf,
   siteTextOf,
 } from './location.ts';
+export { defsLeadingBackWithNoNodeOf } from './nodeless-cycles.ts';
 export type {
   EnumNode,
   Field,
