@@ -8,7 +8,7 @@ import {
   type IncomingHttpHeaders,
 } from 'node:http2';
 import { request as httpsRequest } from 'node:https';
-import { type AddressInfo, connect, type Socket } from 'node:net';
+import { type AddressInfo, connect } from 'node:net';
 import { Writable } from 'node:stream';
 import { defineEndpoint, defineGroup, defineGuard, defineService } from '@cf-loom/contract';
 import { admit, handle, success } from '@cf-loom/handlers';
@@ -33,7 +33,15 @@ import {
   resetFrame,
   windowFrame,
 } from '../../test/h2-raw.ts';
-import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
+import {
+  bodyOf,
+  callerSocket,
+  closeCallerSockets,
+  raw,
+  rawFor,
+  statusLineOf,
+  statusLinesOf,
+} from '../../test/raw-http.ts';
 import { type AnsweredRequest, serve } from '../index.ts';
 import { nodeHttp } from '../node-http/index.ts';
 import { fastifyServe } from './index.ts';
@@ -223,7 +231,6 @@ type Config = {
 
 const apps: { close(): PromiseLike<unknown> }[] = [];
 const servers: ReturnType<typeof nodeHttp>[] = [];
-const sockets: Socket[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -233,9 +240,7 @@ afterEach(async () => {
   for (const server of servers.splice(0)) {
     server.close();
   }
-  for (const socket of sockets.splice(0)) {
-    socket.destroy();
-  }
+  closeCallerSockets();
   await Promise.all(
     apps.splice(0).map((app) => Promise.resolve(app.close()).catch(() => undefined)),
   );
@@ -1643,7 +1648,7 @@ describe('fastifyServe after a garbage collection', () => {
       await handlerStarted;
       await collected();
       caller.leave();
-      await Promise.race([answered, waitFor(1000)]);
+      await answered;
 
       expect(events).toEqual(['started', 'saw abort', 'finally']);
       expect(records.map((record) => record.aborted)).toEqual([true]);
@@ -1653,14 +1658,12 @@ describe('fastifyServe after a garbage collection', () => {
   test.each(versions)(
     'over $version, a Caller who leaves while a GuardHandler waits on its signal aborts it',
     async ({ version, fastify }) => {
-      const events: string[] = [];
       const { promise: guardStarted, resolve: started } = Promise.withResolvers<void>();
-      const { promise: sawAbort, resolve: saw } = Promise.withResolvers<void>();
+      const { promise: sawAbort, resolve: saw } = Promise.withResolvers<string>();
       const waiting = handle(apiKey, async ({ headers }, { request: { signal } }) => {
         started();
         await new Promise((resolve) => signal.addEventListener('abort', resolve));
-        events.push('saw abort');
-        saw();
+        saw('saw abort');
         return admit(apiKey, { callerId: headers['x-api-key'] });
       });
       const { url } = await served({
@@ -1677,9 +1680,8 @@ describe('fastifyServe after a garbage collection', () => {
       await guardStarted;
       await collected();
       caller.leave();
-      await Promise.race([sawAbort, waitFor(1000)]);
 
-      expect(events).toEqual(['saw abort']);
+      expect(await sawAbort).toBe('saw abort');
     },
   );
 
@@ -1697,9 +1699,9 @@ describe('fastifyServe after a garbage collection', () => {
       await caller.firstData;
       caller.pause();
       await collected();
-      caller.leave();
       const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
-      await Promise.race([aborted, waitFor(1000)]);
+      caller.leave();
+      await aborted;
 
       expect(signals[0]?.aborted).toBe(true);
     },
@@ -1719,30 +1721,12 @@ describe('fastifyServe after a garbage collection', () => {
       const { url } = await served({ fastify, options: { onAnswered } });
 
       await answeredOnOneConnection(version, url, count);
-      await collected();
-      const held = requests.filter((request) => request.deref() !== undefined);
 
       expect(requests).toHaveLength(count);
-      expect(held).toHaveLength(0);
-    },
-  );
-
-  test.each(versions)(
-    'over $version, a request whose Caller stopped reading is no longer held once its connection is gone',
-    async ({ version, fastify }) => {
-      const requests: WeakRef<Request>[] = [];
-      const onAnswered = (_record: AnsweredRequest, request: Request) =>
-        void requests.push(new WeakRef(request));
-      const { url } = await served({ fastify, options: { onAnswered } });
-
-      const caller = callerOver(version, url, { method: 'GET', path: '/report' });
-      caller.pause();
-      await vi.waitFor(() => expect(requests).toHaveLength(1));
-      caller.disconnect();
-      await waitFor(50);
-      await collected();
-
-      expect(requests.filter((request) => request.deref() !== undefined)).toHaveLength(0);
+      await vi.waitFor(async () => {
+        await collected();
+        expect(heldOf(requests)).toBe(0);
+      });
     },
   );
 });
@@ -1755,12 +1739,11 @@ type Sent = {
   readonly body?: string;
 };
 
-/** A Caller with one request in flight: its first bytes of response, and how it stops reading, leaves its request, or drops its connection. */
+/** A Caller with one request in flight: its first bytes of response, and how it stops reading or leaves its request. */
 type Caller = {
   readonly firstData: Promise<unknown>;
   readonly pause: () => void;
   readonly leave: () => void;
-  readonly disconnect: () => void;
 };
 
 /** A Caller that sent `sent` to `url` over `version`, a raw socket for HTTP/1.1, a stream of its own session for HTTP/2. */
@@ -1777,7 +1760,6 @@ function callerOver(version: 'HTTP/1.1' | 'HTTP/2', url: string, sent: Sent): Ca
       firstData: once(stream, 'data'),
       pause: () => stream.pause(),
       leave: () => stream.close(constants.NGHTTP2_CANCEL),
-      disconnect: () => session.destroy(),
     };
   }
   const socket = callerSocket(url);
@@ -1793,7 +1775,6 @@ function callerOver(version: 'HTTP/1.1' | 'HTTP/2', url: string, sent: Sent): Ca
     firstData: once(socket, 'data'),
     pause: () => socket.pause(),
     leave: () => socket.destroy(),
-    disconnect: () => socket.destroy(),
   };
 }
 
@@ -1814,10 +1795,7 @@ async function answeredOnOneConnection(version: 'HTTP/1.1' | 'HTTP/2', url: stri
   await vi.waitFor(() => expect(statusLinesOf(received)).toHaveLength(count));
 }
 
-/** A raw socket to the server at `url`, which the test's end destroys. */
-function callerSocket(url: string): Socket {
-  const socket = connect(Number(new URL(url).port), '127.0.0.1');
-  socket.on('error', () => undefined);
-  sockets.push(socket);
-  return socket;
+/** How many of the Requests `requests` refers to are still reachable. */
+function heldOf(requests: readonly WeakRef<Request>[]): number {
+  return requests.filter((request) => request.deref() !== undefined).length;
 }

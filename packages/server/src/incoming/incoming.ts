@@ -27,20 +27,30 @@ export function incomingUrlOf(incoming: Incoming): IncomingUrl {
   return url === undefined ? { kind: 'unreadable' } : { kind: 'url', url };
 }
 
+/** The Caller's departure a request follows: its signal, and the end of its take, which releases what follows it. */
+export type Departure = {
+  readonly closed: AbortSignal;
+  readonly releaseAtEnd: (release: () => void) => void;
+};
+
 /**
- * The `Request` of an incoming message on its URL, or none when a `Request` refuses what Node
- * accepted, so nothing it is given throws past the adapter.
+ * The `Request` of an incoming message on its URL, following the Caller's departure and held from
+ * it until the take ends, or none when a `Request` refuses what Node accepted, so nothing it is
+ * given throws past the adapter.
  */
 export function incomingRequestOf(
   incoming: Incoming,
   url: URL,
-  signal: AbortSignal,
-): HeldRequest | undefined {
+  { closed, releaseAtEnd }: Departure,
+): Request | undefined {
+  let held: HeldRequest;
   try {
-    return newRequestOf(incoming, url, signal);
+    held = newRequestOf(incoming, url, closed);
   } catch {
     return undefined;
   }
+  releaseAtEnd(held.release);
+  return held.request;
 }
 
 /** What answers a request that cannot be read as a web-standard one: 400. */

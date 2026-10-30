@@ -5,31 +5,23 @@ import { constants, type ServerHttp2Stream } from 'node:http2';
 export type Departure = {
   /** Aborts when the Caller is gone before the response finished; every part of the request that must stop derives from it and is held from it until the take ends. */
   readonly closed: AbortSignal;
-  /** Runs `release` once the take ends, after its last chance to abort `closed`, or at once when it has ended. */
+  /** Runs `release` once the take ends, after its last chance to abort `closed`, or at once when it ended before it was taken. */
   readonly releaseAtEnd: (release: () => void) => void;
 };
 
 /** The end of a take, and how a release is given to it. */
 type End = Pick<Departure, 'releaseAtEnd'> & { readonly end: () => void };
 
-/** The end of a take: `end` runs each release given before it, and each given after runs at once. */
+/** The end of a take: `end` runs each release given to it. */
 function endOf(): End {
-  let releases: (() => void)[] | undefined = [];
+  const releases: (() => void)[] = [];
   return {
     end: () => {
-      const ending = releases ?? [];
-      releases = undefined;
-      for (const release of ending) {
+      for (const release of releases.splice(0)) {
         release();
       }
     },
-    releaseAtEnd: (release) => {
-      if (releases === undefined) {
-        release();
-        return;
-      }
-      releases.push(release);
-    },
+    releaseAtEnd: (release) => void releases.push(release),
   };
 }
 

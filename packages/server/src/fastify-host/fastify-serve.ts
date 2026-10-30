@@ -99,12 +99,8 @@ async function answeredWhenServed(
 
 /** What answers a request taken from Fastify: `serve`'s Response, or 400 when no `Request` can be built. */
 async function answeredFor(http: Http, taken: Taken, url: URL): Promise<Response> {
-  const asked = incomingRequestOf(taken.incoming, url, taken.closed);
-  if (asked === undefined) {
-    return unreadableResponse();
-  }
-  taken.releaseAtEnd(asked.release);
-  return await http(asked.request);
+  const asked = incomingRequestOf(taken.incoming, url, taken);
+  return asked === undefined ? unreadableResponse() : await http(asked);
 }
 
 /** The URL of a request whose method and path a declared Endpoint has, or none. */

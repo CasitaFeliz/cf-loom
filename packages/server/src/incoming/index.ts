@@ -1,4 +1,4 @@
-export type { Incoming, IncomingUrl } from './incoming.ts';
+export type { Departure, Incoming, IncomingUrl } from './incoming.ts';
 export {
   incomingRequestOf,
   incomingUrlOf,

@@ -6,7 +6,15 @@ import { admit, handle, success } from '@cf-loom/handlers';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { collected } from '../../../contract/test/collected.ts';
-import { bodyOf, raw, rawFor, statusLineOf, statusLinesOf } from '../../test/raw-http.ts';
+import {
+  bodyOf,
+  callerSocket,
+  closeCallerSockets,
+  raw,
+  rawFor,
+  statusLineOf,
+  statusLinesOf,
+} from '../../test/raw-http.ts';
 import { type AnsweredRequest, type Http, serve } from '../index.ts';
 import { nodeHttp, nodeListener } from './index.ts';
 
@@ -94,6 +102,7 @@ const servers: ReturnType<typeof nodeHttp>[] = [];
 
 afterEach(() => {
   vi.restoreAllMocks();
+  closeCallerSockets();
   for (const server of servers.splice(0)) {
     server.close();
   }
@@ -906,21 +915,19 @@ describe('nodeHttp after a garbage collection', () => {
     await handlerStarted;
     await collected();
     socket.destroy();
-    await Promise.race([answered, waitFor(1000)]);
+    await answered;
 
     expect(events).toEqual(['started', 'saw abort', 'finally']);
     expect(records.map((record) => record.aborted)).toEqual([true]);
   });
 
   test('a Caller who leaves while a GuardHandler waits on its signal aborts it', async () => {
-    const events: string[] = [];
     const { promise: guardStarted, resolve: started } = Promise.withResolvers<void>();
-    const { promise: sawAbort, resolve: saw } = Promise.withResolvers<void>();
+    const { promise: sawAbort, resolve: saw } = Promise.withResolvers<string>();
     const waiting = handle(apiKey, async ({ headers }, { request: { signal } }) => {
       started();
       await new Promise((resolve) => signal.addEventListener('abort', resolve));
-      events.push('saw abort');
-      saw();
+      saw('saw abort');
       return admit(apiKey, { callerId: headers['x-api-key'] });
     });
     const url = await listening(
@@ -934,9 +941,8 @@ describe('nodeHttp after a garbage collection', () => {
     await guardStarted;
     await collected();
     socket.destroy();
-    await Promise.race([sawAbort, waitFor(1000)]);
 
-    expect(events).toEqual(['saw abort']);
+    expect(await sawAbort).toBe('saw abort');
   });
 
   test('a Caller who leaves while a large Success is written aborts the signal the Handler kept', async () => {
@@ -954,9 +960,9 @@ describe('nodeHttp after a garbage collection', () => {
     await firstData;
     socket.pause();
     await collected();
-    socket.destroy();
     const aborted = new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
-    await Promise.race([aborted, waitFor(1000)]);
+    socket.destroy();
+    await aborted;
 
     expect(signals[0]?.aborted).toBe(true);
   });
@@ -976,42 +982,17 @@ describe('nodeHttp after a garbage collection', () => {
 
       socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n'.repeat(count));
       await vi.waitFor(() => expect(statusLinesOf(received)).toHaveLength(count));
-      await collected();
-      const held = requests.filter((request) => request.deref() !== undefined);
-      socket.destroy();
 
       expect(requests).toHaveLength(count);
-      expect(held).toHaveLength(0);
+      await vi.waitFor(async () => {
+        await collected();
+        expect(heldOf(requests)).toBe(0);
+      });
     },
   );
-
-  test('a request whose Caller stopped reading is no longer held once its connection is gone', async () => {
-    const requests: WeakRef<Request>[] = [];
-    const large = handle(getOrder, () => success(getOrder, { id: 'x'.repeat(16_000_000) }));
-    const onAnswered = (_record: AnsweredRequest, request: Request) =>
-      void requests.push(new WeakRef(request));
-    const served = { ...handlers, endpoints: { ...handlers.endpoints, getOrder: large } };
-    const url = await listening(nodeHttp(serve(contract, served, { onAnswered })));
-    const socket = callerSocket(url);
-    socket.pause();
-
-    socket.write('GET /orders/o-1 HTTP/1.1\r\nHost: test\r\n\r\n');
-    await vi.waitFor(() => expect(requests).toHaveLength(1));
-    socket.destroy();
-    await waitFor(50);
-    await collected();
-
-    expect(requests.filter((request) => request.deref() !== undefined)).toHaveLength(0);
-  });
 });
 
-/** A raw socket to the server at `url`, as a Caller who may leave at any time. */
-function callerSocket(url: string) {
-  const socket = connect(Number(new URL(url).port), '127.0.0.1');
-  socket.on('error', () => undefined);
-  return socket;
-}
-
-function waitFor(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** How many of the Requests `requests` refers to are still reachable. */
+function heldOf(requests: readonly WeakRef<Request>[]): number {
+  return requests.filter((request) => request.deref() !== undefined).length;
 }

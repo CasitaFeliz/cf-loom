@@ -34,18 +34,15 @@ async function respond(http: Http, outgoing: ServerResponse) {
  * What answers an incoming message: `http`'s Response, `NO_SUCH_ENDPOINT` for a method a `Request`
  * refuses, which no Endpoint can have, and 400 for one that cannot be read.
  */
-async function answeredFor(
-  http: Http,
-  { incoming, closed, releaseAtEnd }: Taken,
-): Promise<Response> {
+async function answeredFor(http: Http, taken: Taken): Promise<Response> {
+  const { incoming } = taken;
   const read = incomingUrlOf(incoming);
   if (read.kind === 'refused-method') {
     return reservedResponseOf('NO_SUCH_ENDPOINT');
   }
-  const asked = read.kind === 'url' ? incomingRequestOf(incoming, read.url, closed) : undefined;
-  if (asked === undefined) {
+  const request = read.kind === 'url' ? incomingRequestOf(incoming, read.url, taken) : undefined;
+  if (request === undefined) {
     return unreadableResponse();
   }
-  releaseAtEnd(asked.release);
-  return await answeredOf(http, asked.request, rejectedLine);
+  return await answeredOf(http, request, rejectedLine);
 }
