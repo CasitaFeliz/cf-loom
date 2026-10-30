@@ -1,14 +1,15 @@
 import { fileURLToPath } from 'node:url';
 import { handle } from '@cf-loom/handlers';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
-import { wakeEach } from '../../test/aws-arranging.ts';
+import { storeIn, wakeEach } from '../../test/aws-arranging.ts';
 import { countCommands, failingCommand, holdingCommand } from '../../test/aws-clients.ts';
 import { queueCountsOf, topicNamesOf } from '../../test/aws-reading.ts';
+import { aGate } from '../../test/gate.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import { handlersOf, ordersReaders, type Received } from '../../test/orders.ts';
 import {
-  aGate,
   anOrdersMessaging,
+  limitsWith,
   orderMessagingOver,
   type Settings,
 } from '../../test/orders-messaging.ts';
@@ -121,6 +122,51 @@ describe('close over sqs()', () => {
     const again: Received[] = [];
     await next.consume(handlersOf(again), {});
     await until(() => expect(again.map(({ meta }) => meta.deliveryCount)).toEqual([2]));
+  });
+
+  test('close while a later Delivery’s visibility change is still running hands its Message back instead of delivering it', async () => {
+    const first = await aMessaging({
+      limits: limitsWith({ ackWait: ['1s', '2s'], maxDeliver: 5 }),
+    });
+    const holding = holdingCommand(first.connecting.sqs, 'ChangeMessageVisibilityCommand');
+    const received: Received[] = [];
+    const throwingOnce = ({ meta }: Received) => {
+      if (meta.deliveryCount === 1) {
+        throw new Error('the database is down');
+      }
+      return undefined;
+    };
+    await first.consume(handlersOf(received, { notify: throwingOnce }), {});
+    await first.publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+    await holding.reached;
+
+    const closing = first.close();
+    await wakeEach(first.connecting.sqs, [first.orders.chargeQueue]);
+    holding.open();
+    await closing;
+
+    expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1]);
+    await expect(queueCountsOf(first.connecting.sqs, first.orders.notifyQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 0,
+    });
+  });
+
+  test('an unreadable Message the open poll returns once closing started is handed back unread, with no console line', async () => {
+    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const first = await aMessaging();
+    await first.consume(handlersOf([]), {});
+    const closing = first.close();
+
+    await storeIn(first.connecting.sqs, first.orders.notifyQueue, 'not cf-loom’s');
+    await wakeEach(first.connecting.sqs, [first.orders.chargeQueue]);
+    await closing;
+
+    await expect(queueCountsOf(first.connecting.sqs, first.orders.notifyQueue)).resolves.toEqual({
+      visible: 1,
+      inFlight: 0,
+    });
+    expect(written).not.toHaveBeenCalled();
   });
 
   test('close while consume is still checking the queues means no receive at all', async () => {

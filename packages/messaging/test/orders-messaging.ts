@@ -60,11 +60,3 @@ export async function orderMessagingOver(connecting: SqsConnecting, settings: Se
 export function limitsWith(settings: Partial<SqsDurableConsumerLimits>): SqsBrokerLimits {
   return { durableConsumerDefaults: { ...testLimits.durableConsumerDefaults, ...settings } };
 }
-
-/** A promise a test settles itself, to hold a Handler while it runs; opened when the test ends, so a failing test never leaves a Handler held. */
-export function aGate() {
-  const gate = Promise.withResolvers<undefined>();
-  const open = () => gate.resolve(undefined);
-  onTestFinished(open);
-  return { opened: gate.promise, open };
-}

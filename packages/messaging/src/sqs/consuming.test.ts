@@ -15,6 +15,7 @@ import {
   tagByHand,
   unsubscribe,
   untagByHand,
+  wakeEach,
 } from '../../test/aws-arranging.ts';
 import {
   aClosedUrl,
@@ -30,6 +31,7 @@ import {
   queueTagsOf,
   receivedFrom,
 } from '../../test/aws-reading.ts';
+import { aGate } from '../../test/gate.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
 import {
   anOrders,
@@ -44,7 +46,6 @@ import {
   testLimits,
 } from '../../test/orders.ts';
 import {
-  aGate,
   anOrdersMessaging,
   closedWhenDone,
   limitsWith,
@@ -519,6 +520,39 @@ describe('consuming over sqs()', () => {
 
         const line = `${orders.notifyQueue}: left SQS message ${id} for the dead-letter queue, since it lacks or cannot read ${name}`;
         await until(() => expect(written.mock.calls.map(([text]) => String(text))).toContain(line));
+        await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
+        expect(received).toEqual([]);
+      },
+    );
+
+    test.each(Object.keys(valid))(
+      'a Message whose %s is a String without a StringValue is left for the dead-letter queue, its console line naming that attribute',
+      async (name) => {
+        const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const { publisher, consume, connecting, orders } = await aMessaging({
+          limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+        });
+        alteringAnswers(connecting.sqs, 'ReceiveMessageCommand', (output) => {
+          const messages = (output['Messages'] ?? []) as { MessageAttributes?: object }[];
+          for (const message of messages) {
+            message.MessageAttributes = {
+              ...message.MessageAttributes,
+              [name]: { DataType: 'String' },
+            };
+          }
+        });
+        const received: Received[] = [];
+        await consume(handlersOf(received), {});
+
+        await publisher.publish('OrderCreated', { v1: { orderId: 'o-1' } }, { factId: 'f-1' });
+
+        const left = `${orders.notifyQueue}: left SQS message `;
+        const reason = ` for the dead-letter queue, since it lacks or cannot read ${name}`;
+        await until(() => {
+          const lines = written.mock.calls.map(([text]) => String(text));
+          expect(lines.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
+        });
+        await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
         expect(received).toEqual([]);
       },
     );
@@ -547,7 +581,9 @@ describe('consuming over sqs()', () => {
       'a Message whose ApproximateReceiveCount is %s is left for the dead-letter queue, its console line naming it',
       async (_, count) => {
         const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        const { publisher, consume, connecting, orders } = await aMessaging();
+        const { publisher, consume, connecting, orders } = await aMessaging({
+          limits: limitsWith({ ackWait: '1s', maxDeliver: 3 }),
+        });
         answeringReceiveCount(connecting.sqs, count);
         const received: Received[] = [];
         await consume(handlersOf(received), {});
@@ -561,6 +597,7 @@ describe('consuming over sqs()', () => {
           const lines = written.mock.calls.map(([text]) => String(text));
           expect(lines.some((line) => line.startsWith(left) && line.endsWith(reason))).toBe(true);
         });
+        await untilInDeadLetterQueue(connecting.sqs, orders.notifyQueue);
         expect(received).toEqual([]);
       },
     );
@@ -641,7 +678,7 @@ describe('consuming over sqs()', () => {
   test('a DeleteMessage SQS refuses while consuming reaches neither hook nor the console, and the Message comes back after its wait', async () => {
     const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const hooked: unknown[] = [];
-    const { publisher, consume, connecting } = await aMessaging({
+    const { publisher, consume, close, connecting, orders } = await aMessaging({
       limits: limitsWith({ ackWait: '1s' }),
       onServiceFault: (consumed) => void hooked.push(consumed),
       onBrokerTrouble: (trouble) => void hooked.push(trouble),
@@ -657,6 +694,8 @@ describe('consuming over sqs()', () => {
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     expect(hooked).toEqual([]);
     expect(written).not.toHaveBeenCalled();
+    await wakeEach(connecting.sqs, [orders.notifyQueue, orders.chargeQueue]);
+    await expect(close()).resolves.toBeUndefined();
   });
 
   test('a queue deleted while consuming reaches onBrokerTrouble once as pull-failed with SQS’s error, and the queue created again reaches it as recovered and its Messages reach their Handler', async () => {
@@ -948,6 +987,24 @@ describe('consuming over sqs()', () => {
       await expect(consuming).rejects.toMatchObject({ message: line });
     });
 
+    test('a tag SNS answers as an invalid parameter is refused as naming no subscription', async () => {
+      const { consume, connecting, orders } = await aMessaging();
+      const arn = await subscriptionOf(connecting.sqs, orders.chargeQueue);
+      const invalid = Object.assign(new Error('Invalid parameter: SubscriptionArn'), {
+        name: 'InvalidParameterException',
+      });
+      failingCommand(connecting.sns, {
+        command: 'GetSubscriptionAttributesCommand',
+        error: invalid,
+      });
+
+      const consuming = consume(handlersOf([]), {});
+
+      await expect(consuming).rejects.toThrow(
+        `The queue ${orders.chargeQueue} of the Durable consumer ${orders.chargeDurable} has the cf-loom:subscription tag '${arn}', which names no subscription: apply the Service's Broker plan`,
+      );
+    });
+
     test('a filter policy equal as JSON but written otherwise is no difference', async () => {
       const messagingOf = await aMessaging();
       const { consume, connecting, orders } = messagingOf;
@@ -1007,3 +1064,11 @@ type RawAttribute = {
   readonly StringValue?: string;
   readonly BinaryValue?: Uint8Array;
 };
+
+/** Waits until the dead-letter queue of the queue holds the one Message of the test, its body as published. */
+async function untilInDeadLetterQueue(sqsClient: SQSClient, queue: string): Promise<void> {
+  await until(async () => {
+    const dead = await messagesWithAttributesIn(sqsClient, `${queue}_dlq`);
+    expect(dead.map(({ body }) => body)).toEqual(['{"orderId":"o-1"}']);
+  });
+}
