@@ -784,7 +784,7 @@ describe('fastifyServe', () => {
       );
       await waitFor(50);
       socket.destroy();
-      await Promise.race([recorded, waitFor(1000)]);
+      await recorded;
 
       expect(records.map(({ status, code, aborted }) => ({ status, code, aborted }))).toEqual([
         { status: 400, code: 'INVALID_INPUT', aborted: true },
@@ -1288,27 +1288,21 @@ describe('fastifyServe', () => {
           const session = h2Session(wire.url);
           const headers = { ':method': 'POST', ':path': asked.path, ...asked.headers };
 
-          const answer = await Promise.race([
-            h2(session, { ...headers, 'content-type': 'application/json' }, upload),
-            waitFor(2000).then(() => 'still open'),
-          ]);
-          const next = await Promise.race([
-            h2(session, { ':path': '/orders/o-1' }),
-            waitFor(1000).then(() => 'unanswered'),
-          ]);
+          const answer = await h2(
+            session,
+            { ...headers, 'content-type': 'application/json' },
+            upload,
+          );
+          const next = await h2(session, { ':path': '/orders/o-1' });
           session.destroy();
-          const closing = await Promise.race([
-            app.close().then(() => 'closed'),
-            waitFor(2000).then(() => 'still open'),
-          ]);
+          await app.close();
 
           expect(answer).toMatchObject({ status: asked.status, ended: true, rstCode: 0 });
           expect(wireEndOf(wire.framesOf(1))).toBe('end, then RST(0)');
           expect(wireEndOf(wire.framesOf(3))).toBe('end');
-          expect(typeof answer === 'string' ? '' : answer.body).toContain(`"${asked.code}"`);
-          expect(typeof answer === 'string' ? 0 : answer.sent).toBeLessThan(upload.length);
+          expect(answer.body).toContain(`"${asked.code}"`);
+          expect(answer.sent).toBeLessThan(upload.length);
           expect(next).toMatchObject({ status: 200, body: '{"id":"o-1"}' });
-          expect(closing).toBe('closed');
         },
       );
     });
@@ -1349,10 +1343,7 @@ describe('fastifyServe', () => {
         stream.on('error', () => undefined);
         await handlerStarted;
         stream.close(constants.NGHTTP2_CANCEL);
-        await Promise.race([
-          new Promise((resolve) => signals[0]?.addEventListener('abort', resolve)),
-          waitFor(1000),
-        ]);
+        await new Promise((resolve) => signals[0]?.addEventListener('abort', resolve));
         await waitFor(50);
         const recorded = records.map((record) => record.aborted);
         const next = await h2(session, { ':path': '/orders/summary' });
@@ -1404,13 +1395,9 @@ describe('fastifyServe', () => {
         await waitFor(100);
         const aborted = requests[0]?.signal.aborted;
         session.destroy();
-        const closing = await Promise.race([
-          app.close().then(() => 'closed'),
-          waitFor(2000).then(() => 'still open'),
-        ]);
+        await app.close();
 
         expect(aborted).toBe(true);
-        expect(closing).toBe('closed');
       });
 
       test('a Caller that leaves while its Handler runs makes the request reach onRequestAbort and then onResponse, over HTTP/2, as every Fastify HTTP/2 route does', async () => {
