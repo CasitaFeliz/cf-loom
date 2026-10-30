@@ -1,10 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import {
-  constants,
-  type Http2ServerRequest,
-  Http2ServerResponse,
-  type ServerHttp2Stream,
-} from 'node:http2';
+import { type Http2ServerRequest, Http2ServerResponse, type ServerHttp2Stream } from 'node:http2';
+import { closedDepartureOf, type Departure, resetDepartureOf } from './departure.ts';
 
 /** The headers a host set on a request before it was taken. */
 type HostHeaders = Readonly<Record<string, number | string | string[] | undefined>>;
@@ -15,14 +11,13 @@ type Exchange =
   | { readonly incoming: Http2ServerRequest; readonly outgoing: Http2ServerResponse };
 
 /** A request taken from its host: the messages to answer it on, the Caller's departure, and the headers the host set before. */
-export type Taken = Exchange & {
-  /** Aborts when the Caller is gone before the response finished; every part of the request that must stop derives from it. */
-  readonly closed: AbortSignal;
-  /** The host's headers, which the Response's replace; a `content-length`, the host's or already on `outgoing`, frames a body that is not the Response's, so it is dropped. */
-  readonly hostHeaders: HostHeaders;
-  /** The writer's steps the request's protocol decides, HTTP/1.1 or HTTP/2, chosen once when it is taken. */
-  readonly protocol: Protocol;
-};
+export type Taken = Exchange &
+  Departure & {
+    /** The host's headers, which the Response's replace; a `content-length`, the host's or already on `outgoing`, frames a body that is not the Response's, so it is dropped. */
+    readonly hostHeaders: HostHeaders;
+    /** The writer's steps the request's protocol decides, HTTP/1.1 or HTTP/2, chosen once when it is taken. */
+    readonly protocol: Protocol;
+  };
 
 /** The steps of writing a response that differ between HTTP/1.1 and HTTP/2. */
 type Protocol = {
@@ -46,11 +41,11 @@ export function takenOf(
   if (outgoing instanceof Http2ServerResponse) {
     const { req: incoming, stream } = outgoing;
     const protocol = http2Of(incoming, outgoing);
-    return { incoming, outgoing, closed: resetSignalOf(stream), hostHeaders, protocol };
+    return { incoming, outgoing, ...resetDepartureOf(stream), hostHeaders, protocol };
   }
   const { req: incoming } = outgoing;
   const protocol = http1Of(incoming, outgoing);
-  return { incoming, outgoing, closed: closedSignalOf(outgoing), hostHeaders, protocol };
+  return { incoming, outgoing, ...closedDepartureOf(outgoing), hostHeaders, protocol };
 }
 
 /**
@@ -117,43 +112,4 @@ function resetOnceEnded(stream: ServerHttp2Stream): void {
   };
   let timer = setTimeout(check, 0);
   stream.once('close', () => clearTimeout(timer));
-}
-
-/**
- * The Caller's departure over HTTP/1.1: aborted at once when the response is already closed
- * unfinished, else when it closes so.
- */
-function closedSignalOf(outgoing: ServerResponse): AbortSignal {
-  if (outgoing.destroyed && !outgoing.writableFinished) {
-    return AbortSignal.abort();
-  }
-  const controller = new AbortController();
-  outgoing.once('close', () => {
-    if (!outgoing.writableFinished) {
-      controller.abort();
-    }
-  });
-  return controller.signal;
-}
-
-/**
- * The Caller's departure over HTTP/2: aborted when the stream is, by a reset or a lost connection
- * before the response ended, or when it closes with an error code.
- */
-function resetSignalOf(stream: ServerHttp2Stream): AbortSignal {
-  if (stream.aborted || (stream.closed && isReset(stream))) {
-    return AbortSignal.abort();
-  }
-  const controller = new AbortController();
-  stream.once('aborted', () => controller.abort());
-  stream.once('close', () => {
-    if (isReset(stream)) {
-      controller.abort();
-    }
-  });
-  return controller.signal;
-}
-
-function isReset(stream: ServerHttp2Stream): boolean {
-  return stream.rstCode !== constants.NGHTTP2_NO_ERROR;
 }

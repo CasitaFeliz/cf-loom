@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { Http2ServerRequest } from 'node:http2';
+import { type HeldRequest, heldRequestOf } from '@cf-loom/contract/internal';
 import { lazyBodyOf } from './body.ts';
 
 /** The methods a web-standard `Request` refuses, whatever their case, so no Endpoint can have them. */
@@ -34,7 +35,7 @@ export function incomingRequestOf(
   incoming: Incoming,
   url: URL,
   signal: AbortSignal,
-): Request | undefined {
+): HeldRequest | undefined {
   try {
     return newRequestOf(incoming, url, signal);
   } catch {
@@ -96,7 +97,7 @@ function isBareHost(host: string): boolean {
   return !/[\s/\\?#@]/.test(host) && URL.canParse(`http://${host}`);
 }
 
-function newRequestOf(incoming: Incoming, url: URL, signal: AbortSignal): Request {
+function newRequestOf(incoming: Incoming, url: URL, signal: AbortSignal): HeldRequest {
   const headers = new Headers();
   for (let index = 0; index + 1 < incoming.rawHeaders.length; index += 2) {
     const name = incoming.rawHeaders[index] ?? '';
@@ -106,8 +107,8 @@ function newRequestOf(incoming: Incoming, url: URL, signal: AbortSignal): Reques
   }
   const method = incoming.method ?? 'GET';
   if (bodiless.includes(method)) {
-    return new Request(url, { method, headers, signal });
+    return heldRequestOf(url, { method, headers, signal });
   }
   const body = lazyBodyOf(incoming);
-  return new Request(url, { method, headers, body, duplex: 'half', signal } as RequestInit);
+  return heldRequestOf(url, { method, headers, body, duplex: 'half', signal });
 }
