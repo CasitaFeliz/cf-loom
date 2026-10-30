@@ -1842,3 +1842,36 @@ describe('baselineOf and its temporary folder', () => {
     );
   });
 });
+
+describe('baselineOf and what npm prints', () => {
+  test('npm pack reporting no package fails the Baseline read with printed no tarball', async ({
+    lab,
+  }) => {
+    const metadata = `{"version":"1.0.0","cfLoom":{"kind":"service"},"dist":{"tarball":"http://x/y.tgz","integrity":"sha512-${'A'.repeat(86)}=="}}`;
+    const body = `case "$1" in\nview) case "$2" in *@1.0.0) echo '${metadata}';; *) echo '["1.0.0"]';; esac;;\npack) echo '{}';;\nesac`;
+    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: undefined,
+    });
+
+    expect(failureIn(read)).toBe(`npm pack ${ordersPackage}@1.0.0 printed no tarball`);
+  });
+
+  test('a dist-tags print that is no object fails --against with printed no dist-tags', async ({
+    lab,
+  }) => {
+    const body = `case "$1" in\nview) case "$3" in dist-tags) echo '"next"';; *) echo '["1.0.0"]';; esac;;\nesac`;
+    const npm = lab.aPlace({ path: aStubNpm(lab, body) });
+
+    const read = await baselineOf(npm, {
+      packageName: ordersPackage,
+      declared: orders,
+      against: 'next',
+    });
+
+    expect(failureIn(read)).toBe(`npm view ${ordersPackage} dist-tags printed no dist-tags`);
+  });
+});

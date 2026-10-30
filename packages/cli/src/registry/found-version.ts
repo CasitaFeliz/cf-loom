@@ -1,6 +1,6 @@
 import { type Failed, failed } from '../child-process/index.ts';
 import type { Choice } from './against.ts';
-import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, viewedOf } from './npm.ts';
 import {
   type DeclaredPackage,
   type ExpectedSnapshot,
@@ -83,7 +83,7 @@ async function metadataOf(
   });
   switch (run.kind) {
     case 'json':
-      return metadataFrom(expected, run.value);
+      return metadataFrom(expected, viewedOf(run.value));
     case 'refused':
       return failed(run.message);
     case 'failed':

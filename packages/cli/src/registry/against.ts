@@ -1,7 +1,7 @@
-import { isSemanticVersion, ownOf } from '@cf-loom/contract/internal';
+import { isPlainObject, isSemanticVersion, ownOf } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { baselineCandidatesOf } from '../versioning/index.ts';
-import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, viewedOf } from './npm.ts';
 import type { Listing } from './versions.ts';
 
 /**
@@ -66,8 +66,12 @@ async function namedVersionOf(
   const label = `npm view ${packageName} dist-tags`;
   const run = await jsonFromNpm(npm, { label, args: ['view', packageName, 'dist-tags'] });
   switch (run.kind) {
-    case 'json':
-      return namedByTag(versions, ownOf(run.value, against));
+    case 'json': {
+      const tags = viewedOf(run.value);
+      return isPlainObject(tags)
+        ? namedByTag(versions, ownOf(tags, against))
+        : failed(`${label} printed no dist-tags`);
+    }
     case 'refused':
       return failed(run.message);
     case 'failed':

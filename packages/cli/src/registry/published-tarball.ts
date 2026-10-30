@@ -9,7 +9,7 @@ import {
 } from '@cf-loom/contract/internal';
 import { type Failed, failed } from '../child-process/index.ts';
 import { newerFormatTextOf } from '../loading/index.ts';
-import { jsonFromNpm, type NpmPlace } from './npm.ts';
+import { jsonFromNpm, type NpmPlace, packedOf } from './npm.ts';
 import { fileNamed } from './tar-entries.ts';
 import type { ExpectedSnapshot } from './versions.ts';
 
@@ -73,8 +73,7 @@ export function publishedSnapshotIn(
 }
 
 function filenameOf(printed: unknown): string | undefined {
-  const [first] = Array.isArray(printed) ? printed : [];
-  const filename = ownOf(first, 'filename');
+  const filename = ownOf(packedOf(printed), 'filename');
   return typeof filename === 'string' && filename !== '' && basename(filename) === filename
     ? filename
     : undefined;

@@ -77,6 +77,23 @@ async function endedOf(place: NpmPlace, call: NpmCall): Promise<ChildRan> {
   return ended;
 }
 
+/**
+ * The one package `npm pack --json` reports packing: npm lists the packages it packed in an
+ * array, or keys each by its name; `undefined` when it reports none.
+ */
+export function packedOf(printed: unknown): unknown {
+  return typeof printed === 'object' && printed !== null ? Object.values(printed)[0] : undefined;
+}
+
+/**
+ * What `npm view <package>[@<version>] <fields> --json` printed for one version, as one value:
+ * npm prints it bare, or wraps it in a list of one. A list field, such as `versions`, is never
+ * wrapped, so its reader does not call this.
+ */
+export function viewedOf(printed: unknown): unknown {
+  return Array.isArray(printed) && printed.length === 1 ? printed[0] : printed;
+}
+
 function refusalOf(call: NpmCall, ended: Extract<ChildRan, { kind: 'errored' }>): Refused | Failed {
   const printed = jsonOf(call, ended.stdout);
   const error = printed.kind === 'json' ? errorOf(printed.value) : undefined;
