@@ -4917,12 +4917,7 @@ function publishedFilesOf(registry: Registry): Readonly<Record<string, string>> 
 }
 
 /** The files `aBuiltDefinitions` publishes: its package.json and built files, and the `snapshot.json` written in. */
-const ownFilesOfDefinitions = [
-  'dist/index.d.ts',
-  'dist/index.js',
-  'package.json',
-  'snapshot.json',
-];
+const ownFilesOfDefinitions = ['dist/index.d.ts', 'dist/index.js', 'package.json', 'snapshot.json'];
 
 /** The PATH of an `npm` that prints what is given for `pack --dry-run` and runs the developer's npm for every other call. */
 function aStubNpmPrintingForDryRun(lab: Lab, printed: string): string {

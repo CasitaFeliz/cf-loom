@@ -61,7 +61,10 @@ describe('what the check runs say of CI', () => {
   });
 
   it.for([
-    ['a leg of a matrix failed', [passed('check'), conclusionOf('cli-npm (npm 12.2.1)', 'failure')]],
+    [
+      'a leg of a matrix failed',
+      [passed('check'), conclusionOf('cli-npm (npm 12.2.1)', 'failure')],
+    ],
     ['a run was cancelled', [passed('check'), conclusionOf('cli-npm (npm 11.13.0)', 'cancelled')]],
     ['a run was skipped', [passed('check'), conclusionOf('cli-npm (npm 11.13.0)', 'skipped')]],
     [
@@ -81,9 +84,9 @@ describe('what the check runs say of CI', () => {
     ];
 
     expect(ciOf(runs, 'checks / ')).toBe('success');
-    expect(ciOf([conclusionOf('checks / cli-npm (npm 12.2.1)', 'failure'), ...runs], 'checks / ')).toBe(
-      'failure',
-    );
+    expect(
+      ciOf([conclusionOf('checks / cli-npm (npm 12.2.1)', 'failure'), ...runs], 'checks / '),
+    ).toBe('failure');
     expect(ciOf([conclusionOf('publish', 'skipped')], 'checks / ')).toBe('pending');
   });
 });

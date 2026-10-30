@@ -25,7 +25,9 @@ function cliNpmJobIn(workflow: string): readonly string[] {
 
 /** The npm releases the `cli-npm` matrix pins, in its order. */
 function testedReleasesIn(workflow: string): readonly string[] {
-  return cliNpmJobIn(workflow).flatMap((line) => /^\s+- version: (\d+\.\d+\.\d+)\s*$/.exec(line)?.[1] ?? []);
+  return cliNpmJobIn(workflow).flatMap(
+    (line) => /^\s+- version: (\d+\.\d+\.\d+)\s*$/.exec(line)?.[1] ?? [],
+  );
 }
 
 /**
@@ -33,7 +35,11 @@ function testedReleasesIn(workflow: string): readonly string[] {
  * range the CLI README quotes: `engines.npm` is a caret at each tested release, joined by ` || `
  * in the matrix's order.
  */
-function npmReleaseProblems({ engines, workflow, readme }: NpmReleaseStatements): readonly string[] {
+function npmReleaseProblems({
+  engines,
+  workflow,
+  readme,
+}: NpmReleaseStatements): readonly string[] {
   const releases = testedReleasesIn(workflow);
   if (releases.length === 0) {
     return ['the cli-npm job of ci.yml pins no npm release'];
@@ -59,7 +65,10 @@ const matrix = (...versions: readonly string[]) =>
     '    strategy:',
     '      matrix:',
     '        npm:',
-    ...versions.flatMap((version) => [`          - version: ${version}`, '            sha256: PENDING']),
+    ...versions.flatMap((version) => [
+      `          - version: ${version}`,
+      '            sha256: PENDING',
+    ]),
     '    steps:',
     '      - run: true',
     '  later:',
