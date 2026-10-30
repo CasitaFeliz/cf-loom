@@ -1,0 +1,18 @@
+language js
+
+predicate library_source() {
+  $filename <: r".*/packages/(?:contract|handlers|messaging|server|client|testing)/src/.*",
+  $filename <: not r".*\.test\.ts",
+  $filename <: not r".*/packages/contract/src/written/line\.ts"
+}
+
+or {
+  or {
+    `$lines.join($separator)`,
+    `$lines?.join($separator)`
+  } as $join where {
+    $separator <: r"['\"`]\\n['\"`]",
+    library_source(),
+    register_diagnostic(span=$join, message="C1: join lines into a message with linesTextOf, which writes each on one line.", severity="error")
+  }
+}

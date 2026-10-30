@@ -203,4 +203,28 @@ describe('lint plugins', () => {
 
     expect(pluginReportsFor(lines, 'walker/probe.ts')).toEqual(['C1@2', 'C1@3', 'C1@4', 'C1@6']);
   });
+
+  it('report a join on LF in a library package’s source, optional calls and each quote included, but not another separator, the CLI, a test file or the line module (C1)', () => {
+    const lines = [
+      'const lines = ["a", "b"];',
+      "export const single = lines.join('\\n');",
+      'export const double = lines.join("\\n");',
+      'export const template = lines.join(`\\n`);',
+      "export const optional = lines?.join('\\n');",
+      "export const comma = lines.join(', ');",
+      "export const empty = lines.join('');",
+      "export const spelled = lines.join('\\\\n');",
+      "export const space = lines.join(' ');",
+    ];
+
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@5',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/written/line.ts')).toEqual([]);
+  });
 });
