@@ -328,8 +328,9 @@ and `reduceRight` (C12), a single-letter name outside a lambda of one expression
 `boolean` parameter, by type or by default, of an exported function or arrow function (C17), under `walker/`, a read of
 a getter zod derives from the schemas a schema holds (`_zod.propValues`, `values`, `optin`, `optout`), as a member
 read, a destructuring or a cast of `_zod` (a name bound to `_zod` is out of reach), which reaches what the walk has not
-judged (C1), a spread argument of `push`, `unshift` or `splice` (C29), outside a `*.test.ts`, a `new Request` built on a signal anywhere but the held one, `heldRequestOf` (C1), and, in a `*.test.ts`, a read of a clock
-(`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`, `process.threadCpuUsage`) (C30).
+judged (C1), a spread argument of `push`, `unshift` or `splice` (C29), outside a `*.test.ts`, a `new Request` whose
+init literal has a `signal` member, outside `wire/held-request.ts` (a variable init or a copied Request is out of
+reach) (C1), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`, `process.threadCpuUsage`) (C30).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`

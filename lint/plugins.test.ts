@@ -212,6 +212,7 @@ describe('lint plugins', () => {
       "export const cast = new Request('http://x/', { method: 'POST', signal } as RequestInit);",
       "export const plain = new Request('http://x/', { method: 'GET' });",
       "export const bare = new Request('http://x/');",
+      "export const nested = new Request('http://x/', { headers: { signal: 'yes' } });",
     ];
 
     expect(pluginReportsFor(lines)).toEqual(['C1@2', 'C1@3', 'C1@4']);
