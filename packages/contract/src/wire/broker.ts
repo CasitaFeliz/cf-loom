@@ -61,7 +61,7 @@ export function brokerHeaderBytesOf(message: {
   return new TextEncoder().encode(`NATS/1.0\r\n${lines.join('')}\r\n`).length;
 }
 
-/** A delivered Message's broker headers read back: its ids and transport headers, or the names of the cf-loom headers it lacks. */
+/** A delivered Message's ids and transport headers read back, or the names of the cf-loom headers or attributes it lacks or that do not read back. */
 export type ReceivedHeaders =
   | {
       readonly kind: 'read';
