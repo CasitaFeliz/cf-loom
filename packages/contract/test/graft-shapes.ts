@@ -96,19 +96,34 @@ export function endpointsLosingFieldBesideUnreachedDefs(count: number): Shape {
   return { baseline: publishedFirst(baseline), proposed: sideOf({ k: required(aString) }) };
 }
 
-/** A Baseline holding a Former Input for each of `count` Endpoints, beside a chain of `count` defs, and the Service as it stands. */
-export function baselineHoldingFormerInputs(count: number): Shape {
-  const kept = { k: required(aString) };
-  const service = aServiceOf(
-    { ...endpointsOf(count, () => anObject(kept)), 'GET /chain': chainEndpointOf(count) },
-    aChainOfObjects(count),
-  );
-  const formerInputs = Array.from({ length: count }, (_, index): FormerInput => {
-    const body = anObject({ ...kept, g: optional(aString) });
+/** A Former Input of each of `count` Endpoints, `PUT /e0`…, each holding the field `g` its Endpoint lost. */
+function formerInputsEachOf(count: number): readonly FormerInput[] {
+  return Array.from({ length: count }, (_, index): FormerInput => {
+    const body = anObject({ k: required(aString), g: optional(aString) });
     const input = { query: emptyObject, body };
     return { endpoint: `PUT /e${index}`, removedIn: '1.1.0', input, defs: {} };
   });
-  return publishedHolding(service, formerInputs);
+}
+
+/** A Baseline holding a Former Input for each of `count` Endpoints, beside a chain of `count` defs, and the Service as it stands. */
+export function baselineHoldingFormerInputs(count: number): Shape {
+  const service = aServiceOf(
+    {
+      ...endpointsOf(count, () => anObject({ k: required(aString) })),
+      'GET /chain': chainEndpointOf(count),
+    },
+    aChainOfObjects(count),
+  );
+  return publishedHolding(service, formerInputsEachOf(count));
+}
+
+/** A Baseline holding a Former Input for each of `count` Endpoints and no def, so what a Check does per Endpoint with the Former Inputs is all that grows with their product. */
+export function endpointsHoldingFormerInputEach(count: number): Shape {
+  const service = aServiceOf(
+    endpointsOf(count, () => anObject({ k: required(aString) })),
+    {},
+  );
+  return publishedHolding(service, formerInputsEachOf(count));
 }
 
 /**

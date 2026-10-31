@@ -1751,6 +1751,18 @@ describe('decodeSnapshot', () => {
       expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
     });
 
+    test.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+      'a ref in an Endpoint’s body to a def named %s that the Snapshot does not hold is malformed at the ref',
+      (name) => {
+        const input = { ...anEndpoint.input, body: aRef(name) };
+        const endpoints = { 'GET /orders/{}': { ...anEndpoint, input } };
+
+        const result = serviceWith({ endpoints });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'input', 'body']));
+      },
+    );
+
     test('a ref to a def the Snapshot does not hold is malformed at the ref', () => {
       const defs = { tree: { type: 'array', items: aRef('missing') } };
 
@@ -2827,6 +2839,22 @@ describe('decodeSnapshot', () => {
           });
 
           expect(result.kind).toBe(kind);
+        },
+      );
+
+      test.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+        'a former Input whose removed field names a def %s that its Endpoint no longer reaches is decoded',
+        (name) => {
+          const former: ObjectNode = {
+            type: 'object',
+            fields: { name: { required: true, schema: stringNode }, gone: optional(aRef(name)) },
+          };
+
+          const result = withBody(anObjectOf(stringNode), [
+            formerOf(former, { [name]: anObjectOf(stringNode) }),
+          ]);
+
+          expect(result.kind).toBe('decoded');
         },
       );
 

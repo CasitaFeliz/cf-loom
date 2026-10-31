@@ -4,10 +4,10 @@ import { destinationOf, isClosureUnchanged, problemWithDefsOf } from '../../test
 import { graftedIdentity, type Shape } from '../../test/graft-fixtures.ts';
 import { differenceFromInput } from '../../test/graft-oracle.ts';
 import {
-  baselineHoldingFormerInputs,
   chainLosingFieldAtEnd,
   defsNamedApartFromOne,
   defsNamingAnAliasChain,
+  endpointsHoldingFormerInputEach,
   endpointsLosingFieldBesideUnreachedDefs,
   endpointsNamingAnAliasChain,
   endpointsNamingChain,
@@ -1364,6 +1364,40 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
     expect(fields['constructor']).toEqual(gone);
   });
 
+  test('a kept field naming an unchanged def is written as the Endpoint writes its `ref`, whatever the Baseline wrote', () => {
+    const written = { type: 'ref', name: 'shared', nullable: true, description: 'new' } as const;
+    const before = aService({
+      body: { id, gone, kept: required({ type: 'ref', name: 'shared', description: 'old' }) },
+      defs: { shared },
+    });
+    const after = aService({ body: { id, kept: required(written) }, defs: { shared } });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([
+      anEntry('1.1.0', { id, gone, kept: required(written) }, { shared }),
+    ]);
+  });
+
+  test.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+    'a removed field naming a def %s that the proposed Snapshot no longer holds is kept as a Former Input, and its Snapshot decodes',
+    (name) => {
+      const dropped = anObject({ p: required(aString) });
+      const before = aService({
+        body: { id, gone: required(ref(name)) },
+        defs: { [name]: dropped },
+      });
+      const after = aService({ body: { id } });
+
+      const published = publishedThrough(before, after);
+
+      expect([published.formerInputs, decodeSnapshot(canonicalTextOf(published)).kind]).toEqual([
+        [anEntry('1.1.0', { id, gone: required(ref(name)) }, { [name]: dropped })],
+        'decoded',
+      ]);
+    },
+  );
+
   test('two pairs whose former defs share a name are named `~1` and `~2` as before', () => {
     const both = anObject({ p: required(aString), q: optional(aString) });
     const before = aService({
@@ -1455,6 +1489,9 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
 
   /** The Endpoints are as many as the chain is long, so a check that reads the chain per Endpoint costs their product. */
   const endpointSizes = { small: 1_000, large: 8_000 };
+
+  /** The Former Inputs are as many as the Endpoints, and a Check that scans them per Endpoint costs their product, which only sizes this large let outgrow the rest of the Check. */
+  const formerSizes = { small: 4_000, large: 32_000 };
 
   const mergedAt = publishedAt('1.1.0');
 
@@ -1564,10 +1601,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
   test('a Baseline holding a Former Input for each of many Endpoints is checked in time that grows with them', {
     timeout: growthTimeout,
   }, () => {
-    const { baseline, proposed } = baselineHoldingFormerInputs(3);
+    const { baseline, proposed } = endpointsHoldingFormerInputEach(3);
 
     const report = compatibilityReportOf(baseline, proposed);
-    const growth = growthOf(checked(baselineHoldingFormerInputs), endpointSizes, linearGrowth);
+    const growth = growthOf(checked(endpointsHoldingFormerInputEach), formerSizes, linearGrowth);
 
     expect(report).toEqual({ changes: [] });
     expect(growth).toBeLessThan(linearGrowth);
@@ -1621,7 +1658,7 @@ describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
     return draws.filter(({ kinds }) => kinds.has(kind)).length;
   }
 
-  test('the generator draws removals under every kind of node the graft enters and removed fields naming defs through every kind it copies', () => {
+  test('the generator draws removals under every kind of node the graft enters, and removed fields naming defs through every kind it copies and defs the proposed Snapshot drops', () => {
     const wanted = [
       'graft: field',
       'graft: items',
@@ -1638,6 +1675,10 @@ describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
       'copy: object',
       'copy: nullable ref',
       'copy: ref to an alias',
+      'dropped: toString',
+      'dropped: constructor',
+      'dropped: valueOf',
+      'dropped: hasOwnProperty',
     ];
 
     const scarce = wanted.filter((kind) => countOf(kind) < 50);

@@ -152,7 +152,7 @@ export function chainEndpointOf(count: number): EndpointSnapshot {
   return anEndpointOf(null, { name: 'getChain', success });
 }
 
-/** The Service published as 1.1.0 holding the Former Inputs given, which a publish would write, in the order a Snapshot keeps them. */
+/** The Service published as 1.0.0 holding the Former Inputs given, which a publish would write, in the order a Snapshot keeps them. */
 export function publishedHolding(
   service: ServiceSnapshot,
   formerInputs: readonly FormerInput[],

@@ -4,6 +4,14 @@ import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
 /**
+ * The def a name stands for in a defs value: none unless `defs` holds it as an own key, since a
+ * name an object inherits, such as `toString`, is no def.
+ */
+export function defNamed(defs: Defs, name: string): SchemaNode | undefined {
+  return Object.hasOwn(defs, name) ? defs[name] : undefined;
+}
+
+/**
  * Every node within the given nodes and within each def they reach through `ref`s, directly or
  * through other defs; a def is added once.
  */
@@ -24,7 +32,7 @@ export function nodesReachedFrom(nodes: readonly SchemaNode[], defs: Defs): read
         break;
       }
       case 'def': {
-        const def = defs[next.name];
+        const def = defNamed(defs, next.name);
         if (def !== undefined && !entered.has(next.name)) {
           entered.add(next.name);
           pending.push({ kind: 'node', node: def });
@@ -80,7 +88,7 @@ function destinationOf(
   const aliases: string[] = [];
   let destination = followedFrom(name, { defs, known }, aliases);
   for (let alias = aliases.pop(); alias !== undefined; alias = aliases.pop()) {
-    const def = defs[alias];
+    const def = defNamed(defs, alias);
     if (destination !== undefined && def?.type === 'ref' && def.nullable === true) {
       destination = { ...destination, nullable: true };
     }
@@ -100,7 +108,7 @@ function followedFrom(
     if (reader.known.has(current)) {
       return reader.known.get(current);
     }
-    const def = Object.hasOwn(reader.defs, current) ? reader.defs[current] : undefined;
+    const def = defNamed(reader.defs, current);
     if (def === undefined || onPath.has(current)) {
       return undefined;
     }
@@ -129,9 +137,9 @@ export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonl
  * order, as the canonical Snapshot keys them, in time that grows with what they reach.
  */
 export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
-  const held = reachedDefsOf(nodes, defs).filter((name) => Object.hasOwn(defs, name));
+  const held = reachedDefsOf(nodes, defs).filter((name) => defNamed(defs, name) !== undefined);
   held.sort(byCodePoint);
-  return Object.fromEntries(held.map((name) => [name, defs[name] as SchemaNode]));
+  return Object.fromEntries(held.map((name) => [name, defNamed(defs, name) as SchemaNode]));
 }
 
 function isRef(node: SchemaNode): node is RefNode {

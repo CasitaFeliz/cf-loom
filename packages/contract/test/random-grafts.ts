@@ -10,7 +10,7 @@ import { anObject, aRef, aString, aVersionOf } from './graft-fixtures.ts';
 import { defsReachedUnenteredFrom, edgesOf, type Site, sitesIn } from './graft-sites.ts';
 import { defPairOf } from './random-def-pairs.ts';
 import type { Next } from './random-draft.ts';
-import { removedSchemaOf, useOf } from './random-removed-schemas.ts';
+import { droppedDefsOf, removedSchemaOf, useOf } from './random-removed-schemas.ts';
 import { seededNext } from './random-schemas.ts';
 
 /**
@@ -130,7 +130,11 @@ function wrapperDefsOf(names: readonly string[], next: Next): Defs {
 }
 
 /** The Input body with the fields that stay, and with the ones a version removes besides. */
-function bodyOf(names: readonly string[], next: Next): { kept: ObjectNode; full: ObjectNode } {
+function bodyOf(
+  names: readonly string[],
+  dropped: readonly [string, Field][],
+  next: Next,
+): { kept: ObjectNode; full: ObjectNode } {
   const kept = names.map((name): [string, Field] => [
     `k_${name}`,
     { required: next() < 0.5, schema: useOf([name], next) },
@@ -142,7 +146,7 @@ function bodyOf(names: readonly string[], next: Next): { kept: ObjectNode; full:
   ]);
   return {
     kept: anObject(Object.fromEntries(kept)),
-    full: anObject(Object.fromEntries([...kept, ...gone])),
+    full: anObject(Object.fromEntries([...kept, ...gone, ...dropped])),
   };
 }
 
@@ -163,19 +167,23 @@ export function graftDrawOf(seed: number): GraftDraw {
   const next = seededNext(seed * 7919 + 11);
   const graph = defPairOf(seed).baseline;
   const defs: Defs = { ...graph, ...wrapperDefsOf(Object.keys(graph), next) };
-  const { kept, full } = bodyOf(Object.keys(defs), next);
+  const dropped = droppedDefsOf(Object.keys(defs), next);
+  const { kept, full } = bodyOf(Object.keys(defs), dropped.fields, next);
   const { proposedDefs, applied } = withRemovals(defs, kept, next);
+  const baselineDefs: Defs = { ...defs, ...dropped.defs };
   const gone = Object.entries(full.fields)
-    .filter(([name]) => name.startsWith('gone'))
+    .filter(([name]) => name.startsWith('gone') || name.startsWith('dropped_'))
     .map(([, field]) => field.schema);
   const graftSteps = applied.flatMap(({ removal }) => removal.site.steps.map((s) => `graft: ${s}`));
   const copied = [...gone, ...applied.map(({ schema }) => schema)];
+  const droppedKinds = Object.keys(dropped.defs).map((name) => `dropped: ${name}`);
   const kinds = new Set([
     ...graftSteps,
-    ...copied.flatMap((schema) => copiedKindsOf(schema, defs)),
+    ...droppedKinds,
+    ...copied.flatMap((schema) => copiedKindsOf(schema, baselineDefs)),
   ]);
   return {
-    baseline: aVersionOf(full, defs),
+    baseline: aVersionOf(full, baselineDefs),
     proposed: aVersionOf(kept, proposedDefs),
     kinds,
   };
@@ -183,9 +191,9 @@ export function graftDrawOf(seed: number): GraftDraw {
 
 /**
  * Three versions of a Service whose defs are the two graphs of a seeded pair, the first and the
- * rest: the Endpoint's body names every def of its version in a field, and in the first version
- * holds three fields besides, which name defs through every kind of node the graft copies and
- * which the next versions remove one at a time.
+ * rest, the first also holding some defs the rest drop: the Endpoint's body names every def of its
+ * version in a field, and in the first version holds three fields besides, which name defs through
+ * every kind of node the graft copies and which the next versions remove one at a time.
  */
 export function removalHistoryOf(seed: number): readonly ServiceSnapshot[] {
   const next = seededNext(seed * 6007 + 5);
@@ -195,6 +203,7 @@ export function removalHistoryOf(seed: number): readonly ServiceSnapshot[] {
     `gone${index}`,
     { required: next() < 0.5, schema: removedSchemaOf(names, next) },
   ]);
+  const dropped = droppedDefsOf(names, next);
   const keptIn = (defs: Defs) =>
     Object.keys(defs).map((name): [string, Field] => [
       `k_${name}`,
@@ -205,7 +214,7 @@ export function removalHistoryOf(seed: number): readonly ServiceSnapshot[] {
     return aVersionOf(anObject(Object.fromEntries(fields)), defs);
   };
   return [
-    versionWith(pair.baseline, 0),
+    versionWith({ ...pair.baseline, ...dropped.defs }, 0),
     versionWith(pair.proposed, 1),
     versionWith(pair.proposed, 2),
   ];

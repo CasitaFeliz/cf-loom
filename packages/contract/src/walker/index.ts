@@ -13,6 +13,7 @@ export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { ResolvedRef } from './def-graph.ts';
 export {
+  defNamed,
   defsReachedOf,
   nodesReachedFrom,
   type RefResolver,
