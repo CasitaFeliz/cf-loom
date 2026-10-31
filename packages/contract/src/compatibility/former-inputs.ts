@@ -91,15 +91,12 @@ function taggedBreakingOf(
  * body, kept while it grafts a field.
  */
 export function formerInputsMerged(
-  baseline: PublishedServiceSnapshot | undefined,
-  proposed: ServiceSnapshot,
+  checked: CheckedService,
   version: string,
 ): readonly FormerInput[] {
-  if (baseline === undefined) {
-    return [];
-  }
+  const { baseline, proposed } = checked;
   const merge = {
-    checked: checkedServiceOf(baseline, proposed),
+    checked,
     read: { baseline: readDefsOf(baseline.defs), proposed: readDefsOf(proposed.defs) },
   };
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
