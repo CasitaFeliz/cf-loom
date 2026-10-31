@@ -121,10 +121,10 @@ export const viewedFields: NpmShape<PrintedObject> = {
 /** `npm pack`: the report of the one package it packed, in an array of reports or keyed by package name. */
 export const packedReport: NpmShape<PrintedObject> = {
   expected: 'the report of one packed package',
-  read: (printed) =>
-    typeof printed === 'object' && printed !== null
-      ? objectOf(Object.values(printed)[0])
-      : undefined,
+  read: (printed) => {
+    const reports = typeof printed === 'object' && printed !== null ? Object.values(printed) : [];
+    return reports.length === 1 ? objectOf(reports[0]) : undefined;
+  },
 };
 
 /** `npm whoami`: the user name npm logs in as. */
@@ -172,13 +172,18 @@ function shapedOf<Value>(
   return { kind: 'json', value };
 }
 
-/** What npm printed in a failure's words: its JSON cut at 60 characters, or `nothing`. */
+const excerptLength = 60;
+
+/** What npm printed in a failure's words: its JSON cut after 60 characters, never inside one, or `nothing`. */
 function excerptOf(printed: unknown): string {
   if (printed === undefined) {
     return 'nothing';
   }
   const json = JSON.stringify(printed);
-  return json.length > 60 ? `${json.slice(0, 60)}…` : json;
+  const characters = Array.from(json.slice(0, 2 * excerptLength + 1));
+  return characters.length > excerptLength
+    ? `${characters.slice(0, excerptLength).join('')}…`
+    : json;
 }
 
 function refusalOf(call: NpmCall, ended: Extract<ChildRan, { kind: 'errored' }>): Refused | Failed {

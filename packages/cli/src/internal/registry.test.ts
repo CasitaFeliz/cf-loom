@@ -1954,6 +1954,24 @@ describe('baselineOf and what npm prints', () => {
     expect(failureIn(read)).toBe(`${viewingVersion} printed ${print}, not one version's fields`);
   });
 
+  test('a print is cut between characters, never inside an emoji', async ({ lab }) => {
+    const print = `"${'😀'.repeat(59)}"`;
+
+    const read = await readPrinted(lab, { fields: print });
+
+    const cut = `"${'😀'.repeat(59)}…`;
+    expect(failureIn(read)).toBe(`${viewingVersion} printed ${cut}, not one version's fields`);
+  });
+
+  test('a print of exactly 60 characters, emoji among them, is not cut', async ({ lab }) => {
+    const print = `"${'😀'.repeat(58)}"`;
+
+    const read = await readPrinted(lab, { fields: print });
+
+    expect(Array.from(print)).toHaveLength(60);
+    expect(failureIn(read)).toBe(`${viewingVersion} printed ${print}, not one version's fields`);
+  });
+
   test.for([
     ['an empty object', '{}'],
     ['an empty list', '[]'],
@@ -1962,6 +1980,8 @@ describe('baselineOf and what npm prints', () => {
     ['null', 'null'],
     ['a list of numbers', '[7]'],
     ['a map of a file name', '{"p":"a.tgz"}'],
+    ['a list of two reports', '[{"filename":"a.tgz"},{"filename":"b.tgz"}]'],
+    ['a map of two packages', '{"a":{"filename":"a.tgz"},"b":{"filename":"b.tgz"}}'],
     ['nothing', ''],
   ] as const)(
     'npm pack printing %s fails the Baseline read with what it printed',
