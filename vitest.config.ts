@@ -61,6 +61,7 @@ export default defineConfig({
     env: { NODE_OPTIONS: `--max-old-space-size=${lightHeapMegabytes}` },
     projects: [
       'packages/*',
+      'packages/*/vitest.heavy.config.ts',
       'examples/*',
       {
         test: {
