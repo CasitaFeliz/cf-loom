@@ -22,6 +22,10 @@
       "types": "./dist/jetstream/index.d.ts",
       "default": "./dist/jetstream/index.js"
     },
+    "./in-process": {
+      "types": "./dist/in-process/index.d.ts",
+      "default": "./dist/in-process/index.js"
+    },
     "./sqs": {
       "types": "./dist/sqs/index.d.ts",
       "default": "./dist/sqs/index.js"
