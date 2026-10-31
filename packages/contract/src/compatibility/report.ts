@@ -1,5 +1,5 @@
 import type { Visibility } from '../declarations/index.ts';
-import type { ChangedSite, Step } from '../walker/index.ts';
+import type { Anchored, ChangedSite, Step } from '../walker/index.ts';
 import type { ShapeDifference } from './shape-differences.ts';
 
 /**
@@ -68,20 +68,15 @@ export type Difference =
   | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
   /**
    * A difference inside a schema, at its steps from the site, or, inside a recursive schema the
-   * proposed Snapshot reaches through a `ref`, from that schema, read in one Position; a shared
-   * schema is read as a Message, the strongest.
+   * proposed Snapshot reaches through a `ref`, from that schema, by its id in the proposed
+   * Snapshot's defs, read in one Position; a shared schema is read as a Message, the strongest.
    */
-  | {
-      readonly kind: 'schema';
-      /** The steps from the site, or from the def when there is one. */
-      readonly at: readonly Step[];
-      /** The id, in the proposed Snapshot's defs, of the recursive schema the difference is in; absent outside every one. */
-      readonly def?: string;
-      readonly position: Position;
-      readonly shape: ShapeDifference;
-      /** The version that first published a field of the former Input it was found against removed; absent when found against the Baseline's own shape. */
-      readonly removedIn?: string;
-    }
+  | ({ readonly kind: 'schema' } & Anchored & {
+        readonly position: Position;
+        readonly shape: ShapeDifference;
+        /** The version that first published a field of the former Input it was found against removed; absent when found against the Baseline's own shape. */
+        readonly removedIn?: string;
+      })
   /** A shared schema, a Guard or a Rejection gone from its Definitions Package. */
   | { readonly kind: 'removed' }
   /** A Success's or a code's HTTP status changed: Callers may depend on either. */

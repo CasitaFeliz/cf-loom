@@ -107,8 +107,8 @@ export function snapshotPathOf(steps: readonly Step[]): Path {
 }
 
 /**
- * Steps from a site, or, with a `def`, from the recursive schema of that id in the proposed
- * Snapshot's `defs`: a path that cannot be read without the `def` it starts at.
+ * Steps from a site, or, with a `def`, from the recursive schema of that id in `defs`; without the
+ * `def` the same steps name another place.
  */
 export type Anchored = { readonly at: readonly Step[]; readonly def?: string };
 

@@ -61,7 +61,7 @@ export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { byShape, shapeKey, shapeOf } from './shapes.ts';
-export type { PartName, Step, StepChain } from './steps.ts';
+export type { Anchored, PartName, Step, StepChain } from './steps.ts';
 export {
   anchoredAuthorPathOf,
   anchoredSnapshotPathOf,
