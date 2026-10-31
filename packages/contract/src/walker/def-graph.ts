@@ -1,3 +1,4 @@
+import { byCodePoint } from './canonical-json.ts';
 import { childrenOf, nodesWithin } from './children.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
@@ -123,10 +124,14 @@ export function reachedDefsOf(nodes: readonly SchemaNode[], defs: Defs): readonl
   return [...new Set(refs.map(({ name }) => name))];
 }
 
-/** The defs the nodes reach through `ref`s, directly or through other defs, keyed and ordered as in `defs`. */
+/**
+ * The defs the nodes reach through `ref`s, directly or through other defs, keyed in code point
+ * order, as the canonical Snapshot keys them, in time that grows with what they reach.
+ */
 export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
-  const reached = new Set(reachedDefsOf(nodes, defs));
-  return Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
+  const held = reachedDefsOf(nodes, defs).filter((name) => Object.hasOwn(defs, name));
+  held.sort(byCodePoint);
+  return Object.fromEntries(held.map((name) => [name, defs[name] as SchemaNode]));
 }
 
 function isRef(node: SchemaNode): node is RefNode {

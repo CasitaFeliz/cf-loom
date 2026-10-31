@@ -43,7 +43,8 @@ export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted 
   const options = { defs, resolve, met: namedDefs(recorded.met, onto.defs) };
   const named = walked(former, onto.input, options);
   const nodes = [named.input.query, named.input.body].filter((node) => node !== null);
-  return { input: named.input, defs: defsReachedOf(nodes, { ...onto.defs, ...named.out }) };
+  const held = defsReachedOf([...nodes, ...Object.values(named.out)], onto.defs);
+  return { input: named.input, defs: { ...held, ...named.out } };
 }
 
 type Options = Pick<Walk, 'defs' | 'resolve' | 'met'>;
