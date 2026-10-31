@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import type { Shape } from '../../test/graft-fixtures.ts';
+import {
+  baselineHoldingFormerInputs,
+  formerInputsNamingAnAliasChain,
+} from '../../test/graft-shapes.ts';
+import { growthOf } from '../../test/growth.ts';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, publishedServiceAt, schemaExports } from '../../test/snapshots.ts';
@@ -3483,5 +3489,42 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
     const at = ['defs', 'deep', ...Array<string>(254).fill('items')];
     const refusal = malformedAt(at, 'nests deeper than 256 levels');
     expect(results).toEqual(draws.map(({ refused }) => (refused ? refusal : 'decoded')));
+  });
+});
+
+describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
+  /** How many times longer a decode of a Snapshot eight times as large may take: about 8 for one that reads each part once. */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  const sizes = { small: 1_000, large: 8_000 };
+
+  function decoded(shapeOf: (count: number) => Shape) {
+    return (count: number) => {
+      const text = canonicalTextOf(shapeOf(count).baseline);
+      return () => decodeSnapshot(text);
+    };
+  }
+
+  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', {
+    timeout: growthTimeout,
+  }, () => {
+    const read = decoded(baselineHoldingFormerInputs)(3)();
+    const growth = growthOf(decoded(baselineHoldingFormerInputs), sizes, linearGrowth);
+
+    expect(read.kind).toBe('decoded');
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const read = decoded(formerInputsNamingAnAliasChain)(3)();
+    const growth = growthOf(decoded(formerInputsNamingAnAliasChain), sizes, linearGrowth);
+
+    expect(read.kind).toBe('decoded');
+    expect(growth).toBeLessThan(linearGrowth);
   });
 });

@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { defPairOf } from '../../test/random-def-pairs.ts';
+import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedServiceAt } from '../../test/snapshots.ts';
 import {
@@ -13,6 +15,7 @@ import {
 } from '../index.ts';
 import {
   type CodeSnapshot,
+  type Defs,
   type EndpointFields,
   type EndpointLifecycle,
   type EndpointPath,
@@ -1074,5 +1077,84 @@ describe('exportedSnapshotOf, depth', () => {
     );
 
     expect(Object.keys(cut.defs)).toHaveLength(count);
+  });
+});
+
+describe('exportedSnapshotOf, the defs of a seeded def graph', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => defPairOf(seed));
+
+  /** The names of the defs the nodes reach, directly or through the defs those reach, by a plain loop over the graph. */
+  function reachedNamesOf(nodes: readonly SchemaNode[], defs: Defs): ReadonlySet<string> {
+    const reached = new Set<string>();
+    const pending = nodes.flatMap((node) => nodesIn(node).filter(isRef));
+    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+      const name = String(next.name);
+      if (!reached.has(name)) {
+        reached.add(name);
+        const def = Object.hasOwn(defs, name) ? defs[name] : undefined;
+        for (const inner of nodesIn(def).filter(isRef)) {
+          pending.push(inner);
+        }
+      }
+    }
+    return reached;
+  }
+
+  /** The Service exporting the wrappers of the draw's first defs from Public Endpoints, and the others from Private ones, with the defs as given. */
+  function serviceOf(draw: ReturnType<typeof defPairOf>, defs: Defs) {
+    const wrappers = Object.values(draw.exports);
+    const entries = wrappers.map((wrapper, index): [string, EndpointSnapshot] => {
+      const visibility = index < 2 ? 'public' : 'private';
+      const input = { params: null, query: noFields, headers: noFields, body: wrapper.baseline };
+      return [`PUT /e${index}`, anEndpointEntry({ visibility, input })];
+    });
+    const exported = wrappers.slice(0, 2).map(({ baseline }) => baseline);
+    return {
+      snapshot: aServiceSnapshot({ endpoints: Object.fromEntries(entries), defs }),
+      exported,
+    };
+  }
+
+  function inOrder(defs: Defs, direction: 'canonical' | 'reversed'): Defs {
+    const names = Object.keys(defs).sort();
+    return Object.fromEntries(
+      (direction === 'canonical' ? names : names.reverse()).map((name) => [
+        name,
+        defs[name] as SchemaNode,
+      ]),
+    );
+  }
+
+  const orders = ['canonical', 'reversed'] as const;
+
+  /** Whether the cut of a draw holds exactly the defs its exported schemas reach, in code point order, and the Snapshot’s own. */
+  function isCutRight(draw: ReturnType<typeof defPairOf>, order: (typeof orders)[number]): boolean {
+    const defs = inOrder(draw.baseline, order);
+    const { snapshot, exported } = serviceOf(draw, defs);
+
+    const cut = exportedSnapshotOf(snapshot);
+
+    const expected = [...reachedNamesOf(exported, defs)].sort();
+    const isOwn = Object.entries(cut.defs).every(([name, def]) => def === defs[name]);
+    return isOwn && JSON.stringify(Object.keys(cut.defs)) === JSON.stringify(expected);
+  }
+
+  test('the defs an exported cut holds are those its schemas reach, in code point order, whatever order the Snapshot’s defs are in', () => {
+    const labelled = draws.flatMap((draw, seed) =>
+      orders.map((order) => ({ label: `${seed} ${order}`, isRight: isCutRight(draw, order) })),
+    );
+
+    const wrong = labelled.filter(({ isRight }) => !isRight);
+
+    expect(wrong.map(({ label }) => label)).toEqual([]);
+  });
+
+  test('the draws export, from a graph given in either order, a cut of at least two defs, many times over', () => {
+    const cuts = draws.map((draw) => {
+      const { snapshot } = serviceOf(draw, inOrder(draw.baseline, 'reversed'));
+      return Object.keys(exportedSnapshotOf(snapshot).defs).length;
+    });
+
+    expect(cuts.filter((count) => count >= 2).length).toBeGreaterThanOrEqual(500);
   });
 });

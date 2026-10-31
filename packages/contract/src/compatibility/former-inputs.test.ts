@@ -1,4 +1,22 @@
+import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
+import { destinationOf, isClosureUnchanged, problemWithDefsOf } from '../../test/graft-defs.ts';
+import { graftedIdentity, type Shape } from '../../test/graft-fixtures.ts';
+import { differenceFromInput } from '../../test/graft-oracle.ts';
+import {
+  baselineHoldingFormerInputs,
+  chainLosingFieldAtEnd,
+  defsNamedApartFromOne,
+  defsNamingAnAliasChain,
+  endpointsLosingFieldBesideUnreachedDefs,
+  endpointsNamingAnAliasChain,
+  endpointsNamingChain,
+  wideBodyLosingField,
+} from '../../test/graft-shapes.ts';
+import { growthOf } from '../../test/growth.ts';
+import { aliasDrawOf } from '../../test/random-alias-draws.ts';
+import { isRef, nodesIn } from '../../test/random-draft.ts';
+import { graftDrawOf, removalHistoryOf } from '../../test/random-grafts.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
@@ -19,6 +37,7 @@ import {
   type ObjectNode,
   type PublishedServiceSnapshot,
   publishedSnapshotOf,
+  type RefNode,
   type SchemaNode,
   type ServiceSnapshot,
   type ShapeDifference,
@@ -1272,6 +1291,102 @@ function rootDepthsOf({ published }: Published): readonly number[] {
   return defScopesOf(published).flatMap(({ nodes }) => nodes.map(({ at }) => at.length));
 }
 
+const gone = optional(aNumber);
+
+describe('publishedSnapshotOf: the defs a former Input holds', () => {
+  const shared = anObject({ p: required(aString) });
+
+  test('a removed field beside a field naming an unchanged def keeps the `ref` to the Snapshot’s def', () => {
+    const kept = required(ref('shared'));
+    const before = aService({ body: { id, gone, kept }, defs: { shared } });
+    const after = aService({ body: { id, kept }, defs: { shared } });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([anEntry('1.1.0', { id, gone, kept }, { shared })]);
+  });
+
+  test('a removed field beside a field naming a def that changed only its description holds that def as declared', () => {
+    const kept = required(ref('shared'));
+    const described = (description: string) => ({ ...shared, description });
+    const before = aService({ body: { id, gone, kept }, defs: { shared: described('old') } });
+    const after = aService({ body: { id, kept }, defs: { shared: described('new') } });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([
+      anEntry('1.1.0', { id, gone, kept }, { shared: described('new') }),
+    ]);
+  });
+
+  test('a removed field beside a field naming a def that changed its description and lost a field names that def apart', () => {
+    const described = (description: string, fields: Fields) => ({
+      ...anObject(fields),
+      description,
+    });
+    const old = described('old', { p: required(aString), q: optional(aString) });
+    const before = aService({
+      body: { id, gone, kept: required(ref('shared')) },
+      defs: { shared: old },
+    });
+    const after = aService({
+      body: { id, kept: required(ref('shared')) },
+      defs: { shared: described('new', { p: required(aString) }) },
+    });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    const apart = described('new', { p: required(aString), q: optional(aString) });
+    expect(formerInputs).toEqual([
+      anEntry('1.1.0', { id, gone, kept: required(ref('shared~1')) }, { 'shared~1': apart }),
+    ]);
+  });
+
+  test('a `ref` pair naming one unchanged def through an alias def is held as the Endpoint writes it', () => {
+    const kept = required(ref('alias'));
+    const defs = { alias: ref('shared'), shared };
+    const before = aService({ body: { id, gone, kept }, defs });
+    const after = aService({ body: { id, kept }, defs });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([anEntry('1.1.0', { id, gone, kept }, defs)]);
+  });
+
+  test('a field named `constructor` is grafted back as an own field', () => {
+    const before = aService({ body: { id, constructor: gone } });
+    const after = aService({ body: { id } });
+
+    const [former] = formerInputsAfter(before, after);
+
+    const fields = former?.input.body?.type === 'object' ? former.input.body.fields : {};
+    expect(Object.hasOwn(fields, 'constructor')).toBe(true);
+    expect(fields['constructor']).toEqual(gone);
+  });
+
+  test('two pairs whose former defs share a name are named `~1` and `~2` as before', () => {
+    const both = anObject({ p: required(aString), q: optional(aString) });
+    const before = aService({
+      body: { first: required(ref('b1')), second: required(ref('b2')) },
+      defs: { b1: both, b2: both },
+    });
+    const after = aService({
+      body: { first: required(ref('x')), second: required(ref('x')) },
+      defs: { x: shared },
+    });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([
+      anEntry(
+        '1.1.0',
+        { first: required(ref('x~1')), second: required(ref('x~2')) },
+        { 'x~1': both, 'x~2': both },
+      ),
+    ]);
+  });
+});
+
 describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over generated histories', () => {
   const histories = generatedHistories();
   const publishes = histories.flat();
@@ -1322,5 +1437,442 @@ describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over gene
     const repeated = publishes.filter(reportsOneTwice);
 
     expect(repeated.map(({ label }) => label)).toEqual([]);
+  });
+});
+
+describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', () => {
+  /**
+   * How many times longer a check of a shape eight times as large may take: about 8 for a check
+   * that reads each part once, and 64 for one that copies a part, scans a list or follows a chain
+   * again at each part.
+   */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  const sizes = { small: 2_000, large: 16_000 };
+
+  /** The Endpoints are as many as the chain is long, so a check that reads the chain per Endpoint costs their product. */
+  const endpointSizes = { small: 1_000, large: 8_000 };
+
+  const mergedAt = publishedAt('1.1.0');
+
+  function bodyFieldNamesOf(former: FormerInput): readonly string[] {
+    return former.input.body?.type === 'object' ? Object.keys(former.input.body.fields) : [];
+  }
+
+  function checked(shapeOf: (count: number) => Shape) {
+    return (count: number) => {
+      const { baseline, proposed } = shapeOf(count);
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  function checkedAndMerged(shapeOf: (count: number) => Shape) {
+    return (count: number) => {
+      const { baseline, proposed } = shapeOf(count);
+      return () => [
+        compatibilityReportOf(baseline, proposed),
+        publishedSnapshotOf(baseline, proposed, mergedAt),
+      ];
+    };
+  }
+
+  function merged(shapeOf: (count: number) => Shape) {
+    return (count: number) => {
+      const { baseline, proposed } = shapeOf(count);
+      return () => publishedSnapshotOf(baseline, proposed, mergedAt);
+    };
+  }
+
+  test.each([{ naming: 'bare' }, { naming: 'in a field' }] as const)(
+    'many Endpoints whose Input body names the head of one unchanged chain of ids, $naming, are checked in time that grows with their number and the chain’s length',
+    {
+      timeout: growthTimeout,
+    },
+    ({ naming }) => {
+      const shapeOf = (count: number) => endpointsNamingChain(count, naming);
+      const { baseline, proposed } = shapeOf(3);
+
+      const report = compatibilityReportOf(baseline, proposed);
+      const growth = growthOf(checked(shapeOf), endpointSizes, linearGrowth);
+
+      expect(report).toEqual({ changes: [] });
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
+
+  test('a body of many fields losing one is checked and merged in time that grows with its fields', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = wideBodyLosingField(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(checkedAndMerged(wideBodyLosingField), sizes, linearGrowth);
+
+    expect(published.formerInputs.map(bodyFieldNamesOf)).toEqual([['f0', 'f1', 'f2']]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a chain of ids whose end lost a field is checked and merged in time that grows with its length', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = chainLosingFieldAtEnd(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(checkedAndMerged(chainLosingFieldAtEnd), sizes, linearGrowth);
+
+    expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
+      ['c0~1', 'c1~1', 'c2~1'],
+    ]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('many defs naming the top of a long chain of alias defs whose end changed are grafted in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = defsNamingAnAliasChain(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(checkedAndMerged(defsNamingAnAliasChain), sizes, linearGrowth);
+
+    expect(published.formerInputs.map(bodyFieldNamesOf)).toEqual([['f0', 'f1']]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('many Endpoints each losing a field beside many defs they do not reach are checked in time that grows with both', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = endpointsLosingFieldBesideUnreachedDefs(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(
+      checkedAndMerged(endpointsLosingFieldBesideUnreachedDefs),
+      sizes,
+      linearGrowth,
+    );
+
+    expect(published.formerInputs.map(({ endpoint, defs }) => [endpoint, defs])).toEqual([
+      ['PUT /e0', {}],
+      ['PUT /e1', {}],
+      ['PUT /e2', {}],
+    ]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a Baseline holding a Former Input for each of many Endpoints is checked in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = baselineHoldingFormerInputs(3);
+
+    const report = compatibilityReportOf(baseline, proposed);
+    const growth = growthOf(checked(baselineHoldingFormerInputs), endpointSizes, linearGrowth);
+
+    expect(report).toEqual({ changes: [] });
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('many Endpoints naming the top of one long chain of alias defs whose end changed are merged in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = endpointsNamingAnAliasChain(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(merged(endpointsNamingAnAliasChain), sizes, linearGrowth);
+
+    expect(published.formerInputs).toEqual([]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('many defs named apart from one def’s name are merged in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = defsNamedApartFromOne(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const growth = growthOf(merged(defsNamedApartFromOne), endpointSizes, linearGrowth);
+
+    expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
+      ['x~1', 'x~2', 'x~3'],
+    ]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
+  const count = 3_000;
+  const draws = Array.from({ length: count }, (_, seed) => graftDrawOf(seed));
+  const isDecoded = (published: PublishedServiceSnapshot) =>
+    decodeSnapshot(canonicalTextOf(published)).kind === 'decoded';
+
+  /** Every version published in turn, against the one before. */
+  function publishedEach(
+    versions: readonly ServiceSnapshot[],
+  ): readonly PublishedServiceSnapshot[] {
+    const publishes: PublishedServiceSnapshot[] = [];
+    for (const [minor, version] of versions.entries()) {
+      publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
+    }
+    return publishes;
+  }
+
+  function countOf(kind: string): number {
+    return draws.filter(({ kinds }) => kinds.has(kind)).length;
+  }
+
+  test('the generator draws removals under every kind of node the graft enters and removed fields naming defs through every kind it copies', () => {
+    const wanted = [
+      'graft: field',
+      'graft: items',
+      'graft: value',
+      'graft: rest',
+      'graft: variant',
+      'copy: union',
+      'copy: record key',
+      'copy: tuple rest',
+      'copy: tuple',
+      'copy: tagged',
+      'copy: allOf',
+      'copy: array',
+      'copy: object',
+      'copy: nullable ref',
+      'copy: ref to an alias',
+    ];
+
+    const scarce = wanted.filter((kind) => countOf(kind) < 50);
+
+    expect(scarce).toEqual([]);
+  });
+
+  test('the generator draws defs named apart beside defs held as declared, and closures that changed and did not', () => {
+    const published = draws.map((draw) => publishedEach([draw.baseline, draw.proposed]).at(-1));
+    const formers = published.map((publish) => publish?.formerInputs[0]);
+
+    const apart = formers.filter((former) =>
+      Object.keys(former?.defs ?? {}).some((name) => name.includes('~')),
+    );
+    const besideHeld = apart.filter((former) =>
+      Object.keys(former?.defs ?? {}).some((name) => !name.includes('~')),
+    );
+    const unchanged = draws.filter(({ baseline, proposed }) =>
+      Object.keys(baseline.defs).some((name) =>
+        isClosureUnchanged(name, baseline.defs, proposed.defs),
+      ),
+    );
+
+    expect([apart.length, besideHeld.length, unchanged.length]).toEqual([
+      expect.toSatisfy((value: number) => value >= 500),
+      expect.toSatisfy((value: number) => value >= 50),
+      expect.toSatisfy((value: number) => value >= 500),
+    ]);
+  });
+
+  test('a kept former Input of an Input that only lost fields, under every kind of node, is the Input as it was', () => {
+    const problems = draws.flatMap((draw, seed) => {
+      const [, published] = publishedEach([draw.baseline, draw.proposed]);
+      const input = draw.baseline.endpoints[graftedIdentity]?.input;
+      const formers = published?.formerInputs ?? [];
+      const found = formers.flatMap((former) => [
+        differenceFromInput(former, {
+          input: input as Pick<FormerInput, 'input'>['input'],
+          defs: draw.baseline.defs,
+        }),
+        problemWithDefsOf(former),
+      ]);
+      return found
+        .filter((problem) => problem !== undefined)
+        .map((problem) => `${seed}: ${problem}`);
+    });
+
+    expect(problems).toEqual([]);
+  });
+
+  test('every Former Input the merge writes over a seeded def graph that only loses fields decodes', () => {
+    const undecoded = draws.flatMap((draw, seed) => {
+      const publishes = publishedEach([draw.baseline, draw.proposed]);
+      return publishes.every(isDecoded) ? [] : [seed];
+    });
+
+    expect(undecoded).toEqual([]);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs over a seeded def graph with edits', () => {
+  const histories = Array.from({ length: 3_000 }, (_, seed) => removalHistoryOf(seed));
+
+  function publishedEach(
+    versions: readonly ServiceSnapshot[],
+  ): readonly PublishedServiceSnapshot[] {
+    const publishes: PublishedServiceSnapshot[] = [];
+    for (const [minor, version] of versions.entries()) {
+      publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
+    }
+    return publishes;
+  }
+
+  const published = histories.map(publishedEach);
+
+  const namesOf = (former: FormerInput) => Object.keys(former.defs);
+
+  const heldNamesOf = (publishes: readonly PublishedServiceSnapshot[]) =>
+    publishes.flatMap(({ formerInputs }) => formerInputs.flatMap(namesOf));
+
+  test('the histories remove fields naming defs while some defs are named apart beside others held as declared, and some closures changed and some did not', () => {
+    const apart = published.filter((publishes) =>
+      heldNamesOf(publishes).some((name) => name.includes('~')),
+    );
+    const besideUnchanged = histories.filter(([first, second], seed) => {
+      const unchanged = Object.keys(first?.defs ?? {}).filter((name) =>
+        isClosureUnchanged(name, first?.defs ?? {}, second?.defs ?? {}),
+      );
+      const names = heldNamesOf(published[seed] ?? []);
+      return (
+        names.some((name) => name.includes('~')) && unchanged.some((name) => names.includes(name))
+      );
+    });
+    const changed = histories.filter(([first, second]) =>
+      Object.keys(first?.defs ?? {}).some(
+        (name) => !isClosureUnchanged(name, first?.defs ?? {}, second?.defs ?? {}),
+      ),
+    );
+
+    expect([apart.length, besideUnchanged.length, changed.length]).toEqual([
+      expect.toSatisfy((count: number) => count >= 50),
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 100),
+    ]);
+  });
+
+  test('every Former Input the merge writes over a seeded def graph with edits decodes, and every def it holds is named for a def of the graph', () => {
+    const problems = histories.flatMap((versions, seed) => {
+      const bases = new Set(versions.flatMap(({ defs }) => Object.keys(defs)));
+      const publishes = published[seed] ?? [];
+      const undecoded = publishes.filter(
+        (publish) => decodeSnapshot(canonicalTextOf(publish)).kind !== 'decoded',
+      );
+      const unnamed = heldNamesOf(publishes).filter((name) => {
+        const [base = '', ...suffixes] = name.split('~');
+        return !bases.has(base) || !suffixes.every((suffix) => /^[1-9]\d*$/.test(suffix));
+      });
+      return [
+        ...undecoded.map(() => `${seed}: does not decode`),
+        ...unnamed.map((name) => `${seed}: ${name}`),
+      ];
+    });
+
+    expect(problems).toEqual([]);
+  });
+
+  test('a former Input whose defs copy the Endpoint’s and whose body names every def grafts no field', () => {
+    const kept = histories.flatMap((versions, seed) => {
+      const proposed = versions[2] as ServiceSnapshot;
+      const endpoint = proposed.endpoints[graftedIdentity] as EndpointSnapshot;
+      const former: FormerInput = {
+        endpoint: graftedIdentity,
+        removedIn: '1.1.0',
+        input: {
+          query: endpoint.input.query as ObjectNode,
+          body: endpoint.input.body as ObjectNode,
+        },
+        defs: structuredClone(proposed.defs),
+      };
+      const baseline = {
+        ...(published[seed]?.[2] as PublishedServiceSnapshot),
+        formerInputs: [former],
+      };
+
+      const merged = publishedSnapshotOf(baseline, structuredClone(proposed), publishedAt('1.3.0'));
+
+      return merged.formerInputs.map(() => seed);
+    });
+
+    expect(kept).toEqual([]);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => aliasDrawOf(seed));
+
+  /** The `ref`s a field's schema holds, which these draws write as a `ref`, in a union or in an array. */
+  const refsIn = (schema: SchemaNode | undefined) =>
+    schema === undefined ? [] : nodesIn(schema).filter(isRef);
+
+  /** A `ref` without the def it names and its nullability: the annotations it carries itself. */
+  function annotationsOf(node: unknown): unknown {
+    const { name: _name, nullable: _nullable, ...annotations } = node as Record<string, unknown>;
+    return annotations;
+  }
+
+  function writtenRefsDifferFrom(draw: ReturnType<typeof aliasDrawOf>): readonly string[] {
+    const published = publishedThrough(draw.baseline, draw.proposed);
+    const body = draw.baseline.endpoints[graftedIdentity]?.input.body;
+    const former = published.formerInputs[0];
+    const written = former?.input.body;
+    if (body?.type !== 'object' || former === undefined || written?.type !== 'object') {
+      return ['no former Input'];
+    }
+    return Object.entries(body.fields).flatMap(([field, { schema }]) => {
+      const asked = refsIn(schema);
+      const grafted = refsIn(written.fields[field]?.schema);
+      const isHeld = field.startsWith('k') && schema.type === 'union';
+      return asked.flatMap((ask, index) => {
+        const ref = grafted[index] as RefNode | undefined;
+        const expected = destinationOf(ask as RefNode, draw.baseline.defs);
+        const isRight = isHeld
+          ? isDeepStrictEqual(ref, ask)
+          : ref !== undefined &&
+            expected !== undefined &&
+            ref.name.split('~')[0] === expected.name &&
+            (ref.nullable === true) === expected.nullable &&
+            isDeepStrictEqual(annotationsOf(ref), annotationsOf(ask)) &&
+            isDeepStrictEqual(former.defs[ref.name], expected.def);
+        return isRight ? [] : [`${field} ${JSON.stringify(ask)} against ${JSON.stringify(ref)}`];
+      });
+    });
+  }
+
+  test('the generator draws chains of three or more alias defs, nullable asking `ref`s and a def named `constructor`', () => {
+    const counts = [
+      draws.filter(({ aliases }) => aliases >= 3).length,
+      draws.filter(({ nullableAsked }) => nullableAsked > 0).length,
+      draws.filter(({ isConstructor }) => isConstructor).length,
+    ];
+
+    expect(counts).toEqual([
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 50),
+    ]);
+  });
+
+  test('every `ref` a kept Former Input writes to a def only it reaches names where its alias defs lead, nullable when one on the way is', () => {
+    const problems = draws.flatMap((draw, seed) =>
+      writtenRefsDifferFrom(draw).map((problem) => `${seed}: ${problem}`),
+    );
+
+    expect(problems).toEqual([]);
+  });
+
+  test('a field named `constructor` and a def named `constructor` reached through an alias are grafted as declared', () => {
+    const both = anObject({ p: required(aString), q: optional(aString) });
+    const before = aService({
+      body: { id, constructor: gone, kept: required(ref('link')) },
+      defs: { constructor: both, link: ref('constructor') },
+    });
+    const after = aService({
+      body: { id, kept: required(ref('link')) },
+      defs: { constructor: anObject({ p: required(aString) }), link: ref('constructor') },
+    });
+
+    const formerInputs = formerInputsAfter(before, after);
+
+    expect(formerInputs).toEqual([
+      anEntry(
+        '1.1.0',
+        { id, constructor: gone, kept: required(ref('constructor~1')) },
+        { 'constructor~1': both },
+      ),
+    ]);
   });
 });
