@@ -219,7 +219,7 @@ function namedApartOf(sources: readonly DefSource[]): ReadonlySet<number> {
   return apart;
 }
 
-/** The name a def comes from if free, else that name with the first suffix free, `~1`, `~2`…; a base is never tried below the suffix it last took, which no later name frees. */
+/** The name a def comes from if free, else that name with the first free suffix, `~1`, `~2`…, tried from the one after the last the base took, since no name is ever freed. */
 function freeNameOf(
   base: string,
   names: {
