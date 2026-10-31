@@ -7,11 +7,11 @@ import type { InProcessBrokerLimits } from './limits.ts';
 import { durableConsumerReaders } from './reading-limits.ts';
 
 /**
- * A Broker inside the Service's process, for local runs. It holds the Durable consumers that every `messaging()`
- * connected through it consumes, with the limits the Broker plan's names resolve to. It delivers each Message
- * published or sent to the Durable consumers of its subject, one at a time per consuming connection, and again
- * after its wait, until the Message is acknowledged, ended or delivered `maxDeliver` times. It keeps nothing once a
- * Message settles, nothing for a Durable consumer no connection consumes, and nothing across a restart.
+ * A Broker inside the Service's process, for local runs. It holds each Durable consumer that a `messaging()`
+ * connected through it consumes, from that first `consume` for as long as the Broker lives, with the limits the
+ * Broker plan's names resolve to. It delivers each Message published or sent to the Durable consumers of its
+ * subject, one at a time per consuming connection, and again after its wait, until the Message is acknowledged,
+ * ended or delivered `maxDeliver` times. It keeps nothing once a Message settles, and nothing across a restart.
  */
 export function inProcess<const Given = unknown>(
   limits: Closed<Given, InProcessBrokerLimits & DefaultsFields<Given, InProcessBrokerLimits>>,

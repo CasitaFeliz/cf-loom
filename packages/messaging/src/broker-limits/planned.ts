@@ -38,8 +38,7 @@ export function everySetOf<Read, Name extends keyof Read>(
 
 type Refused = { readonly kind: 'refused'; readonly lines: readonly string[] };
 
-/** A Durable consumer or Stream whose limits leave settings unset, with the names of those settings. */
-export type Unset = { readonly name: string; readonly names: readonly [string, ...string[]] };
+type Unset = { readonly name: string; readonly names: readonly [string, ...string[]] };
 
 type Resolved<Planned> = { readonly planned: Planned[]; readonly unset: Unset[] };
 
@@ -85,15 +84,15 @@ function unlistedNamesOf(
     .map(([name]) => name);
 }
 
-/** Each name the plan lists, in plan order, with the settings its own limits over the defaults resolve to. */
+/** Each name listed, in order, with the settings its own limits over the defaults resolve to. */
 function resolvedOf<Reading extends Readers, Listed, Planned>(
-  listed: Readonly<Record<string, Listed>>,
+  listed: Iterable<readonly [string, Listed]>,
   settings: KindSettings<Reading>,
   kindLimits: KindLimits<Reading, Listed, Planned>,
 ): Resolved<Planned> {
   const planned: Planned[] = [];
   const unset: Unset[] = [];
-  for (const [name, entry] of Object.entries(listed)) {
+  for (const [name, entry] of listed) {
     const limits = { ...settings.defaults, ...settings.entries?.[name] } as ReadOf<Reading>;
     const resolution = kindLimits.resolve(name, entry, limits);
     if (resolution.kind === 'planned') {
@@ -118,35 +117,40 @@ function streamsOf<
     return { planned: [], unset: [] };
   }
   const settings = { defaults: limits.streamDefaults, entries: limits.streams };
-  return resolvedOf(plan.streams, settings, stream);
+  return resolvedOf(Object.entries(plan.streams), settings, stream);
 }
 
-function durableConsumersOf<
-  StreamReaders extends Readers,
-  DurableConsumerReaders extends Readers,
-  DurableConsumerPlanned,
->(
-  plan: BrokerPlan,
-  limits: Container<StreamReaders, DurableConsumerReaders>,
-  durableConsumer: KindLimits<
-    DurableConsumerReaders,
-    BrokerPlanDurableConsumer,
-    DurableConsumerPlanned
-  >,
-): Resolved<DurableConsumerPlanned> {
-  const settings = {
-    defaults: limits.durableConsumerDefaults,
-    entries: limits.durableConsumers,
-  };
-  return resolvedOf(plan.durableConsumers, settings, durableConsumer);
+/** The Durable consumers' part of the limits as read: the defaults and each Durable consumer's own settings. */
+export type DurableConsumersRead<Reading extends Readers> = Pick<
+  Container<Readers, Reading>,
+  'durableConsumerDefaults' | 'durableConsumers'
+>;
+
+/** What the listed Durable consumers resolve to, each its own settings over the defaults, and one line for each that leaves a setting unset. */
+export type DurableConsumersResolved<Planned> = {
+  readonly planned: readonly Planned[];
+  readonly lines: readonly string[];
+};
+
+/**
+ * Resolves the limits of every Durable consumer listed, by name, before any is used: those of a Broker
+ * plan, or those `consume` hands a Broker that has no plan applied.
+ */
+export function durableConsumersResolvedOf<Reading extends Readers, Listed, Planned>(
+  listed: Iterable<readonly [string, Listed]>,
+  limits: DurableConsumersRead<Reading>,
+  durableConsumer: KindLimits<Reading, Listed, Planned>,
+): DurableConsumersResolved<Planned> {
+  const settings = { defaults: limits.durableConsumerDefaults, entries: limits.durableConsumers };
+  const { planned, unset } = resolvedOf(listed, settings, durableConsumer);
+  return { planned, lines: unset.map(unsetDurableConsumerLine) };
 }
 
 function unsetStreamLine({ name, names }: Unset): string {
   return `The stream ${name} has no ${names.join(', ')} in limits.streams or limits.streamDefaults`;
 }
 
-/** The line refusing a Durable consumer whose limits leave settings unset. */
-export function unsetDurableConsumerLine({ name, names }: Unset): string {
+function unsetDurableConsumerLine({ name, names }: Unset): string {
   const where = 'limits.durableConsumers or limits.durableConsumerDefaults';
   return `The Durable consumer ${name} has no ${names.join(', ')} in ${where}`;
 }
@@ -207,11 +211,15 @@ export function plannedOf<
     return { kind: 'refused', lines: read.lines };
   }
   const streams = streamsOf(decoded.plan, read.limits, adapter.stream);
-  const durableConsumers = durableConsumersOf(decoded.plan, read.limits, adapter.durableConsumer);
+  const durableConsumers = durableConsumersResolvedOf(
+    Object.entries(decoded.plan.durableConsumers),
+    read.limits,
+    adapter.durableConsumer,
+  );
   const lines = [
     ...unlistedLinesOf(decoded.plan, read.limits),
     ...streams.unset.map(unsetStreamLine),
-    ...durableConsumers.unset.map(unsetDurableConsumerLine),
+    ...durableConsumers.lines,
   ];
   if (lines.length > 0) {
     return { kind: 'refused', lines };

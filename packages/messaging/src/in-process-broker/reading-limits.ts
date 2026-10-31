@@ -1,15 +1,13 @@
 import { z } from 'zod';
-import type { DeliveryLimits } from '../broker/index.ts';
+import type { DeliveryLimits, DurableConsumer } from '../broker/index.ts';
 import {
   durationText,
   everySetOf,
+  type KindLimits,
   millisecondsOf,
   oneOrListOf,
-  type ReadOf,
   readAs,
-  type Unset,
   unlimitedCount,
-  unsetDurableConsumerLine,
 } from '../broker-limits/index.ts';
 import type { InProcessDurableConsumerLimits } from './limits.ts';
 
@@ -30,27 +28,28 @@ export const durableConsumerReaders = {
 
 const settingNames = z.strictObject(durableConsumerReaders).keyof().options;
 
-type DurableConsumerSettings = ReadOf<typeof durableConsumerReaders>;
-
-/** The limits as read: the defaults and each Durable consumer's own. */
-export type ReadLimits = {
-  readonly durableConsumerDefaults?: DurableConsumerSettings | undefined;
-  readonly durableConsumers?: Readonly<Record<string, DurableConsumerSettings>> | undefined;
+/** A Durable consumer `consume` was handed, with the limits its name resolves to. */
+export type Resolved = {
+  readonly durableConsumer: DurableConsumer;
+  readonly limits: DeliveryLimits;
 };
 
-/** What a Durable consumer's own settings over the defaults resolve to, or the line naming what is unset. */
-export type ResolvedLimits =
-  | { readonly kind: 'resolved'; readonly limits: DeliveryLimits }
-  | { readonly kind: 'unset'; readonly line: string };
-
-/** Resolves one Durable consumer's limits by its name, as the Broker plan prints it. */
-export function resolvedLimitsOf(read: ReadLimits, durable: string): ResolvedLimits {
-  const limits = { ...read.durableConsumerDefaults, ...read.durableConsumers?.[durable] };
-  const set = everySetOf(limits, settingNames);
-  if (set.kind === 'unset') {
-    const unset: Unset = { name: durable, names: set.names };
-    return { kind: 'unset', line: unsetDurableConsumerLine(unset) };
-  }
-  const { ackWait, maxDeliver } = set.limits;
-  return { kind: 'resolved', limits: { waits: ackWait, maxDeliver } };
-}
+/** How the Durable consumers `consume` hands resolve to the limits each Delivery is made from. */
+export const durableConsumerLimits: KindLimits<
+  typeof durableConsumerReaders,
+  DurableConsumer,
+  Resolved
+> = {
+  readers: durableConsumerReaders,
+  resolve: (_name, durableConsumer, limits) => {
+    const set = everySetOf(limits, settingNames);
+    if (set.kind === 'unset') {
+      return set;
+    }
+    const { ackWait, maxDeliver } = set.limits;
+    return {
+      kind: 'planned',
+      planned: { durableConsumer, limits: { waits: ackWait, maxDeliver } },
+    };
+  },
+};

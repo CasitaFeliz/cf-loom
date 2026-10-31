@@ -11,12 +11,12 @@ export {
 export { type Duration, durationText, millisecondsOf } from './duration.ts';
 export {
   type AdapterLimits,
+  type DurableConsumersRead,
+  durableConsumersResolvedOf,
   everySetOf,
   type KindLimits,
   plannedOf,
   type Resolution,
-  type Unset,
-  unsetDurableConsumerLine,
 } from './planned.ts';
 export type { RedeliveryLimits } from './redelivery-limits.ts';
 export {

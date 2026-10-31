@@ -12,7 +12,13 @@ import {
 } from '../../test/in-process-services.ts';
 import { type Behavior, handlersOf, ordersContract, type Received } from '../../test/orders.ts';
 import { until } from '../../test/until.ts';
-import { type ConsumedFault, DeadlineError } from '../index.ts';
+import {
+  type ConsumedFault,
+  DeadlineError,
+  type Delivery,
+  type DurableConsumer,
+  type OutgoingMessage,
+} from '../index.ts';
 import { inProcess } from './index.ts';
 
 const chargeDurable = 'orders-service_command_ChargeCard_v1';
@@ -402,6 +408,61 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     const handled = [...receivedByFirst, ...receivedBySecond].map(({ body }) => body);
     expect([receivedByFirst.length, receivedBySecond.length]).toEqual([1, 1]);
     expect(handled).toEqual(expect.arrayContaining([{ orderId: 'o-1' }, { orderId: 'o-2' }]));
+  });
+
+  describe('one durable on two subjects, as two Releases of one Service in one process hand it', () => {
+    const subjectOf = (release: string) => `orders-service.command.Charge${release}.v1`;
+
+    /** A Durable consumer of the one `durable` on this release's subject, noting what reaches it. */
+    function consumerOn(release: string, received: string[]): DurableConsumer {
+      const receive = async ({ messageId }: Delivery) => {
+        received.push(`${release} ${messageId}`);
+        return 'acked' as const;
+      };
+      const subject = subjectOf(release);
+      return { durable: 'orders-service_charge', stream: 'orders-service', subject, receive };
+    }
+
+    const aMessageOn = (release: string, messageId: string): OutgoingMessage => ({
+      subject: subjectOf(release),
+      messageId,
+      factId: 'f-1',
+      headers: {},
+      body: new TextEncoder().encode('{"orderId":"o-1"}'),
+    });
+
+    const consuming = { closing: new AbortController().signal, troubled: () => undefined };
+
+    test('two connections consuming it: a publish to each subject reaches its own Durable consumer', async () => {
+      vi.useFakeTimers();
+      const broker = inProcess(thirtySeconds);
+      const received: string[] = [];
+      const first = await broker.connect({ stream: 'orders-service', subjects: [] });
+      const second = await broker.connect({ stream: 'orders-service', subjects: [] });
+      await first.consume([consumerOn('First', received)], consuming);
+      await second.consume([consumerOn('Second', received)], consuming);
+
+      await first.publish(aMessageOn('First', 'm-1'));
+      await first.publish(aMessageOn('Second', 'm-2'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(received.sort()).toEqual(['First m-1', 'Second m-2']);
+    });
+
+    test('one consume handed both: each resolves, and a publish to each subject reaches its own Durable consumer', async () => {
+      vi.useFakeTimers();
+      const broker = inProcess(thirtySeconds);
+      const received: string[] = [];
+      const connection = await broker.connect({ stream: 'orders-service', subjects: [] });
+      const both = [consumerOn('First', received), consumerOn('Second', received)];
+      await connection.consume(both, consuming);
+
+      await connection.publish(aMessageOn('First', 'm-1'));
+      await connection.publish(aMessageOn('Second', 'm-2'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(received.sort()).toEqual(['First m-1', 'Second m-2']);
+    });
   });
 
   test('a Handler that publishes the Event it handles keeps going, while a node:http server in the same process still answers', async () => {
