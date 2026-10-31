@@ -1,33 +1,29 @@
 import type { FormerInput, InputSnapshot } from '../snapshot/index.ts';
 import {
-  type Child,
-  childrenOf,
   type Defs,
   defsReachedOf,
-  heldNodeOf,
-  type NodeEdit,
+  type RefResolver,
+  refResolverOf,
   type SchemaNode,
-  type Step,
-  withoutNullable,
 } from '../walker/index.ts';
-import type { BothDefs, Finding, NodePair } from './findings.ts';
-import {
-  copyMet,
-  followedPairOf,
-  followedRefOf,
-  type GraftDefs,
-  graftRecorded,
-  namedDefs,
-  pairMet,
-  recordingDefs,
-} from './graft-names.ts';
-import { findingsOf } from './schemas.ts';
+import { stepCopy } from './graft-copy.ts';
+import { namedDefs, recordingDefs } from './graft-names.ts';
+import { placePair, stepGraft } from './graft-pairs.ts';
+import type { Walk } from './graft-walk.ts';
+
+/** A defs value with the reader of its alias defs, which its caller builds once and keeps while any graft reads those defs. */
+export type ReadDefs = { readonly defs: Defs; readonly resolve: RefResolver };
+
+/** The defs given, with the reader of their alias defs. */
+export function readDefsOf(defs: Defs): ReadDefs {
+  return { defs, resolve: refResolverOf(defs) };
+}
 
 /** What a former Input is rewritten onto: an Endpoint's query and body as proposed, and the defs their `ref`s name. */
-export type GraftTarget = {
-  readonly input: Pick<InputSnapshot, 'query' | 'body'>;
-  readonly defs: Defs;
-};
+export type GraftTarget = ReadDefs & { readonly input: Pick<InputSnapshot, 'query' | 'body'> };
+
+/** A former Input to rewrite, with the defs it names: the Input as stored, or its Endpoint's own Input as the Baseline holds it. */
+export type GraftSource = ReadDefs & { readonly input: FormerInput['input'] };
 
 type Grafted = Pick<FormerInput, 'input' | 'defs'>;
 
@@ -37,55 +33,23 @@ type Grafted = Pick<FormerInput, 'input' | 'defs'>;
  * the defs they reach, the Endpoint's under their names and the others named apart; `undefined`
  * when it grafts no field, so the former Input is forgotten.
  */
-export function graftedInputOf(former: Grafted, onto: GraftTarget): Grafted | undefined {
+export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted | undefined {
   const defs = { baseline: former.defs, proposed: onto.defs };
-  const recorded = walked(former, onto.input, { defs, met: recordingDefs() });
+  const resolve = { baseline: former.resolve, proposed: onto.resolve };
+  const recorded = walked(former, onto.input, { defs, resolve, met: recordingDefs() });
   if (!recorded.grafts) {
     return undefined;
   }
-  const named = walked(former, onto.input, { defs, met: namedDefs(recorded.met, onto.defs) });
+  const options = { defs, resolve, met: namedDefs(recorded.met, onto.defs) };
+  const named = walked(former, onto.input, options);
   const nodes = [named.input.query, named.input.body].filter((node) => node !== null);
-  return { input: named.input, defs: defsReachedOf(nodes, { ...onto.defs, ...named.out }) };
+  const held = defsReachedOf([...nodes, ...Object.values(named.out)], onto.defs);
+  return { input: named.input, defs: { ...held, ...named.out } };
 }
 
-/** Where a node the walk builds goes once it is built. */
-type Put = (node: SchemaNode) => void;
+type Options = Pick<Walk, 'defs' | 'resolve' | 'met'>;
 
-/**
- * One node being built on the walk's stack: the proposed node with a pair's findings applied, the
- * former node at hand for the fields it grafts, or a former node copied child by child. Its edits
- * are applied once the frame completes, since a copy replaces children by the index they had.
- */
-type Frame =
-  | {
-      readonly kind: 'graft';
-      readonly former: SchemaNode;
-      readonly findings: Iterator<Finding>;
-      readonly owner: number | undefined;
-      readonly node: SchemaNode;
-      readonly edits: NodeEdit[];
-      readonly put: Put;
-    }
-  | {
-      readonly kind: 'copy';
-      readonly children: Iterator<Child>;
-      readonly node: SchemaNode;
-      readonly edits: NodeEdit[];
-      readonly put: Put;
-    };
-
-/** A walk of a former Input onto an Endpoint's: recording its def sources, or, once named, building. */
-type Walk = {
-  readonly defs: BothDefs;
-  readonly met: GraftDefs;
-  readonly out: Record<string, SchemaNode>;
-  readonly frames: Frame[];
-  grafts: boolean;
-};
-
-type Options = Pick<Walk, 'defs' | 'met'>;
-
-function walked(former: Grafted, onto: GraftTarget['input'], options: Options) {
+function walked(former: GraftSource, onto: GraftTarget['input'], options: Options) {
   const walk: Walk = { ...options, out: {}, frames: [], grafts: false };
   const query = partGrafted(walk, former.input.query, onto.query);
   const body = partGrafted(walk, former.input.body, onto.body);
@@ -122,121 +86,4 @@ function runFrames(walk: Walk): void {
       stepCopy(walk, frame);
     }
   }
-}
-
-function stepGraft(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>): void {
-  const next = frame.findings.next();
-  if (next.done === true) {
-    walk.frames.pop();
-    frame.put(heldNodeOf(frame.node, frame.edits));
-    return;
-  }
-  const finding = next.value;
-  const [step] = finding.steps;
-  if (step === undefined) {
-    return;
-  }
-  if (finding.kind === 'inside') {
-    const put = (child: SchemaNode) => {
-      frame.edits.push({ kind: 'child', step, node: child });
-    };
-    placePair(walk, finding.pair, { owner: frame.owner, put });
-  } else if (finding.shape.kind === 'field-removed') {
-    graftField(walk, frame, step);
-  }
-}
-
-/** A field the former node has and the proposed one lacks, put back with its `required` and its schema copied. */
-function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: Step): void {
-  const field =
-    step.kind === 'field' && frame.former.type === 'object'
-      ? frame.former.fields[step.name]
-      : undefined;
-  if (field === undefined || step.kind !== 'field') {
-    throw new Error('A field removed that the former node does not hold: a bug.');
-  }
-  walk.grafts = true;
-  graftRecorded(walk.met, frame.owner);
-  const put = (schema: SchemaNode) => {
-    frame.edits.push({ kind: 'field', name: step.name, field: { ...field, schema } });
-  };
-  placeCopy(walk, field.schema, put);
-}
-
-/** Where a pair's node goes, and the def whose body it sits in, if any. */
-type Place = { readonly owner: number | undefined; readonly put: Put };
-
-/**
- * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place
- * when the proposed side is written inline, else a `ref` to its def, held as the Snapshot declares
- * it or named apart, built once.
- */
-function placePair(walk: Walk, pair: NodePair, place: Place): void {
-  const followed = followedPairOf(pair, walk.defs);
-  if (pair.proposed.type !== 'ref') {
-    pushGraft(walk, followed.pair, place);
-    return;
-  }
-  const { index, name, isBuilt } = pairMet(walk.met, followed.key, place.owner);
-  const nullable = followed.pair.proposed.nullable === true;
-  place.put(name === undefined ? pair.proposed : renamedRef(pair.proposed, name, nullable));
-  if (isBuilt) {
-    pushGraft(walk, followed.pair, { owner: index, put: defPut(walk, name) });
-  }
-}
-
-/** Where the body of a def named apart goes: the former Input's defs, plain, as every def is; nowhere while recording. */
-function defPut(walk: Walk, name: string | undefined): Put {
-  return (node) => {
-    if (name !== undefined) {
-      walk.out[name] = withoutNullable(node);
-    }
-  };
-}
-
-function pushGraft(walk: Walk, pair: NodePair, place: Place): void {
-  walk.frames.push({
-    kind: 'graft',
-    former: pair.baseline,
-    findings: findingsOf(pair, walk.defs).values(),
-    owner: place.owner,
-    node: pair.proposed,
-    edits: [],
-    put: place.put,
-  });
-}
-
-/** A node only the former Input has, copied as it was, each def it reaches copied and named apart. */
-function placeCopy(walk: Walk, node: SchemaNode, put: Put): void {
-  if (node.type !== 'ref') {
-    const children = childrenOf(node).values();
-    walk.frames.push({ kind: 'copy', children, node, edits: [], put });
-    return;
-  }
-  const resolved = followedRefOf(node, walk.defs.baseline);
-  const { name, isBuilt } = copyMet(walk.met, resolved.name);
-  put(renamedRef(node, name ?? resolved.name, resolved.nullable));
-  if (isBuilt) {
-    placeCopy(walk, resolved.def, defPut(walk, name));
-  }
-}
-
-function stepCopy(walk: Walk, frame: Extract<Frame, { kind: 'copy' }>): void {
-  const next = frame.children.next();
-  if (next.done === true) {
-    walk.frames.pop();
-    frame.put(heldNodeOf(frame.node, frame.edits));
-    return;
-  }
-  const [step] = next.value.steps;
-  if (step !== undefined) {
-    placeCopy(walk, next.value.node, (child) => {
-      frame.edits.push({ kind: 'child', step, node: child });
-    });
-  }
-}
-
-/** A `ref` renamed to the def the graft writes it to, nullable when a `ref` on the way to that def is. */
-function renamedRef(ref: SchemaNode, name: string, nullable: boolean): SchemaNode {
-  return heldNodeOf(ref, [{ kind: 'renamed', name, nullable }]);
 }

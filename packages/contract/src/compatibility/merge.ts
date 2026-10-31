@@ -20,7 +20,7 @@ import {
   type SubscriptionTombstone,
 } from '../snapshot/index.ts';
 import { defsReachedOf } from '../walker/index.ts';
-import { formerInputsMerged } from './former-inputs.ts';
+import { type CheckedService, checkedServiceOf, formerInputsMerged } from './former-inputs.ts';
 import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts';
 
 /**
@@ -62,16 +62,12 @@ function mergedOf(
   proposed: Snapshot,
   heading: PublishedHeading,
 ): PublishedSnapshot {
-  if (baseline !== undefined && !isBaselineOf(baseline, proposed)) {
-    throw new Error(
-      unbrokenLineOf(
-        `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
-      ),
-    );
+  if (baseline !== undefined) {
+    assertBaselineOf(baseline, proposed);
   }
   switch (proposed.kind) {
     case 'service':
-      return serviceMerged(baseline?.kind === 'service' ? baseline : undefined, proposed, heading);
+      return serviceMerged(proposed, serviceCheckedOf(baseline, proposed), heading);
     case 'application':
       return { ...proposed, ...heading };
     case 'definitions':
@@ -83,16 +79,43 @@ function mergedOf(
   }
 }
 
-function isBaselineOf(baseline: PublishedSnapshot, proposed: Snapshot): boolean {
-  return baseline.kind === proposed.kind && baseline.name === proposed.name;
+function assertBaselineOf(baseline: PublishedSnapshot, proposed: Snapshot): void {
+  if (baseline.kind !== proposed.kind || baseline.name !== proposed.name) {
+    throw new Error(
+      unbrokenLineOf(
+        `${baseline.name} (${baseline.kind}) is no Baseline of ${proposed.name} (${proposed.kind}): a bug.`,
+      ),
+    );
+  }
+}
+
+/** The Service checked against its Baseline, if it has one of its kind. */
+function serviceCheckedOf(
+  baseline: PublishedSnapshot | undefined,
+  proposed: ServiceSnapshot,
+): CheckedService | undefined {
+  return baseline?.kind === 'service' ? checkedServiceOf(baseline, proposed) : undefined;
+}
+
+/**
+ * The published Snapshot of a Service its Check has grouped the Baseline's former Inputs for, so
+ * the Check and the merge group them once.
+ */
+export function publishedServiceOf(
+  checked: CheckedService,
+  heading: PublishedHeading,
+): PublishedServiceSnapshot {
+  assertBaselineOf(checked.baseline, checked.proposed);
+  return canonicalSnapshotOf(serviceMerged(checked.proposed, checked, heading));
 }
 
 function serviceMerged(
-  baseline: PublishedServiceSnapshot | undefined,
   proposed: ServiceSnapshot,
+  checked: CheckedService | undefined,
   heading: PublishedHeading,
 ): PublishedServiceSnapshot {
   const { version } = heading;
+  const baseline = checked?.baseline;
   return {
     ...proposed,
     ...heading,
@@ -101,7 +124,7 @@ function serviceMerged(
     commands: messagesMerged(baseline?.commands, proposed.commands, version),
     codes: codesMerged(baseline, proposed.codes, version),
     subscriptions: subscriptionsMerged(baseline?.subscriptions, proposed.subscriptions, version),
-    formerInputs: formerInputsMerged(baseline, proposed, version),
+    formerInputs: checked === undefined ? [] : formerInputsMerged(checked, version),
   };
 }
 

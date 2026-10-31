@@ -2,9 +2,7 @@ import {
   type DefinitionsSnapshot,
   hashedTextOf,
   type PublishedDefinitionsSnapshot,
-  type PublishedServiceSnapshot,
   type PublishedSnapshot,
-  type ServiceSnapshot,
   type Snapshot,
 } from '../snapshot/index.ts';
 import { siteChangesOf } from './changes.ts';
@@ -12,9 +10,10 @@ import { definitionsCodeDifferencesOf, serviceCodeDifferencesOf } from './codes.
 import { dependencyDifferencesOf } from './dependencies.ts';
 import { commandChangesOf, endpointChangesOf, eventChangesOf } from './element-changes.ts';
 import { exportDifferencesOf } from './exports.ts';
+import { type CheckedService, checkedServiceOf } from './former-inputs.ts';
 import { groupDifferencesOf } from './groups.ts';
 import { guardDifferencesOf, serviceGuardDifferencesOf } from './guards.ts';
-import { publishedSnapshotOf } from './merge.ts';
+import { publishedServiceOf, publishedSnapshotOf } from './merge.ts';
 import type { Change, ComparedReport } from './report.ts';
 import {
   definitionsStandardRejectionDifferencesOf,
@@ -31,19 +30,29 @@ export function compatibilityReportOf(
   baseline: PublishedSnapshot,
   proposed: Snapshot,
 ): ComparedReport {
-  const changes = changesOf(baseline, proposed);
   const { version, generator } = baseline;
-  const merged = publishedSnapshotOf(baseline, proposed, { version, generator });
+  const heading = { version, generator };
+  if (baseline.kind === 'service' && proposed.kind === 'service') {
+    const checked = checkedServiceOf(baseline, proposed);
+    return reportOf(baseline, serviceChangesOf(checked), publishedServiceOf(checked, heading));
+  }
+  const changes = otherChangesOf(baseline, proposed);
+  return reportOf(baseline, changes, publishedSnapshotOf(baseline, proposed, heading));
+}
+
+/** The report of a Check: its Changes, or a bug when the published Snapshot differs and no Change names it. */
+function reportOf(
+  baseline: PublishedSnapshot,
+  changes: readonly Change[],
+  merged: PublishedSnapshot,
+): ComparedReport {
   if (changes.length === 0 && hashedTextOf(merged) !== hashedTextOf(baseline)) {
     throw new Error('The Snapshot changed but no Change was found: a bug.');
   }
   return { changes };
 }
 
-function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
-  if (baseline.kind === 'service' && proposed.kind === 'service') {
-    return serviceChangesOf(baseline, proposed);
-  }
+function otherChangesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Change[] {
   if (baseline.kind === 'application' && proposed.kind === 'application') {
     return siteChangesOf(dependencyDifferencesOf(baseline.dependencies, proposed.dependencies));
   }
@@ -53,12 +62,10 @@ function changesOf(baseline: PublishedSnapshot, proposed: Snapshot): readonly Ch
   return [];
 }
 
-function serviceChangesOf(
-  baseline: PublishedServiceSnapshot,
-  proposed: ServiceSnapshot,
-): readonly Change[] {
+function serviceChangesOf(checked: CheckedService): readonly Change[] {
+  const { baseline, proposed } = checked;
   return [
-    ...endpointChangesOf(baseline, proposed),
+    ...endpointChangesOf(checked),
     ...eventChangesOf(baseline, proposed),
     ...commandChangesOf(baseline, proposed),
     ...siteChangesOf(groupDifferencesOf(baseline, proposed)),

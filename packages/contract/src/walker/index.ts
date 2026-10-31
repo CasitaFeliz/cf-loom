@@ -13,18 +13,19 @@ export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { ResolvedRef } from './def-graph.ts';
 export {
+  defNamed,
   defsReachedOf,
   nodesReachedFrom,
+  type RefResolver,
   reachedDefsOf,
+  refResolverOf,
   refsWrittenIn,
-  resolvedRefOf,
 } from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
-export type { NodeEdit } from './held-node.ts';
 export { heldNodeOf, withoutNullable } from './held-node.ts';
 export { joinedOf } from './joined-names.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
@@ -38,6 +39,7 @@ export {
   siteLocationOf,
   siteTextOf,
 } from './location.ts';
+export type { NodeEdit } from './node-edits.ts';
 export { defsLeadingBackWithNoNodeOf } from './nodeless-cycles.ts';
 export type {
   EnumNode,

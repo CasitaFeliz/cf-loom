@@ -2,6 +2,7 @@ import {
   canonicalJson,
   closureFactsOf,
   type Defs,
+  defNamed,
   neutralAnnotations,
   refsWrittenIn,
   type SchemaNode,
@@ -106,7 +107,7 @@ function ownFactsOf(
   baseline: SchemaNode | undefined,
   proposedDefs: Defs,
 ): readonly Fact[] {
-  const proposed = Object.hasOwn(proposedDefs, name) ? proposedDefs[name] : undefined;
+  const proposed = defNamed(proposedDefs, name);
   if (
     baseline === undefined ||
     proposed === undefined ||
