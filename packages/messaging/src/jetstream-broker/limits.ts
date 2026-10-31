@@ -1,4 +1,4 @@
-import type { Duration, LimitsOf } from '../broker-limits/index.ts';
+import type { Duration, LimitsOf, RedeliveryLimits } from '../broker-limits/index.ts';
 
 /** The retentions NATS has, written once for the type of a stream's limits and for reading them. */
 export const retentions = ['limits', 'interest', 'workqueue'] as const;
@@ -24,13 +24,9 @@ export type JetStreamStreamLimits = {
 };
 
 /** A Durable consumer's settings cf-loom has no opinion on, which the organization chooses. */
-export type JetStreamDurableConsumerLimits = {
+export type JetStreamDurableConsumerLimits = RedeliveryLimits & {
   /** Where a new Durable consumer starts reading its stream; NATS never changes it once the Durable consumer exists. */
   readonly deliverPolicy: (typeof deliverPolicies)[number];
-  /** How long a delivery waits for its acknowledgement before it comes again, or one wait per delivery, the last repeating. */
-  readonly ackWait: Duration | readonly Duration[];
-  /** How many times a Message is delivered at most. */
-  readonly maxDeliver: number | 'unlimited';
   /** How many deliveries may wait for an acknowledgement at once. */
   readonly maxAckPending: number | 'unlimited';
 };

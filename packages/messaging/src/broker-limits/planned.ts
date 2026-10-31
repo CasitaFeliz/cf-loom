@@ -38,7 +38,8 @@ export function everySetOf<Read, Name extends keyof Read>(
 
 type Refused = { readonly kind: 'refused'; readonly lines: readonly string[] };
 
-type Unset = { readonly name: string; readonly names: readonly [string, ...string[]] };
+/** A Durable consumer or Stream whose limits leave settings unset, with the names of those settings. */
+export type Unset = { readonly name: string; readonly names: readonly [string, ...string[]] };
 
 type Resolved<Planned> = { readonly planned: Planned[]; readonly unset: Unset[] };
 
@@ -144,7 +145,8 @@ function unsetStreamLine({ name, names }: Unset): string {
   return `The stream ${name} has no ${names.join(', ')} in limits.streams or limits.streamDefaults`;
 }
 
-function unsetDurableConsumerLine({ name, names }: Unset): string {
+/** The line refusing a Durable consumer whose limits leave settings unset. */
+export function unsetDurableConsumerLine({ name, names }: Unset): string {
   const where = 'limits.durableConsumers or limits.durableConsumerDefaults';
   return `The Durable consumer ${name} has no ${names.join(', ')} in ${where}`;
 }

@@ -1,6 +1,5 @@
 import { receivedHeadersOf } from '@cf-loom/contract/internal';
-import type { Settlement } from '../broker/index.ts';
-import { deliveryWaitOf } from '../broker-limits/index.ts';
+import { deliveryOf, type Settlement } from '../broker/index.ts';
 import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
 
@@ -15,17 +14,9 @@ export async function deliver(message: PulledMessage, found: FoundDurableConsume
     return;
   }
   const { messageId, factId, headers } = read;
-  const { deliveryCount } = message;
-  const lastAttempt = isLastDelivery(found.maxDeliver, deliveryCount);
-  const waitMs = deliveryWaitOf(found.waits, deliveryCount);
-  const delivered = { messageId, factId, deliveryCount, lastAttempt, waitMs };
-  const delivery = { ...delivered, headers, body: message.data };
+  const held = { messageId, factId, headers, body: message.data };
+  const delivery = deliveryOf(found, held, message.deliveryCount);
   applySettlement(message, await found.durableConsumer.receive(delivery));
-}
-
-/** Whether NATS delivers no more after this delivery: a limit set, and reached. */
-function isLastDelivery(maxDeliver: number, deliveryCount: number): boolean {
-  return maxDeliver > 0 && deliveryCount >= maxDeliver;
 }
 
 function headerEntriesOf(message: PulledMessage): readonly (readonly [string, string])[] {
