@@ -11,12 +11,8 @@ import { Fifo } from './fifo.ts';
 /** One Message lined up for a Durable consumer, with how many times it has been delivered. */
 type Lined = { readonly message: HeldMessage; readonly deliveryCount: number };
 
-/** One consuming connection's hand on a Durable consumer: it takes one Message at a time, until `closing` aborts. */
-type Puller = {
-  readonly receive: DurableConsumer['receive'];
-  readonly closing: AbortSignal;
-  busy: boolean;
-};
+/** One consuming connection's hand on a Durable consumer: it takes one Message at a time. */
+type Puller = { readonly receive: DurableConsumer['receive']; busy: boolean };
 
 /** What a Settlement needs of the Delivery it settles: when it started, how long it waits and whether it was the last. */
 type Handed = {
@@ -30,16 +26,22 @@ type Handed = {
  * One Durable consumer held inside the process: its Messages in the order lined up, and the
  * connections pulling from it, each handed one Message at a time; a Message left pending comes
  * again at the tail once its wait, counted from the Delivery's start, has passed, one handed back
- * comes again at the head at once, and the delivery that reaches `maxDeliver` is the last.
+ * comes again at the head at once, and the delivery that reaches `maxDeliver` is the last. It holds
+ * nothing once no connection pulls from it and no Delivery of it is in flight: it drops its Messages
+ * and its timers and calls `release`, once.
  */
 export class DurableConsumerLine {
   readonly #limits: DeliveryLimits;
-  readonly #lined = new Fifo<Lined>();
+  readonly #release: () => void;
+  #lined = new Fifo<Lined>();
   readonly #pullers = new Set<Puller>();
+  readonly #redeliveries = new Set<() => void>();
+  #inFlight = 0;
   #isHandOutScheduled = false;
 
-  constructor(limits: DeliveryLimits) {
+  constructor(limits: DeliveryLimits, release: () => void) {
     this.#limits = limits;
+    this.#release = release;
   }
 
   /** Lines a Message up for its first delivery, handed out on a later turn of the event loop. */
@@ -50,10 +52,28 @@ export class DurableConsumerLine {
 
   /** Adds a consuming connection's hand; once its `closing` aborts, nothing more is handed to it. */
   pull(receive: DurableConsumer['receive'], closing: AbortSignal): void {
-    const puller = { receive, closing, busy: false };
+    const puller = { receive, busy: false };
     this.#pullers.add(puller);
-    closing.addEventListener('abort', () => this.#pullers.delete(puller), { once: true });
+    closing.addEventListener('abort', () => this.#pullerLeft(puller), { once: true });
     this.#scheduleHandOut();
+  }
+
+  #pullerLeft(puller: Puller): void {
+    this.#pullers.delete(puller);
+    this.#dropIfUnheld();
+  }
+
+  #dropIfUnheld(): boolean {
+    if (this.#pullers.size > 0 || this.#inFlight > 0) {
+      return false;
+    }
+    this.#lined = new Fifo();
+    for (const stop of this.#redeliveries) {
+      stop();
+    }
+    this.#redeliveries.clear();
+    this.#release();
+    return true;
   }
 
   #scheduleHandOut(): void {
@@ -72,7 +92,7 @@ export class DurableConsumerLine {
       if (this.#lined.length === 0) {
         return;
       }
-      if (!puller.busy && !puller.closing.aborted) {
+      if (!puller.busy) {
         this.#hand(puller);
       }
     }
@@ -84,6 +104,7 @@ export class DurableConsumerLine {
       return;
     }
     puller.busy = true;
+    this.#inFlight += 1;
     const deliveryCount = lined.deliveryCount + 1;
     const delivery = deliveryOf(this.#limits, lined.message, deliveryCount);
     const handed = {
@@ -94,8 +115,11 @@ export class DurableConsumerLine {
     };
     void puller.receive(delivery).then((settlement) => {
       puller.busy = false;
+      this.#inFlight -= 1;
       this.#settle(handed, settlement);
-      this.#scheduleHandOut();
+      if (!this.#dropIfUnheld()) {
+        this.#scheduleHandOut();
+      }
     });
   }
 
@@ -109,13 +133,15 @@ export class DurableConsumerLine {
     }
     const { lined, startedMs, waitMs } = handed;
     const leftMs = Math.max(0, startedMs + waitMs - performance.now());
-    afterWait(
+    const stop = afterWait(
       leftMs,
       () => {
+        this.#redeliveries.delete(stop);
         this.#lined.push(lined);
         this.#scheduleHandOut();
       },
       'lets-process-exit',
     );
+    this.#redeliveries.add(stop);
   }
 }
