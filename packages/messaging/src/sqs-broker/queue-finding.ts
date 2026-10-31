@@ -6,8 +6,8 @@ import {
   type SQSClient,
 } from '@aws-sdk/client-sqs';
 import { prefixedNameOf, prefixedSubjectOf } from '@cf-loom/contract/internal';
-import { type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
-import { type DeliveryWaits, oneLineOf } from '../broker-limits/index.ts';
+import { type DeliveryWaits, type DurableConsumer, shapeRefusalOf } from '../broker/index.ts';
+import { oneLineOf } from '../broker-limits/index.ts';
 import { answeredWith, isAwsError } from './aws-errors.ts';
 import { arnMismatchOf, queueArnOf, type SqsSide, topicArnOf } from './connecting.ts';
 import { queueNameOf } from './queue-names.ts';

@@ -1,5 +1,6 @@
-export type { BrokerPrefixed, PullAnswer, TroubleReporting } from './adapting.ts';
+export type { BrokerPrefixed, PullAnswer, TimerHold, TroubleReporting } from './adapting.ts';
 export {
+  afterWait,
   checkedPrefixOf,
   pause,
   planRemedy,
@@ -18,3 +19,5 @@ export type {
   ServiceStream,
   Settlement,
 } from './broker.ts';
+export type { DeliveryLimits, DeliveryWaits, HeldMessage, TimedDelivery } from './delivery.ts';
+export { deliveryOf } from './delivery.ts';

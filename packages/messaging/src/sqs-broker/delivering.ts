@@ -4,7 +4,7 @@ import {
   DeleteMessageCommand,
   type SQSClient,
 } from '@aws-sdk/client-sqs';
-import type { Delivery, Settlement } from '../broker/index.ts';
+import type { Delivery, Settlement, TimedDelivery } from '../broker/index.ts';
 import { leftForTheDeadLetterQueue, type ReceivedMessage, readingOf } from './received-reading.ts';
 import type { Refusals } from './refusals.ts';
 
@@ -28,18 +28,17 @@ export async function preparedFrom(run: QueueRun, received: ReceivedMessage): Pr
     leftForTheDeadLetterQueue(received, reading.names);
     return { kind: 'none' };
   }
-  const { delivery, waitMs } = reading;
-  const changed = await changedVisibility(run, received, { delivery, waitMs });
-  return changed.kind === 'failed' ? changed : { kind: 'ready', delivery };
+  const changed = await changedVisibility(run, received, reading.delivery);
+  return changed.kind === 'failed' ? changed : { kind: 'ready', delivery: reading.delivery };
 }
 
 /** Gives a delivery after the first the wait of its backoff entry, which the queue's own visibility timeout does not know. */
 async function changedVisibility(
   { sqs }: QueueRun,
   { queue, message }: ReceivedMessage,
-  { delivery, waitMs }: { readonly delivery: Delivery; readonly waitMs: number },
+  { deliveryCount, waitMs }: TimedDelivery,
 ): Promise<{ readonly kind: 'changed' } | { readonly kind: 'failed'; readonly cause: unknown }> {
-  if (delivery.deliveryCount === 1 || queue.waits.length === 1) {
+  if (deliveryCount === 1 || queue.waits.length === 1) {
     return { kind: 'changed' };
   }
   try {
