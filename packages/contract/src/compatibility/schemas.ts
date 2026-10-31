@@ -35,12 +35,14 @@ export type EndpointPlace = { readonly position: EndpointPosition; readonly at: 
 /**
  * A place with the pairs a `ref` already led to within its root schema, one map shared by every
  * place in it: a `ref` is compared where it sits, and the pair it leads to the first time that
- * pair is met, however many paths reach it. Its steps from the site share those of the place it is
- * inside, so a pair one step further costs one step, however far down it is.
+ * pair is met, however many paths reach it. Its steps share those of the place it is inside, so a
+ * pair one step further costs one step, however far down it is; they are from the site, or, inside
+ * a def the proposed side reaches through a `ref`, from that def.
  */
 type EnteredPlace = {
   readonly position: Position;
   readonly steps: StepChain;
+  readonly def?: string;
   readonly entered: Entered;
 };
 
@@ -50,16 +52,20 @@ type EnteredPlace = {
  */
 type Met = { readonly kind: 'use' | 'hop'; readonly pair: NodePair };
 
-/** A pair one hop on from a pair holding a `ref`. */
-type Hop = Met & { readonly kind: 'hop' };
+/**
+ * A pair one hop on from a pair holding a `ref`, with the id of the def the proposed side's `ref`
+ * names, none when the proposed side is written inline.
+ */
+type Hop = Met & { readonly kind: 'hop'; readonly def: string | undefined };
 
 /**
  * Every difference in shape between a Baseline schema and its proposed one, depth first, each at
  * its path, following each `ref` one hop at a time into its Snapshot's defs. A `ref` is compared
- * where it sits, and the pair it leads to the first time that pair is met, so a def used at
- * several paths reports its differences at the first. A pair of `ref`s naming one def the def
- * comparison finds nothing differing in is not followed. A pair holds its steps shared with the
- * pair it is inside and a difference reads them as a list once.
+ * where it sits, and the pair it leads to the first time that pair is met; what differs inside the
+ * def the proposed side names is at its path from that def, so it reads the same whichever path
+ * reaches the def first. A pair of `ref`s naming one def the def comparison finds nothing differing
+ * in is not followed. A pair holds its steps shared with the pair it is inside and a difference
+ * reads them as a list once.
  */
 export function schemaDifferencesOf(
   pair: NodePair,
@@ -82,12 +88,7 @@ export function schemaDifferencesOf(
     const finding = next.value;
     switch (finding.kind) {
       case 'found':
-        differences.push({
-          kind: 'schema',
-          position: level.place.position,
-          at: stepListOf(chainDown(level.place.steps, finding.steps)),
-          shape: finding.shape,
-        });
+        differences.push(differenceOf(level.place, finding));
         break;
       case 'inside': {
         const steps = chainDown(level.place.steps, finding.steps);
@@ -95,11 +96,31 @@ export function schemaDifferencesOf(
         break;
       }
       case 'hop':
-        levels.push(levelOf(finding, defs, level.place));
+        levels.push(levelOf(finding, defs, placeOfHop(level.place, finding)));
         break;
     }
   }
   return differences;
+}
+
+/** A finding as a Difference: its steps below the place, and the def the place is in, if any. */
+function differenceOf(
+  place: EnteredPlace,
+  finding: Extract<Finding, { kind: 'found' }>,
+): Difference {
+  const at = stepListOf(chainDown(place.steps, finding.steps));
+  const difference = {
+    kind: 'schema',
+    position: place.position,
+    at,
+    shape: finding.shape,
+  } as const;
+  return place.def === undefined ? difference : { ...difference, def: place.def };
+}
+
+/** The place a hop's pair is compared in: inside the def the proposed side names, from that def, else where the hop is. */
+function placeOfHop(place: EnteredPlace, { def }: Hop): EnteredPlace {
+  return def === undefined ? place : { ...place, steps: undefined, def };
 }
 
 /**
@@ -137,7 +158,12 @@ function findingsWithin(
   }
   const proposedEntered = place.entered.get(hop.baseline) ?? new Set<SchemaNode>();
   place.entered.set(hop.baseline, proposedEntered.add(hop.proposed));
-  return [...own, { kind: 'hop', pair: hop }];
+  return [...own, { kind: 'hop', pair: hop, def: namedByProposed(pair) }];
+}
+
+/** The id of the def the proposed side of a pair holding a `ref` names; none when it is written inline. */
+function namedByProposed({ proposed }: NodePair): string | undefined {
+  return proposed.type === 'ref' ? proposed.name : undefined;
 }
 
 /**

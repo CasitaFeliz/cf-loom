@@ -67,12 +67,16 @@ export type Difference =
   /** A Visibility narrowed: a Dependency may lose reach. */
   | { readonly kind: 'visibility-narrowed'; readonly from: Visibility; readonly to: Visibility }
   /**
-   * A difference inside a schema, at its steps from the site, read in one Position; a shared schema
-   * is read as a Message, the strongest.
+   * A difference inside a schema, at its steps from the site, or, inside a recursive schema the
+   * proposed Snapshot reaches through a `ref`, from that schema, read in one Position; a shared
+   * schema is read as a Message, the strongest.
    */
   | {
       readonly kind: 'schema';
+      /** The steps from the site, or from the def when there is one. */
       readonly at: readonly Step[];
+      /** The id, in the proposed Snapshot's defs, of the recursive schema the difference is in; absent outside every one. */
+      readonly def?: string;
       readonly position: Position;
       readonly shape: ShapeDifference;
       /** The version that first published a field of the former Input it was found against removed; absent when found against the Baseline's own shape. */

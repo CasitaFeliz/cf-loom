@@ -101,9 +101,13 @@ export const keyStep: Step = { kind: 'key' };
 /** The step into a record's value. */
 export const valueStep: Step = { kind: 'value' };
 
-/** The path a Snapshot spells for steps: `fields.<name>`, `items`, `variants.<value>`… */
-export function snapshotPathOf(steps: readonly Step[]): Path {
-  return steps.flatMap(snapshotSegmentsOf);
+/**
+ * The path a Snapshot spells for steps: `fields.<name>`, `items`, `variants.<value>`…; those of a
+ * `def` start at `defs.<def>`, the recursive schema they are below.
+ */
+export function snapshotPathOf(steps: readonly Step[], def?: string): Path {
+  const below = steps.flatMap(snapshotSegmentsOf);
+  return def === undefined ? below : ['defs', def, ...below];
 }
 
 function snapshotSegmentsOf(step: Step): Path {
@@ -137,13 +141,22 @@ export function tokenOf(text: string): string {
   return plainToken.test(text) ? text : JSON.stringify(text);
 }
 
+/** How a recursive schema is named on a line, as a failure's site or where a Change's path starts: `defs.<id>`. */
+export function defTextOf(name: string): string {
+  return `defs.${tokenOf(name)}`;
+}
+
 /**
  * Steps in the author's terms: `success.body.orders[].lines[].kind<type="a">.x`, where `[]` is an
  * array's items, `[<i>]` a position of a tuple or a list, `[...]` a tuple's rest, `<|<i>>` a
  * union's option, `{}` a record's value, `{key}` its key and `<discriminator=value>` a variant;
- * none when there are no steps.
+ * none when there are no steps, unless they are below a `def`, which starts the path:
+ * `defs.tree.children[]`.
  */
-export function authorPathOf(steps: readonly Step[]): string | null {
+export function authorPathOf(steps: readonly Step[], def?: string): string | null {
+  if (def !== undefined) {
+    return defTextOf(def) + pathTailOf(steps);
+  }
   if (steps.length === 0) {
     return null;
   }

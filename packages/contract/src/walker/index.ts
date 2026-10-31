@@ -65,6 +65,7 @@ export type { PartName, Step, StepChain } from './steps.ts';
 export {
   authorPathOf,
   chainDown,
+  defTextOf,
   fieldStep,
   indexStep,
   itemsStep,
