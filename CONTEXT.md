@@ -233,7 +233,7 @@ One way a value broke its part of the Contract: the part and path, cf-loom's cod
 _Avoid_: error, violation
 
 **Broker plan**:
-The Streams and Durable consumers a Service needs on the Broker: a desired state the tooling derives from Contracts for infrastructure it does not manage. The organization decides how to apply it.
+The Streams and Durable consumers a Service needs on the Broker: a desired state the tooling derives from Contracts for infrastructure it does not manage. The organization decides how to apply it; the Broker inside the process needs none applied.
 _Avoid_: plan (alone), manifest, deployment config
 
 **EventPublisher**:
