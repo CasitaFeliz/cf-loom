@@ -29,6 +29,11 @@ export type Memos = {
   readonly raised: (tree: FailureTree) => void;
   /** An `allOf` or a `union` node the walk built, whose refusal joins those no remembered schema has claimed. */
   readonly built: (composition: Composition) => void;
+  /**
+   * Refusals of a remembered schema itself, judged after its walk closed: its memo claims them,
+   * as it claims what its walk raised.
+   */
+  readonly raisedIn: (schema: core.$ZodType, tree: FailureTree) => void;
   readonly start: () => Start;
   /** A remembered schema's walk closed: it claims what was raised and reached during it that no schema inside it claimed. */
   readonly close: (closed: ReachedSchema, start: Start) => void;
@@ -65,6 +70,7 @@ export function startMemos(): Memos {
     built: ({ refusal }) => {
       state.raised.push(refusal);
     },
+    raisedIn: (schema, tree) => raisedIn(state, schema, tree),
     start: () => ({ raised: state.raised.length, reaches: state.reaches.length }),
     close: (closed, start) => close(state, closed, start),
     forget: (schema) => {
@@ -81,6 +87,18 @@ function reached(state: State, schema: core.$ZodType, at: Reached): void {
   const reaches = state.memoBySchema.get(schema)?.reaches ?? earlyReachesOf(state, schema);
   reaches.push(reach);
   state.reaches.push(reach);
+}
+
+function raisedIn(state: State, schema: core.$ZodType, tree: FailureTree): void {
+  const memo = state.memoBySchema.get(schema);
+  if (memo === undefined) {
+    throw new Error(
+      'A refusal raised in a schema whose walk has not closed has no memo to claim it.',
+    );
+  }
+  for (const refusal of refusalsIn(tree, state.logged)) {
+    state.memoOf.set(refusal, memo);
+  }
 }
 
 function earlyReachesOf(state: State, schema: core.$ZodType): Reach[] {
