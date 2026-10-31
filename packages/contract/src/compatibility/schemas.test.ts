@@ -13,7 +13,8 @@ import {
 import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
-  authorPathOf,
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   byCodePoint,
   type Change,
   type ChangeSite,
@@ -43,7 +44,6 @@ import {
   type Snapshot,
   type Step,
   type StringNode,
-  snapshotPathOf,
   type TaggedNode,
   walkSchemas,
 } from '../internal/index.ts';
@@ -330,9 +330,8 @@ function snapshotPathsOf(changes: readonly Change[]): readonly PathChange[] {
     if (!('at' in difference)) {
       return change;
     }
-    const def = 'def' in difference ? difference.def : undefined;
     const rest = Object.entries(difference).filter(([key]) => key !== 'at' && key !== 'def');
-    const at = snapshotPathOf(difference.at, def);
+    const at = anchoredSnapshotPathOf(difference);
     return { ...change, difference: { ...Object.fromEntries(rest), at } };
   });
 }
@@ -362,7 +361,7 @@ function defOf({ difference }: Change): string | undefined {
 }
 
 function pathOf(change: Change): string {
-  return authorPathOf(stepsOf(change), defOf(change)) ?? '';
+  return 'at' in change.difference ? (anchoredAuthorPathOf(change.difference) ?? '') : '';
 }
 
 function comparedOf(baseline: PublishedSnapshot, proposed: Snapshot): ComparedReport {

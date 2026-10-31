@@ -4,6 +4,8 @@ import { refusalsOf } from '../../test/failures.ts';
 import { type Construct, constructs, pathTextOf, randomNested } from '../../test/random-places.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   type Site,
   type Step,
@@ -73,14 +75,14 @@ describe('authorPathOf', () => {
   ] as const satisfies readonly (readonly [string, readonly Step[], string, string])[])(
     'steps below a recursive schema start at its id: %s',
     ([, steps, def, text]) => {
-      expect(authorPathOf(steps, def)).toBe(text);
+      expect(anchoredAuthorPathOf({ at: steps, def })).toBe(text);
     },
   );
 
   test.for(['tree', 'two words', 'constructor'])(
     'a recursive schema is named in a path as a failure names it as a site: %s',
     (def) => {
-      expect(authorPathOf([], def)).toBe(siteTextOf({ kind: 'def', name: def }));
+      expect(anchoredAuthorPathOf({ at: [], def })).toBe(siteTextOf({ kind: 'def', name: def }));
     },
   );
 
@@ -89,16 +91,16 @@ describe('authorPathOf', () => {
   });
 });
 
-describe('snapshotPathOf', () => {
+describe('anchoredSnapshotPathOf', () => {
   test('steps below a recursive schema are a Snapshot path from its id in defs', () => {
-    const steps = [field('children'), { kind: 'items' }] as const;
+    const at = [field('children'), { kind: 'items' }] as const;
 
     expect([
-      snapshotPathOf(steps),
-      snapshotPathOf(steps, 'tree'),
-      snapshotPathOf([], 'tree'),
+      anchoredSnapshotPathOf({ at }),
+      anchoredSnapshotPathOf({ at, def: 'tree' }),
+      anchoredSnapshotPathOf({ at: [], def: 'tree' }),
     ]).toEqual([
-      ['fields', 'children', 'items'],
+      snapshotPathOf(at),
       ['defs', 'tree', 'fields', 'children', 'items'],
       ['defs', 'tree'],
     ]);
