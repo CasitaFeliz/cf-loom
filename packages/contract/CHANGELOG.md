@@ -1,5 +1,18 @@
 # @cf-loom/contract
 
+## 1.0.0-rc.3
+
+### Major Changes
+
+- 9b10210: `generate`, and `serve` at startup, refuse a text part's field whose example holds a value whose text its part cannot carry, as they refuse such an enum value, in an Input, a Guard's demands, a Success or a Rejection: no Caller could send it, and the Snapshot, the OpenAPI document and the Contract Package would publish it as a value to copy. The example sits on the field, on a query list or its items, or in an example of the part's own object (`z.object({ … }).meta({ examples })`). One line names every such value of a field, enum values first, each once, `A header's values each travel as HTTP field text: x-s has " a"`, rule `unsendable-text`. An example that a Contract refuses now is fixed by a Neutral Change: another example, in the Definitions Package when the field's type comes from there.
+
+### Patch Changes
+
+- 5f109cb: Without an `onServiceFault`, the console lists a Fault's Issues as the invalid-input body does, the first 100 within 64 KiB of the lines written, and counts the others on a last line, `<source>: <count> more Issues`, instead of writing one line per Issue, which made a Message or a Success of a million invalid items write about a hundred megabytes. `onServiceFault` still receives every Issue.
+- c7fe597: `check`, `publish` and the decoder no longer cost the product of two sizes where a Service holds a body of many fields that loses one, a long chain of defs or alias defs, many Endpoints that reach one closure nothing differs in, many Endpoints that each lose a field beside many defs, many removed codes beside many defs, or a Baseline with many Former Inputs. The decoder refuses a `ref` to a missing def named as an object inherits a member (`toString`) as malformed, where it threw. Reports, published Snapshots and Contract Packages are unchanged.
+- 78db080: `generate` refuses a cycle through `z.lazy()`, unions and intersections alone in time that grows with the recursive schemas, instead of its square: a Contract with 8,000 recursive unions, intersections or aliases of each other took 6.5 s in the walk alone, and doubling it took about five times longer. A schema's own failure is judged when it is written, and the cycles are judged among the schemas still standing when the set of recursive schemas closes, so a cycle through a schema that fails on its own is told only by that schema's line, and each other set of standing schemas that lead back to each other, once, at its first schema, the one the walk reaches first. The line of a cycle may therefore sit at another schema than before, lines may come in another order, and a cycle that another cycle among the same recursive schemas used to hide is told. A recursive schema that admits null now always gets its own `.meta({ id }) on a schema that admits null` line, replacing or joining the cycle lines. A Contract that `generate` accepts is accepted with the same Snapshot.
+- 81c45a1: The Compatibility Check, in `cf-loom check` and `publish`, compares a graph of recursive schemas that nothing differs in once, however many exports, Success bodies, Message bodies, Guards or Retired Elements reach it, where it read the whole graph again for each, so a Definitions Package or Service that holds many of them over a large graph was checked in time that grew with their number times the graph's size. Its report is the same.
+
 ## 1.0.0-rc.2
 
 ### Patch Changes
