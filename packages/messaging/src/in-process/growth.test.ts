@@ -1,3 +1,5 @@
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { growthOf } from '../../../contract/test/growth.ts';
 import type { BrokerConnection, DurableConsumer, OutgoingMessage, Settlement } from '../index.ts';
@@ -47,6 +49,26 @@ async function consumingOn(subject: string, others: number): Promise<BrokerConne
     closing: new AbortController().signal,
     troubled: () => undefined,
   });
+  return connection;
+}
+
+/** A connection consuming the Durable consumer after `cycles` connections consumed it and closed. */
+async function consumingAfter(subject: string, cycles: number): Promise<BrokerConnection> {
+  const broker = inProcess(limits);
+  const durableConsumer = aDurableConsumerOn(subject, 'orders-service_target');
+  for (let cycle = 0; cycle < cycles; cycle++) {
+    const connection = await broker.connect({ stream: 'orders-service', subjects: [] });
+    const closing = new AbortController();
+    await connection.consume([durableConsumer], {
+      closing: closing.signal,
+      troubled: () => undefined,
+    });
+    closing.abort();
+    await connection.close();
+  }
+  const connection = await broker.connect({ stream: 'orders-service', subjects: [] });
+  const open = { closing: new AbortController().signal, troubled: () => undefined };
+  await connection.consume([durableConsumer], open);
   return connection;
 }
 
@@ -102,6 +124,28 @@ describe('the growth of inProcess()', () => {
     growthTimeout,
   );
 
+  test(
+    'a publish takes as long after a thousand consume and close cycles as after ten',
+    async () => {
+      vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
+      const subject = subjectOf(0);
+      const connections = new Map([
+        [10, await consumingAfter(subject, 10)],
+        [1_000, await consumingAfter(subject, 1_000)],
+      ]);
+
+      const growth = growthOf(
+        (cycles) =>
+          publishingAndDelivering(connections.get(cycles) as BrokerConnection, subject, 1_000),
+        { small: 10, large: 1_000 },
+        flatGrowth,
+      );
+
+      expect(growth).toBeLessThan(flatGrowth);
+    },
+    growthTimeout,
+  );
+
   test.each([
     [
       'the entries of an ack wait list',
@@ -139,4 +183,37 @@ describe('the growth of inProcess()', () => {
     },
     growthTimeout,
   );
+});
+
+setFlagsFromString('--expose-gc');
+const collectGarbage = runInNewContext('gc') as () => void;
+
+/** The bytes the heap and the buffers hold more after draining `count` Messages of a kilobyte than before, with the garbage collected, and the connection that is kept alive until then. */
+async function retainedAfterDraining(count: number) {
+  vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 10_000_000 });
+  const subject = subjectOf(0);
+  const connection = await consumingOn(subject, 0);
+  collectGarbage();
+  const before = process.memoryUsage();
+  for (let published = 0; published < count; published++) {
+    const body = new Uint8Array(1_024);
+    void connection.publish({ ...aMessageOn(subject), body });
+  }
+  vi.runAllTimers();
+  collectGarbage();
+  collectGarbage();
+  const after = process.memoryUsage();
+  const retained = after.heapUsed + after.arrayBuffers - before.heapUsed - before.arrayBuffers;
+  return { retained, connection };
+}
+
+describe('what inProcess() keeps of the Messages it delivered', () => {
+  test('after draining 40,000 Messages of a kilobyte, far less than their bodies is held', async () => {
+    const count = 40_000;
+
+    const { retained, connection } = await retainedAfterDraining(count);
+
+    expect(retained).toBeLessThan((count * 1_024) / 20);
+    expect(connection.publish).toBeTypeOf('function');
+  });
 });
