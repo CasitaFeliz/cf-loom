@@ -30,9 +30,9 @@ export { heldNodeOf, withoutNullable } from './held-node.ts';
 export { joinedOf } from './joined-names.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
+  belowTextOf,
   inFields,
   inside,
-  locationBelowOf,
   movedFrom,
   placeNameOf,
   placeOf,

@@ -77,18 +77,24 @@ export function siteTextOf(site: Site): string {
   }
 }
 
-/** Where a failure sits on one line: its site, then its steps in the author's terms. */
-export function siteLocationOf(site: Site, steps: readonly Step[]): string {
+/** What the text of a place adds after its site for the steps under it: a space and the path, or nothing. */
+function afterSiteOf(steps: readonly Step[]): string {
   const path = authorPathOf(steps);
-  return path === null ? siteTextOf(site) : `${siteTextOf(site)} ${path}`;
+  return path === null ? '' : ` ${path}`;
 }
 
-/** The text `siteLocationOf` gives a place `below` steps under another, from that one's text. */
-export function locationBelowOf(text: string, place: Place, below: readonly Step[]): string {
-  if (below.length === 0) {
-    return text;
-  }
-  return place.steps === undefined ? siteLocationOf(place.site, below) : text + pathTailOf(below);
+/** Where a failure sits on one line: its site, then its steps in the author's terms. */
+export function siteLocationOf(site: Site, steps: readonly Step[]): string {
+  return siteTextOf(site) + afterSiteOf(steps);
+}
+
+/**
+ * The text a place `held` adds below the place `from` it sits inside, once that one stands at
+ * `place`: what `siteLocationOf` writes after the text of `place`.
+ */
+export function belowTextOf(place: Place, held: StepChain, from: StepChain): string {
+  const below = stepsBelow(held, from);
+  return place.steps === undefined ? afterSiteOf(below) : pathTailOf(below);
 }
 
 /**

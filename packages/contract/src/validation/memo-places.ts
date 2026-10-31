@@ -1,113 +1,83 @@
 import {
-  byCodePoint,
-  locationBelowOf,
+  isUnnamedCycle,
   type Memo,
-  movedFrom,
+  type NotAllowed,
   type Place,
   type Site,
   siteLocationOf,
   siteTextOf,
   stepListOf,
-  stepsBelow,
 } from '../walker/index.ts';
-import { type PlacedReach, popReach, pushReach } from './reach-heap.ts';
+import { type HeldReach, type ToldPlace, toldPlacesOf, type Waiting } from './told-order.ts';
 
 /** Every site of a set once, keyed by the text a line names it by. */
-export type Sites = ReadonlyMap<string, Site>;
+type Sites = ReadonlyMap<string, Site>;
+
+/** Where a refusal is told, its rank among the places told, and every site that reaches it. */
+export type ToldAt = ToldPlace & { readonly sites: Sites };
 
 /**
- * Where a schema the walk remembers is told: the first place it is reached, in code point order,
- * and every site that reaches it, through the remembered schemas it is reached inside.
- */
-export type MemoPlace = { readonly at: Place; readonly sites: Sites };
-
-/** A reach of a memo, which stands nowhere until the memo it was made inside is placed. */
-type HeldReach = { readonly memo: Memo; readonly reach: Memo['reaches'][number] };
-
-/**
- * The places of the memos of one walk, settled together once it is over: a first place is known
+ * Where each refusal is told, settled together once the walk is over: a first place is known
  * only after the whole walk, since a later Endpoint can reach a def at a smaller place, so the
- * walker cannot hand each memo its place as it closes. The memos given and every memo they are
- * reached inside settle, and a memo's sites are its own and those of every memo it is reached
- * inside.
+ * walker cannot hand each memo its place as it closes. A refusal inside a memo is told from the
+ * memo's first place, with every site of that memo, its own and those of every memo it is
+ * reached inside; any other refusal at its own place, with its own site.
  */
-export function memoPlacesOf(memos: Iterable<Memo>): ReadonlyMap<Memo, MemoPlace> {
-  const wanted = new Set(memos);
-  const all = closureOf(wanted);
-  const inside = heldInsideOf(all);
-  const sites = sitesOf(all, inside);
-  const placed = new Map<Memo, MemoPlace>();
-  for (const [memo, at] of firstPlacesOf(all, inside, wanted)) {
-    placed.set(memo, { at, sites: sites.get(memo) ?? new Map() });
+export function toldAtOf(
+  refusals: readonly NotAllowed[],
+  memoOf: ReadonlyMap<NotAllowed, Memo>,
+): ReadonlyMap<NotAllowed, ToldAt> {
+  const memoToldFrom = (refusal: NotAllowed) =>
+    isUnnamedCycle(refusal) ? undefined : memoOf.get(refusal);
+  const inMemo = groupedByMemo(refusals, memoToldFrom);
+  const own = refusals.filter((refusal) => memoToldFrom(refusal) === undefined);
+  const all = closureOf(inMemo.keys());
+  const reaches = heldInsideOf(all);
+  const sites = sitesOf(all, reaches);
+  const roots = [...own.map(waitingAtOwnPlace), ...topLevelReachesOf(all)];
+  const told = new Map<NotAllowed, ToldAt>();
+  for (const [refusal, place] of toldPlacesOf(roots, { reaches, refusals: inMemo })) {
+    const memo = memoToldFrom(refusal);
+    const memoSites = memo === undefined ? undefined : sites.get(memo);
+    const ownSite = new Map([[siteTextOf(refusal.site), refusal.site]]);
+    told.set(refusal, { ...place, sites: memoSites ?? ownSite });
   }
-  return placed;
+  return told;
 }
 
-/**
- * Memos settle in code point order of their first place: the smallest place any unsettled memo
- * is reached at is final, since a place inside a memo only extends that memo's. The places kept
- * are the wanted memos'; the others only settle, so what is kept is theirs alone.
- */
-function firstPlacesOf(
-  memos: ReadonlySet<Memo>,
-  inside: ReadonlyMap<Memo, readonly HeldReach[]>,
-  wanted: ReadonlySet<Memo>,
-): ReadonlyMap<Memo, Place> {
-  const first = new Map<Memo, Place>();
-  const frontier = frontierOf(memos);
-  for (let next = frontier.pop(); next !== undefined; next = frontier.pop()) {
-    if (wanted.has(next.memo)) {
-      first.set(next.memo, next.at);
+/** The refusals raised inside each memo, in the order given. */
+function groupedByMemo(
+  refusals: readonly NotAllowed[],
+  memoToldFrom: (refusal: NotAllowed) => Memo | undefined,
+): ReadonlyMap<Memo, readonly NotAllowed[]> {
+  const inMemo = new Map<Memo, NotAllowed[]>();
+  for (const refusal of refusals) {
+    const memo = memoToldFrom(refusal);
+    if (memo !== undefined) {
+      const held = inMemo.get(memo) ?? [];
+      held.push(refusal);
+      inMemo.set(memo, held);
     }
-    frontier.offerInside(next, inside.get(next.memo) ?? []);
   }
-  return first;
+  return inMemo;
 }
 
-/**
- * The best reach of each memo not yet settled, the smallest place first, seeded with the memos'
- * top-level reaches. A memo enters the heap only when a reach improves on its best, so a memo
- * reached many times inside one memo enters once; `pop` settles the memo it returns.
- */
-function frontierOf(memos: ReadonlySet<Memo>) {
-  const heap: PlacedReach[] = [];
-  const best = new Map<Memo, string>();
-  const settled = new Set<Memo>();
-  const offer = (memo: Memo, at: Place, text: string) => {
-    const known = best.get(memo);
-    if (known === undefined || byCodePoint(text, known) < 0) {
-      best.set(memo, text);
-      pushReach(heap, { memo, at, text });
-    }
-  };
+/** A refusal told at its own place, waiting at the text of that place. */
+function waitingAtOwnPlace(refusal: NotAllowed): Waiting {
+  return { kind: 'telling', refusal, at: refusal, text: locationTextOf(refusal), offset: 0 };
+}
+
+/** The reaches of the memos made from a declaration itself, each waiting at the text of its place. */
+function topLevelReachesOf(memos: ReadonlySet<Memo>): readonly Waiting[] {
+  const reaches: Waiting[] = [];
   for (const memo of memos) {
     for (const { at, within } of memo.reaches) {
       if (within === undefined) {
-        offer(memo, at, locationTextOf(at));
+        reaches.push({ kind: 'reach', memo, at, text: locationTextOf(at), offset: 0 });
       }
     }
   }
-  return {
-    pop: () => {
-      for (let next = popReach(heap); next !== undefined; next = popReach(heap)) {
-        if (!settled.has(next.memo)) {
-          settled.add(next.memo);
-          return next;
-        }
-      }
-      return undefined;
-    },
-    offerInside: (outer: PlacedReach, held: readonly HeldReach[]) => {
-      for (const { memo, reach } of held.filter((entry) => !settled.has(entry.memo))) {
-        const below = stepsBelow(reach.at.steps, outer.memo.at.steps);
-        offer(
-          memo,
-          movedFrom(reach.at, outer.memo.at, outer.at),
-          locationBelowOf(outer.text, outer.at, below),
-        );
-      }
-    },
-  };
+  return reaches;
 }
 
 /** The memos given and every memo one of them is reached inside, at any depth. */
@@ -174,11 +144,6 @@ function sitesOf(
     }
   }
   return sites;
-}
-
-/** The code point order of the places a line would name. */
-export function byLocation(left: Place, right: Place): number {
-  return byCodePoint(locationTextOf(left), locationTextOf(right));
 }
 
 /** The text a line names a place by: its site and the steps under it. */
