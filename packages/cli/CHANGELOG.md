@@ -1,5 +1,16 @@
 # @cf-loom/cli
 
+## 1.0.0-rc.3
+
+### Patch Changes
+
+- Updated dependencies [5f109cb]
+- Updated dependencies [c7fe597]
+- Updated dependencies [78db080]
+- Updated dependencies [9b10210]
+- Updated dependencies [81c45a1]
+  - @cf-loom/contract@1.0.0-rc.3
+
 ## 1.0.0-rc.2
 
 ### Minor Changes

@@ -80,3 +80,23 @@ export function troubleReportingOf(
     isFailing: () => failing,
   };
 }
+
+/** The longest delay a Node timer takes; a longer one fires after 1 ms. */
+const longestTimerMs = 2_147_483_647;
+
+/** Whose timer it is: one the process stays alive for, as the core's wait for a running Handler, or one it may exit on, as a Broker's wait for a Message nobody is handling. */
+export type TimerHold = 'holds-process' | 'lets-process-exit';
+
+/** Calls `passed` once `waitMs` has passed, timed in steps a Node timer holds; answers what stops it. */
+export function afterWait(waitMs: number, passed: () => void, hold: TimerHold): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (leftMs: number) => {
+    const stepMs = Math.min(leftMs, longestTimerMs);
+    timer = setTimeout(() => (leftMs > stepMs ? arm(leftMs - stepMs) : passed()), stepMs);
+    if (hold === 'lets-process-exit') {
+      timer.unref();
+    }
+  };
+  arm(waitMs);
+  return () => clearTimeout(timer);
+}

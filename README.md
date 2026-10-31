@@ -17,6 +17,7 @@ Terms are defined in [CONTEXT.md](CONTEXT.md), the glossary. The rules for chang
 | [`@cf-loom/messaging`](packages/messaging/README.md) | Services with Messages | Connecting a Contract's messaging through a Broker: publishing Events, sending Commands and consuming both |
 | [`@cf-loom/messaging/jetstream`](packages/messaging/README.md#jetstream) | Services on NATS JetStream | The Broker adapter for NATS JetStream, which also applies a Broker plan |
 | [`@cf-loom/messaging/sqs`](packages/messaging/README.md#snssqs) | Services on Amazon SNS and SQS | The Broker adapter for Amazon SNS and SQS, which also applies a Broker plan |
+| [`@cf-loom/messaging/in-process`](packages/messaging/README.md#in-process) | Services run locally | A Broker inside the process, for local runs |
 | [`@cf-loom/messaging/memory`](packages/messaging/README.md#in-memory) | Tests | Messaging in memory, for tests |
 | [`@cf-loom/testing`](packages/testing/README.md) | Tests of Consumers | Faking the Providers a Consumer depends on |
 | [`@cf-loom/cli`](packages/cli/README.md) | Everyone | The `cf-loom` command and its configuration |

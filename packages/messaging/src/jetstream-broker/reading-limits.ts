@@ -7,6 +7,7 @@ import {
   oneOrListOf,
   type ReadOf,
   readAs,
+  unlimitedCount,
 } from '../broker-limits/index.ts';
 import {
   deliverPolicies,
@@ -29,10 +30,6 @@ function nanosOf(input: unknown): number | undefined {
   const exact = milliseconds * nanosInMillisecond;
   return exact <= int64Max && BigInt(Number(exact)) === exact ? Number(exact) : undefined;
 }
-
-const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
-  input === 'unlimited' ? -1 : countOf(input),
-);
 
 /** The readers of a Stream's settings, which read each in NATS's units. */
 export const streamReaders = {

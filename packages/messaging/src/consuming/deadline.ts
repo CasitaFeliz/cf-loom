@@ -1,9 +1,7 @@
 import { unbrokenLineOf } from '@cf-loom/contract/internal';
 import type { MessageRun } from '@cf-loom/handlers/internal';
+import { afterWait } from '../broker/index.ts';
 import type { Settled } from './details.ts';
-
-/** The longest delay a Node timer takes; a longer one fires after 1 ms. */
-const longestTimerMs = 2_147_483_647;
 
 /** Why a Message Handler was no longer waited for: its delivery's wait, how long the Broker waits for its acknowledgement, passed. */
 export class DeadlineError extends Error {
@@ -76,11 +74,15 @@ export class OneDelivery {
     if (waitMs === undefined) {
       return noWait;
     }
-    return afterWait(waitMs, () => {
-      const deadline = new DeadlineError(waitMs);
-      this.#controller.abort(deadline);
-      passed({ kind: 'thrown', cause: deadline });
-    });
+    return afterWait(
+      waitMs,
+      () => {
+        const deadline = new DeadlineError(waitMs);
+        this.#controller.abort(deadline);
+        passed({ kind: 'thrown', cause: deadline });
+      },
+      'holds-process',
+    );
   }
 }
 
@@ -91,15 +93,4 @@ export function whenAborted(signal: AbortSignal, aborted: () => void): void {
     return;
   }
   signal.addEventListener('abort', aborted, { once: true });
-}
-
-/** Calls `passed` once `waitMs` has passed, timed in steps a Node timer holds; answers what stops it. */
-function afterWait(waitMs: number, passed: () => void): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const arm = (leftMs: number) => {
-    const stepMs = Math.min(leftMs, longestTimerMs);
-    timer = setTimeout(() => (leftMs > stepMs ? arm(leftMs - stepMs) : passed()), stepMs);
-  };
-  arm(waitMs);
-  return () => clearTimeout(timer);
 }
