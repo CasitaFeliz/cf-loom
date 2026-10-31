@@ -8,6 +8,13 @@ export type Edge = {
   readonly label: string;
 };
 
+/** The entries of a record in code point order of their keys, so two records with the same keys list them alike. */
+export function sortedEntries<Value>(
+  record: Readonly<Record<string, Value>>,
+): readonly (readonly [string, Value])[] {
+  return Object.entries(record).sort(([left], [right]) => (left < right ? -1 : 1));
+}
+
 /** The steps the graft does not enter: it compares what they lead to as a whole. */
 const unenteredLabels: ReadonlySet<string> = new Set(['index', 'option', 'item']);
 
@@ -21,17 +28,17 @@ function tupleEdgesOf(node: TupleNode): readonly Edge[] {
   return node.rest === undefined ? items : [...items, edgeTo(node.rest, ['rest'], 'rest')];
 }
 
-/** The children of a node, a record's key left out, which holds no field. */
+/** The children of a node, a record's key and value, an object's fields and a tagged union's variants in code point order. */
 export function edgesOf(node: SchemaNode): readonly Edge[] {
   switch (node.type) {
     case 'object':
-      return Object.entries(node.fields).map(([name, { schema }]) =>
+      return sortedEntries(node.fields).map(([name, { schema }]) =>
         edgeTo(schema, ['fields', name, 'schema'], 'field'),
       );
     case 'array':
       return [edgeTo(node.items, ['items'], 'items')];
     case 'record':
-      return [edgeTo(node.value, ['value'], 'value')];
+      return [edgeTo(node.key, ['key'], 'key'), edgeTo(node.value, ['value'], 'value')];
     case 'tuple':
       return tupleEdgesOf(node);
     case 'union':
@@ -39,7 +46,7 @@ export function edgesOf(node: SchemaNode): readonly Edge[] {
     case 'allOf':
       return node.items.map((item, index) => edgeTo(item, ['items', index], 'item'));
     case 'tagged':
-      return Object.entries(node.variants).map(([value, variant]) =>
+      return sortedEntries(node.variants).map(([value, variant]) =>
         edgeTo(variant, ['variants', value], 'variant'),
       );
     default:

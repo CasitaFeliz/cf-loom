@@ -1,7 +1,23 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
-import { destinationOf, isClosureUnchanged, problemWithDefsOf } from '../../test/graft-defs.ts';
-import { graftedIdentity, type Shape } from '../../test/graft-fixtures.ts';
+import {
+  annotationsOf,
+  destinationOf,
+  isClosureUnchanged,
+  problemWithDefsOf,
+} from '../../test/graft-defs.ts';
+import {
+  anObject,
+  aRef,
+  aString,
+  emptyObject,
+  graftedIdentity,
+  optional,
+  required,
+  type Shape,
+  standardCodes,
+  standardRejections,
+} from '../../test/graft-fixtures.ts';
 import { differenceFromInput } from '../../test/graft-oracle.ts';
 import {
   chainLosingFieldAtEnd,
@@ -21,7 +37,6 @@ import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
-  type CodeSnapshot,
   canonicalTextOf,
   compatibilityReportOf,
   type DefinitionsSnapshot,
@@ -46,53 +61,13 @@ import {
 } from '../internal/index.ts';
 
 const identity = 'POST /orders';
-const standardRejections: ServiceSnapshot['standardRejections'] = {
-  invalidInput: 'INVALID_INPUT',
-  notFound: 'NOT_FOUND',
-  notImplemented: 'NOT_IMPLEMENTED',
-};
-const emptyObject = { type: 'object', fields: {} } as const;
 const aNumber: SchemaNode = { type: 'number' };
-const aString: SchemaNode = { type: 'string' };
 const aUuid: SchemaNode = { type: 'string', format: 'uuid' };
 const id: Field = { required: true, schema: aString };
 const unmoved = { baseline: { zod: '^4.1.0' }, proposed: { zod: '^4.1.0' } };
 
 type Fields = Readonly<Record<string, Field>>;
 type Defs = Readonly<Record<string, SchemaNode>>;
-
-function required(schema: SchemaNode): Field {
-  return { required: true, schema };
-}
-
-function optional(schema: SchemaNode): Field {
-  return { required: false, schema };
-}
-
-function anObject(fields: Fields): ObjectNode {
-  return { type: 'object', fields };
-}
-
-function ref(name: string): SchemaNode {
-  return { type: 'ref', name };
-}
-
-function aCode(fields: Partial<CodeSnapshot>): CodeSnapshot {
-  return {
-    origin: 'standard',
-    status: 400,
-    message: 'Standard',
-    headers: emptyObject,
-    body: null,
-    ...fields,
-  };
-}
-
-const standardCodes = {
-  [standardRejections.invalidInput]: aCode({ body: emptyObject }),
-  [standardRejections.notFound]: aCode({ status: 404 }),
-  [standardRejections.notImplemented]: aCode({ status: 501 }),
-};
 
 /** What a version of `POST /orders` declares: its body's and query's fields, headers, defs and the rest. */
 type Declared = {
@@ -146,16 +121,21 @@ function aService(declared: Declared = {}): ServiceSnapshot {
   };
 }
 
-/** Each declared Snapshot published in turn, as 1.0.0, 1.1.0 and so on, each against the one before. */
-function publishedThrough(...versions: readonly ServiceSnapshot[]): PublishedServiceSnapshot {
-  let baseline: PublishedServiceSnapshot | undefined;
-  for (const [minor, proposed] of versions.entries()) {
-    baseline = publishedSnapshotOf(baseline, proposed, publishedAt(`1.${minor}.0`));
+/** Every version published in turn, as 1.0.0, 1.1.0 and so on, each against the one before. */
+function publishedEach(versions: readonly ServiceSnapshot[]): readonly PublishedServiceSnapshot[] {
+  const publishes: PublishedServiceSnapshot[] = [];
+  for (const [minor, version] of versions.entries()) {
+    publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
   }
-  if (baseline === undefined) {
+  return publishes;
+}
+
+function publishedThrough(...versions: readonly ServiceSnapshot[]): PublishedServiceSnapshot {
+  const published = publishedEach(versions).at(-1);
+  if (published === undefined) {
     throw new Error('No version to publish: a bug of the test.');
   }
-  return baseline;
+  return published;
 }
 
 function placeOf(steps: readonly Step[]): string {
@@ -348,20 +328,20 @@ describe('compatibilityReportOf: an Endpoint’s former Inputs', () => {
     const tree = (name: string, label: SchemaNode | undefined): SchemaNode =>
       anObject({
         ...(label === undefined ? {} : { label: optional(label) }),
-        child: optional(ref(name)),
+        child: optional(aRef(name)),
       });
     const baseline = publishedThrough(
       aService({
-        body: { id, left: optional(ref('tree')), right: optional(ref('tree')) },
+        body: { id, left: optional(aRef('tree')), right: optional(aRef('tree')) },
         defs: { tree: tree('tree', aNumber) },
       }),
       aService({
-        body: { id, left: optional(ref('tree')), right: optional(ref('tree')) },
+        body: { id, left: optional(aRef('tree')), right: optional(aRef('tree')) },
         defs: { tree: tree('tree', undefined) },
       }),
     );
     const proposed = aService({
-      body: { id, left: optional(ref('tree')), right: optional(ref('labelled')) },
+      body: { id, left: optional(aRef('tree')), right: optional(aRef('labelled')) },
       defs: { tree: tree('tree', undefined), labelled: tree('labelled', aString) },
     });
 
@@ -530,7 +510,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   test('publishing a version that removes a body field keeps the Baseline’s query and body with the defs they reached and removedIn', () => {
     const query = { page: optional(aNumber) };
     const defs = { note: anObject({ text: required(aString) }), unused: aString };
-    const before = aService({ query, body: { id, note: optional(ref('note')) }, defs });
+    const before = aService({ query, body: { id, note: optional(aRef('note')) }, defs });
 
     const formerInputs = formerInputsAfter(before, aService({ query, body: { id } }));
 
@@ -540,7 +520,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
         removedIn: '1.1.0',
         input: {
           query: anObject(query),
-          body: anObject({ id, note: optional(ref('note')) }),
+          body: anObject({ id, note: optional(aRef('note')) }),
         },
         defs: { note: defs.note },
       },
@@ -668,15 +648,15 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   });
 
   test('an unchanged Contract leaves every former Input byte-identical and reports nothing', () => {
-    const tree = anObject({ label: optional(aNumber), child: optional(ref('tree')) });
-    const bare = anObject({ child: optional(ref('tree')) });
-    const proposed = aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: bare } });
+    const tree = anObject({ label: optional(aNumber), child: optional(aRef('tree')) });
+    const bare = anObject({ child: optional(aRef('tree')) });
+    const proposed = aService({ body: { id, root: optional(aRef('tree')) }, defs: { tree: bare } });
     const published = publishedThrough(
       aService({
-        body: { id, root: optional(ref('tree')), note: optional(aNumber) },
+        body: { id, root: optional(aRef('tree')), note: optional(aNumber) },
         defs: { tree },
       }),
-      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree } }),
+      aService({ body: { id, root: optional(aRef('tree')) }, defs: { tree } }),
       proposed,
     );
 
@@ -691,24 +671,24 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
   test('a field removed inside a def the Endpoint keeps is grafted into a copy of the def named apart, which the def’s own refs name', () => {
     const tree = (label: boolean) =>
-      anObject({ ...(label ? { label: optional(aNumber) } : {}), child: optional(ref('tree')) });
+      anObject({ ...(label ? { label: optional(aNumber) } : {}), child: optional(aRef('tree')) });
 
     const published = publishedThrough(
-      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: tree(true) } }),
-      aService({ body: { id, root: optional(ref('tree')) }, defs: { tree: tree(false) } }),
+      aService({ body: { id, root: optional(aRef('tree')) }, defs: { tree: tree(true) } }),
+      aService({ body: { id, root: optional(aRef('tree')) }, defs: { tree: tree(false) } }),
     );
 
-    const grafted = anObject({ label: optional(aNumber), child: optional(ref('tree~1')) });
+    const grafted = anObject({ label: optional(aNumber), child: optional(aRef('tree~1')) });
     expect([published.formerInputs, decodeSnapshot(canonicalTextOf(published)).kind]).toEqual([
-      [anEntry('1.1.0', { id, root: optional(ref('tree~1')) }, { 'tree~1': grafted })],
+      [anEntry('1.1.0', { id, root: optional(aRef('tree~1')) }, { 'tree~1': grafted })],
       'decoded',
     ]);
   });
 
   test('a field removed inside a def two fields share is grafted once, and declaring it again is reported once', () => {
     const tree = (label: SchemaNode | undefined) =>
-      anObject({ ...(label ? { label: optional(label) } : {}), child: optional(ref('tree')) });
-    const body = { id, left: optional(ref('tree')), right: optional(ref('tree')) };
+      anObject({ ...(label ? { label: optional(label) } : {}), child: optional(aRef('tree')) });
+    const body = { id, left: optional(aRef('tree')), right: optional(aRef('tree')) };
     const published = publishedThrough(
       aService({ body, defs: { tree: tree(aNumber) } }),
       aService({ body, defs: { tree: tree(undefined) } }),
@@ -729,14 +709,14 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   test('two former defs the Endpoint merged into one are grafted apart, and a field declared again with one’s shape is Breaking for the other’s Callers', () => {
     const before = { p: anObject({ c: optional(aNumber) }), q: anObject({ c: optional(aString) }) };
     const published = publishedThrough(
-      aService({ body: { id, x: optional(ref('p')), y: optional(ref('q')) }, defs: before }),
+      aService({ body: { id, x: optional(aRef('p')), y: optional(aRef('q')) }, defs: before }),
       aService({
-        body: { id, x: optional(ref('p')), y: optional(ref('p')) },
+        body: { id, x: optional(aRef('p')), y: optional(aRef('p')) },
         defs: { p: anObject({}) },
       }),
     );
     const proposed = aService({
-      body: { id, x: optional(ref('p')), y: optional(ref('p')) },
+      body: { id, x: optional(aRef('p')), y: optional(aRef('p')) },
       defs: { p: anObject({ c: optional(aNumber) }) },
     });
 
@@ -757,31 +737,31 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
     const formerInputs = formerInputsAfter(
       aService({
-        body: { id, note: optional(ref('note')), remark: optional(ref('note')) },
+        body: { id, note: optional(aRef('note')), remark: optional(aRef('note')) },
         defs: { note },
       }),
-      aService({ body: { id, remark: optional(ref('note')) }, defs: { note: changed } }),
+      aService({ body: { id, remark: optional(aRef('note')) }, defs: { note: changed } }),
     );
 
     expect(formerInputs).toEqual([
       anEntry(
         '1.1.0',
-        { id, remark: optional(ref('note')), note: optional(ref('note~1')) },
+        { id, remark: optional(aRef('note')), note: optional(aRef('note~1')) },
         { note: changed, 'note~1': note },
       ),
     ]);
   });
 
   test('a def the former Input reaches both at a field and inside a plain union is held as declared for the union and grafted apart for the field, and the unchanged Input reports nothing', () => {
-    const union = optional({ type: 'union', options: [aString, ref('n')] });
+    const union = optional({ type: 'union', options: [aString, aRef('n')] });
     const before = anObject({ c: optional(aNumber), d: optional(aString) });
     const after = anObject({ d: optional(aString) });
     const proposed = aService({
-      body: { id, a: optional(ref('n')), u: union },
+      body: { id, a: optional(aRef('n')), u: union },
       defs: { n: after },
     });
     const published = publishedThrough(
-      aService({ body: { id, a: optional(ref('n')), u: union }, defs: { n: before } }),
+      aService({ body: { id, a: optional(aRef('n')), u: union }, defs: { n: before } }),
       proposed,
     );
 
@@ -789,7 +769,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
     const grafted = anObject({ c: optional(aNumber), d: optional(aString) });
     expect([published.formerInputs, lines]).toEqual([
-      [anEntry('1.1.0', { id, a: optional(ref('n~1')), u: union }, { n: after, 'n~1': grafted })],
+      [anEntry('1.1.0', { id, a: optional(aRef('n~1')), u: union }, { n: after, 'n~1': grafted })],
       [],
     ]);
   });
@@ -870,11 +850,11 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   test('a def first met at one field and reached again through another def keeps the removed field after a break at the first', () => {
     const shared = (d: SchemaNode | undefined) =>
       anObject({ c: optional(aNumber), ...(d === undefined ? {} : { d: optional(d) }) });
-    const holder = anObject({ y: optional(ref('y')) });
-    const body = (a: SchemaNode) => ({ id, a: optional(a), b: optional(ref('x')) });
+    const holder = anObject({ y: optional(aRef('y')) });
+    const body = (a: SchemaNode) => ({ id, a: optional(a), b: optional(aRef('x')) });
     const published = publishedThrough(
-      aService({ body: body(ref('y')), defs: { x: holder, y: shared(aNumber) } }),
-      aService({ body: body(ref('y')), defs: { x: holder, y: shared(undefined) } }),
+      aService({ body: body(aRef('y')), defs: { x: holder, y: shared(aNumber) } }),
+      aService({ body: body(aRef('y')), defs: { x: holder, y: shared(undefined) } }),
       aService({ body: body(aString), defs: { x: holder, y: shared(undefined) } }),
     );
 
@@ -891,7 +871,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
   test('a field removed through a nullable alias def, declared again not nullable, is Breaking', () => {
     const target = anObject({ c: optional(aNumber) });
-    const alias = ref('n');
+    const alias = aRef('n');
     const nullableAlias: SchemaNode = { type: 'ref', name: 'alias', nullable: true };
     const published = publishedThrough(
       aService({ body: { id, x: optional(nullableAlias) }, defs: { alias, n: target } }),
@@ -900,7 +880,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
     const lines = linesOf(
       published,
-      aService({ body: { id, x: optional(ref('n')) }, defs: { n: target } }),
+      aService({ body: { id, x: optional(aRef('n')) }, defs: { n: target } }),
     );
 
     expect(lines).toEqual([
@@ -912,9 +892,12 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   test('a copied def named apart twice decodes and is its own graft', () => {
     const before = anObject({ c: optional(aNumber), d: optional(aNumber) });
     const after = anObject({ c: optional(aNumber) });
-    const proposed = aService({ body: { id, a: optional(ref('n')) }, defs: { n: after } });
+    const proposed = aService({ body: { id, a: optional(aRef('n')) }, defs: { n: after } });
     const published = publishedThrough(
-      aService({ body: { id, a: optional(ref('n')), b: optional(ref('n')) }, defs: { n: before } }),
+      aService({
+        body: { id, a: optional(aRef('n')), b: optional(aRef('n')) },
+        defs: { n: before },
+      }),
       proposed,
     );
 
@@ -928,14 +911,14 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   });
 
   test('a removed field whose allOf names a def the publish names apart keeps the items in shape order, and the Snapshot decodes', () => {
-    const intersection: SchemaNode = { type: 'allOf', items: [ref('a'), ref('ab')] };
+    const intersection: SchemaNode = { type: 'allOf', items: [aRef('a'), aRef('ab')] };
     const baseline = aService({
       body: { id, f: required(intersection) },
-      defs: { a: anObject({ x: optional(ref('a')) }), ab: anObject({ y: optional(ref('ab')) }) },
+      defs: { a: anObject({ x: optional(aRef('a')) }), ab: anObject({ y: optional(aRef('ab')) }) },
     });
     const proposed = aService({
-      body: { id, g: optional(ref('a')) },
-      defs: { a: anObject({ z: optional(ref('a')) }) },
+      body: { id, g: optional(aRef('a')) },
+      defs: { a: anObject({ z: optional(aRef('a')) }) },
     });
 
     const published = publishedThrough(baseline, proposed);
@@ -943,14 +926,14 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     expect([
       removedFieldOf(published, 'f'),
       decodeSnapshot(canonicalTextOf(published)).kind,
-    ]).toEqual([{ type: 'allOf', items: [ref('ab'), ref('a~1')] }, 'decoded']);
+    ]).toEqual([{ type: 'allOf', items: [aRef('ab'), aRef('a~1')] }, 'decoded']);
   });
 
   test('a removed field whose allOf names two alias defs of one def holds that def once, and the Snapshot decodes', () => {
-    const intersection: SchemaNode = { type: 'allOf', items: [ref('p'), ref('q')] };
+    const intersection: SchemaNode = { type: 'allOf', items: [aRef('p'), aRef('q')] };
     const baseline = aService({
       body: { id, f: required(intersection) },
-      defs: { n: anObject({ v: optional(ref('n')) }), p: ref('n'), q: ref('n') },
+      defs: { n: anObject({ v: optional(aRef('n')) }), p: aRef('n'), q: aRef('n') },
     });
 
     const published = publishedThrough(baseline, aService({ body: { id } }));
@@ -958,14 +941,14 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     expect([
       removedFieldOf(published, 'f'),
       decodeSnapshot(canonicalTextOf(published)).kind,
-    ]).toEqual([{ type: 'allOf', items: [ref('n')] }, 'decoded']);
+    ]).toEqual([{ type: 'allOf', items: [aRef('n')] }, 'decoded']);
   });
 
   test('a removed field whose allOf names defs the publish does not declare keeps the items as declared, and the Snapshot decodes', () => {
-    const intersection: SchemaNode = { type: 'allOf', items: [ref('a'), ref('ab')] };
+    const intersection: SchemaNode = { type: 'allOf', items: [aRef('a'), aRef('ab')] };
     const defs = {
-      a: anObject({ x: optional(ref('a')) }),
-      ab: anObject({ y: optional(ref('ab')) }),
+      a: anObject({ x: optional(aRef('a')) }),
+      ab: anObject({ y: optional(aRef('ab')) }),
     };
     const baseline = aService({ body: { id, f: required(intersection) }, defs });
 
@@ -980,16 +963,16 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
   test('a copied def keeps its name apart after the Snapshot frees it, so a plain union naming the def again is Breaking against it', () => {
     const former = anObject({ k: optional(aString) });
     const other = anObject({ z: optional(aNumber) });
-    const union = optional({ type: 'union', options: [ref('m'), aNumber] });
+    const union = optional({ type: 'union', options: [aRef('m'), aNumber] });
     const published = publishedThrough(
       aService({ body: { id, u: union }, defs: { m: former } }),
-      aService({ body: { id, w: optional(ref('m')) }, defs: { m: other } }),
-      aService({ body: { id, w: optional(ref('q')) }, defs: { q: other } }),
+      aService({ body: { id, w: optional(aRef('m')) }, defs: { m: other } }),
+      aService({ body: { id, w: optional(aRef('q')) }, defs: { q: other } }),
     );
 
     const lines = linesOf(
       published,
-      aService({ body: { id, w: optional(ref('q')), u: union }, defs: { q: other, m: former } }),
+      aService({ body: { id, w: optional(aRef('q')), u: union }, defs: { q: other, m: former } }),
     );
 
     expect(lines).toEqual([
@@ -1087,11 +1070,11 @@ function aGeneratedSchema(next: () => number): SchemaNode {
     case 2:
       return { type: 'array', items: anObject({ id, ...inner }) };
     case 3:
-      return ref('tree');
+      return aRef('tree');
     case 4:
       return aGeneratedAllOf(next);
     default:
-      return ref('leaf');
+      return aRef('leaf');
   }
 }
 
@@ -1101,23 +1084,23 @@ function nullableRef(name: string): SchemaNode {
 
 /** Items an `allOf` may hold, listed in shape order, so any of its subsequences is held as a Snapshot holds it. */
 const allOfItems: readonly SchemaNode[] = [
-  anObject({ inner: optional(ref('leaf')) }),
-  { type: 'array', items: ref('sprig') },
-  { type: 'array', items: ref('tree') },
-  ref('leaf'),
+  anObject({ inner: optional(aRef('leaf')) }),
+  { type: 'array', items: aRef('sprig') },
+  { type: 'array', items: aRef('tree') },
+  aRef('leaf'),
   nullableRef('leafy'),
-  ref('leafy'),
-  ref('sprig'),
+  aRef('leafy'),
+  aRef('sprig'),
   nullableRef('tree'),
-  ref('tree'),
-  ref('twig'),
-  { type: 'union', options: [ref('twig'), aNumber] },
+  aRef('tree'),
+  aRef('twig'),
+  { type: 'union', options: [aRef('twig'), aNumber] },
 ];
 
 /** An `allOf` of two or more of `allOfItems`; `leaf` is a prefix of `leafy`, so naming `leaf` apart as `leaf~1` reorders them. */
 function aGeneratedAllOf(next: () => number): SchemaNode {
   const drawn = allOfItems.filter(() => next() < 0.35);
-  const items = drawn.length >= 2 ? drawn : [ref('leaf'), ref('leafy')];
+  const items = drawn.length >= 2 ? drawn : [aRef('leaf'), aRef('leafy')];
   return { type: 'allOf', items };
 }
 
@@ -1152,7 +1135,7 @@ function generatedFieldsOf(next: () => number, before: Fields | undefined): Fiel
 /** The `tree` def drawn with or without a label, and the `leaf` def it reaches with or without `c`. */
 function aGeneratedTreeAndLeaf(next: () => number): { tree: SchemaNode; leaf: SchemaNode } {
   const label = next() < 0.5 ? { label: optional(next() < 0.5 ? aNumber : aString) } : {};
-  const tree = anObject({ ...label, child: optional(ref('tree')), leaf: optional(ref('leaf')) });
+  const tree = anObject({ ...label, child: optional(aRef('tree')), leaf: optional(aRef('leaf')) });
   const drawn = next() < 0.5 ? { c: optional(next() < 0.5 ? aNumber : aString) } : {};
   return { tree, leaf: anObject({ ...drawn, d: optional(aString) }) };
 }
@@ -1171,9 +1154,9 @@ function aGeneratedDefs(next: () => number, body: Fields): Defs {
   return {
     ...(usesTree ? { tree } : {}),
     ...(usesLeaf ? { leaf } : {}),
-    ...(usesLeafy ? { leafy: anObject({ e: optional(ref('leaf')) }) } : {}),
-    ...(usesTwig ? { twig: ref('tree') } : {}),
-    ...(usesSprig ? { sprig: ref(sprigLeadsTo) } : {}),
+    ...(usesLeafy ? { leafy: anObject({ e: optional(aRef('leaf')) }) } : {}),
+    ...(usesTwig ? { twig: aRef('tree') } : {}),
+    ...(usesSprig ? { sprig: aRef(sprigLeadsTo) } : {}),
   };
 }
 
@@ -1297,7 +1280,7 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
   const shared = anObject({ p: required(aString) });
 
   test('a removed field beside a field naming an unchanged def keeps the `ref` to the Snapshot’s def', () => {
-    const kept = required(ref('shared'));
+    const kept = required(aRef('shared'));
     const before = aService({ body: { id, gone, kept }, defs: { shared } });
     const after = aService({ body: { id, kept }, defs: { shared } });
 
@@ -1307,7 +1290,7 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
   });
 
   test('a removed field beside a field naming a def that changed only its description holds that def as declared', () => {
-    const kept = required(ref('shared'));
+    const kept = required(aRef('shared'));
     const described = (description: string) => ({ ...shared, description });
     const before = aService({ body: { id, gone, kept }, defs: { shared: described('old') } });
     const after = aService({ body: { id, kept }, defs: { shared: described('new') } });
@@ -1326,11 +1309,11 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
     });
     const old = described('old', { p: required(aString), q: optional(aString) });
     const before = aService({
-      body: { id, gone, kept: required(ref('shared')) },
+      body: { id, gone, kept: required(aRef('shared')) },
       defs: { shared: old },
     });
     const after = aService({
-      body: { id, kept: required(ref('shared')) },
+      body: { id, kept: required(aRef('shared')) },
       defs: { shared: described('new', { p: required(aString) }) },
     });
 
@@ -1338,13 +1321,13 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
 
     const apart = described('new', { p: required(aString), q: optional(aString) });
     expect(formerInputs).toEqual([
-      anEntry('1.1.0', { id, gone, kept: required(ref('shared~1')) }, { 'shared~1': apart }),
+      anEntry('1.1.0', { id, gone, kept: required(aRef('shared~1')) }, { 'shared~1': apart }),
     ]);
   });
 
   test('a `ref` pair naming one unchanged def through an alias def is held as the Endpoint writes it', () => {
-    const kept = required(ref('alias'));
-    const defs = { alias: ref('shared'), shared };
+    const kept = required(aRef('alias'));
+    const defs = { alias: aRef('shared'), shared };
     const before = aService({ body: { id, gone, kept }, defs });
     const after = aService({ body: { id, kept }, defs });
 
@@ -1384,7 +1367,7 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
     (name) => {
       const dropped = anObject({ p: required(aString) });
       const before = aService({
-        body: { id, gone: required(ref(name)) },
+        body: { id, gone: required(aRef(name)) },
         defs: { [name]: dropped },
       });
       const after = aService({ body: { id } });
@@ -1392,7 +1375,7 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
       const published = publishedThrough(before, after);
 
       expect([published.formerInputs, decodeSnapshot(canonicalTextOf(published)).kind]).toEqual([
-        [anEntry('1.1.0', { id, gone: required(ref(name)) }, { [name]: dropped })],
+        [anEntry('1.1.0', { id, gone: required(aRef(name)) }, { [name]: dropped })],
         'decoded',
       ]);
     },
@@ -1401,11 +1384,11 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
   test('two pairs whose former defs share a name are named `~1` and `~2` as before', () => {
     const both = anObject({ p: required(aString), q: optional(aString) });
     const before = aService({
-      body: { first: required(ref('b1')), second: required(ref('b2')) },
+      body: { first: required(aRef('b1')), second: required(aRef('b2')) },
       defs: { b1: both, b2: both },
     });
     const after = aService({
-      body: { first: required(ref('x')), second: required(ref('x')) },
+      body: { first: required(aRef('x')), second: required(aRef('x')) },
       defs: { x: shared },
     });
 
@@ -1414,7 +1397,7 @@ describe('publishedSnapshotOf: the defs a former Input holds', () => {
     expect(formerInputs).toEqual([
       anEntry(
         '1.1.0',
-        { first: required(ref('x~1')), second: required(ref('x~2')) },
+        { first: required(aRef('x~1')), second: required(aRef('x~2')) },
         { 'x~1': both, 'x~2': both },
       ),
     ]);
@@ -1643,17 +1626,6 @@ describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
   const isDecoded = (published: PublishedServiceSnapshot) =>
     decodeSnapshot(canonicalTextOf(published)).kind === 'decoded';
 
-  /** Every version published in turn, against the one before. */
-  function publishedEach(
-    versions: readonly ServiceSnapshot[],
-  ): readonly PublishedServiceSnapshot[] {
-    const publishes: PublishedServiceSnapshot[] = [];
-    for (const [minor, version] of versions.entries()) {
-      publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
-    }
-    return publishes;
-  }
-
   function countOf(kind: string): number {
     return draws.filter(({ kinds }) => kinds.has(kind)).length;
   }
@@ -1742,16 +1714,6 @@ describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
 describe('publishedSnapshotOf: former Inputs over a seeded def graph with edits', () => {
   const histories = Array.from({ length: 3_000 }, (_, seed) => removalHistoryOf(seed));
 
-  function publishedEach(
-    versions: readonly ServiceSnapshot[],
-  ): readonly PublishedServiceSnapshot[] {
-    const publishes: PublishedServiceSnapshot[] = [];
-    for (const [minor, version] of versions.entries()) {
-      publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
-    }
-    return publishes;
-  }
-
   const published = histories.map(publishedEach);
 
   const namesOf = (former: FormerInput) => Object.keys(former.defs);
@@ -1839,12 +1801,6 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
   const refsIn = (schema: SchemaNode | undefined) =>
     schema === undefined ? [] : nodesIn(schema).filter(isRef);
 
-  /** A `ref` without the def it names and its nullability: the annotations it carries itself. */
-  function annotationsOf(node: unknown): unknown {
-    const { name: _name, nullable: _nullable, ...annotations } = node as Record<string, unknown>;
-    return annotations;
-  }
-
   function writtenRefsDifferFrom(draw: ReturnType<typeof aliasDrawOf>): readonly string[] {
     const published = publishedThrough(draw.baseline, draw.proposed);
     const body = draw.baseline.endpoints[graftedIdentity]?.input.body;
@@ -1866,7 +1822,7 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
             expected !== undefined &&
             ref.name.split('~')[0] === expected.name &&
             (ref.nullable === true) === expected.nullable &&
-            isDeepStrictEqual(annotationsOf(ref), annotationsOf(ask)) &&
+            isDeepStrictEqual(annotationsOf(ref), annotationsOf(ask as RefNode)) &&
             isDeepStrictEqual(former.defs[ref.name], expected.def);
         return isRight ? [] : [`${field} ${JSON.stringify(ask)} against ${JSON.stringify(ref)}`];
       });
@@ -1898,12 +1854,12 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
   test('a field named `constructor` and a def named `constructor` reached through an alias are grafted as declared', () => {
     const both = anObject({ p: required(aString), q: optional(aString) });
     const before = aService({
-      body: { id, constructor: gone, kept: required(ref('link')) },
-      defs: { constructor: both, link: ref('constructor') },
+      body: { id, constructor: gone, kept: required(aRef('link')) },
+      defs: { constructor: both, link: aRef('constructor') },
     });
     const after = aService({
-      body: { id, kept: required(ref('link')) },
-      defs: { constructor: anObject({ p: required(aString) }), link: ref('constructor') },
+      body: { id, kept: required(aRef('link')) },
+      defs: { constructor: anObject({ p: required(aString) }), link: aRef('constructor') },
     });
 
     const formerInputs = formerInputsAfter(before, after);
@@ -1911,7 +1867,7 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
     expect(formerInputs).toEqual([
       anEntry(
         '1.1.0',
-        { id, constructor: gone, kept: required(ref('constructor~1')) },
+        { id, constructor: gone, kept: required(aRef('constructor~1')) },
         { 'constructor~1': both },
       ),
     ]);

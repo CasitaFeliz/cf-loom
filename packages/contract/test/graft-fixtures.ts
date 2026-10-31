@@ -10,13 +10,15 @@ import {
   publishedSnapshotOf,
   type SchemaNode,
   type ServiceSnapshot,
+  type StringNode,
 } from '../src/internal/index.ts';
 import { publishedAt } from './snapshots.ts';
 
 export const emptyObject = { type: 'object', fields: {} } as const;
-export const aString: SchemaNode = { type: 'string' };
+export const aString: StringNode = { type: 'string' };
 
-const standardRejections: ServiceSnapshot['standardRejections'] = {
+/** What the Standard Rejections of the Snapshots these fixtures build name. */
+export const standardRejections: ServiceSnapshot['standardRejections'] = {
   invalidInput: 'INVALID_INPUT',
   notFound: 'NOT_FOUND',
   notImplemented: 'NOT_IMPLEMENTED',

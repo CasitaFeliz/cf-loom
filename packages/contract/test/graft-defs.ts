@@ -1,4 +1,5 @@
 import type { Defs, FormerInput, RefNode, SchemaNode } from '../src/internal/index.ts';
+import { edgesOf, sortedEntries } from './graft-sites.ts';
 
 /** The def a `ref` stands for through alias defs, nullable when a `ref` on the way is: a plain loop. */
 export function destinationOf(
@@ -21,13 +22,6 @@ export function destinationOf(
   }
 }
 
-/** The entries of a record in code point order of their keys. */
-export function sortedEntries<Value>(
-  record: Readonly<Record<string, Value>>,
-): readonly (readonly [string, Value])[] {
-  return Object.entries(record).sort(([left], [right]) => (left < right ? -1 : 1));
-}
-
 /** A value as text, its keys in code point order. */
 export function textOf(value: unknown): string {
   if (Array.isArray(value)) {
@@ -42,24 +36,13 @@ export function textOf(value: unknown): string {
 
 /** The nodes inside a node in a fixed order, so two nodes with the same shell pair up one to one. */
 export function innerOf(node: SchemaNode): readonly SchemaNode[] {
-  switch (node.type) {
-    case 'object':
-      return sortedEntries(node.fields).map(([, { schema }]) => schema);
-    case 'array':
-      return [node.items];
-    case 'record':
-      return [node.key, node.value];
-    case 'tuple':
-      return node.rest === undefined ? node.items : [...node.items, node.rest];
-    case 'union':
-      return node.options;
-    case 'allOf':
-      return node.items;
-    case 'tagged':
-      return sortedEntries(node.variants).map(([, variant]) => variant);
-    default:
-      return [];
-  }
+  return edgesOf(node).map(({ child }) => child);
+}
+
+/** A `ref`'s own annotations: the node without the def it names and its nullability. */
+export function annotationsOf(ref: RefNode): Readonly<Record<string, unknown>> {
+  const { name: _name, nullable: _nullable, ...annotations } = ref;
+  return annotations;
 }
 
 /** The names of the defs the nodes reach, through `ref`s, by a plain loop over the graph. */

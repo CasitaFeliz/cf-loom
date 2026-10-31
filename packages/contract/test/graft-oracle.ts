@@ -1,5 +1,6 @@
-import type { Defs, FormerInput, RefNode, SchemaNode } from '../src/internal/index.ts';
-import { destinationOf, innerOf, sortedEntries, textOf } from './graft-defs.ts';
+import type { Defs, FormerInput, SchemaNode } from '../src/internal/index.ts';
+import { annotationsOf, destinationOf, innerOf, textOf } from './graft-defs.ts';
+import { sortedEntries } from './graft-sites.ts';
 
 /** What stands in a node's text for the nodes inside it, which are compared on their own. */
 function placeholdersOf(node: SchemaNode): Readonly<Record<string, unknown>> {
@@ -26,12 +27,6 @@ function placeholdersOf(node: SchemaNode): Readonly<Record<string, unknown>> {
 /** A node as text with each node inside it left out, so two nodes compare by what they hold themselves. */
 function shellOf(node: SchemaNode): string {
   return textOf({ ...node, ...placeholdersOf(node) });
-}
-
-/** A `ref` as text without the def it names or its nullability: the annotations it carries itself. */
-function annotationsOf(ref: RefNode): string {
-  const { name: _name, nullable: _nullable, ...annotations } = ref;
-  return textOf(annotations);
 }
 
 /** The state of one comparison: the defs on each side, the pairs of defs assumed to match, and the first difference found. */
@@ -71,7 +66,10 @@ function sameRefs(comparison: Comparison, { from, to, at }: Pair): boolean {
   if (original === undefined || grafted === undefined) {
     return fail(comparison, at, 'a `ref` that reaches no def');
   }
-  if (original.nullable !== grafted.nullable || annotationsOf(from) !== annotationsOf(to)) {
+  if (
+    original.nullable !== grafted.nullable ||
+    textOf(annotationsOf(from)) !== textOf(annotationsOf(to))
+  ) {
     return fail(
       comparison,
       at,

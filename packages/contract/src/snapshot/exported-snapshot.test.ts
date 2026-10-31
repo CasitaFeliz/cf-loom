@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { namesReachedBy } from '../../test/graft-defs.ts';
 import { defPairOf } from '../../test/random-def-pairs.ts';
-import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedServiceAt } from '../../test/snapshots.ts';
 import {
@@ -1083,23 +1083,6 @@ describe('exportedSnapshotOf, depth', () => {
 describe('exportedSnapshotOf, the defs of a seeded def graph', () => {
   const draws = Array.from({ length: 3_000 }, (_, seed) => defPairOf(seed));
 
-  /** The names of the defs the nodes reach, directly or through the defs those reach, by a plain loop over the graph. */
-  function reachedNamesOf(nodes: readonly SchemaNode[], defs: Defs): ReadonlySet<string> {
-    const reached = new Set<string>();
-    const pending = nodes.flatMap((node) => nodesIn(node).filter(isRef));
-    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-      const name = String(next.name);
-      if (!reached.has(name)) {
-        reached.add(name);
-        const def = Object.hasOwn(defs, name) ? defs[name] : undefined;
-        for (const inner of nodesIn(def).filter(isRef)) {
-          pending.push(inner);
-        }
-      }
-    }
-    return reached;
-  }
-
   /** The Service exporting the wrappers of the draw's first defs from Public Endpoints, and the others from Private ones, with the defs as given. */
   function serviceOf(draw: ReturnType<typeof defPairOf>, defs: Defs) {
     const wrappers = Object.values(draw.exports);
@@ -1134,7 +1117,7 @@ describe('exportedSnapshotOf, the defs of a seeded def graph', () => {
 
     const cut = exportedSnapshotOf(snapshot);
 
-    const expected = [...reachedNamesOf(exported, defs)].sort();
+    const expected = [...namesReachedBy(exported, defs)].sort();
     const isOwn = Object.entries(cut.defs).every(([name, def]) => def === defs[name]);
     return isOwn && JSON.stringify(Object.keys(cut.defs)) === JSON.stringify(expected);
   }
