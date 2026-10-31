@@ -96,7 +96,7 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     expect(whenSendResolved).toBe(0);
   });
 
-  test('two Messages sent in a row reach the Handler in the order sent', async () => {
+  test('Messages sent in a row reach the Handler in the order sent', async () => {
     vi.useFakeTimers();
     const received: Received[] = [];
     const orders = await aMessagingOver(ordersContract, inProcess(thirtySeconds));

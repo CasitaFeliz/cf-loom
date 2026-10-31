@@ -108,25 +108,35 @@ describe('inProcess() reading its limits', () => {
 });
 
 describe('inProcess() resolving its limits at consume', () => {
-  test('consume rejects with one unset line for each Durable consumer whose limits leave a setting unset, and pulls from none', async () => {
+  test('consume rejects with a line for a Durable consumer whose limits leave settings unset, and pulls from none, not even the one whose limits are set', async () => {
     vi.useFakeTimers();
     const received: Received[] = [];
-    const limits = { durableConsumers: { [notifyDurable]: { ackWait: '10s' } } } as const;
+    const limits = {
+      durableConsumers: { [chargeDurable]: { ackWait: '10s', maxDeliver: 3 } },
+    } as const;
     const orders = await aMessagingOver(ordersContract, inProcess(limits));
 
     const consuming = orders.consume(handlersOf(received), {});
 
-    await expect(consuming).rejects.toMatchObject({
-      message: expect.stringContaining('has no'),
-    });
+    await expect(consuming).rejects.toThrow(
+      `The Durable consumer ${notifyDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
+    );
+    await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    await vi.advanceTimersByTimeAsync(3_600_000);
+    expect(received).toEqual([]);
+  });
+
+  test('consume rejects with one unset line for each Durable consumer whose limits leave a setting unset', async () => {
+    const limits = { durableConsumers: { [notifyDurable]: { ackWait: '10s' } } } as const;
+    const orders = await aMessagingOver(ordersContract, inProcess(limits));
+
+    const consuming = orders.consume(handlersOf([]), {});
+
     const lines = await consuming.catch((error: Error) => error.message.split('\n').sort());
     expect(lines).toEqual([
       `The Durable consumer ${chargeDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
       `The Durable consumer ${notifyDurable} has no maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
-    await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
-    await vi.advanceTimersByTimeAsync(3_600_000);
-    expect(received).toEqual([]);
   });
 
   test('consume after inProcess({}) rejects naming every Durable consumer', async () => {
