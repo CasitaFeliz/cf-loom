@@ -1241,6 +1241,8 @@ describe('failure lines: Endpoints that share a site text', () => {
     const second = anEndpoint('e', 'GET /x', { a: exported });
     const installed = anInstalledPackage(defineDefinitions({}), { stamp: exported });
 
+    const declared: readonly unknown[] = [earlier, first, second];
+
     const refusals = refusalsOf(serviceOfGroups([earlier], [first], [second]), {
       packages: [installed],
     });
@@ -1248,7 +1250,7 @@ describe('failure lines: Endpoints that share a site text', () => {
     expect(refusals.map(({ line }) => line)).toEqual([
       `endpoints.GET /x (e) success.body.a ${date} (also in endpoints.GET /z (e0)) ${stamp}`,
     ]);
-    expect(refusals[0]?.declaration).toBe(second);
+    expect(refusals.map(({ declaration }) => declared.indexOf(declaration))).toEqual([2]);
   });
 
   test('a def one holds directly and the other through a def, at one text, is told from the declaration that holds it directly', () => {
@@ -1274,14 +1276,15 @@ describe('failure lines: Endpoints that share a site text', () => {
     const direct = anEndpoint('e', 'GET /x', { a: z.object({ b: inner }) });
     const installed = anInstalledPackage(defineDefinitions({}), { stamp: exported });
 
+    const declared: readonly unknown[] = [throughDef, direct];
+
     const refusals = refusalsOf(serviceOfGroups([throughDef], [direct]), { packages: [installed] });
 
     expect(refusals.map(({ line }) => line)).toEqual([
       `endpoints.GET /x (e) success.body.a.b.d ${date} ${stamp}`,
       `endpoints.GET /x (e) success.body.a.m ${date}`,
     ]);
-    expect(refusals[0]?.declaration).toBe(direct);
-    expect(refusals[1]?.declaration).toBe(throughDef);
+    expect(refusals.map(({ declaration }) => declared.indexOf(declaration))).toEqual([1, 0]);
   });
 });
 
@@ -1340,6 +1343,124 @@ const holders: Readonly<Record<HolderName, Holder>> = {
       ]),
   },
 };
+
+describe('failure lines: a chain of defs, each holding the one before twice', () => {
+  /** `count` defs, each holding the one before as `next` and again as `f` through `holder`, the first holding `leaf`. */
+  function twiceHeldChain(count: number, leaf: z.ZodType, holder: Holder): z.ZodType {
+    let before: z.ZodType = z.object({ leaf });
+    for (let index = 0; index < count; index++) {
+      const held = before;
+      const link: z.ZodType = z
+        .object({
+          next: held,
+          f: holder.build(held),
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      before = link;
+    }
+    return before;
+  }
+
+  const count = 16000;
+  const twiceHolders = [
+    ['a field', 'field'],
+    ['a union option', 'option'],
+    ['an intersection item', 'intersectionItem'],
+    ['a tuple item', 'tupleItem'],
+  ] as const;
+
+  test.for(twiceHolders)(
+    'a date below 16,000 defs, each holding the one before as next and through %s, is one line at the first place, in time that grows as the defs do',
+    { timeout: growthTimeout },
+    ([, name]) => {
+      const holder = holders[name];
+      const told = (size: number) => {
+        const top = twiceHeldChain(size, z.date(), holder);
+        const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
+        return () => linesOf(root);
+      };
+
+      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const lines = told(count)();
+
+      const firstPlace = `success.body.top${`.f${holder.steps}`.repeat(count)}.leaf`;
+      expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
+
+  test.for([
+    ['a union option', 'option'],
+    ['an intersection item', 'intersectionItem'],
+  ] as const)(
+    '16,000 defs, each holding the one before as next and through %s, are valid in time that grows as the defs do',
+    { timeout: growthTimeout },
+    ([, name]) => {
+      const told = (size: number) => {
+        const top = twiceHeldChain(size, z.string(), holders[name]);
+        const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
+        return () => linesOf(root);
+      };
+
+      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const lines = told(count)();
+
+      expect(lines).toEqual([]);
+      expect(growth).toBeLessThan(linearGrowth);
+    },
+  );
+
+  /** `size` defs, each holding the one before as `next`, below which a def holds one date in `size` fields. */
+  function widelyHeldRoot(size: number): Root {
+    const date = z.date();
+    const fields: Record<string, z.ZodType> = {};
+    for (let index = 0; index < size; index++) {
+      fields[`f${String(index).padStart(6, '0')}`] = date;
+    }
+    const bottom: z.ZodType = z
+      .object({
+        ...fields,
+        get self() {
+          return bottom.optional();
+        },
+      })
+      .meta({ id: 'bottom' });
+    let before = bottom;
+    for (let index = 0; index < size; index++) {
+      const held = before;
+      const link: z.ZodType = z
+        .object({
+          next: held,
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      before = link;
+    }
+    return serviceWith([anEndpoint('alpha', 'GET /a', { top: before })]);
+  }
+
+  test('a date held by 4,000 fields of a def below 4,000 defs is one line at the first field, in time that grows as both do', {
+    timeout: growthTimeout,
+  }, () => {
+    const wide = 4000;
+    const told = (size: number) => {
+      const root = widelyHeldRoot(size);
+      return () => linesOf(root);
+    };
+
+    const growth = growthOf(told, { small: wide / 8, large: wide }, linearGrowth);
+    const lines = told(wide)();
+
+    const firstField = `success.body.top${'.next'.repeat(wide)}.f000000`;
+    expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstField} ${date}`]);
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+});
 
 /** Field names with the text a line writes them as: names that are prefixes of one another, quoted ones, and code points on both sides of U+FFFF. */
 const fieldNames = [
