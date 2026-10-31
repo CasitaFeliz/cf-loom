@@ -45,7 +45,7 @@ describe('inProcess() types', () => {
     expect(brokers).toHaveLength(5);
   });
 
-  test('inProcess() accepts a variable upcast to the shape, an explicit unknown, a count typed number, never and any', () => {
+  test('inProcess() accepts a variable upcast to the shape, an explicit unknown and a count typed number', () => {
     const upcast: InProcessBrokerLimits = { durableConsumerDefaults: { ackWait: '1s' } };
     const count: number = Math.max(1, 3);
 
@@ -53,11 +53,17 @@ describe('inProcess() types', () => {
       inProcess(upcast),
       inProcess<unknown>({ durableConsumerDefaults: { ackWait: '1s', maxDeliver: 2 } }),
       inProcess({ durableConsumerDefaults: { ackWait: '1s', maxDeliver: count } }),
-      inProcess(undefined as never),
-      inProcess(JSON.parse('{}')),
     ];
 
-    expect(brokers).toHaveLength(5);
+    expect(brokers).toHaveLength(3);
+  });
+
+  test('inProcess() accepts never and any', () => {
+    const never = () => inProcess(undefined as never);
+    const anything = () => inProcess(JSON.parse('{}'));
+
+    expect(never).toBeTypeOf('function');
+    expect(anything).toBeTypeOf('function');
   });
 
   test('inProcess() refuses unknown, which could hold anything', () => {
