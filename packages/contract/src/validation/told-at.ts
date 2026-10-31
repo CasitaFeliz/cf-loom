@@ -2,13 +2,10 @@ import {
   isUnnamedCycle,
   type Memo,
   type NotAllowed,
-  type Place,
   type Site,
-  siteLocationOf,
   siteTextOf,
-  stepListOf,
 } from '../walker/index.ts';
-import { type HeldReach, type ToldPlace, toldPlacesOf, type Waiting } from './told-order.ts';
+import { type HeldReach, type Standing, type ToldPlace, toldPlacesOf } from './told-order.ts';
 
 /** Every site of a set once, keyed by the text a line names it by. */
 type Sites = ReadonlyMap<string, Site>;
@@ -17,11 +14,9 @@ type Sites = ReadonlyMap<string, Site>;
 export type ToldAt = ToldPlace & { readonly sites: Sites };
 
 /**
- * Where each refusal is told, settled together once the walk is over: a first place is known
- * only after the whole walk, since a later Endpoint can reach a def at a smaller place, so the
- * walker cannot hand each memo its place as it closes. A refusal inside a memo is told from the
- * memo's first place, with every site of that memo, its own and those of every memo it is
- * reached inside; any other refusal at its own place, with its own site.
+ * Where each refusal is told, once the walk is over, since a later Endpoint can reach a def at a
+ * smaller place. A refusal inside a remembered schema is told from that schema's first place,
+ * with every site that reaches it.
  */
 export function toldAtOf(
   refusals: readonly NotAllowed[],
@@ -34,7 +29,7 @@ export function toldAtOf(
   const all = closureOf(inMemo.keys());
   const reaches = heldInsideOf(all);
   const sites = sitesOf(all, reaches);
-  const roots = [...own.map(waitingAtOwnPlace), ...topLevelReachesOf(all)];
+  const roots = [...own.map(standingAtOwnPlace), ...topLevelReachesOf(all)];
   const told = new Map<NotAllowed, ToldAt>();
   for (const [refusal, place] of toldPlacesOf(roots, { reaches, refusals: inMemo })) {
     const memo = memoToldFrom(refusal);
@@ -62,18 +57,18 @@ function groupedByMemo(
   return inMemo;
 }
 
-/** A refusal told at its own place, waiting at the text of that place. */
-function waitingAtOwnPlace(refusal: NotAllowed): Waiting {
-  return { kind: 'telling', refusal, at: refusal, text: locationTextOf(refusal), offset: 0 };
+/** A refusal told at its own place. */
+function standingAtOwnPlace(refusal: NotAllowed): Standing {
+  return { kind: 'telling', refusal, at: refusal };
 }
 
-/** The reaches of the memos made from a declaration itself, each waiting at the text of its place. */
-function topLevelReachesOf(memos: ReadonlySet<Memo>): readonly Waiting[] {
-  const reaches: Waiting[] = [];
+/** The reaches of the memos made from a declaration itself. */
+function topLevelReachesOf(memos: ReadonlySet<Memo>): readonly Standing[] {
+  const reaches: Standing[] = [];
   for (const memo of memos) {
     for (const { at, within } of memo.reaches) {
       if (within === undefined) {
-        reaches.push({ kind: 'reach', memo, at, text: locationTextOf(at), offset: 0 });
+        reaches.push({ kind: 'reach', memo, at });
       }
     }
   }
@@ -144,9 +139,4 @@ function sitesOf(
     }
   }
   return sites;
-}
-
-/** The text a line names a place by: its site and the steps under it. */
-export function locationTextOf({ site, steps }: Place): string {
-  return siteLocationOf(site, stepListOf(steps));
 }

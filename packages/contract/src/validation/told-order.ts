@@ -5,6 +5,8 @@ import {
   movedFrom,
   type NotAllowed,
   type Place,
+  siteLocationOf,
+  stepListOf,
 } from '../walker/index.ts';
 
 /** A reach of a memo, which stands nowhere until the memo it was made inside is placed. */
@@ -16,15 +18,20 @@ export type HeldReach = { readonly memo: Memo; readonly reach: Memo['reaches'][n
  */
 export type ToldPlace = { readonly at: Place; readonly rank: number };
 
-/** What waits in the trie of place texts: a reach of a memo, or a refusal to tell. */
-type Held =
+/** A reach of a memo, or a refusal to tell. */
+type Pending =
   | { readonly kind: 'reach'; readonly memo: Memo }
   | { readonly kind: 'telling'; readonly refusal: NotAllowed };
 
-/** A held thing at the place it would stand at, and that place's text left below a node, from `offset`. */
-export type Waiting = Held & { readonly at: Place; readonly text: string; readonly offset: number };
+/** A reach or a refusal that stands at a place of its own, outside every memo the walk settles. */
+export type Standing = Pending & { readonly at: Place };
+
+/** Something pending at the place it would stand at, and that place's text left below a node, from `offset`. */
+type Waiting = Standing & { readonly text: string; readonly offset: number };
 
 type Telling = Waiting & { readonly kind: 'telling' };
+
+type Reaching = Waiting & { readonly kind: 'reach' };
 
 /** What the walk of the trie reads: the reaches and refusals held inside each memo. */
 export type Holdings = {
@@ -33,21 +40,18 @@ export type Holdings = {
 };
 
 /**
- * Memos settle and refusals are told in code point order of their places, read as one walk of
- * the trie of place texts in that order: a place inside a memo only extends that memo's first
- * place, so all a memo settled at a node holds waits below that node, which the walk has not
- * passed. Each character of a place's own steps is read once, never the text of the place it
- * extends, so the time grows with the places and their own steps, never with how deep they are.
- * What waits at a node is taken in the order it arrived, so of two reaches of one text the first
- * offered settles the memo.
+ * Settles the memos and ranks the refusals in code point order of their places, in one walk of
+ * the trie of the texts of those places. A place inside a memo only extends that memo's, so the
+ * walk reads a place's own steps once and never the text of the place it extends.
  */
 export function toldPlacesOf(
-  roots: readonly Waiting[],
+  roots: readonly Standing[],
   holdings: Holdings,
 ): ReadonlyMap<NotAllowed, ToldPlace> {
   const told = new Map<NotAllowed, ToldPlace>();
   const settled = new Set<Memo>();
-  const nodes: (readonly Waiting[])[] = [roots];
+  const start = roots.map((root) => ({ ...root, text: locationTextOf(root.at), offset: 0 }));
+  const nodes: (readonly Waiting[])[] = [start];
   let rank = 0;
   for (let node = nodes.pop(); node !== undefined; node = nodes.pop()) {
     const { ended, below } = visitNode(node, settled, holdings);
@@ -62,7 +66,10 @@ export function toldPlacesOf(
   return told;
 }
 
-/** What waits at a node, in arrival order: the refusals that end here, and what goes on below, once the memos that end here settle. */
+/**
+ * What waits at a node, taken in the order it arrived, so of two reaches of one text the first
+ * offered settles the memo: the refusals that end here, and what goes on below.
+ */
 function visitNode(
   node: readonly Waiting[],
   settled: Set<Memo>,
@@ -71,7 +78,7 @@ function visitNode(
   const queue = [...node];
   const ended: Telling[] = [];
   const below: Waiting[] = [];
-  for (let at = 0, next = queue[0]; next !== undefined; at++, next = queue[at]) {
+  for (let index = 0, next = queue[0]; next !== undefined; index++, next = queue[index]) {
     if (next.kind === 'reach' && settled.has(next.memo)) {
       continue;
     }
@@ -81,7 +88,7 @@ function visitNode(
       ended.push(next);
     } else {
       settled.add(next.memo);
-      for (const offered of offersOf(next, next.memo, holdings)) {
+      for (const offered of offersOf(next, holdings)) {
         queue.push(offered);
       }
     }
@@ -90,7 +97,8 @@ function visitNode(
 }
 
 /** What a memo just settled holds, each waiting below the node it settled at. */
-function offersOf(settledAt: Waiting, memo: Memo, holdings: Holdings): readonly Waiting[] {
+function offersOf(settledAt: Reaching, holdings: Holdings): readonly Waiting[] {
+  const { memo } = settledAt;
   const below = (at: Place) => ({
     at: movedFrom(at, memo.at, settledAt.at),
     text: belowTextOf(settledAt.at, at.steps, memo.at.steps),
@@ -109,15 +117,8 @@ function offersOf(settledAt: Waiting, memo: Memo, holdings: Holdings): readonly 
   return [...reaches, ...refusals];
 }
 
-/**
- * The children of a node, the greatest code point first so the walk pops the smallest: one
- * thing alone below a node meets no other there, so it moves straight to the end of its text.
- */
+/** The children of a node, the greatest code point first so the walk pops the smallest. */
 function childrenOf(below: readonly Waiting[]): readonly (readonly Waiting[])[] {
-  const [only] = below;
-  if (below.length === 1 && only !== undefined) {
-    return [[{ ...only, offset: only.text.length }]];
-  }
   const byPoint = new Map<string, Waiting[]>();
   for (const waiting of below) {
     const point = String.fromCodePoint(waiting.text.codePointAt(waiting.offset) ?? 0);
@@ -128,4 +129,9 @@ function childrenOf(below: readonly Waiting[]): readonly (readonly Waiting[])[] 
   return [...byPoint.keys()]
     .sort((left, right) => byCodePoint(right, left))
     .map((point) => byPoint.get(point) ?? []);
+}
+
+/** The text a line names a place by: its site and the steps under it. */
+function locationTextOf({ site, steps }: Place): string {
+  return siteLocationOf(site, stepListOf(steps));
 }

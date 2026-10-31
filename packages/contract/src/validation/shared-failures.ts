@@ -7,7 +7,7 @@ import {
   stepListOf,
 } from '../walker/index.ts';
 import type { NotAllowedFailure } from './failures.ts';
-import { locationTextOf, type ToldAt, toldAtOf } from './memo-places.ts';
+import { type ToldAt, toldAtOf } from './told-at.ts';
 
 /**
  * A refusal told where the author reads it, and every site that reaches it; `foldedBy` is what
@@ -36,7 +36,7 @@ export function notAllowedFailuresOf(
   const firsts = bySchema.map(firstOfGroup);
   const byLine = groupedBy(
     firsts,
-    ({ at }) => locationTextOf(at),
+    ({ rank }) => rank,
     ({ refusal }) => refusal.construct,
   );
   return byLine.map(firstOfGroup).map(failureOf);
