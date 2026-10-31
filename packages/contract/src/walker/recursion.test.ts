@@ -610,6 +610,30 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
+      test('cycles left standing in a group that a failure of its root hides in part are each told, at their first def', () => {
+        const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
+        const top: z.ZodType = z.union([z.array(below), z.lazy(() => left)]).meta({ id: 'top' });
+        const left: z.ZodType = z
+          .union([z.lazy(() => left), z.lazy(() => right)])
+          .meta({ id: 'left' });
+        const right: z.ZodType = z
+          .union([z.lazy(() => top), z.lazy(() => right)])
+          .meta({ id: 'right' });
+
+        const walked = walkBody(top);
+
+        expect(walked).toEqual({
+          located: [
+            refused([
+              { at: '<|1>', ...nodelessCycle },
+              { at: '<|1><|1>', ...nodelessCycle },
+              { at: '<|0>[]', ...nodelessCycle },
+            ]),
+          ],
+          defs: {},
+        });
+      });
+
       test('a group whose root is an object with no id fails with its cycle and writes no def', () => {
         const entry: z.ZodType = z.object({
           get next() {
