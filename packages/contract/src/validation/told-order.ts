@@ -26,8 +26,11 @@ type Pending =
 /** A reach or a refusal that stands at a place of its own, outside every memo the walk settles. */
 export type Standing = Pending & { readonly at: Place };
 
-/** Something pending at the place it would stand at, and that place's text left below a node, from `offset`. */
-type Waiting = Standing & { readonly text: string; readonly offset: number };
+/**
+ * Something pending at the place it would stand at, and that place's text left below a node, from
+ * `offset`, which moves down the text as the walk does, since a node holds it alone.
+ */
+type Waiting = Standing & { readonly text: string; offset: number };
 
 type Telling = Waiting & { readonly kind: 'telling' };
 
@@ -123,7 +126,8 @@ function childrenOf(below: readonly Waiting[]): readonly (readonly Waiting[])[] 
   for (const waiting of below) {
     const point = String.fromCodePoint(waiting.text.codePointAt(waiting.offset) ?? 0);
     const group = byPoint.get(point) ?? [];
-    group.push({ ...waiting, offset: waiting.offset + point.length });
+    waiting.offset += point.length;
+    group.push(waiting);
     byPoint.set(point, group);
   }
   return [...byPoint.keys()]
