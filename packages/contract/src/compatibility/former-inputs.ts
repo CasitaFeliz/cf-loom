@@ -2,14 +2,13 @@ import {
   type EndpointSnapshot,
   type FormerInput,
   formerInputsOf,
-  inputNodesOf,
   type PublishedServiceSnapshot,
   type ServiceSnapshot,
 } from '../snapshot/index.ts';
-import { canonicalJson, type Defs, defsReachedOf } from '../walker/index.ts';
+import { canonicalJson, type Defs } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
 import { endpointSiteOf, inputBodyDifferencesOf, queryDifferencesOf } from './endpoints.ts';
-import { graftedInputOf } from './grafting.ts';
+import { type GraftSource, graftedInputOf, type ReadDefs, readDefsOf } from './grafting.ts';
 import { comparedShapesOf, type Pair, pairsOf } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 
@@ -87,15 +86,27 @@ export function formerInputsMerged(
   if (baseline === undefined) {
     return [];
   }
-  const checked = { baseline, proposed };
+  const merge = {
+    checked: { baseline, proposed },
+    read: { baseline: readDefsOf(baseline.defs), proposed: readDefsOf(proposed.defs) },
+  };
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    keptFormerInputsOf(pair, checked, version),
+    keptFormerInputsOf(pair, merge, version),
   );
 }
 
+/** The Check of a merge: the Service and its Baseline, and the reader of each one's alias defs, built once for the merge. */
+type Merge = {
+  readonly checked: CheckedService;
+  readonly read: { readonly baseline: ReadDefs; readonly proposed: ReadDefs };
+};
+
+/** A former Input to rewrite, under the heading it is kept with. */
+type Rewritten = Pick<FormerInput, 'endpoint' | 'removedIn'> & { readonly source: GraftSource };
+
 function keptFormerInputsOf(
   pair: Pair<EndpointSnapshot>,
-  checked: CheckedService,
+  merge: Merge,
   version: string,
 ): readonly FormerInput[] {
   const compared = comparedShapesOf(pair);
@@ -103,18 +114,24 @@ function keptFormerInputsOf(
     return [];
   }
   const { query, body } = compared.baseline.input;
-  const own: FormerInput = {
+  const own: Rewritten = {
     endpoint: pair.identity,
     removedIn: version,
-    input: { query, body },
-    defs: defsReachedOf(inputNodesOf({ query, body }), checked.baseline.defs),
+    source: { input: { query, body }, ...merge.read.baseline },
   };
-  const onto = { input: compared.proposed.input, defs: checked.proposed.defs };
+  const stored = formerInputsOf(merge.checked.baseline, pair.identity).map(
+    (former): Rewritten => ({
+      endpoint: former.endpoint,
+      removedIn: former.removedIn,
+      source: { input: former.input, ...readDefsOf(former.defs) },
+    }),
+  );
+  const onto = { input: compared.proposed.input, ...merge.read.proposed };
   const kept: FormerInput[] = [];
-  for (const former of [...formerInputsOf(checked.baseline, pair.identity), own]) {
-    const grafted = graftedInputOf(former, onto);
+  for (const { source, ...heading } of [...stored, own]) {
+    const grafted = graftedInputOf(source, onto);
     if (grafted !== undefined) {
-      kept.push({ endpoint: former.endpoint, removedIn: former.removedIn, ...grafted });
+      kept.push({ ...heading, ...grafted });
     }
   }
   return kept;

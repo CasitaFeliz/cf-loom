@@ -15,9 +15,10 @@ export type { ResolvedRef } from './def-graph.ts';
 export {
   defsReachedOf,
   nodesReachedFrom,
+  type RefResolver,
   reachedDefsOf,
+  refResolverOf,
   refsWrittenIn,
-  resolvedRefOf,
 } from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';

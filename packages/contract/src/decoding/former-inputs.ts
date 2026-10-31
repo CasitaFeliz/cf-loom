@@ -1,4 +1,4 @@
-import { type GraftTarget, graftedInputOf } from '../compatibility/index.ts';
+import { type GraftTarget, graftedInputOf, readDefsOf } from '../compatibility/index.ts';
 import { unbrokenLineOf } from '../lines/index.ts';
 import {
   declaredEndpointsOf,
@@ -21,6 +21,7 @@ export function formerInputProblemsOf(snapshot: PublishedSnapshot): readonly Pro
     declaredEndpointsOf(snapshot).map(([identity, { input }]) => [identity, input]),
   );
   const problems: Problem[] = [];
+  const onto = readDefsOf(snapshot.defs);
   for (const [index, former] of heldFormerInputsOf(snapshot).entries()) {
     const input = inputs.get(former.endpoint);
     if (input === undefined) {
@@ -28,7 +29,7 @@ export function formerInputProblemsOf(snapshot: PublishedSnapshot): readonly Pro
         unbrokenLineOf(`A former Input of ${former.endpoint}, which is not declared: a bug.`),
       );
     }
-    const reason = graftProblemOf(former, { input, defs: snapshot.defs });
+    const reason = graftProblemOf(former, { ...onto, input });
     if (reason !== undefined) {
       problems.push({ at: ['formerInputs', index], reason });
     }
@@ -37,7 +38,7 @@ export function formerInputProblemsOf(snapshot: PublishedSnapshot): readonly Pro
 }
 
 function graftProblemOf(former: FormerInput, onto: GraftTarget): string | undefined {
-  const grafted = graftedInputOf(former, onto);
+  const grafted = graftedInputOf({ input: former.input, ...readDefsOf(former.defs) }, onto);
   if (grafted === undefined) {
     return 'grafts no field onto its Endpoint’s query and body';
   }
