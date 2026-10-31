@@ -99,9 +99,11 @@ const auditingReaders = readersOf({
 
 /** The Handler map of the auditing Service, each Handler recording what it receives under its name. */
 export function auditingHandlersOf(received: Received[]) {
-  const recording = (handler: string) => (body: unknown, meta: MessageMeta) => {
-    received.push({ handler, body, meta });
-  };
+  const recording =
+    (handler: string) =>
+    (body: unknown, meta: MessageMeta): undefined => {
+      received.push({ handler, body, meta });
+    };
   return {
     commands: {},
     subscriptions: {

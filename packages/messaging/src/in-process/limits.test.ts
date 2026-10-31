@@ -111,7 +111,7 @@ describe('inProcess() resolving its limits at consume', () => {
   test('consume rejects with one unset line for each Durable consumer whose limits leave a setting unset, and pulls from none', async () => {
     vi.useFakeTimers();
     const received: Received[] = [];
-    const limits = { durableConsumers: { [notifyDurable]: { ackWait: '10s' } } };
+    const limits = { durableConsumers: { [notifyDurable]: { ackWait: '10s' } } } as const;
     const orders = await aMessagingOver(ordersContract, inProcess(limits));
 
     const consuming = orders.consume(handlersOf(received), {});
@@ -147,7 +147,7 @@ describe('inProcess() resolving its limits at consume', () => {
     const limits = {
       ...thirtySeconds,
       durableConsumers: { [otherDurable]: { ackWait: '1s' } },
-    };
+    } as const;
     const orders = await aMessagingOver(ordersContract, inProcess(limits));
 
     await orders.consume(handlersOf(received), {});
