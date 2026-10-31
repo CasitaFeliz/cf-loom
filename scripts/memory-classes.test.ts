@@ -4,13 +4,13 @@ import { glob } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
-import { createVitest, type TestProject, type Vitest } from 'vitest/node';
+import { createVitest, type Vitest } from 'vitest/node';
 import { heavyHeapMegabytes } from '../packages/contract/vitest.heavy.config.ts';
 import { lightHeapMegabytes } from '../vitest.config.ts';
 
 const root = join(import.meta.dirname, '..');
 
-/** Every project but the two inline ones, which write the README Service when Vitest starts them and hold no file that needs a heap of its own. */
+/** Every project but the two inline ones, whose start writes the README Service; a file named `*.heavy.test.ts` that one of them runs is found by the file system and refused. */
 const projectsWithoutInlineOnes = ['!tooling', '!readme-service'];
 
 /** How a project that runs the files named `*.heavy.test.ts` is named, which is how CI selects it. */
@@ -40,11 +40,6 @@ function heapLimitOf(megabytes: number): number {
     { encoding: 'utf8', env: environment },
   );
   return Number(printed);
-}
-
-/** The budget a project's test processes get: the heavy one for a project that runs heavy files, else the light one. */
-function budgetOf(project: TestProject): number {
-  return project.name.endsWith(heavySuffix) ? heavyHeapMegabytes : lightHeapMegabytes;
 }
 
 /** A test file that appends the project it runs in and the heap limit of its process to `reportPath`. */
@@ -135,7 +130,7 @@ function lightFilesInHeavyProjects(
   const problems: string[] = [];
   for (const [name, files] of filesByProject) {
     const strangers = name.endsWith(heavySuffix)
-      ? files.filter((f) => !heavyNamed.includes(f))
+      ? files.filter((file) => !heavyNamed.includes(file))
       : [];
     for (const file of strangers) {
       problems.push(`${relative(root, file)} runs in ${name}, but is not named *.heavy.test.ts`);
@@ -146,11 +141,16 @@ function lightFilesInHeavyProjects(
 
 describe('the memory classes of the test run', () => {
   test("every project's test process gets its class's heap limit", async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'memory-classes-'));
     const vitest = await startVitest();
+    const directory = mkdtempSync(join(tmpdir(), 'memory-classes-'));
     try {
+      const lightLimit = heapLimitOf(lightHeapMegabytes);
+      const heavyLimit = heapLimitOf(heavyHeapMegabytes);
       const wanted = Object.fromEntries(
-        vitest.projects.map((project) => [project.name, heapLimitOf(budgetOf(project))]),
+        vitest.projects.map(({ name }) => [
+          name,
+          name.endsWith(heavySuffix) ? heavyLimit : lightLimit,
+        ]),
       );
 
       const run = await runningInEveryProject(vitest, directory);
