@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { collectGarbage } from '../../test/collected.ts';
 import { growthOf } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
 import {
@@ -2589,7 +2588,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     holdingOf?: (previous: SchemaNode) => SchemaNode,
   ) {
     return (count: number) => {
-      collectGarbage();
       const top = aRef(`link${count - 1}`);
       const baseline = shared.baseline(
         top,
@@ -2777,7 +2775,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     timeout: growthTimeout,
   }, () => {
     const checkFields = (count: number) => {
-      collectGarbage();
       const fields = Object.fromEntries(
         Array.from({ length: count }, (_, index) => [
           `f${index}`,
