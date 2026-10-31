@@ -283,7 +283,7 @@ const running = await messaging(contract, sqs({ ...sqsConnecting, prefix: 'stagi
 
 ### In process
 
-`inProcess(limits)` from `@cf-loom/messaging/in-process` is a Broker inside the Service's process, for a local run with no Docker, AWS account or NATS: what the Service publishes and sends reaches its own Subscriptions and Command Handlers, and a Message that fails comes again. It is not for production.
+`inProcess(limits)` from `@cf-loom/messaging/in-process` is a Broker inside the Service's process, for a local run with no Docker, AWS account or NATS: what the Service publishes and sends reaches the Message Handlers of its own Subscriptions and Commands, and a Message that fails comes again. It is not for production.
 
 ```ts
 import { messaging } from '@cf-loom/messaging';
@@ -298,9 +298,9 @@ const running = await messaging(
 #### Limits
 
 - `limits` has the shape of the `limits` of `applyBrokerPlan` without Streams (see [Applying the Broker plan](#applying-the-broker-plan)): `durableConsumerDefaults`, and `durableConsumers` keyed by the unprefixed names `cf-loom broker-plan` prints, each Durable consumer's own settings over the defaults. Its two settings are `ackWait` and `maxDeliver`, as on JetStream, and cf-loom has no defaults for them.
-- `ackWait` is a duration, or a non-empty list of them, one for each delivery, the last repeating; it has no ceiling, and a wait longer than a Node timer holds is timed in steps. `maxDeliver` is a whole number from 1, or `'unlimited'`.
-- `inProcess()` reads the limits and throws on a breach, with one line for each place, all at once, under `limits.` as `applyBrokerPlan` words them: a setting that is neither, a `streamDefaults` or `streams` key, or a setting the Broker does not have.
-- `consume` resolves the limits of each Durable consumer it is handed, its own over the defaults, before it pulls from any, and rejects, pulling from none, with a line for each that leaves a setting unset: `The Durable consumer <name> has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`. So `inProcess({})` is accepted and every `consume` of it is refused; a name no `consume` hands is accepted and never used.
+- `ackWait` is any duration whose milliseconds a JavaScript number holds exactly, or a non-empty list of them, one for each delivery, the last repeating; a wait longer than a Node timer holds is timed in steps. `maxDeliver` is a whole number from 1, or `'unlimited'`.
+- `inProcess()` reads the limits and throws on a breach, with one line for each place, all at once, under `limits.` as `applyBrokerPlan` words them: a setting whose value is neither of those, a `streamDefaults` or `streams` key, or a setting the Broker does not have.
+- `consume` resolves the limits of each Durable consumer it is handed, its own over the defaults, before it pulls from any, and rejects, pulling from none, with a line for each that leaves a setting unset: `The Durable consumer <name> has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`. So `inProcess({})` is accepted, and every `consume` that hands it a Durable consumer is refused; a name no `consume` hands is accepted and never used.
 
 #### Behavior
 
@@ -308,7 +308,8 @@ const running = await messaging(
 - Every `messaging()` connected through one `inProcess()` value shares its Durable consumers, so two Services in one process reach each other, and several connections consuming one Durable consumer share its Messages, each Message going to one of them.
 - A Durable consumer hands each connection one Message at a time, in the order they were lined up; Durable consumers run side by side.
 - A Delivery's `deliveryCount` counts from 1, its wait is that Delivery's `ackWait` entry, and it is the last attempt when `deliveryCount` reaches `maxDeliver`, never with `'unlimited'`.
-- `'acked'`, `'ended'` and any Settlement of the last attempt drop the Message. `'pending'` lines it up again at the tail once the Delivery's wait, counted from its start, has passed; `'handed-back'`, which only `close({ signal })` produces, lines it up again at the head at once and counts as a delivery. A Message waiting for redelivery never keeps the process alive.
+- `'acked'`, `'ended'` and any Settlement of the last attempt drop the Message. `'pending'` lines it up again at the tail once its wait, counted from the hand-out, has passed and it has settled; `'handed-back'`, which only `close({ signal })` produces, lines it up again at the head at once and counts as a delivery. A Message waiting for redelivery never keeps the process alive.
+- A Durable consumer is held from its first `consume` for the life of the `inProcess()` value. A Message lined up when the last connection consuming it closes waits for the next `consume` of it through the same value, as does the retry of a Handler that failed during the close, which comes as delivery 2 after its wait.
 - `onBrokerTrouble` is never called: nothing is pulled that can fail.
 
 #### What differs from JetStream and SNS/SQS
@@ -316,7 +317,6 @@ const running = await messaging(
 - It deduplicates nothing, so a Fact id published twice is delivered twice, as on SNS/SQS.
 - It persists nothing, takes no Broker prefix, and keeps no record of the Messages; `memory()` records them for tests.
 - A Message published before its Durable consumer's first `consume` is dropped, where the other Brokers keep it because the Broker plan applied made the Durable consumer, and so is a Message no Durable consumer in the process takes, with no output, where JetStream keeps it in the Stream.
-- A Durable consumer is held only while a connection consumes it or a Delivery of it is in flight: its unsettled Messages go once the last connection's `close()` has started and its last Delivery has settled. A development server that reloads by closing before it consumes again loses them; one that consumes before it closes keeps them.
 
 ## The Broker plan
 
@@ -337,7 +337,7 @@ const running = await messaging(
 
 ## Applying the Broker plan
 
-Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream` or from `@cf-loom/messaging/sqs`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything. Nothing applies the Broker inside the process either: its limits, `InProcessBrokerLimits`, are in the `applyBrokerPlan` shape with the Broker plan's unprefixed names (see [In process](#in-process)).
+Nothing applies it by default (see [Messages](https://github.com/CasitaFeliz/cf-loom/blob/main/ARCHITECTURE.md#messages) in the root ARCHITECTURE.md); the organization applies it with `applyBrokerPlan` from `@cf-loom/messaging/jetstream` or from `@cf-loom/messaging/sqs`, in a deploy step, or from its own infrastructure tooling. `applyBrokerPlan` is no part of `Broker` (see [Types](#types)): `messaging()` never applies anything. Nothing applies the Broker inside the process either: its limits, `InProcessBrokerLimits`, are in the `applyBrokerPlan` shape with the Broker plan's unprefixed names, and a name no `consume` hands is unused (see [In process](#in-process)).
 
 ### On JetStream
 

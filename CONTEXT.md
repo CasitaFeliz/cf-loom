@@ -145,7 +145,7 @@ The message system a Service's messaging runs on, through an adapter: it holds t
 _Avoid_: bus, queue, message bus
 
 **Stream**:
-What a Service's Messages are published to: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the Stream of the Service whose Event it takes. On JetStream it stores the Messages; on SNS/SQS it is an SNS topic, and each Durable consumer's queue stores them.
+What a Service's Messages are published to: each Service that publishes or sends Messages owns one, named after it, and a Subscription reads the Stream of the Service whose Event it takes. On JetStream it stores the Messages; on SNS/SQS it is an SNS topic, and each Durable consumer's queue stores them; inside the process, each Durable consumer's own line stores them.
 _Avoid_: topic, queue, log
 
 **Durable consumer**:
