@@ -12,6 +12,15 @@ declare module 'vitest' {
   }
 }
 
+/**
+ * The heap limit in megabytes of every test process, so that the 7 processes Vitest starts on an
+ * 8-core runner (`availableParallelism() - 1`) fit its memory: all 7 at their limit were measured at
+ * about 6.4 GB with Vitest's own process, before servers and children, and 640 is the measured
+ * fallback. It reaches the processes as `NODE_OPTIONS`, which the `env` replaces and does not append
+ * to, so a developer's own `NODE_OPTIONS` never reaches a test process.
+ */
+export const lightHeapMegabytes = 768;
+
 /** The lint plugin tests each spawn Biome, and some script tests spawn Node, which takes seconds on a CI runner with shared cores. */
 const spawningTimeout = 30_000;
 
@@ -48,6 +57,8 @@ const provide = { readmeService };
 export default defineConfig({
   plugins: [readmeServiceOwner],
   test: {
+    // biome-ignore lint/style/useNamingConvention: the name of an environment variable
+    env: { NODE_OPTIONS: `--max-old-space-size=${lightHeapMegabytes}` },
     projects: [
       'packages/*',
       'examples/*',
