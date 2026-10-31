@@ -1561,7 +1561,7 @@ function failsOnItsOwn({ leaves: held, holdings }: Holds): boolean {
 
 /**
  * The defs with the `op` leaf stripped from every def that a failing def reaches, itself included.
- * A union or an intersection over a schema that also fails is not refused (#577), though the
+ * A union or an intersection over a schema that also fails is not refused, though the
  * README says it is at any depth, so a draw holds none, and the oracle below refuses one over
  * every def that reaches an openEnum().
  */
