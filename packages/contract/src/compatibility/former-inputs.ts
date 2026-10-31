@@ -4,7 +4,7 @@ import type {
   PublishedServiceSnapshot,
   ServiceSnapshot,
 } from '../snapshot/index.ts';
-import { canonicalJson, type Defs } from '../walker/index.ts';
+import type { Defs } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
 import { endpointSiteOf, inputBodyDifferencesOf, queryDifferencesOf } from './endpoints.ts';
 import { type GraftSource, graftedInputOf, type ReadDefs, readDefsOf } from './grafting.ts';
@@ -34,13 +34,12 @@ type SchemaDifference = Extract<Difference, { readonly kind: 'schema' }>;
 
 /**
  * The Breaking Differences of an Endpoint's query and body against its former Inputs, newest first,
- * each once and none already reported against the Baseline, named by the `removedIn` of the former
- * Input it was found against: its Callers still send that Input.
+ * named by the `removedIn` of the former Input it was found against: its Callers still send that
+ * Input.
  */
 export function formerInputDifferencesOf(
   pair: Pair<EndpointSnapshot>,
   checked: CheckedService,
-  reported: readonly Difference[],
 ): readonly Difference[] {
   const compared = comparedShapesOf(pair);
   if (compared === undefined) {
@@ -52,17 +51,7 @@ export function formerInputDifferencesOf(
     defs: checked.proposed.defs,
   };
   const newestFirst = (checked.formers.get(pair.identity) ?? []).toReversed();
-  const tagged = newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
-  const seen = new Set(reported.filter(isSchemaDifference).map(placedShapeOf));
-  const found: Difference[] = [];
-  for (const difference of tagged) {
-    const placed = placedShapeOf(difference);
-    if (!seen.has(placed)) {
-      seen.add(placed);
-      found.push(difference);
-    }
-  }
-  return found;
+  return newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
 }
 
 /** An Endpoint as the Check compares it with a former Input: its site, its declaration and the defs its `ref`s name. */
@@ -165,9 +154,4 @@ function isBreakingAt(site: ChangeSite, difference: Difference): boolean {
 
 function isSchemaDifference(difference: Difference): difference is SchemaDifference {
   return difference.kind === 'schema';
-}
-
-/** Where a schema Difference is and what it is, the same for the same Difference found twice. */
-function placedShapeOf({ at, shape }: SchemaDifference): string {
-  return canonicalJson([at, shape]);
 }

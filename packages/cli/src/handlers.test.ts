@@ -1940,7 +1940,7 @@ describe('cf-loom generate: a configured layout', () => {
     const [document] = ran.stdout.split('\n');
     expect(ran.status).toBe(3);
     expect(JSON.parse(document ?? '')).toEqual({
-      format: 1,
+      format: 2,
       status: 3,
       errors: [line],
       moved: [

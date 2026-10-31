@@ -1,6 +1,7 @@
 import {
   authorPathOf,
   chainDown,
+  defTextOf,
   fieldStep,
   pathTailOf,
   type Step,
@@ -73,7 +74,7 @@ export function siteTextOf(site: Site): string {
     case 'standard-rejection':
       return `standardRejections.${tokenOf(site.name)}`;
     case 'def':
-      return `defs.${tokenOf(site.name)}`;
+      return defTextOf(site.name);
   }
 }
 

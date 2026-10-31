@@ -306,7 +306,7 @@ const staleSnapshotLine = 'contract.snapshot.json is missing or out of date: run
 
 /** The document `broker-plan --json` prints for the Service of `theReadmeService`: the plan the messaging README shows, in the one document every command prints. */
 function planDocument(): string {
-  return JSON.stringify({ format: 1, status: 0, plan: readmePlan() });
+  return JSON.stringify({ format: 2, status: 0, plan: readmePlan() });
 }
 
 /** The plan the messaging README shows for the Service of `theReadmeService`, as the README writes it. */
@@ -568,7 +568,7 @@ describe('cf-loom broker-plan: what it refuses', () => {
 
       expect(ran).toEqual({
         status,
-        stdout: `${JSON.stringify({ format: 1, status, errors: [line] })}\n`,
+        stdout: `${JSON.stringify({ format: 2, status, errors: [line] })}\n`,
         stderr: `${line}\n`,
       });
     },

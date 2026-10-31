@@ -230,6 +230,8 @@ export type {
   TupleNode,
 } from '../walker/index.ts';
 export {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   byCodePoint,
   chainDown,

@@ -106,6 +106,18 @@ export function snapshotPathOf(steps: readonly Step[]): Path {
   return steps.flatMap(snapshotSegmentsOf);
 }
 
+/**
+ * Steps from a site, or, with a `def`, from the recursive schema of that id in `defs`; without the
+ * `def` the same steps name another place.
+ */
+export type Anchored = { readonly at: readonly Step[]; readonly def?: string };
+
+/** The path a Snapshot spells for anchored steps, `defs.<def>` first when they have a `def`. */
+export function anchoredSnapshotPathOf({ at, def }: Anchored): Path {
+  const below = snapshotPathOf(at);
+  return def === undefined ? below : ['defs', def, ...below];
+}
+
 function snapshotSegmentsOf(step: Step): Path {
   switch (step.kind) {
     case 'part':
@@ -137,6 +149,11 @@ export function tokenOf(text: string): string {
   return plainToken.test(text) ? text : JSON.stringify(text);
 }
 
+/** How a recursive schema is named on a line, as a failure's site or where a Change's path starts: `defs.<id>`. */
+export function defTextOf(name: string): string {
+  return `defs.${tokenOf(name)}`;
+}
+
 /**
  * Steps in the author's terms: `success.body.orders[].lines[].kind<type="a">.x`, where `[]` is an
  * array's items, `[<i>]` a position of a tuple or a list, `[...]` a tuple's rest, `<|<i>>` a
@@ -148,6 +165,14 @@ export function authorPathOf(steps: readonly Step[]): string | null {
     return null;
   }
   return steps.map((step, position) => textOf(step, position === 0)).join('');
+}
+
+/**
+ * Anchored steps in the author's terms: those of `authorPathOf`, or, with a `def`, `defs.<id>`
+ * then the steps below it (`defs.tree.children[]`), which is the whole path when there are none.
+ */
+export function anchoredAuthorPathOf({ at, def }: Anchored): string | null {
+  return def === undefined ? authorPathOf(at) : defTextOf(def) + pathTailOf(at);
 }
 
 /** Steps as they continue a path that already has a step: `.lines[].kind`; nothing for none. */
