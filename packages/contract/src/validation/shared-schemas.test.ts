@@ -1412,7 +1412,9 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
       expect(growth).toBeLessThan(linearGrowth);
     },
   );
+});
 
+describe('failure lines: a shared schema held by many fields below a chain of defs', () => {
   /** `size` defs, each holding the one before as `next`, below which a def holds one date in `size` fields. */
   function widelyHeldRoot(size: number): Root {
     const date = z.date();
@@ -1480,7 +1482,10 @@ type FieldName = (typeof fieldNames)[number];
 /** What a def or a body may hold at a field of its own beside defs: a date of its own, the shared date, and a union reaching an openEnum(). */
 type Leaf = 'at' | 'sh' | 'op';
 
-const leaves: readonly Leaf[] = ['at', 'sh', 'op'];
+/** How often a def or a body holds each leaf: unions that are an openEnum() are drawn more often than the dates that make a def fail. */
+const leafChances: Readonly<Record<Leaf, number>> = { at: 0.2, sh: 0.15, op: 0.45 };
+
+const leaves = Object.keys(leafChances) as readonly Leaf[];
 
 type Holding = {
   readonly name: FieldName;
@@ -1514,7 +1519,7 @@ function holdsOf(next: Next, defCount: number, least: number): Holds {
       holder: pickOf(next, holderNames),
       to: targets[index] as number,
     })),
-    leaves: leaves.filter(() => next() < 0.3),
+    leaves: leaves.filter((leaf) => next() < leafChances[leaf]),
   };
 }
 
@@ -1527,7 +1532,54 @@ function drawOf(seed: number): Draw {
     site: index > 0 && next() < 0.4 ? Math.floor(next() * index) : index,
   }));
   const defs = Array.from({ length: defCount }, () => holdsOf(next, defCount, 0));
-  return { defs, bodies, exported: next() < 0.5 };
+  return { defs: withoutOpenBeyondFailures(defs), bodies, exported: next() < 0.5 };
+}
+
+/** The defs a def holds, itself, and those they hold, at any depth. */
+function reachableFrom(defs: readonly Holds[], start: number): ReadonlySet<number> {
+  const seen = new Set<number>();
+  const pending = [start];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (!seen.has(next)) {
+      seen.add(next);
+      for (const { to } of defs[next]?.holdings ?? []) {
+        pending.push(to);
+      }
+    }
+  }
+  return seen;
+}
+
+/** Whether a def fails on its own: it holds a date, the shared date or a field named constructor. */
+function failsOnItsOwn({ leaves: held, holdings }: Holds): boolean {
+  return (
+    held.includes('at') ||
+    held.includes('sh') ||
+    holdings.some(({ name }) => name[0] === 'constructor')
+  );
+}
+
+/**
+ * The defs with no union that is an openEnum() in any def that a failing def reaches. A union or an
+ * intersection over a schema that also fails is not refused, though the README says it is at any
+ * depth, so a draw holds none, and the oracle below refuses one over every def that reaches an
+ * openEnum().
+ */
+function withoutOpenBeyondFailures(defs: readonly Holds[]): readonly Holds[] {
+  const beyondFailures = new Set<number>();
+  defs.forEach((_, start) => {
+    const reached = reachableFrom(defs, start);
+    if ([...reached].some((index) => failsOnItsOwn(defs[index] as Holds))) {
+      for (const index of reached) {
+        beyondFailures.add(index);
+      }
+    }
+  });
+  return defs.map((holds, index) =>
+    beyondFailures.has(index)
+      ? { ...holds, leaves: holds.leaves.filter((leaf) => leaf !== 'op') }
+      : holds,
+  );
 }
 
 function lazily<Made>(make: () => Made): () => Made {
@@ -1645,41 +1697,20 @@ function firstPlacesOf(draw: Draw): readonly (At | undefined)[] {
 function sitesReachingOf(draw: Draw): readonly ReadonlySet<string>[] {
   const reaching = draw.defs.map(() => new Set<string>());
   for (const body of draw.bodies) {
-    const seen = new Set<number>();
-    const pending = body.holdings.map(({ to }) => to);
-    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-      if (!seen.has(next)) {
-        seen.add(next);
-        reaching[next]?.add(siteOf(body));
-        for (const { to } of draw.defs[next]?.holdings ?? []) {
-          pending.push(to);
-        }
+    for (const { to } of body.holdings) {
+      for (const index of reachableFrom(draw.defs, to)) {
+        reaching[index]?.add(siteOf(body));
       }
     }
   }
   return reaching;
 }
 
-/**
- * Whether a union or an intersection that holds each def is refused: the def reaches a union that
- * is an openEnum(), and neither it nor a def it holds fails, since a def that fails is written
- * no node, so nothing that holds it reaches an openEnum() through it.
- */
-function refusesHoldersOf(draw: Draw): readonly boolean[] {
-  const fails = draw.defs.map(
-    ({ leaves: held, holdings }) =>
-      held.includes('at') ||
-      held.includes('sh') ||
-      holdings.some(({ name }) => name[0] === 'constructor'),
+/** Whether each def reaches a union that is an openEnum(), itself or through the defs it holds, so a union or an intersection that holds it is refused. */
+function reachesOpenOf({ defs }: Draw): readonly boolean[] {
+  return defs.map((_, start) =>
+    [...reachableFrom(defs, start)].some((index) => defs[index]?.leaves.includes('op')),
   );
-  const opens = draw.defs.map(({ leaves: held }) => held.includes('op'));
-  for (let round = 0; round <= draw.defs.length; round++) {
-    draw.defs.forEach(({ holdings }, owner) => {
-      fails[owner] = fails[owner] || holdings.some(({ to }) => fails[to]);
-      opens[owner] = opens[owner] || holdings.some(({ to }) => opens[to]);
-    });
-  }
-  return draw.defs.map((_, index) => !fails[index] && opens[index] === true);
 }
 
 /** A refusal at a place: what is refused, the schema refused, and every site that reaches the place. */
@@ -1701,7 +1732,7 @@ type Owner = {
 function tellingsOf(
   owner: Owner,
   holds: Holds,
-  refusesHolders: readonly boolean[],
+  reachesOpen: readonly boolean[],
 ): readonly Telling[] {
   const { id, at: from, sites } = owner;
   const told = holds.leaves.map((leaf) => ({
@@ -1713,7 +1744,7 @@ function tellingsOf(
   for (const { name, holder, to } of holds.holdings) {
     const refusal = holders[holder].refusedAs;
     const at = { text: `${from.text}.${name[1]}`, site: from.site };
-    if (refusal !== undefined && refusesHolders[to]) {
+    if (refusal !== undefined && reachesOpen[to]) {
       told.push({ schema: `${id}.${name[0]}`, refusal, at, sites });
     }
     if (name[0] === 'constructor') {
@@ -1727,17 +1758,15 @@ function tellingsOf(
 function allTellingsOf(draw: Draw): readonly Telling[] {
   const first = firstPlacesOf(draw);
   const reaching = sitesReachingOf(draw);
-  const refusesHolders = refusesHoldersOf(draw);
+  const reachesOpen = reachesOpenOf(draw);
   const inBodies = draw.bodies.flatMap((body, index) => {
     const at = { text: `${siteOf(body)} success.body`, site: siteOf(body) };
-    return tellingsOf({ id: `b${index}`, at, sites: new Set([at.site]) }, body, refusesHolders);
+    return tellingsOf({ id: `b${index}`, at, sites: new Set([at.site]) }, body, reachesOpen);
   });
   const inDefs = draw.defs.flatMap((holds, index) => {
     const at = first[index];
     const sites = reaching[index] ?? new Set<string>();
-    return at === undefined
-      ? []
-      : tellingsOf({ id: `d${index}`, at, sites }, holds, refusesHolders);
+    return at === undefined ? [] : tellingsOf({ id: `d${index}`, at, sites }, holds, reachesOpen);
   });
   return [...inBodies, ...inDefs];
 }
