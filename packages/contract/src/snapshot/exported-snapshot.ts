@@ -31,7 +31,8 @@ type Kept = {
 /**
  * The Snapshot a Service's Contract Package is written from, from its declared or published
  * Snapshot: its Public and Internal Endpoints and its Internal Events that are not Retired, and
- * the Guards, codes and recursive defs they reach, keyed and ordered as in the Snapshot.
+ * the Guards, codes and recursive defs they reach, keyed as in the Snapshot, the defs in code
+ * point order.
  */
 export function exportedSnapshotOf(
   snapshot: ServiceSnapshot | PublishedServiceSnapshot,

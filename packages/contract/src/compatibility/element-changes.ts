@@ -24,11 +24,8 @@ import { siteVisibilityOf, visibilityDifferenceOf } from './visibility.ts';
 const noMessages = { events: {}, commands: {} } as const;
 
 /** The Changes of a Service's Endpoints, by identity in code point order. */
-export function endpointChangesOf(
-  baseline: PublishedServiceSnapshot,
-  proposed: ServiceSnapshot,
-): readonly Change[] {
-  const checked = { baseline, proposed };
+export function endpointChangesOf(checked: CheckedService): readonly Change[] {
+  const { baseline, proposed } = checked;
   const paths = endpointPathsOf(baseline, proposed);
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
     endpointPairChangesOf(pair, checked, paths),

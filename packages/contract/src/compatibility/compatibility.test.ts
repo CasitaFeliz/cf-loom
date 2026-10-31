@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
+import { codesNoEndpointAnswersBesideDefs } from '../../test/graft-shapes.ts';
 import { growthOf } from '../../test/growth.ts';
-import { publishedBy, schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
   type Change,
@@ -18,6 +19,7 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  publishedSnapshotOf,
   type SchemaNode,
   type ServiceSnapshot,
   type Snapshot,
@@ -727,6 +729,32 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
         verdict,
       ]),
     ).toEqual([['retired-changed', 'neutral', 'allowed']]);
+  });
+});
+
+describe('publishedSnapshotOf, the codes no Endpoint answers any more', () => {
+  const sizes = { small: 2_000, large: 16_000 };
+
+  /** How many times longer a merge of a Snapshot eight times as large may take: about 8 for one that reads each part once. */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  function mergeOfCodes(count: number) {
+    const { baseline, proposed } = codesNoEndpointAnswersBesideDefs(count);
+    return () => publishedSnapshotOf(baseline, proposed, publishedAt('1.1.0'));
+  }
+
+  test('many codes no Endpoint answers any more, beside many defs they do not reach, are merged in time that grows with both', {
+    timeout: growthTimeout,
+  }, () => {
+    const published = mergeOfCodes(3)();
+    const growth = growthOf(mergeOfCodes, sizes, linearGrowth);
+
+    const removed = Object.entries(published.codes).filter(([, held]) => 'removedIn' in held);
+    expect(removed.map(([code]) => code)).toEqual(['LOCKED_0', 'LOCKED_1', 'LOCKED_2']);
+    expect(growth).toBeLessThan(linearGrowth);
   });
 });
 

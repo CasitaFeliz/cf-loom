@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import type { Shape } from '../../test/graft-fixtures.ts';
+import {
+  baselineHoldingFormerInputs,
+  formerInputsNamingAnAliasChain,
+} from '../../test/graft-shapes.ts';
+import { growthOf } from '../../test/growth.ts';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, publishedServiceAt, schemaExports } from '../../test/snapshots.ts';
@@ -1745,6 +1751,18 @@ describe('decodeSnapshot', () => {
       expect([service, application]).toEqual([malformedAt(at), malformedAt(at)]);
     });
 
+    test.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+      'a ref in an Endpoint’s body to a def named %s that the Snapshot does not hold is malformed at the ref',
+      (name) => {
+        const input = { ...anEndpoint.input, body: aRef(name) };
+        const endpoints = { 'GET /orders/{}': { ...anEndpoint, input } };
+
+        const result = serviceWith({ endpoints });
+
+        expect(result).toEqual(malformedAt(['endpoints', 'GET /orders/{}', 'input', 'body']));
+      },
+    );
+
     test('a ref to a def the Snapshot does not hold is malformed at the ref', () => {
       const defs = { tree: { type: 'array', items: aRef('missing') } };
 
@@ -2824,6 +2842,22 @@ describe('decodeSnapshot', () => {
         },
       );
 
+      test.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty'])(
+        'a former Input whose removed field names a def %s that its Endpoint no longer reaches is decoded',
+        (name) => {
+          const former: ObjectNode = {
+            type: 'object',
+            fields: { name: { required: true, schema: stringNode }, gone: optional(aRef(name)) },
+          };
+
+          const result = withBody(anObjectOf(stringNode), [
+            formerOf(former, { [name]: anObjectOf(stringNode) }),
+          ]);
+
+          expect(result.kind).toBe('decoded');
+        },
+      );
+
       test('a former Input whose ref names a def nothing holds is malformed at the ref, never thrown', () => {
         const former: ObjectNode = {
           type: 'object',
@@ -3483,5 +3517,42 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
     const at = ['defs', 'deep', ...Array<string>(254).fill('items')];
     const refusal = malformedAt(at, 'nests deeper than 256 levels');
     expect(results).toEqual(draws.map(({ refused }) => (refused ? refusal : 'decoded')));
+  });
+});
+
+describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
+  /** How many times longer a decode of a Snapshot eight times as large may take: about 8 for one that reads each part once. */
+  const linearGrowth = 13;
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  const sizes = { small: 1_000, large: 8_000 };
+
+  function decoded(shapeOf: (count: number) => Shape) {
+    return (count: number) => {
+      const text = canonicalTextOf(shapeOf(count).baseline);
+      return () => decodeSnapshot(text);
+    };
+  }
+
+  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', {
+    timeout: growthTimeout,
+  }, () => {
+    const read = decoded(baselineHoldingFormerInputs)(3)();
+    const growth = growthOf(decoded(baselineHoldingFormerInputs), sizes, linearGrowth);
+
+    expect(read.kind).toBe('decoded');
+    expect(growth).toBeLessThan(linearGrowth);
+  });
+
+  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const read = decoded(formerInputsNamingAnAliasChain)(3)();
+    const growth = growthOf(decoded(formerInputsNamingAnAliasChain), sizes, linearGrowth);
+
+    expect(read.kind).toBe('decoded');
+    expect(growth).toBeLessThan(linearGrowth);
   });
 });

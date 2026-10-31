@@ -14,8 +14,13 @@ concurrency:
 jobs:
   # The checks run on the CasitaFeliz org's self-hosted runners (CasitaFeliz/orb-infra, README "CI runners"): an
   # ephemeral microVM per job, like a GitHub-hosted one. If they are down, point runs-on back to ubuntu-latest.
+  # The two legs are the memory classes of CLAUDE.md's Repository, so the test processes of a leg fit one runner.
   check:
     runs-on: orb
+    strategy:
+      fail-fast: false
+      matrix:
+        memory: [light, heavy]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,14 +33,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Require a changeset for a change to a package, and a bump that follows the title
-        if: github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != github.repository)
+        if: matrix.memory == 'light' && github.event_name == 'pull_request' && (github.head_ref != 'changeset-release/main' || github.event.pull_request.head.repo.full_name != github.repository)
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           pnpm changeset status --since=origin/main --output="$RUNNER_TEMP/changeset-status.json"
           node scripts/check-changeset-bump.ts "$PR_TITLE" "$RUNNER_TEMP/changeset-status.json"
       - name: Install nats-server
-        if: runner.arch == 'X64'
+        if: matrix.memory == 'light' && runner.arch == 'X64'
         env:
           NATS_SERVER_VERSION: v2.15.1
           NATS_SERVER_SHA256: bf5edc7b1ce98e885c368cb43a886eb148dc5d0551d99f3cf6141fb5e1954c70
@@ -47,7 +52,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$archive.tar.gz" -C "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/$archive" >> "$GITHUB_PATH"
       - name: Install moto
-        if: runner.arch == 'X64'
+        if: matrix.memory == 'light' && runner.arch == 'X64'
         env:
           UV_VERSION: 0.13.1
           UV_SHA256: eadd9d27c134ab5ac1ffd4473b97a741407f3ea238288f03121fc4deddf90220
@@ -65,6 +70,7 @@ jobs:
           ln -s "$RUNNER_TEMP/moto/bin/moto_server" "$RUNNER_TEMP/moto-bin/moto_server"
           echo "$RUNNER_TEMP/moto-bin" >> "$GITHUB_PATH"
       - name: Lint the workflows
+        if: matrix.memory == 'light'
         env:
           ACTIONLINT_VERSION: 1.7.12
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
@@ -75,17 +81,26 @@ jobs:
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint"
-      - run: pnpm biome ci --error-on-warnings .
-      - run: node scripts/check-tsdoc.ts
-      - run: node scripts/check-layout.ts
-      - run: node scripts/check-terms.ts
+      - if: matrix.memory == 'light'
+        run: pnpm biome ci --error-on-warnings .
+      - if: matrix.memory == 'light'
+        run: node scripts/check-tsdoc.ts
+      - if: matrix.memory == 'light'
+        run: node scripts/check-layout.ts
+      - if: matrix.memory == 'light'
+        run: node scripts/check-terms.ts
       - run: pnpm build
-      - run: node scripts/check-expect-errors.ts
-      - run: pnpm vitest run --project '!@cf-loom/cli'
+      - if: matrix.memory == 'light'
+        run: node scripts/check-expect-errors.ts
+      - if: matrix.memory == 'light'
+        run: pnpm vitest run --project '!*-heavy' --project '!@cf-loom/cli'
+      - if: matrix.memory == 'heavy'
+        run: pnpm vitest run --project '*-heavy'
   # The CLI reads and publishes through the npm on PATH (packages/cli/ARCHITECTURE.md): its tests run once for each npm
   # release this matrix pins, whose carets are engines.npm of @cf-loom/cli; scripts/npm-releases.test.ts checks that
   # they agree.
   # pnpm puts Node's own folder, with the npm it bundles, first on PATH, so Vitest is started with node.
+  # The root vitest.config.ts gives its test processes the light heap, as it does the check job's.
   cli-npm:
     name: cli-npm (npm ${{ matrix.npm.version }})
     runs-on: orb

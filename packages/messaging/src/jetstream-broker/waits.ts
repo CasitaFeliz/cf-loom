@@ -1,6 +1,6 @@
 import type { ConsumerConfig } from '@nats-io/jetstream';
 import { millis } from '@nats-io/nats-core';
-import type { DeliveryWaits } from '../broker-limits/index.ts';
+import type { DeliveryWaits } from '../broker/index.ts';
 
 /** The wait NATS gives a Durable consumer's delivery when its configuration holds none. */
 const natsAckWaitMs = 30_000;

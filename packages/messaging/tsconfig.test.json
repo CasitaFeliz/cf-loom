@@ -6,7 +6,14 @@
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "vitest.config.ts", "../contract/test/line-breaks.ts"],
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts",
+    "../contract/test/line-breaks.ts",
+    "../contract/test/random-schemas.ts",
+    "../contract/test/growth.ts"
+  ],
   "references": [
     {
       "path": "../contract/tsconfig.build.json"
