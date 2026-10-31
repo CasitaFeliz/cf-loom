@@ -1,6 +1,6 @@
 import { writtenIdOf } from './metadata.ts';
 import { nodelessCyclesOf } from './nodeless-cycles.ts';
-import type { RefNode, SchemaNode } from './nodes.ts';
+import { type RefNode, refNameOf, type SchemaNode } from './nodes.ts';
 import {
   notAllowed,
   refused,
@@ -102,7 +102,7 @@ function giveFailure(state: State, member: Entered, failure: Failed): void {
 
 /** The name of the def a remembered answer is a `ref` to, none for a failure. */
 function defNameOf(answer: Walked | undefined): string | undefined {
-  return answer?.kind === 'walked' && answer.value.type === 'ref' ? answer.value.name : undefined;
+  return answer?.kind === 'walked' ? refNameOf(answer.value) : undefined;
 }
 
 /**

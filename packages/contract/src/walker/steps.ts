@@ -101,12 +101,20 @@ export const keyStep: Step = { kind: 'key' };
 /** The step into a record's value. */
 export const valueStep: Step = { kind: 'value' };
 
+/** The path a Snapshot spells for steps: `fields.<name>`, `items`, `variants.<value>`… */
+export function snapshotPathOf(steps: readonly Step[]): Path {
+  return steps.flatMap(snapshotSegmentsOf);
+}
+
 /**
- * The path a Snapshot spells for steps: `fields.<name>`, `items`, `variants.<value>`…; those of a
- * `def` start at `defs.<def>`, the recursive schema they are below.
+ * Steps from a site, or, with a `def`, from the recursive schema of that id in the proposed
+ * Snapshot's `defs`: a path that cannot be read without the `def` it starts at.
  */
-export function snapshotPathOf(steps: readonly Step[], def?: string): Path {
-  const below = steps.flatMap(snapshotSegmentsOf);
+export type Anchored = { readonly at: readonly Step[]; readonly def?: string };
+
+/** The path a Snapshot spells for anchored steps, `defs.<def>` first when they have a `def`. */
+export function anchoredSnapshotPathOf({ at, def }: Anchored): Path {
+  const below = snapshotPathOf(at);
   return def === undefined ? below : ['defs', def, ...below];
 }
 
@@ -150,17 +158,21 @@ export function defTextOf(name: string): string {
  * Steps in the author's terms: `success.body.orders[].lines[].kind<type="a">.x`, where `[]` is an
  * array's items, `[<i>]` a position of a tuple or a list, `[...]` a tuple's rest, `<|<i>>` a
  * union's option, `{}` a record's value, `{key}` its key and `<discriminator=value>` a variant;
- * none when there are no steps, unless they are below a `def`, which starts the path:
- * `defs.tree.children[]`.
+ * none when there are no steps.
  */
-export function authorPathOf(steps: readonly Step[], def?: string): string | null {
-  if (def !== undefined) {
-    return defTextOf(def) + pathTailOf(steps);
-  }
+export function authorPathOf(steps: readonly Step[]): string | null {
   if (steps.length === 0) {
     return null;
   }
   return steps.map((step, position) => textOf(step, position === 0)).join('');
+}
+
+/**
+ * Anchored steps in the author's terms: those of `authorPathOf`, or, with a `def`, `defs.<id>`
+ * then the steps below it (`defs.tree.children[]`), which is the whole path when there are none.
+ */
+export function anchoredAuthorPathOf({ at, def }: Anchored): string | null {
+  return def === undefined ? authorPathOf(at) : defTextOf(def) + pathTailOf(at);
 }
 
 /** Steps as they continue a path that already has a step: `.lines[].kind`; nothing for none. */

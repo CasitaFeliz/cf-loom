@@ -56,13 +56,15 @@ export type {
   TaggedNode,
   TupleNode,
 } from './nodes.ts';
-export { neutralAnnotations } from './nodes.ts';
+export { neutralAnnotations, refNameOf } from './nodes.ts';
 export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { byShape, shapeKey, shapeOf } from './shapes.ts';
 export type { PartName, Step, StepChain } from './steps.ts';
 export {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   chainDown,
   defTextOf,

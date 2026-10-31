@@ -1,4 +1,4 @@
-import { canonicalJson, childrenOf, neutralAnnotations, type SchemaNode } from '../walker/index.ts';
+import { canonicalJson, childrenOf, neutralAnnotations, refNameOf } from '../walker/index.ts';
 import { type Finding, found, type NodePair } from './findings.ts';
 
 /** A Neutral annotation: `description`, `examples` or `origin`. */
@@ -16,12 +16,8 @@ export function annotationFindingsOf(pair: NodePair): readonly Finding[] {
  * where the other side is not a `ref`. The name is an annotation (`.meta({ id })`), never a shape.
  */
 export function renamedFindingsOf({ baseline, proposed }: NodePair): readonly Finding[] {
-  const isRenamed = defNameOf(baseline) !== defNameOf(proposed);
+  const isRenamed = refNameOf(baseline) !== refNameOf(proposed);
   return isRenamed ? [found({ kind: 'annotation-changed', annotation: 'id' })] : [];
-}
-
-function defNameOf(node: SchemaNode): string | undefined {
-  return node.type === 'ref' ? node.name : undefined;
 }
 
 /**

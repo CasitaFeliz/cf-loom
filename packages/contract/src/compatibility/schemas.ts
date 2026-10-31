@@ -1,5 +1,6 @@
 import {
   chainDown,
+  refNameOf,
   type SchemaNode,
   type Step,
   type StepChain,
@@ -158,12 +159,7 @@ function findingsWithin(
   }
   const proposedEntered = place.entered.get(hop.baseline) ?? new Set<SchemaNode>();
   place.entered.set(hop.baseline, proposedEntered.add(hop.proposed));
-  return [...own, { kind: 'hop', pair: hop, def: namedByProposed(pair) }];
-}
-
-/** The id of the def the proposed side of a pair holding a `ref` names; none when it is written inline. */
-function namedByProposed({ proposed }: NodePair): string | undefined {
-  return proposed.type === 'ref' ? proposed.name : undefined;
+  return [...own, { kind: 'hop', pair: hop, def: refNameOf(pair.proposed) }];
 }
 
 /**

@@ -8,29 +8,36 @@ export function siteChangesOf(sites: readonly SiteDifferences[]): readonly Chang
 }
 
 /**
- * The differences found at a site, in the order the rules ran, each classified as a Change. A
- * schema Difference found again with the same Position, path and shape is one Change, the first:
- * two paths reach one def, and a former Input is compared with the same defs.
+ * The differences found at a site, in the order the rules ran, each classified as a Change. Two
+ * schema Differences at one place, with one Position and one shape, are one Change, the first
+ * found.
  */
 export function changesAt(site: ChangeSite, found: readonly (Difference | undefined)[]): Change[] {
-  const seen = new Set<string>();
-  return found
-    .filter(isFound)
-    .filter((difference) => isFirstPlaced(difference, seen))
-    .map((difference) => ({ site, difference, ...classificationOf(site, difference) }));
+  return firstPlacedOf(found.filter(isFound)).map((difference) => ({
+    site,
+    difference,
+    ...classificationOf(site, difference),
+  }));
 }
 
 function isFound(difference: Difference | undefined): difference is Difference {
   return difference !== undefined;
 }
 
-function isFirstPlaced(difference: Difference, seen: Set<string>): boolean {
-  if (difference.kind !== 'schema') {
-    return true;
+/** The differences with each schema Difference once, the first found at its place, Position and shape. */
+function firstPlacedOf(differences: readonly Difference[]): Difference[] {
+  const seen = new Set<string>();
+  const first: Difference[] = [];
+  for (const difference of differences) {
+    if (difference.kind === 'schema') {
+      const { position, def, at, shape } = difference;
+      const placed = canonicalJson({ position, def, at, shape });
+      if (seen.has(placed)) {
+        continue;
+      }
+      seen.add(placed);
+    }
+    first.push(difference);
   }
-  const { position, def, at, shape } = difference;
-  const placed = canonicalJson({ position, def, at, shape });
-  const isFirst = !seen.has(placed);
-  seen.add(placed);
-  return isFirst;
+  return first;
 }

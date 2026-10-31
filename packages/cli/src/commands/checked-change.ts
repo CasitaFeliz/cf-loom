@@ -1,11 +1,11 @@
 import {
-  authorPathOf,
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   type Change,
   type ChangeClass,
   type ChangeSite,
   type Difference,
   type Path,
-  snapshotPathOf,
   type Verdict,
 } from '@cf-loom/contract/internal';
 import { hintOf } from './hints.ts';
@@ -36,27 +36,21 @@ export function checkedChangeOf(change: Change): CheckedChange {
   return {
     site,
     difference: differenceJsonOf(difference),
-    path: pathOf(difference),
+    path: 'at' in difference ? anchoredAuthorPathOf(difference) : null,
     class: changeClass,
     verdict,
     hint: hintOf(change),
   };
 }
 
-function pathOf(difference: Difference): string | null {
-  if (!('at' in difference)) {
-    return null;
-  }
-  return authorPathOf(difference.at, difference.kind === 'schema' ? difference.def : undefined);
-}
-
 function differenceJsonOf(difference: Difference): DifferenceJson {
   if (!('at' in difference)) {
     return difference;
   }
+  const at = anchoredSnapshotPathOf(difference);
   if (difference.kind !== 'schema') {
-    return { ...difference, at: snapshotPathOf(difference.at) };
+    return { ...difference, at };
   }
-  const { def, ...placed } = difference;
-  return { ...placed, at: snapshotPathOf(difference.at, def) };
+  const { def: _anchor, ...placed } = difference;
+  return { ...placed, at };
 }
