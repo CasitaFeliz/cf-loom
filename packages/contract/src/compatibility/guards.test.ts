@@ -540,11 +540,8 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
         breaking(codeSite(orderLocked), {
           kind: 'schema',
           position: 'success',
-          at: [
-            { kind: 'part', name: 'body' },
-            { kind: 'field', name: 'tree' },
-            { kind: 'field', name: 'label' },
-          ],
+          at: [{ kind: 'field', name: 'label' }],
+          def: 'tree',
           shape: { kind: 'field-removed' },
         }),
       ]);

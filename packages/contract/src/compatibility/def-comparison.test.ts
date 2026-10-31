@@ -372,7 +372,10 @@ function reportedAt(report: ComparedReport, name: string): Expected[] {
     .filter(isSchemaChange)
     .filter(
       ({ site, difference }) =>
-        site.kind === 'export' && site.name === name && difference.at.length === 0,
+        site.kind === 'export' &&
+        site.name === name &&
+        difference.def === undefined &&
+        difference.at.length === 0,
     );
   return atExport.map(({ difference, class: changeClass }) => ({
     shape: difference.shape,

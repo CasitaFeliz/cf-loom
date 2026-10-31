@@ -138,8 +138,9 @@ function publishedThrough(...versions: readonly ServiceSnapshot[]): PublishedSer
   return published;
 }
 
-function placeOf(steps: readonly Step[]): string {
-  return steps.map(stepName).join('.');
+function placeOf(steps: readonly Step[], def?: string): string {
+  const names = steps.map(stepName);
+  return (def === undefined ? names : ['defs', def, ...names]).join('.');
 }
 
 function stepName(step: Step): string {
@@ -166,7 +167,7 @@ function lineOf({ class: changeClass, difference }: Change): string {
     return `${changeClass} ${difference.kind}`;
   }
   const removedIn = difference.removedIn === undefined ? '' : ` removedIn=${difference.removedIn}`;
-  return `${changeClass} ${difference.shape.kind} at ${placeOf(difference.at)}${removedIn}`;
+  return `${changeClass} ${difference.shape.kind} at ${placeOf(difference.at, difference.def)}${removedIn}`;
 }
 
 function linesOf(baseline: PublishedServiceSnapshot, proposed: ServiceSnapshot): readonly string[] {
@@ -349,9 +350,9 @@ describe('compatibilityReportOf: an Endpoint’s former Inputs', () => {
 
     expect(lines).toEqual([
       'neutral annotation-changed at input.body.right',
-      'neutral annotation-changed at input.body.right.child',
-      'additive field-added at input.body.right.label',
-      'breaking type-changed at input.body.right.label removedIn=1.1.0',
+      'neutral annotation-changed at defs.labelled.child',
+      'additive field-added at defs.labelled.label',
+      'breaking type-changed at defs.labelled.label removedIn=1.1.0',
     ]);
   });
 
@@ -453,6 +454,27 @@ describe('compatibilityReportOf: an Endpoint’s former Inputs', () => {
     expect(lines).toEqual([
       'additive field-added at input.body.note',
       'breaking type-changed at input.body.note removedIn=1.2.0',
+    ]);
+  });
+
+  test('a def changed that the Baseline and a former Input reach by different routes is reported once', () => {
+    const held = (x: SchemaNode) => ({ shape: anObject({ x: optional(x) }) });
+    const nested = (hasD: boolean) =>
+      optional(anObject(hasD ? { d: optional(aRef('shape')) } : {}));
+    const baseline = publishedThrough(
+      aService({ body: { id, a: nested(true), z: optional(aRef('shape')) }, defs: held(aNumber) }),
+      aService({ body: { id, a: nested(false), z: optional(aRef('shape')) }, defs: held(aNumber) }),
+    );
+    const proposed = aService({
+      body: { id, a: nested(true), z: optional(aRef('shape')) },
+      defs: held(aString),
+    });
+
+    const lines = linesOf(baseline, proposed);
+
+    expect(lines).toEqual([
+      'additive field-added at input.body.a.d',
+      'breaking type-changed at defs.shape.x',
     ]);
   });
 
@@ -700,8 +722,8 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     expect([Object.keys(entry?.defs ?? {}), lines]).toEqual([
       ['tree~1'],
       [
-        'additive field-added at input.body.left.label',
-        'breaking type-changed at input.body.left.label removedIn=1.1.0',
+        'additive field-added at defs.tree.label',
+        'breaking type-changed at defs.tree.label removedIn=1.1.0',
       ],
     ]);
   });
@@ -724,10 +746,7 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
 
     expect([Object.keys(published.formerInputs[0]?.defs ?? {}), lines]).toEqual([
       ['p~1', 'p~2'],
-      [
-        'additive field-added at input.body.x.c',
-        'breaking type-changed at input.body.y.c removedIn=1.1.0',
-      ],
+      ['additive field-added at defs.p.c', 'breaking type-changed at defs.p.c removedIn=1.1.0'],
     ]);
   });
 
@@ -864,8 +883,8 @@ describe('publishedSnapshotOf: an Endpoint’s former Inputs', () => {
     );
 
     expect(lines).toEqual([
-      'additive field-added at input.body.b.y.d',
-      'breaking type-changed at input.body.b.y.d removedIn=1.1.0',
+      'additive field-added at defs.y.d',
+      'breaking type-changed at defs.y.d removedIn=1.1.0',
     ]);
   });
 
@@ -1260,7 +1279,7 @@ function isWellFormed(former: FormerInput, { proposed, published }: Published): 
 function shapeKeyOf(change: Change): string | undefined {
   const { difference } = change;
   return difference.kind === 'schema'
-    ? JSON.stringify([placeOf(difference.at), difference.shape])
+    ? JSON.stringify([placeOf(difference.at, difference.def), difference.shape])
     : undefined;
 }
 

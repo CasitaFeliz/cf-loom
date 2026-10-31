@@ -8,6 +8,7 @@ import {
   type Site,
   type Step,
   siteTextOf,
+  snapshotPathOf,
   tokenOf,
   walkSchemas,
 } from '../internal/index.ts';
@@ -64,8 +65,43 @@ describe('authorPathOf', () => {
     },
   );
 
+  test.for([
+    ['no steps', [], 'tree', 'defs.tree'],
+    ['a field', [field('name')], 'tree', 'defs.tree.name'],
+    ['an array', [field('children'), { kind: 'items' }], 'tree', 'defs.tree.children[]'],
+    ['an id that is no plain token', [field('x')], 'two words', 'defs."two words".x'],
+  ] as const satisfies readonly (readonly [string, readonly Step[], string, string])[])(
+    'steps below a recursive schema start at its id: %s',
+    ([, steps, def, text]) => {
+      expect(authorPathOf(steps, def)).toBe(text);
+    },
+  );
+
+  test.for(['tree', 'two words', 'constructor'])(
+    'a recursive schema is named in a path as a failure names it as a site: %s',
+    (def) => {
+      expect(authorPathOf([], def)).toBe(siteTextOf({ kind: 'def', name: def }));
+    },
+  );
+
   test('a text on a line is itself when it is plain and JSON otherwise', () => {
     expect([tokenOf('getOrder'), tokenOf('two words')]).toEqual(['getOrder', '"two words"']);
+  });
+});
+
+describe('snapshotPathOf', () => {
+  test('steps below a recursive schema are a Snapshot path from its id in defs', () => {
+    const steps = [field('children'), { kind: 'items' }] as const;
+
+    expect([
+      snapshotPathOf(steps),
+      snapshotPathOf(steps, 'tree'),
+      snapshotPathOf([], 'tree'),
+    ]).toEqual([
+      ['fields', 'children', 'items'],
+      ['defs', 'tree', 'fields', 'children', 'items'],
+      ['defs', 'tree'],
+    ]);
   });
 });
 
