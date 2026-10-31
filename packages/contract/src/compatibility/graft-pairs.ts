@@ -1,4 +1,5 @@
 import { heldNodeOf, type SchemaNode, type Step } from '../walker/index.ts';
+import { isUnchangedRefPair } from './def-comparison.ts';
 import type { NodePair } from './findings.ts';
 import { placeCopy } from './graft-copy.ts';
 import { followedPairOf, graftRecorded, pairMet } from './graft-names.ts';
@@ -48,9 +49,15 @@ function graftField(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>, step: 
 /**
  * A pair as the graft follows it, each `ref` resolved to the def it stands for: built in place
  * when the proposed side is written inline, else a `ref` to its def, held as the Snapshot declares
- * it or named apart, built once.
+ * it or named apart, built once. A pair of `ref`s naming one def the def comparison finds nothing
+ * differing in is held as the proposed side writes it and not followed, since nothing in it is
+ * grafted.
  */
 export function placePair(walk: Walk, pair: NodePair, place: Place): void {
+  if (isUnchangedRefPair(pair, walk.defs)) {
+    place.put(pair.proposed);
+    return;
+  }
   const followed = followedPairOf(pair, walk.resolve);
   if (pair.proposed.type !== 'ref') {
     pushGraft(walk, followed.pair, place);
