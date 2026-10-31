@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { collectGarbage } from '../../test/collected.ts';
 import { growthOf } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
@@ -1379,7 +1378,6 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
     ([, name]) => {
       const holder = holders[name];
       const told = (size: number) => {
-        collectGarbage();
         const top = twiceHeldChain(size, z.date(), holder);
         const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
         return () => linesOf(root);
@@ -1402,7 +1400,6 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
     { timeout: growthTimeout },
     ([, name]) => {
       const told = (size: number) => {
-        collectGarbage();
         const top = twiceHeldChain(size, z.string(), holders[name]);
         const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
         return () => linesOf(root);
@@ -1454,7 +1451,6 @@ describe('failure lines: a shared schema held by many fields below a chain of de
   }, () => {
     const wide = 4000;
     const told = (size: number) => {
-      collectGarbage();
       const root = widelyHeldRoot(size);
       return () => linesOf(root);
     };
