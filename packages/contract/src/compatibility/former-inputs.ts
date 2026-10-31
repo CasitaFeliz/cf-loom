@@ -1,9 +1,8 @@
-import {
-  type EndpointSnapshot,
-  type FormerInput,
-  formerInputsOf,
-  type PublishedServiceSnapshot,
-  type ServiceSnapshot,
+import type {
+  EndpointSnapshot,
+  FormerInput,
+  PublishedServiceSnapshot,
+  ServiceSnapshot,
 } from '../snapshot/index.ts';
 import { canonicalJson, type Defs } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
@@ -12,11 +11,24 @@ import { type GraftSource, graftedInputOf, type ReadDefs, readDefsOf } from './g
 import { comparedShapesOf, type Pair, pairsOf } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 
-/** A Service's Baseline and the declared Snapshot checked against it. */
+/** A Service's Baseline and the declared Snapshot checked against it, and the Baseline's former Inputs by Endpoint, oldest first. */
 export type CheckedService = {
   readonly baseline: PublishedServiceSnapshot;
   readonly proposed: ServiceSnapshot;
+  readonly formers: ReadonlyMap<string, readonly FormerInput[]>;
 };
+
+/** A Service's Baseline and the declared Snapshot to check against it, with the Baseline's former Inputs grouped once. */
+export function checkedServiceOf(
+  baseline: PublishedServiceSnapshot,
+  proposed: ServiceSnapshot,
+): CheckedService {
+  return {
+    baseline,
+    proposed,
+    formers: Map.groupBy(baseline.formerInputs, (former) => former.endpoint),
+  };
+}
 
 type SchemaDifference = Extract<Difference, { readonly kind: 'schema' }>;
 
@@ -39,7 +51,7 @@ export function formerInputDifferencesOf(
     proposed: compared.proposed,
     defs: checked.proposed.defs,
   };
-  const newestFirst = [...formerInputsOf(checked.baseline, pair.identity)].reverse();
+  const newestFirst = (checked.formers.get(pair.identity) ?? []).toReversed();
   const tagged = newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
   const seen = new Set(reported.filter(isSchemaDifference).map(placedShapeOf));
   const found: Difference[] = [];
@@ -87,7 +99,7 @@ export function formerInputsMerged(
     return [];
   }
   const merge = {
-    checked: { baseline, proposed },
+    checked: checkedServiceOf(baseline, proposed),
     read: { baseline: readDefsOf(baseline.defs), proposed: readDefsOf(proposed.defs) },
   };
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
@@ -119,7 +131,7 @@ function keptFormerInputsOf(
     removedIn: version,
     source: { input: { query, body }, ...merge.read.baseline },
   };
-  const stored = formerInputsOf(merge.checked.baseline, pair.identity).map(
+  const stored = (merge.checked.formers.get(pair.identity) ?? []).map(
     (former): Rewritten => ({
       endpoint: former.endpoint,
       removedIn: former.removedIn,

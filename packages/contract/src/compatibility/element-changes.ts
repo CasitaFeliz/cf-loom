@@ -9,7 +9,11 @@ import { messageBodyDifferencesOf } from './bodies.ts';
 import { changesAt } from './changes.ts';
 import { endpointDifferencesOf, endpointSiteOf } from './endpoints.ts';
 import { type BothDefs, bothDefsOf } from './findings.ts';
-import { type CheckedService, formerInputDifferencesOf } from './former-inputs.ts';
+import {
+  type CheckedService,
+  checkedServiceOf,
+  formerInputDifferencesOf,
+} from './former-inputs.ts';
 import { lifecycleDifferenceOf } from './lifecycle.ts';
 import { historyDifferencesOf, type MessageHistory, messageHistoryOf } from './message-history.ts';
 import { endpointNeutralOf, messageNeutralOf } from './neutral.ts';
@@ -28,7 +32,7 @@ export function endpointChangesOf(
   baseline: PublishedServiceSnapshot,
   proposed: ServiceSnapshot,
 ): readonly Change[] {
-  const checked = { baseline, proposed };
+  const checked = checkedServiceOf(baseline, proposed);
   const paths = endpointPathsOf(baseline, proposed);
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
     endpointPairChangesOf(pair, checked, paths),
