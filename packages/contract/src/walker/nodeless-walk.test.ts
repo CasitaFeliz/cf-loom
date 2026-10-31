@@ -110,6 +110,7 @@ function isUnhidden(graph: NodelessGraph, groups: readonly Group[], group: Group
 
 /** How the walk enters the schemas with an id: in what order, in which declaration, and which it enters while it walks each. */
 type Trace = {
+  readonly graph: NodelessGraph;
   readonly entries: readonly { index: number; declaration: number }[];
   readonly below: ReadonlyMap<number, ReadonlySet<number>>;
 };
@@ -146,7 +147,7 @@ function traceOf(graph: NodelessGraph): Trace {
   for (const [declaration, root] of graph.declarations.entries()) {
     enter(root, declaration);
   }
-  return { entries, below };
+  return { graph, entries, below };
 }
 
 function reaches(graph: NodelessGraph, groups: readonly Group[], index: number): boolean {
@@ -238,38 +239,51 @@ function casesOfGroup(graph: NodelessGraph, group: Group, groups: readonly Group
 }
 
 /**
- * The members of a group of schemas that fail on their own: those that hold, with at most unnamed
- * schemas between, a schema outside the group of schemas that reaches a nodeless group, and those
- * that enter such a member while they are walked. None when a member that stands holds one that
- * failed before it, whose failure it would meet; the examples cover that shape.
+ * Whether a member holds a member of its group of schemas that failed before it and that it does
+ * not enter itself: one entered before it, not its ancestor, that failed on its own or sits below
+ * one that did and is not its ancestor, whose failure it meets.
+ */
+function meetsFailed(trace: Trace, failed: ReadonlySet<number>, member: number): boolean {
+  const { graph } = trace;
+  const order = (index: number) => trace.entries.findIndex((entry) => entry.index === index);
+  const isBelow = (above: number, under: number) => trace.below.get(above)?.has(under) === true;
+  const walkGroup = cycleOf(graph, allStepsOf, member);
+  const isBefore = (other: number) => order(other) < order(member) && !isBelow(other, member);
+  return allStepsOf(graph, member).some(
+    (to) =>
+      walkGroup.includes(to) &&
+      to !== member &&
+      isBefore(to) &&
+      (failed.has(to) || [...failed].some((other) => isBelow(other, to) && isBefore(other))),
+  );
+}
+
+/**
+ * The members of a group of schemas that fail on their own: those that hold, outside the group, a
+ * schema that reaches a nodeless group, those with a member below them that fails on its own, and
+ * those that hold a member that failed before them.
  */
 function failingOnTheirOwn(
   graph: NodelessGraph,
   groups: readonly Group[],
   walkGroup: readonly number[],
-): ReadonlySet<number> | undefined {
-  const { entries, below } = traceOf(graph);
-  const entered = (member: number) => entries.findIndex((entry) => entry.index === member);
-  const leaking = walkGroup.filter((member) =>
-    allStepsOf(graph, member).some((to) => !walkGroup.includes(to) && reaches(graph, groups, to)),
-  );
-  const failing = walkGroup.filter(
-    (member) =>
-      leaking.includes(member) || leaking.some((other) => below.get(member)?.has(other) === true),
-  );
-  const failed = new Set(failing.flatMap((member) => [member, ...(below.get(member) ?? [])]));
-  const meetsFailed = walkGroup.some(
-    (member) =>
-      !failing.includes(member) &&
-      allStepsOf(graph, member).some(
-        (to) =>
-          failed.has(to) &&
-          to !== member &&
-          below.get(to)?.has(member) !== true &&
-          entered(to) < entered(member),
-      ),
-  );
-  return meetsFailed ? undefined : new Set(failing);
+): ReadonlySet<number> {
+  const trace = traceOf(graph);
+  const failed = new Set<number>();
+  for (let isChanged = true; isChanged; ) {
+    isChanged = false;
+    for (const member of walkGroup.filter((other) => !failed.has(other))) {
+      const isLeaking = allStepsOf(graph, member).some(
+        (to) => !walkGroup.includes(to) && reaches(graph, groups, to),
+      );
+      const hasFailedBelow = [...failed].some((other) => trace.below.get(member)?.has(other));
+      if (isLeaking || hasFailedBelow || meetsFailed(trace, failed, member)) {
+        failed.add(member);
+        isChanged = true;
+      }
+    }
+  }
+  return failed;
 }
 
 /** The cycles among the members of a group of schemas that stand, which the walk judges when the group closes. */
@@ -280,9 +294,6 @@ function standingCyclesOf(
 ): readonly Group[] {
   const walkGroup = cycleOf(graph, allStepsOf, group.members[0] ?? 0);
   const failing = failingOnTheirOwn(graph, groups, walkGroup);
-  if (failing === undefined) {
-    return [];
-  }
   const standing = walkGroup.filter((member) => !failing.has(member));
   const stepsAmongStanding: Steps = (inner, index) =>
     nodelessStepsOf(inner, index).filter((to) => standing.includes(to));
@@ -310,34 +321,35 @@ function toldIn(graph: NodelessGraph) {
   };
 }
 
-/**
- * What the walk got wrong of a graph: a schema told off every group or twice, and a cycle among
- * the members that stand, left untold or told away from its first entered member.
- */
-function problemsOfTold(graph: NodelessGraph): readonly string[] {
+/** The cycles the walk is expected to tell of a graph, each as the schema entered first and where. */
+function expectedToldOf(graph: NodelessGraph): readonly string[] {
   const groups = nodelessGroupsOf(graph);
   const { entries } = traceOf(graph);
-  const { told, others } = toldIn(graph);
-  const problems = others.map(({ construct }) => `refused ${construct}`);
-  for (const { index } of told) {
-    const isOffGroups = !groups.some((group) => group.members.includes(index));
-    const count = told.filter((other) => other.index === index).length;
-    holds(problems, isOffGroups, `n${index} told off any group`);
-    holds(problems, count > 1, `n${index} told ${count} times`);
-  }
-  const standing = new Map(
+  const cycles = new Map(
     groups
       .flatMap((group) => standingCyclesOf(graph, groups, group))
       .map((cycle) => [cycle.members.join(), cycle]),
   );
-  for (const cycle of standing.values()) {
-    const first = entries.find((entry) => cycle.members.includes(entry.index));
-    const inCycle = told.filter(({ index }) => cycle.members.includes(index));
-    const expected = `n${first?.index} at exports.r${first?.declaration}`;
-    const actual = inCycle.map(({ index, site }) => `n${index} at ${site}`);
-    const text = `cycle ${cycle.members}: ${actual.join()} not ${expected}`;
-    holds(problems, actual.join() !== expected, text);
-  }
+  return [...cycles.values()]
+    .map((cycle) => entries.find((entry) => cycle.members.includes(entry.index)))
+    .map((first) => `n${first?.index} at exports.r${first?.declaration}`)
+    .sort();
+}
+
+/**
+ * What the walk got wrong of a graph: a cycle refused that is no cycle of the standing members,
+ * told twice or told away from its first entered member, or one of them left untold.
+ */
+function problemsOfTold(graph: NodelessGraph): readonly string[] {
+  const { told, others } = toldIn(graph);
+  const problems = others.map(({ construct }) => `refused ${construct}`);
+  const actual = told.map(({ index, site }) => `n${index} at ${site}`).sort();
+  const expected = expectedToldOf(graph);
+  holds(
+    problems,
+    actual.join() !== expected.join(),
+    `told ${actual.join()} not ${expected.join()}`,
+  );
   return problems;
 }
 
@@ -351,7 +363,7 @@ function isPartlyHidden(graph: NodelessGraph): boolean {
 }
 
 describe('walkSchemas: nodeless cycles of random graphs', () => {
-  test('the walk tells each cycle that no failure of its own fails once, at its first entered member, and a schema off every group or twice never', () => {
+  test('the walk tells each set of standing schemas that lead back to each other once, at its first entered member, and nothing else', () => {
     const wrong: string[] = [];
 
     for (const [position, graph] of graphs.entries()) {
@@ -364,7 +376,7 @@ describe('walkSchemas: nodeless cycles of random graphs', () => {
     expect(wrong).toEqual([]);
   });
 
-  test('the walk tells each cycle that stands in a group a failure partly hides once, at its first entered member', () => {
+  test('the walk tells the standing schemas of a group a failure partly hides the same', () => {
     const wrong: string[] = [];
     const drawn = Array.from({ length: 40_000 }, (_, index) => ({
       seed: index + 5_001,

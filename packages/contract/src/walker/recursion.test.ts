@@ -634,6 +634,38 @@ describe('walkSchemas: recursion', () => {
         });
       });
 
+      test('a def that holds a def that failed before it fails with it, so its own cycle is not told', () => {
+        const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
+        const entry: z.ZodType = z.lazy(() => top).meta({ id: 'entry' });
+        const top: z.ZodType = z
+          .union([
+            z.intersection(
+              z.object({ a: z.string() }),
+              z.lazy(() => holder),
+            ),
+            z.lazy(() => loop),
+          ])
+          .meta({ id: 'top' });
+        const holder: z.ZodType = z
+          .object({
+            below: z.lazy(() => below),
+            get entry() {
+              return entry;
+            },
+          })
+          .meta({ id: 'holder' });
+        const loop: z.ZodType = z
+          .union([z.lazy(() => loop), z.array(z.lazy(() => holder))])
+          .meta({ id: 'loop' });
+
+        const walked = walkBody(entry);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '<|0>[1].below', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
       test('a group whose root is an object with no id fails with its cycle and writes no def', () => {
         const entry: z.ZodType = z.object({
           get next() {
