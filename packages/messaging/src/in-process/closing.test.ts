@@ -209,11 +209,10 @@ describe('inProcess() consuming and closing', () => {
       const first = await aMessagingOver(ordersContract, broker);
       const gate = aGate();
       await first.consume(handlersOf([], { charge: () => gate.opened }), {});
-      await first.sender.send('ChargeCard', order('o-1'), { factId: 'f-1' });
-      await vi.advanceTimersByTimeAsync(1_000);
-      for (let sent = 2; sent <= messages; sent++) {
+      for (let sent = 1; sent <= messages; sent++) {
         await first.sender.send('ChargeCard', order(`o-${sent}`), { factId: `f-${sent}` });
       }
+      await vi.advanceTimersByTimeAsync(1_000);
       await first.close({ signal: AbortSignal.abort() }).catch(() => undefined);
 
       const second = await aMessagingOver(ordersContract, broker);

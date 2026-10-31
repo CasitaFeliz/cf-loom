@@ -96,6 +96,56 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     expect(whenSendResolved).toBe(0);
   });
 
+  test('two Messages sent in a row reach the Handler in the order sent', async () => {
+    vi.useFakeTimers();
+    const received: Received[] = [];
+    const orders = await aMessagingOver(ordersContract, inProcess(thirtySeconds));
+    await orders.consume(handlersOf(received), {});
+
+    for (const orderId of ['o-1', 'o-2', 'o-3']) {
+      await orders.sender.send('ChargeCard', { orderId }, { factId: orderId });
+    }
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(received.map(({ body }) => body)).toEqual([
+      { orderId: 'o-1' },
+      { orderId: 'o-2' },
+      { orderId: 'o-3' },
+    ]);
+  });
+
+  test('a pending Message comes back after a Message lined up before its wait passed', async () => {
+    vi.useFakeTimers();
+    const received: Received[] = [];
+    const limits = { durableConsumerDefaults: { ackWait: '10s', maxDeliver: 3 } } as const;
+    const orders = await aMessagingOver(ordersContract, inProcess(limits), {
+      onServiceFault: () => undefined,
+    });
+    const gate = aGate();
+    const behavior: Behavior = ({ body, meta }) => {
+      const { orderId } = body as { orderId: string };
+      if (orderId === 'o-1' && meta.deliveryCount === 1) {
+        throw new Error('the Handler failed');
+      }
+      return orderId === 'o-2' ? gate.opened : undefined;
+    };
+    await orders.consume(handlersOf(received, { charge: behavior }), {});
+    await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+    await vi.advanceTimersByTimeAsync(8_000);
+    await orders.sender.send('ChargeCard', { orderId: 'o-2' }, { factId: 'f-2' });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await orders.sender.send('ChargeCard', { orderId: 'o-3' }, { factId: 'f-3' });
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    gate.open();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const starts = received.map(
+      ({ body, meta }) => `${(body as { orderId: string }).orderId} ${meta.deliveryCount}`,
+    );
+    expect(starts).toEqual(['o-1 1', 'o-2 1', 'o-3 1', 'o-1 2']);
+  });
+
   test('a Handler that throws gets the Message again once its ack wait passed, as delivery 2', async () => {
     vi.useFakeTimers();
     const received: Received[] = [];
