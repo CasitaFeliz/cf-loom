@@ -25,6 +25,8 @@ export type Entered = Entering & {
   isOpen: boolean;
   isOnCycle: boolean;
   answer: Walked | undefined;
+  /** The def it wrote, kept once a failure takes the def's place, so its group's judgement still reads it. */
+  def: SchemaNode | undefined;
   /**
    * Once it failed as a def, the end of `open` at that moment: every member between its slot and
    * here is no def any more, so a later failure passes over them.
@@ -39,7 +41,6 @@ export type State = {
   readonly open: Entered[];
   readonly remembered: Remembered;
   readonly schemaById: Map<string, core.$ZodType>;
-  readonly defById: Map<string, SchemaNode>;
   readonly memos: Memos;
   count: number;
 };

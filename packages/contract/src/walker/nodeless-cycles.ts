@@ -8,21 +8,18 @@ import type { SchemaNode } from './nodes.ts';
 export function defsLeadingBackWithNoNodeOf(
   defs: ReadonlyMap<string, SchemaNode>,
 ): ReadonlySet<string> {
-  return cycleMembersFrom(defs.keys(), (name) => defs.get(name));
+  return new Set(nodelessCyclesOf(defs).flat());
 }
 
 /**
- * Whether a def leads back to itself through `ref`s, `union` options and `allOf` items alone,
- * with no other node between, which zod's parse never ends on; a `ref` to a name with no def
- * leads nowhere. The def need not be among `defs` yet, as when the walk writes it.
+ * Every nodeless cycle among the defs: the names of each strongly connected group of the steps
+ * with no node between that holds two defs or more, or a def stepping to itself, which zod's
+ * parse never ends on. A `ref` to a name the defs do not hold leads nowhere.
  */
-export function leadsBackWithNoNode(
-  name: string,
-  def: SchemaNode,
+export function nodelessCyclesOf(
   defs: ReadonlyMap<string, SchemaNode>,
-): boolean {
-  const defOf = (other: string) => (other === name ? def : defs.get(other));
-  return cycleMembersFrom([name], defOf).has(name);
+): readonly (readonly string[])[] {
+  return cycleMembersFrom(defs);
 }
 
 /** A def met by the search: its order, the lowest order it steps back to, and its steps. */
@@ -34,32 +31,32 @@ type Entry = {
   readonly steps: readonly string[];
   /** How many of the steps are read. */
   next: number;
+  /** Whether one of its steps is the def itself. */
+  isSelfStep: boolean;
 };
 
 type Search = {
-  readonly defOf: (name: string) => SchemaNode | undefined;
+  readonly defs: ReadonlyMap<string, SchemaNode>;
   readonly entries: Map<string, Entry>;
   /** The defs of the groups not closed yet, in the order they were met. */
   readonly open: Entry[];
-  readonly onCycle: Set<string>;
+  /** The groups that hold a cycle, each as the names of its defs. */
+  readonly groups: string[][];
 };
 
 /**
- * Every def on a cycle of the steps with no node between, among those reached from the starts:
- * a strongly connected group of two or more, or a def stepping to itself; read with an explicit
- * stack, one frame per def, and a name `defOf` gives no def for has no steps and leads nowhere.
+ * Every strongly connected group of the steps with no node between among the defs that holds a
+ * cycle: two defs or more, or a def stepping to itself; read with an explicit stack, one frame
+ * per def, and a name with no def has no steps and leads nowhere.
  */
-function cycleMembersFrom(
-  starts: Iterable<string>,
-  defOf: (name: string) => SchemaNode | undefined,
-): ReadonlySet<string> {
-  const search: Search = { defOf, entries: new Map(), open: [], onCycle: new Set() };
-  for (const start of starts) {
+function cycleMembersFrom(defs: ReadonlyMap<string, SchemaNode>): readonly (readonly string[])[] {
+  const search: Search = { defs, entries: new Map(), open: [], groups: [] };
+  for (const start of defs.keys()) {
     if (!search.entries.has(start)) {
       readFrom(start, search);
     }
   }
-  return search.onCycle;
+  return search.groups;
 }
 
 function readFrom(start: string, search: Search): void {
@@ -85,9 +82,9 @@ function readFrom(start: string, search: Search): void {
 /** A def met for the first time, in an open group of its own. */
 function enter(name: string, search: Search): Entry {
   const index = search.entries.size;
-  const def = search.defOf(name);
+  const def = search.defs.get(name);
   const steps = def === undefined ? [] : nodelessDefsFrom(def);
-  const entry: Entry = { name, index, low: index, isOpen: true, steps, next: 0 };
+  const entry: Entry = { name, index, low: index, isOpen: true, steps, next: 0, isSelfStep: false };
   search.entries.set(name, entry);
   search.open.push(entry);
   return entry;
@@ -96,7 +93,7 @@ function enter(name: string, search: Search): Entry {
 /** One step of a def: a def met first is entered, one in an open group is stepped back to. */
 function stepTo(from: Entry, name: string, search: Search): Entry | undefined {
   if (name === from.name) {
-    search.onCycle.add(name);
+    from.isSelfStep = true;
     return undefined;
   }
   const met = search.entries.get(name);
@@ -122,10 +119,8 @@ function closeGroup(entry: Entry, search: Search): void {
       break;
     }
   }
-  if (group.length > 1) {
-    for (const member of group) {
-      search.onCycle.add(member.name);
-    }
+  if (group.length > 1 || entry.isSelfStep) {
+    search.groups.push(group.map((member) => member.name));
   }
 }
 
