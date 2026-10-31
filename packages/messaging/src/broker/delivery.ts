@@ -23,12 +23,15 @@ function isLastDelivery(maxDeliver: number, deliveryCount: number): boolean {
   return maxDeliver > 0 && deliveryCount >= maxDeliver;
 }
 
+/** A Delivery whose wait the Broker knows, as an adapter that reads its Durable consumer's limits makes it. */
+export type TimedDelivery = Delivery & { readonly waitMs: number };
+
 /** The Delivery of a held Message as its Durable consumer's limits decide it: which attempt, whether the last, and its wait, always known. */
 export function deliveryOf(
   limits: DeliveryLimits,
   message: HeldMessage,
   deliveryCount: number,
-): Delivery & { readonly waitMs: number } {
+): TimedDelivery {
   const { messageId, factId, headers, body } = message;
   const lastAttempt = isLastDelivery(limits.maxDeliver, deliveryCount);
   const waitMs = deliveryWaitOf(limits.waits, deliveryCount);

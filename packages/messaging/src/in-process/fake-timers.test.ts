@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test, vi } from 'vitest';
-import { handlersOf, ordersContract, type Received } from '../../test/orders.ts';
+import { type Behavior, handlersOf, ordersContract, type Received } from '../../test/orders.ts';
 import { messaging } from '../index.ts';
 import { inProcess } from './index.ts';
 
@@ -36,5 +36,28 @@ describe('inProcess() under fake timers installed before it loads', () => {
 
     expect([beforeTimers, afterHandOut, beforeTheWait, afterTheWait]).toEqual([0, 1, 1, 2]);
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
+  });
+
+  test('with only the timers faked, delivery 2 of a Command whose Handler ran past its wait comes at the wait, not a wait later', async () => {
+    vi.useRealTimers();
+    vi.useFakeTimers({
+      toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'],
+    });
+    const received: Received[] = [];
+    const running = await messaging(ordersContract, inProcess(limits), {
+      onServiceFault: () => undefined,
+    });
+    const hangs: Behavior = ({ meta }) =>
+      new Promise((resolve) => meta.signal.addEventListener('abort', () => resolve(undefined)));
+    await running.consume(handlersOf(received, { charge: hangs }), {});
+    await running.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
+
+    await vi.advanceTimersByTimeAsync(29_000);
+    const beforeTheWait = received.length;
+    await vi.advanceTimersByTimeAsync(2_000);
+    const afterTheWait = received.length;
+    await running.close();
+
+    expect([beforeTheWait, afterTheWait]).toEqual([1, 2]);
   });
 });

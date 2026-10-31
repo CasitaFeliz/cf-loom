@@ -243,6 +243,20 @@ describe('inProcess() consuming and closing', () => {
     expect(receivedBySecond.map(({ body }) => body)).toEqual([order('o-1')]);
   });
 
+  test('a Delivery that close({ signal }) hands back leaves no timer waiting for a redelivery', async () => {
+    vi.useFakeTimers();
+    const first = await aMessagingOver(ordersContract, inProcess(thirtySeconds));
+    const gate = aGate();
+    await first.consume(handlersOf([], { charge: () => gate.opened }), {});
+    await first.sender.send('ChargeCard', order('o-1'), { factId: 'f-1' });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await first.close({ signal: AbortSignal.abort() }).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test('a Message handed back on its last attempt never comes again', async () => {
     vi.useFakeTimers();
     const broker = inProcess({ durableConsumerDefaults: { ackWait: '30s', maxDeliver: 1 } });

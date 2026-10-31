@@ -18,8 +18,8 @@ export function inProcessConnectionOf(
 ): BrokerConnection {
   return {
     publish: async (message) => {
-      for (const line of held.linesOf(message.subject)) {
-        line.lineUp(message);
+      for (const durableConsumer of held.durableConsumersOf(message.subject)) {
+        durableConsumer.lineUp(message);
       }
       return { duplicate: false };
     },
@@ -32,7 +32,7 @@ export function inProcessConnectionOf(
         return;
       }
       for (const { durableConsumer, limits: resolved } of resolving.resolved) {
-        held.lineFor(durableConsumer, resolved).pull(durableConsumer.receive, run.closing);
+        held.heldFor(durableConsumer, resolved).pull(durableConsumer.receive, run.closing);
       }
     },
     close: async () => {},

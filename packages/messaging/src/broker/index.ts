@@ -19,5 +19,5 @@ export type {
   ServiceStream,
   Settlement,
 } from './broker.ts';
-export type { DeliveryLimits, DeliveryWaits, HeldMessage } from './delivery.ts';
+export type { DeliveryLimits, DeliveryWaits, HeldMessage, TimedDelivery } from './delivery.ts';
 export { deliveryOf } from './delivery.ts';

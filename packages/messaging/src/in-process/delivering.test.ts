@@ -241,6 +241,39 @@ describe('inProcess() delivering to the Service’s own Handlers', () => {
     expect(deadlinesOf(faults)).toEqual([{ name: 'ChargeCard@1', waitMs: 30_000 }]);
   });
 
+  test('the last attempt arms no timer: once it settles, nothing is left waiting', async () => {
+    vi.useFakeTimers();
+    const limits = { durableConsumerDefaults: { ackWait: '30s', maxDeliver: 1 } } as const;
+    const orders = await aMessagingOver(ordersContract, inProcess(limits), {
+      onServiceFault: () => undefined,
+    });
+    await orders.consume(handlersOf([], { charge: failing }), {});
+    await orders.sender.send('ChargeCard', order, { factId: 'f-1' });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  const acknowledging: Behavior = () => undefined;
+  const ending: Behavior = () => fault({ committed: 'no', retryable: false, message: 'declined' });
+
+  test.each([
+    ['acknowledges it', acknowledging],
+    ['ends it', ending],
+  ])('a Handler that %s leaves no timer waiting for a redelivery', async (_, answer) => {
+    vi.useFakeTimers();
+    const orders = await aMessagingOver(ordersContract, inProcess(thirtySeconds), {
+      onServiceFault: () => undefined,
+    });
+    await orders.consume(handlersOf([], { charge: answer }), {});
+    await orders.sender.send('ChargeCard', order, { factId: 'f-1' });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test('a 30-day wait is timed in steps: the Message is not delivered again before it', async () => {
     vi.useFakeTimers();
     const received: Received[] = [];

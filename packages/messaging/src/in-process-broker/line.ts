@@ -5,6 +5,7 @@ import {
   deliveryOf,
   type HeldMessage,
   type Settlement,
+  type TimedDelivery,
 } from '../broker/index.ts';
 import { Fifo } from './fifo.ts';
 
@@ -14,21 +15,24 @@ type Lined = { readonly message: HeldMessage; readonly deliveryCount: number };
 /** One consuming connection's hand on a Durable consumer: it takes one Message at a time. */
 type Puller = { readonly receive: DurableConsumer['receive']; busy: boolean };
 
-/** What a Settlement needs of the Delivery it settles: when it started, how long it waits and whether it was the last. */
+/** A Delivery handed out, the Message as it is lined up again, and the timer of its wait. */
 type Handed = {
+  readonly delivery: TimedDelivery;
   readonly lined: Lined;
-  readonly startedMs: number;
-  readonly waitMs: number;
-  readonly lastAttempt: boolean;
+  isWaitOver: boolean;
+  isLeftPending: boolean;
+  stop: () => void;
 };
 
-/**
- * One Durable consumer held inside the process: its Messages in the order lined up, and the
- * connections pulling from it, each handed one Message at a time; a Message left pending comes
- * again at the tail once its wait, counted from the Delivery's start, has passed, one handed back
- * comes again at the head at once, and the delivery that reaches `maxDeliver` is the last.
- */
-export class DurableConsumerLine {
+const stopNothing = () => undefined;
+
+/** Whether a Message left pending is due: both its Settlement and its wait have come. */
+function isDue(handed: Handed): boolean {
+  return handed.isWaitOver && handed.isLeftPending;
+}
+
+/** One Durable consumer held inside the process, with the Messages lined up for it and the connections pulling one at a time from it. */
+export class HeldDurableConsumer {
   readonly #limits: DeliveryLimits;
   readonly #lined = new Fifo<Lined>();
   readonly #pullers = new Set<Puller>();
@@ -82,12 +86,14 @@ export class DurableConsumerLine {
     puller.busy = true;
     const deliveryCount = lined.deliveryCount + 1;
     const delivery = deliveryOf(this.#limits, lined.message, deliveryCount);
-    const handed = {
+    const handed: Handed = {
+      delivery,
       lined: { message: lined.message, deliveryCount },
-      startedMs: performance.now(),
-      waitMs: delivery.waitMs,
-      lastAttempt: delivery.lastAttempt,
+      isWaitOver: false,
+      isLeftPending: false,
+      stop: stopNothing,
     };
+    handed.stop = this.#timerOf(handed);
     void puller.receive(delivery).then((settlement) => {
       puller.busy = false;
       this.#settle(handed, settlement);
@@ -95,23 +101,44 @@ export class DurableConsumerLine {
     });
   }
 
+  /** Starts the wait of a Delivery that may come again; the last attempt has none. */
+  #timerOf(handed: Handed): () => void {
+    if (handed.delivery.lastAttempt) {
+      return stopNothing;
+    }
+    const waitOver = () => {
+      handed.isWaitOver = true;
+      if (isDue(handed)) {
+        this.#lineUpAgain(handed);
+      }
+    };
+    return afterWait(handed.delivery.waitMs, waitOver, 'lets-process-exit');
+  }
+
   #settle(handed: Handed, settlement: Settlement): void {
-    if (settlement === 'acked' || settlement === 'ended' || handed.lastAttempt) {
+    if (handed.delivery.lastAttempt) {
       return;
     }
-    if (settlement === 'handed-back') {
-      this.#lined.unshift(handed.lined);
-      return;
+    switch (settlement) {
+      case 'acked':
+      case 'ended':
+        handed.stop();
+        return;
+      case 'handed-back':
+        handed.stop();
+        this.#lined.unshift(handed.lined);
+        return;
+      case 'pending':
+        handed.isLeftPending = true;
+        if (isDue(handed)) {
+          this.#lineUpAgain(handed);
+        }
+        return;
     }
-    const { lined, startedMs, waitMs } = handed;
-    const leftMs = Math.max(0, startedMs + waitMs - performance.now());
-    afterWait(
-      leftMs,
-      () => {
-        this.#lined.push(lined);
-        this.#scheduleHandOut();
-      },
-      'lets-process-exit',
-    );
+  }
+
+  #lineUpAgain(handed: Handed): void {
+    this.#lined.push(handed.lined);
+    this.#scheduleHandOut();
   }
 }
