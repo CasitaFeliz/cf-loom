@@ -296,10 +296,11 @@ key set is pinned by one type test in its package's `types.test.ts`; a test neve
 (`growthOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
 `tsconfig.test.json` to import it, as billing does `nats-server.ts`): growth between two sizes of each dimension the plan
 names, or a ratio to a reference doing the same work without the behavior under test. A correctness test gets the
-project's timeout, never one sized on an idle machine. A test file reads no clock: `performance.now()`, `Date.now()`,
-`process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors **(lint)**, and the helpers
-that read one are not test files. *Why:* a shared runner slows a clock several times over; absolute bounds turned CI red
-at least eight times.
+project's timeout, never one sized on an idle machine. A test's fixtures fit the light budget
+([CLAUDE.md](CLAUDE.md#repository)); a row that needs more goes in a `*.heavy.test.ts` file, never a bigger budget for
+the project. A test file reads no clock: `performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage` and
+`process.threadCpuUsage` in a `*.test.ts` are errors **(lint)**, and the helpers that read one are not test files.
+*Why:* a shared runner slows a clock several times over; absolute bounds turned CI red at least eight times.
 
 ## Reviewing
 
