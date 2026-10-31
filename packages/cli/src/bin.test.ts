@@ -4507,10 +4507,10 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
     const tree = (description: string) =>
       [
         '(() => {',
-        'const tree = z.object({',
+        'const node = z.object({',
         `label: z.string().describe('${description}'),`,
-        "get children() { return z.array(tree); } }).meta({ id: 'tree' });",
-        'return tree; })()',
+        "get children() { return z.array(node); } }).meta({ id: 'constructor' });",
+        'return node; })()',
       ].join(' ');
     const changed = await aChangedProject(lab, {
       before: aRoot({ body: tree('Label') }),
@@ -4521,13 +4521,17 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
     const json = await checkedAgainst(lab, changed, '--json');
 
     expect(lines.ran.stdout.split('\n')[1]).toBe(
-      'endpoints.GET /ping (ping) schema annotation-changed at defs.tree.label (success) annotation=description: Neutral',
+      'endpoints.GET /ping (ping) schema annotation-changed at defs.constructor.label (success) annotation=description: Neutral',
     );
     const [change] = JSON.parse(json.ran.stdout).changes;
-    expect([change.path, change.difference.at, 'def' in change.difference]).toEqual([
-      'defs.tree.label',
-      ['defs', 'tree', 'fields', 'label'],
-      false,
+    expect([change.path, change.difference]).toEqual([
+      'defs.constructor.label',
+      {
+        kind: 'schema',
+        at: ['defs', 'constructor', 'fields', 'label'],
+        position: 'success',
+        shape: { kind: 'annotation-changed', annotation: 'description' },
+      },
     ]);
   });
 

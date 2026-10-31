@@ -1578,7 +1578,7 @@ const refRows: readonly Row[] = [
     ],
   },
   {
-    change: 'changing a def used at two fields, once, at the first path in walk order',
+    change: 'changing a def used at two fields is one Change, at the def',
     from: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     to: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     fromDefs: { tree },
@@ -1922,6 +1922,27 @@ describe('compatibilityReportOf, refs', () => {
       expect(snapshotPathsOf(after.changes)).toEqual([changeAt(place, treeNameAdded)]);
     },
   );
+
+  test('a def that an Endpoint’s Input and Success both reach, changed, is one Change in each Position', () => {
+    const body = anObject({ node: required(aRef('tree')) });
+    const endpoint = anEndpointReading(body, body);
+    const baseline = aBaseline({ defs: { tree }, endpoints: { 'POST /orders': aLive(endpoint) } });
+    const proposed = aProposed({
+      defs: { tree: treeWithName },
+      endpoints: { 'POST /orders': endpoint },
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, treeNameAdded),
+      changeAt(success, treeNameAdded),
+    ]);
+    expect(report.changes.map(({ class: changeClass }) => changeClass)).toEqual([
+      'breaking',
+      'additive',
+    ]);
+  });
 
   test.each(places)(
     'a ref’s own description is at the ref and its def’s own description at the def, in $name',
