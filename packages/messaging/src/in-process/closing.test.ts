@@ -83,7 +83,7 @@ describe('inProcess() consuming and closing', () => {
     expect(received.map(({ body }) => body)).toEqual([order('o-1')]);
   });
 
-  test('a Message lined up when the last connection consuming its Durable consumer closes is dropped: a later consume through the same inProcess() does not receive it', async () => {
+  test('a Message lined up when the last connection consuming its Durable consumer closes is kept: a later consume through the same inProcess() receives it', async () => {
     vi.useFakeTimers();
     const broker = inProcess(thirtySeconds);
     const first = await aMessagingOver(ordersContract, broker);
@@ -101,10 +101,10 @@ describe('inProcess() consuming and closing', () => {
     await later.consume(handlersOf(receivedLater), {});
     await vi.advanceTimersByTimeAsync(3_600_000);
 
-    expect(receivedLater).toEqual([]);
+    expect(receivedLater.map(({ body }) => body)).toEqual([order('o-2')]);
   });
 
-  test('a Message lined up when the only connection consuming its Durable consumer starts closing, with no Delivery in flight, is dropped', async () => {
+  test('a Message lined up when the only connection consuming its Durable consumer starts closing, with no Delivery in flight, is kept for the next consume', async () => {
     vi.useFakeTimers();
     const broker = inProcess(thirtySeconds);
     const first = await aMessagingOver(ordersContract, broker);
@@ -117,7 +117,7 @@ describe('inProcess() consuming and closing', () => {
     await later.consume(handlersOf(receivedLater), {});
     await vi.advanceTimersByTimeAsync(3_600_000);
 
-    expect(receivedLater).toEqual([]);
+    expect(receivedLater.map(({ body }) => body)).toEqual([order('o-1')]);
   });
 
   test('with another connection still consuming, a Message lined up when the first closes reaches the other', async () => {
@@ -136,7 +136,7 @@ describe('inProcess() consuming and closing', () => {
     expect(receivedBySecond.map(({ body }) => body)).toEqual([order('o-1')]);
   });
 
-  test('a Handler still running when the last connection closes leaves no timer behind: its failure, settled after closing aborted, schedules nothing, and the line is dropped', async () => {
+  test('a Handler still running when the last connection closes and then fails leaves its retry for the next consume, as delivery 2 after its wait', async () => {
     vi.useFakeTimers();
     const broker = inProcess(thirtySeconds);
     const first = await aMessagingOver(ordersContract, broker, { onServiceFault: () => undefined });
@@ -147,14 +147,15 @@ describe('inProcess() consuming and closing', () => {
     const closing = first.close();
     gate.open();
     await closing;
-    const timersLeft = vi.getTimerCount();
 
     const later = await aMessagingOver(ordersContract, broker);
     const receivedLater: Received[] = [];
     await later.consume(handlersOf(receivedLater), {});
-    await vi.advanceTimersByTimeAsync(3_600_000);
+    await vi.advanceTimersByTimeAsync(29_000);
+    const beforeTheWait = receivedLater.length;
+    await vi.advanceTimersByTimeAsync(1_000);
 
-    expect([timersLeft, receivedLater.length]).toEqual([0, 0]);
+    expect([beforeTheWait, receivedLater.map(({ meta }) => meta.deliveryCount)]).toEqual([0, [2]]);
   });
 
   test('a connection that consumes while the other is still closing receives the retry of the Handler that failed during that close', async () => {
@@ -198,6 +199,48 @@ describe('inProcess() consuming and closing', () => {
     expect(receivedBySecond.map(({ meta }) => [meta.deliveryCount, meta.lastAttempt])).toEqual([
       [2, false],
     ]);
+  });
+
+  test.each([2, 3])(
+    'a Delivery that close({ signal }) hands back, with %i Messages lined up in all, is the first the next connection receives, as delivery 2',
+    async (messages) => {
+      vi.useFakeTimers();
+      const broker = inProcess(thirtySeconds);
+      const first = await aMessagingOver(ordersContract, broker);
+      const gate = aGate();
+      await first.consume(handlersOf([], { charge: () => gate.opened }), {});
+      await first.sender.send('ChargeCard', order('o-1'), { factId: 'f-1' });
+      await vi.advanceTimersByTimeAsync(1_000);
+      for (let sent = 2; sent <= messages; sent++) {
+        await first.sender.send('ChargeCard', order(`o-${sent}`), { factId: `f-${sent}` });
+      }
+      await first.close({ signal: AbortSignal.abort() }).catch(() => undefined);
+
+      const second = await aMessagingOver(ordersContract, broker);
+      const receivedBySecond: Received[] = [];
+      await second.consume(handlersOf(receivedBySecond), {});
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      const received = receivedBySecond.map(({ body, meta }) => [body, meta.deliveryCount]);
+      const lined = Array.from({ length: messages - 1 }, (_, at) => [order(`o-${at + 2}`), 1]);
+      expect(received).toEqual([[order('o-1'), 2], ...lined]);
+    },
+  );
+
+  test('consuming, closing, then consuming again through the same inProcess() receives the next Command', async () => {
+    vi.useFakeTimers();
+    const broker = inProcess(thirtySeconds);
+    const first = await aMessagingOver(ordersContract, broker);
+    await first.consume(handlersOf([]), {});
+    await first.close();
+    const second = await aMessagingOver(ordersContract, broker);
+    const receivedBySecond: Received[] = [];
+    await second.consume(handlersOf(receivedBySecond), {});
+
+    await second.sender.send('ChargeCard', order('o-1'), { factId: 'f-1' });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(receivedBySecond.map(({ body }) => body)).toEqual([order('o-1')]);
   });
 
   test('a Message handed back on its last attempt never comes again', async () => {

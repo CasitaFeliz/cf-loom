@@ -26,22 +26,16 @@ type Handed = {
  * One Durable consumer held inside the process: its Messages in the order lined up, and the
  * connections pulling from it, each handed one Message at a time; a Message left pending comes
  * again at the tail once its wait, counted from the Delivery's start, has passed, one handed back
- * comes again at the head at once, and the delivery that reaches `maxDeliver` is the last. It holds
- * nothing once no connection pulls from it and no Delivery of it is in flight: it drops its Messages
- * and its timers and calls `release`, once.
+ * comes again at the head at once, and the delivery that reaches `maxDeliver` is the last.
  */
 export class DurableConsumerLine {
   readonly #limits: DeliveryLimits;
-  readonly #release: () => void;
-  #lined = new Fifo<Lined>();
+  readonly #lined = new Fifo<Lined>();
   readonly #pullers = new Set<Puller>();
-  readonly #redeliveries = new Set<() => void>();
-  #inFlight = 0;
   #isHandOutScheduled = false;
 
-  constructor(limits: DeliveryLimits, release: () => void) {
+  constructor(limits: DeliveryLimits) {
     this.#limits = limits;
-    this.#release = release;
   }
 
   /** Lines a Message up for its first delivery, handed out on a later turn of the event loop. */
@@ -54,26 +48,8 @@ export class DurableConsumerLine {
   pull(receive: DurableConsumer['receive'], closing: AbortSignal): void {
     const puller = { receive, busy: false };
     this.#pullers.add(puller);
-    closing.addEventListener('abort', () => this.#pullerLeft(puller), { once: true });
+    closing.addEventListener('abort', () => this.#pullers.delete(puller), { once: true });
     this.#scheduleHandOut();
-  }
-
-  #pullerLeft(puller: Puller): void {
-    this.#pullers.delete(puller);
-    this.#dropIfUnheld();
-  }
-
-  #dropIfUnheld(): boolean {
-    if (this.#pullers.size > 0 || this.#inFlight > 0) {
-      return false;
-    }
-    this.#lined = new Fifo();
-    for (const stop of this.#redeliveries) {
-      stop();
-    }
-    this.#redeliveries.clear();
-    this.#release();
-    return true;
   }
 
   #scheduleHandOut(): void {
@@ -104,7 +80,6 @@ export class DurableConsumerLine {
       return;
     }
     puller.busy = true;
-    this.#inFlight += 1;
     const deliveryCount = lined.deliveryCount + 1;
     const delivery = deliveryOf(this.#limits, lined.message, deliveryCount);
     const handed = {
@@ -115,11 +90,8 @@ export class DurableConsumerLine {
     };
     void puller.receive(delivery).then((settlement) => {
       puller.busy = false;
-      this.#inFlight -= 1;
       this.#settle(handed, settlement);
-      if (!this.#dropIfUnheld()) {
-        this.#scheduleHandOut();
-      }
+      this.#scheduleHandOut();
     });
   }
 
@@ -133,15 +105,13 @@ export class DurableConsumerLine {
     }
     const { lined, startedMs, waitMs } = handed;
     const leftMs = Math.max(0, startedMs + waitMs - performance.now());
-    const stop = afterWait(
+    afterWait(
       leftMs,
       () => {
-        this.#redeliveries.delete(stop);
         this.#lined.push(lined);
         this.#scheduleHandOut();
       },
       'lets-process-exit',
     );
-    this.#redeliveries.add(stop);
   }
 }
