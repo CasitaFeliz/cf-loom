@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { inShapeOrder, nodesIn } from '../../test/random-draft.ts';
 import { nodelessDefsOf } from '../../test/random-nodeless-defs.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
@@ -256,13 +256,6 @@ describe('decodeSnapshot, the defs that lead back to themselves with no node bet
 describe('decodeSnapshot, many defs', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /**
-   * How many times longer a Snapshot with eight times as many defs may take: about 8 for a
-   * decoder that reads each def once, and 64 for one that reads every def a def leads to, for
-   * each def.
-   */
-  const linearGrowth = 13;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -283,14 +276,14 @@ describe('decodeSnapshot, many defs', () => {
     return Object.fromEntries(entries);
   }
 
-  function decodedGrowth(defsOf: (count: number) => Defs) {
+  function decodedOrder(defsOf: (count: number) => Defs) {
     const prepare = (count: number) => {
       const text = textOf(defsOf(count));
       return () => decodeSnapshot(text);
     };
     const decoded = prepare(sizes.large)();
-    const growth = growthOf(prepare, sizes, linearGrowth);
-    return { decoded, growth };
+    const order = orderOf(prepare, sizes, orders.linear);
+    return { decoded, order };
   }
 
   test('a chain of union defs, each naming the one before it and on a cycle of its own through an object, is decoded in time that grows with its length', {
@@ -305,10 +298,10 @@ describe('decodeSnapshot, many defs', () => {
       ],
     });
 
-    const { decoded, growth } = decodedGrowth((count) => aChainOf(count, union));
+    const { decoded, order } = decodedOrder((count) => aChainOf(count, union));
 
     expect(decoded.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a chain of allOf defs, each naming the one before it and on a cycle of its own through an object, is decoded in time that grows with its length', {
@@ -322,10 +315,10 @@ describe('decodeSnapshot, many defs', () => {
       ]),
     });
 
-    const { decoded, growth } = decodedGrowth((count) => aChainOf(count, allOf));
+    const { decoded, order } = decodedOrder((count) => aChainOf(count, allOf));
 
     expect(decoded.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a chain of alias defs, ending in an object that holds the first back, is decoded in time that grows with its length', {
@@ -336,10 +329,10 @@ describe('decodeSnapshot, many defs', () => {
         index === 0 ? holdingBack(`link${count - 1}`) : ref(`link${index - 1}`),
       );
 
-    const { decoded, growth } = decodedGrowth(aliasesOf);
+    const { decoded, order } = decodedOrder(aliasesOf);
 
     expect(decoded.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many union defs, each naming the head of one chain of alias defs, are decoded in time that grows with their number and the chain’s length', {
@@ -356,9 +349,9 @@ describe('decodeSnapshot, many defs', () => {
       return { ...chain, ...Object.fromEntries(unions) };
     };
 
-    const { decoded, growth } = decodedGrowth(unionsNamingTheChainHead);
+    const { decoded, order } = decodedOrder(unionsNamingTheChainHead);
 
     expect(decoded.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });

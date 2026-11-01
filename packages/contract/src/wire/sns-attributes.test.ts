@@ -1,6 +1,6 @@
 // biome-ignore-all lint/style/useNamingConvention: SNS spells its message attribute fields in PascalCase
 import { describe, expect, test } from 'vitest';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import {
   brokerHeaderBytesOf,
@@ -528,11 +528,6 @@ describe('the Broker headers of a Message received', () => {
 });
 
 describe('the growth of encoding and reading SNS attributes back', () => {
-  /**
-   * How many times longer a shape eight times as large may take: 8 for a read that visits each part once,
-   * which a large object's allocation and collection stretch to 10 to 14, and 64 for one that copies at each part.
-   */
-  const linearGrowth = 24;
   const growthTimeout = 240_000;
   const widths = { small: 2_000, large: 16_000 };
   const lengths = { small: 20_000, large: 160_000 };
@@ -561,9 +556,9 @@ describe('the growth of encoding and reading SNS attributes back', () => {
         return () => snsAttributesOf(message);
       };
 
-      const growth = growthOf(encoding, sizes, linearGrowth);
+      const order = orderOf(encoding, sizes, orders.linear);
 
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );
@@ -579,16 +574,15 @@ describe('the growth of encoding and reading SNS attributes back', () => {
         return () => receivedSnsAttributesOf(attributes);
       };
 
-      const growth = growthOf(reading, sizes, linearGrowth);
+      const order = orderOf(reading, sizes, orders.linear);
 
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );
 });
 
 describe('the growth of reading foreign SNS attributes', () => {
-  const linearGrowth = 24;
   const growthTimeout = 240_000;
 
   test(
@@ -605,11 +599,11 @@ describe('the growth of reading foreign SNS attributes', () => {
 
       const accepted = aReading(30_000)();
       const refused = aReading(nearOneMebibyte)();
-      const growth = growthOf(aReading, { small: 4_000, large: 32_000 }, linearGrowth);
-      const growthBeyond = growthOf(
+      const order = orderOf(aReading, { small: 4_000, large: 32_000 }, orders.linear);
+      const orderBeyond = orderOf(
         aReading,
         { small: 125_000, large: nearOneMebibyte },
-        linearGrowth,
+        orders.linear,
       );
 
       expect(accepted.kind).toBe('read');
@@ -617,8 +611,8 @@ describe('the growth of reading foreign SNS attributes', () => {
         kind: 'missing',
         names: [snsMessageIdAttribute, snsFactIdAttribute, snsHeadersAttribute],
       });
-      expect(growth).toBeLessThan(linearGrowth);
-      expect(growthBeyond).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
+      expect(orderBeyond).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );
@@ -634,10 +628,10 @@ describe('the growth of reading foreign SNS attributes', () => {
       const deepest = 100_000;
 
       const read = aReading(deepest)();
-      const growth = growthOf(aReading, { small: deepest / 8, large: deepest }, linearGrowth);
+      const order = orderOf(aReading, { small: deepest / 8, large: deepest }, orders.linear);
 
       expect(read).toEqual({ kind: 'missing', names: [snsHeadersAttribute] });
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );

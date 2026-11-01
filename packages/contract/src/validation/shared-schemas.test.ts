@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
@@ -58,14 +58,6 @@ function serviceWith(endpoints: readonly Endpoint[], events: readonly Event[] = 
 const date = 'not allowed: z.date() (use z.iso.datetime())';
 const unionIsRefused =
   'not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)';
-
-/**
- * How much longer a shape may take at eight times the size: three times the growth of the size.
- * Linear code measures 7 to 14 times longer, in whole runs of this file and of the project on busy
- * cores, and when the CPU time is read in ticks of 10 ms; the quadratic code these tests were
- * written for measures 48 times or more.
- */
-const linearGrowth = 24;
 
 /**
  * A growth test builds and times its shape up to three times over, which takes up to 11 s while the
@@ -325,11 +317,6 @@ describe('failure lines: defs that hold defs', () => {
 
   const levels = 24;
   const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
-  /**
-   * How many times longer a chain twice as deep may take to tell: about 2 when each def is told
-   * once, and 2 to the power of its length when each of the paths to it tells it afresh.
-   */
-  const toldOnceGrowth = 8;
 
   test.for([
     ['a valid union', () => z.union([z.string(), z.number()]), []],
@@ -349,10 +336,10 @@ describe('failure lines: defs that hold defs', () => {
       };
 
       const lines = toldAt(levels)();
-      const growth = growthOf(toldAt, { small: 8, large: 16 }, toldOnceGrowth);
+      const order = orderOf(toldAt, { small: 8, large: 16 }, orders.polynomial);
 
       expect(lines).toEqual(told);
-      expect(growth).toBeLessThan(toldOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     },
   );
 });
@@ -916,12 +903,12 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     const firstPlace = `success.body.f00000${'.next'.repeat(count - 1)}.at`;
     expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has a def of `count` fields holding the same dated def. */
@@ -958,11 +945,11 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.holder.f000000.at ${date}`]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has `count` dated defs as fields, each holding the one before it. */
@@ -995,13 +982,13 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.c000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.c002999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
@@ -1055,13 +1042,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   const holdings: readonly (readonly [string, Holding])[] = [
@@ -1095,13 +1082,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
         return () => linesOf(root);
       };
 
-      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
       const lines = told(count)();
 
       expect(lines).toHaveLength(count);
       expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
       expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -1130,7 +1117,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(1);
@@ -1140,7 +1127,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       ),
     );
     expect(lines[0]?.split('endpoints.')).toHaveLength(count + 1);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has `count` dated defs of their own, beside `count` Endpoints with none. */
@@ -1172,13 +1159,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /e0 (e000000) success.body.d000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /e0 (e000000) success.body.d015999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
@@ -1383,12 +1370,12 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
         return () => linesOf(root);
       };
 
-      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
       const lines = told(count)();
 
       const firstPlace = `success.body.top${`.f${holder.steps}`.repeat(count)}.leaf`;
       expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -1405,11 +1392,11 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
         return () => linesOf(root);
       };
 
-      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
       const lines = told(count)();
 
       expect(lines).toEqual([]);
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 });
@@ -1455,12 +1442,12 @@ describe('failure lines: a shared schema held by many fields below a chain of de
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: wide / 8, large: wide }, linearGrowth);
+    const order = orderOf(told, { small: wide / 8, large: wide }, orders.linear);
     const lines = told(wide)();
 
     const firstField = `success.body.top${'.next'.repeat(wide)}.f000000`;
     expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstField} ${date}`]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 

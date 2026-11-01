@@ -29,7 +29,7 @@ import {
   endpointsNamingChain,
   wideBodyLosingField,
 } from '../../test/graft-shapes.ts';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
 import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { graftDrawOf, removalHistoryOf } from '../../test/random-grafts.ts';
@@ -1477,13 +1477,6 @@ describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over gene
 });
 
 describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', () => {
-  /**
-   * How many times longer a check of a shape eight times as large may take: about 8 for a check
-   * that reads each part once, and 64 for one that copies a part, scans a list or follows a chain
-   * again at each part.
-   */
-  const linearGrowth = 13;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -1535,10 +1528,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
       const { baseline, proposed } = shapeOf(3);
 
       const report = compatibilityReportOf(baseline, proposed);
-      const growth = growthOf(checked(shapeOf), endpointSizes, linearGrowth);
+      const order = orderOf(checked(shapeOf), endpointSizes, orders.linear);
 
       expect(report).toEqual({ changes: [] });
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -1548,10 +1541,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = wideBodyLosingField(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(checkedAndMerged(wideBodyLosingField), sizes, linearGrowth);
+    const order = orderOf(checkedAndMerged(wideBodyLosingField), sizes, orders.linear);
 
     expect(published.formerInputs.map(bodyFieldNamesOf)).toEqual([['f0', 'f1', 'f2']]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a chain of ids whose end lost a field is checked and merged in time that grows with its length', {
@@ -1560,12 +1553,12 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = chainLosingFieldAtEnd(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(checkedAndMerged(chainLosingFieldAtEnd), sizes, linearGrowth);
+    const order = orderOf(checkedAndMerged(chainLosingFieldAtEnd), sizes, orders.linear);
 
     expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
       ['c0~1', 'c1~1', 'c2~1'],
     ]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many defs naming the top of a long chain of alias defs whose end changed are grafted in time that grows with them', {
@@ -1574,10 +1567,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = defsNamingAnAliasChain(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(checkedAndMerged(defsNamingAnAliasChain), sizes, linearGrowth);
+    const order = orderOf(checkedAndMerged(defsNamingAnAliasChain), sizes, orders.linear);
 
     expect(published.formerInputs.map(bodyFieldNamesOf)).toEqual([['f0', 'f1']]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many Endpoints each losing a field beside many defs they do not reach are checked in time that grows with both', {
@@ -1586,10 +1579,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = endpointsLosingFieldBesideUnreachedDefs(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(
+    const order = orderOf(
       checkedAndMerged(endpointsLosingFieldBesideUnreachedDefs),
       sizes,
-      linearGrowth,
+      orders.linear,
     );
 
     expect(published.formerInputs.map(({ endpoint, defs }) => [endpoint, defs])).toEqual([
@@ -1597,7 +1590,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
       ['PUT /e1', {}],
       ['PUT /e2', {}],
     ]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a Baseline holding a Former Input for each of many Endpoints is checked in time that grows with them', {
@@ -1606,10 +1599,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = endpointsHoldingFormerInputEach(3);
 
     const report = compatibilityReportOf(baseline, proposed);
-    const growth = growthOf(checked(endpointsHoldingFormerInputEach), formerSizes, linearGrowth);
+    const order = orderOf(checked(endpointsHoldingFormerInputEach), formerSizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many Endpoints naming the top of one long chain of alias defs whose end changed are merged in time that grows with them', {
@@ -1618,10 +1611,10 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = endpointsNamingAnAliasChain(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(merged(endpointsNamingAnAliasChain), sizes, linearGrowth);
+    const order = orderOf(merged(endpointsNamingAnAliasChain), sizes, orders.linear);
 
     expect(published.formerInputs).toEqual([]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many defs named apart from one def’s name are merged in time that grows with them', {
@@ -1630,12 +1623,12 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     const { baseline, proposed } = defsNamedApartFromOne(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
-    const growth = growthOf(merged(defsNamedApartFromOne), endpointSizes, linearGrowth);
+    const order = orderOf(merged(defsNamedApartFromOne), endpointSizes, orders.linear);
 
     expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
       ['x~1', 'x~2', 'x~3'],
     ]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
