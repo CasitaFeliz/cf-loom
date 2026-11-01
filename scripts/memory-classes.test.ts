@@ -192,8 +192,8 @@ function commandsIn(text: string, matrix: Readonly<Record<string, string>> = {})
 }
 
 /**
- * The combinations of a job's matrix: the product of its lists, then each `include` entry as a
- * combination of its own. An entry that extends a combination of the lists, or an `exclude`, is
+ * The combinations of a job's matrix: the product of its lists, none when it has no list, then
+ * each `include` entry as a combination of its own. An entry that extends a combination of the lists, or an `exclude`, is
  * not expanded, and throws.
  */
 function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<string, string>[] {
@@ -201,7 +201,7 @@ function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<strin
   if (exclude !== undefined) {
     throw new Error('The matrix has an exclude, which this test does not expand.');
   }
-  let combinations: Record<string, string>[] = [{}];
+  let combinations: Record<string, string>[] = Object.keys(lists).length === 0 ? [] : [{}];
   for (const [key, values] of Object.entries(lists)) {
     combinations = combinations.flatMap((combination) =>
       (values as unknown[]).map((value) => ({ ...combination, [key]: String(value) })),
