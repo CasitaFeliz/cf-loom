@@ -14,13 +14,18 @@ concurrency:
 jobs:
   # The checks run on the CasitaFeliz org's self-hosted runners (CasitaFeliz/orb-infra, README "CI runners"): an
   # ephemeral microVM per job, like a GitHub-hosted one. If they are down, point runs-on back to ubuntu-latest.
-  # The two legs are the memory classes of CLAUDE.md's Repository, so the test processes of a leg fit one runner.
+  # The legs are the test classes of CLAUDE.md's Repository, so a leg's processes fit one runner.
   check:
     runs-on: orb
     strategy:
       fail-fast: false
       matrix:
         memory: [light, heavy]
+        include:
+          - memory: growth
+            shard: 1/2
+          - memory: growth
+            shard: 2/2
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -93,6 +98,8 @@ jobs:
       - if: matrix.memory == 'light'
         run: node scripts/check-expect-errors.ts
       - if: matrix.memory == 'light'
-        run: pnpm vitest run --project '!*-heavy'
+        run: pnpm vitest run --project '!*-heavy' --project '!*-growth'
       - if: matrix.memory == 'heavy'
         run: pnpm vitest run --project '*-heavy'
+      - if: matrix.memory == 'growth'
+        run: pnpm vitest run --project '*-growth' --shard='${{ matrix.shard }}'
