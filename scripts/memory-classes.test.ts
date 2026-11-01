@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { createVitest, type Vitest } from 'vitest/node';
+import { parse } from 'yaml';
 import { growthHeapMegabytes } from '../packages/contract/vitest.growth.config.ts';
 import { heavyHeapMegabytes } from '../packages/contract/vitest.heavy.config.ts';
 import { lightHeapMegabytes } from '../vitest.config.ts';
@@ -160,17 +161,134 @@ function strangersInProjects(
   return problems;
 }
 
-/** The `--project` filters of every `vitest run` command in `text`, one list for each command, in the order they stand. */
-function projectFiltersOfCommands(text: string): string[][] {
-  const commands: string[][] = [];
+/** A `vitest run` command: the `--project` filters it passes, and the `--shard` it passes, if any. */
+type Command = { readonly filters: readonly string[]; readonly shard: string | undefined };
+
+/** The value of an option in `command`, quoted or not, with each `${{ matrix.<key> }}` put in. */
+function optionOf(
+  command: string,
+  option: string,
+  matrix: Readonly<Record<string, string>>,
+): string | undefined {
+  const found = command.match(new RegExp(`--${option}[= ]\\s*(?:'([^']*)'|"([^"]*)"|(\\S+))`));
+  const value = found?.[1] ?? found?.[2] ?? found?.[3];
+  return value?.replace(/\$\{\{\s*matrix\.(\w+)\s*\}\}/g, (_, key) => matrix[key] ?? '');
+}
+
+/** Every `vitest run` command in `text`, one for each line it stands on, in the order they stand. */
+function commandsIn(text: string, matrix: Readonly<Record<string, string>> = {}): Command[] {
+  const commands: Command[] = [];
   for (const line of text.split('\n')) {
     const command = line.match(/\bvitest run\b.*$/)?.[0];
     if (command !== undefined) {
       const filters = [...command.matchAll(/--project\s+(?:'([^']*)'|"([^"]*)"|(\S+))/g)];
-      commands.push(filters.map(([, single, double, bare]) => single ?? double ?? bare ?? ''));
+      commands.push({
+        filters: filters.map(([, single, double, bare]) => single ?? double ?? bare ?? ''),
+        shard: optionOf(command, 'shard', matrix),
+      });
     }
   }
   return commands;
+}
+
+/**
+ * The combinations of a job's matrix as GitHub expands them: the product of its lists, then each
+ * `include` entry added to the combinations it matches on the lists' keys, or a combination of its
+ * own when it matches none.
+ */
+function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<string, string>[] {
+  const { include = [], exclude, ...lists } = matrix;
+  if (exclude !== undefined) {
+    throw new Error('The matrix has an exclude, which this test does not expand.');
+  }
+  let combinations: Record<string, string>[] = [{}];
+  for (const [key, values] of Object.entries(lists)) {
+    combinations = combinations.flatMap((combination) =>
+      (values as unknown[]).map((value) => ({ ...combination, [key]: String(value) })),
+    );
+  }
+  const expanded = [...combinations];
+  for (const entry of include as Record<string, unknown>[]) {
+    const given = Object.fromEntries(
+      Object.entries(entry).map(([key, value]) => [key, String(value)]),
+    );
+    const matching = expanded.filter((combination) =>
+      Object.keys(lists).every((key) => !(key in given) || combination[key] === given[key]),
+    );
+    if (matching.length === 0) {
+      combinations.push(given);
+    }
+    for (const combination of matching) {
+      combinations[combinations.indexOf(combination)] = { ...combination, ...given };
+    }
+  }
+  return combinations;
+}
+
+/** Whether a step with the condition `condition`, a conjunction of `matrix.<key> == '<value>'`, runs for `matrix`. */
+function runsFor(condition: unknown, matrix: Readonly<Record<string, string>>): boolean {
+  if (condition === undefined) {
+    return true;
+  }
+  const terms = String(condition)
+    .replace(/^\$\{\{|\}\}$/g, '')
+    .split('&&');
+  return terms.every((term) => {
+    const tested = term.trim().match(/^matrix\.(\w+) == '([^']*)'$/);
+    if (tested === null) {
+      throw new Error(`The condition of a vitest step is no test of the matrix: ${condition}`);
+    }
+    return matrix[tested[1] ?? ''] === tested[2];
+  });
+}
+
+/** One job of `check`: the values of its matrix, and the `vitest run` commands of the steps that run for them. */
+type Leg = { readonly matrix: Readonly<Record<string, string>>; readonly commands: Command[] };
+
+/** The legs of CI's `check` job: its matrix combinations, each with the commands of the steps whose `if` holds for it. */
+function legsOfCheck(workflow: string): Leg[] {
+  const { strategy, steps } = parse(workflow).jobs.check;
+  const vitestSteps = (steps as { if?: unknown; run?: unknown }[]).filter(
+    ({ run }) => typeof run === 'string' && /\bvitest run\b/.test(run),
+  );
+  return combinationsOf(strategy.matrix).map((matrix) => ({
+    matrix,
+    commands: vitestSteps
+      .filter((step) => runsFor(step.if, matrix))
+      .flatMap((step) => commandsIn(String(step.run), matrix)),
+  }));
+}
+
+/** The legs that run one class together, by their matrix without its `shard`: one leg alone, or the shards of one run. */
+function groupedByClass(legs: readonly Leg[]): Map<string, Leg[]> {
+  const groups = new Map<string, Leg[]>();
+  for (const leg of legs) {
+    const { shard: _shard, ...rest } = leg.matrix;
+    const key = JSON.stringify(rest);
+    groups.set(key, [...(groups.get(key) ?? []), leg]);
+  }
+  return groups;
+}
+
+/** What is wrong with the legs of one class: a leg that runs no Vitest, or shards that are not 1/n to n/n, or not alone and unsharded. */
+function legProblems(key: string, group: readonly Leg[]): string[] {
+  const shards = group.map(
+    ({ commands }) => commands.find(({ shard }) => shard !== undefined)?.shard,
+  );
+  const total = Number(shards[0]?.split('/')[1]);
+  const wanted =
+    shards[0] === undefined
+      ? [undefined]
+      : Array.from({ length: total }, (_, index) => `${index + 1}/${total}`);
+  const problems = group
+    .filter(({ commands }) => commands.length === 0)
+    .map(() => `a leg of ${key} runs no vitest command`);
+  if (JSON.stringify([...shards].sort()) !== JSON.stringify(wanted)) {
+    problems.push(
+      `the legs of ${key} run the shards ${shards.map((shard) => shard ?? 'none').join(', ')}, not ${wanted.map((shard) => shard ?? 'none').join(', ')}`,
+    );
+  }
+  return problems;
 }
 
 /** The names of the projects each list of `--project` filters selects. */
@@ -267,23 +385,34 @@ describe('the memory classes of the test run', () => {
     }
   });
 
-  test("each project runs in exactly one leg of CI's check, and in exactly one of pnpm test and pnpm test:growth", async () => {
+  test("each project runs in exactly one class of CI's legs, whose shards are 1/n to n/n, and in exactly one of pnpm test and pnpm test:growth", async () => {
     const vitest = await startVitest();
     try {
       const all = vitest.projects.map(({ name }) => name);
       const workflow = readFileSync(join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
       const { scripts } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-
       const missing = ['test', 'test:growth'].filter((name) => typeof scripts[name] !== 'string');
 
-      const legs = await projectsSelectedBy(projectFiltersOfCommands(workflow));
+      const groups = groupedByClass(legsOfCheck(workflow));
+      const classes: string[][] = [];
+      const problems: string[] = [];
+      for (const [key, group] of groups) {
+        for (const problem of legProblems(key, group)) {
+          problems.push(problem);
+        }
+        const selected = await projectsSelectedBy(
+          group.flatMap(({ commands }) => commands.map(({ filters }) => filters)),
+        );
+        classes.push([...new Set(selected.flat())]);
+      }
       const local = await projectsSelectedBy(
-        projectFiltersOfCommands(`${scripts.test}\n${scripts['test:growth']}`),
+        commandsIn(`${scripts.test}\n${scripts['test:growth']}`).map(({ filters }) => filters),
       );
 
       expect([
         ...missing.map((name) => `package.json has no ${name} script`),
-        ...projectsNotRunOnce(all, legs, "CI's legs"),
+        ...problems,
+        ...projectsNotRunOnce(all, classes, "CI's classes of legs"),
         ...projectsNotRunOnce(all, local, 'pnpm test and pnpm test:growth'),
       ]).toEqual([]);
     } finally {
