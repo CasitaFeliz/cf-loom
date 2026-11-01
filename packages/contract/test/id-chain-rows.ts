@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Same } from './chain-readers.ts';
-import type { ChainTable, IdChain } from './id-chain-type.ts';
+import type { ChainTable, Holding, IdChain } from './id-chain-type.ts';
 import { chainsByType, type HolderType } from './id-chains.ts';
 
 /** A node type that holds a schema must list a chain. */
@@ -33,8 +33,7 @@ export const leafIsNoHolder: HolderType = 'string';
 /** A chain on one cycle through its first link has no link to start from. */
 export const groupWithStart: IdChain = {
   name: 'x',
-  wayOfHolding: 'x',
-  holds: 1,
+  holdings: [['array', 'ref']],
   cycle: 'group',
   linkOf: (previous) => previous,
   // @ts-expect-error TS2353 a group chain takes no startOf
@@ -47,8 +46,18 @@ const holdingBackLink = (previous: z.ZodType, self: () => z.ZodType) => z.union(
 // @ts-expect-error TS2322 a group chain's linkOf takes the previous link only
 export const groupWithSelf: IdChain = {
   name: 'x',
-  wayOfHolding: 'x',
-  holds: 1,
+  holdings: [['array', 'ref']],
   cycle: 'group',
   linkOf: holdingBackLink,
 };
+
+/** A holding ends at the `ref` to the link before it. */
+// @ts-expect-error TS2322 a holding that ends at an object
+export const holdingWithoutRef: Holding = ['object'];
+
+/** A holding passes through node types only. */
+// @ts-expect-error TS2322 a step that is no node type
+export const holdingThroughNoType: Holding = ['object', 'field', 'ref'];
+
+/** A step admits null as an attribute of its node type. */
+export const nullableHolding: Holding = ['object', { type: 'ref', nullable: true }];

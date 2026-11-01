@@ -1,7 +1,7 @@
 import { basename } from 'node:path';
 import { afterAll, describe, expect, test } from 'vitest';
 import { forgetChain, groupedByDeclaredSnapshot, inputOf } from './chain-fixtures.ts';
-import { holdingKindOf, holdingsOf } from './chain-holding-types.ts';
+import { holdingText, holdingTextsOf } from './chain-holding-types.ts';
 import type { ChainReader } from './chain-readers.ts';
 import { checkStages } from './check-stages.ts';
 import { generateStages, generateWritesText } from './generate-stages.ts';
@@ -81,20 +81,15 @@ function stagesOf(chain: TableChain): ChainStage[] {
  */
 export function describeChainFamily(file: string): void {
   const chain = chainOfFile(file);
-  describe(`./internal, a chain of ids held through ${chain.wayOfHolding}`, () => {
+  describe(`./internal, a chain of ids, each link holding the one before as ${chain.holdings.map(holdingText).join(' and ')}`, () => {
     afterAll(() => forgetChain(chain));
 
     test(`walks each link to a node of type \`${chain.type}\``, () => {
       const declared = inputOf(chain, linksWalked, 'declared');
-      const kinds = chain.holds === 2 ? ['inside', 'next'] : ['inside'];
+      const stated = chain.holdings.map(holdingText).sort();
 
       for (let link = 1; link < linksWalked; link++) {
-        const holdings = holdingsOf(declared, link);
-
-        expect(holdings.map((holding) => holdingKindOf(holding, chain.type)).sort()).toEqual(kinds);
-        expect(holdings.map(({ nullable }) => nullable)).toEqual(
-          holdings.map(() => chain.nullable === true),
-        );
+        expect(holdingTextsOf(declared, link).sort()).toEqual(stated);
       }
     });
 

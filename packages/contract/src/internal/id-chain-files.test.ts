@@ -34,4 +34,13 @@ describe('./internal, the chains of ids and the files that time them', () => {
       ['id-chains.object.field', 'id-chains.object.inline-lazy'],
     ]);
   });
+
+  test('every chain states that its links hold the link before through the node type its file is named for', () => {
+    const typesOf = (holdings: readonly (readonly (string | { readonly type: string })[])[]) =>
+      holdings.flat().map((step) => (typeof step === 'string' ? step : step.type));
+
+    const unrelated = idChains.filter(({ type, holdings }) => !typesOf(holdings).includes(type));
+
+    expect(unrelated.map(({ stem }) => stem)).toEqual([]);
+  });
 });

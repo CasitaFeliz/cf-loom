@@ -22,23 +22,19 @@ export const chainsByType = {
   object: [
     {
       name: 'field',
-      holds: 1,
-      wayOfHolding: 'a field',
+      holdings: [['object', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) => loopedObject({ next: previous }, self),
     },
     {
       name: 'inline-lazy',
-      holds: 1,
-      wayOfHolding: 'an inline `z.lazy()`',
+      holdings: [['object', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) => loopedObject({ next: z.lazy(() => previous) }, self),
     },
     {
       name: 'nullable',
-      holds: 1,
-      nullable: true,
-      wayOfHolding: 'a `.nullable()` field',
+      holdings: [['object', { type: 'ref', nullable: true }]],
       cycle: 'own',
       linkOf: (previous, self) => loopedObject({ next: previous.nullable() }, self),
     },
@@ -46,15 +42,16 @@ export const chainsByType = {
   record: [
     {
       name: 'value',
-      holds: 1,
-      wayOfHolding: "a record's value",
+      holdings: [['record', 'ref']],
       cycle: 'group',
       linkOf: (previous) => z.record(z.string(), previous),
     },
     {
       name: 'value-and-field',
-      holds: 2,
-      wayOfHolding: "a record's value, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'record', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) =>
         loopedObject({ next: previous, f: z.record(z.string(), previous) }, self),
@@ -63,15 +60,16 @@ export const chainsByType = {
   array: [
     {
       name: 'items',
-      holds: 1,
-      wayOfHolding: "an array's items",
+      holdings: [['array', 'ref']],
       cycle: 'group',
       linkOf: (previous) => z.array(previous),
     },
     {
       name: 'items-and-field',
-      holds: 2,
-      wayOfHolding: "an array's items, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'array', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) => loopedObject({ next: previous, f: z.array(previous) }, self),
     },
@@ -79,23 +77,26 @@ export const chainsByType = {
   tuple: [
     {
       name: 'item',
-      holds: 1,
-      wayOfHolding: "a tuple's item",
+      holdings: [['tuple', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) => z.tuple([previous, loopOnly(self)]),
     },
     {
       name: 'item-and-field',
-      holds: 2,
-      wayOfHolding: "a tuple's item, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'tuple', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) =>
         loopedObject({ next: previous, f: z.tuple([previous, z.string()]) }, self),
     },
     {
       name: 'rest-and-field',
-      holds: 2,
-      wayOfHolding: "a tuple's rest, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'tuple', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) =>
         loopedObject({ next: previous, f: z.tuple([z.string()], previous) }, self),
@@ -104,15 +105,16 @@ export const chainsByType = {
   union: [
     {
       name: 'option',
-      holds: 1,
-      wayOfHolding: "a union's option",
+      holdings: [['union', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) => z.union([previous, z.boolean(), loopOnly(self)]),
     },
     {
       name: 'option-and-field',
-      holds: 2,
-      wayOfHolding: "a union's option, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'union', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) =>
         loopedObject({ next: previous, f: z.union([previous, z.boolean()]) }, self),
@@ -121,8 +123,7 @@ export const chainsByType = {
   tagged: [
     {
       name: 'variant-field',
-      holds: 1,
-      wayOfHolding: "a variant's field",
+      holdings: [['tagged', 'object', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) =>
         z.discriminatedUnion('k', [
@@ -132,8 +133,10 @@ export const chainsByType = {
     },
     {
       name: 'variant-and-field',
-      holds: 2,
-      wayOfHolding: 'a variant that is the link before, and a field',
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'tagged', 'ref'],
+      ],
       cycle: 'own',
       startOf: () => z.object({ k: z.literal('a'), leaf: z.string() }),
       linkOf: (previous, self) =>
@@ -153,15 +156,16 @@ export const chainsByType = {
   allOf: [
     {
       name: 'item',
-      holds: 1,
-      wayOfHolding: "an intersection's item",
+      holdings: [['allOf', 'ref']],
       cycle: 'own',
       linkOf: (previous, self) => z.intersection(previous, loopOnly(self)),
     },
     {
       name: 'item-and-field',
-      holds: 2,
-      wayOfHolding: "an intersection's item, and a field",
+      holdings: [
+        ['object', 'ref'],
+        ['object', 'allOf', 'ref'],
+      ],
       cycle: 'own',
       linkOf: (previous, self) =>
         loopedObject(
@@ -173,8 +177,7 @@ export const chainsByType = {
   ref: [
     {
       name: 'alias',
-      holds: 1,
-      wayOfHolding: 'an alias',
+      holdings: [['ref']],
       cycle: 'group',
       linkOf: (previous) => z.lazy(() => previous),
     },
