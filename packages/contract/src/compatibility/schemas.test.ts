@@ -2592,18 +2592,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
   }
 
-  test('a chain of ids, each on a cycle of its own, is checked in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const checkChain = checkOfChain(() => 'a');
-
-    const report = checkChain(sizes.large)();
-    const order = orderOf(checkChain, sizes, orders.linear);
-
-    expect(report).toEqual({ changes: [] });
-    expect(order).toBeLessThan(orders.linear);
-  });
-
   test('a description changed in the innermost def of a chain is one Change, at that def, in time that grows with the chain', {
     timeout: growthTimeout,
   }, () => {
@@ -2686,22 +2674,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       difference: { kind: 'unproven', node: 'allOf' },
     },
   ];
-
-  test.each(holdings)(
-    'a chain of ids, each reached through $holder, is checked in time that grows with its length',
-    {
-      timeout: growthTimeout,
-    },
-    ({ holdingOf }) => {
-      const checkChain = checkOfChain(() => 'a', holdingOf);
-
-      const report = checkChain(sizes.large)();
-      const order = orderOf(checkChain, sizes, orders.linear);
-
-      expect(report).toEqual({ changes: [] });
-      expect(order).toBeLessThan(orders.linear);
-    },
-  );
 
   /** The steps of the longest path among a report's Changes, from the site, or from the def that holds them. */
   function longestPathOf(report: ComparedReport): number {

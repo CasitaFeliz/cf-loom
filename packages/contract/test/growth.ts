@@ -31,7 +31,10 @@ export type Order = (typeof orders)[keyof typeof orders];
  * memory, which `orders` holds. It advances by the tick of the scheduler, 1 to 10 ms, which 200 ms
  * makes a small part of a span, but not of a single run of a small size. A measurement can still be
  * skewed now and then, and only upward, while a shape of a higher order measures high every time.
- * `prepare` builds the fixture outside the timed part and returns the call to time.
+ * A fresh fixture does two jobs: no run reads what an earlier one read, so no memo answers for the
+ * code timed, and both sizes read about as much memory in a span. A fixture that costs more to build
+ * than a run is built once per size and copied for each run. `prepare` builds the fixture outside
+ * the timed part and returns the call to time.
  */
 export function orderOf(
   prepare: (size: number) => () => unknown,

@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'vitest';
+import { growthTimeout } from '../vitest.growth.config.ts';
 import { orderOf, orders } from './growth.ts';
 
 const sizes = { small: 2_000, large: 16_000 };
-
-const growthTimeout = 240_000;
 
 const namesBySize = new Map<number, readonly string[]>();
 const setsBySize = new Map<number, ReadonlySet<string>>();

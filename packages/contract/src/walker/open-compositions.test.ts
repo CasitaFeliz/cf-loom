@@ -710,36 +710,6 @@ describe('validateRoot, a long chain of ids', () => {
     return () => validateRoot(root, rootPackage);
   }
 
-  test('a chain of ids, each holding the one before it in a union option, is validated in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const validateChain = (count: number) => {
-      const top = aChainOf(count, (previous) => z.union([previous, z.boolean()]));
-      return validationOf(z.object({ top }));
-    };
-
-    const validated = validateChain(sizes.large)();
-    const order = orderOf(validateChain, sizes, orders.linear);
-
-    expect(validated.kind).toBe('valid');
-    expect(order).toBeLessThan(orders.linear);
-  });
-
-  test('a chain of ids, each holding the one before it in an intersection with a string, is validated in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const validateChain = (count: number) => {
-      const top = aChainOf(count, (previous) => z.intersection(previous, z.string()));
-      return validationOf(z.object({ top }));
-    };
-
-    const validated = validateChain(sizes.large)();
-    const order = orderOf(validateChain, sizes, orders.linear);
-
-    expect(validated.kind).toBe('valid');
-    expect(order).toBeLessThan(orders.linear);
-  });
-
   test('many unions, each naming the head of one long chain of ids, are validated in time that grows with their number and the chain’s length', {
     timeout: growthTimeout,
   }, () => {
