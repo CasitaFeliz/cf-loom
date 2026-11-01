@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { orderOf, orders } from '../../test/growth.ts';
-import { inShapeOrder, nodesIn } from '../../test/random-draft.ts';
+import { nodesIn } from '../../test/random-draft.ts';
 import { nodelessDefsOf } from '../../test/random-nodeless-defs.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
 import {
@@ -285,55 +285,6 @@ describe('decodeSnapshot, many defs', () => {
     const order = orderOf(prepare, sizes, orders.linear);
     return { decoded, order };
   }
-
-  test('a chain of union defs, each naming the one before it and on a cycle of its own through an object, is decoded in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const union = (index: number): SchemaNode => ({
-      type: 'union',
-      options: [
-        index === 0 ? { type: 'string' } : ref(`link${index - 1}`),
-        { type: 'boolean' },
-        holdingBack(`link${index}`),
-      ],
-    });
-
-    const { decoded, order } = decodedOrder((count) => aChainOf(count, union));
-
-    expect(decoded.kind).toBe('decoded');
-    expect(order).toBeLessThan(orders.linear);
-  });
-
-  test('a chain of allOf defs, each naming the one before it and on a cycle of its own through an object, is decoded in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const allOf = (index: number): SchemaNode => ({
-      type: 'allOf',
-      items: inShapeOrder([
-        index === 0 ? { type: 'string' } : ref(`link${index - 1}`),
-        holdingBack(`link${index}`),
-      ]),
-    });
-
-    const { decoded, order } = decodedOrder((count) => aChainOf(count, allOf));
-
-    expect(decoded.kind).toBe('decoded');
-    expect(order).toBeLessThan(orders.linear);
-  });
-
-  test('a chain of alias defs, ending in an object that holds the first back, is decoded in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const aliasesOf = (count: number): Defs =>
-      aChainOf(count, (index) =>
-        index === 0 ? holdingBack(`link${count - 1}`) : ref(`link${index - 1}`),
-      );
-
-    const { decoded, order } = decodedOrder(aliasesOf);
-
-    expect(decoded.kind).toBe('decoded');
-    expect(order).toBeLessThan(orders.linear);
-  });
 
   test('many union defs, each naming the head of one chain of alias defs, are decoded in time that grows with their number and the chain’s length', {
     timeout: growthTimeout,

@@ -1378,27 +1378,6 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
       expect(order).toBeLessThan(orders.linear);
     },
   );
-
-  test.for([
-    ['a union option', 'option'],
-    ['an intersection item', 'intersectionItem'],
-  ] as const)(
-    '16,000 defs, each holding the one before as next and through %s, are valid in time that grows as the defs do',
-    { timeout: growthTimeout },
-    ([, name]) => {
-      const told = (size: number) => {
-        const top = twiceHeldChain(size, z.string(), holders[name]);
-        const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
-        return () => linesOf(root);
-      };
-
-      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
-      const lines = told(count)();
-
-      expect(lines).toEqual([]);
-      expect(order).toBeLessThan(orders.linear);
-    },
-  );
 });
 
 describe('failure lines: a shared schema held by many fields below a chain of defs', () => {

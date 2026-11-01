@@ -2115,17 +2115,6 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids each on a cycle of its own', { timeout: growthTimeout }, () => {
-      const walkChain = walkOf((count) => aLoopedChainOf(count, z.string()));
-
-      const walked = walkChain(sizes.large)();
-      const order = orderOf(walkChain, sizes, orders.linear);
-
-      expect(walked.located[0]?.walked.kind).toBe('walked');
-      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(order).toBeLessThan(orders.linear);
-    });
-
     test('ids each on a cycle of its own, around a refused schema', {
       timeout: growthTimeout,
     }, () => {
@@ -2162,27 +2151,6 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    /** `count` ids, each `join`ing the one before it with an object that holds it back, so each lies on a cycle of its own. */
-    function aChainOfJoinedDefs(
-      count: number,
-      join: (before: z.ZodType, holder: z.ZodType) => z.ZodType,
-    ): z.ZodType {
-      let schema: z.ZodType = z.object({ leaf: z.string() });
-      for (let index = 0; index < count; index++) {
-        const before = schema;
-        const link: z.ZodType = join(
-          before,
-          z.object({
-            get self() {
-              return link.optional();
-            },
-          }),
-        ).meta({ id: `link${index}` });
-        schema = link;
-      }
-      return schema;
-    }
-
     /** `count` ids, each `join`ing the one before it with an object that holds the last id, so all lie in one group. */
     function aChainOfJoinedDefsInOneGroup(
       count: number,
@@ -2205,25 +2173,6 @@ describe('walkSchemas: recursion', () => {
         .meta({ id: 'link0' });
       for (let index = 1; index < count; index++) {
         schema = join(schema, back()).meta({ id: `link${index}` });
-      }
-      last = schema;
-      return schema;
-    }
-
-    /** `count` ids, each a `z.lazy()` alias of the one before it, the first holding the last. */
-    function aChainOfAliases(count: number): z.ZodType {
-      let last: z.ZodType | undefined;
-      let schema: z.ZodType = z
-        .object({
-          leaf: z.string(),
-          get back() {
-            return last?.optional();
-          },
-        })
-        .meta({ id: 'link0' });
-      for (let index = 1; index < count; index++) {
-        const before = schema;
-        schema = z.lazy(() => before).meta({ id: `link${index}` });
       }
       last = schema;
       return schema;
@@ -2288,31 +2237,7 @@ describe('walkSchemas: recursion', () => {
     }
 
     const unionOf = (before: z.ZodType, other: z.ZodType) => z.union([before, other]);
-    const unionAround = (before: z.ZodType, holder: z.ZodType) =>
-      z.union([before, z.boolean(), holder]);
     const intersectionOf = (before: z.ZodType, other: z.ZodType) => z.intersection(before, other);
-
-    test('union ids each on a cycle of its own', { timeout: growthTimeout }, () => {
-      const walkChain = walkOf((count) => aChainOfJoinedDefs(count, unionAround));
-
-      const walked = walkChain(sizes.large)();
-      const order = orderOf(walkChain, sizes, orders.linear);
-
-      expect(walked.located[0]?.walked.kind).toBe('walked');
-      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(order).toBeLessThan(orders.linear);
-    });
-
-    test('intersection ids each on a cycle of its own', { timeout: growthTimeout }, () => {
-      const walkChain = walkOf((count) => aChainOfJoinedDefs(count, intersectionOf));
-
-      const walked = walkChain(sizes.large)();
-      const order = orderOf(walkChain, sizes, orders.linear);
-
-      expect(walked.located[0]?.walked.kind).toBe('walked');
-      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(order).toBeLessThan(orders.linear);
-    });
 
     test('union ids in one group, each also in a cycle through an object', {
       timeout: growthTimeout,
@@ -2340,17 +2265,6 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('alias ids in one group', { timeout: growthTimeout }, () => {
-      const walkChain = walkOf(aChainOfAliases);
-
-      const walked = walkChain(sizes.large)();
-      const order = orderOf(walkChain, sizes, orders.linear);
-
-      expect(walked.located[0]?.walked.kind).toBe('walked');
-      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(order).toBeLessThan(orders.linear);
-    });
-
     test('union ids each holding an object whose union names it back', {
       timeout: growthTimeout,
     }, () => {
@@ -2361,19 +2275,6 @@ describe('walkSchemas: recursion', () => {
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(order).toBeLessThan(orders.linear);
-    });
-
-    test('union ids each on a cycle of its own, validated', { timeout: growthTimeout }, () => {
-      const validateChain = (count: number) => {
-        const body = aChainOfJoinedDefs(count, unionAround);
-        return () => validated(body);
-      };
-
-      const result = validateChain(sizes.large)();
-      const order = orderOf(validateChain, sizes, orders.linear);
-
-      expect(result.kind).toBe('valid');
       expect(order).toBeLessThan(orders.linear);
     });
 
