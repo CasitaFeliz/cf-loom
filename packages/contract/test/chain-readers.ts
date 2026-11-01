@@ -27,13 +27,13 @@ export type Same<Left, Right> = [Left] extends [Right]
   : false;
 
 /**
- * Whether `Value` is one of the holder types, or one member of their unions, and not only
+ * Whether `Value` is one of the container types, or one member of their unions, and not only
  * assignable to one: a type whose keys all hold `never`, such as a Refusal, is assignable to `Defs`.
  */
-type IsHolder<Value> = true extends (
-  ChainContainer extends infer Holder
-    ? Holder extends unknown
-      ? Same<Value, Holder>
+type IsContainer<Value> = true extends (
+  ChainContainer extends infer Container
+    ? Container extends unknown
+      ? Same<Value, Container>
       : never
     : never
 )
@@ -49,7 +49,7 @@ type HoldsChain<Value, Levels extends number, Depth extends unknown[] = []> = 0 
   : unknown extends Value
     ? false
     : Value extends unknown
-      ? IsHolder<Value> extends true
+      ? IsContainer<Value> extends true
         ? true
         : Depth['length'] extends Levels
           ? false
