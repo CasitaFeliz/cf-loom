@@ -28,24 +28,24 @@ function isRefTo(node: unknown, name: string): boolean {
   return isNode(node) && node.type === 'ref' && node.name === name;
 }
 
-/** The types of the nodes in `node` that hold a `ref` to `name` directly, never following a `ref`. */
-function holdersIn(node: Node, name: string): string[] {
-  const holders: string[] = [];
+/** The types of the nodes on the way from `node` down to each `ref` to `name` below it, never following a `ref`. */
+function typesOnTheWayIn(node: Node, name: string): string[] {
+  const types: string[] = [];
   for (const held of nodesBelow(node)) {
-    if (isRefTo(held, name)) {
-      holders.push(node.type);
-    } else if (held.type !== 'ref') {
-      for (const holder of holdersIn(held, name)) {
-        holders.push(holder);
-      }
+    const below = isRefTo(held, name) ? [] : typesOnTheWayIn(held, name);
+    if (isRefTo(held, name) || below.length > 0) {
+      types.push(node.type);
+    }
+    for (const type of below) {
+      types.push(type);
     }
   }
-  return holders;
+  return types;
 }
 
 /**
- * The types of the nodes that hold the link before link `index` in its def: the def itself when it
- * is the `ref` to that link, and every node in it with that `ref` as a step of its own.
+ * The types of the nodes the def of link `index` holds the link before through: the def itself when
+ * it is the `ref` to that link, and every node on the way from the def to that `ref` otherwise.
  */
 export function holdingTypesOf(declared: ServiceSnapshot, index: number): string[] {
   const def = declared.defs[`link${index}`];
@@ -53,5 +53,5 @@ export function holdingTypesOf(declared: ServiceSnapshot, index: number): string
   if (def === undefined) {
     return [];
   }
-  return isRefTo(def, before) ? ['ref'] : holdersIn(def, before);
+  return isRefTo(def, before) ? ['ref'] : typesOnTheWayIn(def, before);
 }
