@@ -7,9 +7,9 @@ import {
   validateRoot,
 } from '../src/internal/index.ts';
 import { aRootHolding, inputOf } from './chain-fixtures.ts';
-import type { StagesOf } from './chain-stage.ts';
-import { defsOfText, stage } from './chain-stage.ts';
 import { aRootPackage } from './root-package.ts';
+import type { StagesOf } from './stage-type.ts';
+import { defsOfText, stage } from './stage-type.ts';
 
 /** What `generate` runs on a chain: it validates the Root, declares the Snapshot and writes it. */
 export const generateStages = {

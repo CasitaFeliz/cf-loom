@@ -1,10 +1,8 @@
 import { expect } from 'vitest';
 import { canonicalTextOf, decodeSnapshot, publishedSnapshotOf } from '../src/internal/index.ts';
-import { heading, inputOf } from './chain-fixtures.ts';
-import { type StagesOf, stage } from './chain-stage.ts';
-
-/** The version `publish` writes after the first. */
-const later = { ...heading, version: '1.2.0' };
+import { inputOf } from './chain-fixtures.ts';
+import { publishedAt } from './snapshots.ts';
+import { type StagesOf, stage } from './stage-type.ts';
 
 /** The call `publish` writes the published Snapshot's text with. */
 export const publishWritesText = stage(
@@ -23,7 +21,7 @@ export const publishStages = {
       'publish merges a first version',
       (chain, count) => {
         const declared = inputOf(chain, count, 'declared');
-        return () => publishedSnapshotOf(undefined, declared, heading);
+        return () => publishedSnapshotOf(undefined, declared, publishedAt('1.0.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(0),
     ),
@@ -32,7 +30,7 @@ export const publishStages = {
       (chain, count) => {
         const declared = inputOf(chain, count, 'declared');
         const same = inputOf(chain, count, 'same');
-        return () => publishedSnapshotOf(same, declared, later);
+        return () => publishedSnapshotOf(same, declared, publishedAt('1.2.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(0),
     ),
@@ -41,7 +39,7 @@ export const publishStages = {
       (chain, count) => {
         const declared = inputOf(chain, count, 'declared');
         const baseline = inputOf(chain, count, 'baseline');
-        return () => publishedSnapshotOf(baseline, declared, later);
+        return () => publishedSnapshotOf(baseline, declared, publishedAt('1.2.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(1),
     ),
@@ -50,7 +48,7 @@ export const publishStages = {
       (chain, count) => {
         const declared = inputOf(chain, count, 'declared');
         const baseline = inputOf(chain, count, 'graftedBaseline');
-        return () => publishedSnapshotOf(baseline, declared, later);
+        return () => publishedSnapshotOf(baseline, declared, publishedAt('1.2.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(1),
     ),

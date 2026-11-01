@@ -10,7 +10,7 @@ export const contractTimeout = 60_000;
 /** The files that need more memory than the light budget, which run in the heavy project and nowhere else. */
 export const heavyTestFiles = '**/*.heavy.test.ts';
 
-/** The files of a growth family, whose chains are too many and too long for the light leg, which run in the growth project and nowhere else. */
+/** The files of a growth family, which run in the growth project and nowhere else. */
 export const growthTestFiles = '**/*.growth.test.ts';
 
 export default defineProject({

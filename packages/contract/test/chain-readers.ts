@@ -10,7 +10,7 @@ import type {
 } from '../src/internal/index.ts';
 
 /** What a chain of recursion ids is held in, once a command has read the author's Root. */
-type ChainHolder =
+type ChainContainer =
   | Snapshot
   | PublishedSnapshot
   | ExportedSnapshot
@@ -20,14 +20,18 @@ type ChainHolder =
   | SchemaNode;
 
 /** Whether `Left` and `Right` are the same type: each is assignable to the other. */
-type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
+export type Same<Left, Right> = [Left] extends [Right]
+  ? [Right] extends [Left]
+    ? true
+    : false
+  : false;
 
 /**
  * Whether `Value` is one of the holder types, or one member of their unions, and not only
  * assignable to one: a type whose keys all hold `never`, such as a Refusal, is assignable to `Defs`.
  */
 type IsHolder<Value> = true extends (
-  ChainHolder extends infer Holder
+  ChainContainer extends infer Holder
     ? Holder extends unknown
       ? Same<Value, Holder>
       : never

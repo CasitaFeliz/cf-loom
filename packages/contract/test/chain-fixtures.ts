@@ -13,12 +13,10 @@ import {
 import { headOf } from './chain-heads.ts';
 import type { IdChain } from './id-chain-type.ts';
 import { aRootPackage } from './root-package.ts';
+import { publishedAt } from './snapshots.ts';
 
 /** The Endpoint every chain's Root declares, as the Snapshot identifies it. */
 export const identity = 'POST /echo';
-
-/** The heading a first publish writes, and the one the Baseline's version carries. */
-export const heading = { version: '1.0.0', generator: '@cf-loom/cli@2.1.0' };
 
 /** The Endpoint that takes `body` as its Input body and answers nothing. */
 export function anEchoTaking(body: z.ZodType) {
@@ -96,9 +94,11 @@ export type ChainState = keyof ChainStates;
 function statesOf(chain: IdChain, count: number): ChainStates {
   const declared = declaredBy(chain, count, 'top');
   const before = declaredBy(chain, count, 'top-and-gone');
-  const firstText = canonicalTextOf(publishedSnapshotOf(undefined, declared, heading));
-  const baseline = decodedFrom(canonicalTextOf(publishedSnapshotOf(undefined, before, heading)));
-  const grafted = publishedSnapshotOf(baseline, declared, { ...heading, version: '1.1.0' });
+  const firstText = canonicalTextOf(publishedSnapshotOf(undefined, declared, publishedAt('1.0.0')));
+  const baseline = decodedFrom(
+    canonicalTextOf(publishedSnapshotOf(undefined, before, publishedAt('1.0.0'))),
+  );
+  const grafted = publishedSnapshotOf(baseline, declared, publishedAt('1.1.0'));
   const graftedText = canonicalTextOf(grafted);
   return {
     declared,
@@ -127,11 +127,8 @@ function builtStatesOf(chain: IdChain, count: number): ChainStates {
 }
 
 /**
- * A run's own copy of one state of a chain at a size, as `orderOf` asks: the state is built once per
- * chain and size, through the readers before it, and each call hands out a copy no other run
- * reads, so no memo of an earlier run answers for the code timed and both sizes read about as
- * much memory in a span. The built states are not exported; `forgetChain` drops a chain's once its
- * rows are done.
+ * A run's own copy of one state of a chain at a size, as `orderOf` asks; `forgetChain` drops a
+ * chain's states.
  */
 export function inputOf<State extends ChainState>(
   chain: IdChain,

@@ -10,8 +10,8 @@ import {
   reachedDefsOf,
 } from '../src/internal/index.ts';
 import { anEchoTaking, identity, inputOf } from './chain-fixtures.ts';
-import { defsOfText, type StagesOf, stage } from './chain-stage.ts';
 import { aProvider } from './providers.ts';
+import { defsOfText, type StagesOf, stage } from './stage-type.ts';
 
 /** What `package` and an Application read a chain with: the cut, its text, its hash, the defs it reaches and the cut a Provided Endpoint carries. */
 export const packageStages = {

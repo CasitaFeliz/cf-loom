@@ -2,7 +2,12 @@ import { expect } from 'vitest';
 import type { ComparedReport } from '../src/internal/index.ts';
 import { compatibilityReportOf, decodeSnapshot, originPackagesOf } from '../src/internal/index.ts';
 import { inputOf } from './chain-fixtures.ts';
-import { noChange, type StagesOf, stage } from './chain-stage.ts';
+import { type StagesOf, stage } from './stage-type.ts';
+
+/** A check that a report finds nothing differing. */
+function noChange(report: ComparedReport): void {
+  expect(report.changes).toEqual([]);
+}
 
 /**
  * A changed first link is a Neutral description change at each def that holds it, so at most one

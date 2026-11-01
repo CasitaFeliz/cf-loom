@@ -1,7 +1,6 @@
+import type { Same } from './chain-readers.ts';
 import type { ChainTable } from './id-chain-type.ts';
 import { chainsByType, type HolderType } from './id-chains.ts';
-
-type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
 /** A node type that holds a schema must list a chain. */
 // @ts-expect-error TS2322 a union with no chain

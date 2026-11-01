@@ -1,6 +1,6 @@
 import type * as Internal from '../src/internal/index.ts';
 import type { Defs, ObjectNode, Refusal, SchemaNode, Snapshot } from '../src/internal/index.ts';
-import type { ChainReader, ChainReaderOf } from './chain-readers.ts';
+import type { ChainReader, ChainReaderOf, Same } from './chain-readers.ts';
 
 type Deep = { a: { b: { c: { d: { e: { defs: Defs } } } } } };
 
@@ -19,8 +19,6 @@ declare const candidates: {
 };
 
 type Found = ChainReaderOf<typeof candidates>;
-
-type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 
 /** The readers of a Snapshot, an `ObjectNode`, `defs` six levels down, a `SchemaNode[]` and a record of nodes are found. */
 export const found: Record<Found, 0> = {

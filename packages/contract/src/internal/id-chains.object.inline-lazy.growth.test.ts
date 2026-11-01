@@ -1,3 +1,3 @@
-import { chainFamilyOf } from '../../test/chain-stages.ts';
+import { describeChainFamily } from '../../test/chain-stages.ts';
 
-chainFamilyOf(import.meta.filename);
+describeChainFamily(import.meta.filename);

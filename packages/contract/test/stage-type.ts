@@ -1,5 +1,3 @@
-import { expect } from 'vitest';
-import type { Change } from '../src/internal/index.ts';
 import type { ChainReader } from './chain-readers.ts';
 import type { IdChain } from './id-chain-type.ts';
 
@@ -32,9 +30,4 @@ export function stage<Given>(
 /** How many defs a Snapshot's text holds. */
 export function defsOfText(text: string): number {
   return Object.keys(JSON.parse(text).defs).length;
-}
-
-/** A check that a report finds nothing differing. */
-export function noChange(report: { readonly changes: readonly Change[] }): void {
-  expect(report.changes).toEqual([]);
 }

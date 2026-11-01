@@ -1,15 +1,15 @@
 import { basename } from 'node:path';
 import { afterAll, describe, expect, test } from 'vitest';
 import { forgetChain, groupedByDeclaredSnapshot, inputOf } from './chain-fixtures.ts';
-import { holdingTypesOf } from './chain-holders.ts';
+import { holdingKindOf, holdingsOf } from './chain-holding-types.ts';
 import type { ChainReader } from './chain-readers.ts';
-import type { ChainStage, NoStage } from './chain-stage.ts';
 import { checkStages } from './check-stages.ts';
 import { generateStages, generateWritesText } from './generate-stages.ts';
 import { orderOf, orders } from './growth.ts';
 import { idChains, type TableChain } from './id-chains.ts';
 import { packageStages } from './package-stages.ts';
 import { publishStages, publishWritesText } from './publish-stages.ts';
+import type { ChainStage, NoStage } from './stage-type.ts';
 
 /**
  * Every export of `./internal` that reads or makes a chain, each with the calls a command makes of
@@ -65,8 +65,8 @@ function stagesOf(chain: TableChain): ChainStage[] {
   if (!isFirstToDeclare(chain)) {
     return stages;
   }
-  for (const entry of Object.values(afterGenerate)) {
-    for (const stage of 'reason' in entry ? [] : entry) {
+  for (const stagesOrReason of Object.values(afterGenerate)) {
+    for (const stage of 'reason' in stagesOrReason ? [] : stagesOrReason) {
       stages.push(stage);
     }
   }
@@ -79,16 +79,22 @@ function stagesOf(chain: TableChain): ChainStage[] {
  * `orders.linear`; past `generate`, only for the first chain of the table that declares its
  * Snapshot. A stem no chain has throws, so a file names its chain once, in its name.
  */
-export function chainFamilyOf(file: string): void {
+export function describeChainFamily(file: string): void {
   const chain = chainOfFile(file);
-  describe(`./internal, a chain of ids held through ${chain.holder}`, () => {
+  describe(`./internal, a chain of ids held through ${chain.wayOfHolding}`, () => {
     afterAll(() => forgetChain(chain));
 
-    test(`walks each link to a ${chain.type} node`, () => {
+    test(`walks each link to a node of type \`${chain.type}\``, () => {
       const declared = inputOf(chain, linksWalked, 'declared');
+      const kinds = chain.holds === 2 ? ['inside', 'next'] : ['inside'];
 
       for (let link = 1; link < linksWalked; link++) {
-        expect(holdingTypesOf(declared, link)).toContain(chain.type);
+        const holdings = holdingsOf(declared, link);
+
+        expect(holdings.map((holding) => holdingKindOf(holding, chain.type)).sort()).toEqual(kinds);
+        expect(holdings.map(({ nullable }) => nullable)).toEqual(
+          holdings.map(() => chain.nullable === true),
+        );
       }
     });
 
