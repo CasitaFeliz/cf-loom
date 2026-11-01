@@ -10,7 +10,7 @@ import { growthTestFiles } from './vitest.config.ts';
 export const growthHeapMegabytes = 2048;
 
 /** Three attempts of the slowest row take about 100 s on an idle host, so a growth test gets 240 s, as the growth tests of the other projects do. */
-const growthTimeout = 240_000;
+export const growthTimeout = 240_000;
 
 /**
  * How many growth test processes run at once: two at their limit fit a CI runner as the heavy

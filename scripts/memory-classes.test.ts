@@ -192,9 +192,9 @@ function commandsIn(text: string, matrix: Readonly<Record<string, string>> = {})
 }
 
 /**
- * The combinations of a job's matrix as GitHub expands them: the product of its lists, then each
- * `include` entry added to the combinations it matches on the lists' keys, or a combination of its
- * own when it matches none.
+ * The combinations of a job's matrix: the product of its lists, then each `include` entry as a
+ * combination of its own. An entry that extends a combination of the lists, or an `exclude`, is
+ * not expanded, and throws.
  */
 function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<string, string>[] {
   const { include = [], exclude, ...lists } = matrix;
@@ -207,20 +207,20 @@ function combinationsOf(matrix: Readonly<Record<string, unknown>>): Record<strin
       (values as unknown[]).map((value) => ({ ...combination, [key]: String(value) })),
     );
   }
-  const expanded = [...combinations];
+  const product = [...combinations];
   for (const entry of include as Record<string, unknown>[]) {
     const given = Object.fromEntries(
       Object.entries(entry).map(([key, value]) => [key, String(value)]),
     );
-    const matching = expanded.filter((combination) =>
+    const extended = product.some((combination) =>
       Object.keys(lists).every((key) => !(key in given) || combination[key] === given[key]),
     );
-    if (matching.length === 0) {
-      combinations.push(given);
+    if (extended) {
+      throw new Error(
+        `An include entry extends a combination of the lists, which this test does not expand: ${JSON.stringify(given)}`,
+      );
     }
-    for (const combination of matching) {
-      combinations[combinations.indexOf(combination)] = { ...combination, ...given };
-    }
+    combinations.push(given);
   }
   return combinations;
 }
