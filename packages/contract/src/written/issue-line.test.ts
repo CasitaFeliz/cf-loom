@@ -1,14 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { lineBreaks, lineBreaksIn } from '../../test/line-breaks.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import type { Issue } from '../index.ts';
 import { issueLineOf, listedIssueLinesOf, unbrokenLineOf } from '../internal/index.ts';
 
 const source = 'notifyOnCreated orders-service.event.OrderCreated.v1 m-1 f-1 attempt 1';
-
-/** How much longer telling the Issues may take at ten times their count: flat, so far under the tenfold of linear. */
-const flatGrowth = 4;
 
 function anIssue(overrides: Partial<Issue> = {}): Issue {
   return { part: 'body', path: [], code: 'invalid_type', message: 'Expected string', ...overrides };
@@ -206,9 +203,9 @@ describe('listedIssueLinesOf: a source too long, a path too deep, a count too la
       return () => listedIssueLinesOf(source, issues);
     };
 
-    const growth = growthOf(told, { small, large }, flatGrowth);
+    const order = orderOf(told, { small, large }, orders.flat);
 
-    expect(growth).toBeLessThan(flatGrowth);
+    expect(order).toBeLessThan(orders.flat);
     expect(listedIssueLinesOf(source, lists.get(large) ?? [])).toHaveLength(101);
   });
 });

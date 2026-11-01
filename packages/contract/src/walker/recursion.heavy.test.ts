@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalLocationsOf, refusalsOf, summarized } from '../../test/failures.ts';
-import { cpuRatioOf, growthOf } from '../../test/growth.ts';
+import { cpuRatioOf, orderOf, orders } from '../../test/growth.ts';
 import {
   idOf,
   type Mix,
@@ -1842,9 +1842,6 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** How many times longer a ring twice as long may take to walk: about 2 for a walk of each schema once. */
-  const ringWalkedOnceGrowth = 8;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -1855,10 +1852,10 @@ describe('walkSchemas: recursion', () => {
     };
 
     const walked = walkOf(255)();
-    const growth = growthOf(walkOf, { small: 128, large: 255 }, ringWalkedOnceGrowth);
+    const order = orderOf(walkOf, { small: 128, large: 255 }, orders.polynomial);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(growth).toBeLessThan(ringWalkedOnceGrowth);
+    expect(order).toBeLessThan(orders.polynomial);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -2042,13 +2039,6 @@ describe('walkSchemas: recursion', () => {
   describe('a chain of ids is walked in time that grows with its length', () => {
     const sizes = { small: 2_000, large: 16_000 };
 
-    /**
-     * How many times longer a chain eight times as long may take: about 8 when each id costs the
-     * same wherever it sits, and over 15 when it costs its depth, as the walk's path, its records
-     * and its places did.
-     */
-    const chainGrowth = 13;
-
     /** A chain of `count` ids, each holding the next and one leaf all of them share. */
     function aChainSharingOneLeaf(count: number): z.ZodType {
       const leaf = z.object({ a: z.string() });
@@ -2107,10 +2097,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOf(count, z.string()));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids on no cycle, each also holding a schema all share', {
@@ -2119,21 +2109,21 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainSharingOneLeaf);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each on a cycle of its own', { timeout: growthTimeout }, () => {
       const walkChain = walkOf((count) => aLoopedChainOf(count, z.string()));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each on a cycle of its own, around a refused schema', {
@@ -2142,10 +2132,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aLoopedChainOf(count, z.bigint()));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toEqual(['z.bigint()']);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each holding a date and reaching back to the first', {
@@ -2154,10 +2144,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainBackToItsRoot);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each reaching back to a schema with no id', { timeout: growthTimeout }, () => {
@@ -2165,11 +2155,11 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainBackToAnUnnamedRoot);
 
       const walked = walkChain(unnamedSizes.large)();
-      const growth = growthOf(walkChain, unnamedSizes, chainGrowth);
+      const order = orderOf(walkChain, unnamedSizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(unnamedSizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     /** `count` ids, each `join`ing the one before it with an object that holds it back, so each lies on a cycle of its own. */
@@ -2306,22 +2296,22 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefs(count, unionAround));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('intersection ids each on a cycle of its own', { timeout: growthTimeout }, () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefs(count, intersectionOf));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('union ids in one group, each also in a cycle through an object', {
@@ -2330,11 +2320,11 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, unionOf));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('intersection ids in one group, each also in a cycle through an object', {
@@ -2343,22 +2333,22 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, intersectionOf));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('alias ids in one group', { timeout: growthTimeout }, () => {
       const walkChain = walkOf(aChainOfAliases);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('union ids each holding an object whose union names it back', {
@@ -2367,11 +2357,11 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainOfUnionsAndObjectsNamingThemBack);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('union ids each on a cycle of its own, validated', { timeout: growthTimeout }, () => {
@@ -2381,10 +2371,10 @@ describe('walkSchemas: recursion', () => {
       };
 
       const result = validateChain(sizes.large)();
-      const growth = growthOf(validateChain, sizes, chainGrowth);
+      const order = orderOf(validateChain, sizes, orders.linear);
 
       expect(result.kind).toBe('valid');
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('union ids in one group, each leading back to itself with no node between', {
@@ -2393,10 +2383,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'every link'));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('union ids in one group, the first leading back to itself with no node between', {
@@ -2405,10 +2395,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'the first'));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(1);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('one union id of many options, each leading back to it with no node between', {
@@ -2417,10 +2407,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aUnionOfAliasesLeadingBack);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(1);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each on a cycle of its own, around a refused schema, validated', {
@@ -2432,18 +2422,12 @@ describe('walkSchemas: recursion', () => {
       };
 
       const result = validateChain(sizes.large)();
-      const growth = growthOf(validateChain, sizes, chainGrowth);
+      const order = orderOf(validateChain, sizes, orders.linear);
 
       expect(result.kind).toBe('invalid');
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
   });
-
-  /**
-   * How many times longer a ring of steps twice as long may take: about 2 when the failing def is
-   * walked once, and 2 to the power of the number of steps when it is walked once per path.
-   */
-  const failingDefWalkedOnceGrowth = 8;
 
   test('a failing def met by many paths is reported once and walked once', {
     timeout: growthTimeout,
@@ -2466,13 +2450,13 @@ describe('walkSchemas: recursion', () => {
     };
 
     const walked = walkOf(26)();
-    const growth = growthOf(walkOf, { small: 8, large: 16 }, failingDefWalkedOnceGrowth);
+    const order = orderOf(walkOf, { small: 8, large: 16 }, orders.polynomial);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(growth).toBeLessThan(failingDefWalkedOnceGrowth);
+    expect(order).toBeLessThan(orders.polynomial);
   });
 
   describe('an id on a cycle whose way back runs through a schema answered from memory', () => {
@@ -2930,16 +2914,10 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    /**
-     * How many times longer a fan twice as long takes: about 2 when each id is walked once, and
-     * 2 to the power of the half length when each use walks it again.
-     */
-    const walkedOnceGrowth = 8;
-
-    /** A fan walked again at every use takes seconds a run, and `growthOf` runs it up to nine times. */
+    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it up to nine times. */
     const fanTimeout = 240_000;
 
-    function growthOfFans(
+    function orderOfFans(
       count: number,
       extra: (self: () => z.ZodType) => Record<string, z.ZodType>,
     ) {
@@ -2947,31 +2925,31 @@ describe('walkSchemas: recursion', () => {
         const schema = aFanOf(size, extra);
         return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
       };
-      return growthOf(walkOf, { small: count / 2, large: count }, walkedOnceGrowth);
+      return orderOf(walkOf, { small: count / 2, large: count }, orders.polynomial);
     }
 
     test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(18, () => ({}));
+      const order = orderOfFans(18, () => ({}));
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a fan of 10 defs each cut for its depth, each holding the next twice, walks each once', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(10, cutBack);
+      const order = orderOfFans(10, cutBack);
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
+      const order = orderOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a def cut for its depth used at two locations is the failure walked at the first, at both', () => {

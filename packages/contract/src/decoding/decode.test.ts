@@ -6,7 +6,7 @@ import {
   baselineHoldingFormerInputs,
   formerInputsNamingAnAliasChain,
 } from '../../test/graft-shapes.ts';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, publishedServiceAt, schemaExports } from '../../test/snapshots.ts';
@@ -3521,9 +3521,6 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
 });
 
 describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
-  /** How many times longer a decode of a Snapshot eight times as large may take: about 8 for one that reads each part once. */
-  const linearGrowth = 13;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -3540,19 +3537,19 @@ describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
     timeout: growthTimeout,
   }, () => {
     const read = decoded(baselineHoldingFormerInputs)(3)();
-    const growth = growthOf(decoded(baselineHoldingFormerInputs), sizes, linearGrowth);
+    const order = orderOf(decoded(baselineHoldingFormerInputs), sizes, orders.linear);
 
     expect(read.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', {
     timeout: growthTimeout,
   }, () => {
     const read = decoded(formerInputsNamingAnAliasChain)(3)();
-    const growth = growthOf(decoded(formerInputsNamingAnAliasChain), sizes, linearGrowth);
+    const order = orderOf(decoded(formerInputsNamingAnAliasChain), sizes, orders.linear);
 
     expect(read.kind).toBe('decoded');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orderOfGrowth, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
 import {
   type Construct,
@@ -2549,12 +2549,6 @@ describe('compatibilityReportOf, depth', () => {
 describe('compatibilityReportOf, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /**
-   * How many times longer a check of a shape eight times as large may take: about 8 for a check
-   * that reads each part once, and 64 for one that copies the steps down to a part at each part.
-   */
-  const linearGrowth = 13;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -2604,10 +2598,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const checkChain = checkOfChain(() => 'a');
 
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, linearGrowth);
+    const order = orderOf(checkChain, sizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a description changed in the innermost def of a chain is one Change, at that def, in time that grows with the chain', {
@@ -2616,11 +2610,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
 
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, linearGrowth);
+    const order = orderOf(checkChain, sizes, orders.linear);
 
     const described = found(annotationChanged('description'), neutralEverywhere);
     expect(snapshotPathsOf(report.changes)).toEqual([changeAt(shared, inDef('link0', described))]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('an object of many fields, each changed, is checked in time that grows with their number', {
@@ -2642,10 +2636,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, linearGrowth);
+    const order = orderOf(checkFields, sizes, orders.linear);
 
     expect(report.changes).toHaveLength(sizes.large);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a def that many fields reach, changed, is one Change, at the def, in time that grows with their number', {
@@ -2662,11 +2656,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, linearGrowth);
+    const order = orderOf(checkFields, sizes, orders.linear);
 
     const described = found(annotationChanged('description'), neutralEverywhere);
     expect(snapshotPathsOf(report.changes)).toEqual([changeAt(shared, inDef('money', described))]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
   /** A node that holds another in what the plain-union rule judges: a union's option, a tuple's item or an `allOf`'s item. */
   type Holding = {
@@ -2702,10 +2696,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const checkChain = checkOfChain(() => 'a', holdingOf);
 
       const report = checkChain(sizes.large)();
-      const growth = growthOf(checkChain, sizes, linearGrowth);
+      const order = orderOf(checkChain, sizes, orders.linear);
 
       expect(report).toEqual({ changes: [] });
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -2718,10 +2712,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     return longest;
   }
 
-  /** How many times longer the report of a chain of `sizes.large` defs is as text than that of `sizes.small`. */
-  function lengthGrowthOf(checkChain: (count: number) => () => ComparedReport): number {
+  /** The order of the growth of a report's length as text, from a chain of `sizes.small` defs to one of `sizes.large`. */
+  function lengthOrderOf(checkChain: (count: number) => () => ComparedReport): number {
     const lengthOf = (count: number) => JSON.stringify(checkChain(count)()).length;
-    return lengthOf(sizes.large) / lengthOf(sizes.small);
+    return orderOfGrowth(lengthOf(sizes.large) / lengthOf(sizes.small), sizes);
   }
 
   const described = found(annotationChanged('description'), neutralEverywhere);
@@ -2737,8 +2731,8 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const small = checkChain(sizes.small)();
       expect(longestPathOf(small)).toBeLessThanOrEqual(2);
       const report = checkChain(sizes.large)();
-      const growth = growthOf(checkChain, sizes, linearGrowth);
-      const lengthGrowth = lengthGrowthOf(checkChain);
+      const order = orderOf(checkChain, sizes, orders.linear);
+      const lengthOrder = lengthOrderOf(checkChain);
 
       const heldBy = Array.from({ length: sizes.large - 1 }, (_, index) =>
         inDef(`link${index + 1}`, { ...described, at: ['fields', 'u'] }),
@@ -2747,8 +2741,8 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       expect(snapshotPathsOf(report.changes)).toEqual(
         expected.map((change) => changeAt(shared, change)),
       );
-      expect(growth).toBeLessThan(linearGrowth);
-      expect(lengthGrowth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
+      expect(lengthOrder).toBeLessThan(orders.linear);
     },
   );
 
@@ -2760,15 +2754,15 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const small = checkChain(sizes.small)();
     expect(longestPathOf(small)).toBeLessThanOrEqual(2);
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, linearGrowth);
-    const lengthGrowth = lengthGrowthOf(checkChain);
+    const order = orderOf(checkChain, sizes, orders.linear);
+    const lengthOrder = lengthOrderOf(checkChain);
 
     const everyDef = Array.from({ length: sizes.large }, (_, index) =>
       changeAt(shared, inDef(`link${sizes.large - 1 - index}`, described)),
     );
     expect(snapshotPathsOf(report.changes)).toEqual(everyDef);
-    expect(growth).toBeLessThan(linearGrowth);
-    expect(lengthGrowth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
+    expect(lengthOrder).toBeLessThan(orders.linear);
   });
 
   test('many fields of one def that each hold a changed def in a union report one Change each, from that def, in time and length that grow with their number', {
@@ -2793,16 +2787,16 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const small = checkFields(sizes.small)();
     expect(longestPathOf(small)).toBeLessThanOrEqual(2);
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, linearGrowth);
-    const lengthGrowth = lengthGrowthOf(checkFields);
+    const order = orderOf(checkFields, sizes, orders.linear);
+    const lengthOrder = lengthOrderOf(checkFields);
 
     const names = Array.from({ length: sizes.large }, (_, index) => `f${index}`).sort(byCodePoint);
     const atFields = names.map((name) =>
       changeAt(shared, inDef('holder', { ...described, at: ['fields', name] })),
     );
     expect(snapshotPathsOf(report.changes)).toEqual(atFields);
-    expect(growth).toBeLessThan(linearGrowth);
-    expect(lengthGrowth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
+    expect(lengthOrder).toBeLessThan(orders.linear);
   });
 
   /** `count` objects `c0`, `c1`…, each holding the one before it by `next`, the first a `leaf` and a description. */
@@ -2852,11 +2846,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const checkFan = checkOfFan(holdingOf, { description: 'b', leaf: aString });
 
       const report = checkFan(sizes.large)();
-      const growth = growthOf(checkFan, sizes, linearGrowth);
+      const order = orderOf(checkFan, sizes, orders.linear);
 
       const neutralAtField = found(annotationChanged('description'), neutralEverywhere);
       expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, neutralAtField));
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -2869,11 +2863,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const checkFan = checkOfFan(holdingOf, { description: 'a', leaf: aNumber });
 
       const report = checkFan(sizes.large)();
-      const growth = growthOf(checkFan, sizes, linearGrowth);
+      const order = orderOf(checkFan, sizes, orders.linear);
 
       const breakingAtField = found(difference, breaksEverywhere);
       expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, breakingAtField));
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -2922,10 +2916,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     const checkExports = checkOfExports(unchangedInnermost);
 
     const report = checkExports(rootSizes.large)();
-    const growth = growthOf(checkExports, rootSizes, linearGrowth);
+    const order = orderOf(checkExports, rootSizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('many exports, each naming one unchanged def of many fields that each name a def of their own, are checked in time that grows with their number and the def’s width', {
@@ -2947,10 +2941,10 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkWideExports(rootSizes.large)();
-    const growth = growthOf(checkWideExports, rootSizes, linearGrowth);
+    const order = orderOf(checkWideExports, rootSizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a change at the end of a chain many exports name is reported at each export, at its def', () => {

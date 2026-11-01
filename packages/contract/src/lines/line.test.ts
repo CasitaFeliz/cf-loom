@@ -1,13 +1,10 @@
 import { format, inspect } from 'node:util';
 import { describe, expect, test } from 'vitest';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { lineBreaks, lineBreaksIn } from '../../test/line-breaks.ts';
 import { linePool } from '../../test/line-pool.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { linesTextOf, logOf, unbrokenLineOf } from '../internal/index.ts';
-
-/** How much longer writing a line may take at ten times the line breaks: three times the growth of the size. */
-const linearGrowth = 30;
 
 describe('unbrokenLineOf', () => {
   test.for(lineBreaks)(
@@ -46,9 +43,9 @@ describe('unbrokenLineOf', () => {
       return () => unbrokenLineOf(text);
     };
 
-    const growth = growthOf(written, { small: count / 10, large: count }, linearGrowth);
+    const order = orderOf(written, { small: count / 10, large: count }, orders.linear);
 
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
     expect(unbrokenLineOf('a\n'.repeat(count))).toBe('a\\n'.repeat(count));
   });
 
