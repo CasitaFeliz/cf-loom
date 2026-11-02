@@ -2,7 +2,13 @@ import { describe, expect, test } from 'vitest';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
 import { nodelessDefsOf } from '../../test/random-nodeless-defs.ts';
 import { seededNext } from '../../test/random-schemas.ts';
-import { type Defs, defGraphOf, type RefNode, type SchemaNode } from '../internal/index.ts';
+import {
+  type DefGraph,
+  type Defs,
+  defGraphOf,
+  type RefNode,
+  type SchemaNode,
+} from '../internal/index.ts';
 
 const aString: SchemaNode = { type: 'string' };
 const anObject: SchemaNode = { type: 'object', fields: {} };
@@ -30,23 +36,33 @@ const drawn: readonly Defs[] = seeds.flatMap((seed) => {
   return [degradedOf(nodelessDefsOf(seed), seed), baseline.defs, proposed.defs];
 });
 
-/** Every `ref` name found by a plain search of a JSON value, which shares nothing with the walker. */
-function refNamesIn(value: unknown): string[] {
-  const names: string[] = [];
+/** Every object found by a plain search of a JSON value, which shares nothing with the walker. */
+function objectsIn(value: unknown): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
   const pending = [value];
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     if (typeof next !== 'object' || next === null) {
       continue;
     }
-    const record = next as { readonly type?: unknown; readonly name?: unknown };
-    if (record.type === 'ref' && typeof record.name === 'string') {
-      names.push(record.name);
-    }
+    objects.push(next as Record<string, unknown>);
     for (const inner of Object.values(next)) {
       pending.push(inner);
     }
   }
-  return names;
+  return objects;
+}
+
+function isRef(object: Record<string, unknown>): object is RefNode {
+  return object['type'] === 'ref' && typeof object['name'] === 'string';
+}
+
+/** Every `ref` found by the same search. */
+function refsIn(value: unknown): RefNode[] {
+  return objectsIn(value).filter(isRef);
+}
+
+function refNamesIn(value: unknown): string[] {
+  return refsIn(value).map(({ name }) => name);
 }
 
 /** Every name a Defs gives: its own keys and each name a `ref` in it names. */
@@ -105,6 +121,95 @@ function closureBySearch(defs: Defs): Map<string, string[]> {
   }
   return closures;
 }
+
+/** One question to a graph, with the answer made comparable. */
+type Question = { readonly key: string; readonly ask: (graph: DefGraph) => unknown };
+
+/** Every kind of question a graph answers, asked about each name of the defs and about some nodes. */
+function questionsOf(defs: Defs, seed: number): Question[] {
+  const names = namesOf(defs);
+  const nodes = askedOf(defs, seed);
+  const closure = (graph: DefGraph) =>
+    [...graph.closureFacts(ownFactsOf)].map(([name, held]) => [name, [...held].sort()]);
+  return [
+    ...names.map((name) => ({ key: `def ${name}`, ask: (graph: DefGraph) => graph.def(name) })),
+    ...names.flatMap((name) =>
+      [false, true].map((isNullable) => ({
+        key: `resolved ${name} ${isNullable}`,
+        ask: (graph: DefGraph) => graph.resolved(ref(name, isNullable)),
+      })),
+    ),
+    { key: 'reached', ask: (graph) => graph.reached(nodes) },
+    { key: 'closure', ask: (graph) => Object.fromEntries(closure(graph)) },
+  ];
+}
+
+/** The questions in a random order, which the seed fixes. */
+function shuffled<Item>(items: readonly Item[], seed: number): Item[] {
+  const next = seededNext(seed * 7727 + 5);
+  const rest = [...items];
+  const taken: Item[] = [];
+  while (rest.length > 0) {
+    const [one] = rest.splice(Math.floor(next() * rest.length), 1);
+    taken.push(one as Item);
+  }
+  return taken;
+}
+
+function answersOf(graph: DefGraph, questions: readonly Question[]) {
+  return Object.fromEntries(questions.map(({ key, ask }) => [key, ask(graph)]));
+}
+
+/** The alias defs from a name on, and whether they come back to one already followed. */
+function aliasPathOf(defs: Defs, start: string) {
+  const path: string[] = [];
+  for (let name = start; Object.hasOwn(defs, name); ) {
+    const def = defs[name] as SchemaNode;
+    if (def.type !== 'ref') {
+      break;
+    }
+    if (path.includes(name)) {
+      return { length: path.length, isLoop: true };
+    }
+    path.push(name);
+    name = def.name;
+  }
+  return { length: path.length, isLoop: false };
+}
+
+const nodeTypes = {
+  string: true,
+  number: true,
+  boolean: true,
+  enum: true,
+  object: true,
+  record: true,
+  array: true,
+  tuple: true,
+  union: true,
+  tagged: true,
+  allOf: true,
+  json: true,
+  ref: true,
+} as const satisfies Record<SchemaNode['type'], true>;
+
+/** What the drawn defs must hold for the rows above to act, each asked of one draw. */
+const features: Record<string, (defs: Defs) => boolean> = {
+  'a name with no def': (defs) => namesOf(defs).some((name) => !Object.hasOwn(defs, name)),
+  'an alias loop': (defs) => Object.keys(defs).some((name) => aliasPathOf(defs, name).isLoop),
+  'an alias chain of three': (defs) =>
+    Object.keys(defs).some((name) => {
+      const { length, isLoop } = aliasPathOf(defs, name);
+      return !isLoop && length >= 3;
+    }),
+  'a nullable ref in a node': (defs) =>
+    Object.values(defs)
+      .filter((def) => def.type !== 'ref')
+      .some((def) => refsIn(def).some((used) => used.nullable === true)),
+  'a nullable alias def': (defs) =>
+    Object.values(defs).some((def) => def.type === 'ref' && def.nullable === true),
+  'a def named constructor': (defs) => Object.hasOwn(defs, 'constructor'),
+};
 
 describe('./internal, defGraphOf', () => {
   test.each(['constructor', 'toString', '__proto__'])(
@@ -305,5 +410,31 @@ describe('./internal, defGraphOf', () => {
       mid: everything,
       leaf: everything,
     });
+  });
+
+  test('a graph answers alike whatever order its questions come in', () => {
+    for (const [index, defs] of drawn.entries()) {
+      const questions = questionsOf(defs, index);
+      const first = defGraphOf(structuredClone(defs));
+      const second = defGraphOf(structuredClone(defs));
+
+      const askedInOrder = answersOf(first, shuffled(questions, index));
+      const askedInAnother = answersOf(second, shuffled(questions, index + 1));
+
+      expect(askedInOrder).toEqual(askedInAnother);
+    }
+  });
+
+  test('the drawn defs hold names with no def, alias loops and chains, nullable refs and alias defs, a def named constructor and every node type', () => {
+    const drawsWith = Object.entries(features).map(([feature, holds]) => [
+      feature,
+      drawn.filter(holds).length,
+    ]);
+    const typesDrawn = new Set(
+      drawn.flatMap((defs) => objectsIn(defs).map((object) => object['type'])),
+    );
+
+    expect(drawsWith.filter(([, count]) => (count as number) < 10)).toEqual([]);
+    expect(Object.keys(nodeTypes).filter((type) => !typesDrawn.has(type))).toEqual([]);
   });
 });
