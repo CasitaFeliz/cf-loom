@@ -19,7 +19,7 @@ import {
   type SubscriptionSnapshot,
   type SubscriptionTombstone,
 } from '../snapshot/index.ts';
-import { defsReachedOf } from '../walker/index.ts';
+import { defGraphOf } from '../walker/index.ts';
 import { type CheckedService, checkedServiceOf, formerInputsMerged } from './former-inputs.ts';
 import { carriedForward, endpointsMerged, messagesMerged } from './tombstones.ts';
 
@@ -153,7 +153,7 @@ function codesMerged(
     if (isRemoved(code)) {
       return code;
     }
-    const defs = defsReachedOf(codeNodesOf(code), baseline?.defs ?? {});
+    const { held: defs } = defGraphOf(baseline?.defs ?? {}).reached(codeNodesOf(code));
     return { ...code, removedIn: version, defs };
   });
   return { ...removed, ...proposed };
