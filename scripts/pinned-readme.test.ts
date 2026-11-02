@@ -296,6 +296,26 @@ describe('pinnedReadme', () => {
     expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a(b).md)` });
   });
 
+  it.each([
+    ['a link with a title', `[x](${atMain}/CONTEXT.md "the glossary")`],
+    ['a definition', `[rule]: ${atMain}/CONTEXT.md`],
+    ['an autolink', `<${atMain}/CONTEXT.md>`],
+  ])('names the form it accepts when %s names the repository', (_form, offending) => {
+    const pinned = pinnedReadme(offending, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [
+        {
+          line: 1,
+          problem: expect.stringContaining(
+            `an inline link or image [text](${atMain}/<path>), with no title`,
+          ),
+        },
+      ],
+    });
+  });
+
   it('lists each of two relative links on one line', () => {
     const readme = afterOnePinnedLink('[a](./x.md) and [b](./x.md)');
 

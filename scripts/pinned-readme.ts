@@ -29,12 +29,16 @@ export type ReadmePinning =
   | { readonly kind: 'pinned'; readonly text: string }
   | { readonly kind: 'refused'; readonly problems: readonly ReadmeProblem[] };
 
+/** What a README writes in place of a mention of `repository` the release cannot point at the commit. */
 function unpinnedMention(repository: string): string {
-  const form = `https://github.com/${repository}/blob/main/<path>`;
-  return `a reference to ${repository} that is not a link target ${form}`;
+  const form = `[text](https://github.com/${repository}/blob/main/<path>)`;
+  return `a reference to ${repository} that is not an inline link or image ${form}, with no title`;
 }
 
-/** Each line of the text that names `repository`, once its links to a file at `main` are removed. */
+/**
+ * Each line that names `repository` once its links to a file at `main` are removed, code included, since code names
+ * the repository too.
+ */
 function mentionProblems(readme: string, repository: string): ReadmeProblem[] {
   const link = linkAtMain(repository);
   const problems: ReadmeProblem[] = [];
@@ -54,6 +58,10 @@ const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 /** An HTML comment as a browser ends it: not `<!-->` or `<!--->`, and not at `--!>`. */
 const htmlComment = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
 
+/**
+ * Why a link, image or definition target keeps a README from being pinned: a character reference, which a browser
+ * decodes and `marked` leaves as written, or no scheme and no `#`, which GitHub and npm resolve against `main`.
+ */
 function targetProblem(target: string): string | undefined {
   const reference = characterReference.exec(target)?.[0];
   if (reference !== undefined) {
@@ -65,6 +73,7 @@ function targetProblem(target: string): string | undefined {
   return undefined;
 }
 
+/** Why raw HTML keeps a README from being pinned: its attributes hold targets Markdown does not parse. */
 function htmlProblem(html: string): string | undefined {
   if (html.replace(htmlComment, '').trim() === '') {
     return undefined;
@@ -73,6 +82,7 @@ function htmlProblem(html: string): string | undefined {
   return `raw HTML ${JSON.stringify(firstLine.trimEnd())}: a package README holds no HTML but comments`;
 }
 
+/** The problem a token causes, or `undefined` when it is neither a target nor raw HTML. */
 function tokenProblem(token: MarkedToken): string | undefined {
   switch (token.type) {
     case 'def':
@@ -102,7 +112,7 @@ function tokenProblem(token: MarkedToken): string | undefined {
   }
 }
 
-/** What GitHub and npm would render at `main` from the README read as Markdown, one problem for each token. */
+/** The problems of the pinned README read as Markdown, one for each token that causes one. */
 function tokenProblems(pinned: string): ReadmeProblem[] {
   const problems: ReadmeProblem[] = [];
   for (const { token, line } of locatedTokens(pinned)) {
@@ -120,14 +130,11 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
 }
 
 /**
- * The README with each link to a file of `repository` at `main` pointing at the same file at `commit`, or the lines
- * that keep it from being pinned, so that a pinned README holds nothing at `main`.
+ * The README with each inline link or image to a file of `repository` at `main` pointing at the same file at
+ * `commit`, or the lines that keep it from being pinned, so that a pinned README holds nothing at `main`.
  *
- * It pins the link target `https://github.com/<repository>/blob/main/<path>` and refuses any other mention of
- * `repository` in its text, code included and backslashes ignored. Read as GitHub Flavored Markdown, it refuses a
- * link, image or definition target with no scheme and no `#`, which GitHub and npm resolve against the default
- * branch, a target holding a character reference, which a browser decodes and the parser does not, and raw HTML
- * other than a comment, whose attributes hold targets Markdown does not parse. Code never gives a target.
+ * A package README so links the repository only as `[text](https://github.com/<owner>/<name>/blob/main/<path>)`,
+ * with no title; anything else that could reach `main` refuses it.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
