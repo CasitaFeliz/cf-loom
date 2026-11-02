@@ -1842,7 +1842,7 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   test('a ring of 255 schemas walks each once', { timeout: growthTimeout }, () => {
@@ -2012,7 +2012,7 @@ describe('walkSchemas: recursion', () => {
    */
   const memoCpuRatio = 3;
 
-  /** Each chain is walked up to four times, the refused one many times longer with the memo off. */
+  /** Each chain is walked many times, the refused one many times longer with the memo off. */
   const memoTimeout = 240_000;
 
   test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
@@ -2815,7 +2815,7 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it up to nine times. */
+    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it many times. */
     const fanTimeout = 240_000;
 
     function orderOfFans(

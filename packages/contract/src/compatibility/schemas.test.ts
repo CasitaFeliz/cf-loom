@@ -2549,7 +2549,7 @@ describe('compatibilityReportOf, depth', () => {
 describe('compatibilityReportOf, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   /**

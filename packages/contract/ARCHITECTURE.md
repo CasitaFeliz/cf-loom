@@ -25,3 +25,7 @@ The package builds with `lib: ["ES2024", "WebWorker"]` and no Node types: `wire/
 ## A chain of recursion ids
 
 Every export of `./internal` that `test/chain-readers.ts` finds holding a chain, in a parameter or in what it returns, takes time linear in a chain of recursion ids, on every input a command gives it, however the chain's links hold each other, and its output is linear in it too. The packages that call them (`@cf-loom/cli`, `@cf-loom/client`, `@cf-loom/testing`) call each a fixed number of times per command or per call, so a command is linear in a chain; a loop over one, once per Endpoint, Guard or code, is a count, bounded where it is written. Each `src/internal/id-chains.<type in kebab-case>.<name>.growth.test.ts` times each such export over one way of holding, from the inputs commands make, to a linear order of growth, or `test/chain-stages.ts` says why it needs no time.
+
+## A span of the growth helpers
+
+`test/growth.ts` times a shape in spans: one run on each of as many fresh fixtures as fill 200 ms of the thread's CPU time, all built before one timed interval. A span therefore holds about 200 ms × the bytes of a fixture and its call ÷ the CPU time of a run at once, which the author of a growth test controls. The helper adds nothing to that: the tries that size a span each build, time and drop their own fixtures, so a try never holds an earlier one's. `test/growth.test.ts` forces a collection at the start of each try and checks that no earlier try's fixtures are live.
