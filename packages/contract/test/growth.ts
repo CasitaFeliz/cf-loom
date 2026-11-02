@@ -30,9 +30,9 @@ export type Order = (typeof orders)[keyof typeof orders];
  * CPU time leaves out the time a run waits for a core, but not the time it waits for memory, which
  * `orders` holds. It advances by the tick of the scheduler, 1 to 10 ms, so a run shorter than a tick
  * reads as nothing or as a whole tick: runs that read under 200 ms together are no span, and the
- * next try is sized from what they read, at most twice as many. A measurement is a ratio, so a slow
- * span on either side skews it, but only three slow spans of one side in one measurement move it,
- * while a shape of a higher order measures high every time.
+ * next try is sized from what they read, at most twice as many. A slow span on either side would
+ * skew a ratio; a measurement discards it, and only three slow spans of one side in one measurement
+ * move it, while a shape of a higher order measures high every time.
  * A fresh fixture does two jobs: no run reads what an earlier one read, so no memo answers for the
  * code timed, and both sizes read about as much memory in a span. A fixture that costs more to build
  * than a run is built once per size and copied for each run. A span holds the fixtures of its 200 ms

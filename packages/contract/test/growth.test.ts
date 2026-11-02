@@ -174,7 +174,8 @@ function additionsOfTheStep() {
 /**
  * `call` and `reference` as a cold first span makes them: `reference` does `coldPasses` times its
  * work until `call` has run once, which slows exactly its first span and the tries that size it,
- * without a clock, and costs CPU time, which a wait for a core does not.
+ * without a clock, and costs CPU time, which a wait for a core does not. It relies on the reference
+ * being timed first in each span: a helper that timed the call first would never fire the gate.
  */
 function withColdReference(call: () => unknown, reference: () => unknown) {
   let called = false;
@@ -295,7 +296,7 @@ describe('cpuRatioOf', () => {
     expect(ratio).toBeGreaterThanOrEqual(2);
   });
 
-  test('a read of 16,000 names takes over three times the CPU time of a read of 2,000 whose first span runs cold', {
+  test('a read of 16,000 names takes at least three times the CPU time of a read of 2,000 whose first span runs cold', {
     timeout: growthTimeout,
   }, () => {
     const cold = withColdReference(readingEachName(16_000), readingEachName(2_000));
