@@ -467,4 +467,26 @@ describe('./internal, defGraphOf', () => {
     expect(resolved?.name).toBe('o');
     expect([...(facts.get('__proto__') ?? [])].sort()).toEqual(['__proto__: ref', 'o: object']);
   });
+
+  test('the names with no def are listed in the order the nodes write them', () => {
+    const defs = { d0: aString, d2: aString };
+    const root: SchemaNode = {
+      type: 'union',
+      options: [ref('d0'), ref('d1'), ref('d2'), ref('d3')],
+    };
+
+    const { unheld } = defGraphOf(defs).reached([root]);
+
+    expect(unheld).toEqual(['d1', 'd3']);
+  });
+
+  test('the names with no def are listed in the order the defs reached write them, one def before the next', () => {
+    const items = (name: string): SchemaNode => ({ type: 'array', items: ref(name) });
+    const defs = { a: items('x'), b: items('y') };
+    const root: SchemaNode = { type: 'union', options: [ref('a'), ref('b')] };
+
+    const { unheld } = defGraphOf(defs).reached([root]);
+
+    expect(unheld).toEqual(['x', 'y']);
+  });
 });

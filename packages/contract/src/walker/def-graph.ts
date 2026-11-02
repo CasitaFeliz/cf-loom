@@ -82,6 +82,7 @@ function reachedFrom(
   const entered = new Set<string>();
   const pending = nodes.toReversed();
   for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    const entering: SchemaNode[] = [];
     for (const name of refsWrittenIn(node).filter((written) => !entered.has(written))) {
       entered.add(name);
       const found = def(name);
@@ -89,8 +90,11 @@ function reachedFrom(
         unheld.push(name);
       } else {
         held.set(name, found);
-        pending.push(found);
+        entering.push(found);
       }
+    }
+    for (const found of entering.toReversed()) {
+      pending.push(found);
     }
   }
   const byName = [...held].sort(([left], [right]) => byCodePoint(left, right));
