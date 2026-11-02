@@ -4,6 +4,7 @@ import { forgetChain, groupedByDeclaredSnapshot, inputOf } from './chain-fixture
 import { holdingText, holdingTextsOf } from './chain-holding-types.ts';
 import type { ChainReader } from './chain-readers.ts';
 import { checkStages } from './check-stages.ts';
+import { defGraphStages } from './def-graph-stages.ts';
 import { generateStages, generateWritesText } from './generate-stages.ts';
 import { orderOf, orders } from './growth.ts';
 import { idChains, type TableChain } from './id-chains.ts';
@@ -20,12 +21,12 @@ export const chainStages = {
   ...generateStages,
   ...publishStages,
   ...checkStages,
+  ...defGraphStages,
   ...packageStages,
   canonicalTextOf: [generateWritesText, publishWritesText],
   walkSchemas: { reason: 'run inside validateRoot, which is timed' },
   snapshotOf: { reason: 'reads what validateRoot built, and is timed in it: constant beside it' },
   firstPublishChangesOf: { reason: 'reads the Elements of a first version, never a def' },
-  defGraphOf: { reason: 'under construction' },
   defScopesOf: { reason: 'run inside nestingFailureOf and decodeSnapshot, which are timed' },
   ownRejectionsOf: { reason: 'reads the codes an Endpoint lists, never a def: a count' },
   brokerPlanOf: { reason: 'reads Messages and Subscriptions, never a def: a count' },
