@@ -157,7 +157,7 @@ function shuffled<Item>(items: readonly Item[], seed: number): Item[] {
 }
 
 function answersOf(graph: DefGraph, questions: readonly Question[]) {
-  return Object.fromEntries(questions.map(({ key, ask }) => [key, ask(graph)]));
+  return Object.fromEntries(questions.map(({ key, ask }) => [key, structuredClone(ask(graph))]));
 }
 
 /** The alias defs from a name on, and whether they come back to one already followed. */
