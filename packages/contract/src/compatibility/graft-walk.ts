@@ -6,7 +6,7 @@ import {
   withoutNullable,
 } from '../walker/index.ts';
 import type { BothDefs, Finding } from './findings.ts';
-import type { BothResolvers, GraftDefs } from './graft-names.ts';
+import type { GraftDefs } from './graft-names.ts';
 
 /** Where a node the walk builds goes once it is built. */
 export type Put = (node: SchemaNode) => void;
@@ -37,8 +37,8 @@ export type Frame =
 /** A walk of a former Input onto an Endpoint's: recording its def sources, or, once named, building. */
 export type Walk = {
   readonly defs: BothDefs;
-  readonly resolve: BothResolvers;
   readonly met: GraftDefs;
+  /** The defs named apart, written in place as the walk builds them, so no Def graph is ever asked of them: a Defs is never changed once a graph reads it. */
   readonly out: Record<string, SchemaNode>;
   readonly frames: Frame[];
   grafts: boolean;

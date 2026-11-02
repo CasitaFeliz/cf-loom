@@ -58,7 +58,7 @@ export function placePair(walk: Walk, pair: NodePair, place: Place): void {
     place.put(pair.proposed);
     return;
   }
-  const followed = followedPairOf(pair, walk.resolve);
+  const followed = followedPairOf(pair, walk.defs);
   if (pair.proposed.type !== 'ref') {
     pushGraft(walk, followed.pair, place);
     return;

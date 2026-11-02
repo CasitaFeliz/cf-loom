@@ -1,7 +1,7 @@
 export { compatibilityReportOf } from './check.ts';
 export { firstPublishChangesOf } from './element-changes.ts';
 export type { GraftTarget } from './grafting.ts';
-export { graftedInputOf, readDefsOf } from './grafting.ts';
+export { graftedInputOf } from './grafting.ts';
 export { publishedSnapshotOf } from './merge.ts';
 export type { PeerMove, PeerRangeMove, PeerRanges } from './peers.ts';
 export { peerMovesOf, zodPeerRange } from './peers.ts';
