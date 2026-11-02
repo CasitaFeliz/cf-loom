@@ -68,7 +68,9 @@ export function orderOfGrowth(growth: number, sizes: Sizes): number {
  * the fastest span of each over up to three interleaved spans of both, which stop at the first ratio
  * under `bound`. A span is as many runs as fill 200 ms, as in `orderOf`, so a run shorter than a
  * tick still measures. A slower host stretches the ratio far less than it stretches either run, so it
- * holds where an absolute bound does not.
+ * holds where an absolute bound does not. It stops at the first ratio under `bound`, so a claim that
+ * the ratio reaches a floor passes a bound no ratio is under, `everyAttempt = 0` in growth.test.ts,
+ * to keep the fastest span of every attempt.
  */
 export function cpuRatioOf(call: () => unknown, reference: () => unknown, bound: number): number {
   const callTimer = spanTimerOf((runs) => cpuMillisecondsOfRepeated(call, runs));
