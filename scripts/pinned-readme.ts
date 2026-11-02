@@ -19,6 +19,11 @@ function linkAtMain(repository: string): RegExp {
   return new RegExp(`\\]\\(${targetAt(repository, 'main')}\\)`, 'g');
 }
 
+/** Whether a link target is a file of `repository` at `commit`. */
+function isTargetAt(target: string, repository: string, commit: string): boolean {
+  return new RegExp(`^${targetAt(repository, commit)}$`).test(target);
+}
+
 /** Whether a line names `repository` in any case, as a whole name and not as the end of an owner or the start of a name. */
 function namesRepository(line: string, repository: string): boolean {
   return new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i').test(line);
@@ -54,9 +59,12 @@ const absoluteOrAnchor = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
 /** An HTML comment as a browser ends it: not `<!-->` or `<!--->`, and not at `--!>`. */
 const htmlComment = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
 
-function targetProblem(target: string): string | undefined {
+function targetProblem(target: string, repository: string, commit: string): string | undefined {
   if (!absoluteOrAnchor.test(target)) {
     return `the link target "${target}" has no scheme and is not an anchor`;
+  }
+  if (namesRepository(target, repository) && !isTargetAt(target, repository, commit)) {
+    return unpinnedMention(repository);
   }
   return undefined;
 }
@@ -69,12 +77,12 @@ function htmlProblem(html: string): string | undefined {
   return `raw HTML ${JSON.stringify(firstLine.trimEnd())}, but a package README holds no HTML but comments`;
 }
 
-function tokenProblem(token: MarkedToken): string | undefined {
+function tokenProblem(token: MarkedToken, repository: string, commit: string): string | undefined {
   switch (token.type) {
     case 'def':
     case 'image':
     case 'link':
-      return targetProblem(token.href);
+      return targetProblem(token.href, repository, commit);
     case 'html':
       return htmlProblem(token.raw);
     case 'blockquote':
@@ -99,10 +107,10 @@ function tokenProblem(token: MarkedToken): string | undefined {
 }
 
 /** What GitHub and npm would render at `main` from the README read as Markdown, one problem for each token. */
-function tokenProblems(pinned: string): ReadmeProblem[] {
+function tokenProblems(pinned: string, repository: string, commit: string): ReadmeProblem[] {
   const problems: ReadmeProblem[] = [];
   for (const { token, line } of locatedTokens(pinned)) {
-    const problem = tokenProblem(token);
+    const problem = tokenProblem(token, repository, commit);
     if (problem !== undefined) {
       problems.push({ line, problem });
     }
@@ -122,8 +130,9 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
  *
  * It pins the link target `https://github.com/<repository>/blob/main/<path>` and refuses any other mention of
  * `repository` in its text, code included. Read as GitHub Flavored Markdown, it refuses a link, image or definition
- * target with no scheme and no `#`, which GitHub and npm resolve against the default branch, and raw HTML other
- * than a comment, whose attributes hold targets Markdown does not parse. Code never gives a target.
+ * target with no scheme and no `#`, which GitHub and npm resolve against the default branch, a target naming
+ * `repository` that is not pinned, which a backslash escape can hide from the text, and raw HTML other than a
+ * comment, whose attributes hold targets Markdown does not parse. Code never gives a target.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
@@ -134,7 +143,10 @@ export function pinnedReadme(readme: string, repository: string, commit: string)
     linkAtMain(repository),
     (_link, before: string, after: string) => `](${before}${commit}${after})`,
   );
-  const problems = [...mentionProblems(readme, repository), ...tokenProblems(pinned)];
+  const problems = [
+    ...mentionProblems(readme, repository),
+    ...tokenProblems(pinned, repository, commit),
+  ];
   if (problems.length > 0) {
     return { kind: 'refused', problems: inLineOrder(problems) };
   }

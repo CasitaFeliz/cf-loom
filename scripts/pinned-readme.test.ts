@@ -149,6 +149,22 @@ describe('pinnedReadme', () => {
     ['a bare URL', `See ${atMain}/CONTEXT.md now`],
     ['a reference definition at main', `[rule]: ${atMain}/CONTEXT.md`],
     ['the repository named in prose', `The documents of ${repository} are on GitHub.`],
+    [
+      'a backslash-escaped hyphen in the repository, which the text does not show',
+      '[x](https://github.com/CasitaFeliz/cf\\-loom/blob/main/a.md)',
+    ],
+    [
+      'a backslash-escaped slash in the repository',
+      '[x](https://github.com/CasitaFeliz\\/cf-loom/blob/main/a.md)',
+    ],
+    [
+      'an image of an escaped repository',
+      '![x](https://github.com/CasitaFeliz/cf\\-loom/blob/main/a.png)',
+    ],
+    [
+      'a definition of an escaped repository',
+      '[r]: https://github.com/CasitaFeliz/cf\\-loom/blob/main/a.md',
+    ],
   ])('refuses %s, naming its line', (_form, offending) => {
     const refused = refusedLinesOf(afterOnePinnedLink(offending));
 
