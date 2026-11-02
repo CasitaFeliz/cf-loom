@@ -45,6 +45,22 @@ function childrenOf(token: MarkedToken): readonly MarkedToken[] {
   }
 }
 
+/** The line, counted from 1, that holds the offset `at`: the number of line starts at or before it. */
+function lineAt(lineStarts: readonly number[], at: number): number {
+  let low = 0;
+  let high = lineStarts.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const start = lineStarts[middle];
+    if (start !== undefined && start <= at) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}
+
 type Frame = {
   readonly tokens: readonly MarkedToken[];
   next: number;
@@ -76,7 +92,7 @@ export function locatedTokens(markdown: string): readonly LocatedToken[] {
     const isWithin = found !== -1 && foundEnd <= frame.end;
     const at = isWithin ? found : frame.cursor;
     frame.cursor = isWithin ? foundEnd : frame.cursor;
-    located.push({ token, line: lineStarts.filter((start) => start <= at).length });
+    located.push({ token, line: lineAt(lineStarts, at) });
     frames.push({
       tokens: childrenOf(token),
       next: 0,
