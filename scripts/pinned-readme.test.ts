@@ -474,6 +474,9 @@ const forms: Record<string, (target: string) => string> = {
   'an HTML image': (target) => `<img src="${target}">`,
   'an HTML image with a srcset': (target) => `<img srcset="${target} 2x">`,
   'a comment holding a link': (target) => `<!-- [x](${target}) -->`,
+  'a comment ended by <!--> before an image': (target) => `<!--> <img src="${target}"> -->`,
+  'a comment ended by <!---> before an image': (target) => `<!---> <img src="${target}"> -->`,
+  'a comment ended by --!> before an image': (target) => `<!-- c --!> <img src="${target}"> -->`,
   'a link around an image': (target) => `[![a](https://x.io/a.png)](${target})`,
   'a footnote holding a link': (target) => `a[^1]\n\n[^1]: see [y](${target})`,
 };
@@ -560,9 +563,34 @@ function decodedByMarked(value: string): string {
   return value.replace(markedEscapes, (reference) => escapes[reference] ?? reference);
 }
 
+/** Where the comment whose body starts at `body` ends, as a browser ends it: `-->`, `--!>`, or the end of the text. */
+function endOfCommentAt(html: string, body: number): number {
+  const rest = html.slice(body);
+  if (rest.startsWith('>')) {
+    return body + 1;
+  }
+  if (rest.startsWith('->')) {
+    return body + 2;
+  }
+  const closers = ['-->', '--!>'].map((closer) => ({ at: rest.indexOf(closer), closer }));
+  const found = closers.filter(({ at }) => at !== -1);
+  const ends = found.map(({ at, closer }) => body + at + closer.length);
+  return ends.length === 0 ? html.length : Math.min(...ends);
+}
+
+function withoutComments(html: string): string {
+  let kept = '';
+  let from = 0;
+  for (let open = html.indexOf('<!--'); open !== -1; open = html.indexOf('<!--', from)) {
+    kept += html.slice(from, open);
+    from = endOfCommentAt(html, open + 4);
+  }
+  return kept + html.slice(from);
+}
+
 /** What a browser would load from the HTML `marked` renders: each URL attribute, with its problems. */
 function urlProblemsOf(html: string): string[] {
-  const tags = html.replace(/<!--[\s\S]*?-->/g, '').match(/<[a-z][^>]*>/gi) ?? [];
+  const tags = withoutComments(html).match(/<[a-z][^>]*>/gi) ?? [];
   const attributes = /\b(?:href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
   const problems: string[] = [];
   for (const match of tags.flatMap((tag) => [...tag.matchAll(attributes)])) {
