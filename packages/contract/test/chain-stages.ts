@@ -25,6 +25,7 @@ export const chainStages = {
   walkSchemas: { reason: 'run inside validateRoot, which is timed' },
   snapshotOf: { reason: 'reads what validateRoot built, and is timed in it: constant beside it' },
   firstPublishChangesOf: { reason: 'reads the Elements of a first version, never a def' },
+  defGraphOf: { reason: 'under construction' },
   defScopesOf: { reason: 'run inside nestingFailureOf and decodeSnapshot, which are timed' },
   ownRejectionsOf: { reason: 'reads the codes an Endpoint lists, never a def: a count' },
   brokerPlanOf: { reason: 'reads Messages and Subscriptions, never a def: a count' },

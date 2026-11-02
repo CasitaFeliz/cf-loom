@@ -212,6 +212,7 @@ export {
 export type {
   Catchalls,
   Def,
+  DefGraph,
   Defs,
   DefTypes,
   EnumNode,
@@ -235,6 +236,7 @@ export {
   authorPathOf,
   byCodePoint,
   chainDown,
+  defGraphOf,
   formatConstructorOf,
   isJsonValue,
   isSchema,

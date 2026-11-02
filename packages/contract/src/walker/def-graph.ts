@@ -4,9 +4,28 @@ import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
 /**
- * The def a name stands for in a defs value: none unless `defs` holds it as an own key, since a
- * name an object inherits, such as `toString`, is no def.
+ * The graph of the `ref`s between one Defs' defs, which answers every question about them. A Defs
+ * is never changed once built, so the graph a Defs gives answers for as long as that Defs lives.
  */
+export type DefGraph = {
+  /** The def a name stands for: none unless the Defs holds it as an own key, since a name an object inherits, such as `toString`, is no def. */
+  readonly def: (name: string) => SchemaNode | undefined;
+};
+
+const graphs = new WeakMap<Defs, DefGraph>();
+
+/** The Def graph of a Defs, the same one each time it is asked for that Defs, which is never changed once built. */
+export function defGraphOf(defs: Defs): DefGraph {
+  const known = graphs.get(defs);
+  if (known !== undefined) {
+    return known;
+  }
+  const built: DefGraph = { def: (name) => defNamed(defs, name) };
+  graphs.set(defs, built);
+  return built;
+}
+
+/** The def a name stands for in a defs value: none unless `defs` holds it as an own key. */
 export function defNamed(defs: Defs, name: string): SchemaNode | undefined {
   return Object.hasOwn(defs, name) ? defs[name] : undefined;
 }
