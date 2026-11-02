@@ -60,8 +60,8 @@ const unionIsRefused =
   'not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)';
 
 /**
- * A growth test builds and times its shape up to three times over, which takes up to 11 s while the
- * project's files run in parallel, and several times that on a CI runner that several runs share.
+ * A growth test times its shape many times over, which takes seconds while the project's files run
+ * in parallel, and several times that on a CI runner that several runs share.
  */
 const growthTimeout = 240_000;
 

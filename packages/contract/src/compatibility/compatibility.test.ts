@@ -644,7 +644,7 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
    */
   const sizes = { small: 64, large: 512 };
 
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   const stillRetired = { lifecycle: 'retired' } as const;
@@ -732,7 +732,7 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
 describe('publishedSnapshotOf, the codes no Endpoint answers any more', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   function mergeOfCodes(count: number) {

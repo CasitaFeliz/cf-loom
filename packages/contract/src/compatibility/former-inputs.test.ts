@@ -1477,7 +1477,7 @@ describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over gene
 });
 
 describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', () => {
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   const sizes = { small: 2_000, large: 16_000 };
