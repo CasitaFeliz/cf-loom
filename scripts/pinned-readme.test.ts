@@ -1,6 +1,7 @@
 import type { MarkedToken } from 'marked';
 import { Lexer, marked } from 'marked';
 import { describe, expect, it } from 'vitest';
+import type { ReadmeProblem } from './pinned-readme.ts';
 import { pinnedReadme } from './pinned-readme.ts';
 
 const repository = 'CasitaFeliz/cf-loom';
@@ -635,8 +636,9 @@ const repeatedContainers: Record<string, Container> = {
 
 /**
  * A link split over two lines inside these containers has its source rewritten by `marked`, which takes the markers
- * or the indentation out of it. `locatedTokens` cannot find it as written and names it at the part before it, never
- * after its own line and never above its container: the only line this test lets a problem miss.
+ * or the indentation out of it, so `locatedTokens` names its target inside its container, at the cursor or at a
+ * later identical copy. The READMEs drawn here write every copy alike, so the test holds it to the cursor: at or
+ * above the line of its own link and not above its container.
  */
 const containersThatRewriteSplitLinks = new Set([
   'a quote',
@@ -649,16 +651,27 @@ const splitLink = 'a link split over two lines';
 
 type Block = { readonly form: string; readonly target: string; readonly leadsWithText: boolean };
 
-/** The lines a README must name, and those a split link may be named above instead. */
+/**
+ * The lines a README must name, and the lines of its split links' targets, which it may name above them instead:
+ * the only lines this test lets a problem miss. A mention of the repository in a split link keeps its line.
+ */
 type ExpectedLines = { readonly exact: readonly number[]; readonly splitLinks: readonly number[] };
 
 function linesOfText(text: string): number {
   return text.split('\n').length;
 }
 
-function problemLinesOf(readme: string): number[] {
+function problemsOf(readme: string): readonly ReadmeProblem[] {
   const pinning = pinnedReadme(readme, repository, commit);
-  return pinning.kind === 'refused' ? pinning.problems.map(({ line }) => line) : [];
+  return pinning.kind === 'refused' ? pinning.problems : [];
+}
+
+function problemLinesOf(readme: string): number[] {
+  return problemsOf(readme).map(({ line }) => line);
+}
+
+function isLinkTargetProblem({ problem }: ReadmeProblem): boolean {
+  return problem.startsWith('the link target');
 }
 
 function readmeOf(container: Container, copies: readonly string[]): string {
@@ -696,8 +709,9 @@ function expectedLinesOf(
       linesOfText(container(copies.slice(0, index + 1))) - linesOfText(container([own]));
     const isRewritten =
       block.form === splitLink && containersThatRewriteSplitLinks.has(containerName);
-    for (const line of problemLinesOf(readmeOf(container, [own]))) {
-      (isRewritten ? splitLinks : exact).push(line + start);
+    for (const found of problemsOf(readmeOf(container, [own]))) {
+      const isLoose = isRewritten && isLinkTargetProblem(found);
+      (isLoose ? splitLinks : exact).push(found.line + start);
     }
   }
   return { exact, splitLinks };
@@ -715,13 +729,14 @@ function mismatchOf(named: readonly number[], expected: ExpectedLines): string |
       leftover.splice(at, 1);
     }
   }
-  const ceiling = Math.max(0, ...expected.splitLinks);
-  const misplaced = leftover.filter((line) => line < blockLine || line > ceiling);
-  const isCountRight = leftover.length === expected.splitLinks.length;
+  const links = [...expected.splitLinks].sort((first, second) => first - second);
+  const rest = leftover.sort((first, second) => first - second);
+  const misplaced = rest.filter((line, index) => line < blockLine || line > (links[index] ?? 0));
+  const isCountRight = rest.length === links.length;
   if (missing.length === 0 && misplaced.length === 0 && isCountRight) {
     return undefined;
   }
-  return `missing ${missing}, misplaced ${misplaced}, left over ${leftover}`;
+  return `missing ${missing}, misplaced ${misplaced}, left over ${rest}`;
 }
 
 describe('pinnedReadme over a block repeated in a container', () => {
