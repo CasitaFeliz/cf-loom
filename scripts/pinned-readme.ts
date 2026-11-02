@@ -81,7 +81,7 @@ function htmlProblem(html: string): string | undefined {
     return undefined;
   }
   const [firstLine = ''] = html.trim().split('\n');
-  return `raw HTML ${JSON.stringify(firstLine.trimEnd())}, but a package README holds no HTML but comments`;
+  return `raw HTML ${JSON.stringify(firstLine.trimEnd())}: a package README holds no HTML but comments`;
 }
 
 function tokenProblem(token: MarkedToken, repository: string, commit: string): string | undefined {
