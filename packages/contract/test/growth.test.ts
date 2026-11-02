@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { growthTimeout } from '../vitest.growth.config.ts';
 import { collectedOnce } from './collected.ts';
-import { orderOf, orders } from './growth.ts';
+import { cpuRatioOf, orderOf, orders } from './growth.ts';
 
 const sizes = { small: 2_000, large: 16_000 };
 
@@ -51,6 +51,40 @@ function lookingUpThousandNames(size: number) {
       found += names.has(`name${index}`) ? 1 : 0;
     }
     return found;
+  };
+}
+
+/** A scan of the names for each of them, absent, over a fortieth of the size: n²/1,600 comparisons, a run under a tick of the CPU clock. */
+function scanningFortiethOfNames(size: number) {
+  const names = namesOf(size / 40);
+  return () => {
+    let found = 0;
+    for (const name of names) {
+      found += names.includes(`absent${name}`) ? 1 : 0;
+    }
+    return found;
+  };
+}
+
+/**
+ * `prepare`, whose first `times` runs at `waitingSize` each wait a quarter of a second for a core,
+ * as a preempted run does: they take wall time and no CPU time.
+ */
+function waitingAtFirst(
+  prepare: (size: number) => () => unknown,
+  waitingSize: number,
+  times: number,
+) {
+  let waits = 0;
+  return (size: number) => {
+    const call = prepare(size);
+    return () => {
+      if (size === waitingSize && waits < times) {
+        waits++;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+      }
+      return call();
+    };
   };
 }
 
@@ -117,6 +151,36 @@ describe('orderOf', () => {
     expect(order).toBeGreaterThanOrEqual(orders.flat);
   });
 
+  test('a quadratic scan of a fortieth of the names, whose first runs at the large size wait for a core, reaches the linear order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(scanningFortiethOfNames, sizes.large, 3);
+
+    const order = orderOf(waiting, sizes, orders.linear);
+
+    expect(order).toBeGreaterThanOrEqual(orders.linear);
+  });
+
+  test('a read of each name once, whose first runs at the large size wait for a core, reaches the flat order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(readingEachName, sizes.large, 3);
+
+    const order = orderOf(waiting, sizes, orders.flat);
+
+    expect(order).toBeGreaterThanOrEqual(orders.flat);
+  });
+
+  test('a read of each name once, whose first 18 runs at the small size wait for a core, reaches the flat order', {
+    timeout: growthTimeout,
+  }, () => {
+    const waiting = waitingAtFirst(readingEachName, sizes.small, 18);
+
+    const order = orderOf(waiting, sizes, orders.flat);
+
+    expect(order).toBeGreaterThanOrEqual(orders.flat);
+  });
+
   test.each([1, 8])(
     'a scan of the names at one name in %i reaches the linear order',
     (every) => {
@@ -161,5 +225,18 @@ describe('orderOf', () => {
     const refused = () => orderOf(reading, sizes, 13);
 
     expect(refused).toBeTypeOf('function');
+  });
+});
+
+describe('cpuRatioOf', () => {
+  test('a read of 16,000 names takes at least twice the CPU time of a read of 2,000', {
+    timeout: growthTimeout,
+  }, () => {
+    const large = readingEachName(16_000);
+    const small = readingEachName(2_000);
+
+    const ratio = cpuRatioOf(large, small, 2);
+
+    expect(ratio).toBeGreaterThanOrEqual(2);
   });
 });

@@ -26,24 +26,28 @@ export type Order = (typeof orders)[keyof typeof orders];
  * CPU time grows by, so about 1 for a linear shape and 2 for a quadratic one. The smallest of up to
  * three measurements, which stop at the first under `below`. A measurement is the fastest of three
  * interleaved spans of each size, and a span is one run of the shape on each of as many fresh
- * fixtures as take about 200 ms, timed together by the CPU time of the thread and divided by their
- * number. The CPU time leaves out the time a run waits for a core, but not the time it waits for
- * memory, which `orders` holds. It advances by the tick of the scheduler, 1 to 10 ms, which 200 ms
- * makes a small part of a span, but not of a single run of a small size. A measurement can still be
- * skewed now and then, and only upward, while a shape of a higher order measures high every time.
+ * fixtures as fill 200 ms of the thread's CPU time, timed together and divided by their number. The
+ * CPU time leaves out the time a run waits for a core, but not the time it waits for memory, which
+ * `orders` holds. It advances by the tick of the scheduler, 1 to 10 ms, so a run shorter than a tick
+ * reads as nothing or as a whole tick: runs that read under 200 ms together are no span, and the
+ * next try is sized from what they read, at most twice as many. A measurement can still be skewed
+ * now and then, and only upward, while a shape of a higher order measures high every time.
  * A fresh fixture does two jobs: no run reads what an earlier one read, so no memo answers for the
  * code timed, and both sizes read about as much memory in a span. A fixture that costs more to build
- * than a run is built once per size and copied for each run. `prepare` builds the fixture outside
- * the timed part and returns the call to time.
+ * than a run is built once per size and copied for each run. A span holds the fixtures of its 200 ms
+ * of runs at once, and only its own, so a fast run on a large fixture holds many of them. `prepare`
+ * builds the fixture outside the timed part and returns the call to time.
  */
 export function orderOf(
   prepare: (size: number) => () => unknown,
   sizes: Sizes,
   below: Order,
 ): number {
+  const small = spanTimerOf(() => prepare(sizes.small));
+  const large = spanTimerOf(() => prepare(sizes.large));
   let smallest = Number.POSITIVE_INFINITY;
   for (let attempt = 0; attempt < attempts && smallest >= below; attempt++) {
-    smallest = Math.min(smallest, orderOfGrowth(measuredGrowth(prepare, sizes), sizes));
+    smallest = Math.min(smallest, orderOfGrowth(measuredGrowth(small, large), sizes));
   }
   return smallest;
 }
@@ -54,54 +58,77 @@ export function orderOfGrowth(growth: number, sizes: Sizes): number {
 }
 
 /**
- * How many times longer `call` takes than `reference`, in CPU time of the thread: the fastest run of
- * each over up to three interleaved runs of both, which stop at the first ratio under `bound`. A
- * slower host stretches the ratio far less than it stretches either run, so it holds where an
- * absolute bound does not.
+ * How many times longer a run of `call` takes than a run of `reference`, in CPU time of the thread:
+ * the fastest span of each over up to three interleaved spans of both, which stop at the first ratio
+ * under `bound`. A span is as many runs as fill 200 ms, as in `orderOf`, so a run shorter than a
+ * tick still measures. A slower host stretches the ratio far less than it stretches either run, so it
+ * holds where an absolute bound does not.
  */
 export function cpuRatioOf(call: () => unknown, reference: () => unknown, bound: number): number {
+  const callTimer = spanTimerOf(() => call);
+  const referenceTimer = spanTimerOf(() => reference);
   let fastestCall = Number.POSITIVE_INFINITY;
   let fastestReference = Number.POSITIVE_INFINITY;
   let ratio = Number.POSITIVE_INFINITY;
   for (let attempt = 0; attempt < attempts && ratio >= bound; attempt++) {
-    fastestReference = Math.min(fastestReference, cpuMillisecondsOfRun(reference));
-    fastestCall = Math.min(fastestCall, cpuMillisecondsOfRun(call));
+    fastestReference = Math.min(fastestReference, referenceTimer());
+    fastestCall = Math.min(fastestCall, callTimer());
     ratio = fastestCall / fastestReference;
   }
   return ratio;
 }
 
-function cpuMillisecondsOfRun(call: () => unknown): number {
-  const started = process.threadCpuUsage();
-  call();
-  const { user, system } = process.threadCpuUsage(started);
-  return (user + system) / 1000;
+/** A span's runs and the CPU time of the thread each took, in milliseconds. */
+type Span = { readonly runs: number; readonly cpuMillisecondsPerRun: number };
+
+/**
+ * Times a span of runs on the fresh fixtures `fresh` builds each time it is called, the CPU time of
+ * the thread a run takes in milliseconds, and starts the next span from the runs this one needed,
+ * so only the first span pays for the tries that size it.
+ */
+function spanTimerOf(fresh: () => () => unknown): () => number {
+  let runs = 1;
+  return () => {
+    const span = spanOf(fresh, runs);
+    runs = span.runs;
+    return span.cpuMillisecondsPerRun;
+  };
 }
 
-function measuredGrowth(prepare: (size: number) => () => unknown, sizes: Sizes): number {
+function measuredGrowth(small: () => number, large: () => number): number {
   let fastestSmall = Number.POSITIVE_INFINITY;
   let fastestLarge = Number.POSITIVE_INFINITY;
   for (let span = 0; span < spans; span++) {
-    fastestSmall = Math.min(fastestSmall, cpuMillisecondsPerRun(prepare, sizes.small));
-    fastestLarge = Math.min(fastestLarge, cpuMillisecondsPerRun(prepare, sizes.large));
+    fastestSmall = Math.min(fastestSmall, small());
+    fastestLarge = Math.min(fastestLarge, large());
   }
   return fastestLarge / fastestSmall;
 }
 
-function cpuMillisecondsPerRun(prepare: (size: number) => () => unknown, size: number): number {
-  const calls = Array.from({ length: runsToFillSpan(prepare, size) }, () => prepare(size));
+/**
+ * Runs on fresh fixtures, from `runs`, until their CPU time together fills a span: runs that read
+ * under it size the next try from what they read, at most twice as many.
+ */
+function spanOf(fresh: () => () => unknown, runs: number): Span {
+  for (let count = runs; ; ) {
+    const read = cpuMillisecondsOfFresh(fresh, count);
+    if (read >= spanMilliseconds) {
+      return { runs: count, cpuMillisecondsPerRun: read / count };
+    }
+    count = Math.min(2 * count, Math.ceil((count * spanMilliseconds) / read));
+  }
+}
+
+/**
+ * The CPU time of the thread that one run on each of `count` fresh fixtures takes, timed together.
+ * The fixtures are built here and live only until it returns, so a try never holds an earlier one's.
+ */
+function cpuMillisecondsOfFresh(fresh: () => () => unknown, count: number): number {
+  const calls = Array.from({ length: count }, fresh);
   const started = process.threadCpuUsage();
   for (const call of calls) {
     call();
   }
   const { user, system } = process.threadCpuUsage(started);
-  return (user + system) / 1000 / calls.length;
-}
-
-/** One run on a fresh fixture, which also warms the code up, tells how many fill a span. */
-function runsToFillSpan(prepare: (size: number) => () => unknown, size: number): number {
-  const call = prepare(size);
-  const started = performance.now();
-  call();
-  return Math.ceil(spanMilliseconds / (performance.now() - started));
+  return (user + system) / 1000;
 }
