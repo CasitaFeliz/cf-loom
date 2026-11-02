@@ -138,6 +138,9 @@ function fixturesOfTries() {
   return { prepare, tries };
 }
 
+/** A bound no ratio is under, so that `cpuRatioOf` times every attempt and keeps the fastest span of each. */
+const everyAttempt = 0;
+
 const heapReadEvery = 16_384;
 
 /** The bytes an array holds for each reference it lists. */
@@ -265,7 +268,7 @@ describe('cpuRatioOf', () => {
     const large = readingEachName(16_000);
     const small = readingEachName(2_000);
 
-    const ratio = cpuRatioOf(large, small, 2);
+    const ratio = cpuRatioOf(large, small, everyAttempt);
 
     expect(ratio).toBeGreaterThanOrEqual(2);
   });
