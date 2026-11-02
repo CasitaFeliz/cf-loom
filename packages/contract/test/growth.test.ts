@@ -138,6 +138,36 @@ function fixturesOfTries() {
   return { prepare, tries };
 }
 
+const heapReadEvery = 16_384;
+
+/** The bytes an array holds for each reference it lists. */
+const slotBytes = Float64Array.BYTES_PER_ELEMENT;
+
+/**
+ * A step of 512 additions, which takes tens of nanoseconds, as a call, with the most heap in use
+ * that one of its runs saw, read once in every 16,384 runs.
+ */
+function stepSeeingTheHeap() {
+  const seen = { runs: 0, mostHeapUsed: 0 };
+  const call = () => {
+    seen.runs++;
+    if (seen.runs % heapReadEvery === 0) {
+      seen.mostHeapUsed = Math.max(seen.mostHeapUsed, process.memoryUsage().heapUsed);
+    }
+    return additionsOfTheStep();
+  };
+  return { call, seen };
+}
+
+/** The 512 additions of the step, as a call that reads no heap. */
+function additionsOfTheStep() {
+  let sum = 0;
+  for (let index = 0; index < 512; index++) {
+    sum += index;
+  }
+  return sum;
+}
+
 describe('orderOf', () => {
   test('a read of each name once is under the linear order', { timeout: growthTimeout }, () => {
     const order = orderOf(readingEachName, sizes, orders.linear);
@@ -238,5 +268,18 @@ describe('cpuRatioOf', () => {
     const ratio = cpuRatioOf(large, small, 2);
 
     expect(ratio).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a call of tens of nanoseconds holds no memory for each of its runs', {
+    timeout: growthTimeout,
+  }, () => {
+    const { call, seen } = stepSeeingTheHeap();
+    collectedOnce();
+    const heapUsedBefore = process.memoryUsage().heapUsed;
+
+    cpuRatioOf(call, additionsOfTheStep, 2);
+
+    const heldForEachRun = (seen.mostHeapUsed - heapUsedBefore) / seen.runs;
+    expect(heldForEachRun).toBeLessThan(slotBytes / 2);
   });
 });
