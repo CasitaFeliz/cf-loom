@@ -206,6 +206,40 @@ describe('pinnedReadme', () => {
   });
 
   it.each([
+    [
+      'a hexadecimal reference in the repository',
+      '[x](https://github.com/CasitaFeliz&#x2F;cf-loom/blob/main/a.md)',
+      [3],
+    ],
+    [
+      'a decimal reference in the repository, in an image',
+      '![x](https://github.com/CasitaFeliz&#47;cf-loom/blob/main/a.png)',
+      [3],
+    ],
+    [
+      'a named reference in the repository, in a definition',
+      '[x][r]\n\n[r]: https://github.com/CasitaFeliz&sol;cf-loom/blob/main/a.md',
+      [3, 5],
+    ],
+    ['a colon written as a reference', '[x](https&#58;//zod.dev)', [3]],
+    ['dots written as references, which make a relative target', '[x](&#46;&#46;/a.md)', [3]],
+    ['an ampersand written as a reference', '[x](https://zod.dev/a&amp;b)', [3]],
+  ])('refuses a target with %s, naming its line', (_form, offending, lines) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(offending));
+
+    expect(refused).toEqual(lines);
+  });
+
+  it('names the character reference it refuses, which a browser decodes and the parser does not', () => {
+    const pinned = pinnedReadme('[x](https&#58;//zod.dev)', repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [{ line: 1, problem: expect.stringMatching(/character reference &#58;/) }],
+    });
+  });
+
+  it.each([
     ['an HTML link with a scheme', '<a href="https://fetch.spec.whatwg.org/">x</a>', [3]],
     ['a relative HTML href', '<a href="../../COMPATIBILITY.md">x</a>', [3]],
     ['a relative HTML src', "<img alt='' src='./diagram.png'>", [3]],

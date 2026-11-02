@@ -56,10 +56,17 @@ function mentionProblems(readme: string, repository: string): ReadmeProblem[] {
 
 const absoluteOrAnchor = /^(?:[a-z][a-z0-9+.-]*:|#)/i;
 
+/** A reference a browser decodes in a URL and the parser leaves as written: `&#x2F;`, `&#47;`, `&sol;`. */
+const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
+
 /** An HTML comment as a browser ends it: not `<!-->` or `<!--->`, and not at `--!>`. */
 const htmlComment = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
 
 function targetProblem(target: string, repository: string, commit: string): string | undefined {
+  const reference = characterReference.exec(target)?.[0];
+  if (reference !== undefined) {
+    return `the link target "${target}" holds the character reference ${reference}; write the character itself`;
+  }
   if (!absoluteOrAnchor.test(target)) {
     return `the link target "${target}" has no scheme and is not an anchor`;
   }
@@ -131,8 +138,9 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
  * It pins the link target `https://github.com/<repository>/blob/main/<path>` and refuses any other mention of
  * `repository` in its text, code included. Read as GitHub Flavored Markdown, it refuses a link, image or definition
  * target with no scheme and no `#`, which GitHub and npm resolve against the default branch, a target naming
- * `repository` that is not pinned, which a backslash escape can hide from the text, and raw HTML other than a
- * comment, whose attributes hold targets Markdown does not parse. Code never gives a target.
+ * `repository` that is not pinned, which a backslash escape can hide from the text, a target holding a character
+ * reference, which a browser decodes and the parser does not, and raw HTML other than a comment, whose attributes
+ * hold targets Markdown does not parse. Code never gives a target.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
