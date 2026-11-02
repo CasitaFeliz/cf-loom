@@ -1,4 +1,4 @@
-import { refsWrittenIn } from './def-graph.ts';
+import { defNamed, refsWrittenIn } from './def-graph.ts';
 import type { SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
@@ -17,7 +17,7 @@ export function closureFactsOf<Fact>(
   const facts = new Map([...names].map((name): [string, Set<Fact>] => [name, new Set()]));
   const own: [string, Fact][] = [];
   for (const name of names) {
-    const def = Object.hasOwn(defs, name) ? defs[name] : undefined;
+    const def = defNamed(defs, name);
     for (const fact of ownFactsOf(name, def)) {
       own.push([name, fact]);
     }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { publishedBy } from '../../test/snapshots.ts';
 import {
+  anchoredSnapshotPathOf,
   type Change,
   type ChangeSite,
   type CodeSnapshot,
@@ -838,7 +839,7 @@ describe('compatibilityReportOf, an Endpoint’s order', () => {
 function describedAs(difference: Difference): string {
   switch (difference.kind) {
     case 'schema':
-      return snapshotPathOf(difference.at).join('.');
+      return anchoredSnapshotPathOf(difference).join('.');
     case 'body-added':
     case 'body-removed':
       return `${difference.kind} ${snapshotPathOf(difference.at).join('.')}`;

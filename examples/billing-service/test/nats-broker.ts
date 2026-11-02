@@ -1,13 +1,8 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
-import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
-import {
-  applyBrokerPlan,
-  type BrokerPlan,
-  type JetStreamBrokerLimits,
-} from '@cf-loom/messaging/jetstream';
+import { applyBrokerPlan, type JetStreamBrokerLimits } from '@cf-loom/messaging/jetstream';
 import { jetstreamManager } from '@nats-io/jetstream';
 import { connect } from '@nats-io/transport-node';
+import { planOf } from './broker-plan-of.ts';
 
 /** Every setting of a test's plans, for one throwaway nats-server, which holds one replica of anything. */
 const testLimits: JetStreamBrokerLimits = {
@@ -25,20 +20,6 @@ const testLimits: JetStreamBrokerLimits = {
     storage: 'memory',
   },
 };
-
-/** The plan `cf-loom broker-plan --json --prefix <prefix>` prints for the Service in `serviceDir`. */
-function planOf(serviceDir: string, prefix: string): BrokerPlan {
-  const bin = join(serviceDir, 'node_modules/@cf-loom/cli/dist/bin.js');
-  const ran = spawnSync(process.execPath, [bin, 'broker-plan', '--json', '--prefix', prefix], {
-    cwd: serviceDir,
-    encoding: 'utf8',
-    env: {},
-  });
-  if (ran.status !== 0) {
-    throw new Error(`cf-loom broker-plan failed in ${serviceDir}: ${ran.stderr}`);
-  }
-  return JSON.parse(ran.stdout).plan;
-}
 
 /** Applies the plan of the Service in `serviceDir` to the nats-server at `url`, as the organization's deploy step would. */
 export async function applyPlanOf(serviceDir: string, url: string, prefix: string): Promise<void> {

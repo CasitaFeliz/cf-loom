@@ -8,10 +8,10 @@ import {
   successShapeOf,
 } from '@cf-loom/contract/internal';
 import type {
+  Admission,
   AnyAdmission,
   AnyOutcome,
   BuiltSuccess,
-  CheckedAdmission,
   CheckedOutcome,
   Fault,
 } from '../outcomes/index.ts';
@@ -41,10 +41,7 @@ export function checkedOutcome(
  * What a GuardHandler built, checked against its Guard: parsed with its schema as
  * written, so unknown keys are stripped.
  */
-export function checkedAdmission(
-  guard: Guard,
-  built: AnyAdmission,
-): Checked<CheckedAdmission<Guard>> {
+export function checkedAdmission(guard: Guard, built: AnyAdmission): Checked<Admission<Guard>> {
   switch (built.kind) {
     case 'admitted': {
       const context = parsedPartOf('context', schemaOf(guard, 'context'), { value: built.context });

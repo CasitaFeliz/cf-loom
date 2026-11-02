@@ -293,13 +293,18 @@ key set is pinned by one type test in its package's `types.test.ts`; a test neve
 *Why:* such a test pins the thing the next change must delete.
 
 **C30. A test that bounds time asserts a ratio, never a clock.** It measures with the growth helpers
-(`growthOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
-`tsconfig.test.json` to import it, as billing does `nats-server.ts`): growth between two sizes of each dimension the plan
-names, or a ratio to a reference doing the same work without the behavior under test. A correctness test gets the
-project's timeout, never one sized on an idle machine. A test file reads no clock: `performance.now()`, `Date.now()`,
-`process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors **(lint)**, and the helpers
-that read one are not test files. *Why:* a shared runner slows a clock several times over; absolute bounds turned CI red
-at least eight times.
+(`orderOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
+`tsconfig.test.json` to import it, as billing does `nats-server.ts`): either the order of growth between two sizes of
+each dimension the plan names, held under the one of `orders` the test claims (flat, linear or polynomial) and never
+under a bound of its own, or a ratio to a reference doing the same work without the behavior under test. A correctness
+test gets the project's timeout, never one sized on an idle machine. A test's fixtures fit the light budget
+([CLAUDE.md](CLAUDE.md#repository)); a row that needs more goes in a `*.heavy.test.ts` file or, for a growth family, a
+`*.growth.test.ts` file, never a bigger budget for the project. A test file reads no clock: `performance.now()`,
+`Date.now()`, `process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors
+**(lint)**, and the helpers that read one are not test files.
+*Why:* a shared runner slows a clock several times over, and absolute bounds turned CI red at least eight times; a step
+costs more at the large size beside neighbours that share the memory, which a bound near the claimed growth, written
+again in each file, could not hold.
 
 ## Reviewing
 

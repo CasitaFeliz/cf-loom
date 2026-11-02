@@ -1,5 +1,35 @@
 # @cf-loom/server
 
+## 1.0.0-rc.3
+
+### Major Changes
+
+- 9b10210: `generate`, and `serve` at startup, refuse a text part's field whose example holds a value whose text its part cannot carry, as they refuse such an enum value, in an Input, a Guard's demands, a Success or a Rejection: no Caller could send it, and the Snapshot, the OpenAPI document and the Contract Package would publish it as a value to copy. The example sits on the field, on a query list or its items, or in an example of the part's own object (`z.object({ … }).meta({ examples })`). One line names every such value of a field, enum values first, each once, `A header's values each travel as HTTP field text: x-s has " a"`, rule `unsendable-text`. An example that a Contract refuses now is fixed by a Neutral Change: another example, in the Definitions Package when the field's type comes from there.
+
+### Patch Changes
+
+- 5f109cb: Without an `onServiceFault`, the console lists a Fault's Issues as the invalid-input body does, the first 100 within 64 KiB of the lines written, and counts the others on a last line, `<source>: <count> more Issues`, instead of writing one line per Issue, which made a Message or a Success of a million invalid items write about a hundred megabytes. `onServiceFault` still receives every Issue.
+- Updated dependencies [5f109cb]
+- Updated dependencies [c7fe597]
+- Updated dependencies [78db080]
+- Updated dependencies [9b10210]
+- Updated dependencies [81c45a1]
+  - @cf-loom/contract@1.0.0-rc.3
+  - @cf-loom/handlers@1.0.0-rc.3
+
+## 1.0.0-rc.2
+
+### Patch Changes
+
+- 82776d6: The contract README's orders Group lists `editOrder` and `listOrders`, the Endpoints its examples declare, and the server README's `main.ts` gives its Resources `permissions`, which the handlers README's permission Guard takes, so the Service the READMEs describe is one that `cf-loom generate` accepts.
+- Updated dependencies [dbab5a7]
+- Updated dependencies [39ac3c9]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+  - @cf-loom/handlers@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes

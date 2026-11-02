@@ -1,5 +1,38 @@
 # @cf-loom/messaging
 
+## 1.0.0-rc.3
+
+### Minor Changes
+
+- 352c3d7: `@cf-loom/messaging/in-process` adds `inProcess(limits)`, a Broker inside the Service's process for local runs with no Docker, AWS account or NATS: what the Service publishes and sends reaches the Message Handlers of its own Subscriptions and Commands on a later turn of the event loop, again after its wait when it fails, until it is acknowledged, ended or delivered `maxDeliver` times. Its limits have the shape of an `applyBrokerPlan`'s, `durableConsumerDefaults` and `durableConsumers` keyed by the Broker plan's names, with the settings `ackWait` and `maxDeliver`, which `inProcess()` reads and `consume` resolves for each Durable consumer. It deduplicates and persists nothing, holds each Durable consumer from its first `consume` for the life of the `inProcess()` value, and is not for production.
+
+### Patch Changes
+
+- 5f109cb: Without an `onServiceFault`, the console lists a Fault's Issues as the invalid-input body does, the first 100 within 64 KiB of the lines written, and counts the others on a last line, `<source>: <count> more Issues`, instead of writing one line per Issue, which made a Message or a Success of a million invalid items write about a hundred megabytes. `onServiceFault` still receives every Issue.
+- Updated dependencies [5f109cb]
+- Updated dependencies [c7fe597]
+- Updated dependencies [78db080]
+- Updated dependencies [9b10210]
+- Updated dependencies [81c45a1]
+  - @cf-loom/contract@1.0.0-rc.3
+  - @cf-loom/handlers@1.0.0-rc.3
+
+## 1.0.0-rc.2
+
+### Minor Changes
+
+- ecd2a47: `sqs()` from `@cf-loom/messaging/sqs` runs a Service's messaging on SNS/SQS, through the organization's SNS and SQS clients: `publish` sends each Message to the Service's SNS topic, and `consume` receives from each Durable consumer's SQS queue, after checking the queue and its subscription against what `applyBrokerPlan` writes. A Message cf-loom cannot read is never deleted, but left for the queue's dead-letter queue. `@cf-loom/contract` gives the wire its ASCII JSON for a Message's ids and Transport headers in SNS message attributes.
+
+### Patch Changes
+
+- Updated dependencies [dbab5a7]
+- Updated dependencies [39ac3c9]
+- Updated dependencies [82776d6]
+- Updated dependencies [ecd2a47]
+- Updated dependencies [7a3d3f9]
+  - @cf-loom/contract@1.0.0-rc.2
+  - @cf-loom/handlers@1.0.0-rc.2
+
 ## 1.0.0-rc.1
 
 ### Major Changes

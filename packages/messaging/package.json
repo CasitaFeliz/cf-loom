@@ -1,6 +1,6 @@
 {
   "name": "@cf-loom/messaging",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CasitaFeliz/cf-loom.git",
@@ -21,6 +21,10 @@
     "./jetstream": {
       "types": "./dist/jetstream/index.d.ts",
       "default": "./dist/jetstream/index.js"
+    },
+    "./in-process": {
+      "types": "./dist/in-process/index.d.ts",
+      "default": "./dist/in-process/index.js"
     },
     "./sqs": {
       "types": "./dist/sqs/index.d.ts",

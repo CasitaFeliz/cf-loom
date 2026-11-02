@@ -34,6 +34,11 @@ export function countOf(input: unknown): number | undefined {
   return typeof input === 'number' && Number.isSafeInteger(input) && input >= 1 ? input : undefined;
 }
 
+/** A whole number from 1, or `'unlimited'` read as `-1`. */
+export const unlimitedCount = readAs("a whole number from 1, or 'unlimited'", (input) =>
+  input === 'unlimited' ? -1 : countOf(input),
+);
+
 function isRead<Value>(value: Value | undefined): value is Value {
   return value !== undefined;
 }

@@ -12,7 +12,7 @@ import type {
 import type { Closed } from '@cf-loom/contract/internal';
 import type * as core from 'zod/v4/core';
 import type { HandledRequest } from '../checks/index.ts';
-import type { Admission, CheckedAdmission, CheckedOutcome, Outcome } from '../outcomes/index.ts';
+import type { Admission, CheckedOutcome, Outcome } from '../outcomes/index.ts';
 import type { Readers } from './reader.ts';
 import type {
   CallArgument,
@@ -119,5 +119,5 @@ export type GuardHandler<Target extends Guard, Resources extends object = NoReso
     ContextField<RequiredContextOf<Target>> & QualifierField<Target> & DirectRequestField<Given>
   >,
   ...last: CallArgument<GivenLast, ResourcesField<Resources>>
-) => Promise<CheckedAdmission<Target>>) &
+) => Promise<Admission<Target>>) &
   HandledBy<Target, Resources>;

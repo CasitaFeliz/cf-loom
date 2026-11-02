@@ -5,7 +5,7 @@ import type { Ending, Finding } from './run.ts';
 export type Output = 'lines' | 'json';
 
 /** The format of every document `--json` prints. */
-const documentFormat = 1;
+const documentFormat = 2;
 
 /** The README's order of what a command finds: a tooling error, a failed check, a needed Approval, then lines that carry no status. */
 const ranking = [3, 1, 2, 0] as const;

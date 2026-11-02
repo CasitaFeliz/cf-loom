@@ -770,7 +770,7 @@ describe('cf-loom asyncapi --broker', () => {
   test('with --broker sqs --json, the document is the document of the JSON output', () => {
     const json = cfLoom(fixture, 'asyncapi', '--broker', 'sqs', '--json');
 
-    expect(JSON.parse(json.stdout)).toEqual({ format: 1, status: 0, document: sqs });
+    expect(JSON.parse(json.stdout)).toEqual({ format: 2, status: 0, document: sqs });
   });
 });
 

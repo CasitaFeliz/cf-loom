@@ -1,0 +1,5 @@
+---
+"@cf-loom/contract": patch
+---
+
+`generate` refuses a cycle through `z.lazy()`, unions and intersections alone in time that grows with the recursive schemas, instead of its square: a Contract with 8,000 recursive unions, intersections or aliases of each other took 6.5 s in the walk alone, and doubling it took about five times longer. A schema's own failure is judged when it is written, and the cycles are judged among the schemas still standing when the set of recursive schemas closes, so a cycle through a schema that fails on its own is told only by that schema's line, and each other set of standing schemas that lead back to each other, once, at its first schema, the one the walk reaches first. The line of a cycle may therefore sit at another schema than before, lines may come in another order, and a cycle that another cycle among the same recursive schemas used to hide is told. A recursive schema that admits null now always gets its own `.meta({ id }) on a schema that admits null` line, replacing or joining the cycle lines. A Contract that `generate` accepts is accepted with the same Snapshot.

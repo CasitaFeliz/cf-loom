@@ -1,5 +1,11 @@
 import type { StandardRejections } from '../declarations/index.ts';
-import { type InputIn, type InputPart, type Issue, inOf } from '../written/index.ts';
+import {
+  type InputIn,
+  type InputPart,
+  type Issue,
+  inOf,
+  listedIssuesOf,
+} from '../written/index.ts';
 import { jsonBytesOf } from './body.ts';
 import { rejectionResponseOf } from './responses.ts';
 
@@ -15,29 +21,16 @@ export type InvalidInputBody = {
   readonly omittedIssues: number;
 };
 
-/** The most Issues the invalid-input body lists, so a Response stays small whatever the request. */
-const listedIssueLimit = 100;
-
-/** The most bytes the invalid-input body's `issues` take, as UTF-8 JSON text, since a path holds the Caller's keys. */
-const listedIssueBytes = 65_536;
-
-/**
- * The body of the invalid-input Rejection: the Issues in the order they were read, each with the
- * part of the request it read, up to the first that would pass `listedIssueLimit` Issues or
- * `listedIssueBytes` of JSON; that one and every later one counted in `omittedIssues`.
- */
+/** The body of the invalid-input Rejection: the Issues `listedIssuesOf` lists, each with the part of the request it read. */
 export function invalidInputBodyOf(issues: readonly InputIssue[]): InvalidInputBody {
-  const listed: ListedIssue[] = [];
-  let bytes = '['.length;
-  for (const { part, path, code, message } of issues) {
-    if (listed.length === listedIssueLimit) break;
-    const issue = { in: inOf(part), path, code, message };
-    const total = bytes + jsonBytesOf(issue).byteLength + 1;
-    if (total > listedIssueBytes) break;
-    listed.push(issue);
-    bytes = total;
-  }
-  return { issues: listed, omittedIssues: issues.length - listed.length };
+  const { listed, omittedIssues } = listedIssuesOf(issues, listedOf, '['.length);
+  return { issues: listed, omittedIssues };
+}
+
+/** An Issue as the body lists it, with the bytes of its JSON and the comma or closing bracket after it. */
+function listedOf({ part, path, code, message }: InputIssue) {
+  const issue = { in: inOf(part), path, code, message };
+  return { written: issue, bytes: jsonBytesOf(issue).byteLength + 1 };
 }
 
 /** The response of the invalid-input Rejection: the Provider's code, status and message, cf-loom's body. */

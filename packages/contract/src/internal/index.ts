@@ -230,6 +230,8 @@ export type {
   TupleNode,
 } from '../walker/index.ts';
 export {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   byCodePoint,
   chainDown,
@@ -363,6 +365,7 @@ export {
   isPlainObject,
   isSameRejection,
   issueLineOf,
+  listedIssueLinesOf,
   messageIdentityOf,
   methodAndPathOf,
   nameAndVersionOf,

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orderOfGrowth, orders } from '../../test/growth.ts';
+import { aliasDrawOf } from '../../test/random-alias-draws.ts';
 import {
   type Construct,
   type Leaf,
@@ -9,9 +10,10 @@ import {
   randomNested,
 } from '../../test/random-places.ts';
 import { seededNext } from '../../test/random-schemas.ts';
-import { publishedBy, schemaExports } from '../../test/snapshots.ts';
+import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
-  authorPathOf,
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   byCodePoint,
   type Change,
   type ChangeSite,
@@ -33,6 +35,7 @@ import {
   type PublishedDefinitionsSnapshot,
   type PublishedServiceSnapshot,
   type PublishedSnapshot,
+  publishedSnapshotOf,
   type RefNode,
   type SchemaNode,
   type ServiceSnapshot,
@@ -40,7 +43,6 @@ import {
   type Snapshot,
   type Step,
   type StringNode,
-  snapshotPathOf,
   type TaggedNode,
   walkSchemas,
 } from '../internal/index.ts';
@@ -292,10 +294,20 @@ const addsOnly: Classes = [additive, additive, additive, additive];
 const opensTheEnum: Classes = [neutral, breaking, breaking, breaking];
 const closesTheEnum: Classes = [neutral, additive, additive, additive];
 
-type Found = { readonly shape: ShapeDifference; readonly at: Path; readonly classes: Classes };
+type Found = {
+  readonly shape: ShapeDifference;
+  readonly at: Path;
+  readonly classes: Classes;
+  readonly def?: string;
+};
 
 function found(shape: ShapeDifference, classes: Classes, at: Path = []): Found {
   return { shape, at, classes };
+}
+
+/** A difference found inside the recursive schema `def`, at `at` below it, whichever place reaches it. */
+function inDef(def: string, difference: Found): Found {
+  return { ...difference, def };
 }
 
 type Row = {
@@ -317,7 +329,9 @@ function snapshotPathsOf(changes: readonly Change[]): readonly PathChange[] {
     if (!('at' in difference)) {
       return change;
     }
-    return { ...change, difference: { ...difference, at: snapshotPathOf(difference.at) } };
+    const rest = Object.entries(difference).filter(([key]) => key !== 'at' && key !== 'def');
+    const at = anchoredSnapshotPathOf(difference);
+    return { ...change, difference: { ...Object.fromEntries(rest), at } };
   });
 }
 
@@ -325,13 +339,28 @@ function changeAt(place: Place, difference: Found): PathChange {
   const shapeChange = {
     kind: 'schema',
     position: place.position,
-    at: [...place.root, ...difference.at],
+    at:
+      difference.def === undefined
+        ? [...place.root, ...difference.at]
+        : ['defs', difference.def, ...difference.at],
     shape: difference.shape,
   } as const;
   const changeClass = difference.classes[place.column];
   return changeClass === 'breaking'
     ? { site: place.site, difference: shapeChange, ...place.breaking }
     : { site: place.site, difference: shapeChange, class: changeClass, verdict: 'allowed' };
+}
+
+function stepsOf({ difference }: Change): readonly Step[] {
+  return 'at' in difference ? difference.at : [];
+}
+
+function defOf({ difference }: Change): string | undefined {
+  return 'def' in difference ? difference.def : undefined;
+}
+
+function pathOf(change: Change): string {
+  return 'at' in change.difference ? (anchoredAuthorPathOf(change.difference) ?? '') : '';
 }
 
 function comparedOf(baseline: PublishedSnapshot, proposed: Snapshot): ComparedReport {
@@ -1234,6 +1263,7 @@ const treeWithName = anObject({
 });
 const tupleChanged: ShapeDifference = { kind: 'unproven', node: 'tuple' };
 const nameAdded: ShapeDifference = { kind: 'field-added', required: true };
+const treeNameAdded = inDef('tree', found(nameAdded, acceptsLess, ['fields', 'name']));
 
 const collectionRows: readonly Row[] = [
   aRow(
@@ -1334,7 +1364,7 @@ const collectionRows: readonly Row[] = [
     to: aTuple([], aRef('tree')),
     fromDefs: { tree },
     toDefs: { tree: treeWithName },
-    found: [found(nameAdded, acceptsLess, ['rest', 'fields', 'name'])],
+    found: [inDef('tree', found(nameAdded, acceptsLess, ['fields', 'name']))],
   },
 ];
 
@@ -1449,8 +1479,8 @@ const treeContainers: readonly {
   {
     container: 'a record',
     node: aRecord(aString, aRef('tree')),
-    changed: found(nameAdded, acceptsLess, ['value', 'fields', 'name']),
-    described: found(annotationChanged('description'), neutralEverywhere, ['value']),
+    changed: treeNameAdded,
+    described: inDef('tree', found(annotationChanged('description'), neutralEverywhere)),
   },
   {
     container: 'a tuple',
@@ -1475,8 +1505,8 @@ const containedRows: readonly Row[] = treeContainers.map(({ container, node, cha
   found: [changed],
 }));
 
-const treeNameAdded = found(nameAdded, acceptsLess, ['fields', 'name']);
 const childItems = ['fields', 'child', 'fields', 'children', 'items'];
+const treeChildren = ['fields', 'children', 'items'];
 const inlineChild = anObject({
   child: required(anObject({ children: required(anArray(aString)) })),
 });
@@ -1496,7 +1526,7 @@ const refRows: readonly Row[] = [
     to: aRef('forest'),
     fromDefs: { forest: anObject({ trees: required(anArray(aRef('tree'))) }), tree },
     toDefs: { forest: anObject({ trees: required(anArray(aRef('tree'))) }), tree: treeWithName },
-    found: [found(nameAdded, acceptsLess, ['fields', 'trees', 'items', 'fields', 'name'])],
+    found: [treeNameAdded],
   },
   ...containedRows,
   {
@@ -1513,7 +1543,12 @@ const refRows: readonly Row[] = [
     to: aRef('tree'),
     fromDefs: { tree },
     toDefs: { tree: anObject({ children: required(anArray(aNullable(aRef('tree')))) }) },
-    found: [found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items'])],
+    found: [
+      inDef(
+        'tree',
+        found({ kind: 'nullability-added' }, guaranteesLess, ['fields', 'children', 'items']),
+      ),
+    ],
   },
   {
     change: 'replacing an inline schema with a ref, whose def is compared with it',
@@ -1522,8 +1557,11 @@ const refRows: readonly Row[] = [
     toDefs: { tree },
     found: [
       found(annotationChanged('id'), neutralEverywhere, ['fields', 'child']),
-      found(annotationChanged('id'), neutralEverywhere, childItems),
-      found({ kind: 'type-changed', from: 'string', to: 'object' }, breaksEverywhere, childItems),
+      inDef('tree', found(annotationChanged('id'), neutralEverywhere, treeChildren)),
+      inDef(
+        'tree',
+        found({ kind: 'type-changed', from: 'string', to: 'object' }, breaksEverywhere),
+      ),
     ],
   },
   {
@@ -1538,12 +1576,12 @@ const refRows: readonly Row[] = [
     ],
   },
   {
-    change: 'changing a def used at two fields, once, at the first path in walk order',
+    change: 'changing a def used at two fields is one Change, at the def',
     from: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     to: anObject({ first: required(aRef('tree')), second: required(aRef('tree')) }),
     fromDefs: { tree },
     toDefs: { tree: treeWithName },
-    found: [found(nameAdded, acceptsLess, ['fields', 'first', 'fields', 'name'])],
+    found: [treeNameAdded],
   },
   {
     change: 'replacing two uses of a def with separate, identical inline copies, at both fields',
@@ -1564,7 +1602,7 @@ const refRows: readonly Row[] = [
     toDefs: { card: anObject({ kind: required(aClosedEnum('card')), last4: required(aString) }) },
     found: [
       found(annotationChanged('id'), neutralEverywhere, ['variants', '"card"']),
-      found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4']),
+      inDef('card', found(nameAdded, acceptsLess, ['fields', 'last4'])),
     ],
   },
   {
@@ -1573,7 +1611,7 @@ const refRows: readonly Row[] = [
     to: aNodeTagged(),
     fromDefs: { node: aNodeDef({}) },
     toDefs: { node: aNodeDef({ label: required(aString) }) },
-    found: [found(nameAdded, acceptsLess, ['variants', '"node"', 'fields', 'label'])],
+    found: [inDef('node', found(nameAdded, acceptsLess, ['fields', 'label']))],
   },
 ];
 
@@ -1613,6 +1651,8 @@ const sprawl = anObject(
 const selfReferring = anObject({ f: optional(aString), c: optional(aRef('node')) });
 const kField = ['fields', 'k'];
 const idChanged = found(annotationChanged('id'), neutralEverywhere, kField);
+const idChangedIn = (def: string, at: Path = []) =>
+  inDef(def, found(annotationChanged('id'), neutralEverywhere, at));
 
 function aBodyWith(fields: Readonly<Record<string, SchemaNode>>): ObjectNode {
   const entries = Object.entries(fields).map(([name, schema]) => [name, required(schema)]);
@@ -1636,7 +1676,7 @@ function anAliasAnnotationRow(
     to: aBodyWith({ k: aRef('alias') }),
     fromDefs: { node: selfReferring, alias: anAliasOf('node', annotations.from) },
     toDefs: { node: selfReferring, alias: anAliasOf('node', annotations.to) },
-    found: [found(annotationChanged(annotation), neutralEverywhere, kField)],
+    found: [inDef('alias', found(annotationChanged(annotation), neutralEverywhere))],
   };
 }
 
@@ -1655,7 +1695,7 @@ const aliasRows: readonly Row[] = [
     to: aBodyWith({ g: aRef('node'), k: aRef('node') }),
     fromDefs: { node: selfReferring, alias: aRef('node') },
     toDefs: { node: selfReferring },
-    found: [idChanged, idChanged],
+    found: [idChanged, idChangedIn('node')],
   },
   {
     change: 'pointing a ref at an alias of the def it named, met earlier in the schema',
@@ -1663,7 +1703,7 @@ const aliasRows: readonly Row[] = [
     to: aBodyWith({ g: aRef('node'), k: aRef('alias') }),
     fromDefs: { node: selfReferring },
     toDefs: { node: selfReferring, alias: aRef('node') },
-    found: [idChanged, idChanged],
+    found: [idChanged, idChangedIn('alias')],
   },
   {
     change: 'pointing an array’s items at the def their alias names, met earlier in the schema',
@@ -1673,7 +1713,7 @@ const aliasRows: readonly Row[] = [
     toDefs: { node: selfReferring },
     found: [
       found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
-      found(annotationChanged('id'), neutralEverywhere, [...kField, 'items']),
+      idChangedIn('node'),
     ],
   },
   anAliasAnnotationRow('changing an alias def’s description', 'description', {
@@ -1701,10 +1741,7 @@ const aliasRows: readonly Row[] = [
       renamed: anObject({ f: optional(aString), c: optional(aRef('renamed')) }),
       alias: aRef('renamed'),
     },
-    found: [
-      idChanged,
-      found(annotationChanged('id'), neutralEverywhere, [...kField, 'fields', 'c']),
-    ],
+    found: [idChangedIn('alias'), idChangedIn('renamed', ['fields', 'c'])],
   },
   {
     change: 'shortening a chain of alias defs',
@@ -1712,7 +1749,7 @@ const aliasRows: readonly Row[] = [
     to: aBodyWith({ k: aRef('outer') }),
     fromDefs: { node: selfReferring, outer: aRef('middle'), middle: aRef('node') },
     toDefs: { node: selfReferring, outer: aRef('node') },
-    found: [idChanged, idChanged],
+    found: [idChangedIn('outer'), idChangedIn('node')],
   },
   {
     change: 'turning a def into an alias of a def of the same shape',
@@ -1720,7 +1757,7 @@ const aliasRows: readonly Row[] = [
     to: aBodyWith({ k: aRef('alias') }),
     fromDefs: { alias: anObject({ f: optional(aString) }) },
     toDefs: { alias: aRef('node'), node: anObject({ f: optional(aString) }) },
-    found: [idChanged],
+    found: [idChangedIn('alias')],
   },
   {
     change: 'describing an alias def a variant names',
@@ -1728,7 +1765,7 @@ const aliasRows: readonly Row[] = [
     to: aliasVariant,
     fromDefs: { card: variantCard, alias: aRef('card') },
     toDefs: { card: variantCard, alias: anAliasOf('card', { description: 'A card' }) },
-    found: [found(annotationChanged('description'), neutralEverywhere, ['variants', '"a"'])],
+    found: [inDef('alias', found(annotationChanged('description'), neutralEverywhere))],
   },
   {
     change: 'writing a nullable ref’s def inline, nullable',
@@ -1752,7 +1789,7 @@ const aliasRows: readonly Row[] = [
     to: aBodyWith({ k: aNullable(plainCard) }),
     fromDefs: { alias: aRef('card'), card: plainCard },
     toDefs: {},
-    found: [idChanged, idChanged],
+    found: [idChanged],
   },
   {
     change: 'making a ref nullable while its def gains a description',
@@ -1762,7 +1799,7 @@ const aliasRows: readonly Row[] = [
     toDefs: { node: { ...selfReferring, description: 'x' } },
     found: [
       found({ kind: 'nullability-added' }, guaranteesLess, kField),
-      found(annotationChanged('description'), neutralEverywhere, kField),
+      inDef('node', found(annotationChanged('description'), neutralEverywhere)),
     ],
   },
 ];
@@ -1809,9 +1846,8 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: to.defs,
       });
 
-      expect(snapshotPathsOf(report.changes)).toEqual([
-        changeAt(place, found(annotationChanged('description'), neutralEverywhere)),
-      ]);
+      const described = found(annotationChanged('description'), neutralEverywhere);
+      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, inDef('outer', described))]);
     },
   );
 
@@ -1830,7 +1866,7 @@ describe('compatibilityReportOf, refs', () => {
     ]);
   });
 
-  test('a def reached through two alias defs at two paths is one Change, at the first path', () => {
+  test('a def reached through two alias defs at two paths is one Change, at the def', () => {
     const aliases: Defs = { first: aRef('target'), second: aRef('target') };
     const body = anObject({ x: required(aRef('first')), y: required(aRef('second')) });
 
@@ -1843,23 +1879,149 @@ describe('compatibilityReportOf, refs', () => {
 
     const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
     expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(input, found(changed, breaksEverywhere, ['fields', 'x', 'fields', 'v'])),
+      changeAt(input, inDef('target', found(changed, breaksEverywhere, ['fields', 'v']))),
     ]);
   });
 
   test.each(casesOf(refRows))('$change is $outcome in $place', expectRow);
 
+  test.each(places)('a change in a recursive def is found once, at the def, in $name', (place) => {
+    const report = reportOf(place, {
+      from: aRef('tree'),
+      to: aRef('tree'),
+      fromDefs: { tree },
+      toDefs: { tree: treeWithName },
+    });
+
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, treeNameAdded)]);
+  });
+
   test.each(places)(
-    'a change in a recursive def is found once, where the ref is first followed, in $name',
+    'a field added before the one that reaches a recursive def moves none of the def’s Changes, in $name',
     (place) => {
-      const report = reportOf(place, {
-        from: aRef('tree'),
-        to: aRef('tree'),
-        fromDefs: { tree },
-        toDefs: { tree: treeWithName },
+      const alone = anObject({ b: required(aRef('tree')) });
+      const reachedSooner = anObject({ a: required(aRef('tree')), b: required(aRef('tree')) });
+      const defs = { from: { tree }, to: { tree: treeWithName } };
+
+      const before = reportOf(place, {
+        from: alone,
+        to: alone,
+        fromDefs: defs.from,
+        toDefs: defs.to,
+      });
+      const after = reportOf(place, {
+        from: reachedSooner,
+        to: reachedSooner,
+        fromDefs: defs.from,
+        toDefs: defs.to,
       });
 
-      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, treeNameAdded)]);
+      expect(snapshotPathsOf(after.changes)).toEqual(snapshotPathsOf(before.changes));
+      expect(snapshotPathsOf(after.changes)).toEqual([changeAt(place, treeNameAdded)]);
+    },
+  );
+
+  test('a def that an Endpoint’s Input and Success both reach, changed, is one Change in each Position', () => {
+    const body = anObject({ node: required(aRef('tree')) });
+    const endpoint = anEndpointReading(body, body);
+    const baseline = aBaseline({ defs: { tree }, endpoints: { 'POST /orders': aLive(endpoint) } });
+    const proposed = aProposed({
+      defs: { tree: treeWithName },
+      endpoints: { 'POST /orders': endpoint },
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(input, treeNameAdded),
+      changeAt(success, treeNameAdded),
+    ]);
+    expect(report.changes.map(({ class: changeClass }) => changeClass)).toEqual([
+      'breaking',
+      'additive',
+    ]);
+  });
+
+  test.each(places)(
+    'a ref’s own description is at the ref and its def’s own description at the def, in $name',
+    (place) => {
+      const described = (description: string): SchemaNode => ({ ...aRef('tree'), description });
+
+      const report = reportOf(place, {
+        from: anObject({ k: required(described('a')) }),
+        to: anObject({ k: required(described('b')) }),
+        fromDefs: { tree },
+        toDefs: { tree: { ...tree, description: 'A tree' } },
+      });
+
+      const description = found(annotationChanged('description'), neutralEverywhere);
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(place, { ...description, at: ['fields', 'k'] }),
+        changeAt(place, inDef('tree', description)),
+      ]);
+    },
+  );
+
+  test.each(places)(
+    'a def named like a member every object has is told from defs.constructor, in $name',
+    (place) => {
+      const recursive = (fields: Readonly<Record<string, Field>>): Defs =>
+        Object.fromEntries([
+          ['constructor', anObject({ ...fields, next: optional(aRef('constructor')) })],
+        ]);
+
+      const report = reportOf(place, {
+        from: aRef('constructor'),
+        to: aRef('constructor'),
+        fromDefs: recursive({}),
+        toDefs: recursive({ name: required(aString) }),
+      });
+
+      const [change] = report.changes;
+      const added = inDef('constructor', found(nameAdded, acceptsLess, ['fields', 'name']));
+      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(place, added)]);
+      expect(change?.difference).toMatchObject({ def: 'constructor' });
+      expect(change === undefined ? null : pathOf(change)).toBe('defs.constructor.name');
+    },
+  );
+
+  test.each(places)(
+    'two inline schemas moved into one recursive def report a Difference they share once, in $name',
+    (place) => {
+      const inline = (type: SchemaNode) => anObject({ x: required(type) });
+      const moved = anObject({ a: required(aRef('shared')), b: required(aRef('shared')) });
+      const sharedDef: Defs = {
+        shared: anObject({ x: required(aBoolean), self: optional(aRef('shared')) }),
+      };
+
+      const report = reportOf(place, {
+        from: anObject({ a: required(inline(aString)), b: required(inline(aNumber)) }),
+        to: moved,
+        toDefs: sharedDef,
+      });
+
+      const retyped = (from: 'string' | 'number') =>
+        inDef(
+          'shared',
+          found({ kind: 'type-changed', from, to: 'boolean' }, breaksEverywhere, ['fields', 'x']),
+        );
+      const selfAdded = inDef(
+        'shared',
+        found({ kind: 'field-added', required: false }, addsOnly, ['fields', 'self']),
+      );
+      expect(snapshotPathsOf(report.changes)).toEqual([
+        changeAt(place, {
+          ...found(annotationChanged('id'), neutralEverywhere),
+          at: ['fields', 'a'],
+        }),
+        changeAt(place, selfAdded),
+        changeAt(place, retyped('string')),
+        changeAt(place, {
+          ...found(annotationChanged('id'), neutralEverywhere),
+          at: ['fields', 'b'],
+        }),
+        changeAt(place, retyped('number')),
+      ]);
     },
   );
 
@@ -1879,21 +2041,8 @@ describe('compatibilityReportOf, refs', () => {
     expect(snapshotPathsOf(report.changes)).toEqual([
       changeAt(input, found(annotationChanged('id'), neutralEverywhere)),
       changeAt(input, found(annotationChanged('id'), neutralEverywhere, ['fields', 'x'])),
-      changeAt(
-        input,
-        found(annotationChanged('id'), neutralEverywhere, ['fields', 'x', 'fields', 'x']),
-      ),
-      changeAt(
-        input,
-        found(annotationChanged('id'), neutralEverywhere, [
-          'fields',
-          'x',
-          'fields',
-          'x',
-          'fields',
-          'x',
-        ]),
-      ),
+      changeAt(input, idChangedIn('deep', ['fields', 'x'])),
+      changeAt(input, idChangedIn('deep', ['fields', 'x', 'fields', 'x'])),
     ]);
   });
 
@@ -1905,7 +2054,8 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: { sprawl: anObject({ ...sprawl.fields, name: required(aString) }) },
     });
 
-    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(input, treeNameAdded)]);
+    const nameAddedToSprawl = inDef('sprawl', found(nameAdded, acceptsLess, ['fields', 'name']));
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(input, nameAddedToSprawl)]);
   });
 
   test('a dense set of mutually recursive defs, unchanged, is compared fast', () => {
@@ -1929,9 +2079,8 @@ describe('compatibilityReportOf, refs', () => {
       toDefs: denseDefs(12, { name: required(aString) }),
     });
 
-    const path = ['fields', 'def1', 'fields', 'def10', 'fields', 'def11', 'fields', 'name'];
     expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(input, found(nameAdded, acceptsLess, path)),
+      changeAt(input, inDef('def11', found(nameAdded, acceptsLess, ['fields', 'name']))),
     ]);
   });
 
@@ -1945,7 +2094,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { tree, branch },
         found: [
           found(annotationChanged('id'), neutralEverywhere),
-          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+          idChangedIn('branch', ['fields', 'children', 'items']),
         ],
       },
       {
@@ -1956,7 +2105,7 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: { branch },
         found: [
           found(annotationChanged('id'), neutralEverywhere),
-          found(annotationChanged('id'), neutralEverywhere, ['fields', 'children', 'items']),
+          idChangedIn('branch', ['fields', 'children', 'items']),
         ],
       },
       {
@@ -1967,8 +2116,8 @@ describe('compatibilityReportOf, refs', () => {
         toDefs: mutualDefs,
         found: [
           found(annotationChanged('id'), neutralEverywhere),
-          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next']),
-          found(annotationChanged('id'), neutralEverywhere, ['fields', 'next', 'fields', 'next']),
+          idChangedIn('second', ['fields', 'next']),
+          idChangedIn('first', ['fields', 'next']),
         ],
       },
       {
@@ -1977,10 +2126,7 @@ describe('compatibilityReportOf, refs', () => {
         to: aRef('alias'),
         fromDefs: { tree },
         toDefs: { alias: aRef('tree'), tree },
-        found: [
-          found(annotationChanged('id'), neutralEverywhere),
-          found(annotationChanged('id'), neutralEverywhere),
-        ],
+        found: [found(annotationChanged('id'), neutralEverywhere), idChangedIn('alias')],
       },
       {
         change: 'describing a recursive def a ref names',
@@ -1988,7 +2134,7 @@ describe('compatibilityReportOf, refs', () => {
         to: aRef('tree'),
         fromDefs: { tree },
         toDefs: { tree: { ...tree, description: 'A tree' } },
-        found: [found(annotationChanged('description'), neutralEverywhere)],
+        found: [inDef('tree', found(annotationChanged('description'), neutralEverywhere))],
       },
     ]),
   )('$change is $outcome in $place', expectRow);
@@ -2042,7 +2188,7 @@ describe('compatibilityReportOf, refs', () => {
       });
 
       expect(snapshotPathsOf(report.changes)).toEqual([
-        changeAt(place, found(nameAdded, acceptsLess, ['variants', '"card"', 'fields', 'last4'])),
+        changeAt(place, inDef('card', found(nameAdded, acceptsLess, ['fields', 'last4']))),
       ]);
     },
   );
@@ -2347,15 +2493,6 @@ describe('compatibilityReportOf, depth', () => {
     return Object.fromEntries(entries);
   }
 
-  /** The steps to the innermost def's `v` from the outermost of `count`. */
-  function innermostPathOf(count: number): Path {
-    const steps: string[] = [];
-    for (let index = 0; index < count - 1; index++) {
-      steps.push('fields', 'next');
-    }
-    return [...steps, 'fields', 'v'];
-  }
-
   test('an unchanged Snapshot of 5,000 nested defs has no Change', () => {
     const defs = aDefChainOf(5_000, aBoolean);
 
@@ -2380,9 +2517,8 @@ describe('compatibilityReportOf, depth', () => {
       });
 
       const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
-      expect(snapshotPathsOf(report.changes)).toEqual([
-        changeAt(input, found(changed, breaksEverywhere, innermostPathOf(count))),
-      ]);
+      const innermost = inDef(`def${count - 1}`, found(changed, breaksEverywhere, ['fields', 'v']));
+      expect(snapshotPathsOf(report.changes)).toEqual([changeAt(input, innermost)]);
     },
   );
 
@@ -2405,19 +2541,13 @@ describe('compatibilityReportOf, depth', () => {
 
     const changed = { kind: 'type-changed', from: 'boolean', to: 'string' } as const;
     expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(input, found(changed, breaksEverywhere, ['fields', 'v'])),
+      changeAt(input, inDef('target', found(changed, breaksEverywhere, ['fields', 'v']))),
     ]);
   });
 });
 
 describe('compatibilityReportOf, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
-
-  /**
-   * How many times longer a check of a shape eight times as large may take: about 8 for a check
-   * that reads each part once, and 64 for one that copies the steps down to a part at each part.
-   */
-  const linearGrowth = 13;
 
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
@@ -2462,31 +2592,17 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
   }
 
-  test('a chain of ids, each on a cycle of its own, is checked in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
-    const checkChain = checkOfChain(() => 'a');
-
-    const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, linearGrowth);
-
-    expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
-  });
-
-  test('a description changed in the innermost def of a chain is one Change, at its depth, in time that grows with the chain', {
+  test('a description changed in the innermost def of a chain is one Change, at that def, in time that grows with the chain', {
     timeout: growthTimeout,
   }, () => {
     const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
 
     const report = checkChain(sizes.large)();
-    const growth = growthOf(checkChain, sizes, linearGrowth);
+    const order = orderOf(checkChain, sizes, orders.linear);
 
-    const atInnermostDef = Array.from({ length: sizes.large - 1 }, () => ['fields', 'next']).flat();
-    expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(shared, found(annotationChanged('description'), neutralEverywhere, atInnermostDef)),
-    ]);
-    expect(growth).toBeLessThan(linearGrowth);
+    const described = found(annotationChanged('description'), neutralEverywhere);
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(shared, inDef('link0', described))]);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('an object of many fields, each changed, is checked in time that grows with their number', {
@@ -2508,13 +2624,13 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, linearGrowth);
+    const order = orderOf(checkFields, sizes, orders.linear);
 
     expect(report.changes).toHaveLength(sizes.large);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a def that many fields reach, changed, is one Change, at the first field, in time that grows with their number', {
+  test('a def that many fields reach, changed, is one Change, at the def, in time that grows with their number', {
     timeout: growthTimeout,
   }, () => {
     const checkFields = (count: number) => {
@@ -2528,15 +2644,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
 
     const report = checkFields(sizes.large)();
-    const growth = growthOf(checkFields, sizes, linearGrowth);
+    const order = orderOf(checkFields, sizes, orders.linear);
 
-    expect(snapshotPathsOf(report.changes)).toEqual([
-      changeAt(
-        shared,
-        found(annotationChanged('description'), neutralEverywhere, ['fields', 'field0']),
-      ),
-    ]);
-    expect(growth).toBeLessThan(linearGrowth);
+    const described = found(annotationChanged('description'), neutralEverywhere);
+    expect(snapshotPathsOf(report.changes)).toEqual([changeAt(shared, inDef('money', described))]);
+    expect(order).toBeLessThan(orders.linear);
   });
   /** A node that holds another in what the plain-union rule judges: a union's option, a tuple's item or an `allOf`'s item. */
   type Holding = {
@@ -2563,21 +2675,101 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     },
   ];
 
+  /** The steps of the longest path among a report's Changes, from the site, or from the def that holds them. */
+  function longestPathOf(report: ComparedReport): number {
+    let longest = 0;
+    for (const { difference } of report.changes) {
+      longest = Math.max(longest, 'at' in difference ? difference.at.length : 0);
+    }
+    return longest;
+  }
+
+  /** The order of the growth of a report's length as text, from a chain of `sizes.small` defs to one of `sizes.large`. */
+  function lengthOrderOf(checkChain: (count: number) => () => ComparedReport): number {
+    const lengthOf = (count: number) => JSON.stringify(checkChain(count)()).length;
+    return orderOfGrowth(lengthOf(sizes.large) / lengthOf(sizes.small), sizes);
+  }
+
+  const described = found(annotationChanged('description'), neutralEverywhere);
+
   test.each(holdings)(
-    'a chain of ids, each reached through $holder, is checked in time that grows with its length',
+    'a description changed in the first def of a chain, each def holding the one before it by a field and through $holder, is reported at each def that holds it, from that def, in time and length that grow with the chain',
     {
       timeout: growthTimeout,
     },
     ({ holdingOf }) => {
-      const checkChain = checkOfChain(() => 'a', holdingOf);
+      const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'), holdingOf);
 
+      const small = checkChain(sizes.small)();
+      expect(longestPathOf(small)).toBeLessThanOrEqual(2);
       const report = checkChain(sizes.large)();
-      const growth = growthOf(checkChain, sizes, linearGrowth);
+      const order = orderOf(checkChain, sizes, orders.linear);
+      const lengthOrder = lengthOrderOf(checkChain);
 
-      expect(report).toEqual({ changes: [] });
-      expect(growth).toBeLessThan(linearGrowth);
+      const heldBy = Array.from({ length: sizes.large - 1 }, (_, index) =>
+        inDef(`link${index + 1}`, { ...described, at: ['fields', 'u'] }),
+      );
+      const expected = [inDef('link0', described), ...heldBy];
+      expect(snapshotPathsOf(report.changes)).toEqual(
+        expected.map((change) => changeAt(shared, change)),
+      );
+      expect(order).toBeLessThan(orders.linear);
+      expect(lengthOrder).toBeLessThan(orders.linear);
     },
   );
+
+  test('a description changed in every def of a chain is reported at each def, from that def, in time and length that grow with the chain', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkChain = checkOfChain(() => 'b');
+
+    const small = checkChain(sizes.small)();
+    expect(longestPathOf(small)).toBeLessThanOrEqual(2);
+    const report = checkChain(sizes.large)();
+    const order = orderOf(checkChain, sizes, orders.linear);
+    const lengthOrder = lengthOrderOf(checkChain);
+
+    const everyDef = Array.from({ length: sizes.large }, (_, index) =>
+      changeAt(shared, inDef(`link${sizes.large - 1 - index}`, described)),
+    );
+    expect(snapshotPathsOf(report.changes)).toEqual(everyDef);
+    expect(order).toBeLessThan(orders.linear);
+    expect(lengthOrder).toBeLessThan(orders.linear);
+  });
+
+  test('many fields of one def that each hold a changed def in a union report one Change each, from that def, in time and length that grow with their number', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkFields = (count: number) => {
+      const fields = Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [
+          `f${index}`,
+          required({ type: 'union', options: [aRef('held'), aBoolean] } as SchemaNode),
+        ]),
+      );
+      const defsOf = (description: string): Defs => ({
+        holder: anObject({ ...fields, self: optional(aRef('holder')) }),
+        held: { ...anObject({ x: required(aString), self: optional(aRef('held')) }), description },
+      });
+      const baseline = shared.baseline(aRef('holder'), defsOf('a'));
+      const proposed = shared.proposed(aRef('holder'), defsOf('b'));
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const small = checkFields(sizes.small)();
+    expect(longestPathOf(small)).toBeLessThanOrEqual(2);
+    const report = checkFields(sizes.large)();
+    const order = orderOf(checkFields, sizes, orders.linear);
+    const lengthOrder = lengthOrderOf(checkFields);
+
+    const names = Array.from({ length: sizes.large }, (_, index) => `f${index}`).sort(byCodePoint);
+    const atFields = names.map((name) =>
+      changeAt(shared, inDef('holder', { ...described, at: ['fields', name] })),
+    );
+    expect(snapshotPathsOf(report.changes)).toEqual(atFields);
+    expect(order).toBeLessThan(orders.linear);
+    expect(lengthOrder).toBeLessThan(orders.linear);
+  });
 
   /** `count` objects `c0`, `c1`…, each holding the one before it by `next`, the first a `leaf` and a description. */
   function aFanChainOf(count: number, innermost: { description: string; leaf: SchemaNode }): Defs {
@@ -2626,11 +2818,11 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const checkFan = checkOfFan(holdingOf, { description: 'b', leaf: aString });
 
       const report = checkFan(sizes.large)();
-      const growth = growthOf(checkFan, sizes, linearGrowth);
+      const order = orderOf(checkFan, sizes, orders.linear);
 
       const neutralAtField = found(annotationChanged('description'), neutralEverywhere);
       expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, neutralAtField));
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -2643,13 +2835,175 @@ describe('compatibilityReportOf, a long chain of ids', () => {
       const checkFan = checkOfFan(holdingOf, { description: 'a', leaf: aNumber });
 
       const report = checkFan(sizes.large)();
-      const growth = growthOf(checkFan, sizes, linearGrowth);
+      const order = orderOf(checkFan, sizes, orders.linear);
 
       const breakingAtField = found(difference, breaksEverywhere);
       expect(snapshotPathsOf(report.changes)).toEqual(fanChangesOf(sizes.large, breakingAtField));
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
+
+  /**
+   * The sizes of a shape of `count` roots over a closure of `count` defs: a check that reads the
+   * closure again at each root costs their product, so eight times as large costs about 64 times
+   * as much. At `sizes` that takes minutes a run.
+   */
+  const rootSizes = { small: 125, large: 1_000 };
+
+  const unchangedInnermost = { description: 'a', leaf: aString };
+
+  /** `count` exports named `top0`, `top1`…, each holding `held`. */
+  function exportsOfCount(count: number, held: SchemaNode) {
+    const entries = Array.from({ length: count }, (_, index) => [`top${index}`, held]);
+    return schemaExports(Object.fromEntries(entries));
+  }
+
+  /** The check of `count` exports that each name the head of a chain of `count` defs, against its Baseline. */
+  function checkOfExports(proposedInnermost: { description: string; leaf: SchemaNode }) {
+    return (count: number) => {
+      const exported = exportsOfCount(count, aRef(`c${count - 1}`));
+      const baseline = aBaselineDefinitions({
+        defs: aFanChainOf(count, unchangedInnermost),
+        exports: exported,
+      });
+      const proposed = aDefinitions({
+        defs: aFanChainOf(count, proposedInnermost),
+        exports: exported,
+      });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  /** The Changes of `count` exports that each report `difference`, in the order a report lists them. */
+  function exportChangesOf(count: number, difference: Found) {
+    const names = Array.from({ length: count }, (_, index) => `top${index}`).sort(byCodePoint);
+    return names.map((name) =>
+      changeAt({ ...shared, site: { kind: 'export', name, visibility: 'public' } }, difference),
+    );
+  }
+
+  test('many exports, each naming the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkExports = checkOfExports(unchangedInnermost);
+
+    const report = checkExports(rootSizes.large)();
+    const order = orderOf(checkExports, rootSizes, orders.linear);
+
+    expect(report).toEqual({ changes: [] });
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('many exports, each naming one unchanged def of many fields that each name a def of their own, are checked in time that grows with their number and the def’s width', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkWideExports = (count: number) => {
+      const defsOf = (): Defs => {
+        const parts = Array.from({ length: count }, (_, index) => [
+          `part${index}`,
+          anObject({ value: required(aString) }),
+        ]);
+        const fields = parts.map(([name]) => [name, required(aRef(String(name)))]);
+        return { ...Object.fromEntries(parts), wide: anObject(Object.fromEntries(fields)) };
+      };
+      const exported = exportsOfCount(count, aRef('wide'));
+      const baseline = aBaselineDefinitions({ defs: defsOf(), exports: exported });
+      const proposed = aDefinitions({ defs: defsOf(), exports: exported });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checkWideExports(rootSizes.large)();
+    const order = orderOf(checkWideExports, rootSizes, orders.linear);
+
+    expect(report).toEqual({ changes: [] });
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('a change at the end of a chain many exports name is reported at each export, at its def', () => {
+    const count = 3;
+    const checkExports = checkOfExports({ description: 'a', leaf: aNumber });
+
+    const report = checkExports(count)();
+
+    const typeChanged = { kind: 'type-changed', from: 'string', to: 'number' } as const;
+    const atEnd = inDef('c0', found(typeChanged, breaksEverywhere, ['fields', 'next']));
+    expect(snapshotPathsOf(report.changes)).toEqual(exportChangesOf(count, atEnd));
+  });
+
+  test('a change to a Neutral annotation at the end of a chain many exports name is reported at each export', () => {
+    const count = 3;
+    const checkExports = checkOfExports({ description: 'b', leaf: aString });
+
+    const report = checkExports(count)();
+
+    const described = inDef('c0', found(annotationChanged('description'), neutralEverywhere));
+    expect(snapshotPathsOf(report.changes)).toEqual(exportChangesOf(count, described));
+  });
+
+  test('a `ref` to an unchanged def still reports its own description and a use’s added nullability', () => {
+    const exported = (held: SchemaNode) => schemaExports({ money: held });
+    const baseline = aBaselineDefinitions({
+      defs: aFanChainOf(2, unchangedInnermost),
+      exports: exported(aRef('c1')),
+    });
+    const proposed = aDefinitions({
+      defs: aFanChainOf(2, unchangedInnermost),
+      exports: exported({ type: 'ref', name: 'c1', description: 'Money', nullable: true }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('description'), neutralEverywhere)),
+      changeAt(shared, found({ kind: 'nullability-added' }, guaranteesLess)),
+    ]);
+  });
+
+  test('a `ref` pointed at another def of the same text reports the def name it carries', () => {
+    const defs = (): Defs => ({
+      first: anObject({ value: required(aString) }),
+      second: anObject({ value: required(aString) }),
+    });
+    const baseline = aBaselineDefinitions({
+      defs: defs(),
+      exports: schemaExports({ money: aRef('first') }),
+    });
+    const proposed = aDefinitions({
+      defs: defs(),
+      exports: schemaExports({ money: aRef('second') }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('id'), neutralEverywhere)),
+    ]);
+  });
+
+  test('a `ref` pointed at a def of another shape reports the def name it carries and what differs between the two defs', () => {
+    const baseline = aBaselineDefinitions({
+      defs: {
+        first: anObject({ value: required(aString) }),
+        second: anObject({ value: required(aNumber) }),
+      },
+      exports: schemaExports({ money: aRef('first') }),
+    });
+    const proposed = aDefinitions({
+      defs: {
+        first: anObject({ value: required(aString) }),
+        second: anObject({ value: required(aNumber) }),
+      },
+      exports: schemaExports({ money: aRef('second') }),
+    });
+
+    const report = compatibilityReportOf(baseline, proposed);
+
+    const typeChanged = { kind: 'type-changed', from: 'string', to: 'number' } as const;
+    expect(snapshotPathsOf(report.changes)).toEqual([
+      changeAt(shared, found(annotationChanged('id'), neutralEverywhere)),
+      changeAt(shared, inDef('second', found(typeChanged, breaksEverywhere, ['fields', 'value']))),
+    ]);
+  });
 });
 
 describe('compatibilityReportOf, the steps of a Change in random nested schemas', () => {
@@ -2677,16 +3031,24 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
 
   /**
    * One random schema drawn twice from a seed, whose every leaf is an object that gains `y`, and a
-   * string whose description changes where it is a record's key.
+   * string whose description changes where it is a record's key, with the id of each leaf in the
+   * order the generator recorded them: none for a key, and for all when the draw has no ids.
    */
   function aRandomPair(seed: number, hasIds: boolean) {
     const draw = (proposed: boolean) => {
       let leafCount = 0;
-      const leaf = (crossing: readonly Construct[]) =>
-        crossing.at(-1) === 'key'
-          ? z.string().describe(proposed ? 'b' : 'a')
-          : anObjectGainingY(proposed, hasIds ? `leaf${leafCount++}` : undefined);
-      return randomNested({ next: seededNext(seed), leaf, keysHoldLeaves: true }, 5);
+      const ids: (string | undefined)[] = [];
+      const leaf = (crossing: readonly Construct[]) => {
+        if (crossing.at(-1) === 'key') {
+          ids.push(undefined);
+          return z.string().describe(proposed ? 'b' : 'a');
+        }
+        const id = hasIds ? `leaf${leafCount++}` : undefined;
+        ids.push(id);
+        return anObjectGainingY(proposed, id);
+      };
+      const drawn = randomNested({ next: seededNext(seed), leaf, keysHoldLeaves: true }, 5);
+      return { ...drawn, ids };
     };
     return { baseline: draw(false), proposed: draw(true) };
   }
@@ -2695,8 +3057,10 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
    * Where the Change of a leaf is reported, from the steps the generator recorded for it: after the
    * place's own, at `y` for an object that gains one, without an intersection's `[i]` since its
    * objects are one, and, across a plain union's option or a tuple's item, at the node before it.
+   * An object with an id that gains `y` is reported from its def, `defs.<id>.y`, whatever the steps
+   * that reach it.
    */
-  function reportedAtOf(place: Place, leaf: Leaf) {
+  function reportedAtOf(place: Place, leaf: Leaf, id: string | undefined) {
     const crossed = leaf.crossing.filter((construct) => construct !== 'optional');
     const constructs = crossed.map((construct, index) => ({ construct, piece: leaf.steps[index] }));
     const wholeAt = constructs.findIndex(({ construct }) => reportedWhole.includes(construct));
@@ -2709,11 +3073,9 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
     const gainsY = !isWhole && leaf.crossing.at(-1) !== 'key';
     const added: readonly Piece[] = gainsY ? [{ text: 'y', isField: true }] : [];
     const pieces = [...placeSteps, ...written.flatMap(({ piece }) => piece ?? []), ...added];
-    return { path: pathTextOf(pieces), isWhole, gainsY };
-  }
-
-  function stepsOf({ difference }: Change): readonly Step[] {
-    return 'at' in difference ? difference.at : [];
+    const isInDef = gainsY && id !== undefined;
+    const path = isInDef ? `defs.${id}.y` : pathTextOf(pieces);
+    return { path, isWhole, gainsY };
   }
 
   /** A random pair compared at one of the places, hopping through a `ref` at each leaf in half of the draws. */
@@ -2727,9 +3089,11 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
       place.baseline(from.node, from.defs),
       place.proposed(to.node, to.defs),
     );
-    const drawn = baseline.leaves.map((leaf) => reportedAtOf(place, leaf));
+    const drawn = baseline.leaves.map((leaf, index) =>
+      reportedAtOf(place, leaf, baseline.ids[index]),
+    );
     const walkedDefs = Object.keys(from.defs).length > 0;
-    return { place, walkedDefs, report, drawn };
+    return { place, walkedDefs, report, drawn, from, to };
   }
 
   test('every Change sits at the steps its leaf was drawn at, after the place’s own', () => {
@@ -2743,7 +3107,7 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
       const { place, walkedDefs, report, drawn } = aDraw(seed);
 
       const expected = [...new Set(drawn.map(({ path }) => path))].sort();
-      const reported = report.changes.map((change) => authorPathOf(stepsOf(change)) ?? '').sort();
+      const reported = report.changes.map(pathOf).sort();
       if (JSON.stringify(reported) !== JSON.stringify(expected)) {
         wrong.push(
           `seed ${seed} in ${place.name}: ${reported.join(' ')} not ${expected.join(' ')}`,
@@ -2772,6 +3136,69 @@ describe('compatibilityReportOf, the steps of a Change in random nested schemas'
     expect(deepestOwnSteps).toBeGreaterThanOrEqual(2);
     expect(changesAtNodes).toBeGreaterThan(0);
     expect(changesThroughRefs).toBeGreaterThan(0);
+  });
+
+  /** A body holding `first` by `a`, which comes before `top` in code point order, then `node` by `top`. */
+  function enteringFirst(first: string, node: SchemaNode): SchemaNode {
+    return anObject({ a: required(aRef(first)), top: required(node) });
+  }
+
+  test('a Change inside a recursive schema is the same whichever path reaches the schema first', () => {
+    const moved: string[] = [];
+    let compared = 0;
+
+    for (let seed = 1; seed <= seedCount; seed++) {
+      const { place, report, from, to } = aDraw(seed);
+      const insideDefs = report.changes.filter((change) => defOf(change) !== undefined);
+      const first = insideDefs.map(defOf)[0];
+      if (first === undefined) {
+        continue;
+      }
+
+      const sooner = comparedOf(
+        place.baseline(enteringFirst(first, from.node), from.defs),
+        place.proposed(enteringFirst(first, to.node), to.defs),
+      );
+
+      const soonerInsideDefs = sooner.changes.filter((change) => defOf(change) !== undefined);
+      compared++;
+      if (
+        JSON.stringify(soonerInsideDefs.map(pathOf).sort()) !==
+        JSON.stringify(insideDefs.map(pathOf).sort())
+      ) {
+        moved.push(`seed ${seed} in ${place.name} when ${first} is reached first`);
+      }
+    }
+
+    expect(moved).toEqual([]);
+    expect(compared).toBeGreaterThan(seedCount / 10);
+  });
+});
+
+describe('compatibilityReportOf, a Change inside a chain of alias defs in seeded draws', () => {
+  const seedCount = 1_000;
+
+  test('a field lost by the object def at the end of a chain of alias defs is one Change, from that def, however many refs name the chain', () => {
+    const wrong: string[] = [];
+    let named = 0;
+
+    for (let seed = 0; seed < seedCount; seed++) {
+      const draw = aliasDrawOf(seed);
+      const baseline = publishedSnapshotOf(undefined, draw.baseline, publishedAt('1.0.0'));
+
+      const report = compatibilityReportOf(baseline, draw.proposed);
+
+      const inDefs = report.changes.filter((change) => defOf(change) !== undefined);
+      const paths = inDefs.map(pathOf);
+      const objectName = draw.isConstructor ? 'constructor' : 'o';
+      if (paths.join() !== `defs.${objectName}.q`) {
+        wrong.push(`seed ${seed}: ${paths.join(' ')}`);
+      }
+      named += draw.isConstructor ? 1 : 0;
+    }
+
+    expect(wrong).toEqual([]);
+    expect(named).toBeGreaterThan(0);
   });
 });
 

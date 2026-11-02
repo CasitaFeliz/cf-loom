@@ -143,14 +143,6 @@ export function heldFormerInputsOf(snapshot: Snapshot | PublishedSnapshot): read
   return 'formerInputs' in snapshot ? snapshot.formerInputs : [];
 }
 
-/** An Endpoint's former Inputs, oldest first. */
-export function formerInputsOf(
-  snapshot: PublishedServiceSnapshot,
-  endpoint: string,
-): readonly FormerInput[] {
-  return snapshot.formerInputs.filter((former) => former.endpoint === endpoint);
-}
-
 /** Whether a published Subscription is a removed one's tombstone rather than a declared Subscription. */
 export function isSubscriptionTombstone(
   subscription: SubscriptionSnapshot | SubscriptionTombstone,

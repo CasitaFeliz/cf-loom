@@ -114,6 +114,11 @@ export type JsonNode = Annotations & { readonly type: 'json' };
 /** A schema with an id on a cycle, written once under the Snapshot's `defs` by that id. */
 export type RefNode = Annotations & { readonly type: 'ref'; readonly name: string };
 
+/** The name of the def a `ref` node carries, or none for any other node. */
+export function refNameOf(node: SchemaNode): string | undefined {
+  return node.type === 'ref' ? node.name : undefined;
+}
+
 /** A schema as the Snapshot describes it, language-neutral, for the Compatibility Check. */
 export type SchemaNode =
   | StringNode

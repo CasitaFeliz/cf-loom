@@ -9,7 +9,8 @@
     "check": "biome check --error-on-warnings . && node scripts/check-tsdoc.ts && node scripts/check-layout.ts && node scripts/check-terms.ts && node scripts/check-expect-errors.ts",
     "clean": "tsc -b --clean",
     "format": "biome check --write .",
-    "test": "pnpm build && vitest run"
+    "test": "pnpm build && vitest run --project '!*-growth'",
+    "test:growth": "vitest run --project '*-growth'"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
@@ -18,7 +19,8 @@
     "marked": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   },
   "packageManager": "pnpm@12.14.0",
   "engines": {

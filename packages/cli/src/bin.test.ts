@@ -116,7 +116,7 @@ function cfLoomThrowing(message: string, ...args: string[]) {
 
 /** The one line `--json` prints on stdout for a command that stopped with a message. */
 function errorsDocument(...errors: string[]): string {
-  return `${JSON.stringify({ format: 1, status: 3, errors })}\n`;
+  return `${JSON.stringify({ format: 2, status: 3, errors })}\n`;
 }
 
 /** Root may write in any folder, so a permission test means nothing when run as root. */
@@ -4248,7 +4248,7 @@ describe.concurrent('cf-loom check', () => {
     const { ran } = await checkedAgainst(lab, changed, '--json');
 
     expect(JSON.parse(ran.stdout)).toEqual({
-      format: 1,
+      format: 2,
       status: 2,
       errors: [
         '1 Breaking Change(s) need a Breaking Change Approval: your review process enforces it',
@@ -4304,7 +4304,7 @@ describe.concurrent('cf-loom check', () => {
     const reason = `it is not in ${registry.url}/ for the npm user tester: never published, or that login cannot read it`;
     expect(ran.status).toBe(0);
     expect(JSON.parse(ran.stdout)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       package: ordersPackage,
       baseline: null,
@@ -4339,7 +4339,7 @@ describe.concurrent('cf-loom check', () => {
       const lines = ran.stderr.trimEnd().split('\n');
       expect(ran.status).toBe(status);
       expect(ran.stdout.split('\n')).toHaveLength(2);
-      expect(JSON.parse(ran.stdout)).toEqual({ format: 1, status, errors: lines });
+      expect(JSON.parse(ran.stdout)).toEqual({ format: 2, status, errors: lines });
       expect(lines.every((line) => line !== '')).toBe(true);
     },
   );
@@ -4498,6 +4498,40 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
       `endpoints.GET /ping (ping) schema field-removed at success.body.orders[].lines[].kind<type="a">.x: ${needsApproval}`,
       `Would publish ${ordersPackage}@2.0.0 (major)`,
       '',
+    ]);
+  });
+
+  test('a difference inside a recursive schema is at its path from that schema, in the lines and in --json', async ({
+    lab,
+  }) => {
+    const tree = (description: string) =>
+      [
+        '(() => {',
+        'const node = z.object({',
+        `label: z.string().describe('${description}'),`,
+        "get children() { return z.array(node); } }).meta({ id: 'constructor' });",
+        'return node; })()',
+      ].join(' ');
+    const changed = await aChangedProject(lab, {
+      before: aRoot({ body: tree('Label') }),
+      after: aRoot({ body: tree('Name') }),
+    });
+
+    const lines = await checkedAgainst(lab, changed);
+    const json = await checkedAgainst(lab, changed, '--json');
+
+    expect(lines.ran.stdout.split('\n')[1]).toBe(
+      'endpoints.GET /ping (ping) schema annotation-changed at defs.constructor.label (success) annotation=description: Neutral',
+    );
+    const [change] = JSON.parse(json.ran.stdout).changes;
+    expect([change.path, change.difference]).toEqual([
+      'defs.constructor.label',
+      {
+        kind: 'schema',
+        at: ['defs', 'constructor', 'fields', 'label'],
+        position: 'success',
+        shape: { kind: 'annotation-changed', annotation: 'description' },
+      },
     ]);
   });
 
@@ -4832,7 +4866,7 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
 
     const { ran } = await checkedAgainst(lab, { project, served }, '--json');
 
-    expect(JSON.parse(ran.stdout).format).toBe(1);
+    expect(JSON.parse(ran.stdout).format).toBe(2);
   });
 });
 
@@ -5507,7 +5541,7 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
     expect(ran.status).toBe(3);
     expect(ran.stderr).toBe(`${line}\n`);
     expect(documentOf(ran)).toMatchObject({
-      format: 1,
+      format: 2,
       status: 3,
       errors: [line],
       package: ordersPackage,
@@ -7344,7 +7378,7 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
     const lines = ran.stdout.split('\n');
     expect(lines).toHaveLength(2);
     expect(JSON.parse(lines[0] ?? '')).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       package: ordersPackage,
       baseline: null,
@@ -7618,7 +7652,7 @@ describe('cf-loom generate --json', () => {
     const ran = cfLoom(project, 'generate', '--json');
 
     expect(documentOf(ran)).toMatchObject({
-      format: 1,
+      format: 2,
       status: 0,
       moved: [{ from: movedFrom, to: movedTo }],
       wrote: expect.arrayContaining(['contract.snapshot.json']),
@@ -7650,7 +7684,7 @@ describe('cf-loom generate --json', () => {
     expect(ran.status).toBe(3);
     expect(line).toMatch(/^cf-loom failed: .*crashed$/);
     expect(documentOf(ran)).toEqual({
-      format: 1,
+      format: 2,
       status: 3,
       errors: [line],
       moved: [],
@@ -7674,7 +7708,7 @@ describe('cf-loom generate --json', () => {
       const [line] = ran.stderr.split('\n');
       expect(ran.status).toBe(3);
       expect(documentOf(ran)).toEqual({
-        format: 1,
+        format: 2,
         status: 3,
         errors: [line],
         moved: [{ from: movedFrom, to: movedTo }],
@@ -7699,13 +7733,13 @@ describe('cf-loom --json on every command', () => {
     const updated = cfLoom(attributed, 'init', '--json');
 
     expect(documentOf(created)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       created: ['src/contract/index.ts', '.gitattributes'],
       updated: [],
     });
     expect(documentOf(updated)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       created: ['src/contract/index.ts'],
       updated: ['.gitattributes'],
@@ -7719,7 +7753,7 @@ describe('cf-loom --json on every command', () => {
 
     const lines = cfLoom(project, 'verify').stdout.split('\n').filter(Boolean);
     const upToDate = lines.map((line) => line.replace(/ is up to date$/, ''));
-    expect(documentOf(ran)).toEqual({ format: 1, status: 0, upToDate });
+    expect(documentOf(ran)).toEqual({ format: 2, status: 0, upToDate });
   });
 
   test('package names the folder it wrote', () => {
@@ -7727,7 +7761,7 @@ describe('cf-loom --json on every command', () => {
 
     const ran = cfLoom(project, 'package', '--json', '--out', 'out');
 
-    expect(documentOf(ran)).toEqual({ format: 1, status: 0, wrote: 'out' });
+    expect(documentOf(ran)).toEqual({ format: 2, status: 0, wrote: 'out' });
     expect(existsSync(join(project, 'out/package.json'))).toBe(true);
   });
 
@@ -7740,7 +7774,7 @@ describe('cf-loom --json on every command', () => {
       const flagless = cfLoom(project, command);
 
       expect(documentOf(json)).toEqual({
-        format: 1,
+        format: 2,
         status: 0,
         document: JSON.parse(flagless.stdout),
       });
@@ -7755,12 +7789,12 @@ describe('cf-loom --json on every command', () => {
     const one = cfLoom(project, 'help', 'check', '--json');
 
     expect(documentOf(all)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       usage,
     });
     expect(documentOf(one)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       usage: 'Usage: cf-loom check [--json] [--prerelease] [--against <version|dist-tag>]',
     });
@@ -7772,7 +7806,7 @@ describe('cf-loom --json on every command', () => {
     const ran = cfLoom(project, '--version', '--json');
 
     expect(documentOf(ran)).toEqual({
-      format: 1,
+      format: 2,
       status: 0,
       name: '@cf-loom/cli',
       version: cliVersion,
@@ -7796,7 +7830,7 @@ describe('cf-loom --json on every command', () => {
     const ran = cfLoom(project, command, '--json');
 
     expect(ran.stderr).not.toContain('take --json');
-    expect(documentOf(ran)).toMatchObject({ format: 1, status: ran.status });
+    expect(documentOf(ran)).toMatchObject({ format: 2, status: ran.status });
   });
 });
 
@@ -7819,7 +7853,7 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
 
     const ran = cfLoom(project, command, '--json');
 
-    expect(documentOf(ran)).toMatchObject({ format: 1, status: 0 });
+    expect(documentOf(ran)).toMatchObject({ format: 2, status: 0 });
     expect(ran.status).toBe(0);
     expect(ran.stderr).toBe('');
   });
@@ -7833,7 +7867,7 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
 
       const errors = ran.stderr.split('\n').filter(Boolean);
       expect(ran.status).toBe(1);
-      expect(documentOf(ran)).toEqual({ format: 1, status: 1, errors });
+      expect(documentOf(ran)).toEqual({ format: 2, status: 1, errors });
     },
   );
 
@@ -7847,7 +7881,7 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
 
     const [line] = ran.stderr.split('\n');
     expect(ran.status).toBe(3);
-    expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
+    expect(documentOf(ran)).toEqual({ format: 2, status: 3, errors: [line] });
   });
 
   test.for([
@@ -7867,7 +7901,7 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
 
     const [line] = ran.stderr.split('\n');
     expect(ran.status).toBe(3);
-    expect(documentOf(ran)).toEqual({ format: 1, status: 3, errors: [line] });
+    expect(documentOf(ran)).toEqual({ format: 2, status: 3, errors: [line] });
   });
 });
 
@@ -7879,10 +7913,10 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
     const dry = await publishedAgainst(lab, changed, '--json', '--dry-run');
 
     const errors = checked.ran.stderr.split('\n').filter(Boolean);
-    expect(documentOf(checked.ran)).toMatchObject({ format: 1, status: 2, errors });
+    expect(documentOf(checked.ran)).toMatchObject({ format: 2, status: 2, errors });
     expect(checked.ran.status).toBe(2);
     expect(documentOf(dry.ran)).toStrictEqual({
-      format: 1,
+      format: 2,
       status: 0,
       published: false,
       package: '@org/contract-orders-service',
@@ -7907,7 +7941,7 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
     expect(ran.status).toBe(0);
     const errors = ran.stderr.split('\n').filter(Boolean);
     expect(errors).toEqual([paymentsUnlisted('0.0.0')]);
-    expect(documentOf(ran)).toMatchObject({ format: 1, status: 0, errors });
+    expect(documentOf(ran)).toMatchObject({ format: 2, status: 0, errors });
   });
 
   test('check on a refused Change, exit 1, says what stderr says', async ({ lab }) => {
@@ -7924,7 +7958,7 @@ describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeo
 
     const errors = ran.stderr.split('\n').filter(Boolean);
     expect(errors).toEqual([expect.stringContaining('refused')]);
-    expect(documentOf(ran)).toMatchObject({ format: 1, status: 1, errors });
+    expect(documentOf(ran)).toMatchObject({ format: 2, status: 1, errors });
   });
 });
 
@@ -8121,6 +8155,6 @@ describe('cf-loom', () => {
     expect(ran.status).toBe(3);
     expect(errors).toEqual([expect.stringMatching(/^cf-loom failed: \S+:\d+: ENOENT/)]);
     expect(ran.stdout.split('\n')).toHaveLength(2);
-    expect(JSON.parse(ran.stdout)).toEqual({ format: 1, status: 3, errors });
+    expect(JSON.parse(ran.stdout)).toEqual({ format: 2, status: 3, errors });
   });
 });

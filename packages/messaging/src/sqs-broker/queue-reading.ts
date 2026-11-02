@@ -1,5 +1,6 @@
 import { ownOf } from '@cf-loom/contract/internal';
-import { type DeliveryWaits, oneLineOf, oneOrListOf } from '../broker-limits/index.ts';
+import type { DeliveryWaits } from '../broker/index.ts';
+import { oneLineOf, oneOrListOf } from '../broker-limits/index.ts';
 import { deliveriesOf, readWait } from './reading-limits.ts';
 import { backoffEntriesOf, backoffTag, subscriptionTag } from './tags.ts';
 

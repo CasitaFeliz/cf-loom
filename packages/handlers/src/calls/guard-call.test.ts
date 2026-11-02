@@ -2,9 +2,10 @@ import { defineGuard, defineRejection, type Guard, notImplemented } from '@cf-lo
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import {
+  type Admission,
   admit,
-  type CheckedAdmission,
   type GuardCall,
+  type GuardHandler,
   type GuardImplementation,
   type HandledRequest,
   handle,
@@ -68,6 +69,7 @@ const permission = defineGuard({
 
 type Held = { readonly permissions: { readonly held: readonly string[] } };
 type Keyed = { readonly callers: { readonly byKey: () => string } };
+type Answer<Handler extends (...args: never[]) => unknown> = Awaited<ReturnType<Handler>>;
 
 const apiKeyDemands = { headers: { 'x-api-key': 'key-1' } };
 const userContext = { userToken: { userId: 'u-1' } };
@@ -428,8 +430,50 @@ describe('a GuardHandler’s direct call', () => {
     expectTypeOf<GuardCall<typeof permission>['request']>().toEqualTypeOf<HandledRequest>();
   });
 
+  test('a GuardHandler’s direct call answers the Admission its implementation builds', async () => {
+    const apiKeyHandler = handle(apiKey, () => admit(apiKey, { callerId: 'c-1' }));
+    const teamed = defineGuard({
+      name: 'teamed',
+      description: 'A Caller that may belong to a team',
+      context: z.object({ callerId: z.string(), team: z.string().optional() }),
+    });
+    const upcast: Guard = apiKey;
+    const widenedName: string = 'widened';
+    const widened = defineGuard({ name: widenedName, description: 'A Guard named at run time' });
+    async function answerOf<Target extends Guard>(
+      handler: GuardHandler<Target>,
+      ...args: Parameters<GuardHandler<Target>>
+    ): Promise<Admission<Target>> {
+      return handler(...args);
+    }
+
+    const answered = await apiKeyHandler(apiKeyDemands, {});
+
+    expectTypeOf(answered).toEqualTypeOf<Admission<typeof apiKey>>();
+    expectTypeOf<Answer<GuardHandler<typeof apiKey>>>().toEqualTypeOf<Admission<typeof apiKey>>();
+    expectTypeOf<Answer<GuardHandler<typeof permission>>>().toEqualTypeOf<
+      Admission<typeof permission>
+    >();
+    expectTypeOf<Answer<GuardHandler<Guard>>>().toEqualTypeOf<Admission<Guard>>();
+    expectTypeOf<Answer<GuardHandler<typeof upcast>>>().toEqualTypeOf<Admission<Guard>>();
+    expectTypeOf<Answer<GuardHandler<typeof widened>>>().toEqualTypeOf<Admission<typeof widened>>();
+    expectTypeOf<Answer<GuardHandler<typeof apiKey | typeof permission>>>().toEqualTypeOf<
+      Admission<typeof apiKey | typeof permission>
+    >();
+    // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
+    expectTypeOf<Answer<GuardHandler<any>>>().toEqualTypeOf<Admission<any>>();
+    expectTypeOf(answerOf<typeof apiKey>).returns.resolves.toEqualTypeOf<
+      Admission<typeof apiKey>
+    >();
+    expectTypeOf<{ kind: 'admitted'; context: { callerId: string } }>().toExtend<
+      Admission<typeof teamed>
+    >();
+    // @ts-expect-error TS2344 a Target that is no Guard
+    expectTypeOf<Admission<unknown>>().toBeObject();
+  });
+
   test('a GuardHandler’s direct call answers the Guard’s Rejections and not-implemented', () => {
-    type Rejected = Extract<CheckedAdmission<typeof apiKey>, { kind: 'rejection' }>;
+    type Rejected = Extract<Answer<GuardHandler<typeof apiKey>>, { kind: 'rejection' }>;
 
     expectTypeOf<Rejected['rejection']>().toEqualTypeOf<
       typeof unauthenticated | typeof notImplemented

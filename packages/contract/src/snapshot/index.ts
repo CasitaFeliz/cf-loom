@@ -44,7 +44,6 @@ export type {
 } from './published.ts';
 export {
   declaredCodesOf,
-  formerInputsOf,
   heldFormerInputsOf,
   isDeclared,
   isRemoved,

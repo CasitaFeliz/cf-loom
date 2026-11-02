@@ -13,31 +13,33 @@ export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { ResolvedRef } from './def-graph.ts';
 export {
+  defNamed,
   defsReachedOf,
   nodesReachedFrom,
+  type RefResolver,
   reachedDefsOf,
+  refResolverOf,
   refsWrittenIn,
-  resolvedRefOf,
 } from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
-export type { NodeEdit } from './held-node.ts';
 export { heldNodeOf, withoutNullable } from './held-node.ts';
 export { joinedOf } from './joined-names.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
+  belowTextOf,
   inFields,
   inside,
-  locationBelowOf,
   movedFrom,
   placeNameOf,
   placeOf,
   siteLocationOf,
   siteTextOf,
 } from './location.ts';
+export type { NodeEdit } from './node-edits.ts';
 export { defsLeadingBackWithNoNodeOf } from './nodeless-cycles.ts';
 export type {
   EnumNode,
@@ -54,15 +56,18 @@ export type {
   TaggedNode,
   TupleNode,
 } from './nodes.ts';
-export { neutralAnnotations } from './nodes.ts';
+export { neutralAnnotations, refNameOf } from './nodes.ts';
 export { isUnnamedCycle } from './not-allowed.ts';
 export { openCompositionsOf } from './open-compositions.ts';
 export type { SchemaRule } from './schema-rule.ts';
 export { byShape, shapeKey, shapeOf } from './shapes.ts';
-export type { PartName, Step, StepChain } from './steps.ts';
+export type { Anchored, PartName, Step, StepChain } from './steps.ts';
 export {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   chainDown,
+  defTextOf,
   fieldStep,
   indexStep,
   itemsStep,

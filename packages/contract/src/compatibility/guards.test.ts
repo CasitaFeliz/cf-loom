@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { orderOf, orders } from '../../test/growth.ts';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
   type ChangeSite,
   compatibilityReportOf,
   type DefinitionsSnapshot,
+  type Defs,
   type Difference,
   decodeSnapshot,
   type Field,
@@ -538,11 +540,8 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
         breaking(codeSite(orderLocked), {
           kind: 'schema',
           position: 'success',
-          at: [
-            { kind: 'part', name: 'body' },
-            { kind: 'field', name: 'tree' },
-            { kind: 'field', name: 'label' },
-          ],
+          at: [{ kind: 'field', name: 'label' }],
+          def: 'tree',
           shape: { kind: 'field-removed' },
         }),
       ]);
@@ -675,4 +674,100 @@ describe('compatibilityReportOf, one removal from a Definitions Package', () => 
       expect(removals).toEqual([breaking(exportSite(name), { kind: 'removed' })]);
     },
   );
+});
+
+describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reach', () => {
+  /**
+   * The sizes of `count` Guards over a chain of `count` defs: a check that reads the chain again
+   * for each Guard costs their product, so eight times as large costs about 64 times as much.
+   */
+  const sizes = { small: 64, large: 512 };
+
+  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  const growthTimeout = 240_000;
+
+  function aRef(name: string): SchemaNode {
+    return { type: 'ref', name };
+  }
+
+  /** `count` objects `c0`, `c1`…, each holding the one before it by `next`, the first holding a string described `description`. */
+  function aChainOf(count: number, description: string): Defs {
+    const entries = Array.from({ length: count }, (_, index): [string, SchemaNode] => {
+      const leaf: SchemaNode = { type: 'string', description };
+      const next = index === 0 ? leaf : aRef(`c${index - 1}`);
+      return [`c${index}`, anOpenObject({ next: required(next) })];
+    });
+    return Object.fromEntries(entries);
+  }
+
+  /** `count` Guards whose Qualifier names the head of the chain and whose Context holds it in a field. */
+  function guardsNamingHeadOf(count: number): Readonly<Record<string, GuardSnapshot>> {
+    const head = aRef(`c${count - 1}`);
+    const guard = aGuard({ qualifier: head, context: anOpenObject({ at: required(head) }) });
+    const entries = Array.from({ length: count }, (_, index) => [`guard${index}`, guard]);
+    return Object.fromEntries(entries);
+  }
+
+  function checkOfGuards(proposedDescription: string) {
+    return (count: number) => {
+      const guards = guardsNamingHeadOf(count);
+      const baseline = aBaselineDefinitions({ defs: aChainOf(count, 'a'), guards });
+      const proposed = aDefinitions({ defs: aChainOf(count, proposedDescription), guards });
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+  }
+
+  test('many Guards whose Qualifier and Context name the head of one unchanged chain of ids are checked in time that grows with their number and the chain’s length', {
+    timeout: growthTimeout,
+  }, () => {
+    const checkGuards = checkOfGuards('a');
+
+    const report = checkGuards(sizes.large)();
+    const order = orderOf(checkGuards, sizes, orders.linear);
+
+    expect(report).toEqual({ changes: [] });
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('a Guard’s Context reaching a def whose description changed at the end of a chain is a Neutral context-changed', () => {
+    const context = anOpenObject({ at: required(aRef('c2')) });
+    const guards = { authenticated: aGuard({ context }) };
+    const baseline = aBaselineDefinitions({ defs: aChainOf(3, 'a'), guards });
+    const proposed = aDefinitions({ defs: aChainOf(3, 'b'), guards });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'context-changed' })]);
+  });
+
+  test('a Guard’s Context naming a def that neither side holds is a Neutral context-changed', () => {
+    const context = anOpenObject({ at: required(aRef('missing')) });
+    const guards = { authenticated: aGuard({ context }) };
+    const baseline = aBaselineDefinitions({ guards });
+    const proposed = aDefinitions({ guards });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'context-changed' })]);
+  });
+
+  test('a Guard’s Context naming another def of the same text is a Neutral context-changed', () => {
+    const defs = (): Defs => ({
+      first: anOpenObject({ value: required(aString) }),
+      second: anOpenObject({ value: required(aString) }),
+    });
+    const contextNaming = (name: string) => anOpenObject({ at: required(aRef(name)) });
+    const baseline = aBaselineDefinitions({
+      defs: defs(),
+      guards: { authenticated: aGuard({ context: contextNaming('first') }) },
+    });
+    const proposed = aDefinitions({
+      defs: defs(),
+      guards: { authenticated: aGuard({ context: contextNaming('second') }) },
+    });
+
+    const changes = changesOf(baseline, proposed);
+
+    expect(changes).toEqual([neutral(guardSite, { kind: 'context-changed' })]);
+  });
 });

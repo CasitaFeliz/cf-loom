@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { refusalLocationsOf, refusalsOf, summarized } from '../../test/failures.ts';
-import { cpuRatioOf, growthOf } from '../../test/growth.ts';
+import { cpuRatioOf, orderOf, orders } from '../../test/growth.ts';
 import {
   idOf,
   type Mix,
@@ -21,6 +21,7 @@ import {
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt } from '../../test/snapshots.ts';
+import { validatedAnswering } from '../../test/validated-answering.ts';
 import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   compatibilityReportOf,
@@ -88,6 +89,11 @@ const categoryDef = {
 } as const;
 
 const wrapperIdInstead = '.meta({ id }) on the schema inside';
+
+const nullableDefOf = (id: string) => ({
+  construct: `.meta({ id: "${id}" }) on a schema that admits null`,
+  instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
+});
 
 describe('walkSchemas: recursion', () => {
   test('a cycle through a getter is written once under defs and referenced by ref', () => {
@@ -166,11 +172,6 @@ describe('walkSchemas: recursion', () => {
   });
 
   describe('a def is never nullable: .nullable() belongs to a use', () => {
-    const nullableDefOf = (id: string) => ({
-      construct: `.meta({ id: "${id}" }) on a schema that admits null`,
-      instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
-    });
-
     test('a plain def used with .nullable() writes the def plain and each such ref nullable', () => {
       const node: z.ZodType = z
         .object({ label: z.string(), next: z.lazy(() => node).nullable() })
@@ -359,14 +360,20 @@ describe('walkSchemas: recursion', () => {
       });
     });
 
-    test.each([
-      ['nullable', nullable],
-      ['described', described],
-    ])('a %s z.lazy() of itself with an id fails the same', (_name, schema) => {
-      const walked = walkBody(schema);
+    test('a described z.lazy() of itself with an id fails the same', () => {
+      const walked = walkBody(described);
 
       expect(walked).toEqual({
         located: [refused([{ at: '', ...nodelessCycle }])],
+        defs: {},
+      });
+    });
+
+    test('a nullable z.lazy() of itself with an id fails as a nullable def alone', () => {
+      const walked = walkBody(nullable);
+
+      expect(walked).toEqual({
+        located: [refused([{ at: '', ...nullableDefOf('nullable') }])],
         defs: {},
       });
     });
@@ -481,7 +488,7 @@ describe('walkSchemas: recursion', () => {
       expect(refusalSitesOf(walked)).toEqual([['exports.body'], ['exports.success']]);
     });
 
-    test('a def dropped with one failure keeps it when a later failure drops the group around it', () => {
+    test('a def dropped with one failure keeps it when a later failure drops the group around it, and its cycle is still told', () => {
       const root: z.ZodType = z
         .object({
           get next(): z.ZodType {
@@ -512,10 +519,254 @@ describe('walkSchemas: recursion', () => {
       const cycle = { at: 'next', ...nodelessCycle };
       const date = { at: 'placedAt', ...dateRefused };
       expect(refusalsOf(walked)).toEqual({
-        located: [refused([cycle, date]), refused([cycle])],
+        located: [refused([cycle, date]), refused([date])],
         defs: {},
       });
       expect(refusalSitesOf(walked)).toEqual([['exports.body', 'exports.body'], ['exports.body']]);
+    });
+
+    describe('a group of recursive schemas judged once it is walked', () => {
+      const tree: z.ZodType = z.union([z.lazy(() => branch), z.string()]).meta({ id: 'tree' });
+      const branch: z.ZodType = z
+        .union([z.lazy(() => tree), z.lazy(() => branch), z.number()])
+        .meta({ id: 'branch' });
+
+      test.each([
+        ['tree', tree],
+        ['branch', branch],
+      ])(
+        'a cycle closed inside a larger one, entered at the %s, is told once there',
+        (_, schema) => {
+          const walked = walkBody(z.object({ value: schema }));
+
+          expect(walked).toEqual({
+            located: [refused([{ at: 'value', ...nodelessCycle }])],
+            defs: {},
+          });
+        },
+      );
+
+      test('a cycle told at the def the walk entered first, not where its cycle closed', () => {
+        const wrapper = z.object({ first: tree, second: branch });
+
+        const walked = walkBody(wrapper);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: 'first', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      test('a nodeless cycle inside a def whose own nodeless cycle closes later is told with it', () => {
+        const inner: z.ZodType = z
+          .union([z.lazy(() => inner), z.array(z.lazy(() => outer))])
+          .meta({ id: 'inner' });
+        const outer: z.ZodType = z
+          .union([z.lazy(() => other), z.lazy(() => inner)])
+          .meta({ id: 'outer' });
+        const other: z.ZodType = z.union([z.lazy(() => outer), z.string()]).meta({ id: 'other' });
+
+        const walked = walkBody(outer);
+
+        expect(walked).toEqual({
+          located: [
+            refused([
+              { at: '', ...nodelessCycle },
+              { at: '<|1>', ...nodelessCycle },
+            ]),
+          ],
+          defs: {},
+        });
+      });
+
+      test('two nodeless groups in one group of schemas are each told', () => {
+        const hub: z.ZodType = z
+          .object({
+            get left() {
+              return left;
+            },
+            get right() {
+              return right;
+            },
+          })
+          .meta({ id: 'hub' });
+        const left: z.ZodType = z
+          .union([z.lazy(() => left), z.array(z.lazy(() => hub))])
+          .meta({ id: 'left' });
+        const right: z.ZodType = z
+          .union([z.lazy(() => right), z.array(z.lazy(() => hub))])
+          .meta({ id: 'right' });
+
+        const walked = walkBody(hub);
+
+        expect(walked).toEqual({
+          located: [
+            refused([
+              { at: 'left', ...nodelessCycle },
+              { at: 'right', ...nodelessCycle },
+            ]),
+          ],
+          defs: {},
+        });
+      });
+
+      test('cycles left standing in a group that a failure of its root hides in part are each told, at their first def', () => {
+        const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
+        const top: z.ZodType = z.union([z.array(below), z.lazy(() => left)]).meta({ id: 'top' });
+        const left: z.ZodType = z
+          .union([z.lazy(() => left), z.lazy(() => right)])
+          .meta({ id: 'left' });
+        const right: z.ZodType = z
+          .union([z.lazy(() => top), z.lazy(() => right)])
+          .meta({ id: 'right' });
+
+        const walked = walkBody(top);
+
+        expect(walked).toEqual({
+          located: [
+            refused([
+              { at: '<|1>', ...nodelessCycle },
+              { at: '<|1><|1>', ...nodelessCycle },
+              { at: '<|0>[]', ...nodelessCycle },
+            ]),
+          ],
+          defs: {},
+        });
+      });
+
+      test('a def that holds a def that failed before it fails with it, so its own cycle is not told', () => {
+        const below: z.ZodType = z.union([z.lazy(() => below), z.string()]).meta({ id: 'below' });
+        const entry: z.ZodType = z.lazy(() => top).meta({ id: 'entry' });
+        const top: z.ZodType = z
+          .union([
+            z.intersection(
+              z.object({ a: z.string() }),
+              z.lazy(() => holder),
+            ),
+            z.lazy(() => loop),
+          ])
+          .meta({ id: 'top' });
+        const holder: z.ZodType = z
+          .object({
+            below: z.lazy(() => below),
+            get entry() {
+              return entry;
+            },
+          })
+          .meta({ id: 'holder' });
+        const loop: z.ZodType = z
+          .union([z.lazy(() => loop), z.array(z.lazy(() => holder))])
+          .meta({ id: 'loop' });
+
+        const walked = walkBody(entry);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '<|0>[1].below', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      test('a group whose root is an object with no id fails with its cycle and writes no def', () => {
+        const entry: z.ZodType = z.object({
+          get next() {
+            return loop;
+          },
+        });
+        const loop: z.ZodType = z.union([z.lazy(() => loop), z.array(entry)]).meta({ id: 'loop' });
+
+        const walked = walkBody(entry);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: 'next', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      test('a group whose root is an object with no id lists every Endpoint that reaches its cycle', () => {
+        const entry: z.ZodType = z.object({
+          get next() {
+            return loop;
+          },
+        });
+        const loop: z.ZodType = z.union([z.lazy(() => loop), z.array(entry)]).meta({ id: 'loop' });
+
+        const validated = summarized(validatedAnswering([entry, entry]));
+
+        expect(validated).toEqual({
+          kind: 'invalid',
+          failures: [
+            {
+              kind: 'not-allowed',
+              location: 'endpoints.GET /first (getFirst) success.body.next',
+              ...nodelessCycle,
+              alsoIn: ['endpoints.GET /second (getSecond)'],
+              origin: undefined,
+            },
+          ],
+        });
+      });
+
+      test('an id every object has is refused on a nodeless cycle', () => {
+        const onCycle: z.ZodType = z
+          .union([z.lazy(() => onCycle), z.string()])
+          .meta({ id: 'constructor' });
+
+        const walked = walkBody(onCycle);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '', ...nodelessCycle }])],
+          defs: {},
+        });
+      });
+
+      test('an id every object has is written as a def off a nodeless cycle', () => {
+        const offCycle: z.ZodType = z
+          .object({
+            get next() {
+              return offCycle.optional();
+            },
+          })
+          .meta({ id: 'constructor' });
+
+        const walked = walkBody(offCycle);
+
+        expect(Object.keys(walked.defs)).toEqual(['constructor']);
+        expect(walked.located).toEqual([walkedTo({ type: 'ref', name: 'constructor' })]);
+      });
+
+      test('a nullable def on a cycle through another def fails as a nullable def alone', () => {
+        const plain: z.ZodType = z
+          .union([z.lazy(() => admitsNull), z.string()])
+          .meta({ id: 'plain' });
+        const admitsNull: z.ZodType = z
+          .union([z.lazy(() => plain), z.number()])
+          .nullable()
+          .meta({ id: 'admitsNull' });
+
+        const walked = walkBody(plain);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '<|0>', ...nullableDefOf('admitsNull') }])],
+          defs: {},
+        });
+      });
+
+      test('the line of a cycle lists a second Endpoint that reaches only a later member of its group', () => {
+        const validated = summarized(validatedAnswering([z.object({ value: tree }), branch]));
+
+        expect(validated).toEqual({
+          kind: 'invalid',
+          failures: [
+            {
+              kind: 'not-allowed',
+              location: 'endpoints.GET /first (getFirst) success.body.value',
+              ...nodelessCycle,
+              alsoIn: ['endpoints.GET /second (getSecond)'],
+              origin: undefined,
+            },
+          ],
+        });
+      });
     });
 
     describe('with unions and intersections on the cycle', () => {
@@ -581,9 +832,17 @@ describe('walkSchemas: recursion', () => {
       test.each([
         ['a nullable self option', nullableOption],
         ['a described self option', describedOption],
-        ['a nullable union of itself', nullableUnion],
       ])('%s fails the same', (_, schema) => {
         expect(walkBody(schema)).toEqual(refusedAtBody);
+      });
+
+      test('a nullable union of itself fails as a nullable def alone', () => {
+        const walked = walkBody(nullableUnion);
+
+        expect(walked).toEqual({
+          located: [refused([{ at: '', ...nullableDefOf('nullableUnion') }])],
+          defs: {},
+        });
       });
 
       test.each([
@@ -1583,9 +1842,6 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** How many times longer a ring twice as long may take to walk: about 2 for a walk of each schema once. */
-  const ringWalkedOnceGrowth = 8;
-
   /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
@@ -1596,10 +1852,10 @@ describe('walkSchemas: recursion', () => {
     };
 
     const walked = walkOf(255)();
-    const growth = growthOf(walkOf, { small: 128, large: 255 }, ringWalkedOnceGrowth);
+    const order = orderOf(walkOf, { small: 128, large: 255 }, orders.polynomial);
 
     expect(walked.located[0]?.walked.kind).toBe('walked');
-    expect(growth).toBeLessThan(ringWalkedOnceGrowth);
+    expect(order).toBeLessThan(orders.polynomial);
   });
 
   test('a ring of 400 schemas is refused at its 257th', () => {
@@ -1783,13 +2039,6 @@ describe('walkSchemas: recursion', () => {
   describe('a chain of ids is walked in time that grows with its length', () => {
     const sizes = { small: 2_000, large: 16_000 };
 
-    /**
-     * How many times longer a chain eight times as long may take: about 8 when each id costs the
-     * same wherever it sits, and over 15 when it costs its depth, as the walk's path, its records
-     * and its places did.
-     */
-    const chainGrowth = 13;
-
     /** A chain of `count` ids, each holding the next and one leaf all of them share. */
     function aChainSharingOneLeaf(count: number): z.ZodType {
       const leaf = z.object({ a: z.string() });
@@ -1848,10 +2097,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aChainOf(count, z.string()));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids on no cycle, each also holding a schema all share', {
@@ -1860,21 +2109,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainSharingOneLeaf);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
-    });
-
-    test('ids each on a cycle of its own', { timeout: growthTimeout }, () => {
-      const walkChain = walkOf((count) => aLoopedChainOf(count, z.string()));
-
-      const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
-
-      expect(walked.located[0]?.walked.kind).toBe('walked');
-      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each on a cycle of its own, around a refused schema', {
@@ -1883,10 +2121,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf((count) => aLoopedChainOf(count, z.bigint()));
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toEqual(['z.bigint()']);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each holding a date and reaching back to the first', {
@@ -1895,10 +2133,10 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainBackToItsRoot);
 
       const walked = walkChain(sizes.large)();
-      const growth = growthOf(walkChain, sizes, chainGrowth);
+      const order = orderOf(walkChain, sizes, orders.linear);
 
       expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each reaching back to a schema with no id', { timeout: growthTimeout }, () => {
@@ -1906,11 +2144,174 @@ describe('walkSchemas: recursion', () => {
       const walkChain = walkOf(aChainBackToAnUnnamedRoot);
 
       const walked = walkChain(unnamedSizes.large)();
-      const growth = growthOf(walkChain, unnamedSizes, chainGrowth);
+      const order = orderOf(walkChain, unnamedSizes, orders.linear);
 
       expect(walked.located[0]?.walked.kind).toBe('walked');
       expect(Object.keys(walked.defs)).toHaveLength(unnamedSizes.large);
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    /** `count` ids, each `join`ing the one before it with an object that holds the last id, so all lie in one group. */
+    function aChainOfJoinedDefsInOneGroup(
+      count: number,
+      join: (before: z.ZodType, back: z.ZodType) => z.ZodType,
+    ): z.ZodType {
+      let last: z.ZodType | undefined;
+      const back = () =>
+        z.object({
+          get last() {
+            return last?.optional();
+          },
+        });
+      let schema: z.ZodType = z
+        .object({
+          leaf: z.string(),
+          get back() {
+            return last?.optional();
+          },
+        })
+        .meta({ id: 'link0' });
+      for (let index = 1; index < count; index++) {
+        schema = join(schema, back()).meta({ id: `link${index}` });
+      }
+      last = schema;
+      return schema;
+    }
+
+    /** `count` union ids, each holding the one before it and an object whose union names it back. */
+    function aChainOfUnionsAndObjectsNamingThemBack(count: number): z.ZodType {
+      let schema: z.ZodType = z.object({ leaf: z.string() });
+      for (let index = 0; index < count; index++) {
+        const before = schema;
+        const link: z.ZodType = z
+          .union([
+            before,
+            z.object({
+              get again() {
+                return z.union([link, z.string()]).optional();
+              },
+            }),
+          ])
+          .meta({ id: `link${index}` });
+        schema = link;
+      }
+      return schema;
+    }
+
+    /**
+     * `count` union ids in one group, the first leading back to itself with no node between; with
+     * `every`, each of the others does as well.
+     */
+    function aChainOfUnionsLeadingBack(
+      count: number,
+      every: 'every link' | 'the first',
+    ): z.ZodType {
+      let last: z.ZodType | undefined;
+      const back = () =>
+        z.object({
+          get last() {
+            return last?.optional();
+          },
+        });
+      const first: z.ZodType = z.union([z.lazy(() => first), back()]).meta({ id: 'link0' });
+      let schema = first;
+      for (let index = 1; index < count; index++) {
+        const before = schema;
+        const link: z.ZodType =
+          every === 'every link'
+            ? z.union([before, z.lazy(() => link), back()]).meta({ id: `link${index}` })
+            : z.union([before, back()]).meta({ id: `link${index}` });
+        schema = link;
+      }
+      last = schema;
+      return schema;
+    }
+
+    /** One union id of `count` options, each an alias id that leads back to it with no node between. */
+    function aUnionOfAliasesLeadingBack(count: number): z.ZodType {
+      const options = Array.from({ length: count }, (_, index) =>
+        z.lazy(() => union).meta({ id: `option${index}` }),
+      );
+      const union: z.ZodType = z.union([z.string(), ...options]).meta({ id: 'union' });
+      return union;
+    }
+
+    const unionOf = (before: z.ZodType, other: z.ZodType) => z.union([before, other]);
+    const intersectionOf = (before: z.ZodType, other: z.ZodType) => z.intersection(before, other);
+
+    test('union ids in one group, each also in a cycle through an object', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, unionOf));
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(walked.located[0]?.walked.kind).toBe('walked');
+      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    test('intersection ids in one group, each also in a cycle through an object', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, intersectionOf));
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(walked.located[0]?.walked.kind).toBe('walked');
+      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    test('union ids each holding an object whose union names it back', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf(aChainOfUnionsAndObjectsNamingThemBack);
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(walked.located[0]?.walked.kind).toBe('walked');
+      expect(Object.keys(walked.defs)).toHaveLength(sizes.large);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    test('union ids in one group, each leading back to itself with no node between', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'every link'));
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(constructsOf(walked).flat()).toHaveLength(sizes.large);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    test('union ids in one group, the first leading back to itself with no node between', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'the first'));
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(constructsOf(walked).flat()).toHaveLength(1);
+      expect(order).toBeLessThan(orders.linear);
+    });
+
+    test('one union id of many options, each leading back to it with no node between', {
+      timeout: growthTimeout,
+    }, () => {
+      const walkChain = walkOf(aUnionOfAliasesLeadingBack);
+
+      const walked = walkChain(sizes.large)();
+      const order = orderOf(walkChain, sizes, orders.linear);
+
+      expect(constructsOf(walked).flat()).toHaveLength(1);
+      expect(order).toBeLessThan(orders.linear);
     });
 
     test('ids each on a cycle of its own, around a refused schema, validated', {
@@ -1922,18 +2323,12 @@ describe('walkSchemas: recursion', () => {
       };
 
       const result = validateChain(sizes.large)();
-      const growth = growthOf(validateChain, sizes, chainGrowth);
+      const order = orderOf(validateChain, sizes, orders.linear);
 
       expect(result.kind).toBe('invalid');
-      expect(growth).toBeLessThan(chainGrowth);
+      expect(order).toBeLessThan(orders.linear);
     });
   });
-
-  /**
-   * How many times longer a ring of steps twice as long may take: about 2 when the failing def is
-   * walked once, and 2 to the power of the number of steps when it is walked once per path.
-   */
-  const failingDefWalkedOnceGrowth = 8;
 
   test('a failing def met by many paths is reported once and walked once', {
     timeout: growthTimeout,
@@ -1956,13 +2351,13 @@ describe('walkSchemas: recursion', () => {
     };
 
     const walked = walkOf(26)();
-    const growth = growthOf(walkOf, { small: 8, large: 16 }, failingDefWalkedOnceGrowth);
+    const order = orderOf(walkOf, { small: 8, large: 16 }, orders.polynomial);
 
     expect(refusalsOf(walked).located[0]).toMatchObject({
       kind: 'not-allowed',
       failures: [{ construct: 'z.date()' }],
     });
-    expect(growth).toBeLessThan(failingDefWalkedOnceGrowth);
+    expect(order).toBeLessThan(orders.polynomial);
   });
 
   describe('an id on a cycle whose way back runs through a schema answered from memory', () => {
@@ -2420,16 +2815,10 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    /**
-     * How many times longer a fan twice as long takes: about 2 when each id is walked once, and
-     * 2 to the power of the half length when each use walks it again.
-     */
-    const walkedOnceGrowth = 8;
-
-    /** A fan walked again at every use takes seconds a run, and `growthOf` runs it up to nine times. */
+    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it up to nine times. */
     const fanTimeout = 240_000;
 
-    function growthOfFans(
+    function orderOfFans(
       count: number,
       extra: (self: () => z.ZodType) => Record<string, z.ZodType>,
     ) {
@@ -2437,31 +2826,31 @@ describe('walkSchemas: recursion', () => {
         const schema = aFanOf(size, extra);
         return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
       };
-      return growthOf(walkOf, { small: count / 2, large: count }, walkedOnceGrowth);
+      return orderOf(walkOf, { small: count / 2, large: count }, orders.polynomial);
     }
 
     test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(18, () => ({}));
+      const order = orderOfFans(18, () => ({}));
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a fan of 10 defs each cut for its depth, each holding the next twice, walks each once', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(10, cutBack);
+      const order = orderOfFans(10, cutBack);
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', {
       timeout: fanTimeout,
     }, () => {
-      const growth = growthOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
+      const order = orderOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
 
-      expect(growth).toBeLessThan(walkedOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     });
 
     test('a def cut for its depth used at two locations is the failure walked at the first, at both', () => {
@@ -2515,24 +2904,7 @@ describe('walkSchemas: recursion', () => {
 
     describe('reached by two Endpoints', () => {
       /** A Service whose two Endpoints answer `body`, `getFirst` before `getSecond`. */
-      function validatedByTwo(body: z.ZodType) {
-        const endpointAt = (name: string, path: string) =>
-          defineEndpoint({
-            name,
-            method: 'GET',
-            path,
-            visibility: 'public',
-            description: 'The tree',
-            success: { status: 200, body },
-          });
-        const endpoints = [
-          endpointAt('getFirst', '/first'),
-          endpointAt('getSecond', '/second'),
-        ] as const;
-        const group = defineGroup({ name: 'trees', description: 'Trees', endpoints });
-        const service = defineService({ name: 'orders-service', groups: [group] });
-        return summarized(validateRoot(service, aRootPackage(service)));
-      }
+      const validatedByTwo = (body: z.ZodType) => summarized(validatedAnswering([body, body]));
 
       const acyclicMoney = {
         construct: '.meta({ id: "money" }) on a schema that lies on no cycle',

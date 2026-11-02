@@ -1,16 +1,15 @@
 // biome-ignore-all lint/style/useNamingConvention: SQS spells its fields in PascalCase
 import type { Message } from '@aws-sdk/client-sqs';
 import { joinedOf, logOf, receivedSnsAttributesOf } from '@cf-loom/contract/internal';
-import type { Delivery } from '../broker/index.ts';
-import { deliveryWaitOf } from '../broker-limits/index.ts';
+import { deliveryOf, type TimedDelivery } from '../broker/index.ts';
 import type { FoundQueue } from './queue-finding.ts';
 
 /** A Message received from a Durable consumer's queue. */
 export type ReceivedMessage = { readonly queue: FoundQueue; readonly message: Message };
 
-/** A received Message read: the Delivery for its Handler and the wait of that Delivery, or the names of what cf-loom cannot read of it. */
+/** A received Message read: the Delivery for its Handler, with its wait, or the names of what cf-loom cannot read of it. */
 export type ReceivedReading =
-  | { readonly kind: 'readable'; readonly delivery: Delivery; readonly waitMs: number }
+  | { readonly kind: 'readable'; readonly delivery: TimedDelivery }
   | { readonly kind: 'unreadable'; readonly names: readonly string[] };
 
 /** The system attribute SQS counts a Message's receives in. */
@@ -25,17 +24,10 @@ export function readingOf({ queue, message }: ReceivedMessage): ReceivedReading 
     const names = [...(read.kind === 'missing' ? read.names : []), ...unreadCount];
     return { kind: 'unreadable', names };
   }
-  const waitMs = deliveryWaitOf(queue.waits, deliveryCount);
-  const delivery = {
-    messageId: read.messageId,
-    factId: read.factId,
-    deliveryCount,
-    lastAttempt: deliveryCount >= queue.maxReceiveCount,
-    waitMs,
-    headers: read.headers,
-    body: new TextEncoder().encode(message.Body ?? ''),
-  };
-  return { kind: 'readable', delivery, waitMs };
+  const limits = { waits: queue.waits, maxDeliver: queue.maxReceiveCount };
+  const body = new TextEncoder().encode(message.Body ?? '');
+  const held = { messageId: read.messageId, factId: read.factId, headers: read.headers, body };
+  return { kind: 'readable', delivery: deliveryOf(limits, held, deliveryCount) };
 }
 
 /** How many times SQS has received the Message, a whole number from 1 as SQS counts them; `undefined` when it says otherwise. */

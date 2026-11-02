@@ -222,7 +222,8 @@ A PR is done when all of these hold; the main session checks them and lists them
 
 - [ ] every test in every plan of the PR exists and passes;
 - [ ] `pnpm build`, `pnpm test` and `pnpm check` pass locally on the PR's head, and actionlint too when the PR
-      changes `.github/workflows/`;
+      changes `.github/workflows/`; the growth family (`*.growth.test.ts`) is counted by CI's `check (growth, …)`
+      legs, not by a local run;
 - [ ] the last review round found nothing to fix but nits, now fixed, or the user decided to merge after round 2;
 - [ ] every finding of every round is marked fixed, asked or dismissed on the PR, and every Escalate finding checked,
       skipped for one of the two reasons of [Review](#3-review), or asked;
@@ -234,7 +235,7 @@ A PR is done when all of these hold; the main session checks them and lists them
 ## 5. Merge
 
 A done PR is squash-merged without asking once CI passed on its head, with
-[`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for the `check` job and for GitHub to judge the
+[`scripts/merge-when-green.ts`](scripts/merge-when-green.ts): it waits for every job of CI and for GitHub to judge the
 PR mergeable, refuses while the last CI run on `main` failed, except for the PR that fixes it (run with `--fixes-main`),
 and merges only the head it was given; the subject is the PR title with `(#<PR>)`, the branch is deleted and the issue
 closes. A timeout is reported apart from a failure and the script is run again. A PR whose title changed after its
