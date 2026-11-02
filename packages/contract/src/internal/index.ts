@@ -241,7 +241,6 @@ export {
   isJsonValue,
   isSchema,
   joinedOf,
-  reachedDefsOf,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,

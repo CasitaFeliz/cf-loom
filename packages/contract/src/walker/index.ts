@@ -10,17 +10,8 @@ export type { Child } from './children.ts';
 export { childrenOf, nodesWithin, refsWrittenIn } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
-export type { ReachedDefs, ResolvedRef } from './def-graph.ts';
-export {
-  type DefGraph,
-  defGraphOf,
-  defNamed,
-  defsReachedOf,
-  nodesReachedFrom,
-  type RefResolver,
-  reachedDefsOf,
-  refResolverOf,
-} from './def-graph.ts';
+export type { DefGraph, ReachedDefs, ResolvedRef } from './def-graph.ts';
+export { defGraphOf } from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
