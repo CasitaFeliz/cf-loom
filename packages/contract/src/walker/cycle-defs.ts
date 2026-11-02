@@ -140,7 +140,7 @@ type WrittenDef = { readonly name: string; readonly entered: Entered; readonly d
  */
 export function refuseNodelessCycles(state: State, root: Entered, result: Walked): Walked {
   const written = writtenDefsOf(state, root.slot);
-  const cycles = nodelessCyclesOf(new Map(written.map(({ name, def }) => [name, def])));
+  const cycles = nodelessCyclesOf(Object.fromEntries(written.map(({ name, def }) => [name, def])));
   if (cycles.length === 0) {
     return result;
   }
