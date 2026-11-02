@@ -1,8 +1,8 @@
 import {
   canonicalJson,
-  closureFactsOf,
+  type DefGraph,
   type Defs,
-  defNamed,
+  defGraphOf,
   neutralAnnotations,
   refsWrittenIn,
   type SchemaNode,
@@ -93,7 +93,10 @@ function comparisonOf({ baseline, proposed }: BothDefs): DefComparison {
   if (known !== undefined) {
     return known;
   }
-  const built = closureFactsOf(baseline, (name, def) => ownFactsOf(name, def, proposed));
+  const proposedGraph = defGraphOf(proposed);
+  const built = defGraphOf(baseline).closureFacts((name, def) =>
+    ownFactsOf(name, def, proposedGraph.def),
+  );
   byProposed.set(proposed, built);
   return built;
 }
@@ -105,9 +108,9 @@ function comparisonOf({ baseline, proposed }: BothDefs): DefComparison {
 function ownFactsOf(
   name: string,
   baseline: SchemaNode | undefined,
-  proposedDefs: Defs,
+  proposedDef: DefGraph['def'],
 ): readonly Fact[] {
-  const proposed = defNamed(proposedDefs, name);
+  const proposed = proposedDef(name);
   if (
     baseline === undefined ||
     proposed === undefined ||

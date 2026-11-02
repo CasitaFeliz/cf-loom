@@ -8,7 +8,6 @@ export {
 } from './canonical-json.ts';
 export type { Child } from './children.ts';
 export { childrenOf, nodesWithin, refsWrittenIn } from './children.ts';
-export { closureFactsOf } from './closure-facts.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
 export type { ReachedDefs, ResolvedRef } from './def-graph.ts';

@@ -1,5 +1,6 @@
 import { byCodePoint } from './canonical-json.ts';
 import { nodesWithin, refsWrittenIn } from './children.ts';
+import { closureFactsFrom, type Referrers, referrersOf } from './closure-facts.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
@@ -18,6 +19,15 @@ export type DefGraph = {
   readonly resolved: (ref: RefNode) => ResolvedRef | undefined;
   /** The defs the nodes reach through `ref`s, directly or through other defs, each read once. */
   readonly reached: (nodes: readonly SchemaNode[]) => ReachedDefs;
+  /**
+   * Each def's facts together with those of every def it reaches, from the facts each holds in its
+   * own nodes, a name some `ref` gives with no def included as a def of no node: each fact is
+   * carried back along each `ref` once, so the time grows with the defs, their nodes and the facts,
+   * never with how deep a def reaches.
+   */
+  readonly closureFacts: <Fact>(
+    ownFactsOf: (name: string, def: SchemaNode | undefined) => Iterable<Fact>,
+  ) => ReadonlyMap<string, ReadonlySet<Fact>>;
 };
 
 /**
@@ -42,10 +52,16 @@ export function defGraphOf(defs: Defs): DefGraph {
 
 function graphOf(defs: Defs): DefGraph {
   const known: KnownDestinations = new Map();
+  let referrers: Referrers | undefined;
+  const def = (name: string) => defNamed(defs, name);
   return {
-    def: (name) => defNamed(defs, name),
+    def,
     resolved: (ref) => resolvedFrom(ref, defs, known),
-    reached: (nodes) => reachedFrom(nodes, (name) => defNamed(defs, name)),
+    reached: (nodes) => reachedFrom(nodes, def),
+    closureFacts: (ownFactsOf) => {
+      referrers ??= referrersOf(defs);
+      return closureFactsFrom(referrers, def, ownFactsOf);
+    },
   };
 }
 

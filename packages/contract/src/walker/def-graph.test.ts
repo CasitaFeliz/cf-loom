@@ -81,6 +81,31 @@ function foundFrom(nodes: readonly SchemaNode[], defs: Defs) {
   return { held: [...held].sort(), unheld: [...unheld].sort() };
 }
 
+/** The facts a def holds in its own nodes, which the oracle and the graph are both given. */
+function ownFactsOf(name: string, def: SchemaNode | undefined): string[] {
+  return [def === undefined ? `${name}: no def` : `${name}: ${def.type}`];
+}
+
+/** Each name's own facts with those of every name it reaches, by a fresh search from each name. */
+function closureBySearch(defs: Defs): Map<string, string[]> {
+  const heldOf = (name: string) => (Object.hasOwn(defs, name) ? defs[name] : undefined);
+  const closures = new Map<string, string[]>();
+  for (const name of namesOf(defs)) {
+    const reached = new Set([name]);
+    const pending = [name];
+    for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+      for (const written of refNamesIn(heldOf(next))) {
+        if (!reached.has(written)) {
+          reached.add(written);
+          pending.push(written);
+        }
+      }
+    }
+    closures.set(name, [...reached].flatMap((held) => ownFactsOf(held, heldOf(held))).sort());
+  }
+  return closures;
+}
+
 describe('./internal, defGraphOf', () => {
   test.each(['constructor', 'toString', '__proto__'])(
     'a def is found under a name the defs hold as their own, never under one every object inherits: %s',
@@ -228,5 +253,57 @@ describe('./internal, defGraphOf', () => {
 
     expect(Object.keys(held)).toEqual(['a', 'b']);
     expect(unheld).toEqual(['gone']);
+  });
+
+  test('each def’s closure facts are its own and those of every def it reaches, a name with no def counted as a def of no node', () => {
+    for (const defs of drawn) {
+      const facts = defGraphOf(structuredClone(defs)).closureFacts(ownFactsOf);
+      const expected = closureBySearch(defs);
+
+      expect([...facts.keys()].sort()).toEqual([...expected.keys()].sort());
+      for (const [name, closure] of expected) {
+        expect([...(facts.get(name) ?? [])].sort()).toEqual(closure);
+      }
+    }
+  });
+
+  test('a closure-fact question that throws leaves the graph answering the next one', () => {
+    const defs = { a: ref('b'), b: { type: 'array', items: ref('gone') } } as const;
+    const graph = defGraphOf(structuredClone(defs));
+    const failing = () => {
+      throw new Error('own facts failed');
+    };
+
+    expect(() => graph.closureFacts(failing)).toThrow('own facts failed');
+    const facts = graph.closureFacts(ownFactsOf);
+
+    expect(new Map([...facts].map(([name, held]) => [name, [...held].sort()]))).toEqual(
+      closureBySearch(defs),
+    );
+  });
+
+  test('own facts that ask the same graph while its closure facts are found get the answers a fresh graph gives', () => {
+    const defs: Defs = {
+      top: { type: 'object', fields: { next: { required: true, schema: ref('mid') } } },
+      mid: ref('leaf'),
+      leaf: { type: 'array', items: ref('top') },
+    };
+    const askedOf = (graph: ReturnType<typeof defGraphOf>) => (name: string) => [
+      `${name}: ${graph.def(name)?.type}`,
+      `${name} resolves to ${graph.resolved(ref(name))?.name}`,
+      `${name} reaches ${Object.keys(graph.reached([ref(name)]).held)}`,
+    ];
+    const graph = defGraphOf(structuredClone(defs));
+    const fresh = askedOf(defGraphOf(structuredClone(defs)));
+    const own = new Map(Object.keys(defs).map((name) => [name, fresh(name)]));
+    const everything = [...own.values()].flat().sort();
+
+    const facts = graph.closureFacts(askedOf(graph));
+
+    expect(Object.fromEntries([...facts].map(([name, held]) => [name, [...held].sort()]))).toEqual({
+      top: everything,
+      mid: everything,
+      leaf: everything,
+    });
   });
 });
