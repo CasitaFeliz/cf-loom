@@ -10,6 +10,12 @@ import type { Defs } from './walk.ts';
 export type DefGraph = {
   /** The def a name stands for: none unless the Defs holds it as an own key, since a name an object inherits, such as `toString`, is no def. */
   readonly def: (name: string) => SchemaNode | undefined;
+  /**
+   * The def a `ref` stands for through any alias defs, nullable when the `ref` or an alias def on the
+   * way is; none when a name on the way has no def or the aliases come back to one already followed.
+   * Each alias def is followed once for the graph.
+   */
+  readonly resolved: (ref: RefNode) => ResolvedRef | undefined;
 };
 
 const graphs = new WeakMap<Defs, DefGraph>();
@@ -20,9 +26,17 @@ export function defGraphOf(defs: Defs): DefGraph {
   if (known !== undefined) {
     return known;
   }
-  const built: DefGraph = { def: (name) => defNamed(defs, name) };
+  const built = graphOf(defs);
   graphs.set(defs, built);
   return built;
+}
+
+function graphOf(defs: Defs): DefGraph {
+  const known: KnownDestinations = new Map();
+  return {
+    def: (name) => defNamed(defs, name),
+    resolved: (ref) => resolvedFrom(ref, defs, known),
+  };
 }
 
 /** The def a name stands for in a defs value: none unless `defs` holds it as an own key. */
@@ -85,14 +99,16 @@ export type RefResolver = (ref: RefNode) => ResolvedRef | undefined;
  * a defs value and keeps it while it asks.
  */
 export function refResolverOf(defs: Defs): RefResolver {
-  const known: KnownDestinations = new Map();
-  return (ref) => {
-    const destination = destinationOf(ref.name, defs, known);
-    if (destination === undefined || ref.nullable !== true || destination.nullable) {
-      return destination;
-    }
-    return { ...destination, nullable: true };
-  };
+  return defGraphOf(defs).resolved;
+}
+
+/** The def a `ref` stands for through alias defs, with the `ref`'s own nullability folded in. */
+function resolvedFrom(ref: RefNode, defs: Defs, known: KnownDestinations): ResolvedRef | undefined {
+  const destination = destinationOf(ref.name, defs, known);
+  if (destination === undefined || ref.nullable !== true || destination.nullable) {
+    return destination;
+  }
+  return { ...destination, nullable: true };
 }
 
 /** What a reader has found of the defs it was asked about, by name: the def a name leads to, none when it leads to none. */
