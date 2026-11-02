@@ -252,7 +252,8 @@ describe('pinnedReadme', () => {
     ['a div block', '<div>\nhello\n</div>', [3]],
     ['a div block around Markdown', '<div>\n\n[x](./d.md)\n\n</div>', [3, 5, 7]],
     ['a comment followed by a tag on its line', '<!-- c --> <img src="https://x.io/a.png">', [3]],
-    ['a comment that closes abruptly before a tag', '<!--> <img src="./x">', [3]],
+    ['an empty comment <!--> before a tag', '<!--> <img src="./x"> -->', [3]],
+    ['an empty comment <!---> before a tag', '<!---> <img src="./x"> -->', [3]],
     ['a comment that --!> ends before a tag', '<!-- c --!> <img src="./x"> -->', [3]],
   ])('refuses raw HTML as %s, naming its line', (_form, offending, lines) => {
     const refused = refusedLinesOf(afterOnePinnedLink(offending));
