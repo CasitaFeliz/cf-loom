@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import { canonicalTextOf, decodeSnapshot, publishedSnapshotOf } from '../src/internal/index.ts';
-import { inputOf } from './chain-fixtures.ts';
+import { fannedInputOf, inputOf } from './chain-fixtures.ts';
 import { publishedAt } from './snapshots.ts';
 import { type StagesOf, stage } from './stage-type.ts';
 
@@ -14,7 +14,7 @@ export const publishWritesText = stage(
   (given) => expect(decodeSnapshot(given).kind).toBe('decoded'),
 );
 
-/** What `publish` merges a chain into: no Baseline, an unchanged one, one that held a field the chain lacks, and one holding a Former Input. */
+/** What `publish` merges a chain into: no Baseline, an unchanged one, one that held a field the chain lacks, one that held an object of a field for each link, each a `ref` to the top link, and one holding a Former Input. */
 export const publishStages = {
   publishedSnapshotOf: [
     stage(
@@ -49,6 +49,14 @@ export const publishStages = {
         const declared = inputOf(chain, count, 'declared');
         const baseline = inputOf(chain, count, 'graftedBaseline');
         return () => publishedSnapshotOf(baseline, declared, publishedAt('1.2.0'));
+      },
+      (given) => expect(given.formerInputs).toHaveLength(1),
+    ),
+    stage(
+      'publish grafts a removed field of refs',
+      (chain, count) => {
+        const { baseline, declared } = fannedInputOf(chain, count);
+        return () => publishedSnapshotOf(baseline, declared, publishedAt('1.1.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(1),
     ),
