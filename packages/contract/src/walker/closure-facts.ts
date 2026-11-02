@@ -1,4 +1,5 @@
-import { defNamed, refsWrittenIn } from './def-graph.ts';
+import { refsWrittenIn } from './children.ts';
+import { defNamed } from './def-graph.ts';
 import type { SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 

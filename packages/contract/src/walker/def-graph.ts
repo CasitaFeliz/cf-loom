@@ -1,5 +1,5 @@
 import { byCodePoint } from './canonical-json.ts';
-import { childrenOf, nodesWithin } from './children.ts';
+import { nodesWithin, refsWrittenIn } from './children.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
 
@@ -16,7 +16,16 @@ export type DefGraph = {
    * Each alias def is followed once for the graph.
    */
   readonly resolved: (ref: RefNode) => ResolvedRef | undefined;
+  /** The defs the nodes reach through `ref`s, directly or through other defs, each read once. */
+  readonly reached: (nodes: readonly SchemaNode[]) => ReachedDefs;
 };
+
+/**
+ * What some nodes reach: the defs the Defs holds, keyed in code point order as the canonical
+ * Snapshot keys them, and apart, each once in the order first reached, the names a `ref` gives that
+ * it does not hold.
+ */
+export type ReachedDefs = { readonly held: Defs; readonly unheld: readonly string[] };
 
 const graphs = new WeakMap<Defs, DefGraph>();
 
@@ -36,7 +45,33 @@ function graphOf(defs: Defs): DefGraph {
   return {
     def: (name) => defNamed(defs, name),
     resolved: (ref) => resolvedFrom(ref, defs, known),
+    reached: (nodes) => reachedFrom(nodes, (name) => defNamed(defs, name)),
   };
+}
+
+/** The defs the nodes' `ref`s name and those defs' `ref`s name in turn, each def read once, the names with no def apart. */
+function reachedFrom(
+  nodes: readonly SchemaNode[],
+  def: (name: string) => SchemaNode | undefined,
+): ReachedDefs {
+  const held = new Map<string, SchemaNode>();
+  const unheld: string[] = [];
+  const entered = new Set<string>();
+  const pending = nodes.toReversed();
+  for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
+    for (const name of refsWrittenIn(node).filter((written) => !entered.has(written))) {
+      entered.add(name);
+      const found = def(name);
+      if (found === undefined) {
+        unheld.push(name);
+      } else {
+        held.set(name, found);
+        pending.push(found);
+      }
+    }
+  }
+  const byName = [...held].sort(([left], [right]) => byCodePoint(left, right));
+  return { held: Object.fromEntries(byName), unheld };
 }
 
 /** The def a name stands for in a defs value: none unless `defs` holds it as an own key. */
@@ -179,19 +214,4 @@ export function defsReachedOf(nodes: readonly SchemaNode[], defs: Defs): Defs {
 
 function isRef(node: SchemaNode): node is RefNode {
   return node.type === 'ref';
-}
-
-/** The def names a node's own `ref`s name, each once, inside the node alone, with no def entered. */
-export function refsWrittenIn(node: SchemaNode): readonly string[] {
-  const names = new Set<string>();
-  const pending = [node];
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (next.type === 'ref') {
-      names.add(next.name);
-    }
-    for (const child of childrenOf(next)) {
-      pending.push(child.node);
-    }
-  }
-  return [...names];
 }

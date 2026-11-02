@@ -54,6 +54,33 @@ function namesOf(defs: Defs): string[] {
   return [...new Set([...Object.keys(defs), ...refNamesIn(defs)])];
 }
 
+/** The nodes a seed asks about: the node of some defs, and now and then a `ref` to a name. */
+function askedOf(defs: Defs, seed: number): SchemaNode[] {
+  const next = seededNext(seed * 104729 + 11);
+  const names = namesOf(defs);
+  const nodes = Object.values(defs).filter(() => next() < 0.4);
+  const refs = names.filter(() => next() < 0.2).map((name) => ref(name));
+  return [...nodes, ...refs];
+}
+
+/** The defs and the names with no def that a plain search from some nodes finds, by their `ref`s. */
+function foundFrom(nodes: readonly SchemaNode[], defs: Defs) {
+  const held = new Set<string>();
+  const unheld = new Set<string>();
+  const pending: unknown[] = [...nodes];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    for (const name of refNamesIn(next)) {
+      if (!Object.hasOwn(defs, name)) {
+        unheld.add(name);
+      } else if (!held.has(name)) {
+        held.add(name);
+        pending.push(defs[name]);
+      }
+    }
+  }
+  return { held: [...held].sort(), unheld: [...unheld].sort() };
+}
+
 describe('./internal, defGraphOf', () => {
   test.each(['constructor', 'toString', '__proto__'])(
     'a def is found under a name the defs hold as their own, never under one every object inherits: %s',
@@ -157,5 +184,49 @@ describe('./internal, defGraphOf', () => {
     const behind = graph.resolved(ref('b'));
 
     expect([nullable?.nullable, plain?.nullable, behind?.nullable]).toEqual([true, false, false]);
+  });
+
+  test('the defs some nodes reach are those a search of their refs finds, held in code point order, and the names held by none listed apart', () => {
+    for (const [index, defs] of drawn.entries()) {
+      const nodes = askedOf(defs, index);
+      const own = structuredClone(defs);
+      const reached = defGraphOf(own).reached(nodes);
+      const found = foundFrom(nodes, defs);
+
+      expect(Object.keys(reached.held)).toEqual(found.held);
+      expect(Object.entries(reached.held).filter(([name, def]) => own[name] !== def)).toEqual([]);
+      expect([...reached.unheld].sort()).toEqual(found.unheld);
+      expect(new Set(reached.unheld).size).toBe(reached.unheld.length);
+    }
+  });
+
+  test('the defs some nodes reach are held in the code point order of their names, not of their UTF-16 units', () => {
+    const astral = '\u{1F600}';
+    const high = '\uFFFF';
+    const defs = { [high]: aString, [astral]: aString, a: aString };
+
+    const { held } = defGraphOf(defs).reached([ref(high), ref(astral), ref('a')]);
+
+    expect(Object.keys(held)).toEqual(['a', high, astral]);
+  });
+
+  test('a ref to a name an object inherits is listed apart, never read as a def', () => {
+    const defs = { o: { type: 'array', items: ref('toString') } } as const;
+    const nodes = [ref('o'), ref('constructor'), ref('__proto__')];
+
+    const { held, unheld } = defGraphOf(defs).reached(nodes);
+
+    expect(Object.keys(held)).toEqual(['o']);
+    expect([...unheld].sort()).toEqual(['__proto__', 'constructor', 'toString']);
+  });
+
+  test('a name that is a def is held and a name that is none is listed apart, each once, however often it is reached', () => {
+    const defs = { a: ref('b'), b: { type: 'array', items: ref('a') } } as const;
+    const nodes = [ref('a'), ref('a'), ref('gone'), ref('gone')];
+
+    const { held, unheld } = defGraphOf(defs).reached(nodes);
+
+    expect(Object.keys(held)).toEqual(['a', 'b']);
+    expect(unheld).toEqual(['gone']);
   });
 });

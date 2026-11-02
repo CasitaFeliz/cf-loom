@@ -64,6 +64,21 @@ export function childrenOf(node: SchemaNode): readonly Child[] {
   }
 }
 
+/** The def names a node's own `ref`s name, each once, inside the node alone, with no def entered. */
+export function refsWrittenIn(node: SchemaNode): readonly string[] {
+  const names = new Set<string>();
+  const pending = [node];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (next.type === 'ref') {
+      names.add(next.name);
+    }
+    for (const child of childrenOf(next)) {
+      pending.push(child.node);
+    }
+  }
+  return [...names];
+}
+
 function indexed(node: SchemaNode, index: number): Child {
   return { steps: [indexStep(index)], node };
 }

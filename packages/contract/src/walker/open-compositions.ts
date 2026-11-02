@@ -1,6 +1,5 @@
-import { childrenOf } from './children.ts';
+import { childrenOf, refsWrittenIn } from './children.ts';
 import { closureFactsOf } from './closure-facts.ts';
-import { refsWrittenIn } from './def-graph.ts';
 import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
