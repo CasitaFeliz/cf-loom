@@ -38,8 +38,8 @@ export type Frame =
 export type Walk = {
   readonly defs: BothDefs;
   readonly met: GraftDefs;
-  /** The defs named apart, written in place as the walk builds them, so no Def graph is ever asked of them: a Defs is never changed once a graph reads it. */
-  readonly out: Record<string, SchemaNode>;
+  /** The defs named apart, as the walk builds them. */
+  readonly out: Map<string, SchemaNode>;
   readonly frames: Frame[];
   grafts: boolean;
 };
@@ -51,7 +51,7 @@ export type Place = { readonly owner: number | undefined; readonly put: Put };
 export function defPut(walk: Walk, name: string | undefined): Put {
   return (node) => {
     if (name !== undefined) {
-      walk.out[name] = withoutNullable(node);
+      walk.out.set(name, withoutNullable(node));
     }
   };
 }

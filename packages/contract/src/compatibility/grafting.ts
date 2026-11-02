@@ -31,14 +31,14 @@ export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted 
   const options = { defs, met: namedDefs(recorded.met, onto.defs) };
   const named = walked(former, onto.input, options);
   const nodes = [named.input.query, named.input.body].filter((node) => node !== null);
-  const { held } = defGraphOf(onto.defs).reached([...nodes, ...Object.values(named.out)]);
-  return { input: named.input, defs: { ...held, ...named.out } };
+  const { held } = defGraphOf(onto.defs).reached([...nodes, ...named.out.values()]);
+  return { input: named.input, defs: { ...held, ...Object.fromEntries(named.out) } };
 }
 
 type Options = Pick<Walk, 'defs' | 'met'>;
 
 function walked(former: GraftSource, onto: GraftTarget['input'], options: Options) {
-  const walk: Walk = { ...options, out: {}, frames: [], grafts: false };
+  const walk: Walk = { ...options, out: new Map(), frames: [], grafts: false };
   const query = partGrafted(walk, former.input.query, onto.query);
   const body = partGrafted(walk, former.input.body, onto.body);
   if (query?.type !== 'object') {
