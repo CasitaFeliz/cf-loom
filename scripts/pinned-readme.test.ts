@@ -1,3 +1,5 @@
+import type { MarkedToken } from 'marked';
+import { Lexer, marked } from 'marked';
 import { describe, expect, it } from 'vitest';
 import { pinnedReadme } from './pinned-readme.ts';
 
@@ -296,5 +298,223 @@ describe('pinnedReadme', () => {
         { line: 3, problem: expect.stringContaining('"<img"') },
       ],
     });
+  });
+});
+
+const targets: Record<string, string> = {
+  'a relative file up': '../../COMPATIBILITY.md',
+  'a dot-slash file': './a.png',
+  'a bare file with an anchor': 'COMPATIBILITY.md#rules',
+  'an empty target': '',
+  'a protocol-relative target': '//github.com/x/y',
+  'an anchor': '#anchor',
+  'another host': 'https://zod.dev/api',
+  'a scheme in capitals': 'HTTPS://zod.dev',
+  'the repository at main': `${atMain}/CONTEXT.md#x`,
+  'the repository at tree/main': `https://github.com/${repository}/tree/main/packages`,
+  'the repository in another case': 'https://github.com/casitafeliz/cf-loom/blob/main/x.md',
+  'the repository with an escaped hyphen':
+    'https://github.com/CasitaFeliz/cf\\-loom/blob/main/a.md',
+  'the repository with an escaped slash': 'https://github.com/CasitaFeliz\\/cf-loom/blob/main/a.md',
+  'the repository with a hexadecimal reference':
+    'https://github.com/CasitaFeliz&#x2F;cf-loom/blob/main/a.md',
+  'the repository with a decimal reference':
+    'https://github.com/CasitaFeliz&#47;cf-loom/blob/main/a.md',
+  'the repository with a named reference':
+    'https://github.com/CasitaFeliz&sol;cf-loom/blob/main/a.md',
+  'dots written as references': '&#46;&#46;/a.md',
+  'a colon written as a reference': 'https&#58;//zod.dev',
+  'a query with an ampersand': 'https://img.shields.io/x?a=1&b=2',
+};
+
+function indented(text: string, indent: string): string {
+  return text.split('\n').join(`\n${indent}`);
+}
+
+function oneLine(text: string): string {
+  return text.split('\n').join(' ');
+}
+
+const forms: Record<string, (target: string) => string> = {
+  'an inline link': (target) => `[x](${target})`,
+  'a link with a title': (target) => `[x](${target} "title")`,
+  'a link in angle brackets': (target) => `[x](<${target}>)`,
+  'a link split over two lines': (target) => `[x](\n${target})`,
+  'an image': (target) => `![x](${target})`,
+  'a link through its definition': (target) => `[x][r]\n\n[r]: ${target}`,
+  'a definition with its target on the next line': (target) => `[x][r]\n\n[r]:\n  ${target}`,
+  'an autolink': (target) => `<${target}>`,
+  'an HTML link': (target) => `<a href="${target}">x</a>`,
+  'an HTML image': (target) => `<img src="${target}">`,
+  'an HTML image with a srcset': (target) => `<img srcset="${target} 2x">`,
+  'a comment holding a link': (target) => `<!-- [x](${target}) -->`,
+  'a link around an image': (target) => `[![a](https://x.io/a.png)](${target})`,
+  'a footnote holding a link': (target) => `a[^1]\n\n[^1]: see [y](${target})`,
+};
+
+const codeContainers: Record<string, (form: string) => string> = {
+  'a backtick fence': (form) => `\`\`\`md\n${form}\n\`\`\``,
+  'a tilde fence': (form) => `~~~md\n${form}\n~~~`,
+  'a four-backtick fence': (form) => `\`\`\`\`md\n\`\`\`\n${form}\n\`\`\`\n\`\`\`\``,
+  'indented code': (form) => `    ${indented(form, '    ')}`,
+  'a code span': (form) => `\`\` ${oneLine(form)} \`\``,
+};
+
+const containers: Record<string, (form: string) => string> = {
+  'a paragraph': (form) => form,
+  'a list item': (form) => `- a\n- ${indented(form, '  ')}`,
+  'a task item': (form) => `- [ ] ${indented(form, '  ')}`,
+  'a blockquote': (form) => `> ${indented(form, '> ')}`,
+  'a list in a blockquote': (form) => `> - ${indented(form, '>   ')}`,
+  'a table cell': (form) => `| a |\n|---|\n| ${oneLine(form)} |`,
+  'a heading': (form) => `## ${oneLine(form)}`,
+  'strong text': (form) => `**${form}**`,
+  emphasis: (form) => `*${form}*`,
+  'deleted text': (form) => `~~${form}~~`,
+  ...codeContainers,
+};
+
+const header = [`[ok](${atMain}/CONTEXT.md)  `, 'second line', '', '***', '', '\\*escaped\\*'].join(
+  '\n',
+);
+const blockLine = header.split('\n').length + 2;
+
+type Case = { readonly name: string; readonly block: string; readonly readme: string };
+
+function casesOf(inContainers: Record<string, (form: string) => string>): Case[] {
+  const cases: Case[] = [];
+  for (const [targetName, target] of Object.entries(targets)) {
+    for (const [formName, form] of Object.entries(forms)) {
+      for (const [containerName, container] of Object.entries(inContainers)) {
+        const block = container(form(target));
+        const name = `${formName} to ${targetName} in ${containerName}`;
+        cases.push({ name, block, readme: `${header}\n\n${block}\n` });
+      }
+    }
+  }
+  return cases;
+}
+
+const tokenTypes: Record<MarkedToken['type'], true> = {
+  blockquote: true,
+  br: true,
+  checkbox: true,
+  code: true,
+  codespan: true,
+  def: true,
+  del: true,
+  em: true,
+  escape: true,
+  heading: true,
+  hr: true,
+  html: true,
+  image: true,
+  link: true,
+  list: true,
+  // biome-ignore lint/style/useNamingConvention: marked names this token type list_item
+  list_item: true,
+  paragraph: true,
+  space: true,
+  strong: true,
+  table: true,
+  text: true,
+};
+
+const markedEscapes = /&(?:amp|lt|gt|quot|#39);/g;
+const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
+
+function decodedByMarked(value: string): string {
+  const escapes: Record<string, string> = {
+    '&amp;': '&',
+    '&lt;': '<',
+    '&gt;': '>',
+    '&quot;': '"',
+    '&#39;': "'",
+  };
+  return value.replace(markedEscapes, (reference) => escapes[reference] ?? reference);
+}
+
+/** What a browser would load from the HTML `marked` renders: each URL attribute, with its problems. */
+function urlProblemsOf(html: string): string[] {
+  const tags = html.replace(/<!--[\s\S]*?-->/g, '').match(/<[a-z][^>]*>/gi) ?? [];
+  const attributes = /\b(?:href|src|srcset)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  const problems: string[] = [];
+  for (const match of tags.flatMap((tag) => [...tag.matchAll(attributes)])) {
+    const value = match[1] ?? match[2] ?? match[3] ?? '';
+    if (characterReference.test(value.replace(markedEscapes, ''))) {
+      problems.push(`a character reference a browser decodes in ${value}`);
+    }
+    for (const candidate of decodedByMarked(value).split(',')) {
+      const url = candidate.trim().split(/\s+/)[0] ?? '';
+      const rest = url.replaceAll(`github.com/${repository}/blob/${commit}/`, '');
+      if (!/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(url)) {
+        problems.push(`the URL ${url} has no scheme and is no anchor`);
+      }
+      if (/casitafeliz\/cf-loom/i.test(rest)) {
+        problems.push(`the URL ${url} reaches the repository off its commit`);
+      }
+    }
+  }
+  return problems;
+}
+
+function typesOf(readme: string): string[] {
+  const types: string[] = [];
+  void marked.walkTokens(Lexer.lex(readme, { gfm: true }), (token) => {
+    types.push(token.type);
+  });
+  return types;
+}
+
+describe('pinnedReadme over every target, form and container an author can write', () => {
+  const cases = casesOf(containers);
+
+  it('refuses each README on lines of its own block, or pins it with no rendered URL that reaches main', () => {
+    const wrong: string[] = [];
+    for (const { name, block, readme } of cases) {
+      const pinning = pinnedReadme(readme, repository, commit);
+      if (pinning.kind === 'refused') {
+        const last = blockLine + block.split('\n').length - 1;
+        const outside = pinning.problems.filter(({ line }) => line < blockLine || line > last);
+        if (outside.length > 0) {
+          wrong.push(
+            `${name}: lines ${outside.map(({ line }) => line).join(', ')} are outside the block`,
+          );
+        }
+      } else {
+        const rendered = marked.parse(pinning.text, { gfm: true, async: false });
+        for (const problem of urlProblemsOf(rendered)) {
+          wrong.push(`${name}: ${problem}`);
+        }
+      }
+    }
+
+    expect(wrong).toEqual([]);
+  });
+
+  it('pins a README whose only offending form is code, unless it names the repository off the pinnable link', () => {
+    const wrong: string[] = [];
+    for (const { name, block, readme } of casesOf(codeContainers)) {
+      const pinnable = /\]\(https:\/\/github\.com\/CasitaFeliz\/cf-loom\/blob\/main\/[^)\s]+\)/g;
+      const names = /casitafeliz\/cf-loom/i.test(block.replace(pinnable, ''));
+      const pinning = pinnedReadme(readme, repository, commit);
+      if ((pinning.kind === 'refused') !== names) {
+        wrong.push(
+          `${name}: ${pinning.kind}, but the form ${names ? 'names' : 'does not name'} the repository`,
+        );
+      }
+    }
+
+    expect(wrong).toEqual([]);
+  });
+
+  it('holds every target, form and container, and reaches every type of token marked produces', () => {
+    const reached = new Set(cases.flatMap(({ readme }) => typesOf(readme)));
+    const missing = Object.keys(tokenTypes).filter((type) => !reached.has(type));
+
+    expect(missing).toEqual([]);
+    expect(new Set(cases.map(({ name }) => name)).size).toBe(
+      Object.keys(targets).length * Object.keys(forms).length * Object.keys(containers).length,
+    );
   });
 });
