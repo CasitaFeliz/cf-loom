@@ -201,6 +201,31 @@ describe('pinnedReadme', () => {
     ['a relative link in strong text', '**[x](./s.md)**', [3]],
     ['a relative link around an image', '[![a](https://x.io/a.png)](./b.md)', [3]],
     ['a relative link after a code span', 'a `[x](./a.md)`\n[x](./a.md)', [4]],
+    [
+      'a quoted paragraph whose text appears again later',
+      '> see\n> [x](./a.md)\n\nsee\n[x](./a.md)',
+      [4, 7],
+    ],
+    [
+      'a list item paragraph whose text appears again later',
+      '- a\n  [x](./a.md)\n\na\n[x](./a.md)',
+      [4, 7],
+    ],
+    [
+      'a link split inside a blockquote, then the same link split outside it',
+      '> [x](\n> ../a.md)\n\n[x](\n../a.md)',
+      [3, 6],
+    ],
+    [
+      'a link split inside a list item, then the same link split outside it',
+      '- [x](\n  ../a.md)\n\n[x](\n../a.md)',
+      [3, 6],
+    ],
+    [
+      'a list in a blockquote whose text appears again later',
+      '> - a\n>   [x](./a.md)\n\n- a\n  [x](./a.md)',
+      [4, 7],
+    ],
     ['a backslash-escaped repository in a code span', '`CasitaFeliz\\/cf-loom`', [3]],
     ['a backslash-escaped repository in a fence', '```md\nCasitaFeliz\\/cf-loom\n```', [4]],
   ])('refuses %s, naming the line where it starts', (_form, offending, lines) => {
@@ -322,6 +347,22 @@ describe('pinnedReadme', () => {
       kind: 'refused',
       problems: [{ line: 9, problem: expect.stringContaining(repository) }],
     });
+  });
+
+  it('numbers the lines of a README with CRLF line ends as it does one with LF', () => {
+    const lines = [`[ok](${atMain}/CONTEXT.md)`, '', '[x](', '../a.md)', '', `see ${repository}`];
+
+    const withCrlf = pinnedReadme(lines.join('\r\n'), repository, commit);
+    const withLf = pinnedReadme(lines.join('\n'), repository, commit);
+
+    expect(withCrlf).toEqual({
+      kind: 'refused',
+      problems: [
+        { line: 3, problem: expect.stringContaining('../a.md') },
+        { line: 6, problem: expect.stringContaining(repository) },
+      ],
+    });
+    expect(withLf).toEqual(withCrlf);
   });
 
   it('lists every problem of a README in line order, two on one line both', () => {
