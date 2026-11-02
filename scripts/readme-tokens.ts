@@ -70,9 +70,9 @@ type Frame = {
 
 /**
  * The tokens of `markdown` as GitHub Flavored Markdown, in document order, each with the line where its source
- * starts, since `marked` keeps no positions. A token is looked for after the one before it and inside its parent's
- * source; one not found as written there, because `marked` took a container's marker out of it, takes the line of
- * the part before it.
+ * starts, since `marked` keeps no positions. One cursor only moves forward: a token is looked for after everything
+ * read before it, its earlier siblings and what they hold, and inside its parent's source. One not found as written
+ * there, because `marked` took a container's markers out of it, takes the line of the cursor.
  */
 export function locatedTokens(markdown: string): readonly LocatedToken[] {
   const text = markdown.replace(/\r\n?/g, '\n');
@@ -84,6 +84,10 @@ export function locatedTokens(markdown: string): readonly LocatedToken[] {
     const token = frame.tokens[frame.next];
     if (token === undefined) {
       frames.pop();
+      const parent = frames.at(-1);
+      if (parent !== undefined) {
+        parent.cursor = Math.max(parent.cursor, frame.cursor);
+      }
       continue;
     }
     frame.next += 1;

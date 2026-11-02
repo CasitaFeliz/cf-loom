@@ -461,14 +461,15 @@ function oneLine(text: string): string {
   return text.split('\n').join(' ');
 }
 
-const forms: Record<string, (target: string) => string> = {
+const forms: Record<string, (target: string, label: string) => string> = {
   'an inline link': (target) => `[x](${target})`,
   'a link with a title': (target) => `[x](${target} "title")`,
   'a link in angle brackets': (target) => `[x](<${target}>)`,
   'a link split over two lines': (target) => `[x](\n${target})`,
   'an image': (target) => `![x](${target})`,
-  'a link through its definition': (target) => `[x][r]\n\n[r]: ${target}`,
-  'a definition with its target on the next line': (target) => `[x][r]\n\n[r]:\n  ${target}`,
+  'a link through its definition': (target, label) => `[x][r${label}]\n\n[r${label}]: ${target}`,
+  'a definition with its target on the next line': (target, label) =>
+    `[x][r${label}]\n\n[r${label}]:\n  ${target}`,
   'an autolink': (target) => `<${target}>`,
   'an HTML link': (target) => `<a href="${target}">x</a>`,
   'an HTML image': (target) => `<img src="${target}">`,
@@ -478,7 +479,8 @@ const forms: Record<string, (target: string) => string> = {
   'a comment ended by <!---> before an image': (target) => `<!---> <img src="${target}"> -->`,
   'a comment ended by --!> before an image': (target) => `<!-- c --!> <img src="${target}"> -->`,
   'a link around an image': (target) => `[![a](https://x.io/a.png)](${target})`,
-  'a footnote holding a link': (target) => `a[^1]\n\n[^1]: see [y](${target})`,
+  'a footnote holding a link': (target, label) =>
+    `a[^1${label}]\n\n[^1${label}]: see [y](${target})`,
 };
 
 const codeContainers: Record<string, (form: string) => string> = {
@@ -515,7 +517,7 @@ function casesOf(inContainers: Record<string, (form: string) => string>): Case[]
   for (const [targetName, target] of Object.entries(targets)) {
     for (const [formName, form] of Object.entries(forms)) {
       for (const [containerName, container] of Object.entries(inContainers)) {
-        const block = container(form(target));
+        const block = container(form(target, ''));
         const name = `${formName} to ${targetName} in ${containerName}`;
         cases.push({ name, block, readme: `${header}\n\n${block}\n` });
       }
@@ -619,6 +621,165 @@ function typesOf(readme: string): string[] {
   });
   return types;
 }
+
+type Container = (copies: readonly string[]) => string;
+
+const repeatedContainers: Record<string, Container> = {
+  'a quote': (copies) => copies.map((copy) => `> ${indented(copy, '> ')}`).join('\n>\n'),
+  'a list paragraph': (copies) => `- ${indented(copies.join('\n\n'), '  ')}`,
+  'list items': (copies) => copies.map((copy) => `- ${indented(copy, '  ')}`).join('\n'),
+  'a list in a quote': (copies) => copies.map((copy) => `> - ${indented(copy, '>   ')}`).join('\n'),
+  'a nested quote': (copies) =>
+    copies.map((copy) => `> > ${indented(copy, '> > ')}`).join('\n> >\n'),
+};
+
+/**
+ * A link split over two lines inside these containers has its source rewritten by `marked`, which takes the markers
+ * or the indentation out of it. `locatedTokens` cannot find it as written and names it at the part before it, never
+ * after its own line and never above its container: the only line this test lets a problem miss.
+ */
+const containersThatRewriteSplitLinks = new Set([
+  'a quote',
+  'a list paragraph',
+  'a list in a quote',
+  'a nested quote',
+]);
+
+const splitLink = 'a link split over two lines';
+
+type Block = { readonly form: string; readonly target: string; readonly leadsWithText: boolean };
+
+/** The lines a README must name, and those a split link may be named above instead. */
+type ExpectedLines = { readonly exact: readonly number[]; readonly splitLinks: readonly number[] };
+
+function linesOfText(text: string): number {
+  return text.split('\n').length;
+}
+
+function problemLinesOf(readme: string): number[] {
+  const pinning = pinnedReadme(readme, repository, commit);
+  return pinning.kind === 'refused' ? pinning.problems.map(({ line }) => line) : [];
+}
+
+function readmeOf(container: Container, copies: readonly string[]): string {
+  return `${header}\n\n${container(copies)}\n`;
+}
+
+/** A generator that draws the same sequence on every run (mulberry32). */
+function aSeededDraw(seed: number): () => number {
+  let state = seed;
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
+    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function copyOf(block: Block, label: string): string {
+  const form = forms[block.form] as (target: string, label: string) => string;
+  const text = form(targets[block.target] as string, label);
+  return block.leadsWithText ? `a\n${text}` : text;
+}
+
+/** What each copy names when it stands alone in the container, moved to where the copy stands in the README. */
+function expectedLinesOf(
+  [containerName, container]: readonly [string, Container],
+  blocks: readonly Block[],
+  copies: readonly string[],
+): ExpectedLines {
+  const exact: number[] = [];
+  const splitLinks: number[] = [];
+  for (const [index, block] of blocks.entries()) {
+    const own = copies[index] as string;
+    const start =
+      linesOfText(container(copies.slice(0, index + 1))) - linesOfText(container([own]));
+    const isRewritten =
+      block.form === splitLink && containersThatRewriteSplitLinks.has(containerName);
+    for (const line of problemLinesOf(readmeOf(container, [own]))) {
+      (isRewritten ? splitLinks : exact).push(line + start);
+    }
+  }
+  return { exact, splitLinks };
+}
+
+/** What differs between the lines a README names and the lines it must, or `undefined` when nothing does. */
+function mismatchOf(named: readonly number[], expected: ExpectedLines): string | undefined {
+  const leftover = [...named];
+  const missing: number[] = [];
+  for (const line of expected.exact) {
+    const at = leftover.indexOf(line);
+    if (at === -1) {
+      missing.push(line);
+    } else {
+      leftover.splice(at, 1);
+    }
+  }
+  const ceiling = Math.max(0, ...expected.splitLinks);
+  const misplaced = leftover.filter((line) => line < blockLine || line > ceiling);
+  const isCountRight = leftover.length === expected.splitLinks.length;
+  if (missing.length === 0 && misplaced.length === 0 && isCountRight) {
+    return undefined;
+  }
+  return `missing ${missing}, misplaced ${misplaced}, left over ${leftover}`;
+}
+
+describe('pinnedReadme over a block repeated in a container', () => {
+  const draw = aSeededDraw(421);
+  const formNames = Object.keys(forms);
+  const targetNames = Object.keys(targets);
+
+  function pickFrom(names: readonly string[]): string {
+    return names[Math.floor(draw() * names.length)] as string;
+  }
+
+  function aBlock(): Block {
+    return {
+      form: pickFrom(formNames),
+      target: pickFrom(targetNames),
+      leadsWithText: draw() < 0.5,
+    };
+  }
+
+  /** Two to four copies, each the first block with a chance of 0.7 and a new one otherwise. */
+  function repeatedBlocks(): Block[] {
+    const first = aBlock();
+    const length = 2 + Math.floor(draw() * 3);
+    return Array.from({ length }, () => (draw() < 0.7 ? first : aBlock()));
+  }
+
+  it('names each problem on the line of its own copy, a split link excepted', () => {
+    const wrong: string[] = [];
+    const drawn = {
+      forms: new Set<string>(),
+      targets: new Set<string>(),
+      copies: new Set<number>(),
+    };
+    for (const entry of Object.entries(repeatedContainers)) {
+      for (let sample = 0; sample < 1500; sample++) {
+        const blocks = repeatedBlocks();
+        const copies = blocks.map((block, index) => copyOf(block, String(index)));
+        const mismatch = mismatchOf(
+          problemLinesOf(readmeOf(entry[1], copies)),
+          expectedLinesOf(entry, blocks, copies),
+        );
+        if (mismatch !== undefined) {
+          wrong.push(`${entry[0]}: ${mismatch} in ${JSON.stringify(copies)}`);
+        }
+        for (const block of blocks) {
+          drawn.forms.add(block.form);
+          drawn.targets.add(block.target);
+        }
+        drawn.copies.add(copies.length);
+      }
+    }
+
+    expect({ wrong: wrong.length, first: wrong.slice(0, 3) }).toEqual({ wrong: 0, first: [] });
+    expect(drawn.forms).toEqual(new Set(formNames));
+    expect(drawn.targets).toEqual(new Set(targetNames));
+    expect(drawn.copies).toEqual(new Set([2, 3, 4]));
+  });
+});
 
 describe('pinnedReadme over every target, form and container an author can write', () => {
   const cases = casesOf(containers);
