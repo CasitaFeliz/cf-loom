@@ -30,8 +30,9 @@ export type Order = (typeof orders)[keyof typeof orders];
  * CPU time leaves out the time a run waits for a core, but not the time it waits for memory, which
  * `orders` holds. It advances by the tick of the scheduler, 1 to 10 ms, so a run shorter than a tick
  * reads as nothing or as a whole tick: runs that read under 200 ms together are no span, and the
- * next try is sized from what they read, at most twice as many. A measurement can still be skewed
- * now and then, and only upward, while a shape of a higher order measures high every time.
+ * next try is sized from what they read, at most twice as many. A measurement is a ratio, so a slow
+ * span on either side skews it, but only three slow spans of one side in one measurement move it,
+ * while a shape of a higher order measures high every time.
  * A fresh fixture does two jobs: no run reads what an earlier one read, so no memo answers for the
  * code timed, and both sizes read about as much memory in a span. A fixture that costs more to build
  * than a run is built once per size and copied for each run. A span holds the fixtures of its 200 ms
@@ -51,11 +52,8 @@ export function orderOf(
   const largeTimer = spanTimerOf((runs) =>
     cpuMillisecondsOfFresh(() => prepare(sizes.large), runs),
   );
-  let smallest = Number.POSITIVE_INFINITY;
-  for (let attempt = 0; attempt < attempts && smallest >= below; attempt++) {
-    smallest = Math.min(smallest, orderOfGrowth(measuredGrowth(smallTimer, largeTimer), sizes));
-  }
-  return smallest;
+  const growth = smallestRatioOf(largeTimer, smallTimer, (sizes.large / sizes.small) ** below);
+  return orderOfGrowth(growth, sizes);
 }
 
 /** The order a growth between `sizes.small` and `sizes.large` is: the power of their ratio it equals. */
@@ -65,25 +63,29 @@ export function orderOfGrowth(growth: number, sizes: Sizes): number {
 
 /**
  * How many times longer a run of `call` takes than a run of `reference`, in CPU time of the thread:
- * the fastest span of each over up to three interleaved spans of both, which stop at the first ratio
- * under `bound`. A span is as many runs as fill 200 ms, as in `orderOf`, so a run shorter than a
- * tick still measures. A slower host stretches the ratio far less than it stretches either run, so it
- * holds where an absolute bound does not. It stops at the first ratio under `bound`, so a claim that
- * the ratio reaches a floor passes a bound no ratio is under, `everyAttempt = 0` in growth.test.ts,
- * to keep the fastest span of every attempt.
+ * the smallest of up to three measurements, which stop at the first under `bound`, each taken as
+ * `orderOf` takes it. A span is as many runs as fill 200 ms, so a run shorter than a tick still
+ * measures. A slower host stretches the ratio far less than it stretches either run, so it holds
+ * where an absolute bound does not.
  */
 export function cpuRatioOf(call: () => unknown, reference: () => unknown, bound: number): number {
   const callTimer = spanTimerOf((runs) => cpuMillisecondsOfRepeated(call, runs));
   const referenceTimer = spanTimerOf((runs) => cpuMillisecondsOfRepeated(reference, runs));
-  let fastestCall = Number.POSITIVE_INFINITY;
-  let fastestReference = Number.POSITIVE_INFINITY;
-  let ratio = Number.POSITIVE_INFINITY;
-  for (let attempt = 0; attempt < attempts && ratio >= bound; attempt++) {
-    fastestReference = Math.min(fastestReference, referenceTimer());
-    fastestCall = Math.min(fastestCall, callTimer());
-    ratio = fastestCall / fastestReference;
+  return smallestRatioOf(callTimer, referenceTimer, bound);
+}
+
+/**
+ * The smallest of up to three measurements of how many times longer a run timed by `timer` takes
+ * than one timed by `reference`, which stop at the first under `bound`. A measurement is the fastest
+ * of three interleaved spans of each, so a cold or interrupted span on either side is discarded
+ * before the early stop looks at the ratio.
+ */
+function smallestRatioOf(timer: () => number, reference: () => number, bound: number): number {
+  let smallest = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < attempts && smallest >= bound; attempt++) {
+    smallest = Math.min(smallest, measuredRatio(timer, reference));
   }
-  return ratio;
+  return smallest;
 }
 
 /** A span's runs and the CPU time of the thread each took, in milliseconds. */
@@ -102,14 +104,14 @@ function spanTimerOf(timed: (runs: number) => number): () => number {
   };
 }
 
-function measuredGrowth(smallTimer: () => number, largeTimer: () => number): number {
-  let fastestSmall = Number.POSITIVE_INFINITY;
-  let fastestLarge = Number.POSITIVE_INFINITY;
+function measuredRatio(timer: () => number, reference: () => number): number {
+  let fastest = Number.POSITIVE_INFINITY;
+  let fastestReference = Number.POSITIVE_INFINITY;
   for (let span = 0; span < spans; span++) {
-    fastestSmall = Math.min(fastestSmall, smallTimer());
-    fastestLarge = Math.min(fastestLarge, largeTimer());
+    fastestReference = Math.min(fastestReference, reference());
+    fastest = Math.min(fastest, timer());
   }
-  return fastestLarge / fastestSmall;
+  return fastest / fastestReference;
 }
 
 /**

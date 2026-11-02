@@ -138,9 +138,6 @@ function fixturesOfTries() {
   return { prepare, tries };
 }
 
-/** A bound no ratio is under, so that `cpuRatioOf` times every attempt and keeps the fastest span of each. */
-const everyAttempt = 0;
-
 /** The work of a cold run in warm runs: more than the 6 a cold span was seen to cost, so a cold call beside it still reads under a ceiling of 3. */
 const coldPasses = 20;
 
@@ -293,7 +290,7 @@ describe('cpuRatioOf', () => {
     const large = readingEachName(16_000);
     const small = readingEachName(2_000);
 
-    const ratio = cpuRatioOf(large, small, everyAttempt);
+    const ratio = cpuRatioOf(large, small, 2);
 
     expect(ratio).toBeGreaterThanOrEqual(2);
   });
