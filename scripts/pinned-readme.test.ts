@@ -201,6 +201,8 @@ describe('pinnedReadme', () => {
     ['a relative link in strong text', '**[x](./s.md)**', [3]],
     ['a relative link around an image', '[![a](https://x.io/a.png)](./b.md)', [3]],
     ['a relative link after a code span', 'a `[x](./a.md)`\n[x](./a.md)', [4]],
+    ['a backslash-escaped repository in a code span', '`CasitaFeliz\\/cf-loom`', [3]],
+    ['a backslash-escaped repository in a fence', '```md\nCasitaFeliz\\/cf-loom\n```', [4]],
   ])('refuses %s, naming the line where it starts', (_form, offending, lines) => {
     const refused = refusedLinesOf(afterOnePinnedLink(offending));
 
@@ -261,6 +263,67 @@ describe('pinnedReadme', () => {
     expect(refused).toEqual(lines);
   });
 
+  it('pins a link whose path holds parentheses', () => {
+    const readme = `[x](${atMain}/a(b).md)`;
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a(b).md)` });
+  });
+
+  it('lists each of two relative links on one line', () => {
+    const readme = afterOnePinnedLink('[a](./x.md) and [b](./x.md)');
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [
+        { line: 3, problem: expect.stringContaining('./x.md') },
+        { line: 3, problem: expect.stringContaining('./x.md') },
+      ],
+    });
+  });
+
+  it('lists each of the four tags of two elements on one line', () => {
+    const readme = afterOnePinnedLink('a <b>x</b> <b>y</b>');
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [
+        { line: 3, problem: expect.stringContaining('raw HTML "<b>"') },
+        { line: 3, problem: expect.stringContaining('raw HTML "</b>"') },
+        { line: 3, problem: expect.stringContaining('raw HTML "<b>"') },
+        { line: 3, problem: expect.stringContaining('raw HTML "</b>"') },
+      ],
+    });
+  });
+
+  it('names a link to the repository split over two lines once, at the line of the name', () => {
+    const readme = afterOnePinnedLink(`[x](\nhttps://github.com/${repository}/tree/main/a)`);
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [{ line: 4, problem: expect.stringContaining(repository) }],
+    });
+  });
+
+  it('names a definition at main once, at the definition, however often it is used', () => {
+    const uses = '[a][r]\n\n[b][r]\n\n[c][r]';
+    const readme = afterOnePinnedLink(`${uses}\n\n[r]: ${atMain}/CONTEXT.md`);
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [{ line: 9, problem: expect.stringContaining(repository) }],
+    });
+  });
+
   it('lists every problem of a README in line order, two on one line both', () => {
     const readme = [
       '[x](../up.md)',
@@ -312,6 +375,7 @@ const targets: Record<string, string> = {
   'another host': 'https://zod.dev/api',
   'a scheme in capitals': 'HTTPS://zod.dev',
   'the repository at main': `${atMain}/CONTEXT.md#x`,
+  'the repository at main with parentheses in its path': `${atMain}/a(b).md`,
   'the repository at tree/main': `https://github.com/${repository}/tree/main/packages`,
   'the repository in another case': 'https://github.com/casitafeliz/cf-loom/blob/main/x.md',
   'the repository with an escaped hyphen':
@@ -497,7 +561,7 @@ describe('pinnedReadme over every target, form and container an author can write
     const wrong: string[] = [];
     for (const { name, block, readme } of casesOf(codeContainers)) {
       const pinnable = /\]\(https:\/\/github\.com\/CasitaFeliz\/cf-loom\/blob\/main\/[^)\s]+\)/g;
-      const names = /casitafeliz\/cf-loom/i.test(block.replace(pinnable, ''));
+      const names = /casitafeliz\/cf-loom/i.test(block.replace(pinnable, '').replaceAll('\\', ''));
       const pinning = pinnedReadme(readme, repository, commit);
       if ((pinning.kind === 'refused') !== names) {
         wrong.push(

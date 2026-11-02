@@ -6,27 +6,19 @@ function literally(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/**
- * The one form a README may use for a file of `repository` at `ref`: a link target, anchor allowed, as a regular
- * expression source with `ref` between its two captures.
- */
-function targetAt(repository: string, ref: string): string {
-  return `(https://github\\.com/${literally(repository)}/blob/)${literally(ref)}(/[^)\\s]+)`;
-}
-
-/** The inline links to a file of `repository` at `main`, which the release points at a commit. */
+/** The inline links and images to a file of `repository` at `main`, which the release points at a commit. */
 function linkAtMain(repository: string): RegExp {
-  return new RegExp(`\\]\\(${targetAt(repository, 'main')}\\)`, 'g');
+  const target = `(https://github\\.com/${literally(repository)}/blob/)main(/[^)\\s]+)`;
+  return new RegExp(`\\]\\(${target}\\)`, 'g');
 }
 
-/** Whether a link target is a file of `repository` at `commit`. */
-function isTargetAt(target: string, repository: string, commit: string): boolean {
-  return new RegExp(`^${targetAt(repository, commit)}$`).test(target);
-}
-
-/** Whether a line names `repository` in any case, as a whole name and not as the end of an owner or the start of a name. */
+/**
+ * Whether a line names `repository` in any case, as a whole name and not as the end of an owner or the start of a
+ * name, read without its backslashes, which Markdown drops before punctuation.
+ */
 function namesRepository(line: string, repository: string): boolean {
-  return new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i').test(line);
+  const unescaped = line.replaceAll('\\', '');
+  return new RegExp(`(?<![\\w.-])${literally(repository)}(?![\\w-])`, 'i').test(unescaped);
 }
 
 /** What is wrong on one line of a README. */
@@ -62,16 +54,13 @@ const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 /** An HTML comment as a browser ends it: not `<!-->` or `<!--->`, and not at `--!>`. */
 const htmlComment = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
 
-function targetProblem(target: string, repository: string, commit: string): string | undefined {
+function targetProblem(target: string): string | undefined {
   const reference = characterReference.exec(target)?.[0];
   if (reference !== undefined) {
     return `the link target "${target}" holds the character reference ${reference}; write the character itself`;
   }
   if (!absoluteOrAnchor.test(target)) {
     return `the link target "${target}" has no scheme and is not an anchor`;
-  }
-  if (namesRepository(target, repository) && !isTargetAt(target, repository, commit)) {
-    return unpinnedMention(repository);
   }
   return undefined;
 }
@@ -84,12 +73,12 @@ function htmlProblem(html: string): string | undefined {
   return `raw HTML ${JSON.stringify(firstLine.trimEnd())}: a package README holds no HTML but comments`;
 }
 
-function tokenProblem(token: MarkedToken, repository: string, commit: string): string | undefined {
+function tokenProblem(token: MarkedToken): string | undefined {
   switch (token.type) {
     case 'def':
     case 'image':
     case 'link':
-      return targetProblem(token.href, repository, commit);
+      return targetProblem(token.href);
     case 'html':
       return htmlProblem(token.raw);
     case 'blockquote':
@@ -114,10 +103,10 @@ function tokenProblem(token: MarkedToken, repository: string, commit: string): s
 }
 
 /** What GitHub and npm would render at `main` from the README read as Markdown, one problem for each token. */
-function tokenProblems(pinned: string, repository: string, commit: string): ReadmeProblem[] {
+function tokenProblems(pinned: string): ReadmeProblem[] {
   const problems: ReadmeProblem[] = [];
   for (const { token, line } of locatedTokens(pinned)) {
-    const problem = tokenProblem(token, repository, commit);
+    const problem = tokenProblem(token);
     if (problem !== undefined) {
       problems.push({ line, problem });
     }
@@ -125,10 +114,9 @@ function tokenProblems(pinned: string, repository: string, commit: string): Read
   return problems;
 }
 
-/** The problems once each appears once, in line order. */
+/** The problems in line order, those of one line in the order found. */
 function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
-  const once = new Map(problems.map((found) => [`${found.line} ${found.problem}`, found]));
-  return [...once.values()].sort((first, second) => first.line - second.line);
+  return [...problems].sort((first, second) => first.line - second.line);
 }
 
 /**
@@ -136,11 +124,10 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
  * that keep it from being pinned, so that a pinned README holds nothing at `main`.
  *
  * It pins the link target `https://github.com/<repository>/blob/main/<path>` and refuses any other mention of
- * `repository` in its text, code included. Read as GitHub Flavored Markdown, it refuses a link, image or definition
- * target with no scheme and no `#`, which GitHub and npm resolve against the default branch, a target naming
- * `repository` that is not pinned, which a backslash escape can hide from the text, a target holding a character
- * reference, which a browser decodes and the parser does not, and raw HTML other than a comment, whose attributes
- * hold targets Markdown does not parse. Code never gives a target.
+ * `repository` in its text, code included and backslashes ignored. Read as GitHub Flavored Markdown, it refuses a
+ * link, image or definition target with no scheme and no `#`, which GitHub and npm resolve against the default
+ * branch, a target holding a character reference, which a browser decodes and the parser does not, and raw HTML
+ * other than a comment, whose attributes hold targets Markdown does not parse. Code never gives a target.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
@@ -151,10 +138,7 @@ export function pinnedReadme(readme: string, repository: string, commit: string)
     linkAtMain(repository),
     (_link, before: string, after: string) => `](${before}${commit}${after})`,
   );
-  const problems = [
-    ...mentionProblems(readme, repository),
-    ...tokenProblems(pinned, repository, commit),
-  ];
+  const problems = [...mentionProblems(readme, repository), ...tokenProblems(pinned)];
   if (problems.length > 0) {
     return { kind: 'refused', problems: inLineOrder(problems) };
   }
