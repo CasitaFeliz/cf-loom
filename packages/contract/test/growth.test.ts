@@ -141,6 +141,9 @@ function fixturesOfTries() {
 /** A bound no ratio is under, so that `cpuRatioOf` times every attempt and keeps the fastest span of each. */
 const everyAttempt = 0;
 
+/** The work of a cold run in warm runs: more than the 6 a cold span was seen to cost, so a cold call beside it still reads under a ceiling of 3. */
+const coldPasses = 20;
+
 const heapReadEvery = 16_384;
 
 /** The bytes an array holds for each reference it lists. */
@@ -169,6 +172,28 @@ function additionsOfTheStep() {
     sum += index;
   }
   return sum;
+}
+
+/**
+ * `call` and `reference` as a cold first span makes them: `reference` does `coldPasses` times its
+ * work until `call` has run once, which slows exactly its first span and the tries that size it,
+ * without a clock, and costs CPU time, which a wait for a core does not.
+ */
+function withColdReference(call: () => unknown, reference: () => unknown) {
+  let called = false;
+  return {
+    call: () => {
+      called = true;
+      return call();
+    },
+    reference: () => {
+      let result: unknown;
+      for (let pass = 0; pass < (called ? 1 : coldPasses); pass++) {
+        result = reference();
+      }
+      return result;
+    },
+  };
 }
 
 describe('orderOf', () => {
@@ -271,6 +296,16 @@ describe('cpuRatioOf', () => {
     const ratio = cpuRatioOf(large, small, everyAttempt);
 
     expect(ratio).toBeGreaterThanOrEqual(2);
+  });
+
+  test('a read of 16,000 names takes over three times the CPU time of a read of 2,000 whose first span runs cold', {
+    timeout: growthTimeout,
+  }, () => {
+    const cold = withColdReference(readingEachName(16_000), readingEachName(2_000));
+
+    const ratio = cpuRatioOf(cold.call, cold.reference, 3);
+
+    expect(ratio).toBeGreaterThanOrEqual(3);
   });
 
   test('a call of tens of nanoseconds holds no memory for each of its runs', {
