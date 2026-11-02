@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { growthTimeout } from '../vitest.growth.config.ts';
+import { collectedOnce } from './collected.ts';
 import { orderOf, orders } from './growth.ts';
 
 const sizes = { small: 2_000, large: 16_000 };
@@ -66,6 +67,43 @@ function walkingEverySubset(size: number) {
   };
 }
 
+const fixtureDoubles = 8_192;
+const fixtureBytes = fixtureDoubles * Float64Array.BYTES_PER_ELEMENT;
+
+/** One try of `orderOf`: the heap in use when it began, after a full collection, and the fixtures it built. */
+type Try = { readonly heapUsedAtStart: number; fixtures: number };
+
+/**
+ * Fixtures of 8,192 doubles on the heap, 64 KB each, whose run reads them for about `size`
+ * milliseconds, and the tries they were built for: a build after a run begins a try.
+ */
+function fixturesOfTries() {
+  const tries: Try[] = [];
+  let current: Try = { heapUsedAtStart: 0, fixtures: 0 };
+  let ranSinceBuild = true;
+  const prepare = (size: number) => {
+    if (ranSinceBuild) {
+      ranSinceBuild = false;
+      collectedOnce();
+      current = { heapUsedAtStart: process.memoryUsage().heapUsed, fixtures: 0 };
+      tries.push(current);
+    }
+    current.fixtures++;
+    const fixture = Array.from({ length: fixtureDoubles }, (_, index) => index + 0.5);
+    return () => {
+      ranSinceBuild = true;
+      let sum = 0;
+      for (let pass = 0; pass < size * 122; pass++) {
+        for (const value of fixture) {
+          sum += value;
+        }
+      }
+      return sum;
+    };
+  };
+  return { prepare, tries };
+}
+
 describe('orderOf', () => {
   test('a read of each name once is under the linear order', { timeout: growthTimeout }, () => {
     const order = orderOf(readingEachName, sizes, orders.linear);
@@ -103,6 +141,17 @@ describe('orderOf', () => {
     const order = orderOf(walkingEverySubset, { small: 8, large: 16 }, orders.polynomial);
 
     expect(order).toBeGreaterThanOrEqual(orders.polynomial);
+  });
+
+  test("a try holds none of an earlier try's fixtures", { timeout: growthTimeout }, () => {
+    const { prepare, tries } = fixturesOfTries();
+
+    orderOf(prepare, { small: 1, large: 8 }, orders.linear);
+
+    const heapAtStarts = tries.map(({ heapUsedAtStart }) => heapUsedAtStart);
+    const heldByLaterTries = Math.max(...heapAtStarts) - Math.min(...heapAtStarts);
+    const largestTryBytes = Math.max(...tries.map(({ fixtures }) => fixtures)) * fixtureBytes;
+    expect(heldByLaterTries).toBeLessThan(largestTryBytes / 2);
   });
 
   test("a bound of a test's own is refused", () => {
