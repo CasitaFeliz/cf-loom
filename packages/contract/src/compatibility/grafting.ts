@@ -1,29 +1,18 @@
 import type { FormerInput, InputSnapshot } from '../snapshot/index.ts';
-import {
-  type Defs,
-  defsReachedOf,
-  type RefResolver,
-  refResolverOf,
-  type SchemaNode,
-} from '../walker/index.ts';
+import { type Defs, defGraphOf, type SchemaNode } from '../walker/index.ts';
 import { stepCopy } from './graft-copy.ts';
 import { namedDefs, recordingDefs } from './graft-names.ts';
 import { placePair, stepGraft } from './graft-pairs.ts';
 import type { Walk } from './graft-walk.ts';
 
-/** A defs value with the reader of its alias defs, which its caller builds once and keeps while any graft reads those defs. */
-export type ReadDefs = { readonly defs: Defs; readonly resolve: RefResolver };
-
-/** The defs given, with the reader of their alias defs. */
-export function readDefsOf(defs: Defs): ReadDefs {
-  return { defs, resolve: refResolverOf(defs) };
-}
-
 /** What a former Input is rewritten onto: an Endpoint's query and body as proposed, and the defs their `ref`s name. */
-export type GraftTarget = ReadDefs & { readonly input: Pick<InputSnapshot, 'query' | 'body'> };
+export type GraftTarget = {
+  readonly input: Pick<InputSnapshot, 'query' | 'body'>;
+  readonly defs: Defs;
+};
 
 /** A former Input to rewrite, with the defs it names: the Input as stored, or its Endpoint's own Input as the Baseline holds it. */
-export type GraftSource = ReadDefs & { readonly input: FormerInput['input'] };
+export type GraftSource = { readonly input: FormerInput['input']; readonly defs: Defs };
 
 type Grafted = Pick<FormerInput, 'input' | 'defs'>;
 
@@ -35,22 +24,21 @@ type Grafted = Pick<FormerInput, 'input' | 'defs'>;
  */
 export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted | undefined {
   const defs = { baseline: former.defs, proposed: onto.defs };
-  const resolve = { baseline: former.resolve, proposed: onto.resolve };
-  const recorded = walked(former, onto.input, { defs, resolve, met: recordingDefs() });
+  const recorded = walked(former, onto.input, { defs, met: recordingDefs() });
   if (!recorded.grafts) {
     return undefined;
   }
-  const options = { defs, resolve, met: namedDefs(recorded.met, onto.defs) };
+  const options = { defs, met: namedDefs(recorded.met, onto.defs) };
   const named = walked(former, onto.input, options);
   const nodes = [named.input.query, named.input.body].filter((node) => node !== null);
-  const held = defsReachedOf([...nodes, ...Object.values(named.out)], onto.defs);
-  return { input: named.input, defs: { ...held, ...named.out } };
+  const { held } = defGraphOf(onto.defs).reached([...nodes, ...named.out.values()]);
+  return { input: named.input, defs: { ...held, ...Object.fromEntries(named.out) } };
 }
 
-type Options = Pick<Walk, 'defs' | 'resolve' | 'met'>;
+type Options = Pick<Walk, 'defs' | 'met'>;
 
 function walked(former: GraftSource, onto: GraftTarget['input'], options: Options) {
-  const walk: Walk = { ...options, out: {}, frames: [], grafts: false };
+  const walk: Walk = { ...options, out: new Map(), frames: [], grafts: false };
   const query = partGrafted(walk, former.input.query, onto.query);
   const body = partGrafted(walk, former.input.body, onto.body);
   if (query?.type !== 'object') {

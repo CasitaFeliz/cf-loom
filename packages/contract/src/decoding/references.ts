@@ -120,9 +120,8 @@ function nodelessCycleProblemsOf(snapshot: PublishedSnapshot): readonly Problem[
   }
   const problems: Problem[] = [];
   for (const scope of defScopesOf(snapshot)) {
-    const defs = new Map(Object.entries(scope.defs));
-    const leadingBack = defsLeadingBackWithNoNodeOf(defs);
-    for (const name of defs.keys()) {
+    const leadingBack = defsLeadingBackWithNoNodeOf(scope.defs);
+    for (const name of Object.keys(scope.defs)) {
       if (leadingBack.has(name)) {
         problems.push({
           at: [...scope.at, name],

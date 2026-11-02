@@ -7,20 +7,11 @@ export {
   isJsonValue,
 } from './canonical-json.ts';
 export type { Child } from './children.ts';
-export { childrenOf, nodesWithin } from './children.ts';
-export { closureFactsOf } from './closure-facts.ts';
+export { childrenOf, nodesWithin, refsWrittenIn } from './children.ts';
 export type { DecimalDigits } from './decimal-digits.ts';
 export { decimalDigitsOf } from './decimal-digits.ts';
-export type { ResolvedRef } from './def-graph.ts';
-export {
-  defNamed,
-  defsReachedOf,
-  nodesReachedFrom,
-  type RefResolver,
-  reachedDefsOf,
-  refResolverOf,
-  refsWrittenIn,
-} from './def-graph.ts';
+export type { DefGraph, ReachedDefs, ResolvedRef } from './def-graph.ts';
+export { defGraphOf } from './def-graph.ts';
 export type { Catchalls, Def, DefTypes, PipeRefusals } from './def-types.ts';
 export { isSchema } from './def-types.ts';
 export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';

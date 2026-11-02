@@ -9,7 +9,7 @@ export function placeCopy(walk: Walk, node: SchemaNode, put: Put): void {
     walk.frames.push({ kind: 'copy', children, node, edits: [], put });
     return;
   }
-  const resolved = followedRefOf(node, walk.resolve.baseline);
+  const resolved = followedRefOf(node, walk.defs.baseline);
   const { name, isBuilt } = copyMet(walk.met, resolved.name);
   put(renamedRef(node, { name: name ?? resolved.name, nullable: resolved.nullable }));
   if (isBuilt) {

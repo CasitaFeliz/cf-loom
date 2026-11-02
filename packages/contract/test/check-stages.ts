@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import type { ComparedReport } from '../src/internal/index.ts';
 import { compatibilityReportOf, decodeSnapshot, originPackagesOf } from '../src/internal/index.ts';
-import { inputOf } from './chain-fixtures.ts';
+import { fannedInputOf, inputOf } from './chain-fixtures.ts';
 import { type StagesOf, stage } from './stage-type.ts';
 
 /** A check that a report finds nothing differing. */
@@ -41,6 +41,14 @@ export const checkStages = {
       (chain, count) => {
         const text = inputOf(chain, count, 'graftedText');
         return () => decodeSnapshot(text);
+      },
+      (given) => expect(given.kind).toBe('decoded'),
+    ),
+    stage(
+      'check decodes a Former Input of refs',
+      (chain, count) => {
+        const { graftedText } = fannedInputOf(chain, count);
+        return () => decodeSnapshot(graftedText);
       },
       (given) => expect(given.kind).toBe('decoded'),
     ),

@@ -4,6 +4,7 @@ import { forgetChain, groupedByDeclaredSnapshot, inputOf } from './chain-fixture
 import { holdingText, holdingTextsOf } from './chain-holding-types.ts';
 import type { ChainReader } from './chain-readers.ts';
 import { checkStages } from './check-stages.ts';
+import { defGraphStages } from './def-graph-stages.ts';
 import { generateStages, generateWritesText } from './generate-stages.ts';
 import { orderOf, orders } from './growth.ts';
 import { idChains, type TableChain } from './id-chains.ts';
@@ -20,6 +21,7 @@ export const chainStages = {
   ...generateStages,
   ...publishStages,
   ...checkStages,
+  ...defGraphStages,
   ...packageStages,
   canonicalTextOf: [generateWritesText, publishWritesText],
   walkSchemas: { reason: 'run inside validateRoot, which is timed' },

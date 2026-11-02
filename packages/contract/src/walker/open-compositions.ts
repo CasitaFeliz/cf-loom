@@ -1,6 +1,5 @@
-import { childrenOf } from './children.ts';
-import { closureFactsOf } from './closure-facts.ts';
-import { refsWrittenIn } from './def-graph.ts';
+import { childrenOf, refsWrittenIn } from './children.ts';
+import { defGraphOf } from './def-graph.ts';
 import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
@@ -17,7 +16,7 @@ export function openCompositionsOf(
   compositions: readonly Composition[],
   defs: Defs,
 ): readonly NotAllowed[] {
-  const holding = closureFactsOf<OpenEnumFact>(defs, (_name, def) =>
+  const holding = defGraphOf(defs).closureFacts<OpenEnumFact>((_name, def) =>
     def !== undefined && holdsOpenEnum(def) ? [openEnumFact] : [],
   );
   const reachesOpen = ({ node }: Composition): boolean =>

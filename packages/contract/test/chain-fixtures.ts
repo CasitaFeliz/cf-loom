@@ -31,10 +31,29 @@ export function anEchoTaking(body: z.ZodType) {
   });
 }
 
+/** What an Endpoint's body holds of a chain's head: `top`, and for a Baseline also the optional `gone`, the head itself or an object of a field for each link, each holding the head. */
+type Field = 'top' | 'top-and-gone' | 'top-and-fan';
+
+function bodyHolding(top: z.ZodType, field: Field, count: number) {
+  switch (field) {
+    case 'top':
+      return z.object({ top });
+    case 'top-and-gone':
+      return z.object({ top, gone: top.optional() });
+    case 'top-and-fan': {
+      const fan = Array.from({ length: count }, (_, link): [string, z.ZodType] => [
+        `f${link}`,
+        top,
+      ]);
+      return z.object({ top, gone: z.object(Object.fromEntries(fan)).optional() });
+    }
+  }
+}
+
 /** The Root whose one Endpoint takes the chain's head as `top`, and, for the Baseline, also as the optional `gone`. */
-export function aRootHolding(chain: IdChain, count: number, field: 'top' | 'top-and-gone') {
+export function aRootHolding(chain: IdChain, count: number, field: Field) {
   const top = headOf(chain, count);
-  const body = field === 'top' ? z.object({ top }) : z.object({ top, gone: top.optional() });
+  const body = bodyHolding(top, field, count);
   const group = defineGroup({
     name: 'shapes',
     description: 'Shapes',
@@ -43,7 +62,7 @@ export function aRootHolding(chain: IdChain, count: number, field: 'top' | 'top-
   return defineService({ name: 'shapes-service', groups: [group] });
 }
 
-function declaredBy(chain: IdChain, count: number, field: 'top' | 'top-and-gone'): ServiceSnapshot {
+function declaredBy(chain: IdChain, count: number, field: Field): ServiceSnapshot {
   const root = aRootHolding(chain, count, field);
   const validated = validateRoot(root, aRootPackage(root));
   if (validated.kind !== 'valid') {
@@ -112,18 +131,47 @@ function statesOf(chain: IdChain, count: number): ChainStates {
   };
 }
 
-const statesBuilt = new Map<IdChain, Map<number, ChainStates>>();
+/** What a Baseline whose removed field is a fan of the chain's head has to publish onto, and the result's text. */
+type FannedStates = {
+  /** The first version, decoded, whose Input also held the field `gone`: an object of a field for each link, each holding the head. */
+  readonly baseline: PublishedServiceSnapshot;
+  /** The declared Snapshot without `gone`. */
+  readonly declared: ServiceSnapshot;
+  /** The text of the declared Snapshot merged on that Baseline, which holds one Former Input. */
+  readonly graftedText: string;
+};
 
-function builtStatesOf(chain: IdChain, count: number): ChainStates {
-  const bySize = statesBuilt.get(chain) ?? new Map<number, ChainStates>();
-  statesBuilt.set(chain, bySize);
+function fannedStatesOf(chain: IdChain, count: number): FannedStates {
+  const before = declaredBy(chain, count, 'top-and-fan');
+  const baselineText = canonicalTextOf(
+    publishedSnapshotOf(undefined, before, publishedAt('1.0.0')),
+  );
+  const baseline = decodedFrom(baselineText);
+  const declared = declaredBy(chain, count, 'top');
+  const graftedText = canonicalTextOf(
+    publishedSnapshotOf(baseline, declared, publishedAt('1.1.0')),
+  );
+  return { baseline, declared, graftedText };
+}
+
+const statesBuilt = new Map<IdChain, Map<number, ChainStates>>();
+const fannedBuilt = new Map<IdChain, Map<number, FannedStates>>();
+
+/** The states of a chain at a size, built on the first ask and kept in `cache`. */
+function builtIn<States>(
+  cache: Map<IdChain, Map<number, States>>,
+  [chain, count]: readonly [IdChain, number],
+  build: (chain: IdChain, count: number) => States,
+): States {
+  const bySize = cache.get(chain) ?? new Map<number, States>();
+  cache.set(chain, bySize);
   const known = bySize.get(count);
   if (known !== undefined) {
     return known;
   }
-  const built = statesOf(chain, count);
-  bySize.set(count, built);
-  return built;
+  const made = build(chain, count);
+  bySize.set(count, made);
+  return made;
 }
 
 /**
@@ -135,12 +183,18 @@ export function inputOf<State extends ChainState>(
   count: number,
   state: State,
 ): ChainStates[State] {
-  return structuredClone(builtStatesOf(chain, count)[state]);
+  return structuredClone(builtIn(statesBuilt, [chain, count], statesOf)[state]);
+}
+
+/** A run's own copy of the states of a Baseline whose removed field is a fan of the chain's head, as `orderOf` asks. */
+export function fannedInputOf(chain: IdChain, count: number): FannedStates {
+  return structuredClone(builtIn(fannedBuilt, [chain, count], fannedStatesOf));
 }
 
 /** Drops every state built for the chain, so the next chain's rows start with the memory free. */
 export function forgetChain(chain: IdChain): void {
   statesBuilt.delete(chain);
+  fannedBuilt.delete(chain);
 }
 
 /** How many links the chains are compared at to tell the Snapshots they declare apart. */

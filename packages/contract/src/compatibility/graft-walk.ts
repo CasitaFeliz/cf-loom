@@ -6,7 +6,7 @@ import {
   withoutNullable,
 } from '../walker/index.ts';
 import type { BothDefs, Finding } from './findings.ts';
-import type { BothResolvers, GraftDefs } from './graft-names.ts';
+import type { GraftDefs } from './graft-names.ts';
 
 /** Where a node the walk builds goes once it is built. */
 export type Put = (node: SchemaNode) => void;
@@ -37,9 +37,9 @@ export type Frame =
 /** A walk of a former Input onto an Endpoint's: recording its def sources, or, once named, building. */
 export type Walk = {
   readonly defs: BothDefs;
-  readonly resolve: BothResolvers;
   readonly met: GraftDefs;
-  readonly out: Record<string, SchemaNode>;
+  /** The defs named apart, as the walk builds them. */
+  readonly out: Map<string, SchemaNode>;
   readonly frames: Frame[];
   grafts: boolean;
 };
@@ -51,7 +51,7 @@ export type Place = { readonly owner: number | undefined; readonly put: Put };
 export function defPut(walk: Walk, name: string | undefined): Put {
   return (node) => {
     if (name !== undefined) {
-      walk.out[name] = withoutNullable(node);
+      walk.out.set(name, withoutNullable(node));
     }
   };
 }

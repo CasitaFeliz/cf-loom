@@ -5,7 +5,7 @@ import {
   messageBodySentence,
   messageVersionSentence,
 } from '../declarations/index.ts';
-import { inFields, type RefResolver, refResolverOf, type SchemaNode } from '../walker/index.ts';
+import { type DefGraph, defGraphOf, inFields, type SchemaNode } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -72,10 +72,10 @@ export function messageBodyFailures(
 ): readonly DeclarationFailure[] {
   const { events, commands } = locatedMessagesOf(declarations);
   const located = [...events, ...commands];
-  const resolve = refResolverOf(defs);
+  const graph = defGraphOf(defs);
   const notObjects = located.filter(({ message }) => {
     const body = nodeOf(message, 'body');
-    return body !== undefined && !isObjectOf(body, resolve);
+    return body !== undefined && !isObjectOf(body, graph);
   });
   return notObjects.map((message) =>
     failure(
@@ -87,11 +87,11 @@ export function messageBodyFailures(
 }
 
 /** Whether a node is an object, a `ref` read through its def and any alias defs; a nullable one is not. */
-function isObjectOf(node: SchemaNode, resolve: RefResolver): boolean {
+function isObjectOf(node: SchemaNode, graph: DefGraph): boolean {
   if (node.type !== 'ref') {
     return node.type === 'object' && node.nullable !== true;
   }
-  const resolved = resolve(node);
+  const resolved = graph.resolved(node);
   return (
     resolved !== undefined &&
     !resolved.nullable &&

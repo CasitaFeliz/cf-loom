@@ -1,9 +1,12 @@
 import { unbrokenLineOf } from '../lines/index.ts';
-import type { Defs, RefNode, RefResolver, ResolvedRef, SchemaNode } from '../walker/index.ts';
-import type { NodePair } from './findings.ts';
-
-/** The readers of the aliases in a pair's two sides' defs, which the graft builds once for its walks. */
-export type BothResolvers = { readonly baseline: RefResolver; readonly proposed: RefResolver };
+import {
+  type Defs,
+  defGraphOf,
+  type RefNode,
+  type ResolvedRef,
+  type SchemaNode,
+} from '../walker/index.ts';
+import type { BothDefs, NodePair } from './findings.ts';
 
 /**
  * The key of a pair the graft follows: each side by the name of the def its `ref` stands for, or
@@ -22,9 +25,9 @@ export type FollowedPair = { readonly pair: NodePair; readonly key: PairKey };
  * `ref` is and keyed by its name, since the graft writes only destinations; a side written inline
  * stays and is its own key.
  */
-export function followedPairOf(pair: NodePair, resolve: BothResolvers): FollowedPair {
-  const baseline = resolvedSideOf(pair.baseline, resolve.baseline);
-  const proposed = resolvedSideOf(pair.proposed, resolve.proposed);
+export function followedPairOf(pair: NodePair, defs: BothDefs): FollowedPair {
+  const baseline = resolvedSideOf(pair.baseline, defs.baseline);
+  const proposed = resolvedSideOf(pair.proposed, defs.proposed);
   return {
     pair: { baseline: baseline.node, proposed: proposed.node },
     key: { baseline: baseline.key, proposed: proposed.key },
@@ -34,11 +37,11 @@ export function followedPairOf(pair: NodePair, resolve: BothResolvers): Followed
 /** One side of a pair as the graft follows it: the schema it stands for, and its key. */
 type ResolvedSide = { readonly node: SchemaNode; readonly key: string | SchemaNode };
 
-function resolvedSideOf(node: SchemaNode, resolve: RefResolver): ResolvedSide {
+function resolvedSideOf(node: SchemaNode, defs: Defs): ResolvedSide {
   if (node.type !== 'ref') {
     return { node, key: node };
   }
-  const { name, def, nullable } = followedRefOf(node, resolve);
+  const { name, def, nullable } = followedRefOf(node, defs);
   return { node: nullable ? { ...def, nullable: true } : def, key: name };
 }
 
@@ -46,8 +49,8 @@ function resolvedSideOf(node: SchemaNode, resolve: RefResolver): ResolvedSide {
  * The def a `ref` stands for through alias defs, as the graft writes only destinations: a `ref`
  * that reaches none is a bug.
  */
-export function followedRefOf(ref: RefNode, resolve: RefResolver): ResolvedRef {
-  const resolved = resolve(ref);
+export function followedRefOf(ref: RefNode, defs: Defs): ResolvedRef {
+  const resolved = defGraphOf(defs).resolved(ref);
   if (resolved === undefined) {
     throw new Error(unbrokenLineOf(`\`ref\` to ${ref.name} reaches no schema: a bug.`));
   }
@@ -115,7 +118,8 @@ export function namedDefs(recorded: GraftDefs, declared: Defs): GraftDefs {
   const apart = namedApartOf(recorded.sources);
   const used = new Set<string>();
   const nextSuffix = new Map<string, number>();
-  const isTaken = (name: string) => Object.hasOwn(declared, name) || used.has(name);
+  const graph = defGraphOf(declared);
+  const isTaken = (name: string) => graph.def(name) !== undefined || used.has(name);
   const names = recorded.sources.map((source, index) => {
     if (source.kind === 'pair' && !apart.has(index)) {
       return undefined;
