@@ -437,4 +437,34 @@ describe('./internal, defGraphOf', () => {
     expect(drawsWith.filter(([, count]) => (count as number) < 10)).toEqual([]);
     expect(Object.keys(nodeTypes).filter((type) => !typesDrawn.has(type))).toEqual([]);
   });
+
+  test('an empty Defs, no nodes and a node with no ref reach and resolve nothing', () => {
+    const graph = defGraphOf({});
+
+    const reachedFromNone = graph.reached([]);
+    const reachedFromPlain = graph.reached([aString, anObject]);
+    const facts = graph.closureFacts(ownFactsOf);
+
+    expect([reachedFromNone, reachedFromPlain]).toEqual([
+      { held: {}, unheld: [] },
+      { held: {}, unheld: [] },
+    ]);
+    expect(facts.size).toBe(0);
+  });
+
+  test('a def named __proto__ is held and resolved as any other def, never read as the prototype', () => {
+    const defs: Defs = Object.fromEntries([
+      ['__proto__', ref('o')],
+      ['o', anObject],
+    ]);
+    const graph = defGraphOf(defs);
+
+    const { held } = graph.reached([ref('__proto__')]);
+    const resolved = graph.resolved(ref('__proto__'));
+    const facts = graph.closureFacts(ownFactsOf);
+
+    expect(Object.keys(held)).toEqual(['__proto__', 'o']);
+    expect(resolved?.name).toBe('o');
+    expect([...(facts.get('__proto__') ?? [])].sort()).toEqual(['__proto__: ref', 'o: object']);
+  });
 });
