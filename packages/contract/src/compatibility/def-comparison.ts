@@ -108,9 +108,9 @@ function comparisonOf({ baseline, proposed }: BothDefs): DefComparison {
 function ownFactsOf(
   name: string,
   baseline: SchemaNode | undefined,
-  proposedDef: DefGraph['def'],
+  proposedDefNamed: DefGraph['def'],
 ): readonly Fact[] {
-  const proposed = proposedDef(name);
+  const proposed = proposedDefNamed(name);
   if (
     baseline === undefined ||
     proposed === undefined ||

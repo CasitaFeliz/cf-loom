@@ -118,7 +118,8 @@ export function namedDefs(recorded: GraftDefs, declared: Defs): GraftDefs {
   const apart = namedApartOf(recorded.sources);
   const used = new Set<string>();
   const nextSuffix = new Map<string, number>();
-  const isTaken = (name: string) => Object.hasOwn(declared, name) || used.has(name);
+  const graph = defGraphOf(declared);
+  const isTaken = (name: string) => graph.def(name) !== undefined || used.has(name);
   const names = recorded.sources.map((source, index) => {
     if (source.kind === 'pair' && !apart.has(index)) {
       return undefined;

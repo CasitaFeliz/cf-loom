@@ -138,21 +138,21 @@ function destinationOf(
 /** The alias defs from a name on, pushed on `aliases`, and the def at their end: none at a name with no def or a name already followed. */
 function followedFrom(
   name: string,
-  graph: { readonly defs: Defs; readonly known: KnownDestinations },
+  following: { readonly defs: Defs; readonly known: KnownDestinations },
   aliases: string[],
 ): ResolvedRef | undefined {
   const onPath = new Set<string>();
   for (let current = name; ; ) {
-    if (graph.known.has(current)) {
-      return graph.known.get(current);
+    if (following.known.has(current)) {
+      return following.known.get(current);
     }
-    const def = defNamed(graph.defs, current);
+    const def = defNamed(following.defs, current);
     if (def === undefined || onPath.has(current)) {
       return undefined;
     }
     if (def.type !== 'ref') {
       const destination = { name: current, def, nullable: false };
-      graph.known.set(current, destination);
+      following.known.set(current, destination);
       return destination;
     }
     aliases.push(current);
