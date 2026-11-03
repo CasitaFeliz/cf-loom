@@ -1,16 +1,16 @@
 import {
   chainDown,
-  type Defs,
-  defGraphOf,
   type ResolvedRef,
+  refNameOf,
   type SchemaNode,
   type Step,
   type StepChain,
 } from '../walker/index.ts';
-import { type AliasLink, aliasLinksOf, defOf, passesAlias } from './alias-runs.ts';
+import { type AliasLink, aliasLinksOf } from './alias-runs.ts';
 import { isUnchangedRefPair } from './def-comparison.ts';
 import type { BothDefs, Finding, NodePair } from './findings.ts';
 import { findingsOf } from './pair-findings.ts';
+import { resolvedRefOf } from './ref-defs.ts';
 
 /**
  * A walk of the pairs of Baseline and proposed nodes over the two sides' defs: each pair a pair
@@ -82,7 +82,10 @@ export type Hop = { readonly resolved: BothResolved } & (
   | { readonly kind: 'unchanged' }
 );
 
-/** The def each side's `ref` stands for through its alias defs, as its Def graph resolves it; none for a side written inline. */
+/**
+ * The def each side's `ref` stands for through its alias defs, as its Def graph resolves it, a
+ * `ref` that stands for none being a bug; none for a side written inline.
+ */
 export type BothResolved = {
   readonly baseline: ResolvedRef | undefined;
   readonly proposed: ResolvedRef | undefined;
@@ -222,11 +225,14 @@ function metPairOf(placed: Placed, { defs, entered }: Walking): Opened {
   }
   const resolved = resolvedOf(pair, defs);
   const isSameRefs = isUnchangedRefPair(pair, defs);
-  const passes = !isSameRefs && passesAlias(pair, defs);
-  const onward = resolvedPairOf(pair, defs);
+  const passes = !isSameRefs && passesAlias(pair, resolved);
   if (isSameRefs || isUnchangedResolved(resolved, defs)) {
     return { met: { ...placed, hop: { kind: 'unchanged', resolved } }, passes, onward: undefined };
   }
+  const onward = {
+    baseline: resolved.baseline?.def ?? pair.baseline,
+    proposed: resolved.proposed?.def ?? pair.proposed,
+  };
   const known = entered.get(onward.baseline)?.get(onward.proposed);
   if (known !== undefined) {
     return {
@@ -240,9 +246,17 @@ function metPairOf(placed: Placed, { defs, entered }: Walking): Opened {
 
 function resolvedOf({ baseline, proposed }: NodePair, defs: BothDefs): BothResolved {
   return {
-    baseline: baseline.type === 'ref' ? defGraphOf(defs.baseline).resolved(baseline) : undefined,
-    proposed: proposed.type === 'ref' ? defGraphOf(defs.proposed).resolved(proposed) : undefined,
+    baseline: baseline.type === 'ref' ? resolvedRefOf(baseline, defs.baseline) : undefined,
+    proposed: proposed.type === 'ref' ? resolvedRefOf(proposed, defs.proposed) : undefined,
   };
+}
+
+/** Whether a hop passes over an alias def on either side: a `ref` stands for a def it does not name. */
+function passesAlias({ baseline, proposed }: NodePair, resolved: BothResolved): boolean {
+  return (
+    (resolved.baseline !== undefined && resolved.baseline.name !== refNameOf(baseline)) ||
+    (resolved.proposed !== undefined && resolved.proposed.name !== refNameOf(proposed))
+  );
 }
 
 /** Whether both sides stand for one def by name that, with every def it reaches, is the same on both sides. */
@@ -252,14 +266,4 @@ function isUnchangedResolved({ baseline, proposed }: BothResolved, defs: BothDef
   }
   const ref = { type: 'ref', name: baseline.name } as const;
   return isUnchangedRefPair({ baseline: ref, proposed: ref }, defs);
-}
-
-/** The pair a pair holding a `ref` leads to: each `ref` side the def its Def graph resolves it to, a side written inline as it is. */
-function resolvedPairOf(pair: NodePair, defs: BothDefs): NodePair {
-  const side = (node: SchemaNode, held: Defs) =>
-    node.type === 'ref' ? (defGraphOf(held).resolved(node)?.def ?? defOf(node, held)) : node;
-  return {
-    baseline: side(pair.baseline, defs.baseline),
-    proposed: side(pair.proposed, defs.proposed),
-  };
 }

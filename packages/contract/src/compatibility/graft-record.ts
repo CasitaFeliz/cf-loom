@@ -1,6 +1,6 @@
-import type { Field, ResolvedRef, Step } from '../walker/index.ts';
+import type { Field, Step } from '../walker/index.ts';
 import type { BothDefs, NodePair } from './findings.ts';
-import { type CopyRecord, copyRecordOf, type DefSources, reachedOrBug } from './graft-copy.ts';
+import { type CopyRecord, copyRecordOf, type DefSources } from './graft-copy.ts';
 import { type MetPair, type PairWalk, pairWalkOf, type Reached, type Walked } from './pair-walk.ts';
 
 /** What rewriting a pair holds: a pair inside it, at its step, or a field only the former node has, grafted back with its copy. */
@@ -20,8 +20,6 @@ export type PairRecord = {
   readonly edits: RecordEdit[];
   /** The records that hold this one: the pair it is inside, and each pair holding a `ref` that leads to it. */
   readonly dependents: PairRecord[];
-  /** The def the proposed `ref` of the pair holding it stands for, which its hop leads to; none for a pair whose proposed side is written inline. */
-  readonly via: ResolvedRef | undefined;
   /** The record of the pair the hop leads to, for a pair holding a `ref` that is followed or leads to a pair entered before. */
   next: PairRecord | undefined;
   /** Where the def source it is sits among the sources, when it is the pair a proposed `ref` leads to. */
@@ -98,7 +96,6 @@ function recordedMet(reading: Reading, met: MetPair): void {
     met,
     edits: [],
     dependents: [],
-    via: viaOf(met, parent),
     next: undefined,
     source: undefined,
   };
@@ -117,27 +114,12 @@ function recordedMet(reading: Reading, met: MetPair): void {
 
 /** The pair a proposed `ref` leads to is a def the graft meets, once, where the first pair holding a `ref` to it meets it. */
 function registeredAsSource(reading: Reading, record: PairRecord): void {
-  if (record.met.reached.kind === 'hop' && record.via !== undefined) {
+  const { reached } = record.met;
+  const proposed = reached.kind === 'hop' ? reached.by.hop?.resolved.proposed : undefined;
+  if (proposed !== undefined) {
     record.source = reading.sources.all.length;
-    reading.sources.all.push({ kind: 'pair', base: record.via.name, end: record });
+    reading.sources.all.push({ kind: 'pair', base: proposed.name, end: record });
   }
-}
-
-/** The def the chain of `ref`s a pair is on stands for: from a proposed `ref` that is followed, else from its parent's chain. */
-function viaOf(met: MetPair, parent: PairRecord | undefined): ResolvedRef | undefined {
-  if (met.reached.kind === 'hop') {
-    return parent?.via;
-  }
-  const { hop, pair } = met;
-  if (hop === undefined || hop.kind === 'unchanged') {
-    return undefined;
-  }
-  if (pair.baseline.type === 'ref') {
-    reachedOrBug(pair.baseline, hop.resolved.baseline);
-  }
-  return pair.proposed.type === 'ref'
-    ? reachedOrBug(pair.proposed, hop.resolved.proposed)
-    : undefined;
 }
 
 /** A pair joins the pair it is inside as an edit at its step, or the pair holding the `ref` that led to it as its next. */

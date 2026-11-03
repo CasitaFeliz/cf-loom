@@ -1,8 +1,8 @@
-import { unbrokenLineOf } from '../lines/index.ts';
-import { type Defs, defGraphOf, refNameOf, type SchemaNode } from '../walker/index.ts';
+import { type Defs, refNameOf, type SchemaNode } from '../walker/index.ts';
 import { isUnchangedRefPair } from './def-comparison.ts';
 import type { BothDefs, Finding, NodePair } from './findings.ts';
 import { findingsOf } from './pair-findings.ts';
+import { namedDefOf } from './ref-defs.ts';
 
 /**
  * An alias pair with findings of its own on a run of hops, the def the walk one hop at a time
@@ -32,29 +32,15 @@ function runsOf(defs: BothDefs): Map<SchemaNode, Map<SchemaNode, Run>> {
  * A pair holding a `ref`, one hop on: each `ref` becomes the def it names in its Snapshot's defs,
  * itself a `ref` when that def is an alias def, and a side written inline stays.
  */
-export function hopPairOf(pair: NodePair, defs: BothDefs): NodePair {
+function hopPairOf(pair: NodePair, defs: BothDefs): NodePair {
   return {
     baseline: defOf(pair.baseline, defs.baseline),
     proposed: defOf(pair.proposed, defs.proposed),
   };
 }
 
-/** The def a `ref` names, or the node itself when it is written inline: a name with no def is a bug. */
-export function defOf(node: SchemaNode, defs: Defs): SchemaNode {
-  if (node.type !== 'ref') {
-    return node;
-  }
-  const def = defGraphOf(defs).def(node.name);
-  if (def === undefined) {
-    throw new Error(unbrokenLineOf(`\`ref\` to ${node.name} reaches no schema: a bug.`));
-  }
-  return def;
-}
-
-/** Whether a hop from the pair passes over an alias def on either side. */
-export function passesAlias(pair: NodePair, defs: BothDefs): boolean {
-  const onward = hopPairOf(pair, defs);
-  return onward.baseline.type === 'ref' || onward.proposed.type === 'ref';
+function defOf(node: SchemaNode, defs: Defs): SchemaNode {
+  return node.type === 'ref' ? namedDefOf(node, defs) : node;
 }
 
 /** Whether neither side of a pair is a `ref`. */
@@ -62,31 +48,28 @@ function holdsNoRef({ baseline, proposed }: NodePair): boolean {
   return baseline.type !== 'ref' && proposed.type !== 'ref';
 }
 
+const noLinks: Run = { links: undefined };
+
 /**
  * The alias pairs on the hops from the first, up to the first kept for the two defs values or the
- * one the run ends at: a pair of `ref`s naming one def nothing differs in, the pair one hop on
- * holding no `ref`, or a pair met before on the run.
+ * one the run ends at: a pair of `ref`s naming one def nothing differs in, or the pair one hop on
+ * holding no `ref`.
  */
 function hopsFrom(first: NodePair, defs: BothDefs): { chain: NodePair[]; tail: Run } {
   const memo = runsOf(defs);
   const chain: NodePair[] = [];
-  const met = new Map<SchemaNode, Set<SchemaNode>>();
   for (let pair = first; ; ) {
     const kept = memo.get(pair.baseline)?.get(pair.proposed);
     if (kept !== undefined) {
       return { chain, tail: kept };
     }
-    if (met.get(pair.baseline)?.has(pair.proposed) === true) {
-      return { chain, tail: { links: undefined } };
-    }
-    met.set(pair.baseline, (met.get(pair.baseline) ?? new Set()).add(pair.proposed));
     chain.push(pair);
     if (isUnchangedRefPair(pair, defs)) {
-      return { chain, tail: { links: undefined } };
+      return { chain, tail: noLinks };
     }
     const onward = hopPairOf(pair, defs);
     if (holdsNoRef(onward)) {
-      return { chain, tail: { links: undefined } };
+      return { chain, tail: noLinks };
     }
     pair = onward;
   }
@@ -105,18 +88,14 @@ function placesOf(
 }
 
 /**
- * The alias pairs with findings on the hops from a pair holding a `ref`, in the order the walk
- * one hop at a time meets them. The run from each alias pair, its own link first, is kept for the
- * two defs values, so each alias pair's findings are read once for them and a chain that meets a
- * pair another chain met shares its link.
+ * The alias pairs with findings on the hops from a pair whose hop passes an alias def, in the
+ * order the walk one hop at a time meets them. The run from each alias pair, its own link first,
+ * is kept for the two defs values, so each alias pair's findings are read once for them and a
+ * chain that meets a pair another chain met shares its link.
  */
 export function aliasLinksOf(start: NodePair, defs: BothDefs): AliasLink | undefined {
-  const first = isUnchangedRefPair(start, defs) ? undefined : hopPairOf(start, defs);
-  if (first === undefined || holdsNoRef(first)) {
-    return undefined;
-  }
   const memo = runsOf(defs);
-  const { chain, tail } = hopsFrom(first, defs);
+  const { chain, tail } = hopsFrom(hopPairOf(start, defs), defs);
   const places = placesOf(chain, refNameOf(start.proposed));
   let run = tail;
   for (let index = chain.length - 1; index >= 0; index--) {

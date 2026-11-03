@@ -1,13 +1,5 @@
-import { unbrokenLineOf } from '../lines/index.ts';
-import {
-  childrenOf,
-  type Defs,
-  defGraphOf,
-  type RefNode,
-  type ResolvedRef,
-  type SchemaNode,
-  type Step,
-} from '../walker/index.ts';
+import { childrenOf, type Defs, type SchemaNode, type Step } from '../walker/index.ts';
+import { resolvedRefOf } from './ref-defs.ts';
 
 /** A node only the former Input has, recorded for copying as it was, as it is read: a `ref` names its def source, any other node its children. */
 export type CopyRecord = {
@@ -76,7 +68,7 @@ function readCopy<PairSource>(
     }
     return record.children.map((child) => child.record);
   }
-  const resolved = followedRefOf(node, defs);
+  const resolved = resolvedRefOf(node, defs);
   const known = sources.copied.get(resolved.name);
   const source = known ?? sources.all.length;
   record.ref = { source, nullable: resolved.nullable };
@@ -87,20 +79,4 @@ function readCopy<PairSource>(
   sources.all.push({ kind: 'copy', base: resolved.name, body });
   sources.copied.set(resolved.name, source);
   return [body];
-}
-
-/**
- * The def a `ref` stands for through alias defs, as the graft writes only destinations: a `ref`
- * that reaches none is a bug.
- */
-export function followedRefOf(ref: RefNode, defs: Defs): ResolvedRef {
-  return reachedOrBug(ref, defGraphOf(defs).resolved(ref));
-}
-
-/** The def a `ref` was resolved to; none is a bug. */
-export function reachedOrBug(ref: RefNode, resolved: ResolvedRef | undefined): ResolvedRef {
-  if (resolved === undefined) {
-    throw new Error(unbrokenLineOf(`\`ref\` to ${ref.name} reaches no schema: a bug.`));
-  }
-  return resolved;
 }
