@@ -25,7 +25,7 @@ type OwnCycleChain = ChainBase & {
   readonly cycle: 'own';
   readonly linkOf: (previous: z.ZodType, self: () => z.ZodType) => z.ZodType;
   /** The link the chain starts from, when not `z.object({ leaf: z.string() })`. */
-  readonly startOf?: () => z.ZodType;
+  readonly startOf?: () => z.ZodObject;
 };
 
 /** A chain whose links all lie on one cycle, through the first, which holds the last. */

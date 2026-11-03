@@ -1,4 +1,4 @@
-import type { Defs, FormerInput, SchemaNode } from '../src/internal/index.ts';
+import type { Defs, FormerInput, RefNode, SchemaNode } from '../src/internal/index.ts';
 import { annotationsOf, destinationOf, innerOf, textOf } from './graft-defs.ts';
 import { sortedEntries } from './graft-sites.ts';
 
@@ -57,7 +57,22 @@ function trial(comparison: Comparison, run: () => boolean): boolean {
   return holds;
 }
 
+/** A `ref` against a node written in place: the def the `ref` names, with the `ref`'s own annotations and nullability, against that node. */
+function sameThroughDef(comparison: Comparison, from: RefNode, { to, at }: Pair): boolean {
+  const original = destinationOf(from, comparison.baseline);
+  if (original === undefined) {
+    return fail(comparison, at, 'a `ref` that reaches no def');
+  }
+  const { type: _type, name: _name, nullable: _nullable, ...annotations } = from;
+  const nullable = original.nullable ? { nullable: true as const } : {};
+  const written = { ...original.def, ...annotations, ...nullable };
+  return same(comparison, { from: written, to, at: `${at} > ${original.name}` });
+}
+
 function sameRefs(comparison: Comparison, { from, to, at }: Pair): boolean {
+  if (from.type === 'ref' && to.type !== 'ref') {
+    return sameThroughDef(comparison, from, { from, to, at });
+  }
   if (from.type !== 'ref' || to.type !== 'ref') {
     return fail(comparison, at, `${from.type} against ${to.type}`);
   }

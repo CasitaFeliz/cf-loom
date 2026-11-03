@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import { canonicalTextOf, decodeSnapshot, publishedSnapshotOf } from '../src/internal/index.ts';
-import { fannedInputOf, inputOf } from './chain-fixtures.ts';
+import { fannedInputOf, inputOf, lostInputOf } from './chain-fixtures.ts';
 import { publishedAt } from './snapshots.ts';
 import { type StagesOf, stage } from './stage-type.ts';
 
@@ -51,6 +51,17 @@ export const publishStages = {
         return () => publishedSnapshotOf(baseline, declared, publishedAt('1.2.0'));
       },
       (given) => expect(given.formerInputs).toHaveLength(1),
+    ),
+    stage(
+      'publish grafts a field the first link lost',
+      (chain, count) => {
+        const { baseline, declared } = lostInputOf(chain, count);
+        return () => publishedSnapshotOf(baseline, declared, publishedAt('1.1.0'));
+      },
+      (given) => {
+        expect(given.formerInputs.length).toBeLessThanOrEqual(1);
+        expect(decodeSnapshot(canonicalTextOf(given)).kind).toBe('decoded');
+      },
     ),
     stage(
       'publish grafts a removed field of refs',

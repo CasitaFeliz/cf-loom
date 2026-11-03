@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { shapeTextOf } from '../../test/alias-graph-facts.ts';
+import { oracleOf } from '../../test/alias-graph-oracle.ts';
+import {
+  endpointsNamingAnotherAliasOfOneDef,
+  fieldsNamingChangedAliasDefs,
+} from '../../test/alias-shapes.ts';
+import { publishedFirst } from '../../test/graft-fixtures.ts';
 import { orderOf, orderOfGrowth, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
+import { aliasGraphDrawOf } from '../../test/random-alias-graphs.ts';
 import {
   type Construct,
   type Leaf,
@@ -1752,6 +1760,48 @@ const aliasRows: readonly Row[] = [
     found: [idChangedIn('outer'), idChangedIn('node')],
   },
   {
+    change: 'describing an alias def that two alias defs of one def name',
+    from: aBodyWith({ k: aRef('first'), m: aRef('second') }),
+    to: aBodyWith({ k: aRef('first'), m: aRef('second') }),
+    fromDefs: {
+      first: aRef('shared'),
+      second: aRef('shared'),
+      shared: anAliasOf('node', { description: 'x' }),
+      node: selfReferring,
+    },
+    toDefs: {
+      first: aRef('shared'),
+      second: aRef('shared'),
+      shared: anAliasOf('node', { description: 'y' }),
+      node: selfReferring,
+    },
+    found: [inDef('shared', found(annotationChanged('description'), neutralEverywhere))],
+  },
+  {
+    change: 'writing inline what two defs naming alias defs of one def name',
+    from: aBodyWith({ x: aRef('first'), y: aRef('second') }),
+    to: aBodyWith({ x: aRef('inlined'), y: aRef('inlined') }),
+    fromDefs: {
+      first: anObject({ f: required(aRef('left')) }),
+      second: anObject({ f: required(aRef('right')) }),
+      left: anAliasOf('shared', { description: 'left' }),
+      right: anAliasOf('shared', { description: 'right' }),
+      shared: anAliasOf('node', { description: 'shared' }),
+      node: anObject({ k: required(aString) }),
+    },
+    toDefs: {
+      inlined: anObject({
+        f: required({ ...anObject({ k: required(aString) }), description: 'inline' }),
+      }),
+    },
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'x']),
+      inDef('inlined', found(annotationChanged('description'), neutralEverywhere, ['fields', 'f'])),
+      inDef('inlined', found(annotationChanged('id'), neutralEverywhere, ['fields', 'f'])),
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'y']),
+    ],
+  },
+  {
     change: 'turning a def into an alias of a def of the same shape',
     from: aBodyWith({ k: aRef('alias') }),
     to: aBodyWith({ k: aRef('alias') }),
@@ -3260,4 +3310,94 @@ describe('compatibilityReportOf, an inner annotation moved between nodes of one 
       );
     },
   );
+});
+
+/** The Check's Changes as lines, each a shape and where it is. */
+function linesOf(changes: readonly Change[]): readonly string[] {
+  return changes.flatMap(({ difference }) => {
+    if (difference.kind !== 'schema') {
+      return [difference.kind];
+    }
+    const names = difference.at.map((step) =>
+      step.kind === 'field' || step.kind === 'part' ? step.name : step.kind,
+    );
+    const place = difference.def === undefined ? names : ['defs', difference.def, ...names];
+    return [`${shapeTextOf(difference.shape)} at ${place.join('.')}`];
+  });
+}
+
+describe('compatibilityReportOf, alias defs', () => {
+  const growthTimeout = 240_000;
+
+  const sizes = { small: 2_000, large: 16_000 };
+
+  test('an Endpoint whose many fields each name one alias def of a long chain, each alias def’s description changed, is checked in time that grows with them, and reports each alias def once', {
+    timeout: growthTimeout,
+  }, () => {
+    const checked = (count: number) => {
+      const { baseline, proposed } = fieldsNamingChangedAliasDefs(count);
+      return () => compatibilityReportOf(baseline, proposed);
+    };
+
+    const report = checked(3)();
+    const order = orderOf(checked, sizes, orders.linear);
+
+    expect(linesOf(report.changes)).toEqual([
+      'annotation-changed(description) at defs.a1',
+      'annotation-changed(description) at defs.a2',
+    ]);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test.each([
+    { proposedAliases: 1, shape: 'one alias def away from it' },
+    { proposedAliases: 2, shape: 'two alias defs away from it' },
+  ] as const)(
+    'many Endpoints, each naming an alias def that leads through another to one def of many fields, where the proposed Snapshot names an alias def of it $shape, are checked in time that grows with the Endpoints and the def’s fields',
+    { timeout: growthTimeout },
+    ({ proposedAliases }) => {
+      const sizesOfEndpoints = { small: 500, large: 4_000 };
+      const checked = (count: number) => {
+        const { baseline, proposed } = endpointsNamingAnotherAliasOfOneDef(count, proposedAliases);
+        return () => compatibilityReportOf(baseline, proposed);
+      };
+
+      const report = checked(3)();
+      const order = orderOf(checked, sizesOfEndpoints, orders.linear);
+
+      expect(linesOf(report.changes).length).toBeGreaterThan(0);
+      expect(order).toBeLessThan(orders.linear);
+    },
+  );
+});
+
+describe('compatibilityReportOf, alias defs over seeded graphs', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => aliasGraphDrawOf(seed));
+  const oracles = draws.map(oracleOf);
+
+  test('the draws hold chains of alias defs that join part way, alias pairs that differ, proposed sides written in place against an alias chain, and two refs resolving to one def nothing differs in behind a finding', () => {
+    const counts = [
+      oracles.filter(({ stats }) => stats.joined).length,
+      oracles.filter(({ stats }) => stats.aliasFinding).length,
+      oracles.filter(({ stats }) => stats.writtenAgainstAlias).length,
+      oracles.filter(({ stats }) => stats.unchangedBehindAliasFinding).length,
+    ];
+
+    expect(counts).toEqual([
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 100),
+    ]);
+  });
+
+  test('every draw’s Changes are the Changes of a walk one hop at a time, in order', () => {
+    const wrong = draws.flatMap((draw, seed) => {
+      const report = compatibilityReportOf(publishedFirst(draw.baseline), draw.proposed);
+      const expected = (oracles[seed] as ReturnType<typeof oracleOf>).lines;
+      return linesOf(report.changes).join('\n') === expected.join('\n') ? [] : [seed];
+    });
+
+    expect(wrong).toEqual([]);
+  });
 });

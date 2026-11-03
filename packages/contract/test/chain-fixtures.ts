@@ -31,12 +31,17 @@ export function anEchoTaking(body: z.ZodType) {
   });
 }
 
-/** What an Endpoint's body holds of a chain's head: `top`, and for a Baseline also the optional `gone`, the head itself or an object of a field for each link, each holding the head. */
-type Field = 'top' | 'top-and-gone' | 'top-and-fan';
+/**
+ * What an Endpoint's body holds of a chain's head: `top`, and for a Baseline also the optional
+ * `gone`, the head itself or an object of a field for each link, each holding the head; or only
+ * `top`, whose innermost object also holds the optional `lost`.
+ */
+type Field = 'top' | 'top-and-gone' | 'top-and-fan' | 'top-with-lost';
 
 function bodyHolding(top: z.ZodType, field: Field, count: number) {
   switch (field) {
     case 'top':
+    case 'top-with-lost':
       return z.object({ top });
     case 'top-and-gone':
       return z.object({ top, gone: top.optional() });
@@ -52,7 +57,7 @@ function bodyHolding(top: z.ZodType, field: Field, count: number) {
 
 /** The Root whose one Endpoint takes the chain's head as `top`, and, for the Baseline, also as the optional `gone`. */
 export function aRootHolding(chain: IdChain, count: number, field: Field) {
-  const top = headOf(chain, count);
+  const top = headOf(chain, count, field === 'top-with-lost' ? { lost: true } : {});
   const body = bodyHolding(top, field, count);
   const group = defineGroup({
     name: 'shapes',
@@ -154,8 +159,32 @@ function fannedStatesOf(chain: IdChain, count: number): FannedStates {
   return { baseline, declared, graftedText };
 }
 
+/** What a Baseline whose head held a field the declared Snapshot lacks, in the innermost object of the chain, has to publish onto. */
+type LostStates = {
+  /** The first version, decoded, whose head also held the field `lost`: every link's closure changed. */
+  readonly baseline: PublishedServiceSnapshot;
+  /** The declared Snapshot, which lacks `lost`. */
+  readonly declared: ServiceSnapshot;
+  /** The text of the declared Snapshot merged on that Baseline, whose Former Input, where the chain holds one, names every link apart. */
+  readonly graftedText: string;
+};
+
+function lostStatesOf(chain: IdChain, count: number): LostStates {
+  const before = declaredBy(chain, count, 'top-with-lost');
+  const baselineText = canonicalTextOf(
+    publishedSnapshotOf(undefined, before, publishedAt('1.0.0')),
+  );
+  const baseline = decodedFrom(baselineText);
+  const declared = declaredBy(chain, count, 'top');
+  const graftedText = canonicalTextOf(
+    publishedSnapshotOf(baseline, declared, publishedAt('1.1.0')),
+  );
+  return { baseline, declared, graftedText };
+}
+
 const statesBuilt = new Map<IdChain, Map<number, ChainStates>>();
 const fannedBuilt = new Map<IdChain, Map<number, FannedStates>>();
+const lostBuilt = new Map<IdChain, Map<number, LostStates>>();
 
 /** The states of a chain at a size, built on the first ask and kept in `cache`. */
 function builtIn<States>(
@@ -191,10 +220,16 @@ export function fannedInputOf(chain: IdChain, count: number): FannedStates {
   return structuredClone(builtIn(fannedBuilt, [chain, count], fannedStatesOf));
 }
 
+/** A run's own copy of the states of a Baseline whose head held a field the declared Snapshot lacks, as `orderOf` asks. */
+export function lostInputOf(chain: IdChain, count: number): LostStates {
+  return structuredClone(builtIn(lostBuilt, [chain, count], lostStatesOf));
+}
+
 /** Drops every state built for the chain, so the next chain's rows start with the memory free. */
 export function forgetChain(chain: IdChain): void {
   statesBuilt.delete(chain);
   fannedBuilt.delete(chain);
+  lostBuilt.delete(chain);
 }
 
 /** How many links the chains are compared at to tell the Snapshots they declare apart. */
