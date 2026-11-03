@@ -1,8 +1,10 @@
 import type { FormerInput, InputSnapshot } from '../snapshot/index.ts';
 import { type Defs, defGraphOf } from '../walker/index.ts';
+import type { BothDefs } from './findings.ts';
 import { builtGraftOf } from './graft-build.ts';
 import { defNamesOf } from './graft-names.ts';
 import { type GraftRoots, graftRecordOf } from './graft-record.ts';
+import { walkFindsRemovedField } from './pair-closure.ts';
 
 /** What a former Input is rewritten onto: an Endpoint's query and body as proposed, and the defs their `ref`s name. */
 export type GraftTarget = {
@@ -19,11 +21,16 @@ type Grafted = Pick<FormerInput, 'input' | 'defs'>;
  * A former Input rewritten onto an Endpoint's query and body: the Endpoint's, with every field the
  * former Input has and they lack grafted in as it was, wherever the Input rules compare fields, and
  * the defs they reach, the Endpoint's under their names and the others named apart; `undefined`
- * when it grafts no field, so the former Input is forgotten.
+ * when it grafts no field, so the former Input is forgotten, and at once when no pair walk from
+ * its query or body finds a removed field.
  */
 export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted | undefined {
   const defs = { baseline: former.defs, proposed: onto.defs };
-  const record = graftRecordOf(rootsOf(former.input, onto.input), defs);
+  const roots = rootsOf(former.input, onto.input);
+  if (!findsRemovedField(roots, defs)) {
+    return undefined;
+  }
+  const record = graftRecordOf(roots, defs);
   if (record.grafting.length === 0) {
     return undefined;
   }
@@ -44,4 +51,11 @@ function rootsOf(former: GraftSource['input'], onto: GraftTarget['input']): Graf
     return { query, body: undefined };
   }
   return { query, body: { baseline: former.body, proposed: onto.body } };
+}
+
+/** Whether a pair walk from the query, or the body when both sides have one, finds a field removed. */
+function findsRemovedField({ query, body }: GraftRoots, defs: BothDefs): boolean {
+  return (
+    walkFindsRemovedField(query, defs) || (body !== undefined && walkFindsRemovedField(body, defs))
+  );
 }

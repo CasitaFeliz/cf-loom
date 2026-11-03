@@ -14,7 +14,8 @@ import { seededNext } from './random-schemas.ts';
 /**
  * A Service of several Endpoints over one graph of defs, whose next version removes fields only
  * inside the defs, and edits some others in ways that put no field back. Each Endpoint's Input
- * body keeps some of the fields the draw's body holds, so the Endpoints reach different defs.
+ * body keeps some of the fields the draw's body holds, so the Endpoints reach different defs. Now
+ * and then no field is removed at all.
  */
 export type DefGraftDraw = {
   readonly baselineDefs: Defs;
@@ -71,8 +72,12 @@ export function defGraftDrawOf(seed: number): DefGraftDraw {
     .filter((kind) => kind.startsWith('dropped: '))
     .map((kind) => kind.slice('dropped: '.length));
   const held = Object.entries(draw.baseline.defs).filter(([name]) => !dropped.includes(name));
-  const baselineDefs: Defs = Object.fromEntries(held);
-  const edited = Object.keys(baselineDefs).filter(() => next() < 0.3);
+  const isUntouched = next() < 0.12;
+  const baselineDefs: Defs = Object.fromEntries(
+    isUntouched ? Object.entries(draw.proposed.defs) : held,
+  );
+  const isEdited = next() < 0.5;
+  const edited = Object.keys(baselineDefs).filter(() => isEdited && next() < 0.3);
   const proposedDefs: Defs = Object.fromEntries(
     Object.entries(draw.proposed.defs).map(([name, def]) => [
       name,
@@ -86,7 +91,7 @@ export function defGraftDrawOf(seed: number): DefGraftDraw {
     baselineDefs,
     proposedDefs,
     bodies,
-    landed: draw.landed,
+    landed: isUntouched ? [] : draw.landed,
     edited,
     kinds: draw.kinds,
   };

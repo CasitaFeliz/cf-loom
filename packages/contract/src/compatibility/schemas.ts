@@ -26,6 +26,10 @@ export function schemaDifferencesOf(
   for (const walked of pairWalkOf(defs).pairsFrom(pair, place.at)) {
     if (walked.kind === 'found') {
       differences.push(differenceOf(place.position, walked));
+    } else if (walked.kind === 'passed') {
+      for (const found of walked.read()) {
+        differences.push(differenceOf(place.position, found));
+      }
     }
   }
   return differences;

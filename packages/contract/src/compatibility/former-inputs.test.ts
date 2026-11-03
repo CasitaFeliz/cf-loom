@@ -19,13 +19,13 @@ import {
   emptyObject,
   graftedIdentity,
   optional,
-  publishedFirst,
   required,
   type Shape,
   standardCodes,
   standardRejections,
 } from '../../test/graft-fixtures.ts';
 import { differenceFromInput } from '../../test/graft-oracle.ts';
+import { publishedEach, publishedThrough } from '../../test/graft-pools.ts';
 import {
   chainLosingFieldAtEnd,
   defsMergedIntoOneWrittenInline,
@@ -39,17 +39,8 @@ import {
 } from '../../test/graft-shapes.ts';
 import { orderOf, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
-import {
-  defGraftDrawOf,
-  identityOf,
-  reachesLanded,
-  servicesOf,
-  shuffledIdentities,
-} from '../../test/random-def-grafts.ts';
-import { doubledGraftDrawOf } from '../../test/random-doubled-grafts.ts';
 import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { graftDrawOf, removalHistoryOf } from '../../test/random-grafts.ts';
-import { inlinedGraftDrawOf } from '../../test/random-inlined-grafts.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
@@ -144,22 +135,6 @@ function aService(declared: Declared = {}): ServiceSnapshot {
 }
 
 /** Every version published in turn, as 1.0.0, 1.1.0 and so on, each against the one before. */
-function publishedEach(versions: readonly ServiceSnapshot[]): readonly PublishedServiceSnapshot[] {
-  const publishes: PublishedServiceSnapshot[] = [];
-  for (const [minor, version] of versions.entries()) {
-    publishes.push(publishedSnapshotOf(publishes.at(-1), version, publishedAt(`1.${minor}.0`)));
-  }
-  return publishes;
-}
-
-function publishedThrough(...versions: readonly ServiceSnapshot[]): PublishedServiceSnapshot {
-  const published = publishedEach(versions).at(-1);
-  if (published === undefined) {
-    throw new Error('No version to publish: a bug of the test.');
-  }
-  return published;
-}
-
 function placeOf(steps: readonly Step[], def?: string): string {
   const names = steps.map(stepName);
   return (def === undefined ? names : ['defs', def, ...names]).join('.');
@@ -1971,56 +1946,6 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
   });
 });
 
-/** The defs of a Former Input named apart from one name, `x~1`, `x~2`…, for each name with two or more. */
-function apartGroupsOf(former: FormerInput): readonly (readonly string[])[] {
-  const byBase = new Map<string, string[]>();
-  for (const name of Object.keys(former.defs).filter((held) => held.includes('~'))) {
-    const base = name.split('~')[0] as string;
-    byBase.set(base, [...(byBase.get(base) ?? []), name]);
-  }
-  return [...byBase.values()].filter((names) => names.length >= 2);
-}
-
-function hasTwoDefsApartFromOne(former: FormerInput): boolean {
-  return apartGroupsOf(former).length > 0;
-}
-
-/** The defs named apart that a def of a Former Input names. */
-function defsApartNamedBy(former: FormerInput, name: string): readonly string[] {
-  const names = nodesIn(former.defs[name])
-    .filter(isRef)
-    .map((ref) => String(ref.name));
-  return names.filter((held) => held.includes('~'));
-}
-
-/** Whether two defs named apart from one name both name a def named apart. */
-function hasTwoApartNamingOne(former: FormerInput): boolean {
-  return apartGroupsOf(former).some((group) =>
-    group.some((name, index) =>
-      group.slice(index + 1).some((other) => {
-        const named = defsApartNamedBy(former, other);
-        return defsApartNamedBy(former, name).some((held) => named.includes(held));
-      }),
-    ),
-  );
-}
-
-function fieldsOfDef(node: SchemaNode | undefined): Readonly<Record<string, Field>> {
-  return node?.type === 'object' ? node.fields : {};
-}
-
-/** Whether a node holds, in place, an object of exactly the fields given. */
-function holdsObjectOf(node: SchemaNode | undefined, fieldNames: readonly string[]): boolean {
-  const wanted = fieldNames.toSorted().join();
-  return nodesIn(node).some(
-    (inner) =>
-      inner.type === 'object' &&
-      Object.keys(inner.fields as object)
-        .sort()
-        .join() === wanted,
-  );
-}
-
 describe('publishedSnapshotOf: a pair the graft meets again', () => {
   const written = anObject({ k: required(aString) });
 
@@ -2213,173 +2138,5 @@ describe('publishedSnapshotOf: a pair the graft meets again', () => {
         ),
       ],
     ]);
-  });
-});
-
-describe('publishedSnapshotOf: former Inputs over seeded draws whose Baseline holds a def twice', () => {
-  const draws = Array.from({ length: 3_000 }, (_, seed) => doubledGraftDrawOf(seed));
-  const published = draws.map((draw) => publishedThrough(draw.baseline, draw.proposed));
-
-  test('the draws hold Former Inputs with two defs named apart from one proposed def, and both naming one def named apart', () => {
-    const counts = [
-      published.filter(({ formerInputs }) => formerInputs.some(hasTwoDefsApartFromOne)).length,
-      published.filter(({ formerInputs }) => formerInputs.some(hasTwoApartNamingOne)).length,
-    ];
-
-    expect(counts).toEqual([
-      expect.toSatisfy((count: number) => count >= 100),
-      expect.toSatisfy((count: number) => count >= 50),
-    ]);
-  });
-
-  test('a kept former Input of a draw whose Baseline holds a def twice is the Input as it was, and decodes', () => {
-    const problems = draws.flatMap((draw, seed) => {
-      const input = draw.baseline.endpoints[graftedIdentity]?.input;
-      const found = (published[seed] as PublishedServiceSnapshot).formerInputs.flatMap((former) => [
-        differenceFromInput(former, {
-          input: input as Pick<FormerInput, 'input'>['input'],
-          defs: draw.baseline.defs,
-        }),
-        problemWithDefsOf(former),
-      ]);
-      const undecoded = decodeSnapshot(
-        canonicalTextOf(published[seed] as PublishedServiceSnapshot),
-      );
-      return [...found, undecoded.kind === 'decoded' ? undefined : 'does not decode']
-        .filter((problem) => problem !== undefined)
-        .map((problem) => `${seed}: ${problem}`);
-    });
-
-    expect(problems).toEqual([]);
-  });
-});
-
-describe('publishedSnapshotOf: former Inputs over seeded draws whose proposed version writes a def inline', () => {
-  const draws = Array.from({ length: 3_000 }, (_, seed) => inlinedGraftDrawOf(seed));
-  const published = draws.map((draw) => publishedThrough(draw.baseline, draw.proposed));
-
-  /** Whether the draw's Input names, where its proposed version writes a def in place, an object a Former Input holds in two defs named apart from one proposed def. */
-  function holdsWrittenTwice(draw: ReturnType<typeof inlinedGraftDrawOf>, seed: number): boolean {
-    const name = [...draw.kinds].find((kind) => kind.startsWith('inlined: '))?.slice(9);
-    const fieldNames = Object.keys(fieldsOfDef(draw.baseline.defs[name ?? '']));
-    return (published[seed] as PublishedServiceSnapshot).formerInputs.some((former) =>
-      apartGroupsOf(former).some(
-        (group) => group.filter((def) => holdsObjectOf(former.defs[def], fieldNames)).length >= 2,
-      ),
-    );
-  }
-
-  test('the draws hold a pair written inline on the proposed side reached twice, and grafted under both', () => {
-    const inlined = draws.filter(({ kinds }) =>
-      [...kinds].some((kind) => kind.startsWith('inlined: ')),
-    );
-    const twice = draws.filter(holdsWrittenTwice);
-    const grafted = twice.filter(({ kinds }) => kinds.has('inlined: lost a field'));
-
-    expect([inlined.length, twice.length, grafted.length]).toEqual([
-      expect.toSatisfy((count: number) => count >= 500),
-      expect.toSatisfy((count: number) => count >= 100),
-      expect.toSatisfy((count: number) => count >= 50),
-    ]);
-  });
-
-  test('a kept former Input of a draw whose proposed version writes a def inline is the Input as it was, and decodes', () => {
-    const problems = draws.flatMap((draw, seed) => {
-      const input = draw.baseline.endpoints[graftedIdentity]?.input;
-      const found = (published[seed] as PublishedServiceSnapshot).formerInputs.flatMap((former) => [
-        differenceFromInput(former, {
-          input: input as Pick<FormerInput, 'input'>['input'],
-          defs: draw.baseline.defs,
-        }),
-        problemWithDefsOf(former),
-      ]);
-      const undecoded = decodeSnapshot(
-        canonicalTextOf(published[seed] as PublishedServiceSnapshot),
-      );
-      return [...found, undecoded.kind === 'decoded' ? undefined : 'does not decode']
-        .filter((problem) => problem !== undefined)
-        .map((problem) => `${seed}: ${problem}`);
-    });
-
-    expect(problems).toEqual([]);
-  });
-});
-
-describe('publishedSnapshotOf: former Inputs of Endpoints over seeded draws that remove fields only inside defs', () => {
-  const draws = Array.from({ length: 3_000 }, (_, seed) => defGraftDrawOf(seed));
-  const identitiesOf = (count: number) =>
-    Array.from({ length: count }, (_, index) => identityOf(index));
-
-  function publishedUnder(draw: ReturnType<typeof defGraftDrawOf>, identities: readonly string[]) {
-    const { baseline, proposed } = servicesOf(draw, identities);
-    return publishedSnapshotOf(publishedFirst(baseline), proposed, publishedAt('1.1.0'));
-  }
-
-  const published = draws.map((draw) => publishedUnder(draw, identitiesOf(draw.bodies.length)));
-
-  /** Whether the draw's Endpoints differ in whether they keep a Former Input. */
-  const isMixed = (seed: number) => {
-    const kept = identitiesOf((draws[seed] as (typeof draws)[number]).bodies.length).map(
-      (identity) =>
-        (published[seed] as PublishedServiceSnapshot).formerInputs.some(
-          (former) => former.endpoint === identity,
-        ),
-    );
-    return kept.includes(true) && kept.includes(false);
-  };
-
-  test('the draws hold removals that landed, edits that put no field back, and neither', () => {
-    const landed = draws.filter(({ landed: owners }) => owners.length > 0);
-    const steps = ['field', 'items', 'value', 'rest', 'variant'].map(
-      (step) => landed.filter(({ kinds }) => kinds.has(`graft: ${step}`)).length,
-    );
-    const counts = [
-      draws.filter((draw) => draw.landed.length === 0 && draw.edited.length > 0).length,
-      draws.filter((draw) => draw.landed.length === 0 && draw.edited.length === 0).length,
-      landed.length,
-      draws.filter((_, seed) => isMixed(seed)).length,
-    ];
-
-    expect([counts, steps.map((count) => count >= 50)]).toEqual([
-      [
-        expect.toSatisfy((count: number) => count >= 100),
-        expect.toSatisfy((count: number) => count >= 100),
-        expect.toSatisfy((count: number) => count >= 1_000),
-        expect.toSatisfy((count: number) => count >= 100),
-      ],
-      [true, true, true, true, true],
-    ]);
-  });
-
-  test('an Endpoint keeps a Former Input exactly when its body reaches a def a removal landed in', () => {
-    const wrong = draws.flatMap((draw, seed) => {
-      const formers = (published[seed] as PublishedServiceSnapshot).formerInputs;
-      return draw.bodies.flatMap((body, index) => {
-        const isKept = formers.some((former) => former.endpoint === identityOf(index));
-        return isKept === reachesLanded(draw, body) ? [] : [`${seed}: Endpoint ${index}`];
-      });
-    });
-
-    expect(wrong).toEqual([]);
-  });
-
-  test('the Former Inputs kept are the same whatever order the Endpoints’ identities put them in', () => {
-    const different = draws.flatMap((draw, seed) => {
-      const identities = identitiesOf(draw.bodies.length);
-      const next = seededNext(seed + 7);
-      const permuted = shuffledIdentities(identities, next);
-      const again = publishedUnder(draw, permuted).formerInputs;
-      const formersOf = (identity: string, formers: readonly FormerInput[]) =>
-        formers.find((former) => former.endpoint === identity);
-      return identities.flatMap((identity, index) => {
-        const was = formersOf(identity, (published[seed] as PublishedServiceSnapshot).formerInputs);
-        const now = formersOf(permuted[index] as string, again);
-        const bare = (former: FormerInput | undefined) =>
-          former === undefined ? undefined : { ...former, endpoint: '' };
-        return isDeepStrictEqual(bare(was), bare(now)) ? [] : [`${seed}: Endpoint ${index}`];
-      });
-    });
-
-    expect(different).toEqual([]);
   });
 });

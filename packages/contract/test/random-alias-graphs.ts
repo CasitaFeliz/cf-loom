@@ -6,6 +6,7 @@ import type {
   SchemaNode,
   ServiceSnapshot,
 } from '../src/internal/index.ts';
+import { namesReachedBy } from './graft-defs.ts';
 import { anEndpointOf, anObject, aRef, aServiceOf, aString } from './graft-fixtures.ts';
 import type { Next } from './random-draft.ts';
 import { seededNext } from './random-schemas.ts';
@@ -57,6 +58,12 @@ function objectOf(fieldNames: readonly string[]): ObjectNode {
   return anObject(Object.fromEntries(fields));
 }
 
+/** The defs a body reaches: a Snapshot holds no other. */
+function reachedFrom(body: ObjectNode, defs: Defs): Defs {
+  const reached = namesReachedBy([body], defs);
+  return Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
+}
+
 /** The fields of `o` in the proposed version: one lost, one gained, or the same. */
 function proposedFieldsOf(names: readonly string[], next: Next): readonly string[] {
   const roll = next();
@@ -92,8 +99,10 @@ export function aliasGraphDrawOf(seed: number): AliasGraphDraw {
         }),
       ),
     );
-  const serviceOf = (side: 'baseline' | 'proposed', defs: Defs) =>
-    aServiceOf({ [identity]: anEndpointOf(bodyOf(side)) }, defs);
+  const serviceOf = (side: 'baseline' | 'proposed', defs: Defs) => {
+    const body = bodyOf(side);
+    return aServiceOf({ [identity]: anEndpointOf(body) }, reachedFrom(body, defs));
+  };
   return {
     baseline: serviceOf('baseline', baselineDefs),
     proposed: serviceOf('proposed', proposedDefs),

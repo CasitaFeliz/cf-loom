@@ -76,7 +76,7 @@ function partRecorded(reading: Reading, walk: PairWalk, root: NodePair): PairRec
   for (const item of walked) {
     if (item.kind === 'met') {
       recordedMet(reading, item.met);
-    } else {
+    } else if (item.kind === 'found') {
       recordedFound(reading, item);
     }
   }
