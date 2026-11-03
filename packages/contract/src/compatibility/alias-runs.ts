@@ -15,7 +15,7 @@ export type AliasLink = {
   readonly next: AliasLink | undefined;
 };
 
-/** The alias pairs with findings that follow a pair on the hops from it. */
+/** The alias pairs with findings on the hops from a pair, its own first when it has findings. */
 type Run = { readonly links: AliasLink | undefined };
 
 const runs = new WeakMap<Defs, WeakMap<Defs, Map<SchemaNode, Map<SchemaNode, Run>>>>();
@@ -63,24 +63,24 @@ function holdsNoRef({ baseline, proposed }: NodePair): boolean {
 }
 
 /**
- * The pairs on the hops from a pair holding a `ref`, up to the first kept for the two defs
- * values or the one the run ends at: a pair of `ref`s naming one def nothing differs in, the pair
- * one hop on holding no `ref`, or a pair met before on the run.
+ * The alias pairs on the hops from the first, up to the first kept for the two defs values or the
+ * one the run ends at: a pair of `ref`s naming one def nothing differs in, the pair one hop on
+ * holding no `ref`, or a pair met before on the run.
  */
-function hopsFrom(start: NodePair, defs: BothDefs): { chain: NodePair[]; tail: Run } {
+function hopsFrom(first: NodePair, defs: BothDefs): { chain: NodePair[]; tail: Run } {
   const memo = runsOf(defs);
   const chain: NodePair[] = [];
   const met = new Map<SchemaNode, Set<SchemaNode>>();
-  for (let pair = start; ; ) {
+  for (let pair = first; ; ) {
+    const kept = memo.get(pair.baseline)?.get(pair.proposed);
+    if (kept !== undefined) {
+      return { chain, tail: kept };
+    }
     if (met.get(pair.baseline)?.has(pair.proposed) === true) {
       return { chain, tail: { links: undefined } };
     }
     met.set(pair.baseline, (met.get(pair.baseline) ?? new Set()).add(pair.proposed));
     chain.push(pair);
-    const kept = memo.get(pair.baseline)?.get(pair.proposed);
-    if (kept !== undefined) {
-      return { chain, tail: kept };
-    }
     if (isUnchangedRefPair(pair, defs)) {
       return { chain, tail: { links: undefined } };
     }
@@ -93,8 +93,11 @@ function hopsFrom(start: NodePair, defs: BothDefs): { chain: NodePair[]; tail: R
 }
 
 /** The def each pair of a chain is placed in, from the proposed `ref` of the pair before it. */
-function placesOf(chain: readonly NodePair[]): readonly (string | undefined)[] {
-  const places: (string | undefined)[] = [undefined];
+function placesOf(
+  chain: readonly NodePair[],
+  first: string | undefined,
+): readonly (string | undefined)[] {
+  const places: (string | undefined)[] = [first];
   for (const [index, pair] of chain.entries()) {
     places.push(refNameOf(pair.proposed) ?? places[index]);
   }
@@ -103,23 +106,28 @@ function placesOf(chain: readonly NodePair[]): readonly (string | undefined)[] {
 
 /**
  * The alias pairs with findings on the hops from a pair holding a `ref`, in the order the walk
- * one hop at a time meets them. A run is kept for the two defs values, so each alias pair's
- * findings are read once for them.
+ * one hop at a time meets them. The run from each alias pair, its own link first, is kept for the
+ * two defs values, so each alias pair's findings are read once for them and a chain that meets a
+ * pair another chain met shares its link.
  */
 export function aliasLinksOf(start: NodePair, defs: BothDefs): AliasLink | undefined {
+  const first = isUnchangedRefPair(start, defs) ? undefined : hopPairOf(start, defs);
+  if (first === undefined || holdsNoRef(first)) {
+    return undefined;
+  }
   const memo = runsOf(defs);
-  const { chain, tail } = hopsFrom(start, defs);
-  const places = placesOf(chain);
+  const { chain, tail } = hopsFrom(first, defs);
+  const places = placesOf(chain, refNameOf(start.proposed));
   let run = tail;
   for (let index = chain.length - 1; index >= 0; index--) {
     const pair = chain[index] as NodePair;
-    const byProposed = memo.get(pair.baseline) ?? new Map<SchemaNode, Run>();
-    memo.set(pair.baseline, byProposed);
-    byProposed.set(pair.proposed, run);
-    const findings = index === 0 ? [] : foundIn(pair, defs);
+    const findings = foundIn(pair, defs);
     if (findings.length > 0) {
       run = { links: { pair, def: places[index], findings, next: run.links } };
     }
+    const byProposed = memo.get(pair.baseline) ?? new Map<SchemaNode, Run>();
+    memo.set(pair.baseline, byProposed);
+    byProposed.set(pair.proposed, run);
   }
   return run.links;
 }

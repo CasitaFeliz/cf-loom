@@ -1760,6 +1760,48 @@ const aliasRows: readonly Row[] = [
     found: [idChangedIn('outer'), idChangedIn('node')],
   },
   {
+    change: 'describing an alias def that two alias defs of one def name',
+    from: aBodyWith({ k: aRef('first'), m: aRef('second') }),
+    to: aBodyWith({ k: aRef('first'), m: aRef('second') }),
+    fromDefs: {
+      first: aRef('shared'),
+      second: aRef('shared'),
+      shared: anAliasOf('node', { description: 'x' }),
+      node: selfReferring,
+    },
+    toDefs: {
+      first: aRef('shared'),
+      second: aRef('shared'),
+      shared: anAliasOf('node', { description: 'y' }),
+      node: selfReferring,
+    },
+    found: [inDef('shared', found(annotationChanged('description'), neutralEverywhere))],
+  },
+  {
+    change: 'writing inline what two defs naming alias defs of one def name',
+    from: aBodyWith({ x: aRef('first'), y: aRef('second') }),
+    to: aBodyWith({ x: aRef('inlined'), y: aRef('inlined') }),
+    fromDefs: {
+      first: anObject({ f: required(aRef('left')) }),
+      second: anObject({ f: required(aRef('right')) }),
+      left: anAliasOf('shared', { description: 'left' }),
+      right: anAliasOf('shared', { description: 'right' }),
+      shared: anAliasOf('node', { description: 'shared' }),
+      node: anObject({ k: required(aString) }),
+    },
+    toDefs: {
+      inlined: anObject({
+        f: required({ ...anObject({ k: required(aString) }), description: 'inline' }),
+      }),
+    },
+    found: [
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'x']),
+      inDef('inlined', found(annotationChanged('description'), neutralEverywhere, ['fields', 'f'])),
+      inDef('inlined', found(annotationChanged('id'), neutralEverywhere, ['fields', 'f'])),
+      found(annotationChanged('id'), neutralEverywhere, ['fields', 'y']),
+    ],
+  },
+  {
     change: 'turning a def into an alias of a def of the same shape',
     from: aBodyWith({ k: aRef('alias') }),
     to: aBodyWith({ k: aRef('alias') }),
