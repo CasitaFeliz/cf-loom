@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import type { ComparedReport } from '../src/internal/index.ts';
 import { compatibilityReportOf, decodeSnapshot, originPackagesOf } from '../src/internal/index.ts';
-import { fannedInputOf, inputOf } from './chain-fixtures.ts';
+import { fannedInputOf, inputOf, lostInputOf } from './chain-fixtures.ts';
 import { type StagesOf, stage } from './stage-type.ts';
 
 /** A check that a report finds nothing differing. */
@@ -23,6 +23,16 @@ function neutralDescriptions(report: ComparedReport, count: number): void {
   expect(described).toHaveLength(report.changes.length);
   expect(report.changes.length).toBeGreaterThanOrEqual(1);
   expect(report.changes.length).toBeLessThanOrEqual(count);
+}
+
+/**
+ * A field the first link lost is a removal at that link, and a union, a tuple item or an
+ * intersection that holds the link before is a change of its own, so at most one Change for each
+ * link and the one at the first.
+ */
+function changedAtMostOncePerLink(report: ComparedReport, count: number): void {
+  expect(report.changes.length).toBeGreaterThanOrEqual(1);
+  expect(report.changes.length).toBeLessThanOrEqual(count + 1);
 }
 
 /** What `check` reads a chain with: it decodes the Baseline, reads the origins and compares. */
@@ -48,6 +58,14 @@ export const checkStages = {
       'check decodes a Former Input of refs',
       (chain, count) => {
         const { graftedText } = fannedInputOf(chain, count);
+        return () => decodeSnapshot(graftedText);
+      },
+      (given) => expect(given.kind).toBe('decoded'),
+    ),
+    stage(
+      'check decodes a Baseline whose Former Input names the chain apart',
+      (chain, count) => {
+        const { graftedText } = lostInputOf(chain, count);
         return () => decodeSnapshot(graftedText);
       },
       (given) => expect(given.kind).toBe('decoded'),
@@ -90,6 +108,14 @@ export const checkStages = {
         return () => compatibilityReportOf(baseline, declared);
       },
       (given) => expect(given.changes).toHaveLength(1),
+    ),
+    stage(
+      'check compares a field the first link lost',
+      (chain, count) => {
+        const { baseline, declared } = lostInputOf(chain, count);
+        return () => compatibilityReportOf(baseline, declared);
+      },
+      changedAtMostOncePerLink,
     ),
     stage(
       'check compares on a Baseline holding a Former Input',

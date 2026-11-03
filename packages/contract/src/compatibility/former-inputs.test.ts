@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
+import { z } from 'zod';
 import {
   annotationsOf,
   destinationOf,
@@ -21,6 +22,7 @@ import {
 import { differenceFromInput } from '../../test/graft-oracle.ts';
 import {
   chainLosingFieldAtEnd,
+  defsMergedIntoOneWrittenInline,
   defsNamedApartFromOne,
   defsNamingAnAliasChain,
   endpointsHoldingFormerInputEach,
@@ -31,10 +33,14 @@ import {
 } from '../../test/graft-shapes.ts';
 import { orderOf, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
+import { doubledGraftDrawOf } from '../../test/random-doubled-grafts.ts';
 import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { graftDrawOf, removalHistoryOf } from '../../test/random-grafts.ts';
+import { inlinedGraftDrawOf } from '../../test/random-inlined-grafts.ts';
 import { seededNext } from '../../test/random-schemas.ts';
+import { aRootPackage } from '../../test/root-package.ts';
 import { publishedAt, schemaExports } from '../../test/snapshots.ts';
+import { defineEndpoint, defineGroup, defineService } from '../index.ts';
 import {
   type Change,
   canonicalTextOf,
@@ -47,6 +53,7 @@ import {
   type EndpointSnapshot,
   type Field,
   type FormerInput,
+  failureLineOf,
   hashedTextOf,
   isDeclared,
   type ObjectNode,
@@ -57,6 +64,8 @@ import {
   type ServiceSnapshot,
   type ShapeDifference,
   type Step,
+  snapshotOf,
+  validateRoot,
   versionBumpOf,
 } from '../internal/index.ts';
 
@@ -1630,6 +1639,20 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     ]);
     expect(order).toBeLessThan(orders.linear);
   });
+
+  test('many former defs merged into one proposed def whose field writes in place what they all name are merged in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = defsMergedIntoOneWrittenInline(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const order = orderOf(merged(defsMergedIntoOneWrittenInline), endpointSizes, orders.linear);
+
+    expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
+      ['p~1', 'p~2', 'p~3'],
+    ]);
+    expect(order).toBeLessThan(orders.linear);
+  });
 });
 
 describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
@@ -1883,5 +1906,339 @@ describe('publishedSnapshotOf: former Inputs over seeded alias graphs and nodes'
         { 'constructor~1': both },
       ),
     ]);
+  });
+});
+
+/** The defs of a Former Input named apart from one name, `x~1`, `x~2`…, for each name with two or more. */
+function apartGroupsOf(former: FormerInput): readonly (readonly string[])[] {
+  const byBase = new Map<string, string[]>();
+  for (const name of Object.keys(former.defs).filter((held) => held.includes('~'))) {
+    const base = name.split('~')[0] as string;
+    byBase.set(base, [...(byBase.get(base) ?? []), name]);
+  }
+  return [...byBase.values()].filter((names) => names.length >= 2);
+}
+
+function hasTwoDefsApartFromOne(former: FormerInput): boolean {
+  return apartGroupsOf(former).length > 0;
+}
+
+/** The defs named apart that a def of a Former Input names. */
+function defsApartNamedBy(former: FormerInput, name: string): readonly string[] {
+  const names = nodesIn(former.defs[name])
+    .filter(isRef)
+    .map((ref) => String(ref.name));
+  return names.filter((held) => held.includes('~'));
+}
+
+/** Whether two defs named apart from one name both name a def named apart. */
+function hasTwoApartNamingOne(former: FormerInput): boolean {
+  return apartGroupsOf(former).some((group) =>
+    group.some((name, index) =>
+      group.slice(index + 1).some((other) => {
+        const named = defsApartNamedBy(former, other);
+        return defsApartNamedBy(former, name).some((held) => named.includes(held));
+      }),
+    ),
+  );
+}
+
+function fieldsOfDef(node: SchemaNode | undefined): Readonly<Record<string, Field>> {
+  return node?.type === 'object' ? node.fields : {};
+}
+
+/** Whether a node holds, in place, an object of exactly the fields given. */
+function holdsObjectOf(node: SchemaNode | undefined, fieldNames: readonly string[]): boolean {
+  const wanted = fieldNames.toSorted().join();
+  return nodesIn(node).some(
+    (inner) =>
+      inner.type === 'object' &&
+      Object.keys(inner.fields as object)
+        .sort()
+        .join() === wanted,
+  );
+}
+
+describe('publishedSnapshotOf: a pair the graft meets again', () => {
+  const written = anObject({ k: required(aString) });
+
+  test('a field removed inside an object that two former defs the Endpoint merged into one each name is grafted under both copies, and the Check reports it once', () => {
+    const named = anObject({ k: required(aString), gone: optional(aString) });
+    const before = aService({
+      body: { x: required(aRef('left')), y: required(aRef('right')) },
+      defs: {
+        left: anObject({ a: required(aRef('shared')), xa: optional(aString) }),
+        right: anObject({ a: required(aRef('shared')) }),
+        shared: named,
+      },
+    });
+    const after = aService({
+      body: { x: required(aRef('merged')), y: required(aRef('merged')) },
+      defs: { merged: anObject({ a: required(written) }) },
+    });
+
+    const published = publishedThrough(before, after);
+
+    expect([
+      linesOf(publishedThrough(before), after),
+      published.formerInputs,
+      decodeSnapshot(canonicalTextOf(published)).kind,
+    ]).toEqual([
+      [
+        'neutral annotation-changed at input.body.x',
+        'neutral annotation-changed at defs.merged.a',
+        'additive field-removed at defs.merged.a.gone',
+        'additive field-removed at defs.merged.xa',
+        'neutral annotation-changed at input.body.y',
+      ],
+      [
+        anEntry(
+          '1.1.0',
+          { x: required(aRef('merged~1')), y: required(aRef('merged~2')) },
+          {
+            'merged~1': anObject({ a: required(named), xa: optional(aString) }),
+            'merged~2': anObject({ a: required(named) }),
+          },
+        ),
+      ],
+      'decoded',
+    ]);
+  });
+
+  test('a former def reached again inside the object it is grafted into keeps both defs named apart, each grafted', () => {
+    const inner = anObject({ gone: optional(aString), y: optional(aRef('merged~2')) });
+    const before = aService({
+      body: { x: required(aRef('outer')) },
+      defs: {
+        outer: anObject({ x: required(aRef('shared')) }),
+        again: anObject({ x: required(aRef('shared')), z: optional(aString) }),
+        shared: anObject({ gone: optional(aString), y: optional(aRef('again')) }),
+      },
+    });
+    const after = aService({
+      body: { x: required(aRef('merged')) },
+      defs: {
+        merged: anObject({ x: required(anObject({ y: optional(aRef('merged')) })) }),
+      },
+    });
+
+    const published = publishedThrough(before, after);
+
+    expect([published.formerInputs, decodeSnapshot(canonicalTextOf(published)).kind]).toEqual([
+      [
+        anEntry(
+          '1.1.0',
+          { x: required(aRef('merged~1')) },
+          {
+            'merged~1': anObject({ x: required(inner) }),
+            'merged~2': anObject({ x: required(inner), z: optional(aString) }),
+          },
+        ),
+      ],
+      'decoded',
+    ]);
+  });
+
+  test.each([
+    {
+      order: 'the kept field first',
+      before: { a: required(aRef('n')), b: optional(aRef('n')) },
+      after: { a: required(aRef('n')) },
+      names: { a: 'n~1', b: 'n~2' },
+    },
+    {
+      order: 'the removed field first',
+      before: { a: optional(aRef('n')), b: required(aRef('n')) },
+      after: { b: required(aRef('n')) },
+      names: { a: 'n~1', b: 'n~2' },
+    },
+  ])(
+    'a def a kept field reaches and a def a removed field copies, of one name, are named apart in the order the body reaches them, $order',
+    ({ before, after, names }) => {
+      const both = anObject({ q: optional(aString), r: required(aString) });
+      const defsBefore = { n: both };
+      const defsAfter = { n: anObject({ r: required(aString) }) };
+
+      const formerInputs = formerInputsAfter(
+        aService({ body: before, defs: defsBefore }),
+        aService({ body: after, defs: defsAfter }),
+      );
+
+      const body = Object.fromEntries(
+        Object.entries(before).map(([name, field]) => [
+          name,
+          { ...field, schema: aRef(names[name as 'a' | 'b']) },
+        ]),
+      );
+      expect(formerInputs).toEqual([anEntry('1.1.0', body, { 'n~1': both, 'n~2': both })]);
+    },
+  );
+
+  test('two ids of one zod shape, as generate declares them, are grafted apart under their own names', () => {
+    const declared = (isLost: boolean) => {
+      const shape: z.ZodType = z.object({
+        get x() {
+          return first.optional();
+        },
+        get y() {
+          return second.optional();
+        },
+        ...(isLost ? { lost: z.string().optional() } : {}),
+      });
+      const first: z.ZodType = z.lazy(() => shape).meta({ id: 'a' });
+      const second: z.ZodType = z.lazy(() => shape).meta({ id: 'b' });
+      const endpoint = defineEndpoint({
+        name: 'echo',
+        method: 'POST',
+        path: '/echo',
+        visibility: 'public',
+        description: 'Echo',
+        input: { body: z.object({ a: first, b: second }) },
+        success: { status: 204 },
+      });
+      const group = defineGroup({ name: 'shapes', description: 'Shapes', endpoints: [endpoint] });
+      const root = defineService({ name: 'shapes-service', groups: [group] });
+      const validated = validateRoot(root, aRootPackage(root));
+      if (validated.kind !== 'valid') {
+        throw new Error(validated.failures.slice(0, 1).map(failureLineOf).join(''));
+      }
+      return snapshotOf(validated) as ServiceSnapshot;
+    };
+
+    const published = publishedThrough(declared(true), declared(false));
+
+    const apart = anObject({
+      lost: optional(aString),
+      x: optional(aRef('a~1')),
+      y: optional(aRef('b~1')),
+    });
+    expect(published.formerInputs).toEqual([
+      {
+        endpoint: 'POST /echo',
+        removedIn: '1.1.0',
+        input: {
+          query: anObject({}),
+          body: anObject({ a: required(aRef('a~1')), b: required(aRef('b~1')) }),
+        },
+        defs: { 'a~1': apart, 'b~1': apart },
+      },
+    ]);
+  });
+
+  test('two refs naming different alias defs of one unchanged def are held as the Endpoint writes them', () => {
+    const held = anObject({ s: required(aString), t: optional(aRef('target')) });
+    const before = aService({
+      body: { id, gone, kept: required(aRef('oldAlias')) },
+      defs: { oldAlias: aRef('target'), target: held },
+    });
+    const after = aService({
+      body: { id, kept: required(aRef('newAlias')) },
+      defs: { newAlias: aRef('target'), target: held },
+    });
+
+    const published = publishedThrough(before, after);
+
+    expect([linesOf(publishedThrough(before), after), published.formerInputs]).toEqual([
+      [
+        'additive field-removed at input.body.gone',
+        'neutral annotation-changed at input.body.kept',
+      ],
+      [
+        anEntry(
+          '1.1.0',
+          { id, gone, kept: required(aRef('newAlias')) },
+          { target: held, newAlias: aRef('target') },
+        ),
+      ],
+    ]);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs over seeded draws whose Baseline holds a def twice', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => doubledGraftDrawOf(seed));
+  const published = draws.map((draw) => publishedThrough(draw.baseline, draw.proposed));
+
+  test('the draws hold Former Inputs with two defs named apart from one proposed def, and both naming one def named apart', () => {
+    const counts = [
+      published.filter(({ formerInputs }) => formerInputs.some(hasTwoDefsApartFromOne)).length,
+      published.filter(({ formerInputs }) => formerInputs.some(hasTwoApartNamingOne)).length,
+    ];
+
+    expect(counts).toEqual([
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 50),
+    ]);
+  });
+
+  test('a kept former Input of a draw whose Baseline holds a def twice is the Input as it was, and decodes', () => {
+    const problems = draws.flatMap((draw, seed) => {
+      const input = draw.baseline.endpoints[graftedIdentity]?.input;
+      const found = (published[seed] as PublishedServiceSnapshot).formerInputs.flatMap((former) => [
+        differenceFromInput(former, {
+          input: input as Pick<FormerInput, 'input'>['input'],
+          defs: draw.baseline.defs,
+        }),
+        problemWithDefsOf(former),
+      ]);
+      const undecoded = decodeSnapshot(
+        canonicalTextOf(published[seed] as PublishedServiceSnapshot),
+      );
+      return [...found, undecoded.kind === 'decoded' ? undefined : 'does not decode']
+        .filter((problem) => problem !== undefined)
+        .map((problem) => `${seed}: ${problem}`);
+    });
+
+    expect(problems).toEqual([]);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs over seeded draws whose proposed version writes a def inline', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => inlinedGraftDrawOf(seed));
+  const published = draws.map((draw) => publishedThrough(draw.baseline, draw.proposed));
+
+  /** Whether the draw's Input names, where its proposed version writes a def in place, an object a Former Input holds in two defs named apart from one proposed def. */
+  function holdsWrittenTwice(draw: ReturnType<typeof inlinedGraftDrawOf>, seed: number): boolean {
+    const name = [...draw.kinds].find((kind) => kind.startsWith('inlined: '))?.slice(9);
+    const fieldNames = Object.keys(fieldsOfDef(draw.baseline.defs[name ?? '']));
+    return (published[seed] as PublishedServiceSnapshot).formerInputs.some((former) =>
+      apartGroupsOf(former).some(
+        (group) => group.filter((def) => holdsObjectOf(former.defs[def], fieldNames)).length >= 2,
+      ),
+    );
+  }
+
+  test('the draws hold a pair written inline on the proposed side reached twice, and grafted under both', () => {
+    const inlined = draws.filter(({ kinds }) =>
+      [...kinds].some((kind) => kind.startsWith('inlined: ')),
+    );
+    const twice = draws.filter(holdsWrittenTwice);
+    const grafted = twice.filter(({ kinds }) => kinds.has('inlined: lost a field'));
+
+    expect([inlined.length, twice.length, grafted.length]).toEqual([
+      expect.toSatisfy((count: number) => count >= 500),
+      expect.toSatisfy((count: number) => count >= 100),
+      expect.toSatisfy((count: number) => count >= 50),
+    ]);
+  });
+
+  test('a kept former Input of a draw whose proposed version writes a def inline is the Input as it was, and decodes', () => {
+    const problems = draws.flatMap((draw, seed) => {
+      const input = draw.baseline.endpoints[graftedIdentity]?.input;
+      const found = (published[seed] as PublishedServiceSnapshot).formerInputs.flatMap((former) => [
+        differenceFromInput(former, {
+          input: input as Pick<FormerInput, 'input'>['input'],
+          defs: draw.baseline.defs,
+        }),
+        problemWithDefsOf(former),
+      ]);
+      const undecoded = decodeSnapshot(
+        canonicalTextOf(published[seed] as PublishedServiceSnapshot),
+      );
+      return [...found, undecoded.kind === 'decoded' ? undefined : 'does not decode']
+        .filter((problem) => problem !== undefined)
+        .map((problem) => `${seed}: ${problem}`);
+    });
+
+    expect(problems).toEqual([]);
   });
 });
