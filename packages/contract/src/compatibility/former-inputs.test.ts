@@ -2,6 +2,11 @@ import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import {
+  endpointsNamingAnAliasChainLosingField,
+  endpointsNamingChangedAliasDefs,
+} from '../../test/alias-shapes.ts';
+import { type ChainEnd, endpointsNamingOneChainChangedAt } from '../../test/chain-end-shapes.ts';
+import {
   annotationsOf,
   destinationOf,
   isClosureUnchanged,
@@ -14,6 +19,7 @@ import {
   emptyObject,
   graftedIdentity,
   optional,
+  publishedFirst,
   required,
   type Shape,
   standardCodes,
@@ -33,6 +39,13 @@ import {
 } from '../../test/graft-shapes.ts';
 import { orderOf, orders } from '../../test/growth.ts';
 import { aliasDrawOf } from '../../test/random-alias-draws.ts';
+import {
+  defGraftDrawOf,
+  identityOf,
+  reachesLanded,
+  servicesOf,
+  shuffledIdentities,
+} from '../../test/random-def-grafts.ts';
 import { doubledGraftDrawOf } from '../../test/random-doubled-grafts.ts';
 import { isRef, nodesIn } from '../../test/random-draft.ts';
 import { graftDrawOf, removalHistoryOf } from '../../test/random-grafts.ts';
@@ -1653,6 +1666,55 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     ]);
     expect(order).toBeLessThan(orders.linear);
   });
+
+  test('many Endpoints naming the top of one long chain of alias defs whose end lost a field are merged in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = endpointsNamingAnAliasChainLosingField(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const order = orderOf(merged(endpointsNamingAnAliasChainLosingField), sizes, orders.linear);
+
+    expect(published.formerInputs.map(({ defs }) => Object.keys(defs))).toEqual([
+      ['a0~1'],
+      ['a0~1'],
+      ['a0~1'],
+    ]);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('many Endpoints naming the top of one long chain of alias defs, each alias def’s description changed, are merged in time that grows with them', {
+    timeout: growthTimeout,
+  }, () => {
+    const { baseline, proposed } = endpointsNamingChangedAliasDefs(3);
+
+    const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+    const order = orderOf(merged(endpointsNamingChangedAliasDefs), sizes, orders.linear);
+
+    expect(published.formerInputs).toEqual([]);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test.each([
+    'description',
+    'gained field',
+    'retyped field',
+    'union option',
+    'retargeted refs',
+  ] as const satisfies readonly ChainEnd[])(
+    'many Endpoints naming the top of one long chain of object defs whose end changed (%s) with no field to put back are merged in time that grows with them, and keep no Former Input',
+    { timeout: growthTimeout },
+    (change) => {
+      const shapeOf = (count: number) => endpointsNamingOneChainChangedAt(count, change);
+      const { baseline, proposed } = shapeOf(3);
+
+      const published = publishedSnapshotOf(baseline, proposed, mergedAt);
+      const order = orderOf(merged(shapeOf), endpointSizes, orders.linear);
+
+      expect(published.formerInputs).toEqual([]);
+      expect(order).toBeLessThan(orders.linear);
+    },
+  );
 });
 
 describe('publishedSnapshotOf: former Inputs over a seeded def graph', () => {
@@ -2240,5 +2302,84 @@ describe('publishedSnapshotOf: former Inputs over seeded draws whose proposed ve
     });
 
     expect(problems).toEqual([]);
+  });
+});
+
+describe('publishedSnapshotOf: former Inputs of Endpoints over seeded draws that remove fields only inside defs', () => {
+  const draws = Array.from({ length: 3_000 }, (_, seed) => defGraftDrawOf(seed));
+  const identitiesOf = (count: number) =>
+    Array.from({ length: count }, (_, index) => identityOf(index));
+
+  function publishedUnder(draw: ReturnType<typeof defGraftDrawOf>, identities: readonly string[]) {
+    const { baseline, proposed } = servicesOf(draw, identities);
+    return publishedSnapshotOf(publishedFirst(baseline), proposed, publishedAt('1.1.0'));
+  }
+
+  const published = draws.map((draw) => publishedUnder(draw, identitiesOf(draw.bodies.length)));
+
+  /** Whether the draw's Endpoints differ in whether they keep a Former Input. */
+  const isMixed = (seed: number) => {
+    const kept = identitiesOf((draws[seed] as (typeof draws)[number]).bodies.length).map(
+      (identity) =>
+        (published[seed] as PublishedServiceSnapshot).formerInputs.some(
+          (former) => former.endpoint === identity,
+        ),
+    );
+    return kept.includes(true) && kept.includes(false);
+  };
+
+  test('the draws hold removals that landed, edits that put no field back, and neither', () => {
+    const landed = draws.filter(({ landed: owners }) => owners.length > 0);
+    const steps = ['field', 'items', 'value', 'rest', 'variant'].map(
+      (step) => landed.filter(({ kinds }) => kinds.has(`graft: ${step}`)).length,
+    );
+    const counts = [
+      draws.filter((draw) => draw.landed.length === 0 && draw.edited.length > 0).length,
+      draws.filter((draw) => draw.landed.length === 0 && draw.edited.length === 0).length,
+      landed.length,
+      draws.filter((_, seed) => isMixed(seed)).length,
+    ];
+
+    expect([counts, steps.map((count) => count >= 50)]).toEqual([
+      [
+        expect.toSatisfy((count: number) => count >= 100),
+        expect.toSatisfy((count: number) => count >= 100),
+        expect.toSatisfy((count: number) => count >= 1_000),
+        expect.toSatisfy((count: number) => count >= 100),
+      ],
+      [true, true, true, true, true],
+    ]);
+  });
+
+  test('an Endpoint keeps a Former Input exactly when its body reaches a def a removal landed in', () => {
+    const wrong = draws.flatMap((draw, seed) => {
+      const formers = (published[seed] as PublishedServiceSnapshot).formerInputs;
+      return draw.bodies.flatMap((body, index) => {
+        const isKept = formers.some((former) => former.endpoint === identityOf(index));
+        return isKept === reachesLanded(draw, body) ? [] : [`${seed}: Endpoint ${index}`];
+      });
+    });
+
+    expect(wrong).toEqual([]);
+  });
+
+  test('the Former Inputs kept are the same whatever order the Endpoints’ identities put them in', () => {
+    const different = draws.flatMap((draw, seed) => {
+      const identities = identitiesOf(draw.bodies.length);
+      const next = seededNext(seed + 7);
+      const permuted = shuffledIdentities(identities, next);
+      const again = publishedUnder(draw, permuted).formerInputs;
+      const formersOf = (identity: string, formers: readonly FormerInput[]) =>
+        formers.find((former) => former.endpoint === identity);
+      return identities.flatMap((identity, index) => {
+        const was = formersOf(identity, (published[seed] as PublishedServiceSnapshot).formerInputs);
+        const now = formersOf(permuted[index] as string, again);
+        const bare = (former: FormerInput | undefined) =>
+          former === undefined ? undefined : { ...former, endpoint: '' };
+        return isDeepStrictEqual(bare(was), bare(now)) ? [] : [`${seed}: Endpoint ${index}`];
+      });
+    });
+
+    expect(different).toEqual([]);
   });
 });
