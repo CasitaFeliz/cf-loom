@@ -109,9 +109,9 @@ function recordedMet(reading: Reading, met: MetPair): void {
   if (met.hop === undefined) {
     registeredAsSource(reading, record);
   } else if (met.hop.kind === 'again') {
-    const next = recordOf(reading, met.hop.first).next;
+    const next = recordOf(reading, met.hop.entered);
     record.next = next;
-    next?.dependents.push(record);
+    next.dependents.push(record);
   }
 }
 

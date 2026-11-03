@@ -5,8 +5,6 @@ import { type MetPair, type PairWalk, pairWalkOf, type Walked } from './pair-wal
 /** What is kept for a pair of defs values: the walk every question about them shares, and what it learned of the pairs it met. */
 type Kept = {
   readonly walk: PairWalk;
-  /** The pair each pair holding a `ref` led to. */
-  readonly onward: WeakMap<MetPair, MetPair>;
   /** Whether a removed field is found from a pair, final once the question that met it ends. */
   readonly answers: WeakMap<MetPair, boolean>;
 };
@@ -20,7 +18,7 @@ function keptFor(defs: BothDefs): Kept {
   if (known !== undefined) {
     return known;
   }
-  const made = { walk: pairWalkOf(defs), onward: new WeakMap(), answers: new WeakMap() };
+  const made = { walk: pairWalkOf(defs), answers: new WeakMap() };
   byProposed.set(defs.proposed, made);
   return made;
 }
@@ -33,7 +31,7 @@ type Read = {
   readonly holders: Map<MetPair, MetPair[]>;
   /** The pairs a removed field is found in. */
   readonly seeds: MetPair[];
-  /** The pairs that led to a pair entered before, with the pair that entered it. */
+  /** The pairs that led to a pair entered before, with that pair. */
   readonly agains: (readonly [MetPair, MetPair])[];
 };
 
@@ -43,7 +41,7 @@ function heldBy(read: Read, held: MetPair, holder: MetPair): void {
   read.holders.set(held, holders);
 }
 
-function readWalked(walked: readonly Walked[], known: Kept): Read {
+function readWalked(walked: readonly Walked[]): Read {
   const read: Read = { met: new Set(), holders: new Map(), seeds: [], agains: [] };
   for (const item of walked) {
     if (item.kind === 'found' && item.finding.shape.kind === 'field-removed') {
@@ -54,24 +52,20 @@ function readWalked(walked: readonly Walked[], known: Kept): Read {
       if (reached.kind !== 'root') {
         heldBy(read, item.met, reached.by);
       }
-      if (reached.kind === 'hop') {
-        known.onward.set(reached.by, item.met);
-      }
       if (hop?.kind === 'again') {
-        read.agains.push([item.met, hop.first]);
+        read.agains.push([item.met, hop.entered]);
       }
     }
   }
   return read;
 }
 
-/** A pair that led to a pair entered before holds the answer of the pair that entered it led to, from this question or an earlier one. */
+/** A pair that led to a pair entered before holds that pair's answer, from this question or an earlier one. */
 function readAgains(read: Read, known: Kept): void {
-  for (const [again, first] of read.agains) {
-    const target = known.onward.get(first);
-    if (target !== undefined && read.met.has(target)) {
+  for (const [again, target] of read.agains) {
+    if (read.met.has(target)) {
       heldBy(read, target, again);
-    } else if (target !== undefined && known.answers.get(target) === true) {
+    } else if (known.answers.get(target) === true) {
       read.seeds.push(again);
     }
   }
@@ -101,7 +95,7 @@ function pairsFinding(read: Read): ReadonlySet<MetPair> {
 export function walkFindsRemovedField(root: NodePair, defs: BothDefs): boolean {
   const known = keptFor(defs);
   const walked = known.walk.pairsFrom(root, []);
-  const read = readWalked(walked, known);
+  const read = readWalked(walked);
   readAgains(read, known);
   const finding = pairsFinding(read);
   for (const met of read.met) {

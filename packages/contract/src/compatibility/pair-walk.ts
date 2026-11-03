@@ -73,13 +73,12 @@ export type Reached =
 /**
  * What a pair holding a `ref` leads to: each `ref` side the def it stands for through its alias
  * defs, as its Def graph resolves it, and a side written inline as it is: entered here and
- * followed next; entered by an earlier pair, `first`, and not followed; or, for two `ref`s naming
- * one def the def comparison finds nothing differing in, or resolving to one such def, never
- * followed.
+ * followed next; entered before, as `entered`, and not followed; or, for two `ref`s naming one def
+ * the def comparison finds nothing differing in, or resolving to one such def, never followed.
  */
 export type Hop = { readonly resolved: BothResolved } & (
   | { readonly kind: 'first' }
-  | { readonly kind: 'again'; readonly first: MetPair }
+  | { readonly kind: 'again'; readonly entered: MetPair }
   | { readonly kind: 'unchanged' }
 );
 
@@ -103,7 +102,7 @@ export function pairWalkOf(defs: BothDefs): PairWalk {
 
 type Walking = {
   readonly defs: BothDefs;
-  /** The pairs the walk entered, by their nodes, each with the pair holding the `ref` that entered it. */
+  /** The pairs a hop entered, by their nodes. */
   readonly entered: Map<SchemaNode, Map<SchemaNode, MetPair>>;
   /** The alias pairs with findings whose findings this walk gave. */
   readonly given: Set<AliasLink>;
@@ -123,10 +122,11 @@ type Level = {
 function walkedFrom(root: Placed, walking: Walking): readonly Walked[] {
   const walked: Walked[] = [];
   const levels: Level[] = [];
-  const open = (placed: Placed) => {
+  const open = (placed: Placed): MetPair => {
     const level = levelOf(placed, walking);
     walked.push({ kind: 'met', met: level.met });
     levels.push(level);
+    return level.met;
   };
   open(root);
   for (let level = levels.at(-1); level !== undefined; level = levels.at(-1)) {
@@ -144,10 +144,17 @@ function walkedFrom(root: Placed, walking: Walking): readonly Walked[] {
       walked.push({ kind: 'passed', read: () => passedOver(level.met, walking) });
     }
     if (level.onward !== undefined) {
-      open(hopPlacedFrom(level.met, level.onward));
+      enteredAs(walking, level.onward, open(hopPlacedFrom(level.met, level.onward)));
     }
   }
   return walked;
+}
+
+function enteredAs({ entered }: Walking, { baseline, proposed }: NodePair, met: MetPair): void {
+  entered.set(
+    baseline,
+    (entered.get(baseline) ?? new Map<SchemaNode, MetPair>()).set(proposed, met),
+  );
 }
 
 function insidePlacedIn(met: MetPair, finding: Extract<Finding, { kind: 'inside' }>): Placed {
@@ -220,18 +227,15 @@ function metPairOf(placed: Placed, { defs, entered }: Walking): Opened {
   if (isSameRefs || isUnchangedResolved(resolved, defs)) {
     return { met: { ...placed, hop: { kind: 'unchanged', resolved } }, passes, onward: undefined };
   }
-  const first = entered.get(onward.baseline)?.get(onward.proposed);
-  if (first !== undefined) {
+  const known = entered.get(onward.baseline)?.get(onward.proposed);
+  if (known !== undefined) {
     return {
-      met: { ...placed, hop: { kind: 'again', resolved, first } },
+      met: { ...placed, hop: { kind: 'again', resolved, entered: known } },
       passes,
       onward: undefined,
     };
   }
-  const met: MetPair = { ...placed, hop: { kind: 'first', resolved } };
-  const byProposed = entered.get(onward.baseline) ?? new Map<SchemaNode, MetPair>();
-  entered.set(onward.baseline, byProposed.set(onward.proposed, met));
-  return { met, passes, onward };
+  return { met: { ...placed, hop: { kind: 'first', resolved } }, passes, onward };
 }
 
 function resolvedOf({ baseline, proposed }: NodePair, defs: BothDefs): BothResolved {
