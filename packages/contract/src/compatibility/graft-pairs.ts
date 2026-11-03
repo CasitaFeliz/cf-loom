@@ -4,7 +4,7 @@ import type { NodePair } from './findings.ts';
 import { placeCopy } from './graft-copy.ts';
 import { followedPairOf, graftRecorded, pairMet } from './graft-names.ts';
 import { defPut, type Frame, type Place, renamedRef, type Walk } from './graft-walk.ts';
-import { findingsOf } from './schemas.ts';
+import { findingsOf } from './pair-findings.ts';
 
 /** Applies the next finding of a pair being built: the pair inside it followed, or a field removed grafted back. */
 export function stepGraft(walk: Walk, frame: Extract<Frame, { kind: 'graft' }>): void {
@@ -75,7 +75,7 @@ function pushGraft(walk: Walk, pair: NodePair, place: Place): void {
   walk.frames.push({
     kind: 'graft',
     former: pair.baseline,
-    findings: findingsOf(pair, walk.defs).values(),
+    findings: findingsOf(pair, walk.defs, 'use').values(),
     owner: place.owner,
     node: pair.proposed,
     edits: [],
