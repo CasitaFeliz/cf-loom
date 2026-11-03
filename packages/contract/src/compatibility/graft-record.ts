@@ -28,7 +28,7 @@ export type PairRecord = {
   source: number | undefined;
 };
 
-/** A pair of a former node and a proposed def that a chain of `ref`s from a proposed `ref` ends at; `base` is the name of the proposed def. */
+/** The pair of a former node and a proposed def that a proposed `ref` leads to; `base` is the name of the proposed def. */
 export type PairSource = {
   readonly kind: 'pair';
   readonly base: string;
