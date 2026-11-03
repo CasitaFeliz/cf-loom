@@ -20,13 +20,11 @@ export type PairRecord = {
   readonly edits: RecordEdit[];
   /** The records that hold this one: the pair it is inside, and each pair holding a `ref` that leads to it. */
   readonly dependents: PairRecord[];
-  /** The def the chain of `ref`s this pair is on stands for, from the proposed `ref` that starts it; none when it starts at a proposed side written inline. */
+  /** The def the proposed `ref` of the pair holding it stands for, which its hop leads to; none for a pair whose proposed side is written inline. */
   readonly via: ResolvedRef | undefined;
-  /** The record one hop on, for a pair holding a `ref` that is followed or leads to a pair entered before. */
+  /** The record of the pair the hop leads to, for a pair holding a `ref` that is followed or leads to a pair entered before. */
   next: PairRecord | undefined;
-  /** The pair holding no `ref` that the chain of hops from this pair ends at: itself for such a pair, none when the chain stops at two `ref`s nothing differs in. */
-  end: PairRecord | undefined;
-  /** Where the def source it ends sits among the sources, when it is the pair a chain from a proposed `ref` ends at. */
+  /** Where the def source it is sits among the sources, when it is the pair a proposed `ref` leads to. */
   source: number | undefined;
 };
 
@@ -102,7 +100,6 @@ function recordedMet(reading: Reading, met: MetPair): void {
     dependents: [],
     via: viaOf(met, parent),
     next: undefined,
-    end: undefined,
     source: undefined,
   };
   reading.records.set(met, record);
@@ -110,29 +107,15 @@ function recordedMet(reading: Reading, met: MetPair): void {
     linkedUnder(parent, record, reached);
   }
   if (met.hop === undefined) {
-    chainEnded(reading, record, record);
     registeredAsSource(reading, record);
   } else if (met.hop.kind === 'again') {
     const next = recordOf(reading, met.hop.first).next;
     record.next = next;
     next?.dependents.push(record);
-    chainEnded(reading, record, next?.end);
   }
 }
 
-/** A pair at the end of a chain of hops gives the end to every pair holding a `ref` before it, back to the pair that starts the chain. */
-function chainEnded(reading: Reading, last: PairRecord, end: PairRecord | undefined): void {
-  for (let record = last; ; ) {
-    record.end = end;
-    const { reached } = record.met;
-    if (reached.kind !== 'hop') {
-      return;
-    }
-    record = recordOf(reading, reached.by);
-  }
-}
-
-/** The pair a chain from a proposed `ref` ends at is a def the graft meets, once, where the chain's first pair meets it. */
+/** The pair a proposed `ref` leads to is a def the graft meets, once, where the first pair holding a `ref` to it meets it. */
 function registeredAsSource(reading: Reading, record: PairRecord): void {
   if (record.met.reached.kind === 'hop' && record.via !== undefined) {
     record.source = reading.sources.all.length;

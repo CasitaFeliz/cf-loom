@@ -74,11 +74,11 @@ function isChildEdit(edit: RecordEdit): edit is Extract<RecordEdit, { kind: 'chi
 }
 
 /** The records whose nodes a pair's node is built from: the pairs inside it, or, for a pair written in place against a `ref`, the pair its chain ends at. */
-function neededBy({ met, edits, end }: PairRecord): readonly PairRecord[] {
+function neededBy({ met, edits, next }: PairRecord): readonly PairRecord[] {
   if (met.hop === undefined) {
     return edits.filter(isChildEdit).map((edit) => edit.record);
   }
-  return met.pair.proposed.type !== 'ref' && end !== undefined ? [end] : [];
+  return met.pair.proposed.type !== 'ref' && next !== undefined ? [next] : [];
 }
 
 /** A pair's node once the nodes it is built from are built. */
@@ -87,13 +87,13 @@ function nodeOf(record: PairRecord, building: Building): SchemaNode {
   if (hop === undefined) {
     return heldNodeOf(pair.proposed, editsOf(record, building));
   }
-  if (record.end === undefined) {
+  if (record.next === undefined) {
     return pair.proposed;
   }
   if (pair.proposed.type !== 'ref') {
-    return heldFor(building.built, record.end);
+    return heldFor(building.built, record.next);
   }
-  const name = record.end.source === undefined ? undefined : building.names[record.end.source];
+  const name = record.next.source === undefined ? undefined : building.names[record.next.source];
   const nullable = hop.resolved.proposed?.nullable === true;
   return name === undefined ? pair.proposed : renamedRef(pair.proposed, { name, nullable });
 }
