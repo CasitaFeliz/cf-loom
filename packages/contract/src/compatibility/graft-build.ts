@@ -73,7 +73,7 @@ function isChildEdit(edit: RecordEdit): edit is Extract<RecordEdit, { kind: 'chi
   return edit.kind === 'child';
 }
 
-/** The records whose nodes a pair's node is built from: the pairs inside it, or, for a pair written in place against a `ref`, the pair its chain ends at. */
+/** The records whose nodes a pair's node is built from: the pairs inside it, or, for a pair written in place against a `ref`, the pair its hop leads to. */
 function neededBy({ met, edits, next }: PairRecord): readonly PairRecord[] {
   if (met.hop === undefined) {
     return edits.filter(isChildEdit).map((edit) => edit.record);

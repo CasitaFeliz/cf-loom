@@ -20,9 +20,9 @@ type Grafted = Pick<FormerInput, 'input' | 'defs'>;
 /**
  * A former Input rewritten onto an Endpoint's query and body: the Endpoint's, with every field the
  * former Input has and they lack grafted in as it was, wherever the Input rules compare fields, and
- * the defs they reach, the Endpoint's under their names and the others named apart; `undefined`
- * when it grafts no field, so the former Input is forgotten, and at once when no pair walk from
- * its query or body finds a removed field.
+ * the defs they reach, the Endpoint's under their names and the others named apart; `undefined`,
+ * with nothing recorded, when no pair walk from its query or body finds a removed field, so the
+ * former Input is forgotten.
  */
 export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted | undefined {
   const defs = { baseline: former.defs, proposed: onto.defs };
@@ -31,9 +31,6 @@ export function graftedInputOf(former: GraftSource, onto: GraftTarget): Grafted 
     return undefined;
   }
   const record = graftRecordOf(roots, defs);
-  if (record.grafting.length === 0) {
-    return undefined;
-  }
   const built = builtGraftOf(record, defNamesOf(record, onto.defs));
   if (built.query.type !== 'object') {
     throw new Error('A query grafted into no object: a bug.');

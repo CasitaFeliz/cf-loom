@@ -38,19 +38,19 @@ function heldBy(read: Read, held: MetPair, holder: MetPair): void {
   read.holders.set(held, holders);
 }
 
-function readWalked(walked: readonly Walked[]): Read {
+function readWalked(given: readonly Walked[]): Read {
   const read: Read = { met: new Set(), holders: new Map(), seeds: [], agains: [] };
-  for (const item of walked) {
-    if (item.kind === 'found' && item.finding.shape.kind === 'field-removed') {
-      read.seeds.push(item.in);
-    } else if (item.kind === 'met') {
-      read.met.add(item.met);
-      const { reached, hop } = item.met;
+  for (const walked of given) {
+    if (walked.kind === 'found' && walked.finding.shape.kind === 'field-removed') {
+      read.seeds.push(walked.in);
+    } else if (walked.kind === 'met') {
+      read.met.add(walked.met);
+      const { reached, hop } = walked.met;
       if (reached.kind !== 'root') {
-        heldBy(read, item.met, reached.by);
+        heldBy(read, walked.met, reached.by);
       }
       if (hop?.kind === 'again') {
-        read.agains.push([item.met, hop.entered]);
+        read.agains.push([walked.met, hop.entered]);
       }
     }
   }
@@ -84,12 +84,11 @@ function pairsFinding(read: Read): ReadonlySet<MetPair> {
 }
 
 /**
- * The pairs among the walked items from which the walk gives a `found` finding of a removed
- * field: the pairs it is found in, and every pair that holds one of them, by a pair inside it, a
+ * The pairs among those a walk gave from which it gives a `found` finding of a removed field: the pairs it is found in, and every pair that holds one of them, by a pair inside it, a
  * `ref` that leads to it, or a `ref` that leads again to a pair it led to.
  */
-export function pairsFindingRemovedField(walked: readonly Walked[]): ReadonlySet<MetPair> {
-  const read = readWalked(walked);
+export function pairsFindingRemovedField(given: readonly Walked[]): ReadonlySet<MetPair> {
+  const read = readWalked(given);
   readAgains(read);
   return pairsFinding(read);
 }
@@ -101,13 +100,13 @@ export function pairsFindingRemovedField(walked: readonly Walked[]): ReadonlySet
  * once the question that met it ends.
  */
 export function walkFindsRemovedField(root: NodePair, defs: BothDefs): boolean {
-  const walked = keptWalkFor(defs).pairsFrom(root, []);
-  const finding = pairsFindingRemovedField(walked);
-  for (const item of walked) {
-    if (item.kind === 'met') {
-      answers.set(item.met, finding.has(item.met));
+  const given = keptWalkFor(defs).pairsFrom(root, []);
+  const finding = pairsFindingRemovedField(given);
+  for (const walked of given) {
+    if (walked.kind === 'met') {
+      answers.set(walked.met, finding.has(walked.met));
     }
   }
-  const first = walked[0];
+  const first = given[0];
   return first?.kind === 'met' && finding.has(first.met);
 }

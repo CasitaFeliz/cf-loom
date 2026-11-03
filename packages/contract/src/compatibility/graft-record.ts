@@ -41,8 +41,6 @@ export type GraftRecord = {
   readonly sources: DefSources<PairSource>;
   /** What the walk gave for the query, then for the body. */
   readonly walked: readonly Walked[];
-  /** The records into which a field is grafted back. */
-  readonly grafting: readonly PairRecord[];
 };
 
 type Reading = {
@@ -50,7 +48,6 @@ type Reading = {
   readonly records: Map<MetPair, PairRecord>;
   readonly sources: DefSources<PairSource>;
   readonly walked: Walked[];
-  readonly grafting: PairRecord[];
 };
 
 /** A Former Input's query and body as one pair walk meets them, each pair once, with the defs it names in the order met. */
@@ -61,25 +58,24 @@ export function graftRecordOf(roots: GraftRoots, defs: BothDefs): GraftRecord {
     records: new Map(),
     sources: { all: [], copied: new Map() },
     walked: [],
-    grafting: [],
   };
   const query = partRecorded(reading, walk, roots.query);
   const body = roots.body === undefined ? undefined : partRecorded(reading, walk, roots.body);
-  const { sources, walked, grafting } = reading;
-  return { query, body, sources, walked, grafting };
+  const { sources, walked } = reading;
+  return { query, body, sources, walked };
 }
 
 function partRecorded(reading: Reading, walk: PairWalk, root: NodePair): PairRecord {
-  const walked = walk.pairsFrom(root, []);
-  for (const item of walked) {
-    reading.walked.push(item);
-    if (item.kind === 'met') {
-      recordedMet(reading, item.met);
-    } else if (item.kind === 'found') {
-      recordedFound(reading, item);
+  const given = walk.pairsFrom(root, []);
+  for (const walked of given) {
+    reading.walked.push(walked);
+    if (walked.kind === 'met') {
+      recordedMet(reading, walked.met);
+    } else if (walked.kind === 'found') {
+      recordedFound(reading, walked);
     }
   }
-  const first = walked[0];
+  const first = given[0];
   return recordOf(reading, first?.kind === 'met' ? first.met : undefined);
 }
 
@@ -160,5 +156,4 @@ function recordedFound(
   const record = recordOf(reading, met);
   const copy = copyRecordOf(field.schema, reading.defs.baseline, reading.sources);
   record.edits.push({ kind: 'field', name: step.name, field, copy });
-  reading.grafting.push(record);
 }
