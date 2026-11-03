@@ -18,8 +18,6 @@ export type PairRecord = {
   readonly met: MetPair;
   /** The edits in the order the pair's findings name them. */
   readonly edits: RecordEdit[];
-  /** The records that hold this one: the pair it is inside, and each pair holding a `ref` that leads to it. */
-  readonly dependents: PairRecord[];
   /** The record of the pair the hop leads to, for a pair holding a `ref` that is followed or leads to a pair entered before. */
   next: PairRecord | undefined;
   /** Where the def source it is sits among the sources, when it is the pair a proposed `ref` leads to. */
@@ -41,6 +39,8 @@ export type GraftRecord = {
   readonly query: PairRecord;
   readonly body: PairRecord | undefined;
   readonly sources: DefSources<PairSource>;
+  /** What the walk gave for the query, then for the body. */
+  readonly walked: readonly Walked[];
   /** The records into which a field is grafted back. */
   readonly grafting: readonly PairRecord[];
 };
@@ -49,6 +49,7 @@ type Reading = {
   readonly defs: BothDefs;
   readonly records: Map<MetPair, PairRecord>;
   readonly sources: DefSources<PairSource>;
+  readonly walked: Walked[];
   readonly grafting: PairRecord[];
 };
 
@@ -59,17 +60,19 @@ export function graftRecordOf(roots: GraftRoots, defs: BothDefs): GraftRecord {
     defs,
     records: new Map(),
     sources: { all: [], copied: new Map() },
+    walked: [],
     grafting: [],
   };
   const query = partRecorded(reading, walk, roots.query);
   const body = roots.body === undefined ? undefined : partRecorded(reading, walk, roots.body);
-  const { sources, grafting } = reading;
-  return { query, body, sources, grafting };
+  const { sources, walked, grafting } = reading;
+  return { query, body, sources, walked, grafting };
 }
 
 function partRecorded(reading: Reading, walk: PairWalk, root: NodePair): PairRecord {
   const walked = walk.pairsFrom(root, []);
   for (const item of walked) {
+    reading.walked.push(item);
     if (item.kind === 'met') {
       recordedMet(reading, item.met);
     } else if (item.kind === 'found') {
@@ -95,7 +98,6 @@ function recordedMet(reading: Reading, met: MetPair): void {
   const record: PairRecord = {
     met,
     edits: [],
-    dependents: [],
     next: undefined,
     source: undefined,
   };
@@ -108,7 +110,6 @@ function recordedMet(reading: Reading, met: MetPair): void {
   } else if (met.hop.kind === 'again') {
     const next = recordOf(reading, met.hop.entered);
     record.next = next;
-    next.dependents.push(record);
   }
 }
 
@@ -129,13 +130,11 @@ function linkedUnder(parent: PairRecord, record: PairRecord, reached: Reached): 
       return;
     case 'hop':
       parent.next = record;
-      record.dependents.push(parent);
       return;
     case 'inside': {
       const [step] = reached.steps;
       if (step !== undefined) {
         parent.edits.push({ kind: 'child', step, record });
-        record.dependents.push(parent);
       }
       return;
     }

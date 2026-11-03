@@ -1,5 +1,6 @@
 import { type Defs, defGraphOf } from '../walker/index.ts';
-import type { GraftRecord, PairRecord } from './graft-record.ts';
+import type { GraftRecord } from './graft-record.ts';
+import { pairsFindingRemovedField } from './pair-closure.ts';
 
 /**
  * The name each def source takes, in the order the sources are met: none for a pair that grafts
@@ -9,32 +10,19 @@ import type { GraftRecord, PairRecord } from './graft-record.ts';
  * collides with a declared one.
  */
 export function defNamesOf(record: GraftRecord, declared: Defs): readonly (string | undefined)[] {
-  const apart = recordsNamedApartIn(record);
+  const apart = pairsFindingRemovedField(record.walked);
   const used = new Set<string>();
   const nextSuffix = new Map<string, number>();
   const graph = defGraphOf(declared);
   const isTaken = (name: string) => graph.def(name) !== undefined || used.has(name);
   return record.sources.all.map((source) => {
-    if (source.kind === 'pair' && !apart.has(source.end)) {
+    if (source.kind === 'pair' && !apart.has(source.end.met)) {
       return undefined;
     }
     const name = freeNameOf(source.base, { isTaken, nextSuffix });
     used.add(name);
     return name;
   });
-}
-
-/** The records that graft a field and every record that holds one of them, however far up, by a pair inside it or a `ref` that leads to it. */
-function recordsNamedApartIn({ grafting }: GraftRecord): ReadonlySet<PairRecord> {
-  const apart = new Set(grafting);
-  const pending = [...grafting];
-  for (let record = pending.pop(); record !== undefined; record = pending.pop()) {
-    for (const dependent of record.dependents.filter((held) => !apart.has(held))) {
-      apart.add(dependent);
-      pending.push(dependent);
-    }
-  }
-  return apart;
 }
 
 /** The name a def comes from if free, else that name with the first free suffix, `~1`, `~2`…, tried from the one after the last the base took, since no name is ever freed. */

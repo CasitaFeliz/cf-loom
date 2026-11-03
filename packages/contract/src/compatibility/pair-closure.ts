@@ -2,26 +2,23 @@ import type { Defs } from '../walker/index.ts';
 import type { BothDefs, NodePair } from './findings.ts';
 import { type MetPair, type PairWalk, pairWalkOf, type Walked } from './pair-walk.ts';
 
-/** What is kept for a pair of defs values: the walk every question about them shares, and what it learned of the pairs it met. */
-type Kept = {
-  readonly walk: PairWalk;
-  /** Whether a removed field is found from a pair, final once the question that met it ends. */
-  readonly answers: WeakMap<MetPair, boolean>;
-};
+const kept = new WeakMap<Defs, WeakMap<Defs, PairWalk>>();
 
-const kept = new WeakMap<Defs, WeakMap<Defs, Kept>>();
-
-function keptFor(defs: BothDefs): Kept {
-  const byProposed = kept.get(defs.baseline) ?? new WeakMap<Defs, Kept>();
+/** The walk every question about two defs values shares. */
+function keptWalkFor(defs: BothDefs): PairWalk {
+  const byProposed = kept.get(defs.baseline) ?? new WeakMap<Defs, PairWalk>();
   kept.set(defs.baseline, byProposed);
   const known = byProposed.get(defs.proposed);
   if (known !== undefined) {
     return known;
   }
-  const made = { walk: pairWalkOf(defs), answers: new WeakMap() };
+  const made = pairWalkOf(defs);
   byProposed.set(defs.proposed, made);
   return made;
 }
+
+/** Whether a removed field is found from a pair a kept walk met, final once the question that met it ends. */
+const answers = new WeakMap<MetPair, boolean>();
 
 /** What a question read of the pairs its walk gave. */
 type Read = {
@@ -61,11 +58,11 @@ function readWalked(walked: readonly Walked[]): Read {
 }
 
 /** A pair that led to a pair entered before holds that pair's answer, from this question or an earlier one. */
-function readAgains(read: Read, known: Kept): void {
+function readAgains(read: Read): void {
   for (const [again, target] of read.agains) {
     if (read.met.has(target)) {
       heldBy(read, target, again);
-    } else if (known.answers.get(target) === true) {
+    } else if (answers.get(target) === true) {
       read.seeds.push(again);
     }
   }
@@ -87,19 +84,29 @@ function pairsFinding(read: Read): ReadonlySet<MetPair> {
 }
 
 /**
+ * The pairs among the walked items from which the walk gives a `found` finding of a removed
+ * field: the pairs it is found in, and every pair that holds one of them, by a pair inside it, a
+ * `ref` that leads to it, or a `ref` that leads again to a pair it led to.
+ */
+export function pairsFindingRemovedField(walked: readonly Walked[]): ReadonlySet<MetPair> {
+  const read = readWalked(walked);
+  readAgains(read);
+  return pairsFinding(read);
+}
+
+/**
  * Whether a pair walk from the root gives a `found` finding of a removed field: read from one walk
  * kept for the two defs values, whose memo every question about them shares, each pair it meets
  * answered once, from its own findings and the answers of the pairs it leads to, and kept as final
  * once the question that met it ends.
  */
 export function walkFindsRemovedField(root: NodePair, defs: BothDefs): boolean {
-  const known = keptFor(defs);
-  const walked = known.walk.pairsFrom(root, []);
-  const read = readWalked(walked);
-  readAgains(read, known);
-  const finding = pairsFinding(read);
-  for (const met of read.met) {
-    known.answers.set(met, finding.has(met));
+  const walked = keptWalkFor(defs).pairsFrom(root, []);
+  const finding = pairsFindingRemovedField(walked);
+  for (const item of walked) {
+    if (item.kind === 'met') {
+      answers.set(item.met, finding.has(item.met));
+    }
   }
   const first = walked[0];
   return first?.kind === 'met' && finding.has(first.met);
