@@ -14,8 +14,9 @@ import { seededNext } from './random-schemas.ts';
 /**
  * A Service of several Endpoints over one graph of defs, whose next version removes fields only
  * inside the defs, and edits some others in ways that put no field back. Each Endpoint's Input
- * body keeps some of the fields the draw's body holds, so the Endpoints reach different defs. Now
- * and then no field is removed at all.
+ * body keeps some of the fields the draw's body holds, so the Endpoints reach different defs; the
+ * Service holds only the defs the bodies reach, so each def a field was removed from or edited is
+ * one an Endpoint reaches. Now and then no field is removed at all.
  */
 export type DefGraftDraw = {
   readonly baselineDefs: Defs;
@@ -87,13 +88,28 @@ export function defGraftDrawOf(seed: number): DefGraftDraw {
   const count = 2 + Math.floor(next() * 4);
   const fields = bodyFieldsOf(proposedBody);
   const bodies = Array.from({ length: count }, () => subsetOf(fields, next));
-  return {
+  return reachedOnly({
     baselineDefs,
     proposedDefs,
     bodies,
     landed: isUntouched ? [] : draw.landed,
     edited,
     kinds: draw.kinds,
+  });
+}
+
+/** The draw with only the defs its bodies reach, on each side, and the removals and edits made in them. */
+function reachedOnly(draw: DefGraftDraw): DefGraftDraw {
+  const baselineReached = namesReachedBy(draw.bodies, draw.baselineDefs);
+  const proposedReached = namesReachedBy(draw.bodies, draw.proposedDefs);
+  const only = (defs: Defs, reached: ReadonlySet<string>): Defs =>
+    Object.fromEntries(Object.entries(defs).filter(([name]) => reached.has(name)));
+  return {
+    ...draw,
+    baselineDefs: only(draw.baselineDefs, baselineReached),
+    proposedDefs: only(draw.proposedDefs, proposedReached),
+    landed: draw.landed.filter((name) => baselineReached.has(name)),
+    edited: draw.edited.filter((name) => proposedReached.has(name)),
   };
 }
 

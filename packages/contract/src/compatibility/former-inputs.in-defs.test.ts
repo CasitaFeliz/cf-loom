@@ -11,7 +11,7 @@ import {
 } from '../../test/random-def-grafts.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { publishedAt } from '../../test/snapshots.ts';
-import { type FormerInput, publishedSnapshotOf } from '../internal/index.ts';
+import { compatibilityReportOf, type FormerInput, publishedSnapshotOf } from '../internal/index.ts';
 
 describe('publishedSnapshotOf: former Inputs of Endpoints over seeded draws that remove fields only inside defs', () => {
   const draws = Array.from({ length: 3_000 }, (_, seed) => defGraftDrawOf(seed));
@@ -59,6 +59,28 @@ describe('publishedSnapshotOf: former Inputs of Endpoints over seeded draws that
       ],
       [true, true, true, true, true],
     ]);
+  });
+
+  test('a draw whose removals landed has an Endpoint that reaches one of them', () => {
+    const unreached = draws.filter(
+      (draw) => draw.landed.length > 0 && !draw.bodies.some((body) => reachesLanded(draw, body)),
+    );
+
+    expect(unreached.length).toBe(0);
+  });
+
+  test('the Compatibility Check accepts the Service of every draw', () => {
+    const refused: number[] = [];
+    for (const [seed, draw] of draws.entries()) {
+      const { baseline, proposed } = servicesOf(draw, identitiesOf(draw));
+      try {
+        compatibilityReportOf(publishedFirst(baseline), proposed);
+      } catch {
+        refused.push(seed);
+      }
+    }
+
+    expect(refused).toEqual([]);
   });
 
   test('an Endpoint keeps a Former Input exactly when its body reaches a def a removal landed in', () => {
