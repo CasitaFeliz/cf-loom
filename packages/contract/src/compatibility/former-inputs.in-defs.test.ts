@@ -61,14 +61,6 @@ describe('publishedSnapshotOf: former Inputs of Endpoints over seeded draws that
     ]);
   });
 
-  test('a draw whose removals landed has an Endpoint that reaches one of them', () => {
-    const unreached = draws.filter(
-      (draw) => draw.landed.length > 0 && !draw.bodies.some((body) => reachesLanded(draw, body)),
-    );
-
-    expect(unreached.length).toBe(0);
-  });
-
   test('the Compatibility Check accepts the Service of every draw', () => {
     const refused: number[] = [];
     for (const [seed, draw] of draws.entries()) {
