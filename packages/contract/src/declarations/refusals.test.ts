@@ -518,4 +518,16 @@ describe('the types of a refusal that lists names, beyond the plain tuple', () =
     expect(endpointAt('/orders/:id').path).toBe('/orders/:id');
     expect(endpointRequiring([tenant]).guards).toHaveLength(1);
   });
+
+  test('a Dependency of a thousand Endpoints of one Provider is accepted by its type', () => {
+    const getZeta = providedAs('zeta-service', 'getZeta', 'public');
+    type Twice<List extends readonly unknown[]> = readonly [...List, ...List];
+    type Thousand = Twice<
+      Twice<Twice<Twice<Twice<Twice<Twice<Twice<Twice<Twice<readonly [typeof getZeta]>>>>>>>>>
+    >;
+    type Written = Parameters<typeof defineDependency<{ readonly endpoints: Thousand }>>[0];
+
+    expectTypeOf<Thousand>().toExtend<Written['endpoints']>();
+    expectTypeOf<Thousand['length']>().toEqualTypeOf<1024>();
+  });
 });

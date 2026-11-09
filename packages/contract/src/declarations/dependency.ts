@@ -22,7 +22,10 @@ export type Dependency<
   readonly endpoints: Endpoints;
 };
 
-/** The Providers of the Endpoints listed, each once, in the order the Endpoints list them, its open part last. */
+/**
+ * The Providers of the Endpoints listed, each once, in the order the Endpoints list them, its open
+ * part last: what a refusal names, so built only for a Dependency that is refused.
+ */
 type ProviderList<Endpoints, Listed extends readonly string[] = []> = Endpoints extends readonly [
   infer First,
   ...infer Rest,
@@ -34,7 +37,7 @@ type ProviderList<Endpoints, Listed extends readonly string[] = []> = Endpoints 
 
 /** The names of the Providers whose Endpoints a declaration lists, as their types give them. */
 type ListedProvidersOf<Declaration extends DependencyDeclaration> = LiteralNames<
-  ProviderList<Declaration['endpoints']>[number]
+  ProviderNameOf<Declaration['endpoints'][number]>
 >;
 
 /** What a Dependency must also satisfy: its Endpoints are one Provider's, since one client calls one base URL. */
