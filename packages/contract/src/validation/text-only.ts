@@ -74,16 +74,19 @@ export function conflictFailures(
 
 function partFailures(slot: OutlinedSlot): readonly DeclarationFailure[] {
   const { at, node, part } = slot;
-  if (!isObjectPart(part) || node.type === undefined) {
+  if (!isObjectPart(part)) {
     return [];
   }
   const textIn = partFieldOf(part);
   const name = placeNameOf(at);
-  if (node.type !== 'object') {
+  if (node.type !== undefined && node.type !== 'object') {
     return [failure(at, 'not-an-object-schema', `${name} is an object of its fields`)];
   }
   if (node.nullable === true) {
     return [failure(at, 'nullable-text', `${name} is never nullable`)];
+  }
+  if (node.type === undefined) {
+    return [];
   }
   const examplesByField = partExamplesByField(node);
   return Object.entries(node.fields).flatMap(([field, { schema }]) => {

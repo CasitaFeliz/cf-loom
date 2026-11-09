@@ -399,6 +399,24 @@ describe('validateRoot: params beside a schema that fails', () => {
     });
   });
 
+  test('params that are nullable and whose kind is not built tell that they are never nullable, and the date', () => {
+    const params = z.date().nullable() as unknown as z.ZodObject<{ orderId: z.ZodUUID }>;
+    const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });
+
+    expect(validateEndpoint(getOrder)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: paramsAt,
+          rule: 'nullable-text',
+          message: 'params is never nullable',
+        },
+        dateRefusal(paramsAt),
+      ],
+    });
+  });
+
   test('an object holding a field named constructor tells that name alone, since it is unbuilt', () => {
     const params = headersOf({ orderId: z.uuid(), constructor: z.string() });
     const getOrder = defineEndpoint({ ...listOrders, path: '/orders/:orderId', input: { params } });

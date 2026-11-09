@@ -587,6 +587,31 @@ describe('validateRoot: a Message body beside a schema that fails', () => {
     ]);
   });
 
+  test('a body that is a nullable schema whose kind is not built tells that it is no object', () => {
+    expect(validateMessages([anEvent({ body: z.date().nullable() })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(eventAt)],
+    });
+  });
+
+  test('a body that is a nullable ref to a def whose kind is not built tells that it is no object', () => {
+    const tree: z.ZodType = z
+      .object({
+        constructor: z.string(),
+        get next() {
+          return tree.optional();
+        },
+      })
+      .meta({ id: 'tree' });
+
+    const validated = validateMessages([anEvent({ body: tree.nullable() })]);
+
+    expect(validated.kind === 'invalid' ? validated.failures.map(({ kind }) => kind) : []).toEqual([
+      'declaration',
+      'not-allowed',
+    ]);
+  });
+
   test('a body that is a nullable ref to a def that fails on its own tells both', () => {
     expect(validateMessages([anEvent({ body: treeWith(z.date()).nullable() })])).toEqual({
       kind: 'invalid',

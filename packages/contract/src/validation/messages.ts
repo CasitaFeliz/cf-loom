@@ -88,24 +88,18 @@ export function messageBodyFailures(
 
 /**
  * Whether an outline is known to be no object: nullable, of a kind other than object, or a `ref`
- * whose def is, read through any alias defs by the same rule. One whose kind is not built is no
- * verdict, since the fix of what is refused decides it.
+ * whose def is, read through any alias defs by the same rule. A nullable one is none whatever
+ * replaces what is refused, while one whose kind is not built is otherwise no verdict.
  */
 function isNoObject(node: Outline, graph: DefGraph<Outline>): boolean {
-  if (node.type === undefined) {
-    return false;
-  }
-  if (node.type !== 'ref') {
-    return node.type !== 'object' || node.nullable === true;
-  }
-  const resolved = graph.resolved(node);
-  if (resolved === undefined) {
+  const resolved = node.type === 'ref' ? graph.resolved(node) : undefined;
+  if (node.type === 'ref' && resolved === undefined) {
     return true;
   }
-  const { def } = resolved;
-  return (
-    def.type !== undefined && (resolved.nullable || def.type !== 'object' || def.nullable === true)
-  );
+  const judged = resolved?.def ?? node;
+  const isNullable =
+    node.nullable === true || resolved?.nullable === true || judged.nullable === true;
+  return isNullable || (judged.type !== undefined && judged.type !== 'object');
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {
