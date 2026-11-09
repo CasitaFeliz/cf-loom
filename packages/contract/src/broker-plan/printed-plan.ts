@@ -1,6 +1,6 @@
 import type { Problem } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
-import type { RoutedSubscription } from '../wire/index.ts';
+import { type RoutedSubscription, subjectOf } from '../wire/index.ts';
 import { type BrokerPlan, brokerPlanOfRoutes, type RoutedService } from './broker-plan.ts';
 import type { ReadPlan } from './read-plan.ts';
 
@@ -14,9 +14,11 @@ export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | 
   return streamDifferenceOf(plan, printed, service) ?? consumerDifferenceOf(plan, printed, service);
 }
 
-/** The Message Versions of the Service's own Stream and the Subscriptions the Durable consumers are. */
+/** The Message Versions its Streams' subjects name for the Service, each once, and the Subscriptions the Durable consumers are. */
 function routedOf(service: string, read: ReadPlan): RoutedService {
   const subjects = read.streams.flatMap((stream) => stream.subjects);
+  const own = subjects.filter((subject) => subject.service === service);
+  const messages = new Map(own.map((message) => [subjectOf(service, message), message]));
   const subscriptions: RoutedSubscription[] = [];
   for (const { consumed, subject } of read.consumers) {
     if (consumed.kind === 'subscription') {
@@ -25,7 +27,7 @@ function routedOf(service: string, read: ReadPlan): RoutedService {
   }
   return {
     service,
-    messages: subjects.filter((subject) => subject.service === service),
+    messages: [...messages.values()],
     subscriptions,
   };
 }
@@ -92,7 +94,7 @@ type Comparison = {
   readonly placeOf: (index: number, item: string) => Path;
 };
 
-/** An item the printed list does not hold, then one it holds that the given list lacks. */
+/** An item the printed list lacks, then one it does not hold, then the first out of its order or repeated. */
 function listDifferenceOf(
   given: readonly string[],
   printed: readonly string[],
@@ -111,6 +113,11 @@ function listDifferenceOf(
       at: where.at,
       reason: `lacks ${lacking}, which the plan's names print for ${where.service}`,
     };
+  }
+  for (const [index, item] of given.entries()) {
+    if (item !== printed[index]) {
+      return unprintedAt(where.placeOf(index, item), where.service);
+    }
   }
   return undefined;
 }

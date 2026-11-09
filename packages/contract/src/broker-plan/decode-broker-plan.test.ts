@@ -95,6 +95,11 @@ const chargeCardConsumer = 'orders-service_command_ChargeCard_v1';
 const refundConsumer = 'orders-service_command_Refund_v1';
 const refundSubject = 'orders-service.command.Refund.v1';
 
+/** The subjects of the Stream of orders-service the plan lists. */
+function ordersSubjectsOf(plan: EditablePlan): string[] {
+  return plan.streams['orders-service']?.subjects ?? [];
+}
+
 /** The plan with the fields of one Durable consumer it lists replaced. */
 function withConsumer(
   plan: EditablePlan,
@@ -571,6 +576,35 @@ describe('reading a broker plan', () => {
         `durableConsumers lacks ${refundConsumer}, which the plan's names print for orders-service`,
       ),
     );
+  });
+
+  test.each([
+    [
+      'subjects out of code point order',
+      (plan: EditablePlan) =>
+        withStream(plan, 'orders-service', { subjects: ordersSubjectsOf(plan).toReversed() }),
+      'streams.orders-service.subjects.0',
+    ],
+    [
+      'a subject listed twice',
+      (plan: EditablePlan) =>
+        withStream(plan, 'orders-service', {
+          subjects: [...ordersSubjectsOf(plan), refundSubject].toSorted(),
+        }),
+      'streams.orders-service.subjects.2',
+    ],
+    [
+      'Durable consumers out of code point order',
+      (plan: EditablePlan) => ({
+        ...plan,
+        durableConsumers: Object.fromEntries(Object.entries(plan.durableConsumers).reverse()),
+      }),
+      'durableConsumers.orders-service_notify-on-settled',
+    ],
+  ])('a plan with %s is malformed, naming the first item out of place', (_, edit, at) => {
+    const decoded = decodeBrokerPlan(edit(aPrintedPlan()));
+
+    expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
   });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {
