@@ -8,7 +8,13 @@ import {
   providedEvent,
   type Subscription,
 } from '../src/index.ts';
-import { type BrokerPlan, brokerPlanOf, snapshotOf, validateRoot } from '../src/internal/index.ts';
+import {
+  type BrokerPlan,
+  brokerPlanOf,
+  type Failure,
+  snapshotOf,
+  validateRoot,
+} from '../src/internal/index.ts';
 import { aRootPackage } from './root-package.ts';
 
 /** A Message Version of a Service's own, as a draw names it. */
@@ -33,18 +39,31 @@ export type ServiceModel = {
   readonly subscriptions: readonly ModelSubscription[];
 };
 
-/** The plan `cf-loom broker-plan` prints for a model declared through the public API, or nothing when the Service is invalid. */
-export function brokerPlanOfModel(
-  model: ServiceModel,
-  prefix: string | null,
-): BrokerPlan | undefined {
+/** What declaring a model through the public API gives: the plan `cf-loom broker-plan` prints, or the refusal of `generate` and whether only rules a plan leaves out refused it. */
+export type PrintedModel =
+  | { readonly kind: 'printed'; readonly plan: BrokerPlan }
+  | { readonly kind: 'refused'; readonly isOnlyByRulesThePlanLeavesOut: boolean };
+
+/** The rules a Broker plan says nothing of: one kind for each Message name, and no Subscription to a Retired Event. */
+const rulesThePlanLeavesOut: ReadonlySet<string> = new Set([
+  'message-kind',
+  'retired-event-subscribed',
+]);
+
+/** The plan `cf-loom broker-plan` prints for a model declared through the public API, or why `generate` refuses the Service. */
+export function brokerPlanOfModel(model: ServiceModel, prefix: string | null): PrintedModel {
   const root = declaredRootOf(model);
   const validated = validateRoot(root, aRootPackage(root, { packageName: model.service }));
   if (validated.kind !== 'valid') {
-    return undefined;
+    const isLeftOut = (failure: Failure) =>
+      failure.kind === 'declaration' && rulesThePlanLeavesOut.has(failure.rule);
+    return { kind: 'refused', isOnlyByRulesThePlanLeavesOut: validated.failures.every(isLeftOut) };
   }
   const snapshot = snapshotOf(validated);
-  return snapshot.kind === 'service' ? brokerPlanOf(snapshot, prefix) : undefined;
+  if (snapshot.kind !== 'service') {
+    return { kind: 'refused', isOnlyByRulesThePlanLeavesOut: false };
+  }
+  return { kind: 'printed', plan: brokerPlanOf(snapshot, prefix) };
 }
 
 const body = z.object({ id: z.string() });
@@ -159,7 +178,7 @@ function isDefined<Value>(value: Value | undefined): value is Value {
   return value !== undefined;
 }
 
-/** The model of a Service whose live Messages are the given subjects, a Command with its first Version Active, and whose Subscriptions are given. */
+/** The model of a Service whose live Messages are the given subjects, a Command with its first Version Active, and whose Subscriptions are given, an Event of its own that one receives and no subject holds declared Retired. */
 function modelOf(
   service: string,
   subjects: readonly SubjectParts[],
@@ -175,21 +194,23 @@ function modelOf(
   }
   const own = [...messages.values()];
   const subscribed = subscriptions.filter(({ provider }) => provider === undefined);
-  const unlisted = subscribed
-    .filter(
-      ({ event }) =>
-        !own.some(
-          (one) => one.kind === 'event' && one.name === event.name && one.version === event.version,
-        ),
-    )
-    .map(({ event }) => ({
-      kind: 'event' as const,
-      name: event.name,
-      version: event.version,
-      lifecycle: 'active' as const,
-    }));
+  const unlisted = new Map<string, { name: string; version: number }>();
+  for (const { event } of subscribed) {
+    const isListed = own.some(
+      (one) => one.kind === 'event' && one.name === event.name && one.version === event.version,
+    );
+    if (!isListed) {
+      unlisted.set(`${event.name}/${event.version}`, event);
+    }
+  }
+  const retired = [...unlisted.values()].map(({ name, version }) => ({
+    kind: 'event' as const,
+    name,
+    version,
+    lifecycle: 'retired' as const,
+  }));
   const withKind = (kind: 'event' | 'command') =>
-    [...own, ...unlisted]
+    [...own, ...retired]
       .filter((message) => message.kind === kind)
       .map(({ name, version, lifecycle }) => ({ name, version, lifecycle }));
   return { service, events: withKind('event'), commands: withKind('command'), subscriptions };

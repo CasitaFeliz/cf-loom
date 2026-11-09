@@ -36,11 +36,11 @@ function printedPlansOf(seed: number) {
   for (let draw = 0; draw < draws; draw += 1) {
     const model = drawnModel(next);
     const prefix = drawnPrefix(next);
-    const plan = brokerPlanOfModel(model, prefix);
-    if (plan === undefined) {
+    const declared = brokerPlanOfModel(model, prefix);
+    if (declared.kind === 'refused') {
       refused += 1;
     } else {
-      printed.push({ model, prefix, plan });
+      printed.push({ model, prefix, plan: declared.plan });
     }
   }
   return { printed, refused };
@@ -96,8 +96,8 @@ describe('the plans cf-loom broker-plan prints', () => {
   });
 });
 
-/** What the oracle says of a plan a decoder accepted: the Service its names declare prints the same plan, or is no valid Service. */
-type Verdict = 'matches' | 'excluded' | 'unreadable' | 'differs';
+/** What the oracle says of a plan a decoder accepted: the Service its names declare prints the same plan, is refused only by a rule the plan leaves out, or is wrong. */
+type Verdict = 'matches' | 'excluded' | 'unreadable' | 'invalid' | 'differs';
 
 /** A Service declared from the names of a plan through the public API, which prints its plan again, compared with the plan. */
 function verdictOf(decoded: BrokerPlan): Verdict {
@@ -106,10 +106,10 @@ function verdictOf(decoded: BrokerPlan): Verdict {
     return 'unreadable';
   }
   const declared = brokerPlanOfModel(model, decoded.prefix);
-  if (declared === undefined) {
-    return 'excluded';
+  if (declared.kind === 'refused') {
+    return declared.isOnlyByRulesThePlanLeavesOut ? 'excluded' : 'invalid';
   }
-  return JSON.stringify(declared) === JSON.stringify(decoded) ? 'matches' : 'differs';
+  return JSON.stringify(declared.plan) === JSON.stringify(decoded) ? 'matches' : 'differs';
 }
 
 /** What a plan with one site's text changed decodes to, judged: the kind of outcome it is, and why it is wrong when it is. */
