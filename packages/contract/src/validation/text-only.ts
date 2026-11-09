@@ -128,7 +128,7 @@ function fieldFailures(
   { name, schema, partExamples }: TextField,
 ): readonly DeclarationFailure[] {
   const fieldAt = inFields(at, name);
-  const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
+  const items = textItemsOf(part, schema);
   if (schema.nullable === true || items.nullable === true) {
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
   }
@@ -145,12 +145,19 @@ function fieldFailures(
   return [failure(fieldAt, 'not-text', message)];
 }
 
+/** The schema whose text a field carries: a query param's list holds the items, any other field is its own. */
+function textItemsOf(part: TextIn, schema: SchemaNode): SchemaNode;
+function textItemsOf(part: TextIn, schema: Outline): Outline;
+function textItemsOf(part: TextIn, schema: Outline): Outline {
+  return part === 'query' && schema.type === 'array' ? schema.items : schema;
+}
+
 /** What a whole text field takes as values: its enum's shared texts and the values no part can carry. */
 function valueFailures(
   { at, part }: Located,
   { name, schema, partExamples }: TextField & { readonly schema: SchemaNode },
 ): readonly DeclarationFailure[] {
-  const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
+  const items = textItemsOf(part, schema);
   const place = { at, part };
   return [
     ...sharedTextFailures(place, name, items),

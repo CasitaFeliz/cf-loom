@@ -1,5 +1,5 @@
 import { refsWrittenIn } from './children.ts';
-import type { Outline } from './walked.ts';
+import type { DefsOf, Outline } from './walked.ts';
 
 /** The defs whose nodes write a `ref` to each name, and every name a def or a `ref` gives. */
 export type Referrers = {
@@ -8,7 +8,7 @@ export type Referrers = {
 };
 
 /** The referrers of some defs, found by reading each def's own nodes once. */
-export function referrersOf(defs: Readonly<Record<string, Outline>>): Referrers {
+export function referrersOf(defs: DefsOf): Referrers {
   const namesGiven = new Set(Object.keys(defs));
   const referrersByName = new Map<string, string[]>();
   for (const [name, def] of Object.entries(defs)) {

@@ -145,32 +145,38 @@ function isWalkedInPart(state: State, node: Walked): boolean {
   return node.kind === 'not-allowed' && state.remembered.holdsWrittenTooDeep(node.tree);
 }
 
-/** Every def the walk wrote whole that no failure took the place of, in the order written. */
-export function defsOf(state: State): Readonly<Record<string, SchemaNode>> {
-  const defs: [string, SchemaNode][] = [];
-  for (const [name, schema] of state.schemaById) {
-    const entered = state.remembered.enteredOf(schema);
-    if (isWhole(entered?.def) && defNameOf(entered?.answer) !== undefined) {
-      defs.push([name, entered.def]);
-    }
-  }
-  return Object.fromEntries(defs);
-}
-
-/** Every def the walk wrote or was writing, by its id, a def that failed or was failed included. */
-export function judgedDefsOf(state: State): JudgedDefs {
-  const defs: [string, Outline][] = [];
-  for (const [name, schema] of state.schemaById) {
-    const def = state.remembered.enteredOf(schema)?.def;
-    if (def !== undefined) {
-      defs.push([name, def]);
-    }
-  }
-  return Object.fromEntries(defs);
-}
-
 /** A def the walk wrote, by the id it wrote, with the entry that wrote it. */
 type WrittenDef = { readonly name: string; readonly entered: Entered; readonly def: Outline };
+
+/** A def written whole that no failure took the place of. */
+type StandingDef = WrittenDef & { readonly def: SchemaNode };
+
+/** Every def the walk wrote or was writing, a def that failed or was failed included, in the order written. */
+function judgedEntriesOf(state: State): readonly WrittenDef[] {
+  const entries: WrittenDef[] = [];
+  for (const [name, schema] of state.schemaById) {
+    const entered = state.remembered.enteredOf(schema);
+    if (entered?.def !== undefined) {
+      entries.push({ name, entered, def: entered.def });
+    }
+  }
+  return entries;
+}
+
+function isStanding(written: WrittenDef): written is StandingDef {
+  return isWhole(written.def) && defNameOf(written.entered.answer) !== undefined;
+}
+
+/** Every def the walk wrote or was writing, by its id: what the rules over defs judge. */
+export function judgedDefsOf(state: State): JudgedDefs {
+  return Object.fromEntries(judgedEntriesOf(state).map(({ name, def }) => [name, def]));
+}
+
+/** Every judged def that was written whole and that no failure took the place of, in the order written. */
+export function defsOf(state: State): Readonly<Record<string, SchemaNode>> {
+  const standing = judgedEntriesOf(state).filter(isStanding);
+  return Object.fromEntries(standing.map(({ name, def }) => [name, def]));
+}
 
 /**
  * A group of schemas closing: each nodeless cycle among the defs it wrote, a def that failed or

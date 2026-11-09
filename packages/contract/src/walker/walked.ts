@@ -85,11 +85,14 @@ export type Outline =
   | AllOfOutline
   | Unbuilt;
 
+/** Some defs by name, each a node or an outline: a Snapshot's defs, or the defs a walk judged. */
+export type DefsOf<Node extends Outline = Outline> = Readonly<Record<string, Node>>;
+
 /**
  * The defs a walk judged, by their id: every def it wrote or was writing when it failed, each as
  * the outline it was built as, so the rules over defs judge a def that fails too.
  */
-export type JudgedDefs = Readonly<Record<string, Outline>>;
+export type JudgedDefs = DefsOf;
 
 /** An outline of nothing the walk built: where a refused construct stands. */
 const unbuilt: Unbuilt = {};

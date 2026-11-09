@@ -5,12 +5,12 @@ import { type Refused, refused } from './not-allowed.ts';
 import type { Composition, JudgedDefs, Outline, Reached } from './walked.ts';
 
 /**
- * Every `allOf` or `union` the walk built or was building that reaches an Open Enum, at any depth: a reader of an
- * intersection merges what each item read, and a reader of a union takes the first option that
- * parses, and neither can tell an Unknown case from a value another part declares. Each is
- * judged where the walk built it or was building it, a def's at every place the walk met the def, reach read through
- * outlines and stopping at a part the walk refused; whether a def
- * reaches one is answered once for the defs.
+ * Every `allOf` or `union` the walk built or was building that reaches an Open Enum, at any depth:
+ * a reader of an intersection merges what each item read, and a reader of a union takes the first
+ * option that parses, and neither can tell an Unknown case from a value another part declares. Each
+ * is judged where the walk built it or was building it, a def's at every place the walk met the def,
+ * its reach read through outlines and stopping at a part the walk refused; whether a def reaches
+ * one is answered once for the defs.
  */
 export function openCompositionsOf(
   compositions: readonly Composition[],
