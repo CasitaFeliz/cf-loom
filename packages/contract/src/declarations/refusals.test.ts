@@ -13,9 +13,10 @@ import {
   defineRejection,
   defineService,
   defineSubscription,
+  type ProvidedEndpoint,
   providedEndpoint,
 } from '../index.ts';
-import type { Root } from '../internal/index.ts';
+import type { IsOneLiteral, Root } from '../internal/index.ts';
 import * as internal from '../internal/index.ts';
 
 /** Every sentence the types and `generate` share, by the name `./internal` exports it under. */
@@ -558,5 +559,66 @@ describe('the types of a refusal that lists names, beyond the plain tuple', () =
 
     expectTypeOf<Thousand>().toExtend<Written['endpoints']>();
     expectTypeOf<Thousand['length']>().toEqualTypeOf<1024>();
+  });
+});
+
+/** The names a sentence lists after its colon: `a, b and c` lists `a`, `b` and `c`. */
+type NamesListedIn<Sentence> = Sentence extends `${string}: ${infer Tail}`
+  ? NamesOfList<Tail>
+  : never;
+
+type NamesOfList<Tail> = Tail extends `${infer Head}, ${infer Rest}`
+  ? Head | NamesOfList<Rest>
+  : Tail extends `${infer Head} and ${infer Last}`
+    ? Head | Last
+    : Tail;
+
+/** The sentences a Dependency of these Endpoints is refused with by its type. */
+type DependencySentences<Endpoints extends readonly [ProvidedEndpoint, ...ProvidedEndpoint[]]> =
+  SentencesOf<
+    Parameters<typeof defineDependency<{ readonly endpoints: Endpoints }>>[0]['endpoints']
+  >;
+
+describe('the Providers a Dependency is refused for are the ones its refusal lists', () => {
+  const inAlpha = providedAs('a-service', 'getAlpha', 'public');
+  const inAlphaAgain = providedAs('a-service', 'getAlphaAgain', 'public');
+  const inBeta = providedAs('b-service', 'getBeta', 'public');
+  const inGamma = providedAs('c-service', 'getGamma', 'public');
+  type Alpha = typeof inAlpha;
+  type AlphaAgain = typeof inAlphaAgain;
+  type Beta = typeof inBeta;
+  type Gamma = typeof inGamma;
+
+  test('a closed list, a repeated Provider and an open tail are refused by one sentence naming each Provider once', () => {
+    type Closed = DependencySentences<readonly [Alpha, Beta]>;
+    type Repeated = DependencySentences<readonly [Alpha, Beta, AlphaAgain]>;
+    type OpenTail = DependencySentences<readonly [Alpha, ...Beta[]]>;
+
+    expectTypeOf<IsOneLiteral<Closed>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<Closed>>().toEqualTypeOf<'a-service' | 'b-service'>();
+    expectTypeOf<IsOneLiteral<Repeated>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<Repeated>>().toEqualTypeOf<'a-service' | 'b-service'>();
+    expectTypeOf<IsOneLiteral<OpenTail>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<OpenTail>>().toEqualTypeOf<'a-service' | 'b-service'>();
+  });
+
+  test('a middle rest and an open tail of a union are refused by one sentence naming each Provider once', () => {
+    type Middle = DependencySentences<readonly [Alpha, ...Gamma[], Beta]>;
+    type UnionTail = DependencySentences<readonly [Alpha, ...(Alpha | Beta)[]]>;
+
+    expectTypeOf<IsOneLiteral<Middle>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<Middle>>().toEqualTypeOf<'a-service' | 'b-service' | 'c-service'>();
+    expectTypeOf<IsOneLiteral<UnionTail>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<UnionTail>>().toEqualTypeOf<'a-service' | 'b-service'>();
+  });
+
+  test('an Endpoint typed as a union and a union of lists are refused by one sentence naming each Provider', () => {
+    type UnionElement = DependencySentences<readonly [Alpha | Beta]>;
+    type UnionOfLists = DependencySentences<readonly [Alpha, Beta] | readonly [Beta]>;
+
+    expectTypeOf<IsOneLiteral<UnionElement>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<UnionElement>>().toEqualTypeOf<'a-service' | 'b-service'>();
+    expectTypeOf<IsOneLiteral<UnionOfLists>>().toEqualTypeOf<true>();
+    expectTypeOf<NamesListedIn<UnionOfLists>>().toEqualTypeOf<'a-service' | 'b-service'>();
   });
 });

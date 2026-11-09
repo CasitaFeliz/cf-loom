@@ -77,6 +77,15 @@ export type ListedOnce<Listed extends readonly string[], Name extends string> = 
     ? Listed
     : [...Listed, Name];
 
+/** A list with every name of a union appended once each, in the order the compiler gives the union. */
+export type ListedAll<Listed extends readonly string[], Names extends string> = [Names] extends [
+  never,
+]
+  ? Listed
+  : ListedAll<Listed, Exclude<Names, LastOf<Names>>> extends infer Earlier extends readonly string[]
+    ? ListedOnce<Earlier, LastOf<Names> & string>
+    : never;
+
 /** The names a rule may judge: a name typed as plain `string` says nothing about itself. */
 export type LiteralNames<Names> = Names extends string
   ? string extends Names

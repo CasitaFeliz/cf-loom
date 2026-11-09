@@ -4,7 +4,7 @@ import type { OneProviderSentence } from './refusals.ts';
 import type {
   DeclaredFieldsRule,
   IsOneLiteral,
-  ListedOnce,
+  ListedAll,
   LiteralNames,
   Refusal,
 } from './rules.ts';
@@ -23,16 +23,16 @@ export type Dependency<
 };
 
 /**
- * The Providers of the Endpoints listed, each once, in the order the Endpoints list them, its open
- * part last: what a refusal names, so built only for a Dependency that is refused.
+ * The Providers a refusal names: the ones the rule judged, each once, in the order the Endpoints
+ * list them and the open part last, so what is named is what was judged. Built only for a
+ * Dependency that is refused.
  */
-type ProviderList<Endpoints, Listed extends readonly string[] = []> = Endpoints extends readonly [
-  infer First,
-  ...infer Rest,
-]
-  ? ProviderList<Rest, ListedOnce<Listed, ProviderNameOf<First> & string>>
-  : Endpoints extends readonly (infer Open)[]
-    ? ListedOnce<Listed, ProviderNameOf<Open> & string>
+type ProviderList<Endpoints, Judged extends string, Listed extends readonly string[] = []> = [
+  Endpoints,
+] extends [readonly [infer First, ...infer Rest]]
+  ? ProviderList<Rest, Judged, ListedAll<Listed, ProviderNameOf<First> & Judged>>
+  : [Endpoints] extends [readonly (infer Open)[]]
+    ? ListedAll<Listed, ProviderNameOf<Open> & Judged>
     : Listed;
 
 /** The names of the Providers whose Endpoints a declaration lists, as their types give them. */
@@ -48,7 +48,11 @@ type OneProviderRule<Declaration extends DependencyDeclaration> = [
   : IsOneLiteral<ListedProvidersOf<Declaration>> extends true
     ? unknown
     : {
-        readonly endpoints: Refusal<OneProviderSentence<ProviderList<Declaration['endpoints']>>>;
+        readonly endpoints: Refusal<
+          OneProviderSentence<
+            ProviderList<Declaration['endpoints'], ListedProvidersOf<Declaration>>
+          >
+        >;
       };
 
 /** Declares the Endpoints a Contract calls of one Provider, so its client reaches no more. */
