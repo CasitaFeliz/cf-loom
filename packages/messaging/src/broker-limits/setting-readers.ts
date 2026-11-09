@@ -24,7 +24,7 @@ function shownCopyOf(value: unknown, depth: number): unknown {
     return worded(words);
   }
   if (depth > shown.depth) {
-    return value.length === 0 ? [] : [0];
+    return new Array(value.length);
   }
   const held: unknown[] = [];
   for (let at = 0; at < Math.min(value.length, shown.maxArrayLength); at++) {
