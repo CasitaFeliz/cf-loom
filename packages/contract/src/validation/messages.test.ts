@@ -527,6 +527,50 @@ describe('validateRoot: a Message body is an object of its fields', () => {
   });
 });
 
+describe('validateRoot: a Message body beside a schema that fails', () => {
+  const eventAt = 'events.OrderCreated@1 body';
+  const dateRefusal = (location: string) => ({
+    kind: 'not-allowed',
+    location,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+    alsoIn: [],
+  });
+  const bodyLine = {
+    kind: 'declaration',
+    location: eventAt,
+    rule: 'not-an-object-schema',
+    message: 'A Message body is an object of its fields: OrderCreated@1',
+  };
+  const treeWith = (leaf: z.ZodType) => {
+    const tree: z.ZodType = z.union([leaf, z.array(z.lazy(() => tree))]).meta({ id: 'tree' });
+    return tree;
+  };
+
+  test('a body that is a union with a date in an option tells both', () => {
+    const body = z.union([z.object({ orderId: z.uuid() }), z.date()]);
+
+    expect(validateMessages([anEvent({ body })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine, dateRefusal(`${eventAt}<|1>`)],
+    });
+  });
+
+  test('a body that is a ref to a def that is no object tells so when the def walked whole', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.string()) })])).toEqual({
+      kind: 'invalid',
+      failures: [bodyLine],
+    });
+  });
+
+  test('a body that is a ref to a def that fails on its own tells the def’s failure alone', () => {
+    expect(validateMessages([anEvent({ body: treeWith(z.date()) })])).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(`${eventAt}<|0>`)],
+    });
+  });
+});
+
 describe('validateRoot: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],

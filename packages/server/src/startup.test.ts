@@ -482,6 +482,39 @@ describe('serve: what it checks before the first request', () => {
     expect(serving).toThrow('endpoints.GET /since (since) input.query.at not allowed: z.date()');
   });
 
+  test('a text part that fails beside a rule of its own throws both, as generate words them', () => {
+    const since = defineEndpoint({
+      name: 'since',
+      method: 'GET',
+      path: '/since',
+      visibility: 'public',
+      description: 'Since a day',
+      input: { query: z.object({ tenant: z.string().nullable(), at: z.date() as never }) },
+      success: { status: 204 },
+    });
+    const withSince = defineService({
+      name: 'orders-service',
+      groups: [defineGroup({ name: 'orders', description: 'Orders', endpoints: [since] })],
+    });
+
+    const serving = () =>
+      serve(
+        withSince,
+        {
+          endpoints: { since: handle(since, () => success(since)) },
+          guards: {},
+        },
+        {},
+      );
+
+    const lines = refusalOf(serving).split(lineBreakPattern);
+    expect(lines).toEqual([
+      'serve() takes a Contract generate accepts:',
+      expect.stringContaining('endpoints.GET /since (since) input.query.at not allowed: z.date()'),
+      expect.stringContaining('endpoints.GET /since (since) input.query.tenant nullable-text: '),
+    ]);
+  });
+
   test('a text part that is no object throws, as generate words it', () => {
     const lookup = defineEndpoint({
       name: 'lookup',

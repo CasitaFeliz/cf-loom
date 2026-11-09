@@ -1,37 +1,28 @@
 import type * as core from 'zod/v4/core';
-import { defOf, isSchema } from './def-types.ts';
+import { isSchema } from './def-types.ts';
 import { walkedBy } from './drive.ts';
+import { walkField } from './fields.ts';
 import type { Place } from './location.ts';
-import {
-  annotatedBy,
-  hasOwnId,
-  type Metadata,
-  metadataOf,
-  withExamplesParsed,
-} from './metadata.ts';
-import type { Field, FieldOf, NotAllowed, Origin, SchemaNode } from './nodes.ts';
-import { notAllowed, refused, refusedWrapperId } from './not-allowed.ts';
+import { annotatedBy, withExamplesParsed } from './metadata.ts';
+import type { NotAllowed, Origin, SchemaNode } from './nodes.ts';
+import { notAllowed, refused } from './not-allowed.ts';
 import { compositionOf } from './open-compositions.ts';
+import { ownMetadata, withOrigin } from './origins.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   type Composition,
-  failedField,
   type JudgedDefs,
   type LocatedSchema,
   type Memo,
-  type Outline,
   outlineOf,
   type Reached,
-  type ReachedSchema,
-  refusedBeside,
   type Under,
   type Visit,
   type Walked,
   type Walker,
   type Walking,
-  walked,
 } from './walked.ts';
-import { walkDefinition, withOwnChecks } from './zod-types.ts';
+import { walkDefinition } from './zod-types.ts';
 
 /** Where a schema came from, as the caller knows it from the Definitions Packages installed. */
 export type OriginOf = (schema: core.$ZodType) => Origin | undefined;
@@ -46,6 +37,8 @@ export type WalkedLocation = { readonly at: Place; readonly walked: Walked };
 export type WalkedSchemas = {
   readonly located: readonly WalkedLocation[];
   readonly defs: Defs;
+  /** Every def the walk wrote or was writing when it failed, by its id: what the rules over defs judge. */
+  readonly judgedDefs: JudgedDefs;
   /** The remembered schema each refusal was raised inside, so the fold tells it where that schema is reached. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
 };
@@ -54,8 +47,6 @@ export type WalkedSchemas = {
 export type MeetingWalk = WalkedSchemas & {
   readonly met: ReadonlyMap<core.$ZodType, Place>;
   readonly compositions: readonly Composition[];
-  /** Every def the walk wrote or was writing when it failed, by its id: what the rules over defs judge. */
-  readonly judgedDefs: JudgedDefs;
 };
 
 /** The schemas written once under a Snapshot's `defs`, by the id that names each cycle. */
@@ -77,8 +68,13 @@ type WalkState = {
  * afresh, since it has no identity to share.
  */
 export function walkSchemas(located: readonly LocatedSchema[], originOf: OriginOf): WalkedSchemas {
-  const { located: walkedLocations, defs, memoOf } = walkMeetingSchemas(located, originOf);
-  return { located: walkedLocations, defs, memoOf };
+  const {
+    located: walkedLocations,
+    defs,
+    judgedDefs,
+    memoOf,
+  } = walkMeetingSchemas(located, originOf);
+  return { located: walkedLocations, defs, judgedDefs, memoOf };
 }
 
 /**
@@ -123,10 +119,6 @@ function reachedAt(schema: unknown, at: Under, state: WalkState): Reached {
   return withOrigin(schema, at, isSchema(schema) ? state.originOf(schema) : undefined);
 }
 
-function withOrigin(schema: unknown, at: Under, own: Origin | undefined): Reached {
-  return { ...at, schema, origin: own ?? at.origin };
-}
-
 /** A schema walked where it sits; a value that is no zod 4 schema is refused there, unread. */
 function* walkSchema(schema: unknown, under: Under, state: WalkState): Walking {
   if (!isSchema(schema)) {
@@ -155,97 +147,4 @@ function recordComposition(node: Walked, at: Reached, state: WalkState): void {
     state.compositions.push(composition);
     state.recursion.built(composition);
   }
-}
-
-/** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
-function* walkField(
-  schema: unknown,
-  under: Under,
-  state: WalkState,
-): Walking<Field, FieldOf<Outline>> {
-  if (!isSchema(schema)) {
-    return requiredField(yield* state.walker.schema(schema, under));
-  }
-  const def = defOf(schema);
-  if (def.type === 'optional') {
-    const inner = yield* state.walker.schema(def.innerType, under);
-    return optionalField(
-      throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner),
-    );
-  }
-  if (def.type === 'nonoptional') {
-    const inner = yield* walkRequired(def.innerType, under, state);
-    return requiredField(
-      throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner),
-    );
-  }
-  return requiredField(yield* state.walker.schema(schema, under));
-}
-
-function* walkRequired(schema: unknown, under: Under, state: WalkState): Walking {
-  const def = defOf(schema);
-  if (!isSchema(schema) || def?.type !== 'optional') {
-    return yield* state.walker.schema(schema, under);
-  }
-  const inner = yield* state.walker.schema(def.innerType, under);
-  return throughWrapper(wrapperOf({ schema, under, kind: def.type }, state), inner);
-}
-
-/** A field's `.optional()` or `.nonoptional()`, where it sits and which of the two it is. */
-type Wrapper = ReachedSchema & {
-  readonly kind: 'optional' | 'nonoptional';
-  readonly origin: Origin | undefined;
-};
-
-function wrapperOf(
-  { schema, under, kind }: { schema: core.$ZodType; under: Under; kind: Wrapper['kind'] },
-  state: WalkState,
-): Wrapper {
-  const origin = state.originOf(schema);
-  return { schema, at: withOrigin(schema, under, origin), kind, origin };
-}
-
-/**
- * A field's wrapper says what any schema does: its own metadata applies, and its checks are judged
- * as any schema's are. It names no cycle, so an id on it is refused beside whatever the schema
- * inside fails by.
- */
-function throughWrapper(wrapper: Wrapper, inner: Walked): Walked {
-  const { schema, at, kind, origin } = wrapper;
-  const checked = withOwnChecks(schema, inner, { at, kind });
-  const joined = hasOwnId(schema)
-    ? refusedBeside(notAllowed(at, refusedWrapperId(kind)), checked)
-    : checked;
-  const annotatedNode = annotatedBy(joined, ownMetadata(schema, at, origin));
-  return withExamplesParsed(schema, annotatedNode, at);
-}
-
-function requiredField(result: Walked): Walked<Field, FieldOf<Outline>> {
-  return fieldOf(result, true);
-}
-
-function optionalField(result: Walked): Walked<Field, FieldOf<Outline>> {
-  return fieldOf(result, false);
-}
-
-/** A field walked, or failed keeping the field it was building, with the outline of its schema. */
-function fieldOf(result: Walked, required: boolean): Walked<Field, FieldOf<Outline>> {
-  if (result.kind === 'walked') {
-    return walked({ required, schema: result.value });
-  }
-  return failedField(result.tree, { required, schema: outlineOf(result) });
-}
-
-/** What the schema itself says of its node: its metadata, and the origin it has itself. */
-function ownMetadata(
-  schema: core.$ZodType,
-  at: Reached,
-  origin: Origin | undefined,
-): Walked<Metadata> {
-  const metadata = metadataOf(schema, at);
-  if (metadata.kind === 'not-allowed' || origin === undefined) {
-    return metadata;
-  }
-  const annotations = { ...metadata.value.annotations, origin };
-  return walked({ ...metadata.value, annotations });
 }

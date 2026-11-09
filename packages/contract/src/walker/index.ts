@@ -34,6 +34,7 @@ export { defsLeadingBackWithNoNodeOf } from './nodeless-cycles.ts';
 export type {
   EnumNode,
   Field,
+  FieldOf,
   JsonPrimitive,
   NotAllowed,
   NumberNode,
@@ -74,6 +75,13 @@ export {
 } from './steps.ts';
 export type { Defs, MeetingWalk, OriginOf, WalkedLocation, WalkedSchemas } from './walk.ts';
 export { walkMeetingSchemas, walkSchemas } from './walk.ts';
-export type { LocatedSchema, Memo, Outline, Unbuilt } from './walked.ts';
-export { failuresOf, isWhole, refusalsIn } from './walked.ts';
+export type {
+  JudgedDefs,
+  LocatedSchema,
+  Memo,
+  ObjectOutline,
+  Outline,
+  Unbuilt,
+} from './walked.ts';
+export { failuresOf, isWhole, outlineOf, refusalsIn } from './walked.ts';
 export { withinStack } from './within-stack.ts';

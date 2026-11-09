@@ -5,7 +5,7 @@ import {
   messageBodySentence,
   messageVersionSentence,
 } from '../declarations/index.ts';
-import { type DefGraph, defGraphOf, inFields, type SchemaNode } from '../walker/index.ts';
+import { type DefGraph, defGraphOf, inFields, isWhole, type Outline } from '../walker/index.ts';
 import {
   type Declarations,
   isWithoutValue,
@@ -65,14 +65,14 @@ export function messageFailures(declarations: Declarations): readonly Declaratio
   ];
 }
 
-/** A Message body is an object of its fields, judged on the walked node, so a Message can grow. */
+/** A Message body is an object of its fields, judged on its outline, so a Message can grow. */
 export function messageBodyFailures(
   declarations: Declarations,
-  { nodeOf, defs }: Nodes,
+  { nodeOf, judgedDefs }: Nodes,
 ): readonly DeclarationFailure[] {
   const { events, commands } = locatedMessagesOf(declarations);
   const located = [...events, ...commands];
-  const graph = defGraphOf(defs);
+  const graph = defGraphOf(judgedDefs);
   const notObjects = located.filter(({ message }) => {
     const body = nodeOf(message, 'body');
     return body !== undefined && !isObjectOf(body, graph);
@@ -86,18 +86,25 @@ export function messageBodyFailures(
   );
 }
 
-/** Whether a node is an object, a `ref` read through its def and any alias defs; a nullable one is not. */
-function isObjectOf(node: SchemaNode, graph: DefGraph): boolean {
+/**
+ * Whether an outline is an object, a `ref` read through its def and any alias defs; a nullable one
+ * is not. One whose kind is not built is no verdict, and a `ref` is judged only through a def the
+ * walk built whole.
+ */
+function isObjectOf(node: Outline, graph: DefGraph<Outline>): boolean {
+  if (node.type === undefined) {
+    return true;
+  }
   if (node.type !== 'ref') {
     return node.type === 'object' && node.nullable !== true;
   }
   const resolved = graph.resolved(node);
-  return (
-    resolved !== undefined &&
-    !resolved.nullable &&
-    resolved.def.type === 'object' &&
-    resolved.def.nullable !== true
-  );
+  if (resolved === undefined) {
+    return false;
+  }
+  const { def } = resolved;
+  const isObject = !resolved.nullable && def.type === 'object' && def.nullable !== true;
+  return isObject || !isWhole(def);
 }
 
 function versionFailures({ at, message }: LocatedMessage): readonly DeclarationFailure[] {

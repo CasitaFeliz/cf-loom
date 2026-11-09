@@ -1,7 +1,10 @@
 import { joinedOf } from '../lines/index.ts';
 import {
+  type FieldOf,
   inFields,
-  type ObjectNode,
+  isWhole,
+  type ObjectOutline,
+  type Outline,
   type Place,
   placeNameOf,
   type SchemaNode,
@@ -21,7 +24,7 @@ import {
 } from '../written/index.ts';
 import { type DeclarationFailure, type Failure, failure } from './failures.ts';
 import { headerNameFailures } from './header-names.ts';
-import type { Nodes, WalkedSlot } from './schemas.ts';
+import type { Nodes, OutlinedSlot } from './schemas.ts';
 
 /** Where a text part's field sits, and which part carries it. */
 type Located = { readonly at: Place; readonly part: TextIn };
@@ -29,14 +32,19 @@ type Located = { readonly at: Place; readonly part: TextIn };
 /** A field of a text part, with the values the part's own examples give it. */
 type TextField = {
   readonly name: string;
-  readonly schema: SchemaNode;
+  readonly schema: Outline;
   readonly partExamples: readonly unknown[];
 };
 
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
-const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
+const textTypes: readonly (SchemaNode['type'] | undefined)[] = [
+  'string',
+  'number',
+  'boolean',
+  'enum',
+];
 
 const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',
@@ -45,8 +53,8 @@ const nouns: Readonly<Record<TextIn, string>> = {
 };
 
 /**
- * Every rule the parts that travel as text break, judged on their walked nodes, so `generate` and
- * the runtime's startup check read text parts by the same rules.
+ * Every rule the parts that travel as text break, judged on their outlines, a field only when its
+ * schema is whole, so `generate` and the runtime's startup check read text parts by the same rules.
  */
 export function textPartFailures(nodes: Nodes): readonly Failure[] {
   return nodes.slots.flatMap(partFailures);
@@ -68,9 +76,9 @@ export function conflictFailures(
   });
 }
 
-function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
+function partFailures(slot: OutlinedSlot): readonly DeclarationFailure[] {
   const { at, node, part } = slot;
-  if (!isObjectPart(part)) {
+  if (!isObjectPart(part) || node.type === undefined) {
     return [];
   }
   const textIn = partFieldOf(part);
@@ -91,10 +99,14 @@ function partFailures(slot: WalkedSlot): readonly DeclarationFailure[] {
   });
 }
 
-/** The values each field takes in the part's own examples, read once over each example's entries. */
-function partExamplesByField(part: ObjectNode): ReadonlyMap<string, readonly unknown[]> {
+/**
+ * The values each field takes in the part's own examples, read once over each example's entries;
+ * only a part walked whole has its examples parsed, so only its are read.
+ */
+function partExamplesByField(part: Outline): ReadonlyMap<string, readonly unknown[]> {
   const byField = new Map<string, unknown[]>();
-  for (const example of (part.examples ?? []).filter(isPlainObject)) {
+  const examples = isWhole(part) ? (part.examples ?? []) : [];
+  for (const example of examples.filter(isPlainObject)) {
     for (const [field, value] of Object.entries(example)) {
       const values = byField.get(field);
       if (values === undefined) {
@@ -107,6 +119,11 @@ function partExamplesByField(part: ObjectNode): ReadonlyMap<string, readonly unk
   return byField;
 }
 
+/**
+ * A field's kind is judged whatever lies inside it, since a fix inside changes no kind: a field of
+ * an object or of a part that is nullable is no text, and one whose kind is not yet built is not
+ * judged. The values it takes are judged only when its schema is whole.
+ */
 function fieldFailures(
   { at, part }: Located,
   { name, schema, partExamples }: TextField,
@@ -116,16 +133,30 @@ function fieldFailures(
   if (schema.nullable === true || items.nullable === true) {
     return [failure(fieldAt, 'nullable-text', `${nouns[part]} is never nullable: ${name}`)];
   }
+  if (items.type === undefined) {
+    return [];
+  }
   if (textTypes.includes(items.type)) {
-    const place = { at: fieldAt, part };
-    return [
-      ...sharedTextFailures(place, name, items),
-      ...unsendableTextFailures(place, name, valuesOf(schema, items, partExamples)),
-    ];
+    return isWhole(schema)
+      ? valueFailures({ at: fieldAt, part }, { name, schema, partExamples })
+      : [];
   }
   const lists = part === 'query' ? ', or a list of those' : '';
   const message = `${nouns[part]} travels as text: a string, number, boolean, literal or enum${lists}: ${name}`;
   return [failure(fieldAt, 'not-text', message)];
+}
+
+/** What a whole text field takes as values: its enum's shared texts and the values no part can carry. */
+function valueFailures(
+  { at, part }: Located,
+  { name, schema, partExamples }: TextField & { readonly schema: SchemaNode },
+): readonly DeclarationFailure[] {
+  const items = part === 'query' && schema.type === 'array' ? schema.items : schema;
+  const place = { at, part };
+  return [
+    ...sharedTextFailures(place, name, items),
+    ...unsendableTextFailures(place, name, valuesOf(schema, items, partExamples)),
+  ];
 }
 
 /**
@@ -180,13 +211,13 @@ function unsendableTextFailures(
 }
 
 function partConflicts(
-  sources: readonly { readonly owner: string; readonly node: SchemaNode | undefined }[],
+  sources: readonly { readonly owner: string; readonly node: Outline | undefined }[],
   { at, part }: { readonly at: Place; readonly part: 'headers' | 'query' },
 ): readonly DeclarationFailure[] {
   const declaredByName = new Map<string, Declared>();
   const failures: DeclarationFailure[] = [];
   for (const { owner, node } of sources.filter(hasObject)) {
-    for (const [name, field] of Object.entries(node.fields)) {
+    for (const [name, field] of Object.entries(node.fields).filter(isWholeField)) {
       const key = part === 'headers' ? name.toLowerCase() : name;
       const shape = shapeKey(field.schema);
       const first = declaredByName.get(key);
@@ -200,9 +231,14 @@ function partConflicts(
   return failures;
 }
 
+/** Whether a field's schema is whole, so its shape can be compared. */
+function isWholeField(entry: [string, FieldOf<Outline>]): entry is [string, FieldOf<SchemaNode>] {
+  return isWhole(entry[1].schema);
+}
+
 function hasObject(source: {
   readonly owner: string;
-  readonly node: SchemaNode | undefined;
-}): source is { readonly owner: string; readonly node: ObjectNode } {
+  readonly node: Outline | undefined;
+}): source is { readonly owner: string; readonly node: ObjectOutline } {
   return source.node?.type === 'object';
 }

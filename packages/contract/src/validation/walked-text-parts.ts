@@ -1,6 +1,6 @@
 import type { Endpoint, Guard, ServiceContract } from '../declarations/index.ts';
 import { isEndpoint, isGuard } from '../declarations/index.ts';
-import { type ObjectNode, walkSchemas } from '../walker/index.ts';
+import { isWhole, type ObjectNode, walkSchemas } from '../walker/index.ts';
 import { declarationsOf, type ObjectPart, type TextPartNodes } from '../written/index.ts';
 import type { Failure } from './failures.ts';
 import { paramsFailures } from './paths.ts';
@@ -26,9 +26,9 @@ export type WalkedTextParts =
 
 /**
  * Walks the text parts of every Endpoint, Guard and Rejection of a Contract once, and judges them
- * by every rule `generate` applies to text parts: what they hold, their names, the path's params,
- * an enum whose values travel as one text, an enum value or example its part cannot carry and one
- * shape per header or query name.
+ * on their outlines by every rule `generate` applies to text parts, beside what else in them fails:
+ * what they hold, their names, the path's params, an enum whose values travel as one text, an enum
+ * value or example its part cannot carry and one shape per header or query name.
  */
 export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
   const declarations = declarationsOf(contract, {});
@@ -51,7 +51,8 @@ export function walkedTextPartsOf(contract: ServiceContract): WalkedTextParts {
 function nodesByDeclarationOf(nodes: Nodes): ReadonlyMap<Endpoint | Guard, TextPartNodes> {
   const byDeclaration = new Map<Endpoint | Guard, Partial<Record<ObjectPart, ObjectNode>>>();
   for (const { owner, part, node } of nodes.slots) {
-    if (!isDeclared(owner) || node.type !== 'object') {
+    const isObject = node.type === 'object';
+    if (!isDeclared(owner) || !isObject || !isWhole(node)) {
       continue;
     }
     byDeclaration.set(owner, { ...byDeclaration.get(owner), [part]: node });
