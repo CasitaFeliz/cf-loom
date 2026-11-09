@@ -14,22 +14,22 @@ export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | 
   return streamDifferenceOf(plan, printed, service) ?? consumerDifferenceOf(plan, printed, service);
 }
 
-/** The Message Versions its Streams' subjects name for the Service, each once, and the Subscriptions the Durable consumers are. */
+/** The Message Versions of the Service its Streams' subjects and its Subscriptions to itself name, each once, and the Subscriptions the Durable consumers are. */
 function routedOf(service: string, read: ReadPlan): RoutedService {
-  const subjects = read.streams.flatMap((stream) => stream.subjects);
-  const own = subjects.filter((subject) => subject.service === service);
-  const messages = new Map(own.map((message) => [subjectOf(service, message), message]));
   const subscriptions: RoutedSubscription[] = [];
   for (const { consumed, subject } of read.consumers) {
     if (consumed.kind === 'subscription') {
-      subscriptions.push({ name: consumed.name, provider: subject.service, event: subject });
+      const event = { name: subject.name, version: subject.version };
+      subscriptions.push({ name: consumed.name, provider: subject.service, event });
     }
   }
-  return {
-    service,
-    messages: [...messages.values()],
-    subscriptions,
-  };
+  const streamed = read.streams.flatMap((stream) => stream.subjects);
+  const received = subscriptions
+    .filter((subscription) => subscription.provider === service)
+    .map(({ event }) => ({ kind: 'event' as const, service, ...event }));
+  const own = [...streamed, ...received].filter((subject) => subject.service === service);
+  const messages = new Map(own.map((message) => [subjectOf(service, message), message]));
+  return { service, messages: [...messages.values()], subscriptions };
 }
 
 function streamDifferenceOf(
