@@ -37,7 +37,7 @@ export function serviceOf(path: string): string | undefined {
 
 /**
  * Every file the TypeScript blocks of a README show, read as GitHub Flavored Markdown: each fenced block whose
- * info string starts with `ts` or `typescript`, whatever its fence or container. A path comment names a file, and
+ * info string's first word is `ts` or `typescript`, whatever its fence or container. A path comment names a file, and
  * starts another when it follows a blank line; a path that is no path of a Service is a problem, and its file is left
  * out. A file with no path comment is written under its nearest heading.
  */
