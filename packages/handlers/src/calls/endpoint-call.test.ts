@@ -984,7 +984,7 @@ describe('fault() retryAfter', () => {
     { label: '{}', given: {}, named: 'an object' },
     { label: 'Object.create(null)', given: Object.create(null), named: 'an object' },
     { label: '[1]', given: [1], named: 'a list' },
-    { label: '1n', given: 1n, named: '1' },
+    { label: '1n', given: 1n, named: 'a bigint' },
   ])('fault() refuses a retryAfter of $label, naming it as a written value', ({ given, named }) => {
     const building = () => fault({ committed: 'no', retryable: true, retryAfter: given as number });
 
@@ -1264,13 +1264,12 @@ describe('an EndpointHandler stub', () => {
   });
 });
 
-/** What a Handler of `getOrder` can return that its types do not allow: each value of the pool but the revoked Proxy, a string and an absent value. */
+/** What a Handler of `getOrder` can return that its types do not allow: each value of the pool, a string and an absent value. */
 function foreignOf(
   hooked: () => unknown,
 ): readonly { readonly label: string; readonly value: unknown }[] {
-  const pooled = foreignValues(hooked).filter(({ label }) => label !== 'a revoked Proxy');
   return [
-    ...pooled,
+    ...foreignValues(hooked),
     { label: 'a string', value: 'FORBIDDEN' },
     { label: 'absent', value: undefined },
   ];
