@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { anInstalledPackage, aRootPackage } from '../../test/root-package.ts';
 import {
@@ -60,16 +60,8 @@ const unionIsRefused =
   'not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)';
 
 /**
- * How much longer a shape may take at eight times the size: three times the growth of the size.
- * Linear code measures 7 to 14 times longer, in whole runs of this file and of the project on busy
- * cores, and when the CPU time is read in ticks of 10 ms; the quadratic code these tests were
- * written for measures 48 times or more.
- */
-const linearGrowth = 24;
-
-/**
- * A growth test builds and times its shape up to three times over, which takes up to 11 s while the
- * project's files run in parallel, and several times that on a CI runner that several runs share.
+ * A growth test times its shape many times over, which takes seconds while the project's files run
+ * in parallel, and several times that on a CI runner that several runs share.
  */
 const growthTimeout = 240_000;
 
@@ -325,11 +317,6 @@ describe('failure lines: defs that hold defs', () => {
 
   const levels = 24;
   const deepest = `success.body.t.${'a.'.repeat(levels)}leaf`;
-  /**
-   * How many times longer a chain twice as deep may take to tell: about 2 when each def is told
-   * once, and 2 to the power of its length when each of the paths to it tells it afresh.
-   */
-  const toldOnceGrowth = 8;
 
   test.for([
     ['a valid union', () => z.union([z.string(), z.number()]), []],
@@ -349,10 +336,10 @@ describe('failure lines: defs that hold defs', () => {
       };
 
       const lines = toldAt(levels)();
-      const growth = growthOf(toldAt, { small: 8, large: 16 }, toldOnceGrowth);
+      const order = orderOf(toldAt, { small: 8, large: 16 }, orders.polynomial);
 
       expect(lines).toEqual(told);
-      expect(growth).toBeLessThan(toldOnceGrowth);
+      expect(order).toBeLessThan(orders.polynomial);
     },
   );
 });
@@ -916,12 +903,12 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     const firstPlace = `success.body.f00000${'.next'.repeat(count - 1)}.at`;
     expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has a def of `count` fields holding the same dated def. */
@@ -958,11 +945,11 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toEqual([`endpoints.GET /a (alpha) success.body.holder.f000000.at ${date}`]);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has `count` dated defs as fields, each holding the one before it. */
@@ -995,13 +982,13 @@ describe('failure lines: defs reached inside one another and from the body', () 
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.c000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.c002999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
@@ -1055,13 +1042,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   const holdings: readonly (readonly [string, Holding])[] = [
@@ -1095,13 +1082,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
         return () => linesOf(root);
       };
 
-      const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
       const lines = told(count)();
 
       expect(lines).toHaveLength(count);
       expect(lines[0]).toBe(`endpoints.GET /a (alpha) success.body.a000000.at ${date}`);
       expect(lines.at(-1)).toBe(`endpoints.GET /a (alpha) success.body.a002999.at ${date}`);
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
   );
 
@@ -1130,7 +1117,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(1);
@@ -1140,7 +1127,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       ),
     );
     expect(lines[0]?.split('endpoints.')).toHaveLength(count + 1);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   /** An Endpoint whose body has `count` dated defs of their own, beside `count` Endpoints with none. */
@@ -1172,13 +1159,13 @@ describe('failure lines: many dated defs that one def holds, reached from many f
       return () => linesOf(root);
     };
 
-    const growth = growthOf(told, { small: count / 8, large: count }, linearGrowth);
+    const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
     const lines = told(count)();
 
     expect(lines).toHaveLength(count);
     expect(lines[0]).toBe(`endpoints.GET /e0 (e000000) success.body.d000000.at ${date}`);
     expect(lines.at(-1)).toBe(`endpoints.GET /e0 (e000000) success.body.d015999.at ${date}`);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 
@@ -1212,95 +1199,632 @@ describe('failure lines: a def held by a def of a Definitions Package, exported'
   });
 });
 
-/** A graph of defs: the edges each holds, the fields of the body, and the defs holding a date. */
-type DefGraph = {
-  readonly edges: readonly (readonly (readonly [string, number])[])[];
-  readonly body: readonly (readonly [string, number])[];
-  readonly dated: readonly number[];
-};
-
-/** Edges from a holder to some of the defs, each at a field of its own, named at random. */
-function edgesTo(
-  defs: readonly number[],
-  chance: number,
-  next: Next,
-): readonly (readonly [string, number])[] {
-  const names = shuffled('abcdefghijklmn'.split(''), next);
-  const held = defs.filter(() => next() < chance);
-  return held.map((def, index) => [names[index] as string, def]);
+/** The `not allowed` failures `generate` finds in a Root, each with the line it prints and the declaration it names. */
+function refusalsOf(root: Root, given: Partial<RootPackage> = {}) {
+  const validated = validateRoot(root, aRootPackage(root, given));
+  const failures = validated.kind === 'invalid' ? validated.failures : [];
+  return failures
+    .filter((failure) => failure.kind === 'not-allowed')
+    .map((failure) => ({ line: failureLineOf(failure), declaration: failure.declaration }));
 }
 
-function defGraphOf(seed: number): DefGraph {
-  const next = seededNext(seed);
-  const count = 6 + Math.floor(next() * 7);
-  const defs = Array.from({ length: count }, (_, index) => index);
-  return {
-    edges: defs.map((def) =>
-      edgesTo(
-        defs.filter((other) => other !== def),
-        0.3,
-        next,
-      ),
+/** A Service whose Groups list the Endpoints given, one list for each Group, in order. */
+function serviceOfGroups(...groups: readonly (readonly Endpoint[])[]): Root {
+  return defineService({
+    name: 'orders-service',
+    groups: groups.map((endpoints, index) =>
+      defineGroup({ name: `g${index}`, description: 'Group', endpoints } as never),
     ),
-    body: edgesTo(defs, 0.4, next),
-    dated: defs.filter(() => next() < 0.4),
+  });
+}
+
+describe('failure lines: Endpoints that share a site text', () => {
+  const stamp = '(declared in @org/definitions@4.2.0#stamp)';
+
+  test('two that hold a date at one field are one line, from the date met first, with its other site and its origin', () => {
+    const exported = z.date();
+    const earlier = anEndpoint('e0', 'GET /z', { a: exported });
+    const first = anEndpoint('e', 'GET /x', { a: z.date() });
+    const second = anEndpoint('e', 'GET /x', { a: exported });
+    const installed = anInstalledPackage(defineDefinitions({}), { stamp: exported });
+
+    const declared: readonly unknown[] = [earlier, first, second];
+
+    const refusals = refusalsOf(serviceOfGroups([earlier], [first], [second]), {
+      packages: [installed],
+    });
+
+    expect(refusals.map(({ line }) => line)).toEqual([
+      `endpoints.GET /x (e) success.body.a ${date} (also in endpoints.GET /z (e0)) ${stamp}`,
+    ]);
+    expect(refusals.map(({ declaration }) => declared.indexOf(declaration))).toEqual([2]);
+  });
+
+  test('a def one holds directly and the other through a def, at one text, is told from the declaration that holds it directly', () => {
+    const exported = z.date();
+    const inner: z.ZodType = z
+      .object({
+        d: exported,
+        get s() {
+          return z.array(inner);
+        },
+      })
+      .meta({ id: 'x' });
+    const outer: z.ZodType = z
+      .object({
+        b: inner,
+        m: z.date(),
+        get s() {
+          return z.array(outer);
+        },
+      })
+      .meta({ id: 'm' });
+    const throughDef = anEndpoint('e', 'GET /x', { a: outer });
+    const direct = anEndpoint('e', 'GET /x', { a: z.object({ b: inner }) });
+    const installed = anInstalledPackage(defineDefinitions({}), { stamp: exported });
+
+    const declared: readonly unknown[] = [throughDef, direct];
+
+    const refusals = refusalsOf(serviceOfGroups([throughDef], [direct]), { packages: [installed] });
+
+    expect(refusals.map(({ line }) => line)).toEqual([
+      `endpoints.GET /x (e) success.body.a.b.d ${date} ${stamp}`,
+      `endpoints.GET /x (e) success.body.a.m ${date}`,
+    ]);
+    expect(refusals.map(({ declaration }) => declared.indexOf(declaration))).toEqual([1, 0]);
+  });
+});
+
+const inheritedName =
+  'not allowed: a field named constructor, which every object already has (zod reads it from Object.prototype when it is absent)';
+
+const intersectionIsRefused =
+  'not allowed: an intersection that is not of open objects reaching an openEnum() (use .extend())';
+
+/**
+ * A way a field holds a schema, as the lines write it: the steps it adds to the text of a place,
+ * what it builds around the schema held, and the sentence it is refused with when that schema
+ * reaches an openEnum().
+ */
+type Holder = {
+  readonly steps: string;
+  readonly build: (held: z.ZodType) => z.ZodType;
+  readonly refusedAs?: string;
+};
+
+const holderNames = [
+  'field',
+  'option',
+  'tupleItem',
+  'tupleRest',
+  'intersectionItem',
+  'items',
+  'value',
+  'variant',
+] as const;
+
+type HolderName = (typeof holderNames)[number];
+
+const holders: Readonly<Record<HolderName, Holder>> = {
+  field: { steps: '', build: (held) => held },
+  option: {
+    steps: '<|0>',
+    build: (held) => z.union([held, z.boolean()]),
+    refusedAs: unionIsRefused,
+  },
+  tupleItem: { steps: '[1]', build: (held) => z.tuple([z.string(), held]) },
+  tupleRest: { steps: '[...]', build: (held) => z.tuple([z.string()]).rest(held) },
+  intersectionItem: {
+    steps: '[0]',
+    build: (held) => z.intersection(held, z.object({ k: z.string() })),
+    refusedAs: intersectionIsRefused,
+  },
+  items: { steps: '[]', build: (held) => z.array(held) },
+  value: { steps: '{}', build: (held) => z.record(z.string(), held) },
+  variant: {
+    steps: '<k="x">.v',
+    build: (held) =>
+      z.discriminatedUnion('k', [
+        z.object({ k: z.literal('x'), v: held }),
+        z.object({ k: z.literal('y'), w: z.string() }),
+      ]),
+  },
+};
+
+describe('failure lines: a chain of defs, each holding the one before twice', () => {
+  /** `count` defs, each holding the one before as `next` and again as `f` through `holder`, the first holding `leaf`. */
+  function twiceHeldChain(count: number, leaf: z.ZodType, holder: Holder): z.ZodType {
+    let before: z.ZodType = z.object({ leaf });
+    for (let index = 0; index < count; index++) {
+      const held = before;
+      const link: z.ZodType = z
+        .object({
+          next: held,
+          f: holder.build(held),
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      before = link;
+    }
+    return before;
+  }
+
+  const count = 16000;
+  const twiceHolders = [
+    ['a field', 'field'],
+    ['a union option', 'option'],
+    ['an intersection item', 'intersectionItem'],
+    ['a tuple item', 'tupleItem'],
+  ] as const;
+
+  test.for(twiceHolders)(
+    'a date below 16,000 defs, each holding the one before as next and through %s, is one line at the first place, in time that grows as the defs do',
+    { timeout: growthTimeout },
+    ([, name]) => {
+      const holder = holders[name];
+      const told = (size: number) => {
+        const top = twiceHeldChain(size, z.date(), holder);
+        const root = serviceWith([anEndpoint('alpha', 'GET /a', { top })]);
+        return () => linesOf(root);
+      };
+
+      const order = orderOf(told, { small: count / 8, large: count }, orders.linear);
+      const lines = told(count)();
+
+      const firstPlace = `success.body.top${`.f${holder.steps}`.repeat(count)}.leaf`;
+      expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstPlace} ${date}`]);
+      expect(order).toBeLessThan(orders.linear);
+    },
+  );
+});
+
+describe('failure lines: a shared schema held by many fields below a chain of defs', () => {
+  /** `size` defs, each holding the one before as `next`, below which a def holds one date in `size` fields. */
+  function widelyHeldRoot(size: number): Root {
+    const date = z.date();
+    const fields: Record<string, z.ZodType> = {};
+    for (let index = 0; index < size; index++) {
+      fields[`f${String(index).padStart(6, '0')}`] = date;
+    }
+    const bottom: z.ZodType = z
+      .object({
+        ...fields,
+        get self() {
+          return bottom.optional();
+        },
+      })
+      .meta({ id: 'bottom' });
+    let before = bottom;
+    for (let index = 0; index < size; index++) {
+      const held = before;
+      const link: z.ZodType = z
+        .object({
+          next: held,
+          get self() {
+            return link.optional();
+          },
+        })
+        .meta({ id: `link${index}` });
+      before = link;
+    }
+    return serviceWith([anEndpoint('alpha', 'GET /a', { top: before })]);
+  }
+
+  test('a date held by 4,000 fields of a def below 4,000 defs is one line at the first field, in time that grows as both do', {
+    timeout: growthTimeout,
+  }, () => {
+    const wide = 4000;
+    const told = (size: number) => {
+      const root = widelyHeldRoot(size);
+      return () => linesOf(root);
+    };
+
+    const order = orderOf(told, { small: wide / 8, large: wide }, orders.linear);
+    const lines = told(wide)();
+
+    const firstField = `success.body.top${'.next'.repeat(wide)}.f000000`;
+    expect(lines).toEqual([`endpoints.GET /a (alpha) ${firstField} ${date}`]);
+    expect(order).toBeLessThan(orders.linear);
+  });
+});
+
+/** Field names with the text a line writes them as: names that are prefixes of one another, quoted ones, and code points on both sides of U+FFFF. */
+const fieldNames = [
+  ['a', 'a'],
+  ['a-b', 'a-b'],
+  ['ab', 'ab'],
+  ['a_', 'a_'],
+  ['A', 'A'],
+  ['a.b', '"a.b"'],
+  ['\u{1F600}', '"\u{1F600}"'],
+  ['￿', '"￿"'],
+  ['constructor', 'constructor'],
+] as const;
+
+type FieldName = (typeof fieldNames)[number];
+
+/** What a def or a body may hold at a field of its own beside defs: a date of its own, the shared date, and a union reaching an openEnum(). */
+type Leaf = 'at' | 'sh' | 'op';
+
+/** How often a def or a body holds each leaf: unions that are an openEnum() are drawn more often than the dates that make a def fail. */
+const leafChances: Readonly<Record<Leaf, number>> = { at: 0.2, sh: 0.15, op: 0.45 };
+
+const leaves = Object.keys(leafChances) as readonly Leaf[];
+
+type Holding = {
+  readonly name: FieldName;
+  readonly holder: HolderName;
+  readonly to: number;
+};
+
+/** What one def or body holds. */
+type Holds = { readonly holdings: readonly Holding[]; readonly leaves: readonly Leaf[] };
+
+/** The body of an Endpoint, whose site is that of the Endpoint of index `site`, an earlier one when two share a site text. */
+type Body = Holds & { readonly site: number };
+
+/** A graph of defs, each on a cycle of its own, held by the bodies of Endpoints. */
+type Draw = {
+  readonly defs: readonly Holds[];
+  readonly bodies: readonly Body[];
+  readonly exported: boolean;
+};
+
+/** What one def or body holds: `least` to 3 defs of `defCount`, sometimes one twice, and some leaves. */
+function holdsOf(next: Next, defCount: number, least: number): Holds {
+  const named = shuffled(fieldNames, next).slice(0, least + Math.floor(next() * (4 - least)));
+  const targets = named.map(() => Math.floor(next() * defCount));
+  if (targets.length > 1 && next() < 0.3) {
+    targets[targets.length - 1] = targets[0] as number;
+  }
+  return {
+    holdings: named.map((name, index) => ({
+      name,
+      holder: pickOf(next, holderNames),
+      to: targets[index] as number,
+    })),
+    leaves: leaves.filter((leaf) => next() < leafChances[leaf]),
   };
 }
 
-/** Every def of the graph as a schema: each holds itself, its edges, and a date if it is dated. */
-function defsOf(graph: DefGraph): readonly z.ZodType[] {
-  const defs: z.ZodType[] = [];
-  graph.edges.forEach((edges, index) => {
-    const shape: Record<string, z.ZodType> = graph.dated.includes(index) ? { at: z.date() } : {};
-    for (const [name, to] of edges) {
-      Object.defineProperty(shape, name, { enumerable: true, get: () => defs[to] });
+function drawOf(seed: number): Draw {
+  const next = seededNext(seed * 7919);
+  const defCount = 2 + Math.floor(next() * 8);
+  const bodyCount = 1 + Math.floor(next() * 3);
+  const bodies = Array.from({ length: bodyCount }, (_, index) => ({
+    ...holdsOf(next, defCount, 1),
+    site: index > 0 && next() < 0.4 ? Math.floor(next() * index) : index,
+  }));
+  const defs = Array.from({ length: defCount }, () => holdsOf(next, defCount, 0));
+  return { defs: withoutOpenBeyondFailures(defs), bodies, exported: next() < 0.5 };
+}
+
+/** The defs a def holds, itself, and those they hold, at any depth. */
+function reachableFrom(defs: readonly Holds[], start: number): ReadonlySet<number> {
+  const seen = new Set<number>();
+  const pending = [start];
+  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
+    if (!seen.has(next)) {
+      seen.add(next);
+      for (const { to } of defs[next]?.holdings ?? []) {
+        pending.push(to);
+      }
     }
+  }
+  return seen;
+}
+
+/** Whether a def fails on its own: it holds a date, the shared date or a field named constructor. */
+function failsOnItsOwn({ leaves: held, holdings }: Holds): boolean {
+  return (
+    held.includes('at') ||
+    held.includes('sh') ||
+    holdings.some(({ name }) => name[0] === 'constructor')
+  );
+}
+
+/**
+ * The defs with the `op` leaf stripped from every def that a failing def reaches, itself included.
+ * A union or an intersection over a schema that also fails is not refused, though the
+ * README says it is at any depth, so a draw holds none, and the oracle below refuses one over
+ * every def that reaches an openEnum().
+ */
+function withoutOpenBeyondFailures(defs: readonly Holds[]): readonly Holds[] {
+  const beyondFailures = new Set<number>();
+  defs.forEach((_, start) => {
+    const reached = reachableFrom(defs, start);
+    if ([...reached].some((index) => failsOnItsOwn(defs[index] as Holds))) {
+      for (const index of reached) {
+        beyondFailures.add(index);
+      }
+    }
+  });
+  return defs.map((holds, index) =>
+    beyondFailures.has(index)
+      ? { ...holds, leaves: holds.leaves.filter((leaf) => leaf !== 'op') }
+      : holds,
+  );
+}
+
+function lazily<Made>(make: () => Made): () => Made {
+  let made: Made | undefined;
+  return () => {
+    made ??= make();
+    return made;
+  };
+}
+
+function leafOf(leaf: Leaf, shared: z.ZodType): z.ZodType {
+  switch (leaf) {
+    case 'at':
+      return z.date();
+    case 'sh':
+      return shared;
+    case 'op':
+      return z.union([openEnum(['a', 'b']), z.number()]);
+  }
+}
+
+/** The fields of a def or a body: its leaves, and each holding as a getter, since defs hold each other. */
+function shapeOf(holds: Holds, defs: readonly z.ZodType[], shared: z.ZodType) {
+  const shape: Record<string, z.ZodType> = {};
+  for (const leaf of holds.leaves) {
+    shape[leaf] = leafOf(leaf, shared);
+  }
+  for (const { name, holder, to } of holds.holdings) {
+    const held = lazily(() => holders[holder].build(defs[to] as z.ZodType));
+    Object.defineProperty(shape, name[0], { enumerable: true, get: held });
+  }
+  return shape;
+}
+
+/** The Root of a draw, and the Definitions Package that exports the shared date when it does. */
+function rootOfDraw(draw: Draw) {
+  const shared = z.date();
+  const defs: z.ZodType[] = [];
+  draw.defs.forEach((holds, index) => {
+    const shape = shapeOf(holds, defs, shared);
     Object.defineProperty(shape, 'self', {
       enumerable: true,
       get: () => z.array(defs[index] as z.ZodType),
     });
     defs.push(z.object(shape).meta({ id: `d${index}` }));
   });
-  return defs;
+  const endpoints = draw.bodies.map((body) =>
+    anEndpoint(`e${body.site}`, `GET /e${body.site}`, shapeOf(body, defs, shared)),
+  );
+  const root = serviceOfGroups(...endpoints.map((endpoint) => [endpoint]));
+  const packages = draw.exported
+    ? [anInstalledPackage(defineDefinitions({}), { stamp: shared })]
+    : [];
+  return { root, given: { packages } };
 }
 
-/** The line each dated def's date is told by: at the smallest text of the paths from the body. */
-function firstPlaceLinesOf(graph: DefGraph): readonly string[] {
-  const firstPlaceOf = new Map<number, string>();
-  const visit = (def: number, text: string, visited: readonly number[]) => {
-    const place = `${text}.at`;
-    const known = firstPlaceOf.get(def);
-    if (graph.dated.includes(def) && (known === undefined || place < known)) {
-      firstPlaceOf.set(def, place);
+/** A place a refusal is told at, with its site. */
+type At = { readonly text: string; readonly site: string };
+
+/** The text of a site of a body. */
+function siteOf({ site }: Body): string {
+  return `endpoints.GET /e${site} (e${site})`;
+}
+
+/** The order of two texts by code point, a shorter text first when it begins the other, read from the code points themselves. */
+function byPoints(left: string, right: string): number {
+  const leftPoints = Array.from(left, (point) => point.codePointAt(0) ?? 0);
+  const rightPoints = Array.from(right, (point) => point.codePointAt(0) ?? 0);
+  const common = Math.min(leftPoints.length, rightPoints.length);
+  for (let index = 0; index < common; index++) {
+    const difference = (leftPoints[index] as number) - (rightPoints[index] as number);
+    if (difference !== 0) {
+      return difference;
     }
-    for (const [name, to] of graph.edges[def] ?? []) {
-      if (!visited.includes(to)) {
-        visit(to, `${text}.${name}`, [...visited, to]);
+  }
+  return leftPoints.length - rightPoints.length;
+}
+
+/** The text a def held at a field is at, below the place `from` it is held at. */
+function belowOf(from: At, { name, holder }: Holding): At {
+  return { text: `${from.text}.${name[1]}${holders[holder].steps}`, site: from.site };
+}
+
+/**
+ * The first place of each def, in code point order, relaxing every hold as many rounds as there are
+ * defs: the smallest of its places in a body and of the places it is held at, counted from the
+ * first place of each def that holds it.
+ */
+function firstPlacesOf(draw: Draw): readonly (At | undefined)[] {
+  const inBodies = draw.defs.map(() => [] as At[]);
+  for (const body of draw.bodies) {
+    const from = { text: `${siteOf(body)} success.body`, site: siteOf(body) };
+    for (const holding of body.holdings) {
+      inBodies[holding.to]?.push(belowOf(from, holding));
+    }
+  }
+  let first: readonly (At | undefined)[] = draw.defs.map(() => undefined);
+  for (let round = 0; round <= draw.defs.length; round++) {
+    const held = inBodies.map((places) => [...places]);
+    draw.defs.forEach((holds, owner) => {
+      const from = first[owner];
+      if (from === undefined) {
+        return;
+      }
+      for (const holding of holds.holdings) {
+        held[holding.to]?.push(belowOf(from, holding));
+      }
+    });
+    first = held.map((places) => places.sort((left, right) => byPoints(left.text, right.text))[0]);
+  }
+  return first;
+}
+
+/** The sites of the bodies that reach each def, through the defs they hold. */
+function sitesReachingOf(draw: Draw): readonly ReadonlySet<string>[] {
+  const reaching = draw.defs.map(() => new Set<string>());
+  for (const body of draw.bodies) {
+    for (const { to } of body.holdings) {
+      for (const index of reachableFrom(draw.defs, to)) {
+        reaching[index]?.add(siteOf(body));
       }
     }
-  };
-  for (const [name, to] of graph.body) {
-    visit(to, `success.body.${name}`, [to]);
   }
-  return [...firstPlaceOf.values()].map((place) => `endpoints.GET /a (alpha) ${place} ${date}`);
+  return reaching;
+}
+
+/** Whether each def reaches a union that is an openEnum(), itself or through the defs it holds, so a union or an intersection that holds it is refused. */
+function reachesOpenOf({ defs }: Draw): readonly boolean[] {
+  return defs.map((_, start) =>
+    [...reachableFrom(defs, start)].some((index) => defs[index]?.leaves.includes('op')),
+  );
+}
+
+/** A refusal at a place: what is refused, the schema refused, and every site that reaches the place. */
+type Telling = {
+  readonly schema: string;
+  readonly refusal: string;
+  readonly at: At;
+  readonly sites: ReadonlySet<string>;
+};
+
+/** A def or a body that holds refusals: its name, its place and the sites that reach it. */
+type Owner = {
+  readonly id: string;
+  readonly at: At;
+  readonly sites: ReadonlySet<string>;
+};
+
+/** The refusals a def or a body holds at its place: its leaves, and the unions and intersections that hold a def reaching an openEnum(). */
+function tellingsOf(
+  owner: Owner,
+  holds: Holds,
+  reachesOpen: readonly boolean[],
+): readonly Telling[] {
+  const { id, at: from, sites } = owner;
+  const told = holds.leaves.map((leaf) => ({
+    schema: leaf === 'sh' ? 'shared' : `${id}.${leaf}`,
+    refusal: leaf === 'op' ? unionIsRefused : date,
+    at: { text: `${from.text}.${leaf}`, site: from.site },
+    sites,
+  }));
+  for (const { name, holder, to } of holds.holdings) {
+    const refusal = holders[holder].refusedAs;
+    const at = { text: `${from.text}.${name[1]}`, site: from.site };
+    if (refusal !== undefined && reachesOpen[to]) {
+      told.push({ schema: `${id}.${name[0]}`, refusal, at, sites });
+    }
+    if (name[0] === 'constructor') {
+      told.push({ schema: `${id}.${name[0]}`, refusal: inheritedName, at, sites });
+    }
+  }
+  return told;
+}
+
+/** Every refusal of a draw at each place it is held at, in a body or in a def reached from one, a def's from its first place. */
+function allTellingsOf(draw: Draw): readonly Telling[] {
+  const first = firstPlacesOf(draw);
+  const reaching = sitesReachingOf(draw);
+  const reachesOpen = reachesOpenOf(draw);
+  const inBodies = draw.bodies.flatMap((body, index) => {
+    const at = { text: `${siteOf(body)} success.body`, site: siteOf(body) };
+    return tellingsOf({ id: `b${index}`, at, sites: new Set([at.site]) }, body, reachesOpen);
+  });
+  const inDefs = draw.defs.flatMap((holds, index) => {
+    const at = first[index];
+    const sites = reaching[index] ?? new Set<string>();
+    return at === undefined ? [] : tellingsOf({ id: `d${index}`, at, sites }, holds, reachesOpen);
+  });
+  return [...inBodies, ...inDefs];
+}
+
+/** The tellings of one schema as one, at the smallest of their places, with the sites of them all. */
+function foldedBySchema(tellings: readonly Telling[]): readonly Telling[] {
+  const bySchema = new Map<string, Telling[]>();
+  for (const telling of tellings) {
+    const key = `${telling.schema} ${telling.refusal}`;
+    bySchema.set(key, [...(bySchema.get(key) ?? []), telling]);
+  }
+  return [...bySchema.values()].map((group) => {
+    const [first] = [...group].sort((left, right) => byPoints(left.at.text, right.at.text));
+    return { ...(first as Telling), sites: new Set(group.flatMap(({ sites }) => [...sites])) };
+  });
+}
+
+/** The line of the refusals at one place: the sites that also reach it in code point order, and the origin of the shared date when it is exported. */
+function lineOf(group: readonly Telling[], exported: boolean): string {
+  const [{ at, refusal, schema }] = group as readonly [Telling];
+  const sites = new Set(group.flatMap((telling) => [...telling.sites]));
+  const others = [...sites].filter((site) => site !== at.site).sort(byPoints);
+  const alsoIn = others.length === 0 ? '' : ` (also in ${others.join(', ')})`;
+  const origin =
+    exported && schema === 'shared' ? ' (declared in @org/definitions@4.2.0#stamp)' : '';
+  return `${at.text} ${refusal}${alsoIn}${origin}`;
+}
+
+/**
+ * The lines a draw prints, worked out from its own graph: each refusal inside a def at the first
+ * place of the def followed by its own steps, a schema several places hold at the first of them,
+ * with every other site. The lines are compared sorted, since their order is the order the walk
+ * meets them in, which this does not model.
+ */
+function toldLinesOf(draw: Draw): readonly string[] {
+  const byPlace = new Map<string, Telling[]>();
+  for (const telling of foldedBySchema(allTellingsOf(draw))) {
+    const key = `${telling.at.text} ${telling.refusal}`;
+    byPlace.set(key, [...(byPlace.get(key) ?? []), telling]);
+  }
+  return [...byPlace.values()].map((group) => lineOf(group, draw.exported));
 }
 
 const graphSeeds = Array.from({ length: 400 }, (_, index) => index + 1);
 
-describe('failure lines: dates in a graph of defs, drawn at random', () => {
+/** Whether two Endpoints of a draw have one site text. */
+function sharesSiteText({ bodies }: Draw): boolean {
+  return bodies.some(({ site }, index) => site !== index);
+}
+
+/** A line without the origin of the schema, which two refusals at one site text and one place may name differently. */
+function withoutOrigin(line: string): string {
+  return line.replace(/ \(declared in [^)]*\)$/, '');
+}
+
+describe('failure lines: a graph of defs, drawn at random', () => {
   test.for(graphSeeds)(
-    'draw %i: each date is told from the first place that reaches it',
+    'draw %i: each refusal is told from the first place in code point order, with every other site',
     (seed) => {
-      const graph = defGraphOf(seed);
-      const defs = defsOf(graph);
-      const fields: Record<string, z.ZodType> = {};
-      for (const [name, to] of graph.body) {
-        fields[name] = defs[to] as z.ZodType;
-      }
+      const draw = drawOf(seed);
+      const { root, given } = rootOfDraw(draw);
 
-      const lines = linesOf(serviceWith([anEndpoint('alpha', 'GET /a', fields)]));
+      const lines = linesOf(root, given).filter((line) => line.includes(' not allowed: '));
 
-      expect([...lines].sort()).toEqual([...firstPlaceLinesOf(graph)].sort());
+      const read = (line: string) => (sharesSiteText(draw) ? withoutOrigin(line) : line);
+      expect(lines.map(read).sort()).toEqual(toldLinesOf(draw).map(read).sort());
     },
   );
+
+  test('the draws hold every kind of step and of name, told in the lines, and shared site texts, origins and refused compositions', () => {
+    const draws = graphSeeds.map(drawOf);
+    const holdings = draws.flatMap(({ defs, bodies }) =>
+      [...defs, ...bodies].flatMap(({ holdings: held }) => held),
+    );
+    const lines = draws.flatMap(toldLinesOf);
+    const unmet = (parts: readonly string[]) =>
+      parts.filter((part) => !lines.some((line) => line.includes(part)));
+
+    expect({
+      holders: holderNames.filter((name) => !holdings.some(({ holder }) => holder === name)),
+      names: fieldNames.filter(([name]) => !holdings.some((held) => held.name[0] === name)),
+      steps: unmet(holderNames.map((name) => holders[name].steps).filter((steps) => steps !== '')),
+      written: unmet(fieldNames.map(([, written]) => `.${written}`)),
+      words: unmet([' (also in ', ' (declared in ', unionIsRefused, intersectionIsRefused]),
+      sharedSiteTexts: draws.some(sharesSiteText),
+    }).toEqual({
+      holders: [],
+      names: [],
+      steps: [],
+      written: [],
+      words: [],
+      sharedSiteTexts: true,
+    });
+  });
 });

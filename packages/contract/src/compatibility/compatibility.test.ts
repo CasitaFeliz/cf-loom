@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { codesNoEndpointAnswersBesideDefs } from '../../test/graft-shapes.ts';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type ApplicationSnapshot,
@@ -644,10 +644,7 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
    */
   const sizes = { small: 64, large: 512 };
 
-  /** How many times longer a check of a shape eight times as large may take: about 8 for a check that reads each part once. */
-  const linearGrowth = 13;
-
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   const stillRetired = { lifecycle: 'retired' } as const;
@@ -703,10 +700,10 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
     const checkCommands = checkOfCommands('a');
 
     const report = checkCommands(sizes.large)();
-    const growth = growthOf(checkCommands, sizes, linearGrowth);
+    const order = orderOf(checkCommands, sizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a Command Retired on both sides whose body reaches a def that changed at the end of a chain gives one retired-changed', () => {
@@ -735,10 +732,7 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
 describe('publishedSnapshotOf, the codes no Endpoint answers any more', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** How many times longer a merge of a Snapshot eight times as large may take: about 8 for one that reads each part once. */
-  const linearGrowth = 13;
-
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   function mergeOfCodes(count: number) {
@@ -750,11 +744,11 @@ describe('publishedSnapshotOf, the codes no Endpoint answers any more', () => {
     timeout: growthTimeout,
   }, () => {
     const published = mergeOfCodes(3)();
-    const growth = growthOf(mergeOfCodes, sizes, linearGrowth);
+    const order = orderOf(mergeOfCodes, sizes, orders.linear);
 
     const removed = Object.entries(published.codes).filter(([, held]) => 'removedIn' in held);
     expect(removed.map(([code]) => code)).toEqual(['LOCKED_0', 'LOCKED_1', 'LOCKED_2']);
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 

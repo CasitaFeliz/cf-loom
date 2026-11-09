@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
 import { summarized } from '../../test/failures.ts';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -1454,14 +1454,9 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
 });
 
 describe('validateRoot: the time it takes to judge the examples of a text part', () => {
-  /**
-   * How many times longer a shape eight times as large may take: 8 for a read that visits each part once,
-   * which a large object's allocation and collection stretch to 10 to 14, and 64 for one that scans at each part.
-   */
-  const linearGrowth = 24;
   const growthTimeout = 240_000;
 
-  /** A header object, as the validated Root of an Endpoint taking it, for `growthOf` to time. */
+  /** A header object, as the validated Root of an Endpoint taking it, for `orderOf` to time. */
   function judgingHeaders(headers: z.ZodObject) {
     const root = rootOf(defineEndpoint({ ...listing, input: { headers } }));
     return () => validateRoot(root, aRootPackage(root));
@@ -1474,7 +1469,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     const told = (size: number) =>
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: examplesOf(size) }) }));
 
-    const growth = growthOf(told, { small: 1000, large: 8000 }, linearGrowth);
+    const order = orderOf(told, { small: 1000, large: 8000 }, orders.linear);
     const named = examplesOf(8000).map((example) => JSON.stringify(example));
     const values = `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
 
@@ -1485,7 +1480,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
         unsendable('header', 'x-s', values),
       ),
     );
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('800 optional headers each given a value by 20 examples of their object validate, in time that grows as they do', {
@@ -1501,10 +1496,10 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     };
     const told = (size: number) => judgingHeaders(headersOfWidth(size));
 
-    const growth = growthOf(told, { small: 100, large: 800 }, linearGrowth);
+    const order = orderOf(told, { small: 100, large: 800 }, orders.linear);
 
     expect(summarized(told(800)()).kind).toBe('valid');
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a header example refused for its trailing space is one line, in time that grows as its length does', {
@@ -1514,7 +1509,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     const told = (size: number) =>
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: [exampleOf(size)] }) }));
 
-    const growth = growthOf(told, { small: 2_500, large: 20_000 }, linearGrowth);
+    const order = orderOf(told, { small: 2_500, large: 20_000 }, orders.linear);
 
     expect(summarized(told(20_000)())).toEqual(
       failed(
@@ -1523,6 +1518,6 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
         unsendable('header', 'x-s', JSON.stringify(exampleOf(20_000))),
       ),
     );
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 });

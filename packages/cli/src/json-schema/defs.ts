@@ -1,4 +1,4 @@
-import { type Defs, reachedDefsOf, type SchemaNode } from '@cf-loom/contract/internal';
+import { type DefGraph, type Defs, defGraphOf, type SchemaNode } from '@cf-loom/contract/internal';
 import { jsonSchemaOf } from './json-schema.ts';
 import type { JsonSchema, JsonSchemaDialect } from './keywords.ts';
 import { defComponentNameOf } from './refs.ts';
@@ -12,16 +12,18 @@ export function defComponentsOf(
   defs: Defs,
   dialect: JsonSchemaDialect,
 ): Readonly<Record<string, JsonSchema>> {
-  const ids = reachedDefsOf(nodes, defs);
-  return Object.fromEntries(ids.map((id) => componentOf(id, defs, dialect)));
+  const graph = defGraphOf(defs);
+  const { held, unheld } = graph.reached(nodes);
+  const ids = [...Object.keys(held), ...unheld];
+  return Object.fromEntries(ids.map((id) => componentOf(id, graph, dialect)));
 }
 
 function componentOf(
   id: string,
-  defs: Defs,
+  graph: DefGraph,
   dialect: JsonSchemaDialect,
 ): readonly [string, JsonSchema] {
-  const def = defs[id];
+  const def = graph.def(id);
   if (def === undefined) {
     throw new Error(`The schemas reference the def ${id}, which the defs given lack`);
   }

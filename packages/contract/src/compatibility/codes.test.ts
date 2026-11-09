@@ -610,11 +610,8 @@ describe('compatibilityReportOf, a removed code declared again, whose body reach
   const labelRemoved = {
     kind: 'schema',
     position: 'success',
-    at: [
-      { kind: 'part', name: 'body' },
-      { kind: 'field', name: 'tree' },
-      { kind: 'field', name: 'label' },
-    ],
+    at: [{ kind: 'field', name: 'label' }],
+    def: 'tree',
     shape: { kind: 'field-removed' },
   } as const;
 

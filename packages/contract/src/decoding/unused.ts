@@ -6,7 +6,7 @@ import {
   reachedGuardNamesOf,
 } from '../snapshot/index.ts';
 import type { Problem } from '../validation/index.ts';
-import { type Path, reachedDefsOf } from '../walker/index.ts';
+import { defGraphOf, type Path } from '../walker/index.ts';
 import { type Use, usesOf } from './uses.ts';
 
 const unused = {
@@ -64,7 +64,7 @@ function attachedOrExportedOf(uses: readonly Use[]): readonly string[] {
 function unusedDefProblemsOf(scope: DefScope): readonly Problem[] {
   const outside = scope.nodes.filter(({ at }) => !isWithin(at, scope.at));
   const roots = outside.map(({ node }) => node);
-  const reached = new Set(reachedDefsOf(roots, scope.defs));
+  const reached = new Set(Object.keys(defGraphOf(scope.defs).reached(roots).held));
   return unusedIn({ at: scope.at, names: Object.keys(scope.defs), reason: unused.def }, reached);
 }
 

@@ -212,6 +212,7 @@ export {
 export type {
   Catchalls,
   Def,
+  DefGraph,
   Defs,
   DefTypes,
   EnumNode,
@@ -230,14 +231,16 @@ export type {
   TupleNode,
 } from '../walker/index.ts';
 export {
+  anchoredAuthorPathOf,
+  anchoredSnapshotPathOf,
   authorPathOf,
   byCodePoint,
   chainDown,
+  defGraphOf,
   formatConstructorOf,
   isJsonValue,
   isSchema,
   joinedOf,
-  reachedDefsOf,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,

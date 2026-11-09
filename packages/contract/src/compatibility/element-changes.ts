@@ -48,7 +48,7 @@ function endpointPairChangesOf(
     ...shadowingDifferencesOf(pair, paths),
     ...differences,
     ...endpointNeutralOf(pair, defs),
-    ...formerInputDifferencesOf(pair, checked, differences),
+    ...formerInputDifferencesOf(pair, checked),
   ]);
 }
 

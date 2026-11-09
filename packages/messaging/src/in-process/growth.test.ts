@@ -1,15 +1,9 @@
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { growthOf } from '../../../contract/test/growth.ts';
+import { orderOf, orders } from '../../../contract/test/growth.ts';
 import type { BrokerConnection, DurableConsumer, OutgoingMessage, Settlement } from '../index.ts';
 import { type InProcessBrokerLimits, inProcess } from './index.ts';
-
-/** How many times longer a shape eight times as large may take: 8 for work done once per part, 64 for work that revisits parts. */
-const linearGrowth = 24;
-
-/** How many times longer a shape may take at eight times the size, when its size changes nothing. */
-const flatGrowth = 4;
 
 const growthTimeout = 240_000;
 
@@ -91,13 +85,13 @@ describe('the growth of inProcess()', () => {
       const subject = subjectOf(0);
       const connection = await consumingOn(subject, 0);
 
-      const growth = growthOf(
+      const order = orderOf(
         (count) => publishingAndDelivering(connection, subject, count),
         { small: 4_000, large: 32_000 },
-        linearGrowth,
+        orders.linear,
       );
 
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );
@@ -112,14 +106,14 @@ describe('the growth of inProcess()', () => {
         [1_000, await consumingOn(subject, 1_000)],
       ]);
 
-      const growth = growthOf(
+      const order = orderOf(
         (others) =>
           publishingAndDelivering(connections.get(others) as BrokerConnection, subject, 1_000),
         { small: 10, large: 1_000 },
-        flatGrowth,
+        orders.flat,
       );
 
-      expect(growth).toBeLessThan(flatGrowth);
+      expect(order).toBeLessThan(orders.flat);
     },
     growthTimeout,
   );
@@ -134,14 +128,14 @@ describe('the growth of inProcess()', () => {
         [1_000, await consumingAfter(subject, 1_000)],
       ]);
 
-      const growth = growthOf(
+      const order = orderOf(
         (cycles) =>
           publishingAndDelivering(connections.get(cycles) as BrokerConnection, subject, 1_000),
         { small: 10, large: 1_000 },
-        flatGrowth,
+        orders.flat,
       );
 
-      expect(growth).toBeLessThan(flatGrowth);
+      expect(order).toBeLessThan(orders.flat);
     },
     growthTimeout,
   );
@@ -170,16 +164,16 @@ describe('the growth of inProcess()', () => {
   ] as const)(
     'reading the limits grows linearly with %s',
     (_, limitsOf) => {
-      const growth = growthOf(
+      const order = orderOf(
         (size) => {
           const given = limitsOf(size);
           return () => inProcess(given);
         },
         { small: 2_500, large: 20_000 },
-        linearGrowth,
+        orders.linear,
       );
 
-      expect(growth).toBeLessThan(linearGrowth);
+      expect(order).toBeLessThan(orders.linear);
     },
     growthTimeout,
   );

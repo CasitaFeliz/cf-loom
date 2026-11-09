@@ -18,6 +18,8 @@ The entry `src/index.ts` (`.`) re-exports from `calling/`, `decoding/` and `infe
 
 The wire rules the client shares with `serve` and `@cf-loom/testing` live in `@cf-loom/contract`'s `wire/`: a value as text and text as a value, which text can travel as a header, a path segment or a query value, reading a received body whole and recognizing an Envelope in it, the Reserved codes with their texts, the invalid-input Rejection from Issues, and the `Deprecation` header both ways. Which Rejections an Endpoint answers, by the code each resolves to, the shape of a Success or a Rejection, its headers and body with their schemas, the Provider's Reader for invalid input among them, and a response read by it, its entry in its exported Snapshot cut, the reading of one by the format it names, which refuses one in a format the client does not read, and the reading of a request are in the contract's `./internal` too.
 
+It calls each export of `@cf-loom/contract/internal` that reads a chain of recursion ids a fixed number of times, as [A chain of recursion ids](../contract/ARCHITECTURE.md#a-chain-of-recursion-ids) requires.
+
 ## A call
 
 1. The headers given to `client()` that the Endpoint declares and the call did not pass are added, a function among them called now with the call's options and raced against its signal; none is called once the signal is aborted, and an abort stops the wait whatever the function does after.

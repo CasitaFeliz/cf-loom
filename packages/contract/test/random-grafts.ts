@@ -24,6 +24,8 @@ export type GraftDraw = {
   readonly proposed: ServiceSnapshot;
   /** What the draw holds: the steps down to an object a field was removed from, and the nodes inside a removed field. */
   readonly kinds: ReadonlySet<string>;
+  /** The defs a field was removed from, one name for each removal that took a field out. */
+  readonly landed: readonly string[];
 };
 
 type Removal = { readonly site: Site; readonly field: string };
@@ -186,6 +188,7 @@ export function graftDrawOf(seed: number): GraftDraw {
     baseline: aVersionOf(full, baselineDefs),
     proposed: aVersionOf(kept, proposedDefs),
     kinds,
+    landed: applied.map(({ removal }) => removal.site.owner),
   };
 }
 

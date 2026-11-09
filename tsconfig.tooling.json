@@ -11,6 +11,7 @@
     "*.config.ts",
     "lint/**/*.ts",
     "packages/contract/vitest.config.ts",
+    "packages/contract/vitest.growth.config.ts",
     "packages/contract/vitest.heavy.config.ts",
     "packages/messaging/test/test-process.ts",
     "scripts/**/*.ts"

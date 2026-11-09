@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
-import { growthOf } from '../../test/growth.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { publishedAt, publishedBy, schemaExports } from '../../test/snapshots.ts';
 import {
   type Change,
@@ -540,11 +540,8 @@ describe('compatibilityReportOf, a Definitions Package’s codes', () => {
         breaking(codeSite(orderLocked), {
           kind: 'schema',
           position: 'success',
-          at: [
-            { kind: 'part', name: 'body' },
-            { kind: 'field', name: 'tree' },
-            { kind: 'field', name: 'label' },
-          ],
+          at: [{ kind: 'field', name: 'label' }],
+          def: 'tree',
           shape: { kind: 'field-removed' },
         }),
       ]);
@@ -686,10 +683,7 @@ describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reac
    */
   const sizes = { small: 64, large: 512 };
 
-  /** How many times longer a check of a shape eight times as large may take: about 8 for a check that reads each part once. */
-  const linearGrowth = 13;
-
-  /** A growth test builds and times its shape up to nine times over, which a CI runner that several runs share stretches several times over. */
+  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
   const growthTimeout = 240_000;
 
   function aRef(name: string): SchemaNode {
@@ -729,10 +723,10 @@ describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reac
     const checkGuards = checkOfGuards('a');
 
     const report = checkGuards(sizes.large)();
-    const growth = growthOf(checkGuards, sizes, linearGrowth);
+    const order = orderOf(checkGuards, sizes, orders.linear);
 
     expect(report).toEqual({ changes: [] });
-    expect(growth).toBeLessThan(linearGrowth);
+    expect(order).toBeLessThan(orders.linear);
   });
 
   test('a Guard’s Context reaching a def whose description changed at the end of a chain is a Neutral context-changed', () => {

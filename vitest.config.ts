@@ -62,6 +62,7 @@ export default defineConfig({
     projects: [
       'packages/*',
       'packages/*/vitest.heavy.config.ts',
+      'packages/*/vitest.growth.config.ts',
       'examples/*',
       {
         test: {

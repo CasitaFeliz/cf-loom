@@ -1,13 +1,13 @@
+import { type DefGraph, defGraphOf } from './def-graph.ts';
 import type { SchemaNode } from './nodes.ts';
+import type { Defs } from './walk.ts';
 
 /**
  * The defs that lead back to themselves through `ref`s, `union` options and `allOf` items alone,
  * with no other node between, which zod's parse never ends on, found once for the defs, so the
  * time grows with the defs and their nodes. A `ref` to a name with no def leads nowhere.
  */
-export function defsLeadingBackWithNoNodeOf(
-  defs: ReadonlyMap<string, SchemaNode>,
-): ReadonlySet<string> {
+export function defsLeadingBackWithNoNodeOf(defs: Defs): ReadonlySet<string> {
   return new Set(nodelessCyclesOf(defs).flat());
 }
 
@@ -16,9 +16,7 @@ export function defsLeadingBackWithNoNodeOf(
  * with no node between that holds two defs or more, or a def stepping to itself, which zod's
  * parse never ends on. A `ref` to a name the defs do not hold leads nowhere.
  */
-export function nodelessCyclesOf(
-  defs: ReadonlyMap<string, SchemaNode>,
-): readonly (readonly string[])[] {
+export function nodelessCyclesOf(defs: Defs): readonly (readonly string[])[] {
   return cycleMembersFrom(defs);
 }
 
@@ -36,7 +34,7 @@ type Entry = {
 };
 
 type Search = {
-  readonly defs: ReadonlyMap<string, SchemaNode>;
+  readonly def: DefGraph['def'];
   readonly entries: Map<string, Entry>;
   /** The defs of the groups not closed yet, in the order they were met. */
   readonly open: Entry[];
@@ -49,9 +47,9 @@ type Search = {
  * cycle: two defs or more, or a def stepping to itself; read with an explicit stack, one frame
  * per def, and a name with no def has no steps and leads nowhere.
  */
-function cycleMembersFrom(defs: ReadonlyMap<string, SchemaNode>): readonly (readonly string[])[] {
-  const search: Search = { defs, entries: new Map(), open: [], groups: [] };
-  for (const start of defs.keys()) {
+function cycleMembersFrom(defs: Defs): readonly (readonly string[])[] {
+  const search: Search = { def: defGraphOf(defs).def, entries: new Map(), open: [], groups: [] };
+  for (const start of Object.keys(defs)) {
     if (!search.entries.has(start)) {
       readFrom(start, search);
     }
@@ -82,7 +80,7 @@ function readFrom(start: string, search: Search): void {
 /** A def met for the first time, in an open group of its own. */
 function enter(name: string, search: Search): Entry {
   const index = search.entries.size;
-  const def = search.defs.get(name);
+  const def = search.def(name);
   const steps = def === undefined ? [] : nodelessDefsFrom(def);
   const entry: Entry = { name, index, low: index, isOpen: true, steps, next: 0, isSelfStep: false };
   search.entries.set(name, entry);

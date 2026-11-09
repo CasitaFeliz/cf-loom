@@ -1,4 +1,4 @@
-import { byCodePoint, type Defs, reachedDefsOf, type SchemaNode } from '@cf-loom/contract/internal';
+import { byCodePoint, type Defs, defGraphOf, type SchemaNode } from '@cf-loom/contract/internal';
 import { stringLiteralOf } from '../source-text/index.ts';
 import { defIdentifierOf, defTypeNameOf } from './def-names.ts';
 import {
@@ -20,11 +20,13 @@ export type DefsCode = { readonly body: readonly string[]; readonly needs: Needs
  * each once per mode, in code point order of its identifier.
  */
 export function reachedDefUsesOf(defs: Defs, referenced: readonly DefUse[]): readonly DefUse[] {
+  const graph = defGraphOf(defs);
   const uses = schemaModes.flatMap((mode) => {
     const refs = referenced
       .filter((use) => use.mode === mode)
       .map(({ id }): SchemaNode => ({ type: 'ref', name: id }));
-    return reachedDefsOf(refs, defs).map((id): DefUse => ({ id, mode }));
+    const { held, unheld } = graph.reached(refs);
+    return [...Object.keys(held), ...unheld].map((id): DefUse => ({ id, mode }));
   });
   return uses.sort((left, right) =>
     byCodePoint(defIdentifierOf(left.id, left.mode), defIdentifierOf(right.id, right.mode)),
@@ -44,7 +46,7 @@ export function defsCodeOf(defs: Defs, uses: readonly DefUse[]): DefsCode {
  */
 function defLinesOf(use: DefUse, defs: Defs, needs: Needs): readonly string[] {
   const { id, mode } = use;
-  const node = defs[id];
+  const node = defGraphOf(defs).def(id);
   if (node === undefined) {
     throw new Error(`The generated code references the def ${id}, which the defs given lack`);
   }

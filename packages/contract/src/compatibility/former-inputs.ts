@@ -4,10 +4,10 @@ import type {
   PublishedServiceSnapshot,
   ServiceSnapshot,
 } from '../snapshot/index.ts';
-import { canonicalJson, type Defs } from '../walker/index.ts';
+import type { Defs } from '../walker/index.ts';
 import { classificationOf } from './classes.ts';
 import { endpointSiteOf, inputBodyDifferencesOf, queryDifferencesOf } from './endpoints.ts';
-import { type GraftSource, graftedInputOf, type ReadDefs, readDefsOf } from './grafting.ts';
+import { type GraftSource, graftedInputOf } from './grafting.ts';
 import { comparedShapesOf, type Pair, pairsOf } from './pairs.ts';
 import type { ChangeSite, Difference } from './report.ts';
 
@@ -34,13 +34,12 @@ type SchemaDifference = Extract<Difference, { readonly kind: 'schema' }>;
 
 /**
  * The Breaking Differences of an Endpoint's query and body against its former Inputs, newest first,
- * each once and none already reported against the Baseline, named by the `removedIn` of the former
- * Input it was found against: its Callers still send that Input.
+ * named by the `removedIn` of the former Input it was found against: its Callers still send that
+ * Input.
  */
 export function formerInputDifferencesOf(
   pair: Pair<EndpointSnapshot>,
   checked: CheckedService,
-  reported: readonly Difference[],
 ): readonly Difference[] {
   const compared = comparedShapesOf(pair);
   if (compared === undefined) {
@@ -52,17 +51,7 @@ export function formerInputDifferencesOf(
     defs: checked.proposed.defs,
   };
   const newestFirst = (checked.formers.get(pair.identity) ?? []).toReversed();
-  const tagged = newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
-  const seen = new Set(reported.filter(isSchemaDifference).map(placedShapeOf));
-  const found: Difference[] = [];
-  for (const difference of tagged) {
-    const placed = placedShapeOf(difference);
-    if (!seen.has(placed)) {
-      seen.add(placed);
-      found.push(difference);
-    }
-  }
-  return found;
+  return newestFirst.flatMap((former) => taggedBreakingOf(former, endpoint));
 }
 
 /** An Endpoint as the Check compares it with a former Input: its site, its declaration and the defs its `ref`s name. */
@@ -95,27 +84,17 @@ export function formerInputsMerged(
   version: string,
 ): readonly FormerInput[] {
   const { baseline, proposed } = checked;
-  const merge = {
-    checked,
-    read: { baseline: readDefsOf(baseline.defs), proposed: readDefsOf(proposed.defs) },
-  };
   return pairsOf(baseline.endpoints, proposed.endpoints).flatMap((pair) =>
-    keptFormerInputsOf(pair, merge, version),
+    keptFormerInputsOf(pair, checked, version),
   );
 }
-
-/** The Check of a merge: the Service and its Baseline, and the reader of each one's alias defs, built once for the merge. */
-type Merge = {
-  readonly checked: CheckedService;
-  readonly read: { readonly baseline: ReadDefs; readonly proposed: ReadDefs };
-};
 
 /** A former Input to rewrite, under the heading it is kept with. */
 type Rewritten = Pick<FormerInput, 'endpoint' | 'removedIn'> & { readonly source: GraftSource };
 
 function keptFormerInputsOf(
   pair: Pair<EndpointSnapshot>,
-  merge: Merge,
+  checked: CheckedService,
   version: string,
 ): readonly FormerInput[] {
   const compared = comparedShapesOf(pair);
@@ -126,16 +105,16 @@ function keptFormerInputsOf(
   const own: Rewritten = {
     endpoint: pair.identity,
     removedIn: version,
-    source: { input: { query, body }, ...merge.read.baseline },
+    source: { input: { query, body }, defs: checked.baseline.defs },
   };
-  const stored = (merge.checked.formers.get(pair.identity) ?? []).map(
+  const stored = (checked.formers.get(pair.identity) ?? []).map(
     (former): Rewritten => ({
       endpoint: former.endpoint,
       removedIn: former.removedIn,
-      source: { input: former.input, ...readDefsOf(former.defs) },
+      source: { input: former.input, defs: former.defs },
     }),
   );
-  const onto = { input: compared.proposed.input, ...merge.read.proposed };
+  const onto = { input: compared.proposed.input, defs: checked.proposed.defs };
   const kept: FormerInput[] = [];
   for (const { source, ...heading } of [...stored, own]) {
     const grafted = graftedInputOf(source, onto);
@@ -165,9 +144,4 @@ function isBreakingAt(site: ChangeSite, difference: Difference): boolean {
 
 function isSchemaDifference(difference: Difference): difference is SchemaDifference {
   return difference.kind === 'schema';
-}
-
-/** Where a schema Difference is and what it is, the same for the same Difference found twice. */
-function placedShapeOf({ at, shape }: SchemaDifference): string {
-  return canonicalJson([at, shape]);
 }
