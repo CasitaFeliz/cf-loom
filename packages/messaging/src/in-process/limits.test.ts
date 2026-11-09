@@ -1,7 +1,10 @@
+import { inspect, types } from 'node:util';
+import { linesTextOf, textOf } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { foreignKindOf, foreignValues } from '../../../contract/test/foreign-values.ts';
 import { aMessagingOver, thirtySeconds } from '../../test/in-process-services.ts';
 import { type Behavior, handlersOf, ordersContract, type Received } from '../../test/orders.ts';
+import { typedValuesOf } from '../../test/typed-values.ts';
 import { inProcess } from './index.ts';
 
 const notifyDurable = 'orders-service_notify-on-created';
@@ -20,11 +23,140 @@ function inProcessGiven(limits: unknown) {
 const duration = 'a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them';
 const count = "a whole number from 1, or 'unlimited'";
 
+/** What `inProcess()` throws for one setting of the defaults, or that it accepted it. */
+function refusalAt(setting: string, value: unknown): unknown {
+  try {
+    inProcess({ durableConsumerDefaults: { [setting]: value } } as never);
+    return 'accepted';
+  } catch (error) {
+    return error instanceof Error ? error.message : error;
+  }
+}
+
+/** The settings of a Durable consumer, as the resolver names them when a consume finds them all unset. */
+async function settingsTheResolverNames(): Promise<readonly string[]> {
+  const orders = await aMessagingOver(ordersContract, inProcess({}));
+
+  const refused = await orders.consume(handlersOf([]), {}).catch((error: Error) => error.message);
+
+  const named = /has no (.+) in limits\.durableConsumers/.exec(String(refused));
+  return (named?.[1] ?? '').split(/, | and /);
+}
+
+const expectedOf: Readonly<Record<string, string>> = { ackWait: duration, maxDeliver: count };
+
+/** A place a value is given at: a setting of the defaults, alone or as an entry of a list, and the line its refusal is. */
+type Place = {
+  readonly name: string;
+  readonly setting: string;
+  readonly given: unknown;
+  readonly line: string;
+};
+
+/**
+ * Each value of the pool at each place `inProcess()` reads a setting: every setting the resolver
+ * names, alone, and in an ack wait list; alone at ackWait only a value whose reading runs none of its code.
+ */
+function placesOf(settings: readonly string[], hooked: () => unknown): readonly Place[] {
+  const places: Place[] = [];
+  for (const setting of settings) {
+    const line = (shown: string) =>
+      `limits.durableConsumerDefaults.${setting} ${shown} is not ${expectedOf[setting]}`;
+    for (const { label, value, shown, readRunsCode } of foreignValues(hooked)) {
+      if (!(setting === 'ackWait' && readRunsCode)) {
+        places.push({ name: `${setting}, ${label}`, setting, given: value, line: line(shown) });
+      }
+      if (setting === 'ackWait') {
+        const listed = ['30s', value];
+        places.push({
+          name: `${setting} list, ${label}`,
+          setting,
+          given: listed,
+          line: line(`[ '30s', ${shown} ]`),
+        });
+      }
+    }
+  }
+  return places;
+}
+
 describe('the values the setting types do not allow', () => {
   test('the values the setting types do not allow, which a refusal is drawn from, hold every kind it shows differently', () => {
     const kinds = new Set(foreignValues(() => undefined).map(({ value }) => foreignKindOf(value)));
 
     expect([...kinds].sort()).toEqual(['bigint', 'function', 'list', 'object', 'proxy', 'symbol']);
+  });
+
+  test('showing a refused value runs none of its code: every hook of the spy pool stays uncalled', async () => {
+    const settings = await settingsTheResolverNames();
+    const ran: string[] = [];
+    const counting = () => {
+      ran.push('ran');
+      return 'x';
+    };
+
+    for (const place of placesOf(settings, counting)) {
+      refusalAt(place.setting, place.given);
+    }
+
+    expect(ran).toEqual([]);
+  });
+
+  test('inProcess() refuses any value its types do not allow at every setting the resolver names, alone or in an ackWait list, on one line, never with what its code threw', async () => {
+    const settings = await settingsTheResolverNames();
+    const throwing = () => {
+      throw new Error('the value’s own code ran');
+    };
+    const places = placesOf(settings, throwing);
+
+    const refused = places.map(({ name, setting, given }) => [name, refusalAt(setting, given)]);
+
+    const expected = places.map(({ name, line }) => [name, linesTextOf([line])]);
+    expect(settings).toEqual(Object.keys(expectedOf));
+    expect(refused).toEqual(expected);
+  });
+
+  test.each([
+    { label: 'an object of seconds', value: { seconds: 30 }, word: 'an object' },
+    { label: 'an Error', value: new Error('boom'), word: 'an object' },
+    { label: 'a Map', value: new Map([['a', 1]]), word: 'an object' },
+    { label: 'a function', value: () => 1, word: 'a function' },
+    { label: 'a list with holes', value: new Array(3), word: 'a list' },
+  ])('$label is refused as $word, never with its content', ({ value, word }) => {
+    const refusal = refusalAt('maxDeliver', value);
+
+    expect(refusal).toBe(`limits.durableConsumerDefaults.maxDeliver ${word} is not ${count}`);
+  });
+
+  test.each([11, 12, 13, 14])(
+    'a refused string, number or list of them reads as util.inspect prints it, for random values of the typed domain (seed %i)',
+    (seed) => {
+      const printed = (value: unknown) => inspect(value, { breakLength: Infinity, compact: true });
+      const refusals = typedValuesOf(seed, 1_000).map((value, at) => ({ at, value }));
+      const given = refusals.filter(({ value }) => value !== undefined);
+
+      const differing = given.flatMap(({ at, value }) => {
+        const line = `limits.durableConsumerDefaults.ackWait ${printed(value)} is not ${duration}`;
+        return refusalAt('ackWait', value) === linesTextOf([line]) ? [] : [at];
+      });
+
+      expect(differing).toEqual([]);
+      expect(given.length).toBeGreaterThan(900);
+    },
+  );
+
+  test('a refused value that is no plain data reads as contract’s textOf names it, a Proxy by its typeof alone', () => {
+    const words = /^an? (object|list|function)$/;
+    const noData = foreignValues(() => undefined).filter(({ shown }) => words.test(shown));
+
+    const refused = noData.map(({ label, value }) => [label, refusalAt('maxDeliver', value)]);
+
+    const expected = noData.map(({ label, value }) => {
+      const typeofWord = typeof value === 'function' ? 'a function' : 'an object';
+      const word = types.isProxy(value) ? typeofWord : textOf(value);
+      return [label, `limits.durableConsumerDefaults.maxDeliver ${word} is not ${count}`];
+    });
+    expect(refused).toEqual(expected);
   });
 });
 

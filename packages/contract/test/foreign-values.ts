@@ -138,8 +138,8 @@ const rows: readonly Row[] = [
       Object.setPrototypeOf(['30s'], new Proxy({}, trapsCalling(hooked))),
     ),
   ),
-  row('a list with its own custom inspect', "[ '30s' ]", (hooked) =>
-    Object.assign(['30s'], { [inspect.custom]: hooked }),
+  row('a list with its own custom inspect', "[ '30s', '0s' ]", (hooked) =>
+    Object.assign(['30s', '0s'], { [inspect.custom]: hooked }),
   ),
   row('a sparse list', 'a list', () => new Array(3)),
   row('an object with no prototype', 'an object', () => Object.create(null)),

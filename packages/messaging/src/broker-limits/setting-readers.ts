@@ -1,10 +1,58 @@
-import { inspect } from 'node:util';
-import { joinedOf } from '@cf-loom/contract/internal';
+import { inspect, types } from 'node:util';
+import { joinedOf, textOf } from '@cf-loom/contract/internal';
 import { z } from 'zod';
 
-/** A JSON value as a refusal shows it, on one line however many entries it holds: `[ '30s', '0s' ]`, `'7 days'`, `0`. */
+/** What a refusal shows of a list: its first entries and its nesting, which the copy and `inspect` both read. */
+const shown = { depth: 2, maxArrayLength: 100 } as const;
+
+/** A value with no text of its own, which `inspect` prints as its words. */
+function worded(words: string): object {
+  return { [inspect.custom]: () => words };
+}
+
+/** The words of a Proxy, read by its `typeof` alone, since nothing else of it can be read without running its traps. */
+function proxyWordsOf(proxy: unknown): string {
+  return typeof proxy === 'function' ? 'a function' : 'an object';
+}
+
+/**
+ * The part of a value a refusal shows, copied by reading it through `typeof`, `types.isProxy` and
+ * own data properties only, so that `inspect` of the copy runs none of the value's code: primitives
+ * and lists held as data stay, anything else is worded.
+ */
+function shownCopyOf(value: unknown, depth: number): unknown {
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+    return value;
+  }
+  if (types.isProxy(value)) {
+    return worded(proxyWordsOf(value));
+  }
+  if (!Array.isArray(value)) {
+    return worded(textOf(value));
+  }
+  if (depth > shown.depth) {
+    return value.length === 0 ? [] : [0];
+  }
+  const held: unknown[] = [];
+  for (let at = 0; at < Math.min(value.length, shown.maxArrayLength); at++) {
+    const own = Object.getOwnPropertyDescriptor(value, at);
+    if (own === undefined || !('value' in own)) {
+      return worded(textOf(value));
+    }
+    held.push(shownCopyOf(own.value, depth + 1));
+  }
+  held.length = value.length;
+  return held;
+}
+
+/**
+ * A refused value as a refusal shows it, as far as a setting's type lets it be one and running none
+ * of its code: a primitive as `util.inspect` prints it (`'7 days'`, `0`), a list held as data with
+ * its first 100 entries, three levels of nesting (`[ '30s', '0s' ]`), anything else in contract's
+ * words (`an object`, `a list`, `a function`).
+ */
 export function oneLineOf(value: unknown): string {
-  return inspect(value, { breakLength: Infinity, compact: true });
+  return inspect(shownCopyOf(value, 0), { ...shown, breakLength: Infinity, compact: true });
 }
 
 /** A setting read by `read`, which answers undefined for what it refuses, as an issue that shows the value on one line: `<value> is not <expected>`. */
