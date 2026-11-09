@@ -1,8 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative } from 'node:path';
-import { hangTimeout } from './hang-timeout.ts';
-import { type Compiled, compile, describe } from './readme-compile.ts';
+import { type Compiled, compile, describe, timeoutMs } from './readme-compile.ts';
 
 /**
  * What stopped one of the README Service's Services, as `<step>: <package name>: <message>`: a
@@ -131,7 +130,7 @@ function run(step: Step, service: Service, program: string): CfLoomProblem[] {
   const ran = spawnSync(process.execPath, [program, ...step.args], {
     cwd: service.at,
     encoding: 'utf8',
-    timeout: hangTimeout,
+    timeout: timeoutMs,
   });
   if (ran.error !== undefined) {
     const message = stoppedBy(step.name, service, `did not finish: ${ran.error.message}`);
