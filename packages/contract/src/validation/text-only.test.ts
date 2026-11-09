@@ -1547,22 +1547,14 @@ describe('validateRoot: a text part beside a schema that fails', () => {
   });
 
   test.each(['query', 'headers'] as const)(
-    'a nullable %s whose kind is not built tells that it is never nullable, and the date',
+    'a nullable %s whose kind is not built tells the date alone, since its fix decides whether it is an object',
     (part) => {
       const nullable = z.date().nullable() as unknown as z.ZodObject;
       const endpoint = defineEndpoint({ ...listing, input: { [part]: nullable } as never });
 
       expect(validateEndpoint(endpoint)).toEqual({
         kind: 'invalid',
-        failures: [
-          {
-            kind: 'declaration',
-            location: `${endpointAt} input.${part}`,
-            rule: 'nullable-text',
-            message: `${part} is never nullable`,
-          },
-          dateRefusal(`${endpointAt} input.${part}`),
-        ],
+        failures: [dateRefusal(`${endpointAt} input.${part}`)],
       });
     },
   );
