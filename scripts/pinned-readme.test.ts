@@ -59,18 +59,6 @@ describe('pinnedReadme', () => {
   });
 
   it.each([
-    [
-      'a link to another repository',
-      `[x](https://github.com/CasitaFeliz/other/blob/main/README.md)`,
-    ],
-    [
-      'a link to a repository whose name starts with its own',
-      `[x](https://github.com/CasitaFeliz/cf-loom-x/blob/main/README.md)`,
-    ],
-    [
-      'a link to a repository whose owner ends with its own',
-      `[x](https://github.com/my-CasitaFeliz/cf-loom/blob/main/README.md)`,
-    ],
     ['an anchor link', '[x](#not-allowed-in-a-contract)'],
     [
       'a link to another host',
@@ -114,19 +102,16 @@ describe('pinnedReadme', () => {
   });
 
   it('matches the repository literally, so its dot is no wildcard', () => {
-    const readme = [
-      `[other](https://github.com/axb/c/blob/main/x.md)`,
-      `[own](https://github.com/a.b/c/blob/main/x.md)`,
-    ].join('\n');
+    const own = pinnedReadme('[own](https://github.com/a.b/c/blob/main/x.md)', 'a.b/c', commit);
+    const other = pinnedReadme('[other](https://github.com/axb/c/blob/main/x.md)', 'a.b/c', commit);
 
-    const pinned = pinnedReadme(readme, 'a.b/c', commit);
-
-    expect(pinned).toEqual({
+    expect(own).toEqual({
       kind: 'pinned',
-      text: [
-        `[other](https://github.com/axb/c/blob/main/x.md)`,
-        `[own](https://github.com/a.b/c/blob/${commit}/x.md)`,
-      ].join('\n'),
+      text: `[own](https://github.com/a.b/c/blob/${commit}/x.md)`,
+    });
+    expect(other).toEqual({
+      kind: 'refused',
+      problems: [{ line: 1, problem: expect.stringContaining('is on GitHub') }],
     });
   });
 
@@ -297,25 +282,192 @@ describe('pinnedReadme', () => {
     expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a(b).md)` });
   });
 
+  it('pins a link whose path holds a fragment, and leaves the fragment as it is', () => {
+    const readme = `[x](${atMain}/a.md#L10-L20)`;
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({ kind: 'pinned', text: `[x](${atCommit}/a.md#L10-L20)` });
+  });
+
   it.each([
-    ['a link with a title', `[x](${atMain}/CONTEXT.md "the glossary")`],
-    ['a definition', `[rule]: ${atMain}/CONTEXT.md`],
-    ['an autolink', `<${atMain}/CONTEXT.md>`],
-  ])('names the form it accepts when %s names the repository', (_form, offending) => {
-    const pinned = pinnedReadme(offending, repository, commit);
+    [
+      'a percent-escaped letter in the name',
+      `https://github.com/CasitaFeliz/cf%2Dloom/blob/main/a.md`,
+    ],
+    ['a doubled slash', `https://github.com/CasitaFeliz//cf-loom/blob/main/a.md`],
+    ['a dot segment before the name', `https://github.com/CasitaFeliz/x/../cf-loom/blob/main/a.md`],
+  ])('refuses a link to the repository with %s, naming its line', (_form, target) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it.each([
+    ['dot segments', `${atMain}/../../../../${repository}/blob/main/a.md`],
+    [
+      'percent-escaped dot segments',
+      `${atMain}/%2e%2e/%2e%2e/%2e%2e/%2e%2e/${repository}/blob/main/a.md`,
+    ],
+    ['a dot segment among others', `${atMain}/a/./b.md`],
+    ['an empty segment', `${atMain}/a//b.md`],
+  ])('refuses a link at main whose path holds %s, naming its line', (_form, target) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it('refuses a link written with backslashes in place of slashes', () => {
+    const readme = afterOnePinnedLink(
+      '[x](https:\\\\github.com\\CasitaFeliz\\cf-loom\\tree\\main)',
+    );
+
+    const refused = refusedLinesOf(readme);
+
+    expect(refused).toEqual([3]);
+  });
+
+  it.each([
+    ['plainly', `https://github.dev/${repository}/blob/main/a.md`],
+    ['with an escaped hyphen', 'https://github.dev/CasitaFeliz/cf%2Dloom/blob/main/a.md'],
+    ['to another repository', 'https://github.dev/other/repo/blob/main/a.md'],
+  ])('refuses a github.dev link written %s, naming its line', (_form, target) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it.each([
+    ['an escaped slash and dots after the commit', `${atMain}/%2F..%2Fa.md`],
+    ['a query', `${atMain}/a.md?plain=1`],
+    ['a percent-escape in a segment', `${atMain}/a%20b.md`],
+    ['a backslash in a segment', `${atMain}/a\\\\b.md`],
+  ])('refuses a link of the pinned form with %s, naming its line', (_form, target) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it.each([
+    ['an upper-case host', 'HTTPS://GitHub.COM/other/repo/blob/main/a.md'],
+    ['a trailing-dot host', 'https://github.com./other/repo/blob/main/a.md'],
+    ['a port', 'https://github.com:443/other/repo/blob/main/a.md'],
+    ['userinfo', 'https://user@github.com/other/repo/blob/main/a.md'],
+    ['a percent-escaped host', 'https://git%68ub.com/other/repo/blob/main/a.md'],
+    ['a port on the repository', `https://github.com:443/${repository}/blob/main/a.md`],
+    ['userinfo on the repository', `https://user@github.com/${repository}/blob/main/a.md`],
+  ])('refuses a GitHub link with %s, naming its line', (_form, target) => {
+    const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it.each([
+    ['a link', (target: string) => `[x](${target})`],
+    ['an image', (target: string) => `![x](${target})`],
+    ['a definition', (target: string) => `[r]: ${target}`],
+  ])(
+    'refuses %s to another GitHub repository, at main or at a commit, naming its line',
+    (_form, write) => {
+      const targets = [
+        'https://github.com/CasitaFeliz/other/blob/main/README.md',
+        'https://github.com/CasitaFeliz/cf-loom-x/blob/main/README.md',
+        'https://github.com/my-CasitaFeliz/cf-loom/blob/main/README.md',
+        `https://github.com/CasitaFeliz/other/blob/${commit}/README.md`,
+      ];
+
+      const refused = targets.map((target) => refusedLinesOf(afterOnePinnedLink(write(target))));
+
+      expect(refused).toEqual([[3], [3], [3], [3]]);
+    },
+  );
+
+  it.each([
+    ['raw.githubusercontent.com', 'https://raw.githubusercontent.com/other/repo/main/a.md'],
+    ['a subdomain of githubusercontent.com', 'https://objects.githubusercontent.com/a.png'],
+    ['gist.github.com', 'https://gist.github.com/other/1'],
+    ['www.github.com', 'https://www.github.com/other/repo'],
+    ['GitHub.COM', 'https://GitHub.COM/other/repo'],
+    ['a bare URL on GitHub', 'See https://github.com/other/repo now'],
+    ['an autolink on GitHub', '<https://github.com/other/repo>'],
+  ])('refuses a link to %s, naming its line', (_form, target) => {
+    const markdown = target.startsWith('http') ? `[x](${target})` : target;
+
+    const refused = refusedLinesOf(afterOnePinnedLink(markdown));
+
+    expect(refused).toEqual([3]);
+  });
+
+  it('refuses each use of a definition on GitHub off the pinned form, and the definition', () => {
+    const readme = afterOnePinnedLink('[a][r]\n\n[b][r]\n\n[r]: https://github.com/other/repo');
+
+    const pinned = pinnedReadme(readme, repository, commit);
+
+    expect(pinned).toEqual({
+      kind: 'refused',
+      problems: [
+        {
+          line: 3,
+          problem: expect.stringContaining('"https://github.com/other/repo" is on GitHub'),
+        },
+        {
+          line: 5,
+          problem: expect.stringContaining('"https://github.com/other/repo" is on GitHub'),
+        },
+        {
+          line: 7,
+          problem: expect.stringContaining('"https://github.com/other/repo" is on GitHub'),
+        },
+      ],
+    });
+  });
+
+  it('names the form to write, with the repository at main, in the problem of a GitHub link', () => {
+    const pinned = pinnedReadme('[x](https://github.com/other/repo)', repository, commit);
 
     expect(pinned).toEqual({
       kind: 'refused',
       problems: [
         {
           line: 1,
-          problem: expect.stringContaining(
-            `an inline link or image [text](${atMain}/<path>), with no title`,
-          ),
+          problem: [
+            'the link target "https://github.com/other/repo" is on GitHub;',
+            `a package README links GitHub only as [text](${atMain}/<path>),`,
+            '<path> with no ".", ".." or empty segment and no %, \\, ? or whitespace',
+          ].join(' '),
         },
       ],
     });
   });
+
+  it.each([
+    ['a link with a title', `[x](${atMain}/CONTEXT.md "the glossary")`],
+    ['a definition', `[rule]: ${atMain}/CONTEXT.md`],
+    ['an autolink', `<${atMain}/CONTEXT.md>`],
+  ])(
+    'names the form it accepts when %s names the repository, in both of its problems',
+    (_form, offending) => {
+      const pinned = pinnedReadme(offending, repository, commit);
+
+      expect(pinned).toEqual({
+        kind: 'refused',
+        problems: [
+          {
+            line: 1,
+            problem: expect.stringContaining(
+              `an inline link or image [text](${atMain}/<path>), with no title`,
+            ),
+          },
+          {
+            line: 1,
+            problem: expect.stringContaining(
+              `is on GitHub; a package README links GitHub only as [text](${atMain}/<path>)`,
+            ),
+          },
+        ],
+      });
+    },
+  );
 
   it('lists each of two relative links on one line', () => {
     const readme = afterOnePinnedLink('[a](./x.md) and [b](./x.md)');
@@ -347,18 +499,21 @@ describe('pinnedReadme', () => {
     });
   });
 
-  it('names a link to the repository split over two lines once, at the line of the name', () => {
+  it('names a link to the repository split over two lines at the line of the link and at the line of the name', () => {
     const readme = afterOnePinnedLink(`[x](\nhttps://github.com/${repository}/tree/main/a)`);
 
     const pinned = pinnedReadme(readme, repository, commit);
 
     expect(pinned).toEqual({
       kind: 'refused',
-      problems: [{ line: 4, problem: expect.stringContaining(repository) }],
+      problems: [
+        { line: 3, problem: expect.stringContaining('is on GitHub') },
+        { line: 4, problem: expect.stringContaining(repository) },
+      ],
     });
   });
 
-  it('names a definition at main once, at the definition, however often it is used', () => {
+  it('names a definition at main once as a mention, and each of its uses and the definition as a link target', () => {
     const uses = '[a][r]\n\n[b][r]\n\n[c][r]';
     const readme = afterOnePinnedLink(`${uses}\n\n[r]: ${atMain}/CONTEXT.md`);
 
@@ -366,7 +521,13 @@ describe('pinnedReadme', () => {
 
     expect(pinned).toEqual({
       kind: 'refused',
-      problems: [{ line: 9, problem: expect.stringContaining(repository) }],
+      problems: [
+        { line: 3, problem: expect.stringContaining('is on GitHub') },
+        { line: 5, problem: expect.stringContaining('is on GitHub') },
+        { line: 7, problem: expect.stringContaining('is on GitHub') },
+        { line: 9, problem: expect.stringContaining('a reference to') },
+        { line: 9, problem: expect.stringContaining('is on GitHub') },
+      ],
     });
   });
 
@@ -386,7 +547,7 @@ describe('pinnedReadme', () => {
     expect(withLf).toEqual(withCrlf);
   });
 
-  it('lists every problem of a README in line order, two on one line both', () => {
+  it('lists every problem of a README in line order, those of one line in the order found', () => {
     const readme = [
       '[x](../up.md)',
       `[ok](${atMain}/CONTEXT.md)`,
@@ -400,7 +561,8 @@ describe('pinnedReadme', () => {
       kind: 'refused',
       problems: [
         { line: 1, problem: expect.stringContaining('../up.md') },
-        { line: 3, problem: expect.stringContaining(repository) },
+        { line: 3, problem: expect.stringContaining('a reference to') },
+        { line: 3, problem: expect.stringContaining('is on GitHub') },
         { line: 4, problem: expect.stringContaining('./b.md') },
         { line: 4, problem: expect.stringContaining('raw HTML') },
       ],
@@ -452,6 +614,26 @@ const targets: Record<string, string> = {
   'dots written as references': '&#46;&#46;/a.md',
   'a colon written as a reference': 'https&#58;//zod.dev',
   'a query with an ampersand': 'https://img.shields.io/x?a=1&b=2',
+  'the repository with a percent-escaped letter':
+    'https://github.com/CasitaFeliz/cf%2Dloom/blob/main/x.md',
+  'the repository with a doubled slash': 'https://github.com/CasitaFeliz//cf-loom/blob/main/x.md',
+  'the repository after a dot segment':
+    'https://github.com/CasitaFeliz/x/../cf-loom/blob/main/x.md',
+  'a path that climbs back to main': `${atMain}/../../../../${repository}/blob/main/x.md`,
+  'a path that climbs back to main in percent-escapes': `${atMain}/%2e%2e/%2e%2e/%2e%2e/%2e%2e/${repository}/blob/main/x.md`,
+  'a path with an escaped slash and dots': `${atMain}/%2F..%2Fx.md`,
+  'the repository with a query': `${atMain}/x.md?plain=1`,
+  'the repository in capitals': `HTTPS://GitHub.COM/${repository}/blob/main/x.md`,
+  'the repository on a host with a trailing dot': `https://github.com./${repository}/blob/main/x.md`,
+  'the repository on a port': `https://github.com:443/${repository}/blob/main/x.md`,
+  'the repository with userinfo': `https://user@github.com/${repository}/blob/main/x.md`,
+  'the repository on a percent-escaped host': `https://git%68ub.com/${repository}/blob/main/x.md`,
+  'backslashes in place of slashes': 'https:\\\\github.com\\CasitaFeliz\\cf-loom\\tree\\main',
+  'raw.githubusercontent.com': `https://raw.githubusercontent.com/${repository}/main/x.md`,
+  'another repository at main': 'https://github.com/other/repo/blob/main/x.md',
+  'another repository at a commit': `https://github.com/other/repo/blob/${commit}/x.md`,
+  'a gist': 'https://gist.github.com/other/1',
+  'github.dev with an escaped hyphen': 'https://github.dev/CasitaFeliz/cf%2Dloom/blob/main/x.md',
 };
 
 function indented(text: string, indent: string): string {
@@ -566,6 +748,35 @@ function withoutComments(html: string): string {
   return kept + html.slice(from);
 }
 
+const githubHosts = ['github.com', 'githubusercontent.com', 'github.dev'];
+
+/** Whether a browser, parsing `url` as it is, lands on GitHub off a file of the repository at its commit. */
+function isOnGitHubOffCommit(url: string): boolean {
+  if (!URL.canParse(url)) {
+    return false;
+  }
+  const { hostname, pathname } = new URL(url);
+  const host = hostname.replace(/\.$/, '');
+  const isGitHub = githubHosts.some((family) => host === family || host.endsWith(`.${family}`));
+  return isGitHub && !pathname.startsWith(`/${repository}/blob/${commit}/`);
+}
+
+/** What is wrong with one URL a browser would load, by what it does with it. */
+function problemsOfUrl(url: string): string[] {
+  const problems: string[] = [];
+  const rest = url.replaceAll(`github.com/${repository}/blob/${commit}/`, '');
+  if (!/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(url)) {
+    problems.push(`the URL ${url} has no scheme and is no anchor`);
+  }
+  if (/casitafeliz\/cf-loom/i.test(rest)) {
+    problems.push(`the URL ${url} reaches the repository off its commit`);
+  }
+  if (isOnGitHubOffCommit(url)) {
+    problems.push(`the URL ${url} is on GitHub and no file of the repository at its commit`);
+  }
+  return problems;
+}
+
 /** What a browser would load from the HTML `marked` renders: each URL attribute, with its problems. */
 function urlProblemsOf(html: string): string[] {
   const tags = withoutComments(html).match(/<[a-z][^>]*>/gi) ?? [];
@@ -577,13 +788,8 @@ function urlProblemsOf(html: string): string[] {
       problems.push(`a character reference a browser decodes in ${value}`);
     }
     for (const candidate of decodedByMarked(value).split(',')) {
-      const url = candidate.trim().split(/\s+/)[0] ?? '';
-      const rest = url.replaceAll(`github.com/${repository}/blob/${commit}/`, '');
-      if (!/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(url)) {
-        problems.push(`the URL ${url} has no scheme and is no anchor`);
-      }
-      if (/casitafeliz\/cf-loom/i.test(rest)) {
-        problems.push(`the URL ${url} reaches the repository off its commit`);
+      for (const problem of problemsOfUrl(candidate.trim().split(/\s+/)[0] ?? '')) {
+        problems.push(problem);
       }
     }
   }
@@ -737,6 +943,19 @@ describe('pinnedReadme over every target, form and container an author can write
     }
 
     expect(wrong).toEqual([]);
+  });
+
+  it('pins each target that is a file of the repository at main, written as a plain inline link', () => {
+    const pinnable = [
+      'the repository at main',
+      'the repository at main with parentheses in its path',
+    ];
+
+    const pinnings = pinnable.map((name) =>
+      pinnedReadme(`[x](${targets[name]})`, repository, commit),
+    );
+
+    expect(pinnings.map(({ kind }) => kind)).toEqual(['pinned', 'pinned']);
   });
 
   it('pins a README whose only offending form is code, unless it names the repository off the pinnable link', () => {
