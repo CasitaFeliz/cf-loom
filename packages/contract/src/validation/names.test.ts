@@ -538,16 +538,27 @@ describe('rootNameProblemOf', () => {
   });
 });
 
-const sourceOfTheFunction = 'the source of the function';
+const textOfTheValue = 'the source of the function or the description of the symbol';
 
 /** A function written where a string belongs, as untyped code can: converting it to text throws, and its source is what no line may show. */
 function aFunctionThatIsNoText(): never {
-  const written = () => sourceOfTheFunction;
+  const written = () => textOfTheValue;
   const toText = () => {
     throw new Error('the function was converted to text');
   };
   return Object.assign(written, { [Symbol.toPrimitive]: toText }) as never;
 }
+
+/** A Symbol written where a string belongs, whose description of many characters no line may show. */
+function aSymbolOfManyCharacters(): never {
+  return Symbol(textOfTheValue.repeat(1_000)) as never;
+}
+
+/** What untyped code can write where a string belongs, and no line may show the text of. */
+const unwritable: readonly { readonly written: string; readonly make: () => never }[] = [
+  { written: 'a function', make: aFunctionThatIsNoText },
+  { written: 'a symbol', make: aSymbolOfManyCharacters },
+];
 
 describe('validateRoot: a function where a name belongs', () => {
   test.each([
@@ -822,17 +833,15 @@ function pathsOf(fields: Fields, above: readonly string[] = []): readonly FieldP
   return paths;
 }
 
-/** The fields with a function at the path, a copy of what holds it. */
-function withFunctionAt(fields: Fields, [key, ...below]: FieldPath): Fields {
+/** The fields with what `make` writes at the path, a copy of what holds it. */
+function withWrittenAt(fields: Fields, [key, ...below]: FieldPath, make: () => never): Fields {
   const [next, ...later] = below;
   const held =
-    next === undefined
-      ? aFunctionThatIsNoText()
-      : withFunctionAt(fields[key] as Fields, [next, ...later]);
+    next === undefined ? make() : withWrittenAt(fields[key] as Fields, [next, ...later], make);
   return { ...fields, [key]: held };
 }
 
-describe('validateRoot: a function in any field of any declaration', () => {
+describe('validateRoot: a function or a symbol in any field of any declaration', () => {
   test('the declarations written here are one of each kind a Root holds', () => {
     expect(kits.map(({ kind }) => kind)).toEqual([
       'Service',
@@ -849,34 +858,40 @@ describe('validateRoot: a function in any field of any declaration', () => {
     ]);
   });
 
-  test.each(Object.entries(kits))(
-    'the %s declaration written with every field validates',
-    (_, kit) => {
-      const root = kit.rootOf(kit.fields);
+  test.each(kits)('the $kind declaration written with every field validates', (kit) => {
+    const root = kit.rootOf(kit.fields);
 
-      const validated = validateRoot(root, aRootPackage(root));
+    const validated = validateRoot(root, aRootPackage(root));
 
-      const lines = validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
-      expect(lines).toEqual([]);
-    },
-  );
+    const lines = validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
+    expect(lines).toEqual([]);
+  });
 
   const rows = kits.flatMap((kit) =>
-    pathsOf(kit.fields).map((path) => ({ kind: kit.kind, field: path.join('.'), kit, path })),
+    pathsOf(kit.fields).flatMap((path) =>
+      unwritable.map(({ written, make }) => ({
+        kind: kit.kind,
+        field: path.join('.'),
+        written,
+        kit,
+        path,
+        make,
+      })),
+    ),
   );
 
   test.each(rows)(
-    'the $kind declaration with a function as its $field fails validation instead of throwing what converting it to text threw',
-    ({ kit, path }) => {
-      const root = kit.rootOf(withFunctionAt(kit.fields, path));
+    'the $kind declaration with $written as its $field fails validation, never throwing and never showing its text',
+    ({ kit, path, make }) => {
+      const root = kit.rootOf(withWrittenAt(kit.fields, path, make));
 
       const validated = validateRoot(root, aRootPackage(root));
 
       const lines = validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
-      const showingTheSource = lines.filter((line) => line.includes(sourceOfTheFunction));
-      expect({ kind: validated.kind, showingTheSource }).toEqual({
+      const showingTheText = lines.filter((line) => line.includes(textOfTheValue));
+      expect({ kind: validated.kind, showingTheText }).toEqual({
         kind: 'invalid',
-        showingTheSource: [],
+        showingTheText: [],
       });
     },
   );

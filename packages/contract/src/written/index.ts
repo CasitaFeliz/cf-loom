@@ -105,6 +105,7 @@ export {
   isMissing,
   isPlainObject,
   isWithoutValue,
+  kindWordsOf,
   listOf,
   ownOf,
   partOf,
