@@ -94,8 +94,9 @@ export type LiteralNames<Names> = Names extends string
 
 /**
  * Whether a type is one value, not a union: a rule on a name or a path judges only what the author
- * wrote exactly, and leaves a union to `generate`; a rule on a list of names judges the set of
- * names its type may hold, and its refusal lists that same set, in the order the declaration does.
+ * wrote exactly, and leaves a union of literals or a widened `string` to `generate`; a rule on a
+ * list of names judges the set of names its type may hold, and its refusal lists that same set, in
+ * the order the declaration does, a union's members in the compiler's order.
  */
 export type IsOneLiteral<Value> = [Value] extends [never]
   ? false
