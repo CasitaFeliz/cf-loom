@@ -745,6 +745,34 @@ describe('validateRoot: an open union or intersection beside a schema that fails
     });
   });
 
+  test('a shared field of an intersection that fails is not kept, so no union reaches the Open Enum in it', () => {
+    const failing = z.object({ a: z.object({ e: openEnum(['a']), d: z.date() }) });
+    const whole = z.object({ a: z.object({ e: openEnum(['a']) }) });
+    const body = z.union([z.intersection(failing, whole), z.boolean()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [{ ...dateRefusal, location: `${bodyAt}<|0>[0].a.d` }],
+    });
+  });
+
+  test('a tuple whose rest fails and holds an Open Enum is reached by a union', () => {
+    const rest = z.object({ e: openEnum(['a']), placedAt: z.date() });
+    const body = z.union([z.tuple([z.string()], rest), z.boolean()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|0>[...].placedAt` },
+      ],
+    });
+  });
+
   test.each([
     ['z.set()', z.set(openEnum(['a']))],
     ['z.function()', z.function({ input: [openEnum(['a'])], output: z.string() })],

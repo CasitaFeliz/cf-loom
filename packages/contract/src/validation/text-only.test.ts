@@ -1567,6 +1567,57 @@ describe('validateRoot: a text part beside a schema that fails', () => {
     },
   );
 
+  test('a nullable query param whose kind is not built tells that it is never nullable, and the date', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { query: headersOf({ q: z.date().nullable() }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: `${endpointAt} input.query.q`,
+          rule: 'nullable-text',
+          message: 'A query param is never nullable: q',
+        },
+        dateRefusal(`${endpointAt} input.query.q`),
+      ],
+    });
+  });
+
+  test('a header that fails by a call tells that call alone, though an example of it cannot travel', () => {
+    const endpoint = defineEndpoint({
+      ...listing,
+      input: { headers: headersOf({ 'x-a': z.coerce.string().meta({ examples: ['a\nb'] }) }) },
+    });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          location: `${endpointAt} input.headers.x-a`,
+          construct: 'z.coerce.*',
+          alsoIn: [],
+        },
+      ],
+    });
+  });
+
+  test('the examples of a headers object that fails are not read, though one cannot travel', () => {
+    const headers = headersOf({ 'x-a': z.string(), 'x-at': z.date() }).meta({
+      examples: [{ 'x-a': 'a\nb' }],
+    });
+    const endpoint = defineEndpoint({ ...listing, input: { headers } });
+
+    expect(validateEndpoint(endpoint)).toEqual({
+      kind: 'invalid',
+      failures: [dateRefusal(`${endpointAt} input.headers.x-at`)],
+    });
+  });
+
   test('a query param that is an object holding a date tells that it is no text, and the date', () => {
     const endpoint = defineEndpoint({
       ...listing,
