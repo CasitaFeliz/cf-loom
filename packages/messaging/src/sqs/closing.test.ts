@@ -1,7 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { joinedOf } from '@cf-loom/contract/internal';
 import { handle } from '@cf-loom/handlers';
-import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { printedBy } from '../../../contract/test/printed.ts';
 import { storeIn, wakeEach } from '../../test/aws-arranging.ts';
 import { countCommands, failingCommand, holdingCommand } from '../../test/aws-clients.ts';
 import { queueCountsOf, topicNamesOf } from '../../test/aws-reading.ts';
@@ -154,7 +155,7 @@ describe('close over sqs()', () => {
   });
 
   test('an unreadable Message the open poll returns once closing started is handed back unread, with no console line', async () => {
-    const written = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const printed = printedBy('error');
     const first = await aMessaging();
     await first.consume(handlersOf([]), {});
     const closing = first.close();
@@ -167,7 +168,7 @@ describe('close over sqs()', () => {
       visible: 1,
       inFlight: 0,
     });
-    expect(written).not.toHaveBeenCalled();
+    expect(printed).toEqual([]);
   });
 
   test('close while consume is still checking the queues means no receive at all', async () => {
@@ -217,7 +218,7 @@ describe('close over sqs()', () => {
   });
 
   test('a hand-back SQS refuses at close makes close reject naming the Durable consumer, with the client’s error as cause', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    printedBy('warn');
     const first = await aMessaging();
     const producer = await orderMessagingOver(first.connecting);
     const refusal = new Error('SQS refused the hand-back');

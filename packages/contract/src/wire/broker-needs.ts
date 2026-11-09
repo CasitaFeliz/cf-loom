@@ -34,8 +34,9 @@ export type BrokerNeeds<Message extends RoutedMessage, Subscribed extends Routed
 };
 
 /**
- * What a Service needs on the Broker, unprefixed: the subjects of its live Message Versions, which
- * its stream holds, and a Durable consumer for each live Command Version and each Subscription.
+ * What a Service needs on the Broker, unprefixed: a Durable consumer for each live Command Version and
+ * each Subscription, and the subjects its stream holds: those of its live Message Versions and every
+ * subject a Durable consumer on its stream filters on, each once.
  */
 export function brokerNeedsOf<Message extends RoutedMessage, Subscribed extends RoutedSubscription>(
   service: string,
@@ -43,13 +44,15 @@ export function brokerNeedsOf<Message extends RoutedMessage, Subscribed extends 
   subscriptions: readonly Subscribed[],
 ): BrokerNeeds<Message, Subscribed> {
   const live = messages.filter(isLive);
-  return {
-    streamSubjects: live.map((message) => subjectOf(service, message)),
-    durableConsumers: [
-      ...live.filter(isCommand).map((command) => commandConsumerOf(service, command)),
-      ...subscriptions.map((subscription) => subscriptionConsumerOf(service, subscription)),
-    ],
-  };
+  const durableConsumers = [
+    ...live.filter(isCommand).map((command) => commandConsumerOf(service, command)),
+    ...subscriptions.map((subscription) => subscriptionConsumerOf(service, subscription)),
+  ];
+  const published = live.map((message) => subjectOf(service, message));
+  const read = durableConsumers
+    .filter((durableConsumer) => durableConsumer.stream === streamNameOf(service))
+    .map((durableConsumer) => durableConsumer.subject);
+  return { streamSubjects: [...new Set([...published, ...read])], durableConsumers };
 }
 
 function isCommand<Message extends RoutedMessage>(message: Message): message is CommandOf<Message> {

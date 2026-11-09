@@ -6,7 +6,13 @@
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": ["src", "test", "../contract/test/collected.ts", "../contract/test/line-breaks.ts"],
+  "include": [
+    "src",
+    "test",
+    "../contract/test/collected.ts",
+    "../contract/test/line-breaks.ts",
+    "../contract/test/printed.ts"
+  ],
   "references": [
     {
       "path": "../contract/tsconfig.build.json"

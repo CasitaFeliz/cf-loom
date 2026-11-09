@@ -4,10 +4,12 @@ import {
   follows,
   isReserved,
   kebabCase,
+  messageNameGrammar,
   nameNouns,
-  pascalCase,
   type RootKind,
   reservedNameSentence,
+  serviceNameGrammar,
+  subscriptionNameGrammar,
   upperSnakeCase,
   wordsOf,
 } from '../declarations/index.ts';
@@ -26,8 +28,12 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
   const camel = [
     ...named(endpoints, (listed) => listed.endpoint.name, nameNouns.endpoint),
     ...named(guards, (listed) => listed.guard.name, nameNouns.guard),
-    ...named(subscriptions, (listed) => listed.subscription.name, nameNouns.subscription),
   ];
+  const subscribed = named(
+    subscriptions,
+    (listed) => listed.subscription.name,
+    nameNouns.subscription,
+  );
   const pascal = [
     ...named(events, (listed) => listed.event.name, 'A Message name'),
     ...named(commands, (listed) => listed.command.name, 'A Message name'),
@@ -40,7 +46,8 @@ export function nameFailures(declarations: Declarations): readonly DeclarationFa
     ...rootNameFailures(root),
     ...grammarFailures(kebab, kebabCase),
     ...grammarFailures(camel, elementName),
-    ...grammarFailures(pascal, pascalCase),
+    ...grammarFailures(subscribed, subscriptionNameGrammar),
+    ...grammarFailures(pascal, messageNameGrammar),
     ...grammarFailures(upperSnake, upperSnakeCase),
   ];
 }
@@ -113,9 +120,6 @@ function hintFor(grammar: CappedGrammar, text: string): string {
   return follows(grammar, words) ? ` (write ${words})` : '';
 }
 
-/** The grammar of a Service's and an Application's name, the one place it is named. */
-const rootNameGrammar = kebabCase;
-
 /** The kinds of Root that are named. */
 type RootNamedKind = 'service' | 'application';
 
@@ -131,10 +135,10 @@ export function rootNameProblemOf(kind: RootKind, name: string): string | undefi
   switch (kind) {
     case 'service':
     case 'application': {
-      if (follows(rootNameGrammar, name)) {
+      if (follows(serviceNameGrammar, name)) {
         return undefined;
       }
-      const { rule } = toldOf(rootNameGrammar, name);
+      const { rule } = toldOf(serviceNameGrammar, name);
       const noun = rootNouns[kind];
       return `${noun.charAt(0).toLowerCase()}${noun.slice(1)} is ${rule}`;
     }
@@ -148,7 +152,7 @@ function rootNameFailures(root: Declarations['root']): readonly DeclarationFailu
   switch (root.kind) {
     case 'service':
     case 'application':
-      return grammarFailures(rootNamed(root), rootNameGrammar);
+      return grammarFailures(rootNamed(root), serviceNameGrammar);
     case 'definitions':
       return [];
   }
