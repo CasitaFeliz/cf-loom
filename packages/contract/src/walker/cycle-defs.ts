@@ -106,9 +106,8 @@ function defNameOf(answer: Walked | undefined): string | undefined {
 }
 
 /**
- * A schema on a cycle no id names is judged as every schema of the cycle would be with an id: a
- * `ref` wherever it is used, which takes no check. So its walk was building no node for a use,
- * met again or ended, and only a check on the schema whose own def builds the node is taken.
+ * A schema on a cycle no id names is `Unbuilt` wherever it is used, met again or ended: its fix, an
+ * id, makes it a `ref`, which no check or rule reads through.
  */
 function withoutOutline(node: Walked): Walked {
   return node.kind === 'not-allowed' ? failed(node.tree) : node;

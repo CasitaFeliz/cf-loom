@@ -61,10 +61,14 @@ function emptinessFailuresOf(outline: Outline, at: Reached): readonly NotAllowed
 
 /**
  * A check belongs to the schema it constrains, so where its schema admits more than its node
- * does, `null` or an absent field, the constraint is refused.
+ * does, `null` or an absent field, the constraint is refused; on an `Unbuilt` part it is judged
+ * as every replacement would judge it, whether the schema admits more or not.
  */
 function constraintOfSchema(outline: Outline, kind: CheckedKind): ConstraintOf<object> {
   const taken = constraintOfType(outline.type);
+  if (outline.type === undefined) {
+    return taken;
+  }
   switch (kind) {
     case 'optional':
       return refusedOnWiderSchema(taken, refusedCheckOnOptional);

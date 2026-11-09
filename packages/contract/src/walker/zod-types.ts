@@ -120,8 +120,8 @@ function refusalOf(def: RefusedDef): Refused {
 }
 
 /**
- * A refused def type, worded as `defTypes` says, beside what lies inside it: a wrapper stands for
- * the schema inside, a map's key and value sit at their own places as a record's do, a pipe's
+ * A refused def type, worded as `defTypes` says, beside what lies inside it, which is walked and
+ * judged where it stands: a map's key and value sit at their own places as a record's do, a pipe's
  * transform is the pipe's own refusal.
  */
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: what lies inside each refused zod type
@@ -142,7 +142,7 @@ function* refusedNodeOf(def: RefusedDef, at: Reached, walker: Walker): Walking {
     case 'nonoptional':
     case 'promise':
     case 'success':
-      return refusedBeside(notAllowed(at, refusal), yield* walker.schema(def.innerType, at));
+      return failed(failuresOf([notAllowed(at, refusal), yield* walker.schema(def.innerType, at)]));
     case 'map': {
       const key = yield* walker.schema(def.keyType, inside(at, keyStep));
       const value = yield* walker.schema(def.valueType, inside(at, valueStep));

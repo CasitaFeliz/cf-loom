@@ -241,14 +241,14 @@ describe('a refused zod check', () => {
   test.each([
     ['a set .min()', z.set(z.string()).min(1), ['z.set()', '.min(), .nonempty() or z.minSize()']],
     [
-      'a date .min()',
-      z.date().min(new Date(0)),
-      ['z.date()', '.min(), .gte(), .nonnegative() or z.minimum()'],
+      'a boolean z.gte()',
+      checked(z.boolean(), z.gte(0)),
+      ['.min(), .gte(), .nonnegative() or z.minimum()'],
     ],
     [
-      'a bigint .gte()',
-      z.bigint().gte(1n),
-      ['z.bigint()', '.min(), .gte(), .nonnegative() or z.minimum()'],
+      'an object z.minLength()',
+      checked(z.object({}), z.minLength(1)),
+      ['.min(), .nonempty() or z.minLength()'],
     ],
     [
       'a nullable number z.gte()',
