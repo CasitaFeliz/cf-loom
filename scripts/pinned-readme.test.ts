@@ -442,7 +442,7 @@ describe('pinnedReadme', () => {
           problem: [
             'the link target "https://github.com/other/repo" is on GitHub;',
             `a package README links GitHub only as [text](${atMain}/<path>),`,
-            '<path> with no ".", ".." or empty segment and no %, \\, ? or whitespace',
+            '<path> with no ".", ".." or empty segment and no %, \\ or ?',
           ].join(' '),
         },
       ],

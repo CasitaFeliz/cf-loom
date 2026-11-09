@@ -81,9 +81,12 @@ function isOnGitHub(target: string): boolean {
   return githubHosts.some((family) => host === family || host.endsWith(`.${family}`));
 }
 
+/** What the problem of a GitHub link tells the author about the path of a file, as `isRepositoryFile` reads it. */
+const pathRule = '<path> with no ".", ".." or empty segment and no %, \\ or ?';
+
 /**
- * Whether `target` is exactly a file of `repository` at `commit`: no segment of its path is empty, `.` or `..`, or
- * holds a `%`, a `\`, a `?` or white space, so that no browser reads it as another place, and a fragment follows.
+ * Whether `target` is exactly a file of `repository` at `commit`, its path, up to a fragment, having no segment that
+ * is empty, `.` or `..` or holds a `%`, a `\` or a `?`, so that no browser reads it as another place.
  */
 function isRepositoryFile(target: string, repository: string, commit: string): boolean {
   const prefix = repositoryFile(repository, commit, '');
@@ -91,7 +94,7 @@ function isRepositoryFile(target: string, repository: string, commit: string): b
     return false;
   }
   const [path = ''] = target.slice(prefix.length).split('#', 1);
-  const isSegment = (segment: string) => !/^\.{0,2}$|[%\\?\s]/.test(segment);
+  const isSegment = (segment: string) => !/^\.{0,2}$|[%\\?]/.test(segment);
   return path.split('/').every(isSegment);
 }
 
@@ -109,8 +112,7 @@ function targetProblem(target: string, repository: string, commit: string): stri
     return `the link target "${target}" has no scheme and is not an anchor`;
   }
   if (isOnGitHub(target) && !isRepositoryFile(target, repository, commit)) {
-    const rule = '<path> with no ".", ".." or empty segment and no %, \\, ? or whitespace';
-    return `the link target "${target}" is on GitHub; a package README links GitHub only as ${linkFormOf(repository)}, ${rule}`;
+    return `the link target "${target}" is on GitHub; a package README links GitHub only as ${linkFormOf(repository)}, ${pathRule}`;
   }
   return undefined;
 }
@@ -175,9 +177,7 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
  * The README with each inline link or image to a file of `repository` at `main` pointing at the same file at
  * `commit`, or the lines that keep it from being pinned, so that a pinned README holds nothing at `main`.
  *
- * A package README so links the repository only as `[text](https://github.com/<owner>/<name>/blob/main/<path>)`,
- * with no title, `<path>` holding no `.` or `..` segment, empty segment, `%`, `\`, `?` or whitespace; it links no
- * other address on GitHub (`github.com`, `githubusercontent.com`, `github.dev` and their subdomains); anything else
+ * A package README links the repository only so, and no other address on GitHub, as CLAUDE.md says; anything else
  * that could reach `main` refuses it.
  *
  * @param readme - The README's text.
