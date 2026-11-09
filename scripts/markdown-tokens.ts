@@ -106,8 +106,7 @@ function pushChildren(
  * are on its line, and the cells of row r on its line plus 2 plus r.
  */
 export function locatedTokens(markdown: string): readonly LocatedToken[] {
-  const text = markdown.replace(/\r\n?/g, '\n');
-  const lexed = markedTokens(Lexer.lex(text, { gfm: true, pedantic: false }));
+  const lexed = markedTokens(Lexer.lex(markdown, { gfm: true, pedantic: false }));
   const located: LocatedToken[] = [];
   const pending: LocatedToken[] = [];
   pushChildren(pending, tiled(lexed, 1), undefined);
