@@ -237,7 +237,7 @@ export function isFailureTree(part: NotAllowed | FailureTree): part is FailureTr
   return Array.isArray(part);
 }
 
-/** A refused construct reported beside the walk of what it holds, whose node it stands for. */
+/** A refused call on a schema reported beside the walk of the schema, which keeps its node. */
 export function refusedBeside(refusal: Failed, inner: Walked): Failed {
   return failed(failuresOf([refusal, inner]), outlineOf(inner));
 }

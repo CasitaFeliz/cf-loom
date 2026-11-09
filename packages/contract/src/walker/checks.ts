@@ -30,7 +30,8 @@ export type CheckedAt = { readonly at: Reached; readonly kind: CheckedKind };
 
 /**
  * A walked schema with the constraint of each of its checks, by what its node's type takes; a
- * failed walk gains the checks' refusals, judged by the node it was building, beside its failures.
+ * failed walk gains the checks' refusals, judged by the node it was building, beside its failures,
+ * and a check on a part the walk refused is judged only when no type takes it.
  */
 export function constrain(
   walkedSchema: Walked,

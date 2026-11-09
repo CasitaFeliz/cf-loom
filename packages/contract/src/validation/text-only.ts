@@ -39,12 +39,7 @@ type TextField = {
 /** What one Endpoint or Guard declares for a header or query name. */
 type Declared = { readonly owner: string; readonly shape: string };
 
-const textTypes: readonly (SchemaNode['type'] | undefined)[] = [
-  'string',
-  'number',
-  'boolean',
-  'enum',
-];
+const textTypes: readonly SchemaNode['type'][] = ['string', 'number', 'boolean', 'enum'];
 
 const nouns: Readonly<Record<TextIn, string>> = {
   params: 'A path param',
@@ -53,8 +48,9 @@ const nouns: Readonly<Record<TextIn, string>> = {
 };
 
 /**
- * Every rule the parts that travel as text break, judged on their outlines, a field only when its
- * schema is whole, so `generate` and the runtime's startup check read text parts by the same rules.
+ * Every rule the parts that travel as text break, judged on their outlines: a field's kind whatever
+ * lies inside it, its values only when its schema is whole, so `generate` and the runtime's startup
+ * check read text parts by the same rules.
  */
 export function textPartFailures(nodes: Nodes): readonly Failure[] {
   return nodes.slots.flatMap(partFailures);

@@ -34,7 +34,7 @@ export type Recursion = {
   readonly judgedDefs: () => JudgedDefs;
   /** Each declaration walks afresh a cycle no id names, which has no identity to share, and what holds one. */
   readonly forgetUnnamedCycles: () => void;
-  /** A composition the walk built, whose refusal is raised inside the remembered schema it is built in. */
+  /** A composition the walk built or was building, whose refusal is raised inside the remembered schema it is built in. */
   readonly built: (composition: Composition) => void;
   /** The remembered schema each refusal was raised inside, those of compositions included. */
   readonly memoOf: ReadonlyMap<NotAllowed, Memo>;
