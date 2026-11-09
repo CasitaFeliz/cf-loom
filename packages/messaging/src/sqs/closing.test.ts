@@ -268,7 +268,7 @@ describe('close over sqs()', () => {
     expect(message.startsWith('SQS refused to settle Messages of the Durable consumers ')).toBe(
       true,
     );
-    const named = message.slice(message.indexOf('consumers ') + 'consumers '.length).split(', ');
+    const named = message.slice(message.indexOf('consumers ') + 'consumers '.length).split(' and ');
     expect(named.sort()).toEqual([orders.chargeDurable, orders.notifyDurable].sort());
     expect((error as Error).cause).toBe(refusal);
   });

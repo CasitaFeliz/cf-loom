@@ -897,9 +897,9 @@ describe('what applyBrokerPlan refuses', () => {
 
     expect(error.message).toBe(
       [
-        `The stream ${orders.stream} has no maxAge, duplicateWindow in limits.streams or limits.streamDefaults`,
-        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
-        `The Durable consumer ${billing.durable} has no maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The stream ${orders.stream} has no maxAge and duplicateWindow in limits.streams or limits.streamDefaults`,
+        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${billing.durable} has no maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);
@@ -921,7 +921,7 @@ describe('what applyBrokerPlan refuses', () => {
     expect(error.message).toBe(
       [
         `The stream ${orders.stream} has no maxAge in limits.streams or limits.streamDefaults`,
-        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver, maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${orders.chargeDurable} has no deliverPolicy, ackWait, maxDeliver and maxAckPending in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
     expect(service.opened).toHaveLength(0);

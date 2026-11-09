@@ -166,7 +166,7 @@ describe('failure lines: an open union or intersection, reached from several sit
     const endpoints = ['c', 'a', 'b'].map((key) => anEndpoint(key, `GET /${key}`, { u: choice }));
 
     expect(linesOf(serviceWith(endpoints))).toEqual([
-      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b), endpoints.GET /c (c))`,
+      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b) and endpoints.GET /c (c))`,
     ]);
   });
 
@@ -1750,12 +1750,18 @@ function foldedBySchema(tellings: readonly Telling[]): readonly Telling[] {
   });
 }
 
+/** Sites as a sentence lists them: `a`, `a and b`, `a, b and c`. */
+function sentenceListOf(sites: readonly string[]): string {
+  const last = sites.at(-1);
+  return sites.length < 2 ? sites.join('') : `${sites.slice(0, -1).join(', ')} and ${last}`;
+}
+
 /** The line of the refusals at one place: the sites that also reach it in code point order, and the origin of the shared date when it is exported. */
 function lineOf(group: readonly Telling[], exported: boolean): string {
   const [{ at, refusal, schema }] = group as readonly [Telling];
   const sites = new Set(group.flatMap((telling) => [...telling.sites]));
   const others = [...sites].filter((site) => site !== at.site).sort(byPoints);
-  const alsoIn = others.length === 0 ? '' : ` (also in ${others.join(', ')})`;
+  const alsoIn = others.length === 0 ? '' : ` (also in ${sentenceListOf(others)})`;
   const origin =
     exported && schema === 'shared' ? ' (declared in @org/definitions@4.2.0#stamp)' : '';
   return `${at.text} ${refusal}${alsoIn}${origin}`;

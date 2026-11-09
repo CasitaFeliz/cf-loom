@@ -175,7 +175,7 @@ describe('validateRoot: a Service’s Dependencies', () => {
       failed(
         '(root) dependencies[0]',
         'dependency-selection',
-        "A Dependency lists one Provider's Endpoints: payments-service, refunds-service",
+        "A Dependency lists one Provider's Endpoints: payments-service and refunds-service",
       ),
     );
   });

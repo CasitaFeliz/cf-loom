@@ -287,6 +287,20 @@ describe('validateRoot: a Qualifier against its schema', () => {
     );
   });
 
+  test('two undeclared keys in an object Qualifier fail, listed closed by and', () => {
+    const guards: readonly Attachment[] = [
+      { guard: quota, qualifier: { perMinute: 60, extra: true, other: 1 } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        `${guardsAt}[0].qualifier`,
+        'qualifier-keys',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: extra and other',
+      ),
+    );
+  });
+
   test('an undeclared key in an object nested in a Qualifier fails', () => {
     const guards: readonly Attachment[] = [
       { guard: quota, qualifier: { perMinute: 60, burst: { size: 5, every: 'minute' } } },

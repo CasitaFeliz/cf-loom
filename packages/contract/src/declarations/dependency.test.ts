@@ -89,7 +89,7 @@ describe('defineDependency', () => {
     >[0];
 
     expectTypeOf<Written['endpoints']>().toExtend<
-      Refusal<"A Dependency lists one Provider's Endpoints: payments-service, refunds-service">
+      Refusal<"A Dependency lists one Provider's Endpoints: payments-service and refunds-service">
     >();
     // @ts-expect-error TS2322 a Dependency calls one Provider
     const declare = () => defineDependency({ endpoints: [getPayment, getRefund] });

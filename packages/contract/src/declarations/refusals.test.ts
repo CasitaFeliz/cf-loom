@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
 import { aProvider } from '../../test/providers.ts';
 import { aRootPackage } from '../../test/root-package.ts';
@@ -199,7 +199,7 @@ const rows: Record<SentenceName, Row> = {
       const dependency = defineDependency({ endpoints } as never);
       return defineService({ name: 'orders-service', dependencies: [dependency] });
     },
-    sentence: internal.oneProviderSentence('payments-service, refunds-service'),
+    sentence: internal.oneProviderSentence('payments-service and refunds-service'),
   },
   exactParamsSentence: {
     root: () => serviceOf(defineEndpoint({ ...listOrders, path: '/orders/:orderId' } as never)),
@@ -254,4 +254,168 @@ describe('the refusal sentences the types and generate share', () => {
       expect(messagesOf(root())).toEqual([sentence]);
     },
   );
+});
+
+/** The sentences a part of a declaration is refused with: the keys of its type that no value has. */
+type SentencesOf<Part> = {
+  [Key in keyof Part]-?: [Part[Key]] extends [never] ? Key : never;
+}[keyof Part];
+
+/** The Endpoint of a Provider's Contract Package, named and of the Visibility given, as literals. */
+function providedAs<
+  const Provider extends string,
+  const Name extends string,
+  const Visibility extends 'public' | 'internal',
+>(provider: Provider, name: Name, visibility: Visibility) {
+  const declaration = { ...listOrders, name, visibility } as const;
+  return providedEndpoint(aProvider(provider), declaration, undefined);
+}
+
+const guardOf = <const Name extends string>(name: Name) => ({ name, description: `The ${name}` });
+
+describe('a refusal that lists names reads as generate writes it', () => {
+  const orderAndItem = "params declares exactly the path's :names: orderId and itemId";
+
+  test('params that are not a path’s :names are refused by type and by generate, listing the names in path order closed by and', () => {
+    const declaration = {
+      ...listOrders,
+      path: '/orders/:orderId/items/:itemId',
+      input: { params: z.object({ id: z.uuid() }) },
+    } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<typeof orderAndItem>();
+    expect(messages).toEqual([orderAndItem]);
+  });
+
+  test('params of a path with three :names list them in path order, and one :name repeated once', () => {
+    const three = {
+      ...listOrders,
+      path: '/orders/:orderId/items/:itemId/parts/:partId',
+      input: { params: z.object({ id: z.uuid() }) },
+    } as const;
+    const repeated = { ...listOrders, path: '/a/:id/b/:other/c/:id' } as const;
+    type WrittenThree = Parameters<typeof defineEndpoint<typeof three>>[0];
+    type WrittenRepeated = Parameters<typeof defineEndpoint<typeof repeated>>[0];
+
+    const messagesOfThree = messagesOf(serviceOf(defineEndpoint(three as never)));
+    const messagesOfRepeated = messagesOf(serviceOf(defineEndpoint(repeated as never)));
+
+    const listed = "params declares exactly the path's :names: orderId, itemId and partId";
+    expectTypeOf<SentencesOf<WrittenThree['input']['params']>>().toEqualTypeOf<typeof listed>();
+    expect(messagesOfThree).toEqual([listed]);
+    const once = "params declares exactly the path's :names: id and other";
+    expectTypeOf<SentencesOf<WrittenRepeated['input']['params']>>().toEqualTypeOf<typeof once>();
+    expect(messagesOfRepeated).toEqual([once]);
+  });
+
+  test('an Endpoint whose path is a union of two paths is refused once for each path', () => {
+    const declaration = {
+      ...listOrders,
+      path: '/a/:orderId/b/:itemId' as '/a/:orderId/b/:itemId' | '/c/:zeta',
+      input: { params: z.object({ id: z.uuid() }) },
+    } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<
+      | "params declares exactly the path's :names: orderId and itemId"
+      | "params declares exactly the path's :names: zeta"
+    >();
+  });
+
+  test('a Guard listed before two Guards it requires is refused by type and by generate, closed by and', () => {
+    const tenant = defineGuard(guardOf('tenant'));
+    const org = defineGuard(guardOf('org'));
+    const member = defineGuard({ ...guardOf('member'), guards: [tenant, org] });
+    const declaration = { ...listOrders, guards: [member] } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    const sentence = 'member requires tenant and org earlier in guards';
+    expectTypeOf<SentencesOf<NonNullable<Written['guards']>>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
+  });
+
+  test('a Guard listed before three Guards it requires lists them in the order its guards list them', () => {
+    const tenant = defineGuard(guardOf('tenant'));
+    const org = defineGuard(guardOf('org'));
+    const region = defineGuard(guardOf('region'));
+    const member = defineGuard({ ...guardOf('member'), guards: [region, tenant, org] });
+    const declaration = { ...listOrders, guards: [member] } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    const sentence = 'member requires region, tenant and org earlier in guards';
+    expectTypeOf<SentencesOf<NonNullable<Written['guards']>>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
+  });
+
+  test('a Dependency of three Providers lists them in the order its Endpoints list them, each once, closed by and', () => {
+    const endpoints = [
+      providedAs('zeta-service', 'getZeta', 'public'),
+      providedAs('alpha-service', 'getAlpha', 'public'),
+      providedAs('zeta-service', 'getZetaAgain', 'public'),
+      providedAs('mid-service', 'getMid', 'public'),
+    ] as const;
+    type Written = Parameters<typeof defineDependency<{ readonly endpoints: typeof endpoints }>>[0];
+    const dependency = defineDependency({ endpoints } as never);
+
+    const messages = messagesOf(
+      defineService({ name: 'orders-service', dependencies: [dependency] }),
+    );
+
+    const sentence =
+      "A Dependency lists one Provider's Endpoints: zeta-service, alpha-service and mid-service";
+    expectTypeOf<SentencesOf<Written['endpoints']>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
+  });
+
+  test('two header names that are not lower-case are two refusals by type and two lines of generate', () => {
+    const declaration = {
+      ...createOrder,
+      input: { headers: z.object({ 'X-Alpha': z.string(), 'X-Beta': z.string() }) },
+    } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    const alpha = 'Header names are lower-case: X-Alpha';
+    const beta = 'Header names are lower-case: X-Beta';
+    expectTypeOf<SentencesOf<Written['input']['headers']>>().toEqualTypeOf<
+      typeof alpha | typeof beta
+    >();
+    expect(messages).toEqual([alpha, beta]);
+  });
+
+  test('two Endpoints an Application lists that are not Public are two refusals by type and two lines of generate', () => {
+    const dependency = defineDependency({
+      endpoints: [
+        providedAs('payments-service', 'refundPayment', 'internal'),
+        providedAs('payments-service', 'voidPayment', 'internal'),
+      ],
+    });
+    type Written = Parameters<
+      typeof defineApplication<{
+        readonly name: 'web-admin';
+        readonly dependencies: readonly [typeof dependency];
+      }>
+    >[0];
+
+    const messages = messagesOf(
+      defineApplication({ name: 'web-admin', dependencies: [dependency] } as never),
+    );
+
+    const refund =
+      "An Application depends on Public Endpoints only: payments-service's refundPayment is internal";
+    const voided =
+      "An Application depends on Public Endpoints only: payments-service's voidPayment is internal";
+    expectTypeOf<SentencesOf<NonNullable<Written['dependencies']>>>().toEqualTypeOf<
+      typeof refund | typeof voided
+    >();
+    expect(messages).toEqual([refund, voided]);
+  });
 });

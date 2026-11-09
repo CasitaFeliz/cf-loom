@@ -570,7 +570,7 @@ describe('failure lines: a schema several places reach', () => {
     );
 
     expect(lines).toEqual([
-      'endpoints.GET /a (a) success.body.v not allowed: .default() (also in endpoints.POST /b (b), endpoints.POST /c (c))',
+      'endpoints.GET /a (a) success.body.v not allowed: .default() (also in endpoints.POST /b (b) and endpoints.POST /c (c))',
     ]);
   });
 
