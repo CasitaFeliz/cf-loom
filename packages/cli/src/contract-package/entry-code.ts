@@ -11,7 +11,7 @@ import {
   type Writing,
   zodExpressionOf,
 } from '../schema-code/index.ts';
-import { relativeSpecifierOf, stringLiteralOf } from '../source-text/index.ts';
+import { codeListOf, relativeSpecifierOf, stringLiteralOf } from '../source-text/index.ts';
 import type { ExportedEndpoint, ExportedEvent } from './exported-snapshot.ts';
 import { type PackageFile, packageModuleOf } from './modules.ts';
 import { bindingOf, fileOf, type ProvidedDeclaration, standardRejectionsSibling } from './names.ts';
@@ -52,7 +52,7 @@ function defTypesExportOf(defUses: readonly DefUse[]): readonly string[] {
   }
   const types = defUses.map(({ id, mode }) => defTypeNameOf(id, mode)).sort(byCodePoint);
   const specifier = relativeSpecifierOf(packagePaths.entry, packagePaths.defs);
-  return [`export type { ${types.join(', ')} } from ${stringLiteralOf(specifier)};`];
+  return [`export type { ${codeListOf(types)} } from ${stringLiteralOf(specifier)};`];
 }
 
 /**

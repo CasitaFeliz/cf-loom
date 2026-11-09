@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { joinedOf } from '@cf-loom/contract/internal';
 import { importedModuleOf, oneLineOf } from '../loading/index.ts';
 import { layoutOf, type ServiceLayout } from './layout.ts';
 
@@ -47,7 +48,7 @@ export async function loadConfig(directory: string): Promise<LoadedConfig> {
 function loadedOf(config: object): LoadedConfig {
   const unknown = Object.keys(config).find((key) => !configFields.includes(key));
   if (unknown !== undefined) {
-    const takes = `it takes ${configFields.join(', ')}`;
+    const takes = `it takes ${joinedOf(configFields, 'and')}`;
     return failed(`${configFile}: ${unknown} is no field of the configuration: ${takes}`);
   }
   const written = Reflect.get(config, 'layout');

@@ -150,6 +150,7 @@
   ],
   "plugins": [
     "./lint/held-request.grit",
+    "./lint/joined-lists.grit",
     "./lint/no-boolean-parameter.grit",
     "./lint/no-clock-in-tests.grit",
     "./lint/no-flatmap-filter.grit",

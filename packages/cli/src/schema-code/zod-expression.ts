@@ -9,7 +9,13 @@ import type {
   TaggedNode,
   TupleNode,
 } from '@cf-loom/contract/internal';
-import { jsonLiteralOf, keyOf, literalOf, stringLiteralOf } from '../source-text/index.ts';
+import {
+  codeListOf,
+  jsonLiteralOf,
+  keyOf,
+  literalOf,
+  stringLiteralOf,
+} from '../source-text/index.ts';
 import { defIdentifierOf } from './def-names.ts';
 import { formatCallOf, regexCallOf } from './formats.ts';
 import { addDefUse, type Writing } from './needs.ts';
@@ -54,7 +60,7 @@ function shapeOf(node: SchemaNode, writing: Writing): string {
     case 'tuple':
       return tupleOf(node, writing);
     case 'union':
-      return `z.union([${node.options.map((option) => zodExpressionOf(option, writing)).join(', ')}])`;
+      return `z.union([${codeListOf(node.options.map((option) => zodExpressionOf(option, writing)))}])`;
     case 'tagged':
       return taggedOf(node, writing);
     case 'allOf':
@@ -100,7 +106,7 @@ function enumOf(node: EnumNode, writing: Writing): string {
  * discriminator must be.
  */
 function closedEnumOf(node: EnumNode): string {
-  const values = node.values.map(literalOf).join(', ');
+  const values = codeListOf(node.values.map(literalOf));
   const allStrings = node.values.every((value) => typeof value === 'string');
   if (node.values.length === 1) {
     return `z.literal(${values})`;
@@ -116,14 +122,14 @@ function closedEnumOf(node: EnumNode): string {
 function openEnumOf(node: EnumNode, writing: Writing): string {
   writing.needs.modules.add('loom');
   const call = writing.mode === 'reader' ? 'openEnumReader' : 'openEnum';
-  return `loom.${call}([${node.values.map(literalOf).join(', ')}])`;
+  return `loom.${call}([${codeListOf(node.values.map(literalOf))}])`;
 }
 
 function objectOf(node: ObjectNode, writing: Writing): string {
   const fields = Object.entries(node.fields).map(
     ([name, field]) => `${keyOf(name)}: ${fieldOf(field, writing)}`,
   );
-  return fields.length === 0 ? 'z.object({})' : `z.object({ ${fields.join(', ')} })`;
+  return fields.length === 0 ? 'z.object({})' : `z.object({ ${codeListOf(fields)} })`;
 }
 
 /** A field's schema, optional unless it is required. */
@@ -133,7 +139,7 @@ function fieldOf({ schema, required }: Field, writing: Writing): string {
 }
 
 function tupleOf(node: TupleNode, writing: Writing): string {
-  const items = node.items.map((item) => zodExpressionOf(item, writing)).join(', ');
+  const items = codeListOf(node.items.map((item) => zodExpressionOf(item, writing)));
   if (node.rest === undefined) {
     return `z.tuple([${items}])`;
   }
@@ -146,7 +152,7 @@ function tupleOf(node: TupleNode, writing: Writing): string {
  */
 function taggedOf(node: TaggedNode, writing: Writing): string {
   const variants = Object.values(node.variants).map((variant) => zodExpressionOf(variant, writing));
-  return `z.discriminatedUnion(${stringLiteralOf(node.discriminator)}, [${variants.join(', ')}])`;
+  return `z.discriminatedUnion(${stringLiteralOf(node.discriminator)}, [${codeListOf(variants)}])`;
 }
 
 /** An intersection of every item, nested from the left, as zod intersects two at a time. */

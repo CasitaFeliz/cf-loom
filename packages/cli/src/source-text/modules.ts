@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import { codeListOf } from './code-lists.ts';
 import { keyOf, stringLiteralOf } from './literals.ts';
 
 /** Which cf-loom command writes a generated file, as its first line says. */
@@ -20,12 +21,12 @@ export function isWrittenBy(command: GeneratingCommand, text: string): boolean {
 
 /** An import of named exports. */
 export function namedImportOf(names: readonly string[], specifier: string): string {
-  return `import { ${names.join(', ')} } from ${stringLiteralOf(specifier)};`;
+  return `import { ${codeListOf(names)} } from ${stringLiteralOf(specifier)};`;
 }
 
 /** An import of named exports, as types only. */
 export function typeImportOf(names: readonly string[], specifier: string): string {
-  return `import type { ${names.join(', ')} } from ${stringLiteralOf(specifier)};`;
+  return `import type { ${codeListOf(names)} } from ${stringLiteralOf(specifier)};`;
 }
 
 /** An import of a whole module under one name. */
