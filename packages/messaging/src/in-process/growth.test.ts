@@ -1,7 +1,7 @@
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { orderOf, orders, type Sizes } from '../../../contract/test/growth.ts';
+import { orderOf, orderOfGrowth, orders, type Sizes } from '../../../contract/test/growth.ts';
 import type { BrokerConnection, DurableConsumer, OutgoingMessage, Settlement } from '../index.ts';
 import { type InProcessBrokerLimits, inProcess } from './index.ts';
 
@@ -170,13 +170,16 @@ function refusalOf(value: unknown): unknown {
   }
 }
 
-/** The order of what refusing the value of each size costs, which each size builds once and every run refuses. */
-function refusalOrderOf(build: (size: number) => unknown, sizes: Sizes): number {
+/** The order of what refusing the value of each size costs in time and in length, which each size builds once and every run refuses. */
+function refusalOrdersOf(build: (size: number) => unknown, sizes: Sizes) {
   const built = new Map([
     [sizes.small, build(sizes.small)],
     [sizes.large, build(sizes.large)],
   ]);
-  return orderOf((size) => () => refusalOf(built.get(size)), sizes, orders.flat);
+  const lengthAt = (size: number) => (refusalOf(built.get(size)) as Error).message.length;
+  const length = orderOfGrowth(lengthAt(sizes.large) / lengthAt(sizes.small), sizes);
+  const time = orderOf((size) => () => refusalOf(built.get(size)), sizes, orders.flat);
+  return { time, length };
 }
 
 /** A list of `width` entries and, in each of its first 100, a list like it down `levels`, the same one when `sharing`, else each its own; the last level holds at most 100 entries, the most a refusal reads. */
@@ -233,10 +236,11 @@ describe('the growth of a refusal showing a value', () => {
       build: (size: number) => treeOf(size, 2, 'fresh'),
       sizes: { small: 1_000, large: 100_000 },
     },
-  ])('a refusal’s time stays flat in $dimension', ({ build, sizes }) => {
-    const order = refusalOrderOf(build, sizes);
+  ])('a refusal’s time and length stay flat in $dimension', ({ build, sizes }) => {
+    const growth = refusalOrdersOf(build, sizes);
 
-    expect(order).toBeLessThan(orders.flat);
+    expect(growth.time).toBeLessThan(orders.flat);
+    expect(growth.length).toBeLessThan(orders.flat);
   });
 });
 
