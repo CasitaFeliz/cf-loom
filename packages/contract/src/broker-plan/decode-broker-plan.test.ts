@@ -96,7 +96,6 @@ function aPrintedPlan(prefix: string | null = null): EditablePlan {
 const chargeCardConsumer = 'orders-service_command_ChargeCard_v1';
 const refundConsumer = 'orders-service_command_Refund_v1';
 const refundSubject = 'orders-service.command.Refund.v1';
-const orderCreatedSubject = 'orders-service.event.OrderCreated.v1';
 
 /** The subjects of the Stream of orders-service the plan lists. */
 function ordersSubjectsOf(plan: EditablePlan): string[] {
@@ -623,56 +622,6 @@ describe('reading a broker plan', () => {
     const decoded = decodeBrokerPlan(edit(aPrintedPlan()));
 
     expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
-  });
-
-  const ownEventConsumer = 'orders-service_on-created';
-
-  /** The plan of orders-service with a Subscription to its own OrderCreated, which its Stream's subjects may lack. */
-  function aSelfSubscriberPlan(subjects: string[]): EditablePlan {
-    const printed = aPrintedPlan();
-    return {
-      ...withStream(printed, 'orders-service', { subjects }),
-      durableConsumers: {
-        ...printed.durableConsumers,
-        [ownEventConsumer]: {
-          service: 'orders-service',
-          stream: 'orders-service',
-          subject: orderCreatedSubject,
-        },
-      },
-    };
-  }
-
-  test('a Subscription to its own Event whose Stream lacks the Event’s subject is malformed, naming the missing subject', () => {
-    const subjects = ordersSubjectsOf(aPrintedPlan()).filter((one) => one !== orderCreatedSubject);
-
-    const decoded = decodeBrokerPlan(aSelfSubscriberPlan(subjects));
-
-    expect(decoded).toEqual(
-      malformed(
-        `streams.orders-service.subjects lacks ${orderCreatedSubject}, which the plan's names print for orders-service`,
-      ),
-    );
-  });
-
-  test('a Subscription to its own Event in a plan with no Stream is malformed, naming the missing Stream', () => {
-    const plan = {
-      prefix: null,
-      streams: {},
-      durableConsumers: {
-        [ownEventConsumer]: {
-          service: 'orders-service',
-          stream: 'orders-service',
-          subject: orderCreatedSubject,
-        },
-      },
-    };
-
-    const decoded = decodeBrokerPlan(plan);
-
-    expect(decoded).toEqual(
-      malformed("streams lacks orders-service, which the plan's names print for orders-service"),
-    );
   });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {

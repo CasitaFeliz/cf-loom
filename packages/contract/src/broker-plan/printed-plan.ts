@@ -14,7 +14,7 @@ export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | 
   return streamDifferenceOf(plan, printed, service) ?? consumerDifferenceOf(plan, printed, service);
 }
 
-/** What the Service the plan names first routes, read from its texts: the Message Versions its Stream's subjects and its Subscriptions to itself name, each once, and the Subscriptions its Durable consumers are. */
+/** What the Service the plan names first routes, read from its texts: the Message Versions its Stream's subjects name, each once, and the Subscriptions its Durable consumers are. */
 function routedOf(service: string, read: ReadPlan): RoutedService {
   const subscriptions: RoutedSubscription[] = [];
   for (const { consumed, subject } of read.consumers) {
@@ -24,10 +24,7 @@ function routedOf(service: string, read: ReadPlan): RoutedService {
     }
   }
   const streamed = read.streams.flatMap((stream) => stream.subjects);
-  const received = subscriptions
-    .filter((subscription) => subscription.provider === service)
-    .map(({ event }) => ({ kind: 'event' as const, service, ...event }));
-  const own = [...streamed, ...received].filter((subject) => subject.service === service);
+  const own = streamed.filter((subject) => subject.service === service);
   const messages = new Map(own.map((message) => [subjectOf(service, message), message]));
   return { service, messages: [...messages.values()], subscriptions };
 }

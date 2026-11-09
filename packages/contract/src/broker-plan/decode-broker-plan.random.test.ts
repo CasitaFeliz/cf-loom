@@ -157,7 +157,8 @@ describe('a printed plan with one text changed', () => {
     expect(count('unprintable')).toBeGreaterThan(300);
     expect(count('refused')).toBeGreaterThan(100);
     expect(count('matches')).toBeGreaterThan(40);
-    expect(count('excluded')).toBeLessThan(count('matches'));
+    expect(count('excluded')).toBeGreaterThan(0);
+    expect(count('excluded')).toBeLessThan(judged.length / 20);
   });
 });
 
@@ -206,6 +207,7 @@ describe('a printed plan with one name replaced, two subjects swapped or a Durab
     ).toEqual([]);
     expect(count('refused')).toBeGreaterThan(200);
     expect(count('matches')).toBeGreaterThan(40);
-    expect(count('excluded')).toBeLessThan(count('matches'));
+    expect(count('excluded')).toBeGreaterThan(0);
+    expect(count('excluded')).toBeLessThan(outcomes.length / 20);
   });
 });
