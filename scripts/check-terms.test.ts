@@ -1,13 +1,24 @@
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { misspelledTerms, multiWordTerms } from './check-terms.ts';
+import { misspelledTerms, multiWordTerms, type TermMisspelling } from './check-terms.ts';
+import { type Container, containers, type MarkdownBlock, placed } from './markdown-containers.ts';
+import { aSeededDraw, type Draw, pickFrom } from './seeded-draw.ts';
 
 const repositoryDirs: string[] = [];
 
-const glossaryPath = join(import.meta.dirname, '..', 'CONTEXT.md');
+const root = join(import.meta.dirname, '..');
+const glossaryPath = join(root, 'CONTEXT.md');
 
 function aRepositoryWith(files: Record<string, string>): string {
   const repositoryDir = mkdtempSync(join(tmpdir(), 'check-terms-'));
@@ -17,6 +28,7 @@ function aRepositoryWith(files: Record<string, string>): string {
     recursive: true,
     filter: (path) => !path.endsWith('.test.ts'),
   });
+  symlinkSync(join(root, 'node_modules'), join(repositoryDir, 'node_modules'));
   for (const [path, content] of Object.entries(files)) {
     mkdirSync(dirname(join(repositoryDir, path)), { recursive: true });
     writeFileSync(join(repositoryDir, path), content);
@@ -89,6 +101,24 @@ describe('multiWordTerms', () => {
     ].join('\n');
 
     expect(multiWordTerms(glossary)).toEqual(['Reader schema']);
+  });
+
+  it('does not read a bold phrase in a code span as a term, and reads one in underscores', () => {
+    const glossary = [
+      '**Direct call**:',
+      'Written as `**Fake Provider**` in code, and as __Message Handler__ in the glossary.',
+    ].join('\n');
+
+    expect(multiWordTerms(glossary)).toEqual(['Direct call', 'Message Handler']);
+  });
+
+  it('does not read an emphasized phrase as a term', () => {
+    const glossary = [
+      '**Direct call**:',
+      'A *Fake Provider* and an _Event Handler_ are only emphasized.',
+    ].join('\n');
+
+    expect(multiWordTerms(glossary)).toEqual(['Direct call']);
   });
 
   it('lists a term once however many times the glossary makes it bold', () => {
@@ -282,7 +312,7 @@ describe('misspelledTerms', () => {
   });
 
   it('does not report a term inside a link destination', () => {
-    const markdown = 'See [the doc](./a direct call.md) here.\n';
+    const markdown = 'See [the doc](<./a direct call.md>) here.\n';
 
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
@@ -295,6 +325,116 @@ describe('misspelledTerms', () => {
     const misspellings = misspelledTerms(markdown, ['Direct call']);
 
     expect(misspellings).toEqual([]);
+  });
+
+  it('does not report a term after a three-backtick line inside a four-backtick fence', () => {
+    const markdown = ['````md', '```', 'a direct call', '```', 'a direct call', '````'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('does not report a term inside indented code', () => {
+    const markdown = ['A paragraph.', '', '    a direct call', '', 'The end.'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it.each([
+    ['a block one', 'A paragraph.\n\n<!-- a direct call -->\n\nThe end.\n'],
+    ['a block one over lines', 'A paragraph.\n\n<!--\na direct call\n-->\n\nThe end.\n'],
+    ['an inline one', 'A paragraph <!-- a direct call --> goes on.\n'],
+  ])('does not report a term inside an HTML comment, %s', (_form, markdown) => {
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it.each([
+    ['an autolink', 'See <https://example.com/direct> call here.\n'],
+    ['a www link', 'See www.example.com/direct call here.\n'],
+    ['a bare URL', 'See https://example.com/direct call here.\n'],
+  ])('does not read a term that begins at the end of %s', (_form, markdown) => {
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([]);
+  });
+
+  it('reports a term in the second paragraph of a blockquote at its line', () => {
+    const markdown = ['> One.', '>', '> A direct call', '> here.'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 3, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it('reports a term in a nested list item at its line, whatever its parent wraps over', () => {
+    const markdown = ['- one', '  two', '  - a direct', '    call', '- three'].join('\n');
+
+    const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 3, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it.each([
+    ['two spaces', 'A direct  \ncall that wraps.\n'],
+    ['a backslash', 'A direct\\\ncall that wraps.\n'],
+  ])(
+    'reports a term whose words a hard line break of %s separates, at the line it starts on',
+    (_form, markdown) => {
+      const misspellings = misspelledTerms(`First.\n\n${markdown}`, ['Direct call']);
+
+      expect(misspellings).toEqual([{ line: 3, written: 'direct call', spelled: 'Direct call' }]);
+    },
+  );
+
+  it.each([
+    ['a code span before the break', 'the direct `x`\\\ncall'],
+    ['a paragraph boundary before the break', 'Some direct\n\n`x`\\\ncall'],
+    ['a code block before the break', 'a direct\n\n```\nq\n```\n\n`y`  \ncall'],
+    ['emphasis before the break', '*direct*\\\ncall'],
+    ['a link before the break', '[direct](u)  \ncall'],
+  ])(
+    'reports no term across %s, since only sibling text is joined by a hard line break',
+    (_form, markdown) => {
+      const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+      expect(misspellings).toEqual([]);
+    },
+  );
+
+  it('reports a term that a hard line break splits inside emphasis', () => {
+    const misspellings = misspelledTerms('*a direct  \ncall*', ['Direct call']);
+
+    expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
+  });
+
+  it.each([
+    ['two spaces', 'Intro.  \nA direct call here.'],
+    ['a backslash', 'Intro.\\\nA direct call here.'],
+  ])(
+    'reports a term after a line that ends in a hard line break of %s, at its own line',
+    (_form, markdown) => {
+      const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+      expect(misspellings).toEqual([{ line: 2, written: 'direct call', spelled: 'Direct call' }]);
+    },
+  );
+
+  it('numbers the lines of a document with CRLF line ends as it does one with LF', () => {
+    const lines = ['> One.', '>', '> A direct call', '', '- a direct', '  call'];
+
+    const withCrlf = misspelledTerms(lines.join('\r\n'), ['Direct call']);
+    const withLf = misspelledTerms(lines.join('\n'), ['Direct call']);
+
+    expect(withCrlf).toEqual([
+      { line: 3, written: 'direct call', spelled: 'Direct call' },
+      { line: 5, written: 'direct call', spelled: 'Direct call' },
+    ]);
+    expect(withLf).toEqual(withCrlf);
   });
 
   it('reports a term in parentheses in prose', () => {
@@ -372,6 +512,170 @@ describe('misspelledTerms', () => {
     const misspellings = misspelledTerms(markdown, terms);
 
     expect(misspellings).toEqual(wrong.map((use, index) => ({ line: index + 1, ...use })));
+  });
+});
+
+/** The words of a term cut after the first, for a holder that puts the first in a URL and the rest after it. */
+function splitOf(words: string): readonly [string, string] {
+  const [first = '', ...rest] = words.split(' ');
+  return [first, rest.join(' ')];
+}
+
+/** What can hold the words of a term: whether it is prose, so that a wrong spelling in it is reported. */
+type Holder = {
+  readonly isProse: boolean;
+  /** The row of its lines that its words start on. */
+  readonly row?: number;
+  readonly lines: (words: string) => readonly string[];
+};
+
+const holders: Record<string, Holder> = {
+  prose: { isProse: true, lines: (words) => [`The ${words} here.`] },
+  'prose over a line break': {
+    isProse: true,
+    lines: (words) => [`The ${splitOf(words)[0]}`, `${splitOf(words)[1]} here.`],
+  },
+  'prose over a hard line break': {
+    isProse: true,
+    lines: (words) => [`The ${splitOf(words)[0]}  `, `${splitOf(words)[1]} here.`],
+  },
+  'prose after a hard line break': {
+    isProse: true,
+    row: 1,
+    lines: (words) => ['An introduction.  ', `A ${words} here.`],
+  },
+  'prose after a backslash line break': {
+    isProse: true,
+    row: 1,
+    lines: (words) => ['An introduction.\\', `A ${words} here.`],
+  },
+  'a code span before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The ${splitOf(words)[0]} \`x\`\\`, `${splitOf(words)[1]} here.`],
+  },
+  'emphasis before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The *${splitOf(words)[0]}*  `, `${splitOf(words)[1]} here.`],
+  },
+  'a paragraph boundary before a hard line break': {
+    isProse: false,
+    lines: (words) => [`The ${splitOf(words)[0]}`, '', '`x`\\', `${splitOf(words)[1]} here.`],
+  },
+  'prose over a backslash line break': {
+    isProse: true,
+    lines: (words) => [`The ${splitOf(words)[0]}\\`, `${splitOf(words)[1]} here.`],
+  },
+  'a code span': { isProse: false, lines: (words) => [`The \`${words}\` here.`] },
+  'a double-backtick span': { isProse: false, lines: (words) => [`The \`\` ${words} \`\` here.`] },
+  'a code span over a line break': {
+    isProse: false,
+    lines: (words) => [`The \`${splitOf(words)[0]}`, `${splitOf(words)[1]}\` here.`],
+  },
+  'a backtick fence': { isProse: false, lines: (words) => ['```ts', `// ${words}`, '```'] },
+  'a tilde fence': { isProse: false, lines: (words) => ['~~~', words, '~~~'] },
+  'a four-backtick fence after a three-backtick line': {
+    isProse: false,
+    lines: (words) => ['````md', '```', words, '```', words, '````'],
+  },
+  'indented code': { isProse: false, lines: (words) => [`    ${words}`] },
+  'an HTML comment block': { isProse: false, lines: (words) => [`<!-- ${words} -->`] },
+  'an HTML comment block over lines': {
+    isProse: false,
+    lines: (words) => ['<!--', words, '-->'],
+  },
+  'an inline HTML comment': { isProse: false, lines: (words) => [`The <!-- ${words} --> here.`] },
+  'a link destination': { isProse: false, lines: (words) => [`See [the doc](<./${words}.md>).`] },
+  'a link title': { isProse: false, lines: (words) => [`See [the doc](./a.md "${words}").`] },
+  'a definition': { isProse: false, lines: (words) => [`[the doc]: ./a.md "${words}"`] },
+  'an autolink': {
+    isProse: false,
+    lines: (words) => [`See <https://example.com/${splitOf(words)[0]}> ${splitOf(words)[1]}.`],
+  },
+  'a bare URL': {
+    isProse: false,
+    lines: (words) => [`See https://example.com/${splitOf(words)[0]} ${splitOf(words)[1]}.`],
+  },
+  'a www link': {
+    isProse: false,
+    lines: (words) => [`See www.example.com/${splitOf(words)[0]} ${splitOf(words)[1]}.`],
+  },
+  'an HTML block': { isProse: false, lines: (words) => [`<summary>${words}</summary>`] },
+};
+
+const spellings = ['wrong', 'wrong plural', 'right', 'right plural', 'right possessive'] as const;
+
+function spellingOf(term: string, spelling: (typeof spellings)[number], draw: Draw): string {
+  const wrong = [term.toLowerCase(), titleCaseOf(term)].filter((form) => form !== term);
+  const form = pickFrom(draw, wrong);
+  switch (spelling) {
+    case 'wrong':
+      return form;
+    case 'wrong plural':
+      return pluralOf(form);
+    case 'right':
+      return term;
+    case 'right plural':
+      return pluralOf(term);
+    case 'right possessive':
+      return `${term}'s`;
+  }
+}
+
+type Use = {
+  readonly block: MarkdownBlock;
+  readonly row: number;
+  readonly expected: Omit<TermMisspelling, 'line'> | undefined;
+};
+
+function aUse(terms: readonly string[], draw: Draw): Use {
+  const term = pickFrom(draw, terms);
+  const spelling = pickFrom(draw, spellings);
+  const holder = holders[pickFrom(draw, Object.keys(holders))] as Holder;
+  const written = spellingOf(term, spelling, draw);
+  const isWrong = spelling.startsWith('wrong');
+  const spelled = spelling === 'wrong plural' ? pluralOf(term) : term;
+  const expected = holder.isProse && isWrong ? { written, spelled } : undefined;
+  const block = { lines: holder.lines(written), isParagraph: holder.isProse };
+  return { block, row: holder.row ?? 0, expected };
+}
+
+/** A document of uses of terms in `container`, and the misspellings in its prose, by construction. */
+function aDocument(
+  terms: readonly string[],
+  container: Container,
+  draw: Draw,
+): { markdown: string; expected: TermMisspelling[] } {
+  const uses = Array.from({ length: 4 + Math.floor(draw() * 4) }, () => aUse(terms, draw));
+  const lead: MarkdownBlock = { lines: ['An introduction.'], isParagraph: true };
+  const laidOut = placed([lead, ...uses.map(({ block }) => block)], container, draw);
+  const expected: TermMisspelling[] = [];
+  for (const [index, { row, expected: use }] of uses.entries()) {
+    if (use !== undefined) {
+      expected.push({ line: (laidOut.starts[index + 1] as number) + row, ...use });
+    }
+  }
+  return { markdown: laidOut.lines.join('\n'), expected };
+}
+
+describe('misspelledTerms over every holder in every container', () => {
+  const terms = termsOf(readFileSync(glossaryPath, 'utf8'));
+
+  it('reports each term exactly where it is misspelled in prose, at the line of its first word', () => {
+    const draw = aSeededDraw(551);
+    const wrong: string[] = [];
+    for (const [name, container] of Object.entries(containers)) {
+      for (let sample = 0; sample < 200; sample++) {
+        const { markdown, expected } = aDocument(terms, container, draw);
+        const reported = misspelledTerms(markdown, terms);
+        if (JSON.stringify(reported) !== JSON.stringify(expected)) {
+          wrong.push(
+            `${name}: reported ${JSON.stringify(reported)} in ${JSON.stringify(markdown)}`,
+          );
+        }
+      }
+    }
+
+    expect({ wrong: wrong.length, first: wrong.slice(0, 3) }).toEqual({ wrong: 0, first: [] });
   });
 });
 
