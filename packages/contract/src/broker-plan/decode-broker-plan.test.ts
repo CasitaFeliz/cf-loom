@@ -2,7 +2,14 @@ import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import { lineBreaks } from '../../test/line-breaks.ts';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineCommand, defineEvent, defineGroup, defineService } from '../index.ts';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+  providedEvent,
+} from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
@@ -26,6 +33,28 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
+const refundV1 = defineCommand({
+  name: 'Refund',
+  version: 1,
+  description: 'Refunds the order’s card',
+  body: z.object({ orderId: z.string() }),
+});
+
+const paymentSettledV1 = providedEvent('payments-service', {
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.string() }),
+});
+
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
+  event: paymentSettledV1,
+});
+
+/** The plan `cf-loom broker-plan` prints for orders-service: a Stream, a Durable consumer for each Command Version and one for its Subscription. */
 function aServicePlan(prefix: string | null): BrokerPlan {
   const root = defineService({
     name: 'orders-service',
@@ -34,7 +63,8 @@ function aServicePlan(prefix: string | null): BrokerPlan {
         name: 'messages',
         description: 'Messages',
         events: [orderCreatedV1],
-        commands: [chargeCardV1],
+        commands: [chargeCardV1, refundV1],
+        subscriptions: [notifyOnSettled],
       }),
     ],
   });
@@ -49,6 +79,37 @@ function aServicePlan(prefix: string | null): BrokerPlan {
   return brokerPlanOf(snapshot, prefix);
 }
 
+/** The plan of `aServicePlan`, as JSON gives it back and a hand can edit it. */
+type EditablePlan = {
+  prefix: string | null;
+  streams: Record<string, { service: string; subjects: string[] }>;
+  durableConsumers: Record<string, { service: string; stream: string; subject: string }>;
+};
+
+function aPrintedPlan(prefix: string | null = null): EditablePlan {
+  const printed: EditablePlan = JSON.parse(JSON.stringify(aServicePlan(prefix)));
+  return printed;
+}
+
+const chargeCardConsumer = 'orders-service_command_ChargeCard_v1';
+const refundSubject = 'orders-service.command.Refund.v1';
+
+/** The plan with the fields of one Durable consumer it lists replaced. */
+function withConsumer(
+  plan: EditablePlan,
+  name: string,
+  fields: Partial<EditablePlan['durableConsumers'][string]>,
+): EditablePlan {
+  const consumer = plan.durableConsumers[name];
+  if (consumer === undefined) {
+    throw new Error(`The plan lists no Durable consumer ${name}`);
+  }
+  return {
+    ...plan,
+    durableConsumers: { ...plan.durableConsumers, [name]: { ...consumer, ...fields } },
+  };
+}
+
 const ordersStream = 'staging_orders-service';
 const invoiceDurableConsumer = 'staging_billing-service_draft-invoice';
 const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
@@ -56,7 +117,7 @@ const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
 function aPlan(fields: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     prefix: 'staging',
-    streams: { [ordersStream]: { service: 'orders-service', subjects: [orderCreated] } },
+    streams: {},
     durableConsumers: {
       [invoiceDurableConsumer]: {
         service: 'billing-service',
@@ -68,13 +129,13 @@ function aPlan(fields: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-/** A prefixed plan with one stream, whose fields are `fields` over the valid ones. */
+/** A prefixed plan with one Stream and no Durable consumer, whose fields are `fields` over the valid ones. */
 function aPlanWithStream(fields: Record<string, unknown>, name = ordersStream) {
   const stream = { service: 'orders-service', subjects: [orderCreated], ...fields };
-  return aPlan({ streams: { [name]: stream } });
+  return aPlan({ streams: { [name]: stream }, durableConsumers: {} });
 }
 
-/** A prefixed plan with one Durable consumer, whose fields are `fields` over the valid ones. */
+/** A prefixed plan with one Durable consumer and no Stream, whose fields are `fields` over the valid ones. */
 function aPlanWithDurableConsumer(fields: Record<string, unknown>, name = invoiceDurableConsumer) {
   const durableConsumer = {
     service: 'billing-service',
@@ -110,7 +171,7 @@ describe('reading a broker plan', () => {
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
   });
 
-  test('a prefixed plan whose names and subjects carry its prefix decodes', () => {
+  test('a Subscriber’s plan, whose Durable consumer reads another Service’s Stream and which has no Stream of its own, decodes', () => {
     const plan = aPlan();
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
@@ -399,6 +460,18 @@ describe('reading a broker plan', () => {
     };
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
+  });
+
+  const reprinted = "is not what the plan's names print for orders-service";
+
+  test('a plan that points a command’s Durable consumer at another Command Version’s subject is malformed, naming its subject', () => {
+    const plan = withConsumer(aPrintedPlan(), chargeCardConsumer, { subject: refundSubject });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.${chargeCardConsumer}.subject ${reprinted}`),
+    );
   });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {

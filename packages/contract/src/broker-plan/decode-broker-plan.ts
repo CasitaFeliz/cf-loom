@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { everyKeyRecordOf, type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import { brokerPrefixRule, isBrokerPrefix } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
+import { unprintedProblemOf } from './printed-plan.ts';
 import { notDurableConsumerName, notStreamName, readPlan } from './read-plan.ts';
 
 /** A value read as a broker plan: the plan, or the first place it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
@@ -34,9 +35,11 @@ export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
     return malformedAt(structured.problems[0]);
   }
   const read = readPlan(structured.value);
-  return read.kind === 'unread'
-    ? malformedAt(read.problem)
-    : { kind: 'decoded', plan: structured.value };
+  if (read.kind === 'unread') {
+    return malformedAt(read.problem);
+  }
+  const problem = unprintedProblemOf(structured.value, read.value);
+  return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {
