@@ -1,7 +1,12 @@
 import { foreignValues } from '../../contract/test/foreign-values.ts';
 
 /** Limits as an organization writes them: groups of settings, each setting a value. */
-type Limits = Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+type Limits = object;
+
+/** The settings of one group of limits, none when it is left out. */
+function groupOf(limits: Limits, group: string): object {
+  return Reflect.get(limits, group) ?? {};
+}
 
 /** A value the setting types do not allow, given at one setting of valid limits, and what its refusal shows of it. */
 export type LimitsPlace = {
@@ -15,13 +20,13 @@ export type LimitsPlace = {
 type Site = { readonly group: string; readonly setting: string };
 
 function limitsWith(valid: Limits, { group, setting }: Site, value: unknown): Limits {
-  return { ...valid, [group]: { ...valid[group], [setting]: value } };
+  return { ...valid, [group]: { ...groupOf(valid, group), [setting]: value } };
 }
 
 /** Every setting of the limits. */
 function sitesOf(valid: Limits): readonly Site[] {
-  return Object.entries(valid).flatMap(([group, settings]) =>
-    Object.keys(settings).map((setting) => ({ group, setting })),
+  return Object.keys(valid).flatMap((group) =>
+    Object.keys(groupOf(valid, group)).map((setting) => ({ group, setting })),
   );
 }
 
