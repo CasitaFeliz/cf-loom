@@ -1,4 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
+import { byCodePoint } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
@@ -105,17 +106,42 @@ function seededNext(seed: number): () => number {
   };
 }
 
-/** A plan of Durable consumers on one Stream with exactly the given names, all of one Service. */
-function aPlanOfDurables(names: readonly string[]): BrokerPlan {
-  const subject = 'long.event.E.v1';
+/** The names a plan of Durable consumers is made of: the prefix, which may be none, and the Service. */
+type Shape = { readonly prefix: string | null; readonly service: string };
+
+/** A plan of a Service whose Subscriptions to its own Event are Durable consumers with exactly the given names, in code point order. */
+function aPlanOfDurables(
+  names: readonly string[],
+  shape: Shape = { prefix: null, service: 'long' },
+): BrokerPlan {
+  const stream = named(shape.prefix, shape.service);
+  const subject = subjectNamed(shape.prefix, `${shape.service}.event.Ea.v1`);
   const durableConsumers = Object.fromEntries(
-    names.map((name) => [name, { service: 'long', stream: 'long', subject }]),
+    names.toSorted(byCodePoint).map((name) => [name, { service: shape.service, stream, subject }]),
   );
   return {
-    prefix: null,
-    streams: { long: { service: 'long', subjects: [subject] } },
+    prefix: shape.prefix,
+    streams: { [stream]: { service: shape.service, subjects: [subject] } },
     durableConsumers,
   };
+}
+
+/** The kebab-case of a Subscription's name, of exactly `length` characters, with the hyphens a name of at most 64 characters needs: a first word, then words of at least two characters. */
+function kebabTailOf(next: () => number, length: number): string {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  const characters = `${letters}0123456789`;
+  const pick = (from: string) => from.charAt(Math.floor(next() * from.length));
+  const required = Math.max(0, length - 64);
+  const spare = Math.min(2, Math.floor((length - 1) / 3) - required);
+  const hyphens = required + Math.floor(next() * (1 + spare));
+  const words = Array.from({ length: hyphens + 1 }, (_, at) =>
+    at === 0 ? pick(letters) : `${pick(letters)}${pick(characters)}`,
+  );
+  for (let rest = length - 1 - 3 * hyphens; rest > 0; rest -= 1) {
+    const at = Math.floor(next() * words.length);
+    words[at] = `${words[at]}${pick(characters)}`;
+  }
+  return words.join('-');
 }
 
 /** Limits as a Service reads them from a JSON file, so a test can write a value the types refuse. */
@@ -392,48 +418,52 @@ describe('applyBrokerPlan', () => {
     ]);
   });
 
-  test('every Durable consumer of a plan of long names sharing their first 63 characters gets queues of its own, found by its cf-loom:durable tag', async () => {
-    const next = seededNext(477);
-    const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789_-';
-    const head = `${'h'.repeat(62)}_`;
-    const tailOf = (length: number) =>
-      Array.from({ length }, () => alphabet[Math.floor(next() * alphabet.length)]).join('');
-    const lengths = [1, 2, 63, 64, 75, 76, 77, 78, 79, 80, 224, 225];
-    const randomLengths = Array.from({ length: 28 }, () => 1 + Math.floor(next() * 225));
-    const names = [
-      ...new Set(
-        [...lengths, ...randomLengths].map((length) => `${head}${tailOf(225)}`.slice(0, length)),
-      ),
-    ];
-    const plan = aPlanOfDurables(names);
-    const connecting = anAwsConnecting(moto.url);
+  test.each([
+    ['around the cut of a queue name', { prefix: null, service: 'h'.repeat(62) }],
+    ['the longest a Contract allows', { prefix: 'p'.repeat(64), service: 'h'.repeat(64) }],
+  ])(
+    'every Durable consumer of a plan of long names sharing their first 63 characters gets queues of its own, found by its cf-loom:durable tag, with %s',
+    async (_, shape) => {
+      const next = seededNext(477);
+      const lengths = [1, 2, 12, 13, 14, 15, 16, 17, 94, 95];
+      const randomLengths = Array.from({ length: 28 }, () => 1 + Math.floor(next() * 95));
+      const names = [
+        ...new Set(
+          [...lengths, ...randomLengths].map((length) =>
+            named(shape.prefix, `${shape.service}_${kebabTailOf(next, length)}`),
+          ),
+        ),
+      ];
+      const plan = aPlanOfDurables(names, shape);
+      const connecting = anAwsConnecting(moto.url);
 
-    await applyBrokerPlan(connecting, plan, testLimits);
+      await applyBrokerPlan(connecting, plan, testLimits);
 
-    const queues = await queueNamesOf(connecting.sqs);
-    const tagsByQueue = new Map(
-      await Promise.all(
-        queues.map(async (queue) => [queue, await queueTagsOf(connecting.sqs, queue)] as const),
-      ),
-    );
-    const queueOf = (durable: string) =>
-      [...tagsByQueue].filter(
-        ([queue, tags]) => tags['cf-loom:durable'] === durable && !queue.endsWith('_dlq'),
+      const queues = await queueNamesOf(connecting.sqs);
+      const tagsByQueue = new Map(
+        await Promise.all(
+          queues.map(async (queue) => [queue, await queueTagsOf(connecting.sqs, queue)] as const),
+        ),
       );
-    expect(queues).toHaveLength(names.length * 2);
-    expect(Math.max(...queues.map((queue) => queue.length))).toBeLessThanOrEqual(80);
-    for (const name of names) {
-      const [found, ...others] = queueOf(name);
-      expect(others).toEqual([]);
-      const queue = found?.[0] ?? '';
-      expect(name.length <= 76 ? queue === name : queue.length === 76).toBe(true);
-      expect(queue.startsWith(name.slice(0, 63))).toBe(true);
-      expect(queues).toContain(`${queue}_dlq`);
-    }
-  });
+      const queueOf = (durable: string) =>
+        [...tagsByQueue].filter(
+          ([queue, tags]) => tags['cf-loom:durable'] === durable && !queue.endsWith('_dlq'),
+        );
+      expect(queues).toHaveLength(names.length * 2);
+      expect(Math.max(...queues.map((queue) => queue.length))).toBeLessThanOrEqual(80);
+      for (const name of names) {
+        const [found, ...others] = queueOf(name);
+        expect(others).toEqual([]);
+        const queue = found?.[0] ?? '';
+        expect(name.length <= 76 ? queue === name : queue.length === 76).toBe(true);
+        expect(queue.startsWith(name.slice(0, 63))).toBe(true);
+        expect(queues).toContain(`${queue}_dlq`);
+      }
+    },
+  );
 
   test('Subscriptions notify and notifyDlq get four distinct queues, two of them dead-letter queues', async () => {
-    const subject = 'billing-service.event.E.v1';
+    const subject = 'billing-service.event.Ea.v1';
     const plan: BrokerPlan = {
       prefix: null,
       streams: { 'billing-service': { service: 'billing-service', subjects: [subject] } },
@@ -664,6 +694,12 @@ describe('applyBrokerPlan', () => {
     const refundSubject = 'orders-service.command.Refund.v1';
     const earlier: BrokerPlan = {
       ...orders.plan,
+      streams: {
+        [orders.stream]: {
+          service: 'orders-service',
+          subjects: [orders.charge, refundSubject, orders.created],
+        },
+      },
       durableConsumers: {
         ...orders.plan.durableConsumers,
         [refund]: { service: 'orders-service', stream: orders.stream, subject: refundSubject },
@@ -744,25 +780,26 @@ describe('applyBrokerPlan', () => {
   });
 
   test('applyBrokerPlan refuses every setting left unset, naming each Durable consumer and the setting, creating nothing', async () => {
-    const billing = aBilling();
+    const orders = anOrders();
+    const subscribed = 'orders-service_on-created';
     const both: BrokerPlan = {
-      ...billing.plan,
+      ...orders.plan,
       durableConsumers: {
-        ...billing.plan.durableConsumers,
-        ...anOrders().plan.durableConsumers,
+        ...orders.plan.durableConsumers,
+        [subscribed]: { service: 'orders-service', stream: orders.stream, subject: orders.created },
       },
     };
     const connecting = anAwsConnecting(moto.url);
     const limits: SqsBrokerLimits = {
       durableConsumerDefaults: { ackWait: '30s' },
-      durableConsumers: { [anOrders().chargeDurable]: { maxDeliver: 3 } },
+      durableConsumers: { [orders.chargeDurable]: { maxDeliver: 3 } },
     };
 
     const error = await rejectionOf(applyBrokerPlan(connecting, both, limits));
 
     expect(error.message.split('\n')).toEqual([
-      `The Durable consumer ${billing.durable} has no maxDeliver, retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
-      `The Durable consumer ${anOrders().chargeDurable} has no retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${orders.chargeDurable} has no retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${subscribed} has no maxDeliver, retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
     expect(await queueNamesOf(connecting.sqs)).toEqual([]);
   });
@@ -938,7 +975,10 @@ describe('applyBrokerPlan', () => {
     const own: BrokerPlan = {
       ...billing.plan,
       streams: {
-        'billing-service': { service: 'billing-service', subjects: ['billing-service.event.E.v1'] },
+        'billing-service': {
+          service: 'billing-service',
+          subjects: ['billing-service.event.Ea.v1'],
+        },
       },
     };
     const connecting = anAwsConnecting(moto.url);
@@ -964,11 +1004,12 @@ describe('applyBrokerPlan', () => {
 
   test('applyBrokerPlan stops at the first Durable consumer it cannot apply and creates none after it', async () => {
     const orders = anOrders();
-    const subject = 'ghost.event.E.v1';
+    const subject = 'ghost.event.Ea.v1';
+    const first = 'orders-service_a-first';
     const plan: BrokerPlan = {
       ...orders.plan,
       durableConsumers: {
-        'a-first': { service: 'orders-service', stream: 'ghost', subject },
+        [first]: { service: 'orders-service', stream: 'ghost', subject },
         ...orders.plan.durableConsumers,
       },
     };
@@ -976,7 +1017,9 @@ describe('applyBrokerPlan', () => {
 
     const error = await rejectionOf(applyBrokerPlan(connecting, plan, testLimits));
 
-    expect(error.message).toMatch(/^The Durable consumer a-first reads the stream ghost/);
+    expect(error.message).toMatch(
+      new RegExp(`^The Durable consumer ${first} reads the stream ghost`),
+    );
     expect(await queueNamesOf(connecting.sqs)).toEqual([]);
     expect(await topicNamesOf(connecting.sns)).toEqual(['orders-service']);
   });
@@ -1028,7 +1071,7 @@ describe('applyBrokerPlan', () => {
   });
 
   test('a Stream read by more than 100 Durable consumers, applied again, subscribes none again and keeps one subscription for each queue', async () => {
-    const names = Array.from({ length: 130 }, (_, index) => `long_consumer-${index}`);
+    const names = Array.from({ length: 130 }, (_, index) => `long_consumer${index}`);
     const plan = aPlanOfDurables(names);
     const connecting = anAwsConnecting(moto.url);
     await applyBrokerPlan(connecting, plan, testLimits);
