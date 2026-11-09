@@ -222,6 +222,21 @@ describe('reading a broker plan', () => {
       `streams.${ordersStream}.retention is a key the Broker plan does not define`,
     ],
     [
+      'a plan with a __proto__ key',
+      aPlan(Object.fromEntries([['__proto__', 1]])),
+      '__proto__ is a key the Broker plan does not define',
+    ],
+    [
+      'a stream with a __proto__ key',
+      aPlanWithStream(Object.fromEntries([['__proto__', 1]])),
+      `streams.${ordersStream}.__proto__ is a key the Broker plan does not define`,
+    ],
+    [
+      'a Durable consumer with a __proto__ key',
+      aPlanWithDurableConsumer(Object.fromEntries([['__proto__', 1]])),
+      `durableConsumers.${invoiceDurableConsumer}.__proto__ is a key the Broker plan does not define`,
+    ],
+    [
       'a stream with no service',
       aPlanWithStream({ service: undefined }),
       `streams.${ordersStream}.service is missing`,
