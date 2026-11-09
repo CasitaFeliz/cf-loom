@@ -1,15 +1,23 @@
 import type { MarkedToken } from 'marked';
-import { locatedTokens } from './readme-tokens.ts';
+import { locatedTokens } from './markdown-tokens.ts';
 
 /** `pattern` as a regular expression source that matches it literally. */
 function literally(pattern: string): string {
   return pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * The address of the file `path` of `repository` at `ref`: the one form a package README links its own files as, which
+ * the release pins, which `pinnedReadme` accepts and which its problems tell the author to write.
+ */
+function repositoryFile(repository: string, ref: string, path: string): string {
+  return `https://github.com/${repository}/blob/${ref}/${path}`;
+}
+
 /** The inline links and images to a file of `repository` at `main`, which the release points at a commit. */
 function linkAtMain(repository: string): RegExp {
-  const target = `(https://github\\.com/${literally(repository)}/blob/)main(/[^)\\s]+)`;
-  return new RegExp(`\\]\\(${target}\\)`, 'g');
+  const file = literally(repositoryFile(repository, 'main', ''));
+  return new RegExp(`\\]\\(${file}([^)\\s]+)\\)`, 'g');
 }
 
 /**
@@ -29,10 +37,14 @@ export type ReadmePinning =
   | { readonly kind: 'pinned'; readonly text: string }
   | { readonly kind: 'refused'; readonly problems: readonly ReadmeProblem[] };
 
+/** The link a package README writes to a file of `repository`, as the release pins it. */
+function linkFormOf(repository: string): string {
+  return `[text](${repositoryFile(repository, 'main', '<path>')})`;
+}
+
 /** What a README writes in place of a mention of `repository` the release cannot point at the commit. */
 function unpinnedMention(repository: string): string {
-  const form = `[text](https://github.com/${repository}/blob/main/<path>)`;
-  return `a reference to ${repository} that is not an inline link or image ${form}, with no title`;
+  return `a reference to ${repository} that is not an inline link or image ${linkFormOf(repository)}, with no title`;
 }
 
 /**
@@ -58,17 +70,49 @@ const characterReference = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]*);/i;
 /** An HTML comment as a browser ends it: not `<!-->` or `<!--->`, and not at `--!>`. */
 const htmlComment = /<!--(?!-?>)(?:(?!--!>)[\s\S])*?-->/g;
 
+const githubHosts = ['github.com', 'githubusercontent.com', 'github.dev'];
+
+/** Whether the address `target` parses to a host of GitHub: one of its families, or a subdomain of one. */
+function isOnGitHub(target: string): boolean {
+  if (!URL.canParse(target)) {
+    return false;
+  }
+  const host = new URL(target).hostname.replace(/\.$/, '');
+  return githubHosts.some((family) => host === family || host.endsWith(`.${family}`));
+}
+
+/** What the problem of a GitHub link tells the author about the path of a file, as `isRepositoryFile` reads it. */
+const pathRule = '<path> with no ".", ".." or empty segment and no %, \\ or ?';
+
+/**
+ * Whether `target` is exactly a file of `repository` at `commit`, its path, up to a fragment, having no segment that
+ * is empty, `.` or `..` or holds a `%`, a `\` or a `?`, so that no browser reads it as another place.
+ */
+function isRepositoryFile(target: string, repository: string, commit: string): boolean {
+  const prefix = repositoryFile(repository, commit, '');
+  if (!target.startsWith(prefix)) {
+    return false;
+  }
+  const [path = ''] = target.slice(prefix.length).split('#', 1);
+  const isSegment = (segment: string) => !/^\.{0,2}$|[%\\?]/.test(segment);
+  return path.split('/').every(isSegment);
+}
+
 /**
  * Why a link, image or definition target keeps a README from being pinned: a character reference, which a browser
- * decodes and `marked` leaves as written, or no scheme and no `#`, which GitHub and npm resolve against `main`.
+ * decodes and `marked` leaves as written, no scheme and no `#`, which GitHub and npm resolve against `main`, or an
+ * address on GitHub that is not a file of `repository` at `commit`, spelled exactly.
  */
-function targetProblem(target: string): string | undefined {
+function targetProblem(target: string, repository: string, commit: string): string | undefined {
   const reference = characterReference.exec(target)?.[0];
   if (reference !== undefined) {
     return `the link target "${target}" holds the character reference ${reference}; write the character itself`;
   }
   if (!absoluteOrAnchor.test(target)) {
     return `the link target "${target}" has no scheme and is not an anchor`;
+  }
+  if (isOnGitHub(target) && !isRepositoryFile(target, repository, commit)) {
+    return `the link target "${target}" is on GitHub; a package README links GitHub only as ${linkFormOf(repository)}, ${pathRule}`;
   }
   return undefined;
 }
@@ -83,12 +127,12 @@ function htmlProblem(html: string): string | undefined {
 }
 
 /** The problem a token causes, or `undefined` when it is neither a target nor raw HTML. */
-function tokenProblem(token: MarkedToken): string | undefined {
+function tokenProblem(token: MarkedToken, repository: string, commit: string): string | undefined {
   switch (token.type) {
     case 'def':
     case 'image':
     case 'link':
-      return targetProblem(token.href);
+      return targetProblem(token.href, repository, commit);
     case 'html':
       return htmlProblem(token.raw);
     case 'blockquote':
@@ -113,10 +157,10 @@ function tokenProblem(token: MarkedToken): string | undefined {
 }
 
 /** The problems of the pinned README read as Markdown, one for each token that causes one. */
-function tokenProblems(pinned: string): ReadmeProblem[] {
+function tokenProblems(pinned: string, repository: string, commit: string): ReadmeProblem[] {
   const problems: ReadmeProblem[] = [];
   for (const { token, line } of locatedTokens(pinned)) {
-    const problem = tokenProblem(token);
+    const problem = tokenProblem(token, repository, commit);
     if (problem !== undefined) {
       problems.push({ line, problem });
     }
@@ -133,8 +177,8 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
  * The README with each inline link or image to a file of `repository` at `main` pointing at the same file at
  * `commit`, or the lines that keep it from being pinned, so that a pinned README holds nothing at `main`.
  *
- * A package README so links the repository only as `[text](https://github.com/<owner>/<name>/blob/main/<path>)`,
- * with no title; anything else that could reach `main` refuses it.
+ * A package README links the repository only so, and no other address on GitHub, as CLAUDE.md says; anything else
+ * that could reach `main` refuses it.
  *
  * @param readme - The README's text.
  * @param repository - The repository as `<owner>/<name>`.
@@ -143,9 +187,12 @@ function inLineOrder(problems: readonly ReadmeProblem[]): ReadmeProblem[] {
 export function pinnedReadme(readme: string, repository: string, commit: string): ReadmePinning {
   const pinned = readme.replace(
     linkAtMain(repository),
-    (_link, before: string, after: string) => `](${before}${commit}${after})`,
+    (_link, path: string) => `](${repositoryFile(repository, commit, path)})`,
   );
-  const problems = [...mentionProblems(readme, repository), ...tokenProblems(pinned)];
+  const problems = [
+    ...mentionProblems(readme, repository),
+    ...tokenProblems(pinned, repository, commit),
+  ];
   if (problems.length > 0) {
     return { kind: 'refused', problems: inLineOrder(problems) };
   }

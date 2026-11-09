@@ -1,3 +1,5 @@
+import { locatedTokens } from './markdown-tokens.ts';
+
 /** A README: the path reports name it by, and its text. */
 export type Readme = { readonly path: string; readonly markdown: string };
 
@@ -13,21 +15,13 @@ export type Block = {
 /** The files of a README, and why a block cannot be read, as `README:line: …`. */
 export type Blocks = { readonly blocks: Block[]; readonly problems: string[] };
 
-type Piece =
-  | { readonly kind: 'heading'; readonly anchor: string }
-  | { readonly kind: 'ts'; readonly at: number; readonly end: number; readonly indent: string }
-  | { readonly kind: 'unclosed'; readonly at: number };
-
 type CodeFile = {
   readonly line: number;
   readonly path: string | undefined;
   readonly source: string;
 };
 
-const opening = /^(\s*)```(?:ts|typescript)(?:\s.*)?$/;
-const anyFence = /^\s*```/;
-const closing = /^\s*```\s*$/;
-const heading = /^#{1,6}\s+(.*?)\s*#*\s*$/;
+const typeScriptInfo = /^(?:ts|typescript)(?:\s|$)/;
 const pathComment = /^\/\/\s+([\w./-]+\.ts)\b/;
 const servicePath = /^(?:(?!node_modules\/)([\w-]+)\/)?src\/(?:(?!\.\.?\/)[\w.-]+\/)*[\w.-]+\.ts$/;
 
@@ -42,43 +36,37 @@ export function serviceOf(path: string): string | undefined {
 }
 
 /**
- * Every file the TypeScript blocks of a README show. A path comment names a file, and starts
- * another when it follows a blank line; a path that is no path of a Service is a problem, and its
- * file is left out. A file with no path comment is written under its nearest heading.
+ * Every file the TypeScript blocks of a README show, read as GitHub Flavored Markdown: each fenced block whose
+ * info string's first word is `ts` or `typescript`, whatever its fence or container. A path comment names a file, and
+ * starts another when it follows a blank line; a path that is no path of a Service is a problem, and its file is left
+ * out. A file with no path comment is written under its nearest heading.
  */
 export function blocksOf(readme: Readme): Blocks {
-  const lines = readme.markdown.split(/\r?\n/);
   const blocks: Block[] = [];
   const problems: string[] = [];
   const snippetPath = snippetNamer(readme.path);
   let anchor = '';
-  for (const piece of piecesOf(lines)) {
-    switch (piece.kind) {
-      case 'heading':
-        anchor = piece.anchor;
-        break;
-      case 'unclosed':
-        problems.push(`${readme.path}:${piece.at + 1}: the TypeScript block is never closed`);
-        break;
-      case 'ts': {
-        const code = lines.slice(piece.at + 1, piece.end);
-        const dedented = code.map((row) =>
-          row.startsWith(piece.indent) ? row.slice(piece.indent.length) : row,
-        );
-        for (const file of filesOf(dedented, piece.at + 2)) {
-          const refusal = refusalOf(readme.path, file);
-          if (refusal !== undefined) {
-            problems.push(refusal);
-          } else {
-            const path = file.path ?? snippetPath(anchor);
-            const named = file.path !== undefined;
-            blocks.push({ readme: readme.path, line: file.line, path, named, source: file.source });
-          }
+  for (const { token, line } of locatedTokens(readme.markdown)) {
+    if (token.type === 'heading') {
+      anchor = headingAnchor(token.text);
+    } else if (token.type === 'code' && typeScriptInfo.test(token.lang ?? '')) {
+      for (const file of filesOf(token.text.split('\n'), line + 1)) {
+        const refusal = refusalOf(readme.path, file);
+        if (refusal === undefined) {
+          blocks.push(blockOf(readme.path, file, () => snippetPath(anchor)));
+        } else {
+          problems.push(refusal);
         }
       }
     }
   }
   return { blocks, problems };
+}
+
+/** The block a file of a README is, written where its path comment says, else where `snippetPath` names. */
+function blockOf(readme: string, file: CodeFile, snippetPath: () => string): Block {
+  const path = file.path ?? snippetPath();
+  return { readme, line: file.line, path, named: file.path !== undefined, source: file.source };
 }
 
 /** Why a file of a block is left out: its path comment names no path of a Service. */
@@ -87,36 +75,6 @@ function refusalOf(readme: string, file: CodeFile): string | undefined {
     return undefined;
   }
   return `${readme}:${file.line}: ${file.path} is no path of a Service: src/… or <service>/src/…`;
-}
-
-/** The headings and TypeScript blocks of a README in order, other fenced blocks skipped whole. */
-function piecesOf(lines: readonly string[]): Piece[] {
-  const pieces: Piece[] = [];
-  let at = 0;
-  while (at < lines.length) {
-    const line = lines[at] ?? '';
-    if (!anyFence.test(line)) {
-      const anchor = headingAnchor(line);
-      if (anchor !== undefined) {
-        pieces.push({ kind: 'heading', anchor });
-      }
-      at++;
-      continue;
-    }
-    const indent = opening.exec(line)?.[1];
-    const end = lines.findIndex((other, index) => index > at && closing.test(other));
-    if (end === -1) {
-      if (indent !== undefined) {
-        pieces.push({ kind: 'unclosed', at });
-      }
-      break;
-    }
-    if (indent !== undefined) {
-      pieces.push({ kind: 'ts', at, end, indent });
-    }
-    at = end + 1;
-  }
-  return pieces;
 }
 
 /** The files in a block's lines: one for each path comment at its start or after a blank line. */
@@ -152,11 +110,7 @@ function snippetNamer(readme: string): (anchor: string) => string {
 }
 
 /** The anchor GitHub gives a heading: lower case, its punctuation dropped, its spaces hyphens. */
-function headingAnchor(line: string): string | undefined {
-  const text = heading.exec(line)?.[1];
-  if (text === undefined) {
-    return undefined;
-  }
+function headingAnchor(text: string): string {
   const kept = text.toLowerCase().replaceAll(/[^\p{L}\p{N}\s-]/gu, '');
   return kept.trim().replaceAll(/\s+/g, '-');
 }
