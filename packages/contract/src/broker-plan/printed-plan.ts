@@ -46,11 +46,7 @@ function streamDifferenceOf(
     return names;
   }
   for (const [name, stream] of Object.entries(plan.streams)) {
-    const expected = printed.streams[name];
-    if (stream.service !== expected?.service) {
-      return unprintedAt(['streams', name, 'service'], service);
-    }
-    const subjects = listDifferenceOf(stream.subjects, expected?.subjects ?? [], {
+    const subjects = listDifferenceOf(stream.subjects, printed.streams[name]?.subjects ?? [], {
       service,
       at: ['streams', name, 'subjects'],
       placeOf: (index) => ['streams', name, 'subjects', index],
