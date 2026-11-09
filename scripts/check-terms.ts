@@ -51,9 +51,7 @@ function proseRunsOf(markdown: string): ProseRun[] {
     } else if (text !== undefined) {
       runs.push({ text, line, parent });
     }
-    const isBreakAfterText =
-      token.type === 'br' && previous !== undefined && previous.parent === parent;
-    broken = isBreakAfterText ? previous : undefined;
+    broken = token.type === 'br' ? previous : undefined;
     previous = text === undefined ? undefined : runs.at(-1);
   }
   return runs;
