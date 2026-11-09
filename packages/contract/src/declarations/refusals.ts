@@ -2,7 +2,10 @@
  * Every sentence a declaration is refused with that the types and `generate` both write, each
  * written once: a fixed sentence as a const the types read with `typeof`, and a sentence with names
  * as a template type with the function `generate` writes it by, whose return type is that template,
- * so a function whose text drifts from its type does not compile.
+ * so a function whose text drifts from its type does not compile; a list of names in such a
+ * sentence is the tuple `Joined` writes, in the order `generate` lists them, and a sentence
+ * `generate` writes once per name is refused once per name; a list whose length its type leaves
+ * open is refused once per name it holds.
  */
 
 /** Why a Guard declares `params` or `body` in its demands. */
@@ -141,17 +144,17 @@ export function requiresEarlierSentence<Name extends string, Missing extends str
   return `${name} requires ${missing} earlier in guards`;
 }
 
-/** Header names that are not lower-case, joined. */
-export type HeaderCaseSentence<Names extends string> = `Header names are lower-case: ${Names}`;
+/** A header name that is not lower-case. */
+export type HeaderCaseSentence<Name extends string> = `Header names are lower-case: ${Name}`;
 
 /** Writes `HeaderCaseSentence`. */
-export function headerCaseSentence<Names extends string>(names: Names): HeaderCaseSentence<Names> {
-  return `Header names are lower-case: ${names}`;
+export function headerCaseSentence<Name extends string>(name: Name): HeaderCaseSentence<Name> {
+  return `Header names are lower-case: ${name}`;
 }
 
 /** An Endpoint an Application lists that is not Public, by its Provider and its Visibility. */
-export type NotPublicSentence<Endpoints extends string> =
-  `An Application depends on Public Endpoints only: ${Endpoints}`;
+export type NotPublicSentence<Endpoint extends string> =
+  `An Application depends on Public Endpoints only: ${Endpoint}`;
 
 /** An Endpoint as a sentence names it, by its Provider: `payments-service's getPayment`. */
 export type EndpointLabel<Provider extends string, Name extends string> = `${Provider}'s ${Name}`;

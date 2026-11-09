@@ -424,3 +424,77 @@ describe('a refusal that lists names reads as generate writes it', () => {
     expect(messages).toEqual([refund, voided]);
   });
 });
+
+describe('the types of a refusal that lists names, beyond the plain tuple', () => {
+  test('a Dependency whose Endpoints end in an open part lists the Provider of that part last', () => {
+    const zeta = providedAs('zeta-service', 'getZeta', 'public');
+    const alpha = providedAs('alpha-service', 'getAlpha', 'public');
+    type Written = Parameters<
+      typeof defineDependency<{ readonly endpoints: readonly [typeof zeta, ...(typeof alpha)[]] }>
+    >[0];
+
+    const sentence = "A Dependency lists one Provider's Endpoints: zeta-service and alpha-service";
+    expectTypeOf<SentencesOf<Written['endpoints']>>().toEqualTypeOf<typeof sentence>();
+  });
+
+  test('a Dependency whose Provider is named by a widened string or by any is not refused by its type', () => {
+    const zeta = providedAs('zeta-service', 'getZeta', 'public');
+    const widened = providedAs('alpha-service' as string, 'getAlpha', 'public');
+    // biome-ignore lint/suspicious/noExplicitAny: the any this test is about
+    const anything = providedAs('alpha-service' as any, 'getAlpha', 'public');
+    type Widened = Parameters<
+      typeof defineDependency<{ readonly endpoints: readonly [typeof zeta, typeof widened] }>
+    >[0];
+    type Anything = Parameters<
+      typeof defineDependency<{ readonly endpoints: readonly [typeof zeta, typeof anything] }>
+    >[0];
+
+    expectTypeOf<readonly [typeof zeta, typeof widened]>().toExtend<Widened['endpoints']>();
+    expectTypeOf<readonly [typeof zeta, typeof anything]>().toExtend<Anything['endpoints']>();
+  });
+
+  test('a Guard whose guards list has an open length is refused once for each Guard it lacks', () => {
+    const tenant = defineGuard(guardOf('tenant'));
+    const org = defineGuard(guardOf('org'));
+    const required: readonly (typeof tenant | typeof org)[] = [tenant, org];
+    const member = defineGuard({ ...guardOf('member'), guards: required });
+    const declaration = { ...listOrders, guards: [member] } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    type Sentences = SentencesOf<NonNullable<Written['guards']>>;
+
+    expectTypeOf<Sentences>().toEqualTypeOf<
+      'member requires tenant earlier in guards' | 'member requires org earlier in guards'
+    >();
+  });
+
+  test('an Endpoint on a path with :names that declares no input is refused, listing the names', () => {
+    const declaration = { ...listOrders, path: '/orders/:orderId/items/:itemId' } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
+    const sentence = "params declares exactly the path's :names: orderId and itemId";
+    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
+  });
+
+  test('a generic wrapper that builds an Endpoint from a path or from Guards it is given is refused in its own body', () => {
+    const tenant = defineGuard(guardOf('tenant'));
+    const endpointAt = <const Path extends string>(path: Path) => {
+      const input = { params: z.object({ id: z.string() }) };
+      // @ts-expect-error TS2345 the path is a type parameter here, so its :names are unknown
+      return defineEndpoint({ ...listOrders, path, input });
+    };
+    const endpointRequiring = <const Required extends readonly (typeof tenant)[]>(
+      guards: Required,
+    ) => {
+      const member = defineGuard({ ...guardOf('member'), guards });
+      // @ts-expect-error TS2322 which Guards the member requires is a type parameter here
+      return defineEndpoint({ ...listOrders, guards: [member] });
+    };
+
+    expect(endpointAt('/orders/:id').path).toBe('/orders/:id');
+    expect(endpointRequiring([tenant]).guards).toHaveLength(1);
+  });
+});

@@ -1,11 +1,12 @@
 import type * as core from 'zod/v4/core';
+import type { Joined } from '../lines/index.ts';
 import type { SchemaRule } from '../walker/index.ts';
 import type { AttachedGuardOf, Attachment, AttachmentsRule } from './attachment.ts';
 import type { Visibility } from './element.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Guard } from './guard.ts';
 import type { HeaderNamesRule, Method, SuccessStatus } from './http.ts';
-import type { PathParams } from './path-params.ts';
+import type { PathParamList, PathParams } from './path-params.ts';
 import type {
   ExactParamsSentence,
   getBodySentence,
@@ -19,7 +20,6 @@ import type { Rejection } from './rejection.ts';
 import type {
   DeclaredFieldsRule,
   IsOneLiteral,
-  JoinedNames,
   LiteralNames,
   Refusal,
   RejectionsOnceRule,
@@ -79,19 +79,24 @@ type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declar
         readonly input: {
           readonly params: ExactParamsRule<
             InputOfDeclaration<Declaration>['params'],
-            PathParams<Declaration['path']>
+            Declaration['path']
           >;
         };
       };
 
-type ExactParamsMessage<Names extends string> = Refusal<ExactParamsSentence<JoinedNames<Names>>>;
+type ExactParamsMessage<Path extends string> = Refusal<
+  ExactParamsSentence<Joined<PathParamList<Path>, 'and'>>
+>;
 
-type ExactParamsRule<Params, Names extends string> =
+type ExactParamsRule<Params, Path extends string> =
   Params extends core.$ZodObject<infer Shape>
-    ? [Exclude<keyof Shape, Names>, Exclude<Names, keyof Shape>] extends [never, never]
+    ? [Exclude<keyof Shape, PathParams<Path>>, Exclude<PathParams<Path>, keyof Shape>] extends [
+        never,
+        never,
+      ]
       ? unknown
-      : ExactParamsMessage<Names>
-    : ExactParamsMessage<Names>;
+      : ExactParamsMessage<Path>
+    : ExactParamsMessage<Path>;
 
 type InputBodyRule<Declaration extends EndpointDeclaration> = Declaration['method'] extends 'GET'
   ? { readonly input?: { readonly body?: Refusal<typeof getBodySentence> } }
@@ -122,15 +127,41 @@ type HeadersRule<Declaration extends EndpointDeclaration> = {
   };
 };
 
+/** The names of the Guards a `guards` list holds that are not earlier, in its order, its open part once. */
+type MissingGuardList<
+  Required,
+  Earlier extends string,
+  Missing extends readonly string[] = [],
+> = Required extends readonly [infer First, ...infer Rest]
+  ? MissingGuardList<Rest, Earlier, MissingAppended<Missing, First, Earlier>>
+  : Required extends readonly (infer Open)[]
+    ? MissingAppended<Missing, Open, Earlier>
+    : Missing;
+
+type MissingAppended<Missing extends readonly string[], Listed, Earlier extends string> = [
+  Exclude<GuardNameOf<Listed>, Earlier>,
+] extends [never]
+  ? Missing
+  : [...Missing, Exclude<GuardNameOf<Listed>, Earlier>];
+
+type GuardNameOf<Listed> = Listed extends Guard ? Listed['name'] : never;
+
 type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed extends {
-  readonly guards: readonly (infer Required extends Guard)[];
+  readonly guards: infer Required;
 }
-  ? Exclude<LiteralNames<Required['name']>, Earlier>
+  ? LiteralNames<MissingGuardList<Required, Earlier>[number]>
   : never;
 
-type RequiresEarlierMessage<Name extends string, Missing extends string> = Refusal<
-  RequiresEarlierSentence<Name, JoinedNames<Missing>>
->;
+/** One sentence naming the Guards in order, or one for each name where the length of `guards` is open. */
+type RequiresEarlierMessage<Listed extends Guard, Earlier extends string> = Listed extends {
+  readonly guards: infer Required extends readonly unknown[];
+}
+  ? number extends Required['length']
+    ? Refusal<RequiresEarlierSentence<Listed['name'], MissingGuardNames<Listed, Earlier>>>
+    : Refusal<
+        RequiresEarlierSentence<Listed['name'], Joined<MissingGuardList<Required, Earlier>, 'and'>>
+      >
+  : never;
 
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
   infer First,
@@ -146,7 +177,7 @@ type ListedOrderRule<Listed, Rest, Earlier extends string> = Listed extends Guar
       ? Refusal<ListedTwiceSentence<Listed['name']>>
       : [MissingGuardNames<Listed, Earlier>] extends [never]
         ? GuardOrderRule<Rest, Earlier | Listed['name']>
-        : RequiresEarlierMessage<Listed['name'], MissingGuardNames<Listed, Earlier>>
+        : RequiresEarlierMessage<Listed, Earlier>
   : unknown;
 
 type GuardsRule<Declaration extends EndpointDeclaration> = {

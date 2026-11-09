@@ -1,10 +1,11 @@
+import type { Joined } from '../lines/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { ProvidedEndpoint, ProviderNameOf } from './provided.ts';
 import type { OneProviderSentence } from './refusals.ts';
 import type {
   DeclaredFieldsRule,
   IsOneLiteral,
-  JoinedNames,
+  ListedOnce,
   LiteralNames,
   Refusal,
 } from './rules.ts';
@@ -22,9 +23,19 @@ export type Dependency<
   readonly endpoints: Endpoints;
 };
 
+/** The Providers of the Endpoints listed, each once, in the order the Endpoints list them, its open part last. */
+type ProviderList<Endpoints, Listed extends readonly string[] = []> = Endpoints extends readonly [
+  infer First,
+  ...infer Rest,
+]
+  ? ProviderList<Rest, ListedOnce<Listed, ProviderNameOf<First> & string>>
+  : Endpoints extends readonly (infer Open)[]
+    ? ListedOnce<Listed, ProviderNameOf<Open> & string>
+    : Listed;
+
 /** The names of the Providers whose Endpoints a declaration lists, as their types give them. */
 type ListedProvidersOf<Declaration extends DependencyDeclaration> = LiteralNames<
-  ProviderNameOf<Declaration['endpoints'][number]>
+  ProviderList<Declaration['endpoints']>[number]
 >;
 
 /** What a Dependency must also satisfy: its Endpoints are one Provider's, since one client calls one base URL. */
@@ -36,7 +47,7 @@ type OneProviderRule<Declaration extends DependencyDeclaration> = [
     ? unknown
     : {
         readonly endpoints: Refusal<
-          OneProviderSentence<JoinedNames<ListedProvidersOf<Declaration>>>
+          OneProviderSentence<Joined<ProviderList<Declaration['endpoints']>, 'and'>>
         >;
       };
 

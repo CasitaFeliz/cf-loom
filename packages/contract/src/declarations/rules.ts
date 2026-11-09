@@ -67,12 +67,14 @@ type LastOf<Names> =
     ? Last
     : never;
 
-/** Several names in one message, comma-separated unless another separator is given. */
-export type JoinedNames<Names extends string, Separator extends string = ', '> = [
-  Exclude<Names, LastOf<Names>>,
-] extends [never]
-  ? Names
-  : `${JoinedNames<Exclude<Names, LastOf<Names>>, Separator>}${Separator}${LastOf<Names> & string}`;
+/** A list with a name appended unless it holds it already, so a name listed twice is listed once, where it is first. */
+export type ListedOnce<Listed extends readonly string[], Name extends string> = [Name] extends [
+  never,
+]
+  ? Listed
+  : Name extends Listed[number]
+    ? Listed
+    : [...Listed, Name];
 
 /** The names a rule may judge: a name typed as plain `string` says nothing about itself. */
 export type LiteralNames<Names> = Names extends string
