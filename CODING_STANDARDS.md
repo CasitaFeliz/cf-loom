@@ -270,7 +270,9 @@ agree with it, or it is read against nothing.
 **C23. Behavior, through a public seam.** A test drives a package through its entries (`.`, its subpaths, or
 `./internal` where another cf-loom package uses it, or where several of a package's commands share a step) and checks
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
-status of a command. It imports no private module and asserts no call order of mocks. A README test imports the
+status of a command, the text the console prints (read with `printedBy`, in `packages/contract/test/printed.ts`, the
+one place a test spies on the console; a package outside `contract` widens its `tsconfig.test.json` to import it, as
+for `growth.ts`). It imports no private module and asserts no call order of mocks. A README test imports the
 README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
 them. *Why:* a test of the mechanics fails on every refactor and passes on every bug. A type test that a call is
 refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and `pnpm check` verifies that the line
@@ -346,7 +348,8 @@ are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`
 `process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an
 options object passed through a variable or a spread, and a test function under another name, a `test.extend` alias or
 a renamed import, are out of reach; a test given both its options and its body by name is reported, so write one
-inline) (C30).
+inline) (C30), and, in any file but `packages/contract/test/printed.ts`, a `vi.spyOn` of `console` (C23; an aliased
+`console` and a spy made another way, as `console.error = …`, are out of reach).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`
