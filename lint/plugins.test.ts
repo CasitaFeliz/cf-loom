@@ -174,6 +174,30 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual([]);
   });
 
+  it('report a spy on the console outside printed.ts, bound or bare, through globalThis or not, but not in printed.ts or on another object (C23)', () => {
+    const lines = [
+      "import { vi } from 'vitest';",
+      "export const bound = vi.spyOn(console, 'error');",
+      "vi.spyOn(console, 'warn').mockImplementation(() => {});",
+      "export const global = vi.spyOn(globalThis.console, 'log');",
+      'export const computed = (method: "debug" | "info") => vi.spyOn(console, method);',
+      "export const emitted = vi.spyOn(process, 'emitWarning');",
+      "export const written = vi.spyOn(process.stderr, 'write');",
+      "export const logger = vi.spyOn(logs, 'error');",
+      "export const quiet = console.error('a line');",
+    ];
+
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(['C23@2', 'C23@3', 'C23@4', 'C23@5']);
+    expect(pluginReportsFor(lines)).toEqual(['C23@2', 'C23@3', 'C23@4', 'C23@5']);
+    expect(pluginReportsFor(lines, 'packages/server/test/probe.ts')).toEqual([
+      'C23@2',
+      'C23@3',
+      'C23@4',
+      'C23@5',
+    ]);
+    expect(pluginReportsFor(lines, 'packages/contract/test/printed.ts')).toEqual([]);
+  });
+
   it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {
     const reported = [
       "test('number', () => {}, 10_000);",
