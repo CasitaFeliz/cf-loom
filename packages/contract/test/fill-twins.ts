@@ -67,10 +67,13 @@ export function linesOf({ endpoints, events }: Declarations): readonly string[] 
   return validated.kind === 'invalid' ? validated.failures.map(failureLineOf) : [];
 }
 
-/** Where a line sits, read after its site and, for a Message, after its identity. */
+/** Where a line sits: after the one Endpoint's site, or with the identity of the Message it sits in. */
 function locationOf(line: string): string {
-  const afterSite = line.replace(/^\S+(?: \S+)? \([^)]*\) /, '').replace(/^\S+@\d+ /, '');
-  return afterSite.split(' ')[0] ?? '';
+  const afterSite = line.replace(/^\S+(?: \S+)? \([^)]*\) /, '');
+  if (afterSite !== line) {
+    return afterSite.split(' ')[0] ?? '';
+  }
+  return /^\S+@\d+ \S+/.exec(line)?.[0] ?? '';
 }
 
 /** Whether a line sits at the place of the slot or below it. */
