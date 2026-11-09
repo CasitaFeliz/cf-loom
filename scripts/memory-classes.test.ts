@@ -528,4 +528,18 @@ describe("the classes of CI's legs", () => {
       'the legs of cli-npm run different --project filters: [["@cf-loom/cli"]] and [["@cf-loom/contract"]]',
     ]);
   });
+
+  test('a job that runs Vitest with no matrix is refused, since its legs would not be read', () => {
+    const workflow = `jobs:
+  light:
+    steps:
+      - run: pnpm vitest run
+`;
+
+    const reading = () => classesOfCi(workflow);
+
+    expect(reading).toThrow(
+      'The job light runs Vitest with no matrix, which this test does not read.',
+    );
+  });
 });
