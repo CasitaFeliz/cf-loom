@@ -110,6 +110,19 @@ function withConsumer(
   };
 }
 
+/** The plan with the fields of one Stream it lists replaced. */
+function withStream(
+  plan: EditablePlan,
+  name: string,
+  fields: Partial<EditablePlan['streams'][string]>,
+): EditablePlan {
+  const stream = plan.streams[name];
+  if (stream === undefined) {
+    throw new Error(`The plan lists no Stream ${name}`);
+  }
+  return { ...plan, streams: { ...plan.streams, [name]: { ...stream, ...fields } } };
+}
+
 const ordersStream = 'staging_orders-service';
 const invoiceDurableConsumer = 'staging_billing-service_draft-invoice';
 const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
@@ -512,6 +525,40 @@ describe('reading a broker plan', () => {
       expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
     },
   );
+
+  test('a Stream whose name is not its service’s is malformed, naming its name', () => {
+    const plan = withStream(aPrintedPlan(), 'orders-service', { service: 'billing-service' });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed("streams.orders-service is not what the plan's names print for billing-service"),
+    );
+  });
+
+  test('a command’s Durable consumer filtering on an Event’s subject is malformed, naming its subject', () => {
+    const plan = withConsumer(aPrintedPlan(), chargeCardConsumer, {
+      subject: 'orders-service.event.OrderCreated.v1',
+    });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.${chargeCardConsumer}.subject ${reprinted}`),
+    );
+  });
+
+  test('a Subscriber’s Durable consumer reading a Stream other than its subject’s Service’s is malformed, naming its stream', () => {
+    const plan = withConsumer(aPrintedPlan(), 'orders-service_notify-on-settled', {
+      stream: 'orders-service',
+    });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.orders-service_notify-on-settled.stream ${reprinted}`),
+    );
+  });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
