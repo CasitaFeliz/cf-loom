@@ -39,16 +39,13 @@ export type ServiceModel = {
   readonly subscriptions: readonly ModelSubscription[];
 };
 
-/** What declaring a model through the public API gives: the plan `cf-loom broker-plan` prints, or the refusal of `generate` and whether only rules a plan leaves out refused it. */
+/** What declaring a model through the public API gives: the plan `cf-loom broker-plan` prints, or the refusal of `generate` and whether only the rule a plan leaves out refused it. */
 export type PrintedModel =
   | { readonly kind: 'printed'; readonly plan: BrokerPlan }
-  | { readonly kind: 'refused'; readonly isOnlyByRulesThePlanLeavesOut: boolean };
+  | { readonly kind: 'refused'; readonly isOnlyByRuleThePlanLeavesOut: boolean };
 
-/** The rules a Broker plan says nothing of: one kind for each Message name, and no Subscription to a Retired Event. */
-const rulesThePlanLeavesOut: ReadonlySet<string> = new Set([
-  'message-kind',
-  'retired-event-subscribed',
-]);
+/** The one rule a Broker plan says nothing of, since its names print a Service that breaks it: one kind for each Message name. */
+const ruleThePlanLeavesOut = 'message-kind';
 
 /** The plan `cf-loom broker-plan` prints for a model declared through the public API, or why `generate` refuses the Service. */
 export function brokerPlanOfModel(model: ServiceModel, prefix: string | null): PrintedModel {
@@ -56,12 +53,12 @@ export function brokerPlanOfModel(model: ServiceModel, prefix: string | null): P
   const validated = validateRoot(root, aRootPackage(root, { packageName: model.service }));
   if (validated.kind !== 'valid') {
     const isLeftOut = (failure: Failure) =>
-      failure.kind === 'declaration' && rulesThePlanLeavesOut.has(failure.rule);
-    return { kind: 'refused', isOnlyByRulesThePlanLeavesOut: validated.failures.every(isLeftOut) };
+      failure.kind === 'declaration' && failure.rule === ruleThePlanLeavesOut;
+    return { kind: 'refused', isOnlyByRuleThePlanLeavesOut: validated.failures.every(isLeftOut) };
   }
   const snapshot = snapshotOf(validated);
   if (snapshot.kind !== 'service') {
-    return { kind: 'refused', isOnlyByRulesThePlanLeavesOut: false };
+    return { kind: 'refused', isOnlyByRuleThePlanLeavesOut: false };
   }
   return { kind: 'printed', plan: brokerPlanOf(snapshot, prefix) };
 }
@@ -180,7 +177,7 @@ function isDefined<Value>(value: Value | undefined): value is Value {
   return value !== undefined;
 }
 
-/** The model of a Service whose live Messages are the given subjects, a Command with its first Version Active, and whose Subscriptions are given, an Event of its own that one receives and no subject holds declared Retired. */
+/** The model of a Service whose live Messages are the given subjects, a Command with its first Version Active, and whose Subscriptions are given. */
 function modelOf(
   service: string,
   subjects: readonly SubjectParts[],
@@ -194,25 +191,8 @@ function modelOf(
     const lifecycle = kind === 'command' && !isFirstVersion ? 'deprecated' : 'active';
     messages.set(`${kind}/${name}/${version}`, { kind, name, version, lifecycle });
   }
-  const own = [...messages.values()];
-  const subscribed = subscriptions.filter(({ provider }) => provider === undefined);
-  const unlisted = new Map<string, { name: string; version: number }>();
-  for (const { event } of subscribed) {
-    const isListed = own.some(
-      (one) => one.kind === 'event' && one.name === event.name && one.version === event.version,
-    );
-    if (!isListed) {
-      unlisted.set(`${event.name}/${event.version}`, event);
-    }
-  }
-  const retired = [...unlisted.values()].map(({ name, version }) => ({
-    kind: 'event' as const,
-    name,
-    version,
-    lifecycle: 'retired' as const,
-  }));
   const withKind = (kind: 'event' | 'command') =>
-    [...own, ...retired]
+    [...messages.values()]
       .filter((message) => message.kind === kind)
       .map(({ name, version, lifecycle }) => ({ name, version, lifecycle }));
   return { service, events: withKind('event'), commands: withKind('command'), subscriptions };

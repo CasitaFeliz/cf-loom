@@ -96,6 +96,7 @@ function aPrintedPlan(prefix: string | null = null): EditablePlan {
 const chargeCardDurableConsumer = 'orders-service_command_ChargeCard_v1';
 const refundDurableConsumer = 'orders-service_command_Refund_v1';
 const refundSubject = 'orders-service.command.Refund.v1';
+const chargeCardSubject = 'orders-service.command.ChargeCard.v1';
 
 /** The subjects of the Stream of orders-service the plan lists. */
 function ordersSubjectsOf(plan: EditablePlan): string[] {
@@ -626,6 +627,76 @@ describe('reading a broker plan', () => {
     const decoded = decodeBrokerPlan(edit(aPrintedPlan()));
 
     expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
+  });
+
+  describe('a Durable consumer of a Subscription to its own Service’s Event', () => {
+    const onCreated = (prefix: string | null) => {
+      const stream = prefix === null ? 'orders-service' : `${prefix}_orders-service`;
+      const subject = `${prefix === null ? '' : `${prefix}.`}orders-service.event.OrderCreated.v1`;
+      const name = `${prefix === null ? '' : `${prefix}_`}orders-service_on-created`;
+      return { stream, subject, name, entry: { service: 'orders-service', stream, subject } };
+    };
+
+    test('on a Stream that lacks the Event’s subject is malformed, naming the missing subject', () => {
+      const created = onCreated(null);
+      const printed = aPrintedPlan();
+      const subjects = ordersSubjectsOf(printed).filter((one) => one !== created.subject);
+      const plan = {
+        ...withStream(printed, 'orders-service', { subjects }),
+        durableConsumers: { ...printed.durableConsumers, [created.name]: created.entry },
+      };
+
+      const decoded = decodeBrokerPlan(plan);
+
+      expect(decoded).toEqual(
+        malformed(
+          `streams.orders-service.subjects lacks ${created.subject}, which the Broker plan's names print for orders-service`,
+        ),
+      );
+    });
+
+    test('on a Stream that holds only a Command’s subject is malformed, naming the missing subject', () => {
+      const created = onCreated(null);
+      const plan = {
+        prefix: null,
+        streams: { 'orders-service': { service: 'orders-service', subjects: [chargeCardSubject] } },
+        durableConsumers: {
+          [chargeCardDurableConsumer]: {
+            service: 'orders-service',
+            stream: 'orders-service',
+            subject: chargeCardSubject,
+          },
+          [created.name]: created.entry,
+        },
+      };
+
+      const decoded = decodeBrokerPlan(plan);
+
+      expect(decoded).toEqual(
+        malformed(
+          `streams.orders-service.subjects lacks ${created.subject}, which the Broker plan's names print for orders-service`,
+        ),
+      );
+    });
+
+    test.each([
+      ['without a prefix', null, 'orders-service'],
+      ['under a prefix', 'staging', 'staging_orders-service'],
+    ])(
+      'in a plan with no Stream, %s, is malformed, naming the missing Stream',
+      (_, prefix, stream) => {
+        const created = onCreated(prefix);
+        const plan = { prefix, streams: {}, durableConsumers: { [created.name]: created.entry } };
+
+        const decoded = decodeBrokerPlan(plan);
+
+        expect(decoded).toEqual(
+          malformed(
+            `streams lacks ${stream}, which the Broker plan's names print for orders-service`,
+          ),
+        );
+      },
+    );
   });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {

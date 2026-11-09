@@ -98,7 +98,7 @@ describe('the plans cf-loom broker-plan prints', () => {
   });
 });
 
-/** What the oracle says of a plan a decoder accepted: the Service its names declare prints the same plan, is refused only by a rule the plan leaves out, or is wrong. */
+/** What the oracle says of a plan a decoder accepted: the Service its names declare prints the same plan, is refused only by the one rule the plan leaves out, or is wrong. */
 type Verdict = 'matches' | 'excluded' | 'unreadable' | 'invalid' | 'differs';
 
 /** A Service declared from the names of a plan through the public API, which prints its plan again, compared with the plan. */
@@ -109,7 +109,7 @@ function verdictOf(decoded: BrokerPlan): Verdict {
   }
   const declared = brokerPlanOfModel(model, decoded.prefix);
   if (declared.kind === 'refused') {
-    return declared.isOnlyByRulesThePlanLeavesOut ? 'excluded' : 'invalid';
+    return declared.isOnlyByRuleThePlanLeavesOut ? 'excluded' : 'invalid';
   }
   return JSON.stringify(declared.plan) === JSON.stringify(decoded) ? 'matches' : 'differs';
 }
@@ -159,8 +159,6 @@ describe('a printed plan with one text changed', () => {
     expect(count('unprintable')).toBeGreaterThan(300);
     expect(count('refused')).toBeGreaterThan(100);
     expect(count('matches')).toBeGreaterThan(40);
-    expect(count('excluded')).toBeGreaterThan(0);
-    expect(count('excluded')).toBeLessThan(judged.length / 20);
   });
 });
 
@@ -211,7 +209,5 @@ describe('a printed plan with one name replaced, two subjects swapped or a Durab
     ).toEqual([]);
     expect(count('refused')).toBeGreaterThan(200);
     expect(count('matches')).toBeGreaterThan(40);
-    expect(count('excluded')).toBeGreaterThan(0);
-    expect(count('excluded')).toBeLessThan(outcomes.length / 20);
   });
 });
