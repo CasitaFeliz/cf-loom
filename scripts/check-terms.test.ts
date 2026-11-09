@@ -118,6 +118,15 @@ describe('multiWordTerms', () => {
     expect(multiWordTerms(glossary)).toEqual(['Direct call', 'Message Handler']);
   });
 
+  it('does not read an emphasized phrase as a term', () => {
+    const glossary = [
+      '**Direct call**:',
+      'A *Fake Provider* and an _Event Handler_ are only emphasized.',
+    ].join('\n');
+
+    expect(multiWordTerms(glossary)).toEqual(['Direct call']);
+  });
+
   it('lists a term once however many times the glossary makes it bold', () => {
     const glossary = '**Direct call**:\nCalling.\n\nElsewhere a **Direct call** is bold again.';
 
