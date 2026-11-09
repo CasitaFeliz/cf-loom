@@ -1,15 +1,14 @@
 import type { MarkedToken } from 'marked';
 import { describe, expect, it } from 'vitest';
 import {
-  aSeededDraw,
-  type Block,
   type Container,
   containers,
-  pickFrom,
+  type MarkdownBlock,
   placed,
   tokenTypes,
 } from './markdown-containers.ts';
 import { type LocatedToken, locatedTokens } from './markdown-tokens.ts';
+import { aSeededDraw, type Draw, pickFrom } from './seeded-draw.ts';
 
 function linesOf(markdown: string, type: MarkedToken['type']): number[] {
   const found = locatedTokens(markdown).filter(({ token }) => token.type === type);
@@ -136,9 +135,7 @@ const inlineForms: readonly ((word: string) => string)[] = [
   (word) => `https://${word}.example`,
 ];
 
-type Draw = () => number;
-
-function paragraphOf(draw: Draw): Block {
+function paragraphOf(draw: Draw): MarkdownBlock {
   const lines = Array.from({ length: 1 + Math.floor(draw() * 3) }, () => {
     const forms = Array.from({ length: 1 + Math.floor(draw() * 2) }, () =>
       pickFrom(draw, inlineForms),
@@ -170,7 +167,7 @@ const blockForms: Record<string, (draw: Draw) => readonly string[]> = {
   'a quote': () => ['> @', '>', '> @'],
 };
 
-function aBlock(draw: Draw): Block {
+function aBlock(draw: Draw): MarkdownBlock {
   const names = ['a paragraph', ...Object.keys(blockForms)];
   const name = pickFrom(draw, names);
   const form = blockForms[name];
@@ -178,7 +175,7 @@ function aBlock(draw: Draw): Block {
 }
 
 /** Two to four copies, each the first block with a chance of 0.7 and a new one otherwise. */
-function repeatedBlocks(draw: Draw, container: Container): Block[] {
+function repeatedBlocks(draw: Draw, container: Container): MarkdownBlock[] {
   const first = aBlock(draw);
   const length = 2 + Math.floor(draw() * 3);
   const blocks = Array.from({ length }, () => (draw() < 0.7 ? first : aBlock(draw)));

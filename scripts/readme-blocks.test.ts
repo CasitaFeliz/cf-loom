@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  aSeededDraw,
-  type Container,
-  containers,
-  type Block as MarkdownBlock,
-  pickFrom,
-  placed,
-} from './markdown-containers.ts';
+import { type Container, containers, type MarkdownBlock, placed } from './markdown-containers.ts';
 import { type Block, blocksOf } from './readme-blocks.ts';
+import { aSeededDraw, type Draw, pickFrom } from './seeded-draw.ts';
 
 const readmePath = 'packages/contract/README.md';
 
@@ -152,8 +146,6 @@ describe('blocksOf', () => {
     expect(withCrlf).toEqual(withLf);
   });
 });
-
-type Draw = () => number;
 
 const fences = ['```', '````', '`````', '~~~', '~~~~'] as const;
 const languages = ['ts', 'typescript', 'ts title="a.ts"', 'tsx', 'TS', 'js', ''] as const;

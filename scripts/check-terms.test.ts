@@ -12,14 +12,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { misspelledTerms, multiWordTerms, type TermMisspelling } from './check-terms.ts';
-import {
-  aSeededDraw,
-  type Block,
-  type Container,
-  containers,
-  pickFrom,
-  placed,
-} from './markdown-containers.ts';
+import { type Container, containers, type MarkdownBlock, placed } from './markdown-containers.ts';
+import { aSeededDraw, type Draw, pickFrom } from './seeded-draw.ts';
 
 const repositoryDirs: string[] = [];
 
@@ -521,8 +515,6 @@ describe('misspelledTerms', () => {
   });
 });
 
-type Draw = () => number;
-
 /** The words of a term cut after the first, for a holder that puts the first in a URL and the rest after it. */
 function splitOf(words: string): readonly [string, string] {
   const [first = '', ...rest] = words.split(' ');
@@ -630,7 +622,7 @@ function spellingOf(term: string, spelling: (typeof spellings)[number], draw: Dr
 }
 
 type Use = {
-  readonly block: Block;
+  readonly block: MarkdownBlock;
   readonly row: number;
   readonly expected: Omit<TermMisspelling, 'line'> | undefined;
 };
@@ -654,7 +646,7 @@ function aDocument(
   draw: Draw,
 ): { markdown: string; expected: TermMisspelling[] } {
   const uses = Array.from({ length: 4 + Math.floor(draw() * 4) }, () => aUse(terms, draw));
-  const lead: Block = { lines: ['An introduction.'], isParagraph: true };
+  const lead: MarkdownBlock = { lines: ['An introduction.'], isParagraph: true };
   const laidOut = placed([lead, ...uses.map(({ block }) => block)], container, draw);
   const expected: TermMisspelling[] = [];
   for (const [index, { row, expected: use }] of uses.entries()) {

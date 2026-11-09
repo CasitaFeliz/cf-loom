@@ -1,8 +1,9 @@
 import { Lexer, marked } from 'marked';
 import { describe, expect, it } from 'vitest';
-import { aSeededDraw, tokenTypes } from './markdown-containers.ts';
+import { tokenTypes } from './markdown-containers.ts';
 import type { ReadmeProblem } from './pinned-readme.ts';
 import { pinnedReadme } from './pinned-readme.ts';
+import { aSeededDraw, pickFrom } from './seeded-draw.ts';
 
 const repository = 'CasitaFeliz/cf-loom';
 const commit = '0123456789abcdef0123456789abcdef01234567';
@@ -875,14 +876,10 @@ describe('pinnedReadme over a block repeated in a container', () => {
   const formNames = Object.keys(forms);
   const targetNames = Object.keys(targets);
 
-  function pickFrom(names: readonly string[]): string {
-    return names[Math.floor(draw() * names.length)] as string;
-  }
-
   function aBlock(): Block {
     return {
-      form: pickFrom(formNames),
-      target: pickFrom(targetNames),
+      form: pickFrom(draw, formNames),
+      target: pickFrom(draw, targetNames),
       leadsWithText: draw() < 0.5,
     };
   }

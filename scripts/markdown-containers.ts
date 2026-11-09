@@ -1,20 +1,5 @@
 import type { MarkedToken } from 'marked';
-
-/** A generator that draws the same sequence on every run (mulberry32). */
-export function aSeededDraw(seed: number): () => number {
-  let state = seed;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let mixed = Math.imul(state ^ (state >>> 15), 1 | state);
-    mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
-    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** A name drawn from `names` with `draw`. */
-export function pickFrom<Name>(draw: () => number, names: readonly Name[]): Name {
-  return names[Math.floor(draw() * names.length)] as Name;
-}
+import type { Draw } from './seeded-draw.ts';
 
 /** Every type of token `marked` produces, so that a test fails to compile when `marked` adds one. */
 export const tokenTypes: Record<MarkedToken['type'], true> = {
@@ -86,7 +71,7 @@ export const containers: Record<string, Container> = {
 };
 
 /** The lines of one block of Markdown, and whether it is a paragraph, whose later lines may be lazy. */
-export type Block = { readonly lines: readonly string[]; readonly isParagraph: boolean };
+export type MarkdownBlock = { readonly lines: readonly string[]; readonly isParagraph: boolean };
 
 /** Blocks laid out in a container: its lines, and the line of them, counted from 1, that each block starts on. */
 export type Placed = { readonly lines: readonly string[]; readonly starts: readonly number[] };
@@ -99,7 +84,7 @@ function prefixOf(container: Container, row: number, isLazy: boolean): string {
 }
 
 /** The blocks in `container`, a blank line between two of them, a paragraph's later lines lazy now and then. */
-export function placed(blocks: readonly Block[], container: Container, draw: () => number): Placed {
+export function placed(blocks: readonly MarkdownBlock[], container: Container, draw: Draw): Placed {
   const lines: string[] = [];
   const starts: number[] = [];
   for (const [index, block] of blocks.entries()) {
