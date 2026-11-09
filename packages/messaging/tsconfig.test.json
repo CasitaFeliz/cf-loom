@@ -9,6 +9,7 @@
   "include": [
     "src",
     "test",
+    "../contract/test/foreign-values.ts",
     "../contract/test/line-breaks.ts",
     "../contract/test/random-schemas.ts",
     "../contract/test/growth.ts"

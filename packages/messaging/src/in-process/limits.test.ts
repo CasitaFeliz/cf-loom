@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { foreignKindOf, foreignValues } from '../../../contract/test/foreign-values.ts';
 import { aMessagingOver, thirtySeconds } from '../../test/in-process-services.ts';
 import { type Behavior, handlersOf, ordersContract, type Received } from '../../test/orders.ts';
 import { inProcess } from './index.ts';
@@ -18,6 +19,14 @@ function inProcessGiven(limits: unknown) {
 
 const duration = 'a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them';
 const count = "a whole number from 1, or 'unlimited'";
+
+describe('the values the setting types do not allow', () => {
+  test('the values the setting types do not allow, which a refusal is drawn from, hold every kind it shows differently', () => {
+    const kinds = new Set(foreignValues(() => undefined).map(({ value }) => foreignKindOf(value)));
+
+    expect([...kinds].sort()).toEqual(['bigint', 'function', 'list', 'object', 'proxy', 'symbol']);
+  });
+});
 
 describe('inProcess() reading its limits', () => {
   test.each([
