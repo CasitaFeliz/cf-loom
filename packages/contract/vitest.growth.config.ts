@@ -1,4 +1,5 @@
 import { defineProject } from 'vitest/config';
+import { hangTimeout } from '../../scripts/hang-timeout.ts';
 import { growthTestFiles } from './vitest.config.ts';
 
 /**
@@ -8,9 +9,6 @@ import { growthTestFiles } from './vitest.config.ts';
  * class's value by measurement, not by reference, since the two classes may move apart.
  */
 export const growthHeapMegabytes = 2048;
-
-/** Three attempts of the slowest row take about 50 s on an idle host, so a growth test gets 240 s, as the growth tests of the other projects do. */
-export const growthTimeout = 240_000;
 
 /**
  * How many growth test processes run at once: two at their limit fit a CI runner as the heavy
@@ -29,7 +27,8 @@ export default defineProject({
   test: {
     name: '@cf-loom/contract-growth',
     include: [growthTestFiles],
-    testTimeout: growthTimeout,
+    testTimeout: hangTimeout,
+    hookTimeout: hangTimeout,
     execArgv: [`--max-old-space-size=${growthHeapMegabytes}`],
     maxWorkers: growthWorkers,
     sequence: { groupOrder: growthGroup },

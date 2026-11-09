@@ -3,6 +3,7 @@ import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Plugin } from 'vite';
 import { configDefaults, defineConfig } from 'vitest/config';
+import { hangTimeout } from './scripts/hang-timeout.ts';
 import { writeReadmeService } from './scripts/readme-snippets.ts';
 
 declare module 'vitest' {
@@ -20,9 +21,6 @@ declare module 'vitest' {
  * to, so a developer's own `NODE_OPTIONS` never reaches a test process.
  */
 export const lightHeapMegabytes = 768;
-
-/** The lint plugin tests each spawn Biome, and some script tests spawn Node, which takes seconds on a CI runner with shared cores. */
-const spawningTimeout = 30_000;
 
 /** The folder of this Vitest's README Service, named anew each time Vitest reads this file, so each Vitest and each restart of one has a folder of its own. */
 const readmeService = join(
@@ -59,6 +57,8 @@ export default defineConfig({
   test: {
     // biome-ignore lint/style/useNamingConvention: the name of an environment variable
     env: { NODE_OPTIONS: `--max-old-space-size=${lightHeapMegabytes}` },
+    testTimeout: hangTimeout,
+    hookTimeout: hangTimeout,
     projects: [
       'packages/*',
       'packages/*/vitest.heavy.config.ts',
@@ -69,7 +69,6 @@ export default defineConfig({
           name: 'tooling',
           include: ['lint/**/*.test.ts', 'scripts/**/*.test.ts'],
           exclude: [...configDefaults.exclude, 'scripts/readme-service/**'],
-          testTimeout: spawningTimeout,
           provide,
         },
       },
@@ -79,7 +78,6 @@ export default defineConfig({
           dir: readmeService,
           include: ['test/**/*.test.ts'],
           setupFiles: ['scripts/readme-service-written.ts'],
-          testTimeout: spawningTimeout,
           fsModuleCache: false,
           provide,
         },

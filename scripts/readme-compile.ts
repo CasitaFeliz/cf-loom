@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { API, type Program } from 'typescript/unstable/sync';
+import { hangTimeout } from './hang-timeout.ts';
 import type { Project } from './readme-project.ts';
 
 /** One diagnostic of `tsc`: the file and row it names, when it names one, with its code and message. */
@@ -19,8 +20,6 @@ export type Compiled = {
 };
 
 const tsc = join(import.meta.dirname, '..', 'node_modules', 'typescript', 'bin', 'tsc');
-/** Long enough for a slow runner, short enough that a hung command fails the write-out. */
-export const timeoutMs = 60_000;
 const located = /^(.+?)\((\d+),\d+\): error TS(\d+): (.*)$/;
 const unlocated = /^error TS(\d+): (.*)$/;
 const notFound = new Set([2304, 2552, 18004, 2503, 2662, 2663]);
@@ -32,7 +31,7 @@ export function compile(directory: string, extraArgs: readonly string[] = []): C
   const ran = spawnSync(process.execPath, args, {
     cwd: directory,
     encoding: 'utf8',
-    timeout: timeoutMs,
+    timeout: hangTimeout,
   });
   if (ran.error) {
     throw new Error(`tsc did not finish in ${directory}: ${ran.error.message}`);

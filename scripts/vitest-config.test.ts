@@ -158,7 +158,7 @@ describe('the Vitest configuration', () => {
     await vitest.exited;
 
     expect(JSON.parse(vitest.stdout())).toEqual({
-      projects: ['@cf-loom/contract', '@cf-loom/client'],
+      projects: ['@cf-loom/client', '@cf-loom/contract'],
       wrote: false,
     });
   });
