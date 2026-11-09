@@ -271,8 +271,8 @@ agree with it, or it is read against nothing.
 `./internal` where another cf-loom package uses it, or where several of a package's commands share a step) and checks
 what a user can see: a declaration's Snapshot, the `Response` `serve` answers, the Outcome a client returns, the exit
 status of a command, the text the console prints (read with `printedBy`, in `packages/contract/test/printed.ts`, the
-one place a test spies on the console; a package outside `contract` widens its `tsconfig.test.json` to import it, as
-for `growth.ts`). It imports no private module and asserts no call order of mocks. A README test imports the
+one place a test spies on the console; a package outside `contract` widens its `tsconfig.test.json` (an example, its
+`tsconfig.json`) to import it, as for `growth.ts`). It imports no private module and asserts no call order of mocks. A README test imports the
 README's own blocks as `writeReadmeService` writes them out (see [CLAUDE.md](CLAUDE.md#repository)), never a copy of
 them. *Why:* a test of the mechanics fails on every refactor and passes on every bug. A type test that a call is
 refused names the error it expects, `// @ts-expect-error TS<code> <reason>`, and `pnpm check` verifies that the line
