@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { growthTimeout } from '../vitest.growth.config.ts';
 import { collectedOnce } from './collected.ts';
 import { cpuRatioOf, orderOf, orders } from './growth.ts';
 
@@ -195,21 +194,19 @@ function withColdReference(call: () => unknown, reference: () => unknown) {
 }
 
 describe('orderOf', () => {
-  test('a read of each name once is under the linear order', { timeout: growthTimeout }, () => {
+  test('a read of each name once is under the linear order', () => {
     const order = orderOf(readingEachName, sizes, orders.linear);
 
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a read of each name once reaches the flat order', { timeout: growthTimeout }, () => {
+  test('a read of each name once reaches the flat order', () => {
     const order = orderOf(readingEachName, sizes, orders.flat);
 
     expect(order).toBeGreaterThanOrEqual(orders.flat);
   });
 
-  test('a quadratic scan of a fortieth of the names, whose first runs at the large size wait for a core, reaches the linear order', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a quadratic scan of a fortieth of the names, whose first runs at the large size wait for a core, reaches the linear order', () => {
     const waiting = waitingAtFirst(scanningFortiethOfNames, sizes.large, 3);
 
     const order = orderOf(waiting, sizes, orders.linear);
@@ -217,9 +214,7 @@ describe('orderOf', () => {
     expect(order).toBeGreaterThanOrEqual(orders.linear);
   });
 
-  test('a read of each name once, whose first runs at the large size wait for a core, reaches the flat order', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a read of each name once, whose first runs at the large size wait for a core, reaches the flat order', () => {
     const waiting = waitingAtFirst(readingEachName, sizes.large, 3);
 
     const order = orderOf(waiting, sizes, orders.flat);
@@ -227,9 +222,7 @@ describe('orderOf', () => {
     expect(order).toBeGreaterThanOrEqual(orders.flat);
   });
 
-  test('a read of each name once, whose first 18 runs at the small size wait for a core, reaches the flat order', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a read of each name once, whose first 18 runs at the small size wait for a core, reaches the flat order', () => {
     const waiting = waitingAtFirst(readingEachName, sizes.small, 18);
 
     const order = orderOf(waiting, sizes, orders.flat);
@@ -237,33 +230,25 @@ describe('orderOf', () => {
     expect(order).toBeGreaterThanOrEqual(orders.flat);
   });
 
-  test.each([1, 8])(
-    'a scan of the names at one name in %i reaches the linear order',
-    (every) => {
-      const order = orderOf(scanningAtEvery(every), sizes, orders.linear);
+  test.each([1, 8])('a scan of the names at one name in %i reaches the linear order', (every) => {
+    const order = orderOf(scanningAtEvery(every), sizes, orders.linear);
 
-      expect(order).toBeGreaterThanOrEqual(orders.linear);
-    },
-    growthTimeout,
-  );
+    expect(order).toBeGreaterThanOrEqual(orders.linear);
+  });
 
-  test('a thousand lookups in a set of the names are under the flat order', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a thousand lookups in a set of the names are under the flat order', () => {
     const order = orderOf(lookingUpThousandNames, sizes, orders.flat);
 
     expect(order).toBeLessThan(orders.flat);
   });
 
-  test('a walk of every subset reaches the polynomial order at twice the size', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a walk of every subset reaches the polynomial order at twice the size', () => {
     const order = orderOf(walkingEverySubset, { small: 8, large: 16 }, orders.polynomial);
 
     expect(order).toBeGreaterThanOrEqual(orders.polynomial);
   });
 
-  test("a try holds none of an earlier try's fixtures", { timeout: growthTimeout }, () => {
+  test("a try holds none of an earlier try's fixtures", () => {
     const { prepare, tries } = fixturesOfTries();
 
     orderOf(prepare, { small: 1, large: 8 }, orders.linear);
@@ -285,9 +270,7 @@ describe('orderOf', () => {
 });
 
 describe('cpuRatioOf', () => {
-  test('a read of 16,000 names takes at least twice the CPU time of a read of 2,000', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a read of 16,000 names takes at least twice the CPU time of a read of 2,000', () => {
     const large = readingEachName(16_000);
     const small = readingEachName(2_000);
 
@@ -296,9 +279,7 @@ describe('cpuRatioOf', () => {
     expect(ratio).toBeGreaterThanOrEqual(2);
   });
 
-  test('a read of 16,000 names takes at least three times the CPU time of a read of 2,000 whose first span runs cold', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a read of 16,000 names takes at least three times the CPU time of a read of 2,000 whose first span runs cold', () => {
     const cold = withColdReference(readingEachName(16_000), readingEachName(2_000));
 
     const ratio = cpuRatioOf(cold.call, cold.reference, 3);
@@ -306,9 +287,7 @@ describe('cpuRatioOf', () => {
     expect(ratio).toBeGreaterThanOrEqual(3);
   });
 
-  test('a call of tens of nanoseconds holds no memory for each of its runs', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a call of tens of nanoseconds holds no memory for each of its runs', () => {
     const { call, seen } = stepSeeingTheHeap();
     collectedOnce();
     const heapUsedBefore = process.memoryUsage().heapUsed;

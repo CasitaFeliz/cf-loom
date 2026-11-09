@@ -9,7 +9,6 @@
   "include": [
     "src",
     "test",
-    "vitest.config.ts",
     "../contract/test/line-breaks.ts",
     "../contract/test/random-schemas.ts",
     "../contract/test/growth.ts"

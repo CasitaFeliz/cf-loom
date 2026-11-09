@@ -644,9 +644,6 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
    */
   const sizes = { small: 64, large: 512 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   const stillRetired = { lifecycle: 'retired' } as const;
 
   function aRef(name: string): SchemaNode {
@@ -694,9 +691,7 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
     };
   }
 
-  test('many Commands Retired on both sides, whose bodies name the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Commands Retired on both sides, whose bodies name the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', () => {
     const checkCommands = checkOfCommands('a');
 
     const report = checkCommands(sizes.large)();
@@ -732,17 +727,12 @@ describe('compatibilityReportOf, the defs an Element Retired on both sides reach
 describe('publishedSnapshotOf, the codes no Endpoint answers any more', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   function mergeOfCodes(count: number) {
     const { baseline, proposed } = codesNoEndpointAnswersBesideDefs(count);
     return () => publishedSnapshotOf(baseline, proposed, publishedAt('1.1.0'));
   }
 
-  test('many codes no Endpoint answers any more, beside many defs they do not reach, are merged in time that grows with both', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many codes no Endpoint answers any more, beside many defs they do not reach, are merged in time that grows with both', () => {
     const published = mergeOfCodes(3)();
     const order = orderOf(mergeOfCodes, sizes, orders.linear);
 

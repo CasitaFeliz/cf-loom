@@ -157,6 +157,7 @@
     "./lint/no-reduce.grit",
     "./lint/no-short-name.grit",
     "./lint/no-spread-push.grit",
+    "./lint/no-test-timeout.grit",
     "./lint/no-zod-derived-getters.grit",
     "./lint/written-lines.grit"
   ],

@@ -99,7 +99,7 @@ beforeAll(() => {
       outcomes.set(keyOf(kind, exportName), outcomeOf(kind, exportName));
     }
   }
-}, 180_000);
+});
 
 afterAll(removeFixtures);
 

@@ -189,7 +189,7 @@ describe('listedIssueLinesOf: a source too long, a path too deep, a count too la
     expect(lines).toEqual(linesOf([deep]));
   });
 
-  test('telling a Fault’s Issues takes time flat in their count', { timeout: 240_000 }, () => {
+  test('telling a Fault’s Issues takes time flat in their count', () => {
     const small = 10_000;
     const large = 100_000;
     const lists = new Map(
