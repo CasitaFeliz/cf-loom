@@ -1,9 +1,9 @@
 import { childrenOf, refsWrittenIn } from './children.ts';
 import { defGraphOf } from './def-graph.ts';
-import type { AllOfNode, NotAllowed, SchemaNode, UnionNode } from './nodes.ts';
+import type { AllOfNodeOf, NotAllowed, UnionNodeOf } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
 import type { Defs } from './walk.ts';
-import type { Composition, Reached } from './walked.ts';
+import type { Composition, Outline, Reached } from './walked.ts';
 
 /**
  * Every `allOf` or `union` the walk built that reaches an Open Enum, at any depth: a reader of an
@@ -31,17 +31,20 @@ type OpenEnumFact = 'holds an Open Enum';
 const openEnumFact: OpenEnumFact = 'holds an Open Enum';
 
 /** A composition the walk built where it stands, with the refusal it is if it reaches an Open Enum. */
-export function compositionOf(at: Reached, node: AllOfNode | UnionNode): Composition {
+export function compositionOf(
+  at: Reached,
+  node: AllOfNodeOf<Outline> | UnionNodeOf<Outline>,
+): Composition {
   return { refusal: { kind: 'not-allowed', ...at, ...refusalOf(node) }, node };
 }
 
-function refusalOf(composition: AllOfNode | UnionNode): Refused {
+function refusalOf(composition: Composition['node']): Refused {
   return composition.type === 'allOf' ? refused.openIntersection : refused.openUnion;
 }
 
 /** Whether a node holds an Open Enum inside it alone, with no def entered. */
-function holdsOpenEnum(node: SchemaNode): boolean {
-  const pending = [node];
+function holdsOpenEnum(node: Outline): boolean {
+  const pending: Outline[] = [node];
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     if (next.type === 'enum' && next.open) {
       return true;

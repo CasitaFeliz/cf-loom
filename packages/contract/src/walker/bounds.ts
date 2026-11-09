@@ -3,7 +3,7 @@ import { type Refused, refused } from './not-allowed.ts';
 
 /** What a node, or the outline of one, holds of its type and bounds. */
 type BoundedNode = {
-  readonly type?: SchemaNode['type'];
+  readonly type?: SchemaNode['type'] | undefined;
   readonly min?: number;
   readonly max?: number;
   readonly exclusiveMin?: number;

@@ -9,14 +9,17 @@ import {
   metadataOf,
   withExamplesParsed,
 } from './metadata.ts';
-import type { Field, NotAllowed, Origin, SchemaNode } from './nodes.ts';
+import type { Field, FieldOf, NotAllowed, Origin, SchemaNode } from './nodes.ts';
 import { notAllowed, refused, refusedWrapperId } from './not-allowed.ts';
 import { compositionOf } from './open-compositions.ts';
 import { type Recursion, startRecursion } from './recursion.ts';
 import {
   type Composition,
+  failedField,
   type LocatedSchema,
   type Memo,
+  type Outline,
+  outlineOf,
   type Reached,
   type ReachedSchema,
   refusedBeside,
@@ -150,7 +153,11 @@ function recordComposition(node: Walked, at: Reached, state: WalkState): void {
 }
 
 /** A field: `.optional()` directly on it makes it not required; `.required()` undoes that. */
-function* walkField(schema: unknown, under: Under, state: WalkState): Walking<Field> {
+function* walkField(
+  schema: unknown,
+  under: Under,
+  state: WalkState,
+): Walking<Field, FieldOf<Outline>> {
   if (!isSchema(schema)) {
     return requiredField(yield* state.walker.schema(schema, under));
   }
@@ -208,12 +215,20 @@ function throughWrapper(wrapper: Wrapper, inner: Walked): Walked {
   return withExamplesParsed(schema, annotatedNode, at);
 }
 
-function requiredField(result: Walked): Walked<Field> {
-  return result.kind === 'walked' ? walked({ required: true, schema: result.value }) : result;
+function requiredField(result: Walked): Walked<Field, FieldOf<Outline>> {
+  return fieldOf(result, true);
 }
 
-function optionalField(result: Walked): Walked<Field> {
-  return result.kind === 'walked' ? walked({ required: false, schema: result.value }) : result;
+function optionalField(result: Walked): Walked<Field, FieldOf<Outline>> {
+  return fieldOf(result, false);
+}
+
+/** A field walked, or failed keeping the field it was building, with the outline of its schema. */
+function fieldOf(result: Walked, required: boolean): Walked<Field, FieldOf<Outline>> {
+  if (result.kind === 'walked') {
+    return walked({ required, schema: result.value });
+  }
+  return failedField(result.tree, { required, schema: outlineOf(result) });
 }
 
 /** What the schema itself says of its node: its metadata, and the origin it has itself. */

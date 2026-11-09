@@ -10,9 +10,13 @@ import {
   valueStep,
   variantStep,
 } from './steps.ts';
+import type { Outline } from './walked.ts';
 
 /** A node inside another, with the steps that lead to it. */
-export type Child = { readonly steps: readonly Step[]; readonly node: SchemaNode };
+export type Child<Node extends Outline = SchemaNode> = {
+  readonly steps: readonly Step[];
+  readonly node: Node;
+};
 
 /** A node and the steps from the node the search began at. */
 export type NodeWithin = { readonly at: readonly Step[]; readonly node: SchemaNode };
@@ -25,8 +29,11 @@ export function nodesWithin(node: SchemaNode, at: readonly Step[] = []): readonl
   return [{ at, node }, ...inside];
 }
 
-/** The nodes directly inside a node, each with the steps to it. */
-export function childrenOf(node: SchemaNode): readonly Child[] {
+/** The nodes directly inside a node, or the outlines inside an outline, each with the steps to it. */
+export function childrenOf(node: SchemaNode): readonly Child[];
+export function childrenOf(node: Outline): readonly Child<Outline>[];
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: one decision: the children of each node type
+export function childrenOf(node: Outline): readonly Child<Outline>[] {
   switch (node.type) {
     case 'object':
       return Object.entries(node.fields).map(([key, field]) => ({
@@ -60,14 +67,15 @@ export function childrenOf(node: SchemaNode): readonly Child[] {
     case 'enum':
     case 'json':
     case 'ref':
+    case undefined:
       return [];
   }
 }
 
 /** The def names a node's own `ref`s name, each once, in the order they are written, inside the node alone, with no def entered. */
-export function refsWrittenIn(node: SchemaNode): readonly string[] {
+export function refsWrittenIn(node: Outline): readonly string[] {
   const names = new Set<string>();
-  const pending = [node];
+  const pending: Outline[] = [node];
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
     if (next.type === 'ref') {
       names.add(next.name);
@@ -79,6 +87,6 @@ export function refsWrittenIn(node: SchemaNode): readonly string[] {
   return [...names];
 }
 
-function indexed(node: SchemaNode, index: number): Child {
+function indexed<Node extends Outline>(node: Node, index: number): Child<Node> {
   return { steps: [indexStep(index)], node };
 }

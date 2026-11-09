@@ -219,6 +219,7 @@ export type {
   Field,
   NumberNode,
   ObjectNode,
+  Outline,
   Path,
   PipeRefusals,
   RefNode,
@@ -229,6 +230,7 @@ export type {
   StringNode,
   TaggedNode,
   TupleNode,
+  Unbuilt,
 } from '../walker/index.ts';
 export {
   anchoredAuthorPathOf,
@@ -240,6 +242,7 @@ export {
   formatConstructorOf,
   isJsonValue,
   isSchema,
+  isWhole,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,
