@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
 import type * as core from 'zod/v4/core';
+import { constructRows } from '../../test/fill-function-rows.ts';
+import { fills } from '../../test/fill-twins.ts';
 import { isWhole, walkSchemas } from '../internal/index.ts';
 
 /** The outline a failed walk of one schema kept. */
@@ -143,5 +145,56 @@ describe('the outline of a failed walk', () => {
 
     expect(whole).toMatchObject({ type: 'object', fields: { id: { schema: { type: 'string' } } } });
     expect(isWhole(whole)).toBe(false);
+  });
+});
+
+describe('an outline that is whole', () => {
+  const site = { kind: 'export', name: 'shape' } as const;
+  const at = { site, declaration: undefined, steps: undefined } as const;
+  const walkedOf = (schema: core.$ZodType) =>
+    walkSchemas([{ at, schema }], () => undefined).located[0]?.walked;
+
+  /** What an object part's field `name` holds as a failed walk kept it. */
+  function keptField(part: core.$ZodType, name: string) {
+    const walked = walkedOf(part);
+    const outline = walked?.kind === 'not-allowed' ? walked.outline : undefined;
+    return outline?.type === 'object' ? outline.fields[name]?.schema : undefined;
+  }
+
+  /** The refused constructs beside which the fill is kept whole but unlike the node its own walk builds. */
+  function differingBeside(
+    fill: core.$ZodType,
+    alone: unknown,
+  ): { held: number; differing: string[] } {
+    const result = { held: 0, differing: [] as string[] };
+    for (const [rowName, row] of constructRows()) {
+      const kept = keptField(z.object({ held: fill, slot: row.make() as core.$ZodType }), 'held');
+      if (kept !== undefined && isWhole(kept)) {
+        result.held++;
+        if (JSON.stringify(kept) !== JSON.stringify(alone)) {
+          result.differing.push(rowName);
+        }
+      }
+    }
+    return result;
+  }
+
+  test('is the node a whole walk of its schema builds, beside every refused construct', () => {
+    let held = 0;
+    const differing: string[] = [];
+    for (const [fillName, make] of fills) {
+      const fill = make?.();
+      const alone = fill === undefined ? undefined : walkedOf(fill);
+      if (fill !== undefined && alone?.kind === 'walked') {
+        const result = differingBeside(fill, alone.value);
+        held += result.held;
+        for (const rowName of result.differing) {
+          differing.push(`${fillName} beside ${rowName}`);
+        }
+      }
+    }
+
+    expect(differing).toEqual([]);
+    expect(held).toBeGreaterThan(1000);
   });
 });

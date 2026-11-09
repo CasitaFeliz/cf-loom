@@ -1479,7 +1479,7 @@ function drawOf(seed: number): Draw {
     site: index > 0 && next() < 0.4 ? Math.floor(next() * index) : index,
   }));
   const defs = Array.from({ length: defCount }, () => holdsOf(next, defCount, 0));
-  return { defs: withoutOpenBeyondFailures(defs), bodies, exported: next() < 0.5 };
+  return { defs, bodies, exported: next() < 0.5 };
 }
 
 /** The defs a def holds, itself, and those they hold, at any depth. */
@@ -1497,36 +1497,9 @@ function reachableFrom(defs: readonly Holds[], start: number): ReadonlySet<numbe
   return seen;
 }
 
-/** Whether a def fails on its own: it holds a date, the shared date or a field named constructor. */
-function failsOnItsOwn({ leaves: held, holdings }: Holds): boolean {
-  return (
-    held.includes('at') ||
-    held.includes('sh') ||
-    holdings.some(({ name }) => name[0] === 'constructor')
-  );
-}
-
-/**
- * The defs with the `op` leaf stripped from every def that a failing def reaches, itself included.
- * A union or an intersection over a schema that also fails is not refused, though the
- * README says it is at any depth, so a draw holds none, and the oracle below refuses one over
- * every def that reaches an openEnum().
- */
-function withoutOpenBeyondFailures(defs: readonly Holds[]): readonly Holds[] {
-  const beyondFailures = new Set<number>();
-  defs.forEach((_, start) => {
-    const reached = reachableFrom(defs, start);
-    if ([...reached].some((index) => failsOnItsOwn(defs[index] as Holds))) {
-      for (const index of reached) {
-        beyondFailures.add(index);
-      }
-    }
-  });
-  return defs.map((holds, index) =>
-    beyondFailures.has(index)
-      ? { ...holds, leaves: holds.leaves.filter((leaf) => leaf !== 'op') }
-      : holds,
-  );
+/** Whether a def holds a field named constructor, which leaves the object unbuilt, so nothing reaches through it. */
+function isUnbuilt({ holdings }: Holds): boolean {
+  return holdings.some(({ name }) => name[0] === 'constructor');
 }
 
 function lazily<Made>(make: () => Made): () => Made {
@@ -1655,8 +1628,9 @@ function sitesReachingOf(draw: Draw): readonly ReadonlySet<string>[] {
 
 /** Whether each def reaches a union that is an openEnum(), itself or through the defs it holds, so a union or an intersection that holds it is refused. */
 function reachesOpenOf({ defs }: Draw): readonly boolean[] {
-  return defs.map((_, start) =>
-    [...reachableFrom(defs, start)].some((index) => defs[index]?.leaves.includes('op')),
+  const built = defs.map((holds) => (isUnbuilt(holds) ? { holdings: [], leaves: [] } : holds));
+  return built.map((_, start) =>
+    [...reachableFrom(built, start)].some((index) => built[index]?.leaves.includes('op')),
   );
 }
 
@@ -1783,7 +1757,7 @@ describe('failure lines: a graph of defs, drawn at random', () => {
     },
   );
 
-  test('the draws hold every kind of step and of name, told in the lines, and shared site texts, origins and refused compositions', () => {
+  test('the draws hold every kind of step and of name, told in the lines, and shared site texts, origins and refused compositions, one over a def that fails on its own', () => {
     const draws = graphSeeds.map(drawOf);
     const holdings = draws.flatMap(({ defs, bodies }) =>
       [...defs, ...bodies].flatMap(({ holdings: held }) => held),
@@ -1792,6 +1766,18 @@ describe('failure lines: a graph of defs, drawn at random', () => {
     const unmet = (parts: readonly string[]) =>
       parts.filter((part) => !lines.some((line) => line.includes(part)));
 
+    const refusedOverFailingDef = draws.some((draw) => {
+      const reachesOpen = reachesOpenOf(draw);
+      return [...draw.defs, ...draw.bodies]
+        .flatMap(({ holdings: held }) => held)
+        .some(
+          ({ holder, to }) =>
+            holders[holder].refusedAs !== undefined &&
+            reachesOpen[to] === true &&
+            draw.defs[to]?.leaves.some((leaf) => leaf !== 'op') === true,
+        );
+    });
+
     expect({
       holders: holderNames.filter((name) => !holdings.some(({ holder }) => holder === name)),
       names: fieldNames.filter(([name]) => !holdings.some((held) => held.name[0] === name)),
@@ -1799,6 +1785,7 @@ describe('failure lines: a graph of defs, drawn at random', () => {
       written: unmet(fieldNames.map(([, written]) => `.${written}`)),
       words: unmet([' (also in ', ' (declared in ', unionIsRefused, intersectionIsRefused]),
       sharedSiteTexts: draws.some(sharesSiteText),
+      refusedOverFailingDef,
     }).toEqual({
       holders: [],
       names: [],
@@ -1806,6 +1793,7 @@ describe('failure lines: a graph of defs, drawn at random', () => {
       written: [],
       words: [],
       sharedSiteTexts: true,
+      refusedOverFailingDef: true,
     });
   });
 });

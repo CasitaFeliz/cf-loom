@@ -223,6 +223,7 @@ export type {
   Path,
   PipeRefusals,
   RefNode,
+  RefusalKey,
   SchemaNode,
   Site,
   Step,

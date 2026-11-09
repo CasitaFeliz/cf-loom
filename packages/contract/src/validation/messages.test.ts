@@ -571,6 +571,51 @@ describe('validateRoot: a Message body beside a schema that fails', () => {
   });
 });
 
+describe('validateRoot: a def that a failure of its group took the place of keeps its own ref', () => {
+  test('a body that is a def of a group whose other def fails is judged as its own def', () => {
+    const outer: z.ZodType = z
+      .object({
+        get failing() {
+          return failing;
+        },
+      })
+      .meta({ id: 'outer' });
+    const failing: z.ZodType = z
+      .object({
+        placedAt: z.date(),
+        get held() {
+          return held;
+        },
+      })
+      .meta({ id: 'failing' });
+    const held: z.ZodType = z.union([z.lazy(() => outer), z.string()]).meta({ id: 'held' });
+
+    const result = validateMessages([
+      anEvent({ name: 'First', body: outer }),
+      anEvent({ name: 'Second', body: held }),
+    ]);
+
+    expect(result).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'declaration',
+          location: 'events.Second@1 body',
+          rule: 'not-an-object-schema',
+          message: 'A Message body is an object of its fields: Second@1',
+        },
+        {
+          kind: 'not-allowed',
+          location: 'events.First@1 body.failing.placedAt',
+          construct: 'z.date()',
+          instead: 'z.iso.datetime()',
+          alsoIn: ['events.Second@1'],
+        },
+      ],
+    });
+  });
+});
+
 describe('validateRoot: Message Versions that fail only as fields', () => {
   test.each([
     ['two Events with no name', [anEvent({ name: undefined }), anEvent({ name: undefined })], []],
