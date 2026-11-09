@@ -8,7 +8,7 @@ export type RootPlace = {
   readonly define: 'defineService' | 'defineApplication' | 'defineDefinitions';
 };
 
-/** Each kind of Root's file, export and declaration, which `init` writes and the loader names. */
+/** Each kind of Root's file, export, declaration and what a sentence calls it, which `init` writes and the loader names. */
 export const rootPlaces: Readonly<Record<RootKind, RootPlace>> = {
   service: {
     noun: "a Service's Contract",
