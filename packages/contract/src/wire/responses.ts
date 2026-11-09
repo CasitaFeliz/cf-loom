@@ -122,10 +122,12 @@ export function reservedResponseOf(code: ReservedCode): Response {
   return jsonResponseOf(status, faultEnvelopeOf({ code, committed, retryable: false, message }));
 }
 
-/** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes. */
+/** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes, empty when it takes none. */
 export function methodNotAllowedResponseOf(allowed: readonly string[]): Response {
   const response = reservedResponseOf('METHOD_NOT_ALLOWED');
-  for (const method of allowed) {
+  const [first = '', ...others] = allowed;
+  response.headers.set('allow', first);
+  for (const method of others) {
     response.headers.append('allow', method);
   }
   return response;
