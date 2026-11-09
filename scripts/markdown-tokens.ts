@@ -20,37 +20,6 @@ function markedTokens(tokens: readonly Token[]): readonly MarkedToken[] {
   return tokens as readonly MarkedToken[];
 }
 
-/** The tokens a token holds, which together make up its source token by token. */
-function contentOf(token: MarkedToken): readonly MarkedToken[] {
-  switch (token.type) {
-    case 'blockquote':
-    case 'del':
-    case 'em':
-    case 'heading':
-    case 'image':
-    case 'link':
-    case 'list_item':
-    case 'paragraph':
-    case 'strong':
-      return markedTokens(token.tokens);
-    case 'text':
-      return markedTokens(token.tokens ?? []);
-    case 'list':
-      return token.items;
-    case 'br':
-    case 'checkbox':
-    case 'code':
-    case 'codespan':
-    case 'def':
-    case 'escape':
-    case 'hr':
-    case 'html':
-    case 'space':
-    case 'table':
-      return [];
-  }
-}
-
 function breaksIn(text: string): number {
   let breaks = 0;
   for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) {
@@ -84,8 +53,36 @@ function cellsOf(table: Tokens.Table): Child[] {
   return children;
 }
 
+/** The tokens a token holds with their offsets: they make up its source token by token, a table's cells apart. */
 function childrenOf(token: MarkedToken): Child[] {
-  return token.type === 'table' ? cellsOf(token) : tiled(contentOf(token), 0);
+  switch (token.type) {
+    case 'blockquote':
+    case 'del':
+    case 'em':
+    case 'heading':
+    case 'image':
+    case 'link':
+    case 'list_item':
+    case 'paragraph':
+    case 'strong':
+      return tiled(markedTokens(token.tokens), 0);
+    case 'text':
+      return tiled(markedTokens(token.tokens ?? []), 0);
+    case 'list':
+      return tiled(token.items, 0);
+    case 'table':
+      return cellsOf(token);
+    case 'br':
+    case 'checkbox':
+    case 'code':
+    case 'codespan':
+    case 'def':
+    case 'escape':
+    case 'hr':
+    case 'html':
+    case 'space':
+      return [];
+  }
 }
 
 /** Puts `children` on `pending`, the first on top, each `offset` lines after `parent`. */
