@@ -1,3 +1,4 @@
+import { joinedOf } from '../lines/index.ts';
 import {
   type Place,
   type Site,
@@ -122,7 +123,7 @@ export function failureLineOf(broken: Failure): string {
 /** The construct, what to use instead, the other sites that reach it and the package that declares it. */
 function notAllowedWordsOf({ construct, instead, alsoIn, origin }: NotAllowedFailure): string {
   const use = instead === undefined ? [] : [`(use ${instead})`];
-  const also = alsoIn.length === 0 ? [] : [`(also in ${alsoIn.map(siteTextOf).join(', ')})`];
+  const also = alsoIn.length === 0 ? [] : [`(also in ${joinedOf(alsoIn.map(siteTextOf), 'and')})`];
   const declared = origin === undefined ? [] : [`(declared in ${origin})`];
   return [construct, ...use, ...also, ...declared].join(' ');
 }

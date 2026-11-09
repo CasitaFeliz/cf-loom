@@ -13,7 +13,7 @@ interface Diagnostic {
   readonly location: { readonly start: { readonly line: number } };
 }
 
-/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given. */
+/** Each `C<n>@<line>` the repository's GritQL plugins report for `probe.ts` or the file given, in the order of the lines. */
 function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[] {
   const directory = mkdtempSync(join(tmpdir(), 'cf-loom-lint-'));
   try {
@@ -27,6 +27,7 @@ function pluginReportsFor(lines: readonly string[], file = 'probe.ts'): string[]
     const report = JSON.parse(biome.stdout) as { diagnostics: Diagnostic[] };
     return report.diagnostics
       .filter((diagnostic) => diagnostic.category === 'plugin')
+      .sort((first, second) => first.location.start.line - second.location.start.line)
       .map((diagnostic) => {
         const rule = diagnostic.message.slice(0, diagnostic.message.indexOf(':'));
         return `${rule}@${diagnostic.location.start.line}`;
@@ -173,6 +174,53 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual([]);
   });
 
+  it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {
+    const reported = [
+      "test('number', () => {}, 10_000);",
+      "it('it', () => {}, 5);",
+      "suite('suite', () => {}, 5);",
+      "test('function', function () {}, 5);",
+      "test('body by name', run, 5);",
+      "test.concurrent('modifier', () => {}, limit);",
+      "test.each([1, 2])('each', () => {}, 5);",
+      "test('options', { timeout: 5 }, () => {});",
+      "test('options, shorthand', { timeout }, () => {});",
+      "test('options, body by name', { retry: 2, timeout: 5 }, run);",
+      "describe.concurrent('options, variable', { timeout: limit }, () => {});",
+      'beforeAll(() => {}, 5);',
+      'beforeEach(() => {}, 9);',
+      'afterAll(run, limit);',
+      'afterEach(() => {}, 5);',
+      'aroundAll(() => {}, 5);',
+      'aroundEach(() => {}, 5);',
+      'onTestFailed(() => {}, 5);',
+      'onTestFinished(() => {}, 4);',
+      'vi.setConfig({ testTimeout: 1 });',
+    ];
+    const unreported = [
+      "test('retried', { retry: 2 }, () => {});",
+      "test('retried, body by name', { retry: 2 }, run);",
+      "test('retried by a variable', { retry: timeout }, () => {});",
+      "test('meta', { meta: { timeout: 1 } }, () => {});",
+      "test('options by name', options, () => {});",
+      "test('options by name, function', options, function () {});",
+      "test('in its body', () => { const timeout = 5; vi.waitFor(check, { interval: timeout }); });",
+      "signal.addEventListener('abort', () => {}, { once: true });",
+      'beforeEach(() => {});',
+    ];
+    const lines = [
+      "import { afterAll, afterEach, aroundAll, aroundEach, beforeAll, beforeEach, describe, it, onTestFailed, onTestFinished, suite, test, vi } from 'vitest';",
+      ...reported,
+      ...unreported,
+    ];
+
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual(
+      reported.map((_, index) => `C30@${index + 2}`),
+    );
+    expect(pluginReportsFor(lines, 'probe.fixture.ts')).toEqual([]);
+    expect(pluginReportsFor(lines)).toEqual([]);
+  });
+
   it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", () => {
     const lines = [
       'declare const schema: { readonly _zod: Record<string, unknown> };',
@@ -240,10 +288,44 @@ describe('lint plugins', () => {
       'C1@3',
       'C1@4',
       'C1@5',
+      'C1@6',
     ]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual(['C1@6']);
     expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual(['C1@6']);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@5',
+    ]);
+  });
+
+  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module, the codeListOf module or the fieldValueOf module (C1)', () => {
+    const lines = [
+      'const names = ["a", "b"];',
+      "export const single = names.join(', ');",
+      'export const double = names.join(", ");',
+      'export const template = names.join(`, `);',
+      "export const optional = names?.join(', ');",
+      "export const mapped = names.map((name) => name).join(', ');",
+      `export const inTemplate = \`[${'$'}{names.join(', ')}]\`;`,
+      "export const bare = names.join(',');",
+      "export const empty = names.join('');",
+      "export const space = names.join(' ');",
+      "export const semicolon = names.join('; ');",
+      "export const closed = names.join(' and ');",
+    ];
+    const reported = ['C1@2', 'C1@3', 'C1@4', 'C1@5', 'C1@6', 'C1@7'];
+
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/cli/src/config/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/code-lists.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/wire/field-values.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
   });
 
   it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {

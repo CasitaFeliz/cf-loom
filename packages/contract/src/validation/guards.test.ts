@@ -287,6 +287,20 @@ describe('validateRoot: a Qualifier against its schema', () => {
     );
   });
 
+  test('two undeclared keys in an object Qualifier fail, listed closed by and', () => {
+    const guards: readonly Attachment[] = [
+      { guard: quota, qualifier: { perMinute: 60, extra: true, other: 1 } },
+    ];
+
+    expect(validateGuards(guards)).toEqual(
+      failed(
+        `${guardsAt}[0].qualifier`,
+        'qualifier-keys',
+        'A Qualifier holds only the keys its schema keeps when zod parses it: extra and other',
+      ),
+    );
+  });
+
   test('an undeclared key in an object nested in a Qualifier fails', () => {
     const guards: readonly Attachment[] = [
       { guard: quota, qualifier: { perMinute: 60, burst: { size: 5, every: 'minute' } } },
@@ -692,8 +706,9 @@ function isQualifierKeysFailure(reported: Reported): reported is KeysReported {
   return reported.kind === 'declaration' && reported.rule === 'qualifier-keys';
 }
 
+/** The keys a message lists, `a, b and c`; none of the drawn keys holds a comma or the word `and`. */
 function keysNamedBy(reported: KeysReported): readonly string[] {
-  return reported.message.slice(reported.message.indexOf(': ') + 2).split(', ');
+  return reported.message.slice(reported.message.indexOf(': ') + 2).split(/, | and /);
 }
 
 /** The paths a validated Root names in its `qualifier-keys` failures. */

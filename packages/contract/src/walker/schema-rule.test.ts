@@ -601,14 +601,23 @@ describe('the refusals of one schema', () => {
     >().toEqualTypeOf<'not allowed: a zod check "bigint_format" of format "int128"'>();
   });
 
-  test('several refusals are joined by a semicolon, so a list-valued name reads as one item', () => {
+  test('several refusals are several type errors, one for each construct, as generate writes a line for each', () => {
     const schema = z.object({ a: z.custom<string>(), b: z.date() });
-    const joined =
-      'not allowed: .refine(), z.custom() or z.instanceof(); z.date() (use z.iso.datetime())';
-    const reversed =
-      'not allowed: z.date() (use z.iso.datetime()); .refine(), z.custom() or z.instanceof()';
+    const body: Parameters<typeof defineEvent>[0] = { ...base, body: schema };
 
-    expectTypeOf<RefusalsOf<typeof schema>>().toExtend<typeof joined | typeof reversed>();
+    const failures = failuresOfEvent(defineEvent(body));
+
+    expectTypeOf<RefusalsOf<typeof schema>>().toEqualTypeOf<
+      | 'not allowed: .refine(), z.custom() or z.instanceof()'
+      | 'not allowed: z.date() (use z.iso.datetime())'
+    >();
+    expect(failures).toEqual([
+      expect.objectContaining({
+        kind: 'not-allowed',
+        construct: '.refine(), z.custom() or z.instanceof()',
+      }),
+      expect.objectContaining({ kind: 'not-allowed', construct: 'z.date()' }),
+    ]);
   });
 });
 

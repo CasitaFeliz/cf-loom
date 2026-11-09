@@ -454,9 +454,6 @@ const killHook = lines([
   'syncBuiltinESMExports();',
 ]);
 
-/** Two runs of `package` for each call a kill test kills at, each a fresh Node process, take minutes on a CI runner with shared cores. */
-const killTestTimeout = 180_000;
-
 /** Runs `package`, killed at the `at`th call of a file-system function on the package folder. */
 function killedPackage(
   project: string,
@@ -2346,7 +2343,6 @@ describe('cf-loom package: where it writes', () => {
       expect(outcomes.at(-1)).toBeNull();
       expect(outcomes.filter((signal) => signal === 'SIGKILL').length).toBeGreaterThan(0);
     },
-    killTestTimeout,
   );
 });
 

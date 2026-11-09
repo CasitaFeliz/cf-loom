@@ -1,5 +1,6 @@
 import {
   issueLineOf,
+  joinedOf,
   linesTextOf,
   maxBrokerHeaderBytes,
   type TransportHeaderFit,
@@ -43,7 +44,7 @@ export class MessageNotSentError extends Error {
     attempted: { readonly factId: string; readonly sent: readonly string[] },
     cause: unknown,
   ) {
-    const sent = attempted.sent.length === 0 ? 'none' : attempted.sent.join(', ');
+    const sent = attempted.sent.length === 0 ? 'none' : joinedOf(attempted.sent, 'and');
     const message = `${name} with Fact id ${attempted.factId} was not sent whole; sent: ${sent}`;
     super(unbrokenLineOf(message), { cause });
     this.factId = attempted.factId;

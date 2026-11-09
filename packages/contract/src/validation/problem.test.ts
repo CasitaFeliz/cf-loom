@@ -103,7 +103,7 @@ describe('readWith', () => {
   });
 
   test.for([
-    ['a value among several', z.enum(['a', 'b']), 'c', 'is none of "a", "b"'],
+    ['a value among several', z.enum(['a', 'b']), 'c', 'is not "a" or "b"'],
     ['a value that is the only one', z.literal(1), 2, 'is not 1'],
   ] as const)('%s that is not allowed lists what is', ([_, schema, value, reason]) => {
     const read = readWith(schema, value, 'its format');
@@ -183,7 +183,7 @@ describe('readWith', () => {
         z.object({ type: z.literal('a') }),
         z.object({ type: z.literal('b') }),
       ]),
-      'is none of "a", "b"',
+      'is not "a" or "b"',
     ],
   ] as const)('%s lists the values the options have', ([_, schema, reason]) => {
     const read = readWith(schema, { type: 'z' }, 'its format');

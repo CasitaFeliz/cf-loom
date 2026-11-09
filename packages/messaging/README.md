@@ -269,7 +269,7 @@ const running = await messaging(contract, sqs({ ...sqsConnecting, prefix: 'stagi
 #### At close
 
 - `close` lets each open receive finish, up to 20 seconds or as long as the SQS client lets a request run, and what it returns is handed back (`ChangeMessageVisibility` to 0) without being read, so the next process of the Service receives it at once; a receive that failed, and its pause, end at once. `close({ signal })` does not shorten that wait (see [Connecting](#connecting)); it hands back each Delivery still settling once its signal aborts, as on any Broker.
-- A Settlement SQS refuses once closing started, a `DeleteMessage` of a Handler that finished after `close()` started or a hand-back, makes `close` reject with an `Error`, `SQS refused to settle Messages of the Durable consumers <a>, <b>`, each prefixed Durable consumer named once and the first client error as `cause`; on AWS a hand-back on a receipt handle whose visibility just ran out may be refused so. The clients are never destroyed.
+- A Settlement SQS refuses once closing started, a `DeleteMessage` of a Handler that finished after `close()` started or a hand-back, makes `close` reject with an `Error`, `SQS refused to settle Messages of the Durable consumers <a> and <b>`, each prefixed Durable consumer named once and the first client error as `cause`; on AWS a hand-back on a receipt handle whose visibility just ran out may be refused so. The clients are never destroyed.
 
 #### What differs from JetStream
 
@@ -300,7 +300,7 @@ const running = await messaging(
 - `limits` has the shape of the `limits` of `applyBrokerPlan` without Streams (see [Applying the Broker plan](#applying-the-broker-plan)): `durableConsumerDefaults`, and `durableConsumers` keyed by the unprefixed names `cf-loom broker-plan` prints, each Durable consumer's own settings over the defaults. Its two settings are `ackWait` and `maxDeliver`, as on JetStream, and cf-loom has no defaults for them.
 - `ackWait` is any duration whose milliseconds a JavaScript number holds exactly, or a non-empty list of them, one for each delivery, the last repeating; a wait longer than a Node timer holds is timed in steps. `maxDeliver` is a whole number from 1, or `'unlimited'`.
 - `inProcess()` reads the limits and throws on a breach, with one line for each place, all at once, under `limits.` as `applyBrokerPlan` words them: a setting whose value is neither of those, a `streamDefaults` or `streams` key, or a setting the Broker does not have.
-- `consume` resolves the limits of each Durable consumer it is handed, its own over the defaults, before it pulls from any, and rejects, pulling from none, with a line for each that leaves a setting unset: `The Durable consumer <name> has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`. So `inProcess({})` is accepted, and every `consume` that hands it a Durable consumer is refused; a name no `consume` hands is accepted and never used.
+- `consume` resolves the limits of each Durable consumer it is handed, its own over the defaults, before it pulls from any, and rejects, pulling from none, with a line for each that leaves a setting unset: `The Durable consumer <name> has no ackWait and maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`. So `inProcess({})` is accepted, and every `consume` that hands it a Durable consumer is refused; a name no `consume` hands is accepted and never used.
 
 #### Behavior
 

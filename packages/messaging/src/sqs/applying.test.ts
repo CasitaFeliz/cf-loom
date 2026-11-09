@@ -761,8 +761,8 @@ describe('applyBrokerPlan', () => {
     const error = await rejectionOf(applyBrokerPlan(connecting, both, limits));
 
     expect(error.message.split('\n')).toEqual([
-      `The Durable consumer ${billing.durable} has no maxDeliver, retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
-      `The Durable consumer ${anOrders().chargeDurable} has no retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${billing.durable} has no maxDeliver, retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${anOrders().chargeDurable} has no retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
     expect(await queueNamesOf(connecting.sqs)).toEqual([]);
   });
@@ -1094,7 +1094,7 @@ describe('applyBrokerPlan', () => {
 
     expect(error.message.split('\n')).toEqual([
       "connecting.account '1234' is not a 12-digit AWS account id",
-      `The Durable consumer ${orders.chargeDurable} has no maxDeliver, retention, deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${orders.chargeDurable} has no maxDeliver, retention and deadLetterRetention in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
   });
 

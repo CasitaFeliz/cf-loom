@@ -11,7 +11,7 @@ import {
   type ServiceSnapshot,
 } from '@cf-loom/contract/internal';
 import { loomNeeds, type Needs, type Writing, zodExpressionOf } from '../schema-code/index.ts';
-import { jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
+import { codeListOf, jsonLiteralOf, stringLiteralOf } from '../source-text/index.ts';
 import { deprecatedLinesOf, elementLinesOf } from './element-lines.ts';
 import type { ExportedEndpoint } from './exported-snapshot.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
@@ -78,7 +78,7 @@ function endpointBodyOf(
     ...guardsLinesOf(endpoint.guards),
     ...partsLinesOf('input', declaredInputOf(endpoint.input), declared),
     `  success: { ${successFieldsOf(endpoint, reader)} },`,
-    ...(listed.length === 0 ? [] : [`  rejections: [${listed.join(', ')}],`]),
+    ...(listed.length === 0 ? [] : [`  rejections: [${codeListOf(listed)}],`]),
   ];
 }
 
@@ -118,7 +118,7 @@ function guardsLinesOf(guards: readonly AttachmentSnapshot[]): readonly string[]
       ? bindingOf({ kind: 'guard', name: guard })
       : `{ guard: ${bindingOf({ kind: 'guard', name: guard })}, qualifier: ${jsonLiteralOf(qualifier)} }`,
   );
-  return [`  guards: [${attachments.join(', ')}],`];
+  return [`  guards: [${codeListOf(attachments)}],`];
 }
 
 /** A Success's status, then its headers and body when it declares them. */
@@ -130,7 +130,7 @@ function successFieldsOf(endpoint: EndpointSnapshot, reader: Writing): string {
     ...(declared === null ? [] : [`headers: ${zodExpressionOf(declared, reader)}`]),
     ...(body === null ? [] : [`body: ${zodExpressionOf(body, reader)}`]),
   ];
-  return fields.join(', ');
+  return codeListOf(fields);
 }
 
 function rejectionNameOf(rejection: ListedRejection): string {

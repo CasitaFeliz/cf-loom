@@ -1,8 +1,8 @@
 // biome-ignore-all lint/style/useNamingConvention: the keys are zod's ids of its check kinds and formats
 import type * as core from 'zod/v4/core';
+import { joinedOf } from '../lines/index.ts';
 import type { CheckDef } from './check-defs.ts';
 import { formatConstructorsOf, isStringFormat, type RegexBuiltFormat } from './format-schemas.ts';
-import { joinedOf } from './joined-names.ts';
 import { type Refused, refused, refusedStringFormat } from './not-allowed.ts';
 
 /** A check kind this walker was written for: every kind zod declares but those that set metadata. */

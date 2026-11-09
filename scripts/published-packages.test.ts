@@ -106,7 +106,7 @@ describe('the packages pnpm publishes', () => {
     beforeAll(() => {
       const published = workspacePackages().filter((workspacePackage) => !workspacePackage.private);
       packages = published.map(packed);
-    }, 120_000);
+    });
 
     it('packs every file its exports and bin point at', () => {
       const missing = packages.flatMap(({ name, files, manifest }) => {

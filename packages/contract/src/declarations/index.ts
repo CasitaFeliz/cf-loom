@@ -147,7 +147,7 @@ export type {
   ServiceContract,
 } from './roots.ts';
 export { defineApplication, defineService } from './roots.ts';
-export type { Closed, DeclaredFieldsRule, IsOneLiteral, JoinedNames, Refusal } from './rules.ts';
+export type { Closed, DeclaredFieldsRule, IsOneLiteral, Refusal } from './rules.ts';
 export type {
   IssueCode,
   ProvidedStandardRejections,

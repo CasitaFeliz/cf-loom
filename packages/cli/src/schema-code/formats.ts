@@ -1,5 +1,5 @@
 import { formatConstructorOf, type StringFormat } from '@cf-loom/contract/internal';
-import { jsonLiteralOf, keyOf } from '../source-text/index.ts';
+import { codeListOf, jsonLiteralOf, keyOf } from '../source-text/index.ts';
 
 /**
  * The zod call that builds a format with the options the Snapshot records, so the generated
@@ -17,7 +17,7 @@ function optionsTextOf(options: Readonly<Record<string, unknown>>): string {
   const entries = Object.entries(options).map(
     ([key, value]) => `${keyOf(key)}: ${optionTextOf(value)}`,
   );
-  return `{ ${entries.join(', ')} }`;
+  return `{ ${codeListOf(entries)} }`;
 }
 
 /** An option's value: a regex the Snapshot records as its source and flags, or its JSON. */

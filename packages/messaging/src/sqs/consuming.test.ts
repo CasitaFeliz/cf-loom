@@ -1002,7 +1002,7 @@ describe('consuming over sqs()', () => {
             `arn:aws:sqs:eu-west-1:123456789012:${orders.notifyQueue}`,
             chargeFilter(orders.created),
           ];
-          return `its subscription has Endpoint '${endpoint}', not arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue} and its subscription has FilterPolicy '${filter}', not ${chargeFilter(orders.charge)}`;
+          return `its subscription has Endpoint '${endpoint}', not arn:aws:sqs:eu-west-1:123456789012:${orders.chargeQueue}; its subscription has FilterPolicy '${filter}', not ${chargeFilter(orders.charge)}`;
         },
       },
     ])('consume rejects naming the queue and the difference of $name', async ({ arrange }) => {

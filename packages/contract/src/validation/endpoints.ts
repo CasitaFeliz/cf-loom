@@ -9,7 +9,8 @@ import {
   successStatuses,
   visibilities,
 } from '../declarations/index.ts';
-import { inFields, joinedOf } from '../walker/index.ts';
+import { joinedOf } from '../lines/index.ts';
+import { inFields } from '../walker/index.ts';
 import {
   isMissing,
   isWithoutValue,

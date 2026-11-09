@@ -2599,9 +2599,6 @@ describe('compatibilityReportOf, depth', () => {
 describe('compatibilityReportOf, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   /**
    * `count` defs, each an object on a cycle of its own that holds the one before it by `next`, and
    * the first holds a string; with `holdingOf`, each also holds the one before it by `u`, inside what
@@ -2642,9 +2639,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     };
   }
 
-  test('a description changed in the innermost def of a chain is one Change, at that def, in time that grows with the chain', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a description changed in the innermost def of a chain is one Change, at that def, in time that grows with the chain', () => {
     const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'));
 
     const report = checkChain(sizes.large)();
@@ -2655,9 +2650,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('an object of many fields, each changed, is checked in time that grows with their number', {
-    timeout: growthTimeout,
-  }, () => {
+  test('an object of many fields, each changed, is checked in time that grows with their number', () => {
     const checkFields = (count: number) => {
       const fieldsOf = (description: string) =>
         anObject(
@@ -2680,9 +2673,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a def that many fields reach, changed, is one Change, at the def, in time that grows with their number', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a def that many fields reach, changed, is one Change, at the def, in time that grows with their number', () => {
     const checkFields = (count: number) => {
       const fields = Object.fromEntries(
         Array.from({ length: count }, (_, index) => [`field${index}`, required(aRef('money'))]),
@@ -2744,9 +2735,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
 
   test.each(holdings)(
     'a description changed in the first def of a chain, each def holding the one before it by a field and through $holder, is reported at each def that holds it, from that def, in time and length that grow with the chain',
-    {
-      timeout: growthTimeout,
-    },
     ({ holdingOf }) => {
       const checkChain = checkOfChain((index) => (index === 0 ? 'b' : 'a'), holdingOf);
 
@@ -2768,9 +2756,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     },
   );
 
-  test('a description changed in every def of a chain is reported at each def, from that def, in time and length that grow with the chain', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a description changed in every def of a chain is reported at each def, from that def, in time and length that grow with the chain', () => {
     const checkChain = checkOfChain(() => 'b');
 
     const small = checkChain(sizes.small)();
@@ -2787,9 +2773,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     expect(lengthOrder).toBeLessThan(orders.linear);
   });
 
-  test('many fields of one def that each hold a changed def in a union report one Change each, from that def, in time and length that grow with their number', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many fields of one def that each hold a changed def in a union report one Change each, from that def, in time and length that grow with their number', () => {
     const checkFields = (count: number) => {
       const fields = Object.fromEntries(
         Array.from({ length: count }, (_, index) => [
@@ -2861,9 +2845,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
 
   test.each(holdings)(
     'many fields that each hold the head of a long chain in $holder, its innermost def’s description changed, report one Neutral Change each, at their field, in time that grows with their number and the chain’s length',
-    {
-      timeout: growthTimeout,
-    },
     ({ holdingOf }) => {
       const checkFan = checkOfFan(holdingOf, { description: 'b', leaf: aString });
 
@@ -2878,9 +2859,6 @@ describe('compatibilityReportOf, a long chain of ids', () => {
 
   test.each(holdings)(
     'many fields that each hold the head of a long chain in $holder, its innermost def’s shape changed, report one Breaking Change each, at their field, in time that grows with their number and the chain’s length',
-    {
-      timeout: growthTimeout,
-    },
     ({ holdingOf, difference }) => {
       const checkFan = checkOfFan(holdingOf, { description: 'a', leaf: aNumber });
 
@@ -2932,9 +2910,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     );
   }
 
-  test('many exports, each naming the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many exports, each naming the head of one unchanged chain of ids, are checked in time that grows with their number and the chain’s length', () => {
     const checkExports = checkOfExports(unchangedInnermost);
 
     const report = checkExports(rootSizes.large)();
@@ -2944,9 +2920,7 @@ describe('compatibilityReportOf, a long chain of ids', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many exports, each naming one unchanged def of many fields that each name a def of their own, are checked in time that grows with their number and the def’s width', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many exports, each naming one unchanged def of many fields that each name a def of their own, are checked in time that grows with their number and the def’s width', () => {
     const checkWideExports = (count: number) => {
       const defsOf = (): Defs => {
         const parts = Array.from({ length: count }, (_, index) => [
@@ -3327,13 +3301,9 @@ function linesOf(changes: readonly Change[]): readonly string[] {
 }
 
 describe('compatibilityReportOf, alias defs', () => {
-  const growthTimeout = 240_000;
-
   const sizes = { small: 2_000, large: 16_000 };
 
-  test('an Endpoint whose many fields each name one alias def of a long chain, each alias def’s description changed, is checked in time that grows with them, and reports each alias def once', {
-    timeout: growthTimeout,
-  }, () => {
+  test('an Endpoint whose many fields each name one alias def of a long chain, each alias def’s description changed, is checked in time that grows with them, and reports each alias def once', () => {
     const checked = (count: number) => {
       const { baseline, proposed } = fieldsNamingChangedAliasDefs(count);
       return () => compatibilityReportOf(baseline, proposed);
@@ -3354,7 +3324,6 @@ describe('compatibilityReportOf, alias defs', () => {
     { proposedAliases: 2, shape: 'two alias defs away from it' },
   ] as const)(
     'many Endpoints, each naming an alias def that leads through another to one def of many fields, where the proposed Snapshot names an alias def of it $shape, are checked in time that grows with the Endpoints and the def’s fields',
-    { timeout: growthTimeout },
     ({ proposedAliases }) => {
       const sizesOfEndpoints = { small: 500, large: 4_000 };
       const checked = (count: number) => {

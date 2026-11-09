@@ -144,7 +144,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      `orders-service's exported Snapshot is malformed: endpoints.GET /orders/{}.lifecycle is none of "active", "deprecated"`,
+      `orders-service's exported Snapshot is malformed: endpoints.GET /orders/{}.lifecycle is not "active" or "deprecated"`,
     );
   });
 
@@ -193,7 +193,7 @@ describe('providedSnapshotOf', () => {
     const read = () => providedSnapshotOf(damaged);
 
     expect(read).toThrow(
-      `orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.lifecycle is none of "active", "deprecated", "retired"`,
+      `orders-service's exported Snapshot is malformed: shadowing.GET /orders/latest.lifecycle is not "active", "deprecated" or "retired"`,
     );
   });
 

@@ -1,4 +1,5 @@
-import { joinedOf, type Place } from '../walker/index.ts';
+import { joinedOf } from '../lines/index.ts';
+import type { Place } from '../walker/index.ts';
 import {
   type Declarations,
   type ResolvedStandard,

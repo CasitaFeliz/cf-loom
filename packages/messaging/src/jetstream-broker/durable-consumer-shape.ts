@@ -1,4 +1,5 @@
 // biome-ignore-all lint/style/useNamingConvention: nats.js spells its settings in snake case
+import { joinedOf } from '@cf-loom/contract/internal';
 import { AckPolicy, type ConsumerConfig } from '@nats-io/jetstream';
 
 /** One setting of a pull consumer cf-loom pulls from: the value `applyBrokerPlan` writes, `undefined` to clear it, and how a Durable consumer differs in it. */
@@ -34,7 +35,7 @@ const shapeSettings = {
       if (filters.length === 1 && filters[0] === subject) {
         return undefined;
       }
-      const filtered = filters.length === 0 ? 'every subject' : filters.join(', ');
+      const filtered = filters.length === 0 ? 'every subject' : joinedOf(filters, 'and');
       return `filters ${filtered}, not ${subject}`;
     },
   },
@@ -53,7 +54,7 @@ const shapeSettings = {
         return undefined;
       }
       const policy = config.priority_policy;
-      return `has the priority groups ${groups.join(', ')} with the policy ${policy}, which a pull must name`;
+      return `has the priority groups ${joinedOf(groups, 'and')} with the policy ${policy}, which a pull must name`;
     },
   },
   priority_policy: cleared,

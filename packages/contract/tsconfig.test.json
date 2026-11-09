@@ -6,12 +6,6 @@
     "types": ["node"]
   },
   "extends": "../../tsconfig.base.json",
-  "include": [
-    "src",
-    "test",
-    "vitest.config.ts",
-    "vitest.heavy.config.ts",
-    "vitest.growth.config.ts"
-  ],
+  "include": ["src", "test"],
   "references": []
 }

@@ -1,6 +1,6 @@
+import { joinedOf } from '../lines/index.ts';
 import {
   inFields,
-  joinedOf,
   type ObjectNode,
   type Place,
   placeNameOf,

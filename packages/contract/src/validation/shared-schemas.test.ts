@@ -13,7 +13,13 @@ import {
   type Event,
   openEnum,
 } from '../index.ts';
-import { failureLineOf, type Root, type RootPackage, validateRoot } from '../internal/index.ts';
+import {
+  failureLineOf,
+  joinedOf,
+  type Root,
+  type RootPackage,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** The lines `generate` prints for a Root. */
 function linesOf(root: Root, given: Partial<RootPackage> = {}): readonly string[] {
@@ -58,12 +64,6 @@ function serviceWith(endpoints: readonly Endpoint[], events: readonly Event[] = 
 const date = 'not allowed: z.date() (use z.iso.datetime())';
 const unionIsRefused =
   'not allowed: a z.union() reaching an openEnum() (use z.discriminatedUnion(), or one openEnum() of all the values)';
-
-/**
- * A growth test times its shape many times over, which takes seconds while the project's files run
- * in parallel, and several times that on a CI runner that several runs share.
- */
-const growthTimeout = 240_000;
 
 /** A recursive def holding a date, as a function so each test has a schema of its own. */
 function dateTree() {
@@ -166,7 +166,7 @@ describe('failure lines: an open union or intersection, reached from several sit
     const endpoints = ['c', 'a', 'b'].map((key) => anEndpoint(key, `GET /${key}`, { u: choice }));
 
     expect(linesOf(serviceWith(endpoints))).toEqual([
-      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b), endpoints.GET /c (c))`,
+      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b) and endpoints.GET /c (c))`,
     ]);
   });
 
@@ -328,7 +328,6 @@ describe('failure lines: defs that hold defs', () => {
     ],
   ] as const)(
     '%s in the last of 24 defs, each holding the next twice, is told once',
-    { timeout: growthTimeout },
     ([, leaf, told]) => {
       const toldAt = (depth: number) => {
         const endpoint = anEndpoint('alpha', 'GET /a', { t: chainOf(depth, leaf()) });
@@ -894,9 +893,7 @@ describe('failure lines: defs reached inside one another and from the body', () 
     return serviceWith([anEndpoint('alpha', 'GET /a', fields)]);
   }
 
-  test('a date in the last of 2,400 defs is one line at the first place, in time that grows as the defs do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a date in the last of 2,400 defs is one line at the first place, in time that grows as the defs do', () => {
     const count = 2400;
     const told = (size: number) => {
       const root = chainedRoot(size);
@@ -936,9 +933,7 @@ describe('failure lines: defs reached inside one another and from the body', () 
     return serviceWith([anEndpoint('alpha', 'GET /a', { holder })]);
   }
 
-  test('a date in a def held by 32,000 fields of another def is one line at the first, in time that grows as the fields do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a date in a def held by 32,000 fields of another def is one line at the first, in time that grows as the fields do', () => {
     const count = 32000;
     const told = (size: number) => {
       const root = heldRoot(size);
@@ -973,9 +968,7 @@ describe('failure lines: defs reached inside one another and from the body', () 
     return serviceWith([anEndpoint('alpha', 'GET /a', fields)]);
   }
 
-  test('3,000 dated defs, each holding the one before and a field of the body, told in time that grows as they do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('3,000 dated defs, each holding the one before and a field of the body, told in time that grows as they do', () => {
     const count = 3000;
     const told = (size: number) => {
       const root = datedChainRoot(size);
@@ -1033,9 +1026,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
     return serviceWith([anEndpoint('alpha', 'GET /a', fields)]);
   }
 
-  test('3,000 dated defs, each a field of the body and of a def that 3,000 fields hold, told in time that grows as they do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('3,000 dated defs, each a field of the body and of a def that 3,000 fields hold, told in time that grows as they do', () => {
     const count = 3000;
     const told = (size: number) => {
       const root = hubRoot(size);
@@ -1072,9 +1063,6 @@ describe('failure lines: many dated defs that one def holds, reached from many f
 
   test.for(holdings)(
     '3,000 dated defs, each a field of the body and of a def that 3,000 fields hold %s, told in time that grows as they do',
-    {
-      timeout: growthTimeout,
-    },
     ([, holding]) => {
       const count = 3000;
       const told = (size: number) => {
@@ -1108,9 +1096,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
     return serviceWith(endpoints);
   }
 
-  test('a dated def that 4,000 Endpoints hold is one line naming every other Endpoint, in time that grows as the Endpoints do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a dated def that 4,000 Endpoints hold is one line naming every other Endpoint, in time that grows as the Endpoints do', () => {
     const count = 4000;
     const told = (size: number) => {
       const root = endpointsRoot(size);
@@ -1150,9 +1136,7 @@ describe('failure lines: many dated defs that one def holds, reached from many f
     return serviceWith([anEndpoint('e000000', 'GET /e0', dated), ...plain]);
   }
 
-  test('16,000 dated defs of one Endpoint, beside 16,000 Endpoints with none, are one line each, in time that grows as they do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('16,000 dated defs of one Endpoint, beside 16,000 Endpoints with none, are one line each, in time that grows as they do', () => {
     const count = 16000;
     const told = (size: number) => {
       const root = datedBesidePlainRoot(size);
@@ -1361,7 +1345,6 @@ describe('failure lines: a chain of defs, each holding the one before twice', ()
 
   test.for(twiceHolders)(
     'a date below 16,000 defs, each holding the one before as next and through %s, is one line at the first place, in time that grows as the defs do',
-    { timeout: growthTimeout },
     ([, name]) => {
       const holder = holders[name];
       const told = (size: number) => {
@@ -1412,9 +1395,7 @@ describe('failure lines: a shared schema held by many fields below a chain of de
     return serviceWith([anEndpoint('alpha', 'GET /a', { top: before })]);
   }
 
-  test('a date held by 4,000 fields of a def below 4,000 defs is one line at the first field, in time that grows as both do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a date held by 4,000 fields of a def below 4,000 defs is one line at the first field, in time that grows as both do', () => {
     const wide = 4000;
     const told = (size: number) => {
       const root = widelyHeldRoot(size);
@@ -1755,7 +1736,7 @@ function lineOf(group: readonly Telling[], exported: boolean): string {
   const [{ at, refusal, schema }] = group as readonly [Telling];
   const sites = new Set(group.flatMap((telling) => [...telling.sites]));
   const others = [...sites].filter((site) => site !== at.site).sort(byPoints);
-  const alsoIn = others.length === 0 ? '' : ` (also in ${others.join(', ')})`;
+  const alsoIn = others.length === 0 ? '' : ` (also in ${joinedOf(others, 'and')})`;
   const origin =
     exported && schema === 'shared' ? ' (declared in @org/definitions@4.2.0#stamp)' : '';
   return `${at.text} ${refusal}${alsoIn}${origin}`;

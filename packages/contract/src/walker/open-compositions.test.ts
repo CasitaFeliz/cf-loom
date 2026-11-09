@@ -682,9 +682,6 @@ describe('validateRoot: a composition reaching an Open Enum through every kind o
 describe('validateRoot, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   /** `count` ids, each on a cycle of its own, holding the one before it in what `holdingOf` makes of it. */
   function aChainOf(count: number, holdingOf: (previous: z.ZodType) => z.ZodType): z.ZodType {
     let head: z.ZodType = z.string();
@@ -710,9 +707,7 @@ describe('validateRoot, a long chain of ids', () => {
     return () => validateRoot(root, rootPackage);
   }
 
-  test('many unions, each naming the head of one long chain of ids, are validated in time that grows with their number and the chain’s length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many unions, each naming the head of one long chain of ids, are validated in time that grows with their number and the chain’s length', () => {
     const validateFan = (count: number) => {
       const head = aChainOf(count, (previous) => previous);
       const fields = Array.from({ length: count }, (_, index) => [
