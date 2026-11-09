@@ -57,9 +57,19 @@ export function* walkUnion(def: DefOfType<'union'>, at: Reached, walker: Walker)
     return failed(failuresOf([notAllowed(at, refused.xor), options]));
   }
   if (options.kind === 'not-allowed') {
-    return failed(options.tree, { type: 'union', options: walkedOptions.map(outlineOf) });
+    return failed(options.tree, unionOutlineOf(walkedOptions.map(outlineOf)));
   }
   return choiceOf(options.value, at);
+}
+
+/**
+ * What a union that failed was building: a union of every option's outline, or nothing built when
+ * its options other than unbuilt ones are all closed literals, since the fix of an unbuilt option
+ * decides between an enum and a union, as `choiceOf` decides.
+ */
+function unionOutlineOf(options: readonly Outline[]): Outline | undefined {
+  const built = options.filter((option) => option.type !== undefined);
+  return built.every(isClosedEnum) ? undefined : { type: 'union', options };
 }
 
 /** A `tagged` node, its variants keyed by the canonical JSON of their discriminator value. */
@@ -215,7 +225,7 @@ export function enumOf(values: readonly JsonPrimitive[], at: Reached): Walked<En
 }
 
 /** A closed enum, which is how a literal walks. */
-function isClosedEnum(node: SchemaNode): node is EnumNode {
+function isClosedEnum(node: Outline): node is EnumNode {
   return node.type === 'enum' && !node.open;
 }
 

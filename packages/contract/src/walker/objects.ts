@@ -2,7 +2,7 @@ import { prototypeNames } from '../declarations/index.ts';
 import { catchallRefusalKeyOf, type DefOfType, defOf } from './def-types.ts';
 import { heldNodeOf } from './held-node.ts';
 import { inside } from './location.ts';
-import type { Field, FieldOf, ObjectNode, SchemaNode, StringNode } from './nodes.ts';
+import type { Field, FieldOf, SchemaNode, StringNode } from './nodes.ts';
 import { notAllowed, type Refused, refused, refusedObjectNameField } from './not-allowed.ts';
 import { shapeKey } from './shapes.ts';
 import { fieldStep, indexStep, keyStep, valueStep } from './steps.ts';
@@ -10,10 +10,13 @@ import {
   allWalked,
   failed,
   failuresOf,
+  isWhole,
+  type ObjectOutline,
   type Outline,
   outlineOf,
   type Reached,
   type ReachedChild,
+  unbuilt,
   type Walked,
   type Walker,
   type Walking,
@@ -124,14 +127,24 @@ export function* walkIntersection(
   const left = yield* walker.schema(def.left, inside(at, indexStep(0)));
   const right = yield* walker.schema(def.right, inside(at, indexStep(1)));
   const items = allWalked([left, right]);
-  if (items.kind === 'not-allowed') {
-    return failed(items.tree, { type: 'allOf', items: [outlineOf(left), outlineOf(right)] });
+  const [leftOutline, rightOutline] = [outlineOf(left), outlineOf(right)];
+  if (leftOutline.type === 'object' && rightOutline.type === 'object') {
+    return mergedObjects({ left: leftOutline, right: rightOutline }, at, items);
   }
-  const [leftNode, rightNode] = items.value;
-  if (leftNode?.type === 'object' && rightNode?.type === 'object') {
-    return mergedObjects(leftNode, rightNode, at);
+  if (items.kind === 'walked') {
+    return walked(heldNodeOf({ type: 'allOf', items: items.value }, []));
   }
-  return walked(heldNodeOf({ type: 'allOf', items: items.value }, []));
+  return failed(items.tree, intersectionOutlineOf(leftOutline, rightOutline));
+}
+
+/**
+ * What an intersection that failed was building when its items are not both objects: an `allOf` as
+ * soon as an item is built and no object, whatever fills the other; nothing built when the items
+ * are objects or unbuilt, since the fix of an unbuilt one decides whether the objects merge.
+ */
+function intersectionOutlineOf(left: Outline, right: Outline): Outline | undefined {
+  const isOther = (item: Outline) => item.type !== undefined && item.type !== 'object';
+  return isOther(left) || isOther(right) ? { type: 'allOf', items: [left, right] } : undefined;
 }
 
 /**
@@ -171,21 +184,63 @@ function walkedEntry(
   return field.kind === 'walked' ? walked([key, field.value]) : field;
 }
 
-function mergedObjects(left: ObjectNode, right: ObjectNode, at: Reached): Walked {
+/** The two objects an intersection holds. */
+type ObjectPair = { readonly left: ObjectOutline; readonly right: ObjectOutline };
+
+/**
+ * Two objects merged: a shared field is compared only when both are whole, and one not compared
+ * is unbuilt in the merged object; a shared field that differs refuses the intersection.
+ */
+function mergedObjects(
+  { left, right }: ObjectPair,
+  at: Reached,
+  items: Walked<readonly SchemaNode[]>,
+): Walked {
   const shared = Object.keys(left.fields).filter((key) => Object.hasOwn(right.fields, key));
-  const differs = shared.some((key) => !isSameField(left.fields[key], right.fields[key]));
-  if (differs) {
-    return notAllowed(at, refused.differingIntersection);
+  if (shared.some((key) => differsAt(key, left, right))) {
+    return failed(failuresOf([notAllowed(at, refused.differingIntersection), items]));
   }
-  const fields = { ...right.fields, ...left.fields };
-  const nullable = left.nullable === true && right.nullable === true;
-  return walked({ type: 'object', fields, ...(nullable && { nullable }) });
+  const merged = mergedOf(left, right, shared);
+  return items.kind === 'walked' ? wholeObject(merged) : failed(items.tree, merged);
 }
 
-/** Two declarations of one field agree on whether it is required and on its shape alone. */
-function isSameField(left: Field | undefined, right: Field | undefined): boolean {
-  if (left === undefined || right === undefined) {
-    return left === right;
+/** The object two objects merge to, a shared field that was not compared being unbuilt. */
+function mergedOf(
+  left: ObjectOutline,
+  right: ObjectOutline,
+  shared: readonly string[],
+): ObjectOutline {
+  const fields: Record<string, FieldOf<Outline>> = { ...right.fields, ...left.fields };
+  for (const key of shared) {
+    const [leftField, rightField] = [left.fields[key], right.fields[key]];
+    if (!isWhole(leftField?.schema) || !isWhole(rightField?.schema)) {
+      const required = leftField?.required === true && rightField?.required === true;
+      fields[key] = { required, schema: unbuilt };
+    }
   }
-  return left.required === right.required && shapeKey(left.schema) === shapeKey(right.schema);
+  const nullable = left.nullable === true && right.nullable === true;
+  return { type: 'object', fields, ...(nullable && { nullable }) };
+}
+
+/** The merged object of two whole objects, which is whole itself. */
+function wholeObject(merged: ObjectOutline): Walked {
+  if (!isWhole(merged)) {
+    throw new Error('The merge of two whole objects is not whole: a bug.');
+  }
+  return walked(merged);
+}
+
+/** Two declarations of one field, both whole, disagree on whether it is required or on its shape. */
+function differsAt(key: string, left: ObjectOutline, right: ObjectOutline): boolean {
+  const [leftField, rightField] = [left.fields[key], right.fields[key]];
+  if (leftField === undefined || rightField === undefined) {
+    return false;
+  }
+  const [leftSchema, rightSchema] = [leftField.schema, rightField.schema];
+  if (!isWhole(leftSchema) || !isWhole(rightSchema)) {
+    return false;
+  }
+  return (
+    leftField.required !== rightField.required || shapeKey(leftSchema) !== shapeKey(rightSchema)
+  );
 }

@@ -86,7 +86,7 @@ export type Outline =
   | Unbuilt;
 
 /** An outline of nothing the walk built: where a refused construct stands. */
-const unbuilt: Unbuilt = {};
+export const unbuilt: Unbuilt = {};
 
 /** Whether an outline is a node walked whole, which every rule, parse and Snapshot may take as a node. */
 export function isWhole(outline: Outline | undefined): outline is SchemaNode {

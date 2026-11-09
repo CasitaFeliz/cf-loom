@@ -333,6 +333,56 @@ describe('walkSchemas: intersections', () => {
   });
 });
 
+describe('walkSchemas: an intersection beside a schema that fails', () => {
+  const differing = 'an intersection of objects whose shared keys differ';
+  const dateAt = (at: string) => ({
+    kind: 'not-allowed',
+    at,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+  });
+  const refusedAll = (failures: readonly object[]) => ({
+    located: [{ kind: 'not-allowed', failures }],
+    defs: {},
+  });
+
+  test('an intersection whose shared keys differ, beside a date in an item, tells both', () => {
+    const named = z.object({ id: z.string() });
+    const numbered = z.object({ id: z.number(), placedAt: z.date() });
+
+    expect(walkBody(named.and(numbered))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: differing, instead: '.extend()' },
+        dateAt('[1].placedAt'),
+      ]),
+    );
+  });
+
+  test('a shared field that fails is not compared, so the intersection tells the failure alone', () => {
+    const named = z.object({ id: z.string() });
+    const dated = z.object({ id: z.date() });
+
+    expect(walkBody(named.and(dated))).toEqual(refusedAll([dateAt('[1].id')]));
+  });
+
+  test('a shared field that agrees is merged beside a field that fails', () => {
+    const named = z.object({ id: z.string(), name: z.string() });
+    const dated = z.object({ id: z.string(), placedAt: z.date() });
+
+    expect(walkBody(named.and(dated))).toEqual(refusedAll([dateAt('[1].placedAt')]));
+  });
+
+  test('an intersection of an object and a refused construct tells the construct alone', () => {
+    const named = z.object({ id: z.string() });
+
+    expect(walkBody(named.and(z.date()))).toEqual(refusedAll([dateAt('[1]')]));
+  });
+
+  test('an intersection of two refused constructs tells each, and no intersection', () => {
+    expect(walkBody(z.date().and(z.date()))).toEqual(refusedAll([dateAt('[0]'), dateAt('[1]')]));
+  });
+});
+
 describe('walkSchemas: a field named __proto__', () => {
   const construct = 'a field named __proto__ (zod drops it when parsing)';
 

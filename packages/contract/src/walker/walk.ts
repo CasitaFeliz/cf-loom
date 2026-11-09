@@ -143,10 +143,11 @@ function* walkSchema(schema: unknown, under: Under, state: WalkState): Walking {
   });
 }
 
-/** A node the walk built that is an `allOf` or a `union`, which a rule judges once the defs are known. */
+/** A node the walk built or was building that is an `allOf` or a `union`, which a rule judges once the defs are known. */
 function recordComposition(node: Walked, at: Reached, state: WalkState): void {
-  if (node.kind === 'walked' && (node.value.type === 'allOf' || node.value.type === 'union')) {
-    const composition = compositionOf(at, node.value);
+  const outline = outlineOf(node);
+  if (outline.type === 'allOf' || outline.type === 'union') {
+    const composition = compositionOf(at, outline);
     state.compositions.push(composition);
     state.recursion.built(composition);
   }
