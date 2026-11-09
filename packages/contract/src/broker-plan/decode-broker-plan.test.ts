@@ -355,6 +355,40 @@ describe('reading a broker plan', () => {
     },
   );
 
+  const notServiceName = 'is not a Service name, kebab-case of at most 64 characters';
+
+  const unreadableServiceNames = [
+    '',
+    'Not A Service\n',
+    'Orders',
+    'orders_service',
+    'orders.service',
+    'orders--service',
+    'orders-service-',
+    'staging_orders-service',
+    'a'.repeat(65),
+  ];
+
+  test.each(unreadableServiceNames)(
+    'a Stream whose service is "%s" is malformed, naming it',
+    (service) => {
+      const decoded = decodeBrokerPlan(aPlanWithStream({ service }));
+
+      expect(decoded).toEqual(malformed(`streams.${ordersStream}.service ${notServiceName}`));
+    },
+  );
+
+  test.each(unreadableServiceNames)(
+    'a Durable consumer whose service is "%s" is malformed, naming it',
+    (service) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ service }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.service ${notServiceName}`),
+      );
+    },
+  );
+
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
       prefix: null,

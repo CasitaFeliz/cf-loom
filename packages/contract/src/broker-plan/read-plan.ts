@@ -1,3 +1,4 @@
+import { follows, kebabCase, ruleOf } from '../declarations/index.ts';
 import type { Problem } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
@@ -64,6 +65,12 @@ const durableConsumerName: TextKind<{
   reason: notDurableConsumerName,
 };
 
+const serviceName: TextKind<string> = {
+  unprefixed: (_prefix, text) => text,
+  read: (text) => (follows(kebabCase, text) ? text : undefined),
+  reason: `is not a Service name, ${ruleOf(kebabCase)}`,
+};
+
 const subject: TextKind<ReadSubject> = {
   unprefixed: unprefixedSubjectOf,
   read: readSubject,
@@ -128,6 +135,10 @@ function readStream(
   if (key.kind === 'unread') {
     return key;
   }
+  const service = readText(serviceName, prefix, { at: [...at, 'service'], text: stream.service });
+  if (service.kind === 'unread') {
+    return service;
+  }
   const subjects: ReadSubject[] = [];
   for (const [index, text] of stream.subjects.entries()) {
     const reading = readText(subject, prefix, { at: [...at, 'subjects', index], text });
@@ -136,7 +147,7 @@ function readStream(
     }
     subjects.push(reading.value);
   }
-  return { kind: 'read', value: { service: stream.service, subjects } };
+  return { kind: 'read', value: { service: service.value, subjects } };
 }
 
 function readConsumer(
@@ -146,10 +157,14 @@ function readConsumer(
 ): Reading<ReadConsumer> {
   const at: Path = ['durableConsumers', name];
   const key = readText(durableConsumerName, prefix, { at, text: name });
+  const service = readText(serviceName, prefix, { at: [...at, 'service'], text: consumer.service });
   const stream = readText(streamName, prefix, { at: [...at, 'stream'], text: consumer.stream });
   const filter = readText(subject, prefix, { at: [...at, 'subject'], text: consumer.subject });
   if (key.kind === 'unread') {
     return key;
+  }
+  if (service.kind === 'unread') {
+    return service;
   }
   if (stream.kind === 'unread') {
     return stream;
@@ -158,5 +173,5 @@ function readConsumer(
     return filter;
   }
   const { consumed } = key.value;
-  return { kind: 'read', value: { service: consumer.service, consumed, subject: filter.value } };
+  return { kind: 'read', value: { service: service.value, consumed, subject: filter.value } };
 }
