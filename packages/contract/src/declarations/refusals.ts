@@ -2,10 +2,12 @@
  * Every sentence a declaration is refused with that the types and `generate` both write, each
  * written once: a fixed sentence as a const the types read with `typeof`, and a sentence with names
  * as a template type with the function `generate` writes it by, whose return type is that template,
- * so a function whose text drifts from its type does not compile; a list of names in such a
- * sentence is the tuple `Joined` writes, in the order `generate` lists them, and a sentence
- * `generate` writes once per name is refused once per name.
+ * so a function whose text drifts from its type does not compile; a sentence that lists names
+ * takes them as a list, in the order `generate` lists them, and joins them itself with `joinedOf`,
+ * whose type is `Joined`; a sentence `generate` writes once per name is refused once per name.
  */
+
+import { type Joined, joinedOf } from '../lines/index.ts';
 
 /** Why a Guard declares `params` or `body` in its demands. */
 export const guardDemandsSentence = 'A Guard demands only headers and query';
@@ -97,26 +99,26 @@ export function takesNoQualifierSentence<Name extends string>(
   return `${name} takes no qualifier`;
 }
 
-/** A Dependency whose Endpoints are several Providers', their names joined. */
-export type OneProviderSentence<Names extends string> =
-  `A Dependency lists one Provider's Endpoints: ${Names}`;
+/** A Dependency whose Endpoints are several Providers', their names in the order its Endpoints list them. */
+export type OneProviderSentence<Names extends readonly string[]> =
+  `A Dependency lists one Provider's Endpoints: ${Joined<Names, 'and'>}`;
 
 /** Writes `OneProviderSentence`. */
-export function oneProviderSentence<Names extends string>(
+export function oneProviderSentence<const Names extends readonly string[]>(
   names: Names,
 ): OneProviderSentence<Names> {
-  return `A Dependency lists one Provider's Endpoints: ${names}`;
+  return `A Dependency lists one Provider's Endpoints: ${joinedOf(names, 'and')}`;
 }
 
-/** Params that are not exactly the path's `:names`, joined. */
-export type ExactParamsSentence<Names extends string> =
-  `params declares exactly the path's :names: ${Names}`;
+/** Params that are not exactly the path's `:names`, in path order. */
+export type ExactParamsSentence<Names extends readonly string[]> =
+  `params declares exactly the path's :names: ${Joined<Names, 'and'>}`;
 
 /** Writes `ExactParamsSentence`. */
-export function exactParamsSentence<Names extends string>(
+export function exactParamsSentence<const Names extends readonly string[]>(
   names: Names,
 ): ExactParamsSentence<Names> {
-  return `params declares exactly the path's :names: ${names}`;
+  return `params declares exactly the path's :names: ${joinedOf(names, 'and')}`;
 }
 
 /** A Success of a status other than 204 that declares no body. */
@@ -129,18 +131,18 @@ export function successBodySentence<Status extends number>(
   return `A ${status} Success has a body`;
 }
 
-/** A Guard listed before the Guards it requires, their names joined. */
+/** A Guard listed before the Guards it requires, their names in the order its `guards` list them. */
 export type RequiresEarlierSentence<
   Name extends string,
-  Missing extends string,
-> = `${Name} requires ${Missing} earlier in guards`;
+  Missing extends readonly string[],
+> = `${Name} requires ${Joined<Missing, 'and'>} earlier in guards`;
 
 /** Writes `RequiresEarlierSentence`. */
-export function requiresEarlierSentence<Name extends string, Missing extends string>(
-  name: Name,
-  missing: Missing,
-): RequiresEarlierSentence<Name, Missing> {
-  return `${name} requires ${missing} earlier in guards`;
+export function requiresEarlierSentence<
+  Name extends string,
+  const Missing extends readonly string[],
+>(name: Name, missing: Missing): RequiresEarlierSentence<Name, Missing> {
+  return `${name} requires ${joinedOf(missing, 'and')} earlier in guards`;
 }
 
 /** A header name that is not lower-case. */

@@ -1,4 +1,3 @@
-import type { Joined } from '../lines/index.ts';
 import { freezeDeclaration } from './freeze-declaration.ts';
 import type { ProvidedEndpoint, ProviderNameOf } from './provided.ts';
 import type { OneProviderSentence } from './refusals.ts';
@@ -46,9 +45,7 @@ type OneProviderRule<Declaration extends DependencyDeclaration> = [
   : IsOneLiteral<ListedProvidersOf<Declaration>> extends true
     ? unknown
     : {
-        readonly endpoints: Refusal<
-          OneProviderSentence<Joined<ProviderList<Declaration['endpoints']>, 'and'>>
-        >;
+        readonly endpoints: Refusal<OneProviderSentence<ProviderList<Declaration['endpoints']>>>;
       };
 
 /** Declares the Endpoints a Contract calls of one Provider, so its client reaches no more. */

@@ -1,5 +1,4 @@
 import type * as core from 'zod/v4/core';
-import type { Joined } from '../lines/index.ts';
 import type { SchemaRule } from '../walker/index.ts';
 import type { AttachedGuardOf, Attachment, AttachmentsRule } from './attachment.ts';
 import type { Visibility } from './element.ts';
@@ -84,9 +83,7 @@ type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declar
         };
       };
 
-type ExactParamsMessage<Path extends string> = Refusal<
-  ExactParamsSentence<Joined<PathParamList<Path>, 'and'>>
->;
+type ExactParamsMessage<Path extends string> = Refusal<ExactParamsSentence<PathParamList<Path>>>;
 
 type ExactParamsRule<Params, Path extends string> =
   Params extends core.$ZodObject<infer Shape>
@@ -156,9 +153,7 @@ type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed ex
 type RequiresEarlierMessage<Listed extends Guard, Earlier extends string> = Listed extends {
   readonly guards: infer Required;
 }
-  ? Refusal<
-      RequiresEarlierSentence<Listed['name'], Joined<MissingGuardList<Required, Earlier>, 'and'>>
-    >
+  ? Refusal<RequiresEarlierSentence<Listed['name'], MissingGuardList<Required, Earlier>>>
   : never;
 
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [

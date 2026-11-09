@@ -12,7 +12,6 @@ import {
   type Root,
   reaches,
 } from '../declarations/index.ts';
-import { joinedOf } from '../lines/index.ts';
 import { fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
@@ -78,7 +77,7 @@ function providerFailures(
   if (providers.size < 2) {
     return [];
   }
-  const message = oneProviderSentence(joinedOf([...providers], 'and'));
+  const message = oneProviderSentence([...providers]);
   return [failure(at, 'dependency-selection', message)];
 }
 

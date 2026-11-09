@@ -199,11 +199,11 @@ const rows: Record<SentenceName, Row> = {
       const dependency = defineDependency({ endpoints } as never);
       return defineService({ name: 'orders-service', dependencies: [dependency] });
     },
-    sentence: internal.oneProviderSentence('payments-service and refunds-service'),
+    sentence: internal.oneProviderSentence(['payments-service', 'refunds-service']),
   },
   exactParamsSentence: {
     root: () => serviceOf(defineEndpoint({ ...listOrders, path: '/orders/:orderId' } as never)),
-    sentence: internal.exactParamsSentence('orderId'),
+    sentence: internal.exactParamsSentence(['orderId']),
   },
   successBodySentence: {
     root: () => serviceOf(defineEndpoint({ ...listOrders, success: { status: 200 } } as never)),
@@ -215,7 +215,7 @@ const rows: Record<SentenceName, Row> = {
       const member = defineGuard({ name: 'member', description: 'A member', guards: [tenant] });
       return serviceOf(defineEndpoint({ ...listOrders, guards: [member] } as never));
     },
-    sentence: internal.requiresEarlierSentence('member', 'tenant'),
+    sentence: internal.requiresEarlierSentence('member', ['tenant']),
   },
   headerCaseSentence: {
     root: () =>
@@ -254,6 +254,27 @@ describe('the refusal sentences the types and generate share', () => {
       expect(messagesOf(root())).toEqual([sentence]);
     },
   );
+});
+
+describe('a sentence that lists names', () => {
+  test('is written from a list of names, which it joins in the order given, as its type does', () => {
+    const exact = internal.exactParamsSentence(['orderId', 'itemId', 'partId']);
+    const requires = internal.requiresEarlierSentence('member', ['tenant', 'org']);
+    const oneProvider = internal.oneProviderSentence(['zeta-service', 'alpha-service']);
+
+    expectTypeOf(
+      exact,
+    ).toEqualTypeOf<"params declares exactly the path's :names: orderId, itemId and partId">();
+    expectTypeOf(requires).toEqualTypeOf<'member requires tenant and org earlier in guards'>();
+    expectTypeOf(
+      oneProvider,
+    ).toEqualTypeOf<"A Dependency lists one Provider's Endpoints: zeta-service and alpha-service">();
+    expect([exact, requires, oneProvider]).toEqual([
+      "params declares exactly the path's :names: orderId, itemId and partId",
+      'member requires tenant and org earlier in guards',
+      "A Dependency lists one Provider's Endpoints: zeta-service and alpha-service",
+    ]);
+  });
 });
 
 /** The sentences a part of a declaration is refused with: the keys of its type that no value has. */

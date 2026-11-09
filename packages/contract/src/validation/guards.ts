@@ -170,7 +170,7 @@ function orderFailures(
   if (missing.length === 0) {
     return [];
   }
-  const message = requiresEarlierSentence(textOf(guard.name), joinedOf(missing, 'and'));
+  const message = requiresEarlierSentence(textOf(guard.name), missing);
   return [failure(at, 'guard-order', message)];
 }
 

@@ -4,7 +4,6 @@ import {
   follows,
   noParamsSentence,
 } from '../declarations/index.ts';
-import { joinedOf } from '../lines/index.ts';
 import { inFields, type ObjectNode, type Place } from '../walker/index.ts';
 import {
   isPlainObject,
@@ -56,7 +55,7 @@ export function paramsFailures(
   if (names.length === 0) {
     return declared ? [failure(paramsAt, 'exact-params', noParamsSentence)] : [];
   }
-  const exact = exactParamsSentence(joinedOf(names, 'and'));
+  const exact = exactParamsSentence(names);
   if (params === undefined) {
     return [failure(paramsAt, 'exact-params', exact)];
   }
