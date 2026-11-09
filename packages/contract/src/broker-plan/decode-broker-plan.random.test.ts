@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import { brokerPlanOfModel, type ServiceModel } from '../../test/broker-plans.ts';
+import {
+  dottedOf,
+  type Mutated,
+  mutatedOf,
+  pick,
+  placeOf,
+  type TextSite,
+  textSitesOf,
+  withText,
+} from '../../test/broker-plan-edits.ts';
+import { brokerPlanOfModel, modelOfPlan, type ServiceModel } from '../../test/broker-plans.ts';
 import { drawnModel, drawnPrefix, longestName } from '../../test/random-broker-plans.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { type BrokerPlan, decodeBrokerPlan } from '../internal/index.ts';
@@ -78,5 +88,70 @@ describe('the plans cf-loom broker-plan prints', () => {
       );
 
     expect(undecoded.map(({ decoded }) => decoded)).toEqual([]);
+  });
+});
+
+/** What the oracle says of a plan a decoder accepted: the Service its names declare prints the same plan, or is no valid Service. */
+type Verdict = 'matches' | 'excluded' | 'unreadable' | 'differs';
+
+/** A Service declared from the names of a plan through the public API, which prints its plan again, compared with the plan. */
+function verdictOf(decoded: BrokerPlan): Verdict {
+  const model = modelOfPlan(decoded);
+  if (model === undefined) {
+    return 'unreadable';
+  }
+  const declared = brokerPlanOfModel(model, decoded.prefix);
+  if (declared === undefined) {
+    return 'excluded';
+  }
+  return JSON.stringify(declared) === JSON.stringify(decoded) ? 'matches' : 'differs';
+}
+
+/** What a plan with one site's text changed decodes to, judged: the kind of outcome it is, and why it is wrong when it is. */
+type Judged = { readonly outcome: string; readonly failure?: unknown };
+
+function judgedOf(json: unknown, site: TextSite, mutated: Mutated): Judged {
+  const decoded = decodeBrokerPlan(withText(json, site, mutated.text));
+  const at = dottedOf(placeOf(site, mutated.text));
+  if (mutated.isUnprintable) {
+    const isAtSite = decoded.kind === 'malformed' && decoded.reason.startsWith(`${at} `);
+    return isAtSite
+      ? { outcome: 'unprintable' }
+      : { outcome: 'unprintable', failure: { at, decoded } };
+  }
+  if (decoded.kind === 'malformed') {
+    return { outcome: 'refused' };
+  }
+  const verdict = verdictOf(decoded.plan);
+  const isRight = verdict === 'matches' || verdict === 'excluded';
+  return isRight
+    ? { outcome: verdict }
+    : { outcome: verdict, failure: { at, text: mutated.text, verdict } };
+}
+
+describe('a printed plan with one text changed', () => {
+  test('is refused at that text when the change writes what no printer writes, and otherwise is refused or is the plan its names print', () => {
+    const next = seededNext(5161);
+    const judged: Judged[] = [];
+    for (const { plan, prefix } of printed) {
+      const json: unknown = JSON.parse(JSON.stringify(plan));
+      const sites = textSitesOf(json);
+      for (let attempt = 0; attempt < 32 && sites.length > 0; attempt += 1) {
+        const site = pick(next, sites);
+        const mutated = mutatedOf(next, site, prefix);
+        if (mutated !== undefined) {
+          judged.push(judgedOf(json, site, mutated));
+        }
+      }
+    }
+    const count = (outcome: string) => judged.filter((one) => one.outcome === outcome).length;
+
+    expect(
+      judged.filter(({ failure }) => failure !== undefined).map(({ failure }) => failure),
+    ).toEqual([]);
+    expect(count('unprintable')).toBeGreaterThan(300);
+    expect(count('refused')).toBeGreaterThan(100);
+    expect(count('matches')).toBeGreaterThan(40);
+    expect(count('excluded')).toBeLessThan(count('matches'));
   });
 });
