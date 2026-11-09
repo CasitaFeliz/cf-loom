@@ -409,6 +409,18 @@ describe('misspelledTerms', () => {
     expect(misspellings).toEqual([{ line: 1, written: 'direct call', spelled: 'Direct call' }]);
   });
 
+  it.each([
+    ['two spaces', 'Intro.  \nA direct call here.'],
+    ['a backslash', 'Intro.\\\nA direct call here.'],
+  ])(
+    'reports a term after a line that ends in a hard line break of %s, at its own line',
+    (_form, markdown) => {
+      const misspellings = misspelledTerms(markdown, ['Direct call']);
+
+      expect(misspellings).toEqual([{ line: 2, written: 'direct call', spelled: 'Direct call' }]);
+    },
+  );
+
   it('numbers the lines of a document with CRLF line ends as it does one with LF', () => {
     const lines = ['> One.', '>', '> A direct call', '', '- a direct', '  call'];
 
@@ -525,6 +537,16 @@ const holders: Record<string, Holder> = {
   'prose over a hard line break': {
     isProse: true,
     lines: (words) => [`The ${splitOf(words)[0]}  `, `${splitOf(words)[1]} here.`],
+  },
+  'prose after a hard line break': {
+    isProse: true,
+    row: 1,
+    lines: (words) => ['An introduction.  ', `A ${words} here.`],
+  },
+  'prose after a backslash line break': {
+    isProse: true,
+    row: 1,
+    lines: (words) => ['An introduction.\\', `A ${words} here.`],
   },
   'a code span before a hard line break': {
     isProse: false,
