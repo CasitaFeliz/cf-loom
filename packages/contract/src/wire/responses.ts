@@ -1,5 +1,5 @@
 import type { ReservedCode } from '../declarations/index.ts';
-import { unbrokenLineOf } from '../lines/index.ts';
+import { joinedOf, unbrokenLineOf } from '../lines/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { jsonContentType } from './content-type.ts';
 import {
@@ -125,7 +125,9 @@ export function reservedResponseOf(code: ReservedCode): Response {
 /** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes. */
 export function methodNotAllowedResponseOf(allowed: readonly string[]): Response {
   const response = reservedResponseOf('METHOD_NOT_ALLOWED');
-  response.headers.set('allow', allowed.join(', '));
+  for (const method of allowed) {
+    response.headers.append('allow', method);
+  }
   return response;
 }
 
@@ -138,7 +140,10 @@ function sentHeaderTextsOf(
 ): readonly (readonly [string, string])[] {
   const headers = headerTextsOf(part, sent);
   if (headers.kind === 'issues') {
-    const names = headers.issues.map(({ path }) => path.join('.')).join(', ');
+    const names = joinedOf(
+      headers.issues.map(({ path }) => path.join('.')),
+      'and',
+    );
     throw new Error(
       unbrokenLineOf(
         `${sentNouns[part]} header that cannot travel was not checked before it was sent: ${names}`,

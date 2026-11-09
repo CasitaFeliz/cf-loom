@@ -706,8 +706,9 @@ function isQualifierKeysFailure(reported: Reported): reported is KeysReported {
   return reported.kind === 'declaration' && reported.rule === 'qualifier-keys';
 }
 
+/** The keys a message lists, `a, b and c`; none of the drawn keys holds a comma or the word `and`. */
 function keysNamedBy(reported: KeysReported): readonly string[] {
-  return reported.message.slice(reported.message.indexOf(': ') + 2).split(', ');
+  return reported.message.slice(reported.message.indexOf(': ') + 2).split(/, | and /);
 }
 
 /** The paths a validated Root names in its `qualifier-keys` failures. */

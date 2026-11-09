@@ -9,6 +9,7 @@ import {
   requiresEarlierSentence,
   takesNoQualifierSentence,
 } from '../declarations/index.ts';
+import { joinedOf } from '../lines/index.ts';
 import {
   fieldStep,
   indexStep,
@@ -133,7 +134,7 @@ function valueFailures(
   if (stripped.length === 0) {
     return [];
   }
-  const keys = stripped.join(', ');
+  const keys = joinedOf(stripped, 'and');
   const message = `A Qualifier holds only the keys its schema keeps when zod parses it: ${keys}`;
   return [failure(qualifierAt, 'qualifier-keys', message)];
 }
@@ -169,7 +170,7 @@ function orderFailures(
   if (missing.length === 0) {
     return [];
   }
-  const message = requiresEarlierSentence(textOf(guard.name), missing.join(', '));
+  const message = requiresEarlierSentence(textOf(guard.name), joinedOf(missing, 'and'));
   return [failure(at, 'guard-order', message)];
 }
 

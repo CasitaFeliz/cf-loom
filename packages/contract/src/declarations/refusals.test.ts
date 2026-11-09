@@ -290,25 +290,30 @@ describe('a refusal that lists names reads as generate writes it', () => {
     expect(messages).toEqual([orderAndItem]);
   });
 
-  test('params of a path with three :names list them in path order, and one :name repeated once', () => {
-    const three = {
+  test('params of a path with three :names list them in path order', () => {
+    const declaration = {
       ...listOrders,
       path: '/orders/:orderId/items/:itemId/parts/:partId',
       input: { params: z.object({ id: z.uuid() }) },
     } as const;
-    const repeated = { ...listOrders, path: '/a/:id/b/:other/c/:id' } as const;
-    type WrittenThree = Parameters<typeof defineEndpoint<typeof three>>[0];
-    type WrittenRepeated = Parameters<typeof defineEndpoint<typeof repeated>>[0];
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
 
-    const messagesOfThree = messagesOf(serviceOf(defineEndpoint(three as never)));
-    const messagesOfRepeated = messagesOf(serviceOf(defineEndpoint(repeated as never)));
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
 
     const listed = "params declares exactly the path's :names: orderId, itemId and partId";
-    expectTypeOf<SentencesOf<WrittenThree['input']['params']>>().toEqualTypeOf<typeof listed>();
-    expect(messagesOfThree).toEqual([listed]);
+    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<typeof listed>();
+    expect(messages).toEqual([listed]);
+  });
+
+  test('a path that repeats a :name is refused by generate for the repeat, and its params by the type list the name once', () => {
+    const declaration = { ...listOrders, path: '/a/:id/b/:other/c/:id' } as const;
+    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
+
     const once = "params declares exactly the path's :names: id and other";
-    expectTypeOf<SentencesOf<WrittenRepeated['input']['params']>>().toEqualTypeOf<typeof once>();
-    expect(messagesOfRepeated).toEqual([once]);
+    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<typeof once>();
+    expect(messages).toEqual(['A path param appears once: ":id"']);
   });
 
   test('an Endpoint whose path is a union of two paths is refused once for each path', () => {
