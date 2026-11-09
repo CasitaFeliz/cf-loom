@@ -81,9 +81,10 @@ function lineOf(run: ProseRun, index: number): number {
  */
 export function misspelledTerms(markdown: string, terms: readonly string[]): TermMisspelling[] {
   const spelledOut = new Map(terms.map((term) => [term.toLowerCase(), term]));
+  const uses = usesOf(terms);
   const misspellings: TermMisspelling[] = [];
   for (const run of proseRunsOf(markdown)) {
-    for (const { 1: head = '', 2: ending = '', index } of run.text.matchAll(usesOf(terms))) {
+    for (const { 1: head = '', 2: ending = '', index } of run.text.matchAll(uses)) {
       const words = head.replace(/\s+/g, ' ');
       const term = spelledOut.get(words.toLowerCase());
       if (term !== undefined && words !== term) {
