@@ -43,10 +43,10 @@ type TextKind<Value> = {
   readonly reason: string;
 };
 
-/** Why a text is no Stream name of the plan, which a key no object can hold is refused with. */
+/** Why a text is no Stream name of the plan, and why a `__proto__` key of its Streams is refused. */
 export const notStreamName = 'is not a Stream name: a Service name after the prefix';
 
-/** Why a text is no Durable consumer name of the plan. */
+/** Why a text is no Durable consumer name of the plan, and why a `__proto__` key of its Durable consumers is refused. */
 export const notDurableConsumerName =
   'is not a Durable consumer name: a Service name, then a Subscription name or a Command Version';
 

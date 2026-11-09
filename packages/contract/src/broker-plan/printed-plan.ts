@@ -14,7 +14,7 @@ export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | 
   return streamDifferenceOf(plan, printed, service) ?? consumerDifferenceOf(plan, printed, service);
 }
 
-/** The Message Versions of the Service its Streams' subjects and its Subscriptions to itself name, each once, and the Subscriptions the Durable consumers are. */
+/** What the Service the plan names first routes, read from its texts: the Message Versions its Stream's subjects and its Subscriptions to itself name, each once, and the Subscriptions its Durable consumers are. */
 function routedOf(service: string, read: ReadPlan): RoutedService {
   const subscriptions: RoutedSubscription[] = [];
   for (const { consumed, subject } of read.consumers) {
