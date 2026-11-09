@@ -1,0 +1,17 @@
+language js
+
+predicate package_source() {
+  $filename <: r".*/packages/[^/]+/src/.*",
+  $filename <: not r".*\.test\.ts",
+  $filename <: not r".*/packages/contract/src/lines/joined-names\.ts",
+  $filename <: not r".*/packages/cli/src/source-text/code-lists\.ts"
+}
+
+or {
+  `$items.join($separator)`,
+  `$items?.join($separator)`
+} as $join where {
+  $separator <: r"['\"`], ['\"`]",
+  package_source(),
+  register_diagnostic(span=$join, message="C1: write a list of names in a sentence with joinedOf(names, closing), and a list in code with codeListOf(items).", severity="error")
+}
