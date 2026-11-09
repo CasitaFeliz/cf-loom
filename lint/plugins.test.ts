@@ -253,7 +253,7 @@ describe('lint plugins', () => {
     ]);
   });
 
-  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module or the codeListOf module (C1)', () => {
+  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module, the codeListOf module or the fieldValueOf module (C1)', () => {
     const lines = [
       'const names = ["a", "b"];',
       "export const single = names.join(', ');",
@@ -276,6 +276,7 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'packages/cli/src/source-text/code-lists.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/wire/field-values.ts')).toEqual([]);
     expect(pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
   });
 

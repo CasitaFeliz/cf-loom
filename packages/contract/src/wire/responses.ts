@@ -8,6 +8,7 @@ import {
   reservedCodeFaults,
   type TravelingFault,
 } from './envelopes.ts';
+import { fieldValueOf } from './field-values.ts';
 import { headerTextsOf } from './header-text.ts';
 
 /** A Success as it is sent: its declared status, its declared headers as checked, and its body. */
@@ -125,11 +126,7 @@ export function reservedResponseOf(code: ReservedCode): Response {
 /** `METHOD_NOT_ALLOWED`'s response, its `Allow` header listing the methods the path takes, empty when it takes none. */
 export function methodNotAllowedResponseOf(allowed: readonly string[]): Response {
   const response = reservedResponseOf('METHOD_NOT_ALLOWED');
-  const [first = '', ...others] = allowed;
-  response.headers.set('allow', first);
-  for (const method of others) {
-    response.headers.append('allow', method);
-  }
+  response.headers.set('allow', fieldValueOf(allowed));
   return response;
 }
 

@@ -4,7 +4,8 @@ predicate package_source() {
   $filename <: r".*/packages/[^/]+/src/.*",
   $filename <: not r".*\.test\.ts",
   $filename <: not r".*/packages/contract/src/lines/joined-names\.ts",
-  $filename <: not r".*/packages/cli/src/source-text/code-lists\.ts"
+  $filename <: not r".*/packages/cli/src/source-text/code-lists\.ts",
+  $filename <: not r".*/packages/contract/src/wire/field-values\.ts"
 }
 
 or {
