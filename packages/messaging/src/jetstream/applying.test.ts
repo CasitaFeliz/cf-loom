@@ -11,6 +11,7 @@ import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
 import { z } from 'zod';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import { aServiceOfLongestNames, planOf } from '../../test/broker-plans.ts';
 import { stopServerUnder, withMethods } from '../../test/connections.ts';
@@ -1072,15 +1073,11 @@ describe('what applyBrokerPlan refuses', () => {
       return (await rejectionOf(applying)).message;
     };
     const ran: string[] = [];
-    const throwing = () => {
-      ran.push('ran');
-      throw new Error('the value’s own code ran');
-    };
     const sentences = new Map<string, string>();
     for (const { path, limits } of referencesOf(testLimits)) {
       sentences.set(path, expectedSentenceOf(await refusing(limits), path));
     }
-    const places = limitsPlacesOf(testLimits, throwing);
+    const places = limitsPlacesOf(testLimits, aHookThatThrows(ran));
 
     const refused: [string, string][] = [];
     const expected: [string, string][] = [];

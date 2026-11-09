@@ -12,7 +12,7 @@ import {
 import { textOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 import { z } from 'zod';
-import { foreignValues } from '../../../contract/test/foreign-values.ts';
+import { aHookThatThrows, foreignValues } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   type CheckedOutcome,
@@ -1277,14 +1277,6 @@ function foreignOf(
 
 function issueMessagesOf(error: InvalidOutcomeError): readonly string[] {
   return error.issues.map(({ message }) => message);
-}
-
-/** A hook that fails the test that runs it: it records the call and throws what the value's own code would. */
-function aHookThatThrows(ran: string[]): () => never {
-  return () => {
-    ran.push('ran');
-    throw new Error('the value’s own code ran');
-  };
 }
 
 describe('an EndpointHandler returning what its types do not allow, shown without running its code', () => {

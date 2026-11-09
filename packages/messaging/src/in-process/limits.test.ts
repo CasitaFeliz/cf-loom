@@ -1,7 +1,17 @@
 import { inspect } from 'node:util';
 import { linesTextOf, textOf } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { foreignKindOf, foreignValues } from '../../../contract/test/foreign-values.ts';
+import {
+  aHookThatThrows,
+  foreignKindOf,
+  foreignValues,
+} from '../../../contract/test/foreign-values.ts';
+import {
+  expectedSentenceOf,
+  limitsPlacesOf,
+  referencesOf,
+  shownForeignValues,
+} from '../../test/foreign-limits.ts';
 import { aMessagingOver, thirtySeconds } from '../../test/in-process-services.ts';
 import { type Behavior, handlersOf, ordersContract, type Received } from '../../test/orders.ts';
 import { typedValuesOf } from '../../test/typed-values.ts';
@@ -23,14 +33,19 @@ function inProcessGiven(limits: unknown) {
 const duration = 'a duration such as 500ms, 30s, 2m, 1h or 7d, or a list of them';
 const count = "a whole number from 1, or 'unlimited'";
 
-/** What `inProcess()` throws for one setting of the defaults, or that it accepted it. */
-function refusalAt(setting: string, value: unknown): unknown {
+/** What `inProcess()` throws for limits of any shape, or that it accepted them. */
+function refusalOf(limits: unknown): unknown {
   try {
-    inProcess({ durableConsumerDefaults: { [setting]: value } } as never);
+    inProcess(limits as never);
     return 'accepted';
   } catch (error) {
     return error instanceof Error ? error.message : error;
   }
+}
+
+/** What `inProcess()` throws for one setting of the defaults, or that it accepted it. */
+function refusalAt(setting: string, value: unknown): unknown {
+  return refusalOf({ durableConsumerDefaults: { [setting]: value } });
 }
 
 /** The settings of a Durable consumer, as the resolver names them when a consume finds them all unset. */
@@ -43,43 +58,6 @@ async function settingsTheResolverNames(): Promise<readonly string[]> {
   return (named?.[1] ?? '').split(/, | and /);
 }
 
-const expectedOf: Readonly<Record<string, string>> = { ackWait: duration, maxDeliver: count };
-
-/** A place a value is given at: a setting of the defaults, alone or as an entry of a list, and the line its refusal is. */
-type Place = {
-  readonly name: string;
-  readonly setting: string;
-  readonly given: unknown;
-  readonly line: string;
-};
-
-/**
- * Each value of the pool at each place `inProcess()` reads a setting: every setting the resolver
- * names, alone, and in an ack wait list; alone at ackWait only a value whose reading runs none of its code.
- */
-function placesOf(settings: readonly string[], hooked: () => unknown): readonly Place[] {
-  const places: Place[] = [];
-  for (const setting of settings) {
-    const line = (shown: string) =>
-      `limits.durableConsumerDefaults.${setting} ${shown} is not ${expectedOf[setting]}`;
-    for (const { label, value, shown, readRunsCode } of foreignValues(hooked)) {
-      if (!(setting === 'ackWait' && readRunsCode)) {
-        places.push({ name: `${setting}, ${label}`, setting, given: value, line: line(shown) });
-      }
-      if (setting === 'ackWait') {
-        const listed = ['30s', value];
-        places.push({
-          name: `${setting} list, ${label}`,
-          setting,
-          given: listed,
-          line: line(`[ '30s', ${shown} ]`),
-        });
-      }
-    }
-  }
-  return places;
-}
-
 describe('the values the setting types do not allow', () => {
   test('the values the setting types do not allow, which a refusal is drawn from, hold every kind it shows differently', () => {
     const kinds = new Set(foreignValues(() => undefined).map(({ value }) => foreignKindOf(value)));
@@ -87,16 +65,15 @@ describe('the values the setting types do not allow', () => {
     expect([...kinds].sort()).toEqual(['bigint', 'function', 'list', 'object', 'proxy', 'symbol']);
   });
 
-  test('showing a refused value runs none of its code: every hook of the spy pool stays uncalled', async () => {
-    const settings = await settingsTheResolverNames();
+  test('showing a refused value runs none of its code: every hook of the spy pool stays uncalled', () => {
     const ran: string[] = [];
     const counting = () => {
       ran.push('ran');
       return 'x';
     };
 
-    for (const place of placesOf(settings, counting)) {
-      refusalAt(place.setting, place.given);
+    for (const { limits } of limitsPlacesOf(thirtySeconds, counting)) {
+      refusalOf(limits);
     }
 
     expect(ran).toEqual([]);
@@ -104,16 +81,24 @@ describe('the values the setting types do not allow', () => {
 
   test('inProcess() refuses any value its types do not allow at every setting the resolver names, alone or in an ackWait list, on one line, never with what its code threw', async () => {
     const settings = await settingsTheResolverNames();
-    const throwing = () => {
-      throw new Error('the value’s own code ran');
-    };
-    const places = placesOf(settings, throwing);
+    const sentences = new Map(
+      referencesOf(thirtySeconds).map(({ path, limits }) => [
+        path,
+        expectedSentenceOf(String(refusalOf(limits)), path),
+      ]),
+    );
+    const ran: string[] = [];
+    const places = limitsPlacesOf(thirtySeconds, aHookThatThrows(ran));
 
-    const refused = places.map(({ name, setting, given }) => [name, refusalAt(setting, given)]);
+    const refused = places.map(({ name, limits }) => [name, refusalOf(limits)]);
 
-    const expected = places.map(({ name, line }) => [name, linesTextOf([line])]);
-    expect(settings).toEqual(Object.keys(expectedOf));
+    const expected = places.map(({ name, path, shown }) => [
+      name,
+      linesTextOf([`${path} ${shown} is not ${sentences.get(path)}`]),
+    ]);
+    expect(settings).toEqual(Object.keys(thirtySeconds.durableConsumerDefaults));
     expect(refused).toEqual(expected);
+    expect(ran).toEqual([]);
   });
 
   test.each([
@@ -147,7 +132,7 @@ describe('the values the setting types do not allow', () => {
 
   test('a refused value that is no plain data reads as contract’s textOf names it', () => {
     const words = /^an? (object|list|function|symbol|bigint)$/;
-    const noData = foreignValues(() => undefined).filter(({ shown }) => words.test(shown));
+    const noData = shownForeignValues(() => undefined).filter(({ shown }) => words.test(shown));
 
     const refused = noData.map(({ label, value }) => [label, refusalAt('maxDeliver', value)]);
 

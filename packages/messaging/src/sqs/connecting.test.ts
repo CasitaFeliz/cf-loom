@@ -1,6 +1,7 @@
 import { defineService } from '@cf-loom/contract';
 import { linesTextOf } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { aClosedUrl, anAwsConnecting, countCommands } from '../../test/aws-clients.ts';
 import { accountPlacesOf } from '../../test/foreign-limits.ts';
 import { aMotoServer, type MotoServer } from '../../test/moto-server.ts';
@@ -95,11 +96,7 @@ describe('sqs()', () => {
   test('sqs() refuses an account of any value its type does not allow on one line, never with what its code threw', () => {
     const connecting = anAwsConnecting(moto.url);
     const ran: string[] = [];
-    const throwing = () => {
-      ran.push('ran');
-      throw new Error('the value’s own code ran');
-    };
-    const places = accountPlacesOf(throwing);
+    const places = accountPlacesOf(aHookThatThrows(ran));
 
     const refused = places.map(({ name, account }) => {
       try {

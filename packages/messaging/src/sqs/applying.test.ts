@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNamingConvention: AWS names its fields in PascalCase, as they travel
 import { byCodePoint, linesTextOf } from '@cf-loom/contract/internal';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { aHookThatThrows } from '../../../contract/test/foreign-values.ts';
 import { lineBreakPattern, lineBreaks } from '../../../contract/test/line-breaks.ts';
 import {
   arrangeQueue,
@@ -1143,10 +1144,6 @@ describe('applyBrokerPlan', () => {
       return (await rejectionOf(applying)).message;
     };
     const ran: string[] = [];
-    const throwing = () => {
-      ran.push('ran');
-      throw new Error('the value’s own code ran');
-    };
     const sentences = new Map<string, string>();
     for (const { path, limits } of referencesOf(testLimits)) {
       sentences.set(path, expectedSentenceOf(await refusing(limits), path));
@@ -1154,11 +1151,11 @@ describe('applyBrokerPlan', () => {
 
     const refused: [string, string][] = [];
     const expected: [string, string][] = [];
-    for (const { name, path, limits, shown } of limitsPlacesOf(testLimits, throwing)) {
+    for (const { name, path, limits, shown } of limitsPlacesOf(testLimits, aHookThatThrows(ran))) {
       refused.push([name, await refusing(limits)]);
       expected.push([name, linesTextOf([`${path} ${shown} is not ${sentences.get(path)}`])]);
     }
-    for (const { name, account, shown } of accountPlacesOf(throwing)) {
+    for (const { name, account, shown } of accountPlacesOf(aHookThatThrows(ran))) {
       refused.push([name, await refusing(testLimits, account as string)]);
       const line = `connecting.account ${shown} is not a 12-digit AWS account id`;
       expected.push([name, linesTextOf([line])]);
