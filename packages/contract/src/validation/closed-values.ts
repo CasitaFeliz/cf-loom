@@ -1,5 +1,6 @@
 import { lifecycles } from '../declarations/index.ts';
-import { joinedOf, type Place } from '../walker/index.ts';
+import { joinedOf } from '../lines/index.ts';
+import type { Place } from '../walker/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 import { type DeclarationFailure, failure, type Rule } from './failures.ts';
 

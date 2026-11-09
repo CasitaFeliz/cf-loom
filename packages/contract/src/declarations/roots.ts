@@ -4,7 +4,7 @@ import { freezeDeclaration } from './freeze-declaration.ts';
 import type { Group } from './group.ts';
 import type { ProviderNameOf } from './provided.ts';
 import type { NotPublicEndpoint, NotPublicSentence, OwnProviderSentence } from './refusals.ts';
-import type { DeclaredFieldsRule, JoinedNames, LiteralNames, Refusal } from './rules.ts';
+import type { DeclaredFieldsRule, LiteralNames, Refusal } from './rules.ts';
 
 /**
  * What a Service's Root lists: its Groups, which list its Elements and Subscriptions, and its
@@ -59,9 +59,7 @@ type PublicOnlyRule<Declaration extends ApplicationContractDeclaration> = [
 ] extends [never]
   ? unknown
   : {
-      readonly dependencies: Refusal<
-        NotPublicSentence<JoinedNames<NonPublicOf<Declaration['dependencies']>>>
-      >;
+      readonly dependencies: Refusal<NotPublicSentence<NonPublicOf<Declaration['dependencies']>>>;
     };
 
 /** An Application's declared Contract, published so the registry records every use of a Service's Elements, an Application's included. */

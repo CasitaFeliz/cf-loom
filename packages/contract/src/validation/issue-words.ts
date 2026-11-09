@@ -1,4 +1,5 @@
 import type { $ZodInvalidTypeExpected, $ZodIssueTooSmall, $ZodRawIssue } from 'zod/v4/core';
+import { joinedOf } from '../lines/index.ts';
 import { writtenTextOf } from '../written/index.ts';
 
 type IssueOf<Code extends string> = Extract<$ZodRawIssue, { readonly code: Code }>;
@@ -36,8 +37,7 @@ function invalidTypeWords(issue: IssueOf<'invalid_type'>, definer: string): stri
 }
 
 function valuesWords(values: readonly unknown[]): string {
-  const allowed = values.map(writtenTextOf).join(', ');
-  return values.length === 1 ? `is not ${allowed}` : `is none of ${allowed}`;
+  return `is not ${joinedOf(values.map(writtenTextOf), 'or')}`;
 }
 
 /** A union keyed by a discriminator lists the values its options have, as an enum does. */

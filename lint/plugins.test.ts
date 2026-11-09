@@ -240,10 +240,44 @@ describe('lint plugins', () => {
       'C1@3',
       'C1@4',
       'C1@5',
+      'C1@6',
     ]);
-    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/probe.ts')).toEqual(['C1@6']);
     expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
-    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/line.ts')).toEqual(['C1@6']);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([
+      'C1@2',
+      'C1@3',
+      'C1@4',
+      'C1@5',
+    ]);
+  });
+
+  it('report a join on a comma and a space in any package’s source, the CLI included, each quote, optional calls, a join in a template and one after a map included, but not another separator, a test file, the joinedOf module, the codeListOf module or the fieldValueOf module (C1)', () => {
+    const lines = [
+      'const names = ["a", "b"];',
+      "export const single = names.join(', ');",
+      'export const double = names.join(", ");',
+      'export const template = names.join(`, `);',
+      "export const optional = names?.join(', ');",
+      "export const mapped = names.map((name) => name).join(', ');",
+      `export const inTemplate = \`[${'$'}{names.join(', ')}]\`;`,
+      "export const bare = names.join(',');",
+      "export const empty = names.join('');",
+      "export const space = names.join(' ');",
+      "export const semicolon = names.join('; ');",
+      "export const closed = names.join(' and ');",
+    ];
+    const reported = ['C1@2', 'C1@3', 'C1@4', 'C1@5', 'C1@6', 'C1@7'];
+
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/cli/src/config/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/probe.ts')).toEqual(reported);
+    expect(pluginReportsFor(lines, 'packages/messaging/src/probe.test.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/lines/joined-names.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/cli/src/source-text/code-lists.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'packages/contract/src/wire/field-values.ts')).toEqual([]);
+    expect(pluginReportsFor(lines, 'scripts/probe.ts')).toEqual([]);
   });
 
   it('report a console call in a library package’s source not given one spread of logOf, every method and form, but not the CLI, a test file or the line module (C1)', () => {

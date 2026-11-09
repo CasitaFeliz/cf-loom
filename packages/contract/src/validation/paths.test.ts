@@ -243,7 +243,7 @@ describe('validateRoot: params against the path', () => {
       failedAt(
         'endpoints.GET /orders/{}/items/{} (listOrders) input.params',
         'exact-params',
-        "params declares exactly the path's :names: orderId, itemId",
+        "params declares exactly the path's :names: orderId and itemId",
       ),
     );
   });

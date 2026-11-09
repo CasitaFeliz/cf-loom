@@ -927,6 +927,25 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(malformedAt(expectedAt));
       });
 
+      test('a params object that declares other fields than two params lists the params, closed by and', () => {
+        const identity = 'GET /orders/{}/items/{}';
+        const input = {
+          ...anEndpoint.input,
+          params: { type: 'object', fields: { id: idField } },
+        };
+
+        const result = serviceWith({
+          endpoints: { [identity]: { ...anEndpoint, params: ['orderId', 'itemId'], input } },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', identity, 'input', 'params'],
+            'declares other fields than the params: orderId and itemId',
+          ),
+        );
+      });
+
       test('a params object on a path without params is malformed at it', () => {
         const result = serviceWith({
           endpoints: {
@@ -1265,7 +1284,7 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(
         malformedAt(
           ['defs', 'tree', 'type'],
-          expect.stringMatching(/^is none of "string", "number", "boolean", .*"ref"$/),
+          expect.stringMatching(/^is not "string", "number", "boolean", .* or "ref"$/),
         ),
       );
     });
@@ -1274,7 +1293,7 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ kind: 'library' });
 
       expect(result).toEqual(
-        malformedAt(['kind'], 'is none of "service", "application", "definitions"'),
+        malformedAt(['kind'], 'is not "service", "application" or "definitions"'),
       );
     });
 
@@ -1372,7 +1391,7 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(
           malformedAt(
             ['endpoints', 'GET /orders/{}', 'visibility'],
-            'is none of "public", "internal", "private"',
+            'is not "public", "internal" or "private"',
           ),
         );
       });
@@ -1404,12 +1423,12 @@ describe('decodeSnapshot', () => {
         [
           'a lifecycle that is none of the three',
           { ...anEndpoint, lifecycle: 'archived' },
-          'is none of "active", "deprecated", "retired"',
+          'is not "active", "deprecated" or "retired"',
         ],
         [
           'a lifecycle that is no string',
           { ...anEndpoint, lifecycle: null },
-          'is none of "active", "deprecated", "retired"',
+          'is not "active", "deprecated" or "retired"',
         ],
         ['no lifecycle', { ...anEndpoint, lifecycle: undefined }, 'is missing'],
       ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint, reason) => {

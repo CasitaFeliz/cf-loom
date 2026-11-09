@@ -13,7 +13,13 @@ import {
   type Event,
   openEnum,
 } from '../index.ts';
-import { failureLineOf, type Root, type RootPackage, validateRoot } from '../internal/index.ts';
+import {
+  failureLineOf,
+  joinedOf,
+  type Root,
+  type RootPackage,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** The lines `generate` prints for a Root. */
 function linesOf(root: Root, given: Partial<RootPackage> = {}): readonly string[] {
@@ -166,7 +172,7 @@ describe('failure lines: an open union or intersection, reached from several sit
     const endpoints = ['c', 'a', 'b'].map((key) => anEndpoint(key, `GET /${key}`, { u: choice }));
 
     expect(linesOf(serviceWith(endpoints))).toEqual([
-      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b), endpoints.GET /c (c))`,
+      `endpoints.GET /a (a) success.body.u ${unionIsRefused} (also in endpoints.GET /b (b) and endpoints.GET /c (c))`,
     ]);
   });
 
@@ -1755,7 +1761,7 @@ function lineOf(group: readonly Telling[], exported: boolean): string {
   const [{ at, refusal, schema }] = group as readonly [Telling];
   const sites = new Set(group.flatMap((telling) => [...telling.sites]));
   const others = [...sites].filter((site) => site !== at.site).sort(byPoints);
-  const alsoIn = others.length === 0 ? '' : ` (also in ${others.join(', ')})`;
+  const alsoIn = others.length === 0 ? '' : ` (also in ${joinedOf(others, 'and')})`;
   const origin =
     exported && schema === 'shared' ? ' (declared in @org/definitions@4.2.0#stamp)' : '';
   return `${at.text} ${refusal}${alsoIn}${origin}`;

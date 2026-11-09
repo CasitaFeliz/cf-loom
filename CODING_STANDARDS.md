@@ -338,8 +338,10 @@ console call not given `...logOf(line, cause)`, and an Error's message, of a bui
 through the one rule of [Runtime](ARCHITECTURE.md#runtime) (C1; an aliased `console` or `Error`, a `DOMException` and an
 Error subclass that inherits Error's constructor are out of reach), outside a `*.test.ts`, a `new Request` whose init
 literal has a `signal` member, outside `wire/held-request.ts` (a variable init or a copied Request is out of reach)
-(C1), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`,
-`process.threadCpuUsage`) (C30).
+(C1), in any package's `src`, a list joined by `', '`, outside `joinedOf`, `codeListOf` and `fieldValueOf`, which write
+a list in a sentence, in code and in an HTTP field (C1; a list built by a template, an aliased separator and `scripts/`
+are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`,
+`process.cpuUsage`, `process.threadCpuUsage`) (C30).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`

@@ -12,7 +12,7 @@ import {
   type Root,
   reaches,
 } from '../declarations/index.ts';
-import { byCodePoint, fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
+import { fieldStep, indexStep, inside, type Place } from '../walker/index.ts';
 import {
   type Declarations,
   isEmptyField,
@@ -77,8 +77,7 @@ function providerFailures(
   if (providers.size < 2) {
     return [];
   }
-  const names = [...providers].sort(byCodePoint).join(', ');
-  const message = oneProviderSentence(names);
+  const message = oneProviderSentence([...providers]);
   return [failure(at, 'dependency-selection', message)];
 }
 

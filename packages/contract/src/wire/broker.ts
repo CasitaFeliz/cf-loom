@@ -1,5 +1,6 @@
 import { follows, kebabCase, ruleOf } from '../declarations/index.ts';
 import { subjectVersionOf } from '../written/index.ts';
+import { fieldValueOf } from './field-values.ts';
 import { kebabCaseOf } from './identifiers.ts';
 
 /** The header the Fact id travels in, never parsed out of the broker message id. */
@@ -90,14 +91,12 @@ export function receivedHeadersOf(
   return { kind: 'read', messageId, factId, headers: Object.fromEntries(transport) };
 }
 
-/** The values of each header name joined with `, `, as an HTTP header given several times is. */
+/** The values of each header name as one field value, as an HTTP header given several times is. */
 function joinedByName(entries: readonly (readonly [string, string])[]): Map<string, string> {
-  const valueByName = new Map<string, string>();
-  for (const [name, value] of entries) {
-    const before = valueByName.get(name);
-    valueByName.set(name, before === undefined ? value : `${before}, ${value}`);
-  }
-  return valueByName;
+  const grouped = Map.groupBy(entries, ([name]) => name);
+  return new Map(
+    [...grouped].map(([name, named]) => [name, fieldValueOf(named.map(([, value]) => value))]),
+  );
 }
 
 /** The stream of a Service, named after it: its own Messages travel on it, and a Durable consumer of its Events reads it. */
