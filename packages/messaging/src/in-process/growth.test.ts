@@ -161,6 +161,8 @@ describe('the growth of inProcess()', () => {
   });
 });
 
+const refusalStart = 'limits.durableConsumerDefaults.maxDeliver ';
+
 /** What `inProcess()` refuses a `maxDeliver` of the value with. */
 function refusalOf(value: unknown): unknown {
   try {
@@ -176,10 +178,15 @@ function refusalOrdersOf(build: (size: number) => unknown, sizes: Sizes) {
     [sizes.small, build(sizes.small)],
     [sizes.large, build(sizes.large)],
   ]);
-  const lengthAt = (size: number) => (refusalOf(built.get(size)) as Error).message.length;
-  const length = orderOfGrowth(lengthAt(sizes.large) / lengthAt(sizes.small), sizes);
+  const messageAt = (size: number) => (refusalOf(built.get(size)) as Error).message;
+  const length = orderOfGrowth(
+    messageAt(sizes.large).length / messageAt(sizes.small).length,
+    sizes,
+  );
   const time = orderOf((size) => () => refusalOf(built.get(size)), sizes, orders.flat);
-  return { time, length };
+  const refusals = [sizes.small, sizes.large].map(messageAt);
+  const isRefusal = refusals.every((message) => message.startsWith(refusalStart));
+  return { time, length, isRefusal };
 }
 
 /** A list of `width` entries and, in each of its first 100, a list like it down `levels`, the same one when `sharing`, else each its own; the last level holds at most 100 entries, the most a refusal reads. */
@@ -227,6 +234,26 @@ describe('the growth of a refusal showing a value', () => {
       sizes: { small: 100_000, large: 10_000_000 },
     },
     {
+      dimension: 'the length of a symbol’s description',
+      build: (size: number) => Symbol('x'.repeat(size)),
+      sizes: { small: 100_000, large: 10_000_000 },
+    },
+    {
+      dimension: 'the length of the descriptions of the symbols a list holds',
+      build: (size: number) => new Array<unknown>(100).fill(Symbol('x'.repeat(size))),
+      sizes: { small: 100_000, large: 10_000_000 },
+    },
+    {
+      dimension: 'the digits of a bigint',
+      build: (size: number) => 10n ** BigInt(size),
+      sizes: { small: 10_000, large: 1_000_000 },
+    },
+    {
+      dimension: 'the digits of the bigints a list holds',
+      build: (size: number) => new Array<unknown>(100).fill(10n ** BigInt(size)),
+      sizes: { small: 10_000, large: 1_000_000 },
+    },
+    {
       dimension: 'the width of lists that share one list at every level',
       build: (size: number) => treeOf(size, 2, 'shared'),
       sizes: { small: 1_000, large: 100_000 },
@@ -239,6 +266,7 @@ describe('the growth of a refusal showing a value', () => {
   ])('a refusal’s time and length stay flat in $dimension', ({ build, sizes }) => {
     const growth = refusalOrdersOf(build, sizes);
 
+    expect(growth.isRefusal).toBe(true);
     expect(growth.time).toBeLessThan(orders.flat);
     expect(growth.length).toBeLessThan(orders.flat);
   });

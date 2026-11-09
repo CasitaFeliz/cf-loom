@@ -1,4 +1,4 @@
-import { inspect, types } from 'node:util';
+import { inspect } from 'node:util';
 import { linesTextOf, textOf } from '@cf-loom/contract/internal';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { foreignKindOf, foreignValues } from '../../../contract/test/foreign-values.ts';
@@ -145,17 +145,16 @@ describe('the values the setting types do not allow', () => {
     },
   );
 
-  test('a refused value that is no plain data reads as contract’s textOf names it, a Proxy by its typeof alone', () => {
-    const words = /^an? (object|list|function)$/;
+  test('a refused value that is no plain data reads as contract’s textOf names it', () => {
+    const words = /^an? (object|list|function|symbol|bigint)$/;
     const noData = foreignValues(() => undefined).filter(({ shown }) => words.test(shown));
 
     const refused = noData.map(({ label, value }) => [label, refusalAt('maxDeliver', value)]);
 
-    const expected = noData.map(({ label, value }) => {
-      const typeofWord = typeof value === 'function' ? 'a function' : 'an object';
-      const word = types.isProxy(value) ? typeofWord : textOf(value);
-      return [label, `limits.durableConsumerDefaults.maxDeliver ${word} is not ${count}`];
-    });
+    const expected = noData.map(({ label, value }) => [
+      label,
+      `limits.durableConsumerDefaults.maxDeliver ${textOf(value)} is not ${count}`,
+    ]);
     expect(refused).toEqual(expected);
   });
 });

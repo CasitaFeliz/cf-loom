@@ -31,7 +31,7 @@ function aString(next: () => number): string {
   return Array.from({ length }, () => characters[Math.floor(next() * characters.length)]).join('');
 }
 
-/** The primitives a setting could be given and its type refuses: strings, numbers, `-0`, `NaN`, `null`, `undefined`, bigints and symbols. */
+/** The primitives a setting could be given and its type refuses: strings, numbers, `-0`, `NaN`, `null` and `undefined`. */
 function aPrimitive(next: () => number): unknown {
   const drawn = [
     aString(next),
@@ -43,8 +43,6 @@ function aPrimitive(next: () => number): unknown {
     true,
     null,
     undefined,
-    10n,
-    Symbol('a\nb'),
   ];
   return drawn[Math.floor(next() * drawn.length)];
 }

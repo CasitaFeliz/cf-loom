@@ -116,9 +116,7 @@ const rows: readonly Row[] = [
     'a function',
     (hooked) => new Proxy(function aFunction() {}, trapsCalling(hooked)),
   ),
-  readRunning(
-    row('a Proxy list', 'an object', (hooked) => new Proxy(['1s'], trapsCalling(hooked))),
-  ),
+  readRunning(row('a Proxy list', 'a list', (hooked) => new Proxy(['1s'], trapsCalling(hooked)))),
   readRunning(
     row('a list with an index getter', 'a list', (hooked) =>
       Object.defineProperty([1, 2], 0, { get: hooked, enumerable: true }),
@@ -148,8 +146,8 @@ const rows: readonly Row[] = [
     Object.assign(['30s', '0s'], { extra: 1 }),
   ),
   readRunning(row('a revoked Proxy', 'an object', aRevokedProxy)),
-  row('a Symbol with a line break', 'Symbol(a\\nb)', () => Symbol('a\nb')),
-  row('a bigint', '10n', () => 10n),
+  row('a Symbol with a line break', 'a symbol', () => Symbol('a\nb')),
+  row('a bigint', 'a bigint', () => 10n),
 ];
 
 /**
