@@ -338,33 +338,21 @@ describe('a refusal that lists names reads as generate writes it', () => {
     expect(messages).toEqual(['A path param appears once: ":id"']);
   });
 
-  test('an Endpoint whose path is a union of two paths is refused once for each path', () => {
-    const declaration = {
+  test('an Endpoint whose path is a union of paths with other :names is not judged by its type, generate judges the path it holds', () => {
+    const path = '/orders/:orderId' as '/orders/:orderId' | '/carts/:cartId';
+    const params = z.object({ orderId: z.uuid(), cartId: z.uuid() });
+    const withNoNames = '/a/:x' as '/a/:x' | '/b';
+
+    const both = defineEndpoint({ ...listOrders, path, input: { params } });
+    const oneName = defineEndpoint({
       ...listOrders,
-      path: '/a/:orderId/b/:itemId' as '/a/:orderId/b/:itemId' | '/c/:zeta',
-      input: { params: z.object({ id: z.uuid() }) },
-    } as const;
-    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
+      path: withNoNames,
+      input: { params: z.object({ x: z.string() }) },
+    });
 
-    expectTypeOf<SentencesOf<Written['input']['params']>>().toEqualTypeOf<
-      | "params declares exactly the path's :names: orderId and itemId"
-      | "params declares exactly the path's :names: zeta"
-    >();
-  });
-
-  test('an Endpoint whose path is a union with a path of no :names is refused for each path by its own rule', () => {
-    const declaration = {
-      ...listOrders,
-      path: '/a/:x' as '/a/:x' | '/b',
-      input: { params: z.object({ id: z.uuid() }) },
-    } as const;
-    type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
-
-    type Sentences = SentencesOf<Written['input']['params']>;
-
-    expectTypeOf<Sentences>().toEqualTypeOf<
-      "params declares exactly the path's :names: x" | 'A path without :names takes no params'
-    >();
+    const messages = messagesOf(serviceOf(both));
+    expect(oneName.path).toBe('/a/:x');
+    expect(messages).toEqual(["params declares exactly the path's :names: orderId"]);
   });
 
   test('a Guard listed before two Guards it requires is refused by type and by generate, closed by and', () => {

@@ -54,8 +54,7 @@ export type ListsSomethingRule<Declaration> = [Extract<keyof Declaration, Groupe
     }
   : unknown;
 
-/** What every member of a union holds at once. */
-export type IntersectionOf<Members> = (
+type IntersectionOf<Members> = (
   Members extends unknown
     ? (member: Members) => void
     : never
@@ -93,7 +92,11 @@ export type LiteralNames<Names> = Names extends string
     : Names
   : never;
 
-/** Whether a type is one value, not a union: a rule judges only what the author wrote exactly. */
+/**
+ * Whether a type is one value, not a union: a rule on a name or a path judges only what the author
+ * wrote exactly, and leaves a union to `generate`; a rule on a list of names judges the set of
+ * names its type may hold, and its refusal lists that same set, in the order the declaration does.
+ */
 export type IsOneLiteral<Value> = [Value] extends [never]
   ? false
   : [Value] extends [LastOf<Value>]

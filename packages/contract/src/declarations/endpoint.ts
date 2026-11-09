@@ -18,7 +18,6 @@ import type {
 import type { Rejection } from './rejection.ts';
 import type {
   DeclaredFieldsRule,
-  IntersectionOf,
   IsOneLiteral,
   LiteralNames,
   Refusal,
@@ -71,23 +70,21 @@ type InputOfDeclaration<Declaration extends EndpointDeclaration> = NonNullable<
   Declaration['input']
 >;
 
+/** What the params must be for a path written as one literal; `generate` judges any other, the one its value holds. */
 type ParamsRule<Declaration extends EndpointDeclaration> = string extends Declaration['path']
   ? unknown
-  : IntersectionOf<PathParamsRule<Declaration, Declaration['path']>>;
-
-/** What the params must be for one path, each path of a union judged by its own rule. */
-type PathParamsRule<
-  Declaration extends EndpointDeclaration,
-  Path extends string,
-> = Path extends unknown
-  ? [PathParams<Path>] extends [never]
-    ? { readonly input?: { readonly params?: Refusal<typeof noParamsSentence> } }
-    : {
-        readonly input: {
-          readonly params: ExactParamsRule<InputOfDeclaration<Declaration>['params'], Path>;
+  : IsOneLiteral<Declaration['path']> extends false
+    ? unknown
+    : [PathParams<Declaration['path']>] extends [never]
+      ? { readonly input?: { readonly params?: Refusal<typeof noParamsSentence> } }
+      : {
+          readonly input: {
+            readonly params: ExactParamsRule<
+              InputOfDeclaration<Declaration>['params'],
+              Declaration['path']
+            >;
+          };
         };
-      }
-  : never;
 
 type ExactParamsMessage<Path extends string> = Refusal<ExactParamsSentence<PathParamList<Path>>>;
 
