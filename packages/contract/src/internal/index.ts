@@ -293,8 +293,6 @@ export {
   invalidInputResponseOf,
   isBrokerPrefix,
   isIdHeaderValue,
-  isPrefixedName,
-  isPrefixedSubject,
   isQueryText,
   isSegmentText,
   isTextValue,

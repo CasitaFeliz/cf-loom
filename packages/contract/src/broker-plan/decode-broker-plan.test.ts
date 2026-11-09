@@ -1,10 +1,20 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { orderOf, orders } from '../../test/growth.ts';
+import { lineBreaks } from '../../test/line-breaks.ts';
 import { aRootPackage } from '../../test/root-package.ts';
-import { defineCommand, defineEvent, defineGroup, defineService } from '../index.ts';
+import {
+  defineCommand,
+  defineEvent,
+  defineGroup,
+  defineService,
+  defineSubscription,
+  providedEvent,
+} from '../index.ts';
 import {
   type BrokerPlan,
   brokerPlanOf,
+  byCodePoint,
   decodeBrokerPlan,
   snapshotOf,
   validateRoot,
@@ -25,6 +35,28 @@ const chargeCardV1 = defineCommand({
   body: z.object({ orderId: z.string() }),
 });
 
+const refundV1 = defineCommand({
+  name: 'Refund',
+  version: 1,
+  description: 'Refunds the order’s card',
+  body: z.object({ orderId: z.string() }),
+});
+
+const paymentSettledV1 = providedEvent('payments-service', {
+  name: 'PaymentSettled',
+  version: 1,
+  visibility: 'internal',
+  description: 'A payment was settled',
+  body: z.object({ paymentId: z.string() }),
+});
+
+const notifyOnSettled = defineSubscription({
+  name: 'notifyOnSettled',
+  description: 'Notifies the customer of each payment settled',
+  event: paymentSettledV1,
+});
+
+/** The plan `cf-loom broker-plan` prints for orders-service: a Stream, a Durable consumer for each Command Version and one for its Subscription. */
 function aServicePlan(prefix: string | null): BrokerPlan {
   const root = defineService({
     name: 'orders-service',
@@ -33,7 +65,8 @@ function aServicePlan(prefix: string | null): BrokerPlan {
         name: 'messages',
         description: 'Messages',
         events: [orderCreatedV1],
-        commands: [chargeCardV1],
+        commands: [chargeCardV1, refundV1],
+        subscriptions: [notifyOnSettled],
       }),
     ],
   });
@@ -48,6 +81,57 @@ function aServicePlan(prefix: string | null): BrokerPlan {
   return brokerPlanOf(snapshot, prefix);
 }
 
+/** The plan of `aServicePlan`, as JSON gives it back and a hand can edit it. */
+type EditablePlan = {
+  prefix: string | null;
+  streams: Record<string, { service: string; subjects: string[] }>;
+  durableConsumers: Record<string, { service: string; stream: string; subject: string }>;
+};
+
+function aPrintedPlan(prefix: string | null = null): EditablePlan {
+  const printed: EditablePlan = JSON.parse(JSON.stringify(aServicePlan(prefix)));
+  return printed;
+}
+
+const chargeCardDurableConsumer = 'orders-service_command_ChargeCard_v1';
+const refundDurableConsumer = 'orders-service_command_Refund_v1';
+const refundSubject = 'orders-service.command.Refund.v1';
+const chargeCardSubject = 'orders-service.command.ChargeCard.v1';
+
+/** The subjects of the Stream of orders-service the plan lists. */
+function ordersSubjectsOf(plan: EditablePlan): string[] {
+  return plan.streams['orders-service']?.subjects ?? [];
+}
+
+/** The plan with the fields of one Durable consumer it lists replaced. */
+function withDurableConsumer(
+  plan: EditablePlan,
+  name: string,
+  fields: Partial<EditablePlan['durableConsumers'][string]>,
+): EditablePlan {
+  const durableConsumer = plan.durableConsumers[name];
+  if (durableConsumer === undefined) {
+    throw new Error(`The plan lists no Durable consumer ${name}`);
+  }
+  return {
+    ...plan,
+    durableConsumers: { ...plan.durableConsumers, [name]: { ...durableConsumer, ...fields } },
+  };
+}
+
+/** The plan with the fields of one Stream it lists replaced. */
+function withStream(
+  plan: EditablePlan,
+  name: string,
+  fields: Partial<EditablePlan['streams'][string]>,
+): EditablePlan {
+  const stream = plan.streams[name];
+  if (stream === undefined) {
+    throw new Error(`The plan lists no Stream ${name}`);
+  }
+  return { ...plan, streams: { ...plan.streams, [name]: { ...stream, ...fields } } };
+}
+
 const ordersStream = 'staging_orders-service';
 const invoiceDurableConsumer = 'staging_billing-service_draft-invoice';
 const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
@@ -55,7 +139,7 @@ const orderCreated = 'staging.orders-service.event.OrderCreated.v1';
 function aPlan(fields: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     prefix: 'staging',
-    streams: { [ordersStream]: { service: 'orders-service', subjects: [orderCreated] } },
+    streams: {},
     durableConsumers: {
       [invoiceDurableConsumer]: {
         service: 'billing-service',
@@ -67,13 +151,13 @@ function aPlan(fields: Record<string, unknown> = {}): Record<string, unknown> {
   };
 }
 
-/** A prefixed plan with one stream, whose fields are `fields` over the valid ones. */
+/** A prefixed plan with one Stream and no Durable consumer, whose fields are `fields` over the valid ones. */
 function aPlanWithStream(fields: Record<string, unknown>, name = ordersStream) {
   const stream = { service: 'orders-service', subjects: [orderCreated], ...fields };
-  return aPlan({ streams: { [name]: stream } });
+  return aPlan({ streams: { [name]: stream }, durableConsumers: {} });
 }
 
-/** A prefixed plan with one Durable consumer, whose fields are `fields` over the valid ones. */
+/** A prefixed plan with one Durable consumer and no Stream, whose fields are `fields` over the valid ones. */
 function aPlanWithDurableConsumer(fields: Record<string, unknown>, name = invoiceDurableConsumer) {
   const durableConsumer = {
     service: 'billing-service',
@@ -109,7 +193,7 @@ describe('reading a broker plan', () => {
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
   });
 
-  test('a prefixed plan whose names and subjects carry its prefix decodes', () => {
+  test('a Subscriber’s plan, whose Durable consumer reads another Service’s Stream and which has no Stream of its own, decodes', () => {
     const plan = aPlan();
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
@@ -136,6 +220,21 @@ describe('reading a broker plan', () => {
       'a stream with a key the shape does not have',
       aPlanWithStream({ retention: 'limits' }),
       `streams.${ordersStream}.retention is a key the Broker plan does not define`,
+    ],
+    [
+      'a plan with a __proto__ key',
+      aPlan(Object.fromEntries([['__proto__', 1]])),
+      '__proto__ is a key the Broker plan does not define',
+    ],
+    [
+      'a stream with a __proto__ key',
+      aPlanWithStream(Object.fromEntries([['__proto__', 1]])),
+      `streams.${ordersStream}.__proto__ is a key the Broker plan does not define`,
+    ],
+    [
+      'a Durable consumer with a __proto__ key',
+      aPlanWithDurableConsumer(Object.fromEntries([['__proto__', 1]])),
+      `durableConsumers.${invoiceDurableConsumer}.__proto__ is a key the Broker plan does not define`,
     ],
     [
       'a stream with no service',
@@ -215,13 +314,501 @@ describe('reading a broker plan', () => {
     },
   );
 
-  test('a plan without a prefix asks no name or subject to carry one', () => {
+  test.each([
+    [
+      'Stream',
+      aPlan({
+        streams: Object.fromEntries([
+          ['__proto__', { service: 'orders-service', subjects: [orderCreated] }],
+        ]),
+      }),
+      'streams.__proto__ is not a Stream name: a Service name after the prefix',
+    ],
+    [
+      'Durable consumer',
+      aPlan({
+        durableConsumers: Object.fromEntries([
+          [
+            '__proto__',
+            { service: 'billing-service', stream: ordersStream, subject: orderCreated },
+          ],
+        ]),
+      }),
+      'durableConsumers.__proto__ is not a Durable consumer name: a Service name, then a Subscription name or a Command Version',
+    ],
+  ])('a plan with a __proto__ %s is malformed, never decoded without it', (_, plan, reason) => {
+    expect(decodeBrokerPlan(plan)).toEqual(malformed(reason));
+  });
+
+  test.for(lineBreaks)('a Stream named with %s is malformed, naming it', ([, code]) => {
+    const name = `${ordersStream}${String.fromCharCode(code)}x`;
+
+    const decoded = decodeBrokerPlan(aPlanWithStream({}, name));
+
+    expect(decoded).toEqual(
+      malformed(`streams.${name} is not a Stream name: a Service name after the prefix`),
+    );
+  });
+
+  const notStreamName = 'is not a Stream name: a Service name after the prefix';
+  const notDurableConsumerName =
+    'is not a Durable consumer name: a Service name, then a Subscription name or a Command Version';
+  const notSubject =
+    'is not a subject: a Service name, event or command, a Message name and its version';
+
+  const unreadableStreamNames = [
+    '',
+    'a.b',
+    'Orders',
+    'a b',
+    '*',
+    '>',
+    '-a',
+    'a--b',
+    'a'.repeat(65),
+  ].map((rest) => `staging_${rest}`);
+
+  test.each(unreadableStreamNames)('a Stream named "%s" is malformed, naming it', (name) => {
+    expect(decodeBrokerPlan(aPlanWithStream({}, name))).toEqual(
+      malformed(`streams.${name} ${notStreamName}`),
+    );
+  });
+
+  test.each(unreadableStreamNames)(
+    'a Durable consumer reading the Stream "%s" is malformed, naming it',
+    (stream) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ stream }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.stream ${notStreamName}`),
+      );
+    },
+  );
+
+  test.each([
+    '',
+    'billing-service',
+    'billing-service_',
+    '_draft-invoice',
+    'Billing_draft-invoice',
+    `${'a'.repeat(65)}_draft-invoice`,
+    'billing-service_Draft',
+    'billing-service_draft-Invoice',
+    'billing-service_draft--invoice',
+    'billing-service_draft-invoice-',
+    'billing-service_draft_invoice',
+    'billing-service_ x>',
+    'billing-service_constructor',
+    `billing-service_${'a'.repeat(65)}`,
+    'billing-service_command_chargeCard_v1',
+    'billing-service_command_ChargeCard_v0',
+    'billing-service_command_ChargeCard_v01',
+    'billing-service_command_ChargeCard_v',
+    'billing-service_command_ChargeCard_1',
+    'billing-service_command_ChargeCard_v9007199254740992',
+  ])('a Durable consumer named "staging_%s" is malformed, naming it', (rest) => {
+    const name = `staging_${rest}`;
+
+    const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({}, name));
+
+    expect(decoded).toEqual(malformed(`durableConsumers.${name} ${notDurableConsumerName}`));
+  });
+
+  const unreadableSubjects = [
+    '',
+    '>',
+    '*.event.*.v1',
+    'orders-service.x',
+    'orders-service.event.>',
+    'orders-service.event.OrderCreated',
+    'orders-service.event.OrderCreated.1',
+    'orders-service.event.OrderCreated.v0',
+    'orders-service.event.OrderCreated.v01',
+    'orders-service.event.OrderCreated.v1e0',
+    'orders-service.event.OrderCreated.v9007199254740992',
+    'orders-service.event.OrderCreated.v1.x',
+    'orders-service.query.OrderCreated.v1',
+    'orders-service.event.orderCreated.v1',
+    'Orders-service.event.OrderCreated.v1',
+    `${'a'.repeat(65)}.event.OrderCreated.v1`,
+  ].map((rest) => `staging.${rest}`);
+
+  test.each(unreadableSubjects)(
+    'a Stream holding the subject "%s" is malformed, naming it',
+    (subject) => {
+      const decoded = decodeBrokerPlan(aPlanWithStream({ subjects: [subject] }));
+
+      expect(decoded).toEqual(malformed(`streams.${ordersStream}.subjects.0 ${notSubject}`));
+    },
+  );
+
+  test.each(unreadableSubjects)(
+    'a Durable consumer filtering on the subject "%s" is malformed, naming it',
+    (subject) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ subject }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.subject ${notSubject}`),
+      );
+    },
+  );
+
+  const notServiceName = 'is not a Service name, kebab-case of at most 64 characters';
+
+  const unreadableServiceNames = [
+    '',
+    'Not A Service\n',
+    'Orders',
+    'orders_service',
+    'orders.service',
+    'orders--service',
+    'orders-service-',
+    'staging_orders-service',
+    'a'.repeat(65),
+  ];
+
+  test.each(unreadableServiceNames)(
+    'a Stream whose service is "%s" is malformed, naming it',
+    (service) => {
+      const decoded = decodeBrokerPlan(aPlanWithStream({ service }));
+
+      expect(decoded).toEqual(malformed(`streams.${ordersStream}.service ${notServiceName}`));
+    },
+  );
+
+  test.each(unreadableServiceNames)(
+    'a Durable consumer whose service is "%s" is malformed, naming it',
+    (service) => {
+      const decoded = decodeBrokerPlan(aPlanWithDurableConsumer({ service }));
+
+      expect(decoded).toEqual(
+        malformed(`durableConsumers.${invoiceDurableConsumer}.service ${notServiceName}`),
+      );
+    },
+  );
+
+  test('a Stream named after a Service named constructor decodes', () => {
     const plan = {
       prefix: null,
-      streams: { 'orders-service': { service: 'orders-service', subjects: ['orders-service.x'] } },
+      streams: {
+        constructor: { service: 'constructor', subjects: ['constructor.event.OrderCreated.v1'] },
+      },
       durableConsumers: {},
     };
 
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
   });
+
+  const reprinted = "is not what the Broker plan's names print for orders-service";
+
+  test('a plan that points a command’s Durable consumer at another Command Version’s subject is malformed, naming its subject', () => {
+    const plan = withDurableConsumer(aPrintedPlan(), chargeCardDurableConsumer, {
+      subject: refundSubject,
+    });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.${chargeCardDurableConsumer}.subject ${reprinted}`),
+    );
+  });
+
+  test.each([
+    [
+      'Streams',
+      (plan: EditablePlan): EditablePlan => ({
+        ...plan,
+        streams: {
+          ...plan.streams,
+          'payments-service': {
+            service: 'payments-service',
+            subjects: ['payments-service.event.PaymentSettled.v1'],
+          },
+        },
+      }),
+      'streams.payments-service',
+    ],
+    [
+      'Durable consumers',
+      (plan: EditablePlan): EditablePlan => ({
+        ...plan,
+        durableConsumers: {
+          ...plan.durableConsumers,
+          'payments-service_notify-on-created': {
+            service: 'payments-service',
+            stream: 'orders-service',
+            subject: 'orders-service.event.OrderCreated.v1',
+          },
+        },
+      }),
+      'durableConsumers.payments-service_notify-on-created',
+    ],
+  ])(
+    'a plan that merges the %s of two Services is malformed, naming the first entry of the second',
+    (_, merge, at) => {
+      const decoded = decodeBrokerPlan(merge(aPrintedPlan()));
+
+      expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
+    },
+  );
+
+  test('a Stream whose name is not its service’s is malformed, naming its name', () => {
+    const plan = withStream(aPrintedPlan(), 'orders-service', { service: 'billing-service' });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(
+        "streams.orders-service is not what the Broker plan's names print for billing-service",
+      ),
+    );
+  });
+
+  test('a command’s Durable consumer filtering on an Event’s subject is malformed, naming its subject', () => {
+    const plan = withDurableConsumer(aPrintedPlan(), chargeCardDurableConsumer, {
+      subject: 'orders-service.event.OrderCreated.v1',
+    });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.${chargeCardDurableConsumer}.subject ${reprinted}`),
+    );
+  });
+
+  test('a Subscriber’s Durable consumer reading a Stream other than its subject’s Service’s is malformed, naming its stream', () => {
+    const plan = withDurableConsumer(aPrintedPlan(), 'orders-service_notify-on-settled', {
+      stream: 'orders-service',
+    });
+
+    const decoded = decodeBrokerPlan(plan);
+
+    expect(decoded).toEqual(
+      malformed(`durableConsumers.orders-service_notify-on-settled.stream ${reprinted}`),
+    );
+  });
+
+  test('a Stream holding a command’s subject with no Durable consumer for it is malformed, naming the missing name', () => {
+    const { [refundDurableConsumer]: _, ...durableConsumers } = aPrintedPlan().durableConsumers;
+
+    const decoded = decodeBrokerPlan({ ...aPrintedPlan(), durableConsumers: durableConsumers });
+
+    expect(decoded).toEqual(
+      malformed(
+        `durableConsumers lacks ${refundDurableConsumer}, which the Broker plan's names print for orders-service`,
+      ),
+    );
+  });
+
+  test.each([
+    [
+      'subjects out of code point order',
+      (plan: EditablePlan) =>
+        withStream(plan, 'orders-service', { subjects: ordersSubjectsOf(plan).toReversed() }),
+      'streams.orders-service.subjects.0',
+    ],
+    [
+      'a subject listed twice',
+      (plan: EditablePlan) =>
+        withStream(plan, 'orders-service', {
+          subjects: [...ordersSubjectsOf(plan), refundSubject].toSorted(),
+        }),
+      'streams.orders-service.subjects.2',
+    ],
+    [
+      'Durable consumers out of code point order',
+      (plan: EditablePlan) => ({
+        ...plan,
+        durableConsumers: Object.fromEntries(Object.entries(plan.durableConsumers).reverse()),
+      }),
+      'durableConsumers.orders-service_notify-on-settled',
+    ],
+  ])('a plan with %s is malformed, naming the first item out of place', (_, edit, at) => {
+    const decoded = decodeBrokerPlan(edit(aPrintedPlan()));
+
+    expect(decoded).toEqual(malformed(`${at} ${reprinted}`));
+  });
+
+  describe('a Durable consumer of a Subscription to its own Service’s Event', () => {
+    const onCreated = (prefix: string | null) => {
+      const stream = prefix === null ? 'orders-service' : `${prefix}_orders-service`;
+      const subject = `${prefix === null ? '' : `${prefix}.`}orders-service.event.OrderCreated.v1`;
+      const name = `${prefix === null ? '' : `${prefix}_`}orders-service_on-created`;
+      return { stream, subject, name, entry: { service: 'orders-service', stream, subject } };
+    };
+
+    test('on a Stream that lacks the Event’s subject is malformed, naming the missing subject', () => {
+      const created = onCreated(null);
+      const printed = aPrintedPlan();
+      const subjects = ordersSubjectsOf(printed).filter((one) => one !== created.subject);
+      const plan = {
+        ...withStream(printed, 'orders-service', { subjects }),
+        durableConsumers: { ...printed.durableConsumers, [created.name]: created.entry },
+      };
+
+      const decoded = decodeBrokerPlan(plan);
+
+      expect(decoded).toEqual(
+        malformed(
+          `streams.orders-service.subjects lacks ${created.subject}, which the Broker plan's names print for orders-service`,
+        ),
+      );
+    });
+
+    test('on a Stream that holds only a Command’s subject is malformed, naming the missing subject', () => {
+      const created = onCreated(null);
+      const plan = {
+        prefix: null,
+        streams: { 'orders-service': { service: 'orders-service', subjects: [chargeCardSubject] } },
+        durableConsumers: {
+          [chargeCardDurableConsumer]: {
+            service: 'orders-service',
+            stream: 'orders-service',
+            subject: chargeCardSubject,
+          },
+          [created.name]: created.entry,
+        },
+      };
+
+      const decoded = decodeBrokerPlan(plan);
+
+      expect(decoded).toEqual(
+        malformed(
+          `streams.orders-service.subjects lacks ${created.subject}, which the Broker plan's names print for orders-service`,
+        ),
+      );
+    });
+
+    test.each([
+      ['without a prefix', null, 'orders-service'],
+      ['under a prefix', 'staging', 'staging_orders-service'],
+    ])(
+      'in a plan with no Stream, %s, is malformed, naming the missing Stream',
+      (_, prefix, stream) => {
+        const created = onCreated(prefix);
+        const plan = { prefix, streams: {}, durableConsumers: { [created.name]: created.entry } };
+
+        const decoded = decodeBrokerPlan(plan);
+
+        expect(decoded).toEqual(
+          malformed(
+            `streams lacks ${stream}, which the Broker plan's names print for orders-service`,
+          ),
+        );
+      },
+    );
+  });
+
+  test('a plan without a prefix asks no name or subject to carry one', () => {
+    const plan = {
+      prefix: null,
+      streams: {
+        'orders-service': {
+          service: 'orders-service',
+          subjects: ['orders-service.event.OrderCreated.v1'],
+        },
+      },
+      durableConsumers: {},
+    };
+
+    expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
+  });
+});
+
+const entryCounts = { small: 1_000, large: 8_000 };
+const textLengths = { small: 100_000, large: 800_000 };
+
+/** A plan of orders-service whose one Stream holds `count` subjects, in code point order. */
+function aPlanOfSubjects(count: number) {
+  const subjects = Array.from(
+    { length: count },
+    (_, at) => `orders-service.event.OrderCreated.v${at + 1}`,
+  );
+  const stream = { service: 'orders-service', subjects: subjects.toSorted(byCodePoint) };
+  return { prefix: null, streams: { 'orders-service': stream }, durableConsumers: {} };
+}
+
+/** A plan of orders-service with no Stream and `count` Subscriptions, in code point order. */
+function aPlanOfDurableConsumers(count: number) {
+  const durableConsumers = Array.from({ length: count }, (_, at) => [
+    `orders-service_s${at}`,
+    {
+      service: 'orders-service',
+      stream: 'payments-service',
+      subject: `payments-service.event.PaymentSettled.v${at + 1}`,
+    },
+  ]);
+  const sorted = durableConsumers.toSorted(([left], [right]) =>
+    byCodePoint(String(left), String(right)),
+  );
+  return { prefix: null, streams: {}, durableConsumers: Object.fromEntries(sorted) };
+}
+
+/** A plan of `count` Streams, each its own Service's, which no Service prints. */
+function aPlanOfStreams(count: number) {
+  const streams = Array.from({ length: count }, (_, at) => [
+    `s${at}`,
+    { service: `s${at}`, subjects: [`s${at}.event.OrderCreated.v1`] },
+  ]);
+  return { prefix: null, streams: Object.fromEntries(streams), durableConsumers: {} };
+}
+
+/** A plan whose one Stream, Durable consumer or subject has a text of `length` characters that every grammar refuses. */
+function aPlanWithLongText(site: 'stream' | 'durable-consumer' | 'subject', length: number) {
+  const subject = `orders-service.event.${site === 'subject' ? `A${'a'.repeat(length)}` : 'OrderCreated'}.v1`;
+  const name = site === 'stream' ? `${'a'.repeat(length)}A` : 'orders-service';
+  const durableConsumer =
+    site === 'durable-consumer' ? `orders-service_${'a'.repeat(length)}` : 'orders-service_s';
+  return {
+    prefix: null,
+    streams: { [name]: { service: 'orders-service', subjects: [subject] } },
+    durableConsumers: {
+      [durableConsumer]: {
+        service: 'orders-service',
+        stream: 'payments-service',
+        subject: subject,
+      },
+    },
+  };
+}
+
+describe('the time to read a plan', () => {
+  test('a Stream of many subjects and many Durable consumers are decoded', () => {
+    const decoded = [
+      aPlanOfSubjects(entryCounts.large),
+      aPlanOfDurableConsumers(entryCounts.large),
+    ].map((plan) => decodeBrokerPlan(plan).kind);
+
+    expect(decoded).toEqual(['decoded', 'decoded']);
+  });
+
+  test.each([
+    ['the subjects of its Stream', aPlanOfSubjects, entryCounts],
+    ['its Durable consumers', aPlanOfDurableConsumers, entryCounts],
+    ['its Streams, which are refused once all are read', aPlanOfStreams, entryCounts],
+  ])('grows linearly with %s', (_, aPlanOf, sizes) => {
+    const reading = (size: number) => {
+      const plan = aPlanOf(size);
+      return () => decodeBrokerPlan(plan);
+    };
+
+    const order = orderOf(reading, sizes, orders.linear);
+
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test.each(['stream', 'durable-consumer', 'subject'] as const)(
+    'refusing a %s of any length grows linearly with it',
+    (site) => {
+      const refusal = (length: number) => {
+        const plan = aPlanWithLongText(site, length);
+        return () => decodeBrokerPlan(plan);
+      };
+
+      const order = orderOf(refusal, textLengths, orders.linear);
+
+      expect(decodeBrokerPlan(aPlanWithLongText(site, textLengths.large)).kind).toBe('malformed');
+      expect(order).toBeLessThan(orders.linear);
+    },
+  );
 });

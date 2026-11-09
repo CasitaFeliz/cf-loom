@@ -1,6 +1,7 @@
 export { exportNamesOf } from './export-names.ts';
 export type { Failure, NotAllowedFailure } from './failures.ts';
 export { failureLineOf } from './failures.ts';
+export { everyKeyRecordOf } from './keyed.ts';
 export { rootNameProblemOf } from './name-grammars.ts';
 export type { Problem, Read } from './problem.ts';
 export { problemLineOf, readWith } from './problem.ts';
