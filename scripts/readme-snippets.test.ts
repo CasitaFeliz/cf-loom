@@ -127,12 +127,34 @@ describe('the README snippet check', () => {
     expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:4: .*repository.*scope/)]);
   });
 
-  test('a TypeScript block that is never closed is reported', () => {
-    const readme = { path: 'FIXTURE.md', markdown: `Text.\n\n${fence}ts\nconst quantity = 1;\n` };
+  test('a TypeScript block never closed runs to the end of the README and is type-checked', () => {
+    const readme = {
+      path: 'FIXTURE.md',
+      markdown: `Text.\n\n${fence}ts\nconst quantity: number = 'three';\n`,
+    };
 
     const problems = snippetProblems([readme], {});
 
-    expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:3: .*never closed/)]);
+    expect(problems).toEqual([expect.stringMatching(/^FIXTURE\.md:4: error TS2322/)]);
+  });
+
+  test.each([
+    ['a tilde fence', `~~~ts\nconst quantity: number = 'three';\n~~~\n`],
+    ['a four-backtick fence', `${fence}\`ts\nconst quantity: number = 'three';\n${fence}\`\n`],
+    ['a blockquote', `> ${fence}ts\n> const quantity: number = 'three';\n> ${fence}\n`],
+    [
+      'a list item',
+      `- An item:\n\n  ${fence}ts\n  const quantity: number = 'three';\n  ${fence}\n`,
+    ],
+  ])('a type error in a block in %s is reported at its README line', (_, block) => {
+    const readme = { path: 'FIXTURE.md', markdown: `Text.\n\n${block}` };
+    const line = block.split('\n').findIndex((row) => row.includes('quantity')) + 3;
+
+    const problems = snippetProblems([readme], {});
+
+    expect(problems).toEqual([
+      expect.stringMatching(new RegExp(`^FIXTURE\\.md:${line}: error TS2322`)),
+    ]);
   });
 
   test.each([
