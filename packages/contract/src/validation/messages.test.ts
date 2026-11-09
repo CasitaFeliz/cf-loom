@@ -612,6 +612,30 @@ describe('validateRoot: a Message body beside a schema that fails', () => {
     ]);
   });
 
+  test('a body that is a def that admits null tells that def’s line alone, which owns its nullability', () => {
+    const node: z.ZodType = z
+      .object({
+        get next() {
+          return node.optional();
+        },
+      })
+      .nullable()
+      .meta({ id: 'nd' });
+
+    expect(validateMessages([anEvent({ body: node })])).toEqual({
+      kind: 'invalid',
+      failures: [
+        {
+          kind: 'not-allowed',
+          location: eventAt,
+          construct: '.meta({ id: "nd" }) on a schema that admits null',
+          instead: '.meta({ id }) on the schema inside, and .nullable() on each use',
+          alsoIn: [],
+        },
+      ],
+    });
+  });
+
   test('a body that is a nullable ref to a def that fails on its own tells both', () => {
     expect(validateMessages([anEvent({ body: treeWith(z.date()).nullable() })])).toEqual({
       kind: 'invalid',
