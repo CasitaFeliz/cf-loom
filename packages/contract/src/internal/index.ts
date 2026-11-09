@@ -382,5 +382,6 @@ export {
   subscriptionsOf,
   successParts,
   successShapeOf,
+  textOf,
   writtenTextOf,
 } from '../written/index.ts';

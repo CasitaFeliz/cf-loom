@@ -66,8 +66,11 @@ export function isWithoutValue(value: unknown): value is undefined | null {
   return value === undefined || value === null;
 }
 
-/** A value as a sentence or a location names it; an object has no text of its own. */
+/** A value as a sentence or a location names it, running none of its code: an object, a list or a function has no text of its own. */
 export function textOf(value: unknown): string {
+  if (typeof value === 'function') {
+    return 'a function';
+  }
   if (typeof value === 'object' && value !== null) {
     return Array.isArray(value) ? 'a list' : 'an object';
   }
