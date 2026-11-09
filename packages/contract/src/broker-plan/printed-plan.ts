@@ -1,0 +1,123 @@
+import type { Problem } from '../validation/index.ts';
+import type { Path } from '../walker/index.ts';
+import { type RoutedSubscription, subjectOf } from '../wire/index.ts';
+import { type BrokerPlan, brokerPlanOfRoutes, type RoutedService } from './broker-plan.ts';
+import type { ReadPlan } from './read-plan.ts';
+
+/** A place where a Broker plan differs from the one its own parts print for the Service it names first. */
+export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | undefined {
+  const service = read.streams[0]?.service ?? read.durableConsumers[0]?.service;
+  if (service === undefined) {
+    return undefined;
+  }
+  const printed = brokerPlanOfRoutes(routedOf(service, read), plan.prefix);
+  return (
+    streamDifferenceOf(plan, printed, service) ??
+    durableConsumerDifferenceOf(plan, printed, service)
+  );
+}
+
+/** What the Service the plan names first routes, read from its texts: the Message Versions its Stream's subjects name, each once, and the Subscriptions its Durable consumers are. */
+function routedOf(service: string, read: ReadPlan): RoutedService {
+  const subscriptions: RoutedSubscription[] = [];
+  for (const { consumed, subject } of read.durableConsumers) {
+    if (consumed.kind === 'subscription') {
+      const event = { name: subject.name, version: subject.version };
+      subscriptions.push({ name: consumed.name, provider: subject.service, event });
+    }
+  }
+  const streamed = read.streams.flatMap((stream) => stream.subjects);
+  const own = streamed.filter((subject) => subject.service === service);
+  const messages = new Map(own.map((message) => [subjectOf(service, message), message]));
+  return { service, messages: [...messages.values()], subscriptions };
+}
+
+function streamDifferenceOf(
+  plan: BrokerPlan,
+  printed: BrokerPlan,
+  service: string,
+): Problem | undefined {
+  const names = listDifferenceOf(Object.keys(plan.streams), Object.keys(printed.streams), {
+    service,
+    at: ['streams'],
+    placeOf: (_, name) => ['streams', name],
+  });
+  if (names !== undefined) {
+    return names;
+  }
+  for (const [name, stream] of Object.entries(plan.streams)) {
+    const subjects = listDifferenceOf(stream.subjects, printed.streams[name]?.subjects ?? [], {
+      service,
+      at: ['streams', name, 'subjects'],
+      placeOf: (index) => ['streams', name, 'subjects', index],
+    });
+    if (subjects !== undefined) {
+      return subjects;
+    }
+  }
+  return undefined;
+}
+
+const durableConsumerFields = ['service', 'stream', 'subject'] as const;
+
+function durableConsumerDifferenceOf(
+  plan: BrokerPlan,
+  printed: BrokerPlan,
+  service: string,
+): Problem | undefined {
+  const names = listDifferenceOf(
+    Object.keys(plan.durableConsumers),
+    Object.keys(printed.durableConsumers),
+    { service, at: ['durableConsumers'], placeOf: (_, name) => ['durableConsumers', name] },
+  );
+  if (names !== undefined) {
+    return names;
+  }
+  for (const [name, durableConsumer] of Object.entries(plan.durableConsumers)) {
+    const expected = printed.durableConsumers[name];
+    const field = durableConsumerFields.find((key) => expected?.[key] !== durableConsumer[key]);
+    if (field !== undefined) {
+      return unprintedAt(['durableConsumers', name, field], service);
+    }
+  }
+  return undefined;
+}
+
+/** Where a list of the plan sits, the place of one of its items and the Service whose plan it is compared with. */
+type Comparison = {
+  readonly service: string;
+  readonly at: Path;
+  readonly placeOf: (index: number, item: string) => Path;
+};
+
+/** An item the printed list lacks, then one it does not hold, then the first out of its order or repeated. */
+function listDifferenceOf(
+  given: readonly string[],
+  printed: readonly string[],
+  where: Comparison,
+): Problem | undefined {
+  const printedItems = new Set(printed);
+  for (const [index, item] of given.entries()) {
+    if (!printedItems.has(item)) {
+      return unprintedAt(where.placeOf(index, item), where.service);
+    }
+  }
+  const givenItems = new Set(given);
+  const lacking = printed.find((item) => !givenItems.has(item));
+  if (lacking !== undefined) {
+    return {
+      at: where.at,
+      reason: `lacks ${lacking}, which the Broker plan's names print for ${where.service}`,
+    };
+  }
+  for (const [index, item] of given.entries()) {
+    if (item !== printed[index]) {
+      return unprintedAt(where.placeOf(index, item), where.service);
+    }
+  }
+  return undefined;
+}
+
+function unprintedAt(at: Path, service: string): Problem {
+  return { at, reason: `is not what the Broker plan's names print for ${service}` };
+}

@@ -65,6 +65,20 @@ describe('brokerNeedsOf', () => {
     ]);
   });
 
+  test('a Subscription to its own Service’s Event keeps that Event’s subject on the stream, once, live Message Version or not', () => {
+    const own = {
+      name: 'orderCreated',
+      provider: 'shop-service',
+      event: { name: 'OrderCreated', version: 1 },
+    };
+
+    const live = brokerNeedsOf('shop-service', [event(1, 'active')], [own]);
+    const unlisted = brokerNeedsOf('shop-service', [], [own]);
+
+    expect(live.streamSubjects).toEqual(['shop-service.event.OrderCreated.v1']);
+    expect(unlisted.streamSubjects).toEqual(['shop-service.event.OrderCreated.v1']);
+  });
+
   test('a Message Version that declares no lifecycle is Active', () => {
     const declared = { kind: 'command', name: 'ShipOrder', version: 1 } as const;
 

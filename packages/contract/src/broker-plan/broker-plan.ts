@@ -38,12 +38,28 @@ export type BrokerPlan = {
  * Message Version of its own is not Retired, and the Durable consumer of each Subscription and live Command Version.
  */
 export function brokerPlanOf(snapshot: ServiceSnapshot, prefix: string | null): BrokerPlan {
-  const service = snapshot.name;
-  const needs = brokerNeedsOf(
-    service,
-    [...messagesOf('event', snapshot.events), ...messagesOf('command', snapshot.commands)],
-    Object.entries(snapshot.subscriptions).map(subscriptionOf),
-  );
+  const routed = {
+    service: snapshot.name,
+    messages: [
+      ...messagesOf('event', snapshot.events),
+      ...messagesOf('command', snapshot.commands),
+    ],
+    subscriptions: Object.entries(snapshot.subscriptions).map(subscriptionOf),
+  };
+  return brokerPlanOfRoutes(routed, prefix);
+}
+
+/** What one Service routes over the Broker: its Message Versions and the Subscriptions it holds. */
+export type RoutedService = {
+  readonly service: string;
+  readonly messages: readonly RoutedMessage[];
+  readonly subscriptions: readonly RoutedSubscription[];
+};
+
+/** The broker plan of a Service's Message Versions and Subscriptions under a prefix: what `brokerPlanOf` prints from its Snapshot. */
+export function brokerPlanOfRoutes(routed: RoutedService, prefix: string | null): BrokerPlan {
+  const { service, messages, subscriptions } = routed;
+  const needs = brokerNeedsOf(service, messages, subscriptions);
   const durableConsumers = needs.durableConsumers
     .map((need) => namedDurableConsumerOf(service, prefix, need))
     .toSorted(([left], [right]) => byCodePoint(left, right));

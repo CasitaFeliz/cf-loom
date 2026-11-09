@@ -19,8 +19,6 @@ import {
   follows,
   isBrokerPrefix,
   isIdHeaderValue,
-  isPrefixedName,
-  isPrefixedSubject,
   kebabCase,
   prefixedNameOf,
   prefixedSubjectOf,
@@ -159,52 +157,6 @@ describe('the Wire protocol over the broker', () => {
       'orders-service',
       'orders-service_notify-on-created',
     ]);
-  });
-
-  test('a stream, a Durable consumer and a subject carry the prefix they were prefixed with', () => {
-    const subject = subjectOf('orders-service', orderCreatedV2);
-
-    const carried = [
-      isPrefixedName('staging', prefixedNameOf('staging', streamNameOf('orders-service'))),
-      isPrefixedName(
-        'staging',
-        prefixedNameOf('staging', durableNameOf('orders-service', notifyOnCreated)),
-      ),
-      isPrefixedSubject('staging', prefixedSubjectOf('staging', subject)),
-    ];
-
-    expect(carried).toEqual([true, true, true]);
-  });
-
-  test('a name or subject without the prefix, or with it only in the middle or without its separator, does not carry it', () => {
-    const names = [
-      'orders-service',
-      'a_staging_orders-service',
-      'staging-orders-service',
-      'stagingorders',
-    ];
-    const subjects = [
-      'orders-service.event.A.v1',
-      'a.staging.orders',
-      'staging_orders',
-      'stagingorders',
-    ];
-
-    const carried = [
-      ...names.map((name) => isPrefixedName('staging', name)),
-      ...subjects.map((subject) => isPrefixedSubject('staging', subject)),
-    ];
-
-    expect(carried).toEqual(Array(names.length + subjects.length).fill(false));
-  });
-
-  test('with no prefix every name and subject carries it', () => {
-    const carried = [
-      isPrefixedName(null, 'orders-service'),
-      isPrefixedSubject(null, 'orders-service.event.A.v1'),
-    ];
-
-    expect(carried).toEqual([true, true]);
   });
 
   test('a prefix is kebab-case, as a Service name is', () => {

@@ -26,8 +26,11 @@ export {
   follows,
   isReserved,
   kebabCase,
+  messageNameGrammar,
   pascalCase,
   ruleOf,
+  serviceNameGrammar,
+  subscriptionNameGrammar,
   upperSnakeCase,
   wordsOf,
 } from './grammars.ts';

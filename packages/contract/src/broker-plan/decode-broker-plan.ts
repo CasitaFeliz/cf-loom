@@ -1,15 +1,11 @@
 import { z } from 'zod';
-import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
-import type { Path } from '../walker/index.ts';
-import {
-  brokerPrefixRule,
-  isBrokerPrefix,
-  isPrefixedName,
-  isPrefixedSubject,
-} from '../wire/index.ts';
+import { everyKeyRecordOf, type Problem, problemLineOf, readWith } from '../validation/index.ts';
+import { brokerPrefixRule, isBrokerPrefix } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
+import { unprintedProblemOf } from './printed-plan.ts';
+import { notDurableConsumerName, notStreamName, readPlan } from './read-plan.ts';
 
-/** A value read as a broker plan: the plan, or the first place it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
+/** A value read as a broker plan: the plan, or a place where it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
 export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
@@ -25,62 +21,29 @@ const plan = z.strictObject({
     .string('is not a text or null')
     .refine(isBrokerPrefix, `is not ${brokerPrefixRule}`)
     .nullable(),
-  streams: z.record(z.string(), stream),
-  durableConsumers: z.record(z.string(), durableConsumer),
+  streams: everyKeyRecordOf(stream, notStreamName),
+  durableConsumers: everyKeyRecordOf(durableConsumer, notDurableConsumerName),
 });
 
 /**
- * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints, refusing any other
- * shape, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
+ * Reads a value as the `plan` of the document `cf-loom broker-plan --json` prints. Each name, subject and Service
+ * name is read back into the names it is built from, which must follow their grammars and print it again unchanged,
+ * and the Broker plan must be the one Service's those names print, in its order; any other value is refused, naming
+ * a place where it differs, so the document itself, an errors document or a hand-edited plan never reaches a Broker.
  */
 export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
   const structured = readWith(plan, value, 'the Broker plan');
   if (structured.kind === 'refused') {
     return malformedAt(structured.problems[0]);
   }
-  const problem = uncarriedProblemOf(structured.value);
+  const read = readPlan(structured.value);
+  if (read.kind === 'refused') {
+    return malformedAt(read.problems[0]);
+  }
+  const problem = unprintedProblemOf(structured.value, read.value);
   return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {
   return { kind: 'malformed', reason: problemLineOf(problem) };
-}
-
-/** A name or subject of the plan, where it sits and whether it carries the plan's prefix. */
-type Carrier = { readonly at: Path; readonly isCarried: boolean };
-
-function uncarriedProblemOf(brokerPlan: BrokerPlan): Problem | undefined {
-  const { prefix } = brokerPlan;
-  if (prefix === null) {
-    return undefined;
-  }
-  const uncarried = carriersOf(brokerPlan, prefix).find((carrier) => !carrier.isCarried);
-  if (uncarried === undefined) {
-    return undefined;
-  }
-  return { at: uncarried.at, reason: `does not carry the prefix ${prefix}` };
-}
-
-function carriersOf(brokerPlan: BrokerPlan, prefix: string): readonly Carrier[] {
-  const carriers: Carrier[] = [];
-  for (const [name, { subjects }] of Object.entries(brokerPlan.streams)) {
-    carriers.push({ at: ['streams', name], isCarried: isPrefixedName(prefix, name) });
-    for (const [index, subject] of subjects.entries()) {
-      const at = ['streams', name, 'subjects', index];
-      carriers.push({ at, isCarried: isPrefixedSubject(prefix, subject) });
-    }
-  }
-  for (const [name, durableConsumer] of Object.entries(brokerPlan.durableConsumers)) {
-    const at = ['durableConsumers', name];
-    carriers.push({ at, isCarried: isPrefixedName(prefix, name) });
-    carriers.push({
-      at: [...at, 'stream'],
-      isCarried: isPrefixedName(prefix, durableConsumer.stream),
-    });
-    carriers.push({
-      at: [...at, 'subject'],
-      isCarried: isPrefixedSubject(prefix, durableConsumer.subject),
-    });
-  }
-  return carriers;
 }
