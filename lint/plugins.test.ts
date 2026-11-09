@@ -173,6 +173,41 @@ describe('lint plugins', () => {
     expect(pluginReportsFor(lines)).toEqual([]);
   });
 
+  it('report a timeout given to a test, a suite or a hook, and vi.setConfig, in a test file, but not other options, a timeout in a body or another file (C30)', () => {
+    const lines = [
+      "import { afterAll, beforeEach, describe, onTestFinished, test, vi } from 'vitest';",
+      "test('first', () => {}, 10_000);",
+      "test('second', { timeout: 5 }, () => {});",
+      "test.concurrent('third', () => {}, limit);",
+      "test.each([1, 2])('fourth', () => {}, 5);",
+      "describe.concurrent('fifth', { timeout: limit }, () => {});",
+      'beforeEach(() => {}, 9);',
+      'afterAll(run, limit);',
+      'onTestFinished(() => {}, 4);',
+      'vi.setConfig({ testTimeout: 1 });',
+      "test('retried', { retry: 2 }, () => {});",
+      "test('bounded in its body', () => {",
+      '  const timeout = 5;',
+      '  vi.waitFor(check, { interval: timeout });',
+      '});',
+      'beforeEach(() => {});',
+    ];
+
+    expect(pluginReportsFor(lines, 'probe.test.ts')).toEqual([
+      'C30@2',
+      'C30@3',
+      'C30@4',
+      'C30@5',
+      'C30@6',
+      'C30@7',
+      'C30@8',
+      'C30@9',
+      'C30@10',
+    ]);
+    expect(pluginReportsFor(lines, 'probe.fixture.ts')).toEqual([]);
+    expect(pluginReportsFor(lines)).toEqual([]);
+  });
+
   it("report a read of a zod getter derived from a child's own, under walker/ alone (C1)", () => {
     const lines = [
       'declare const schema: { readonly _zod: Record<string, unknown> };',

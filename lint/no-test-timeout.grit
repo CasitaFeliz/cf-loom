@@ -1,0 +1,23 @@
+language js
+
+or {
+  `$runner($name, $body, $limit)` where {
+    $runner <: r"(?s)(?:test|it|describe|suite|bench)(?:[.(].*)?",
+    $body <: or {
+      JsArrowFunctionExpression(),
+      JsFunctionExpression()
+    }
+  },
+  `$runner($name, $options, $body)` where {
+    $runner <: r"(?s)(?:test|it|describe|suite|bench)(?:[.(].*)?",
+    $options <: JsObjectExpression(),
+    $options <: contains `timeout`
+  },
+  `$hook($body, $limit)` where {
+    $hook <: r"beforeAll|afterAll|beforeEach|afterEach|aroundAll|aroundEach|onTestFailed|onTestFinished"
+  },
+  `vi.setConfig($config)`
+} as $call where {
+  $filename <: r".*\.test\.ts$",
+  register_diagnostic(span=$call, message="C30: a test, suite or hook gets the hang bound, never a timeout of its own.", severity="error")
+}
