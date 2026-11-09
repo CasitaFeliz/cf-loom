@@ -2,7 +2,7 @@ import type * as core from 'zod/v4/core';
 import { checksOf, type DeclaredCheck } from './check-defs.ts';
 import { refusedCheck } from './check-names.ts';
 import { type CheckedAt, constrain } from './checks.ts';
-import { walkEnum, walkTagged, walkUnion } from './choices.ts';
+import { walkEnum, walkUnion } from './choices.ts';
 import { walkArray, walkTuple } from './collections.ts';
 import {
   type DefOfType,
@@ -15,13 +15,16 @@ import {
   type RefusedDef,
   type WalkedDef,
 } from './def-types.ts';
+import { walkIntersection } from './intersections.ts';
 import { innerOfOneLazy } from './lazy.ts';
 import { inside } from './location.ts';
 import { annotated } from './metadata.ts';
 import { notAllowed, type Refused, refused, refusedZodType } from './not-allowed.ts';
-import { walkIntersection, walkObject, walkRecord } from './objects.ts';
+import { walkObject } from './objects.ts';
+import { walkRecord } from './records.ts';
 import { isJsonUnion, walkLiteral } from './scalars.ts';
 import { keyStep, valueStep } from './steps.ts';
+import { walkTagged } from './variants.ts';
 import {
   failed,
   failuresOf,

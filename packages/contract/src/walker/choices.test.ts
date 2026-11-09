@@ -203,6 +203,32 @@ describe('walkSchemas: discriminated unions', () => {
     );
   });
 
+  test('a variant whose discriminator has several values and a date tells both', () => {
+    const either = z.object({ type: z.literal(['card', 'debit']), placedAt: z.date() });
+
+    expect(walkBody(z.discriminatedUnion('type', [either, transfer]))).toEqual({
+      located: [
+        {
+          kind: 'not-allowed',
+          failures: [
+            {
+              kind: 'not-allowed',
+              at: '<|0>',
+              construct: 'a discriminated union variant whose discriminator has several values',
+            },
+            {
+              kind: 'not-allowed',
+              at: '<|0>.placedAt',
+              construct: 'z.date()',
+              instead: 'z.iso.datetime()',
+            },
+          ],
+        },
+      ],
+      defs: {},
+    });
+  });
+
   test('a discriminated union variant whose discriminator is a number is allowed', () => {
     const numbered = z.object({ type: z.literal(1) });
 

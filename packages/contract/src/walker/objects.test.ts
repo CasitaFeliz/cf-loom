@@ -383,6 +383,59 @@ describe('walkSchemas: an intersection beside a schema that fails', () => {
   });
 });
 
+describe('walkSchemas: a record key beside a schema that fails', () => {
+  const dateAt = (at: string) => ({
+    kind: 'not-allowed',
+    at,
+    construct: 'z.date()',
+    instead: 'z.iso.datetime()',
+  });
+  const refusedAll = (failures: readonly object[]) => ({
+    located: [{ kind: 'not-allowed', failures }],
+    defs: {},
+  });
+  const keyedBy = (key: unknown) => z.record(key as z.ZodString, z.string());
+
+  test('a key that is an object holding a date tells the key that is not a string, and the date', () => {
+    const key = z.object({ placedAt: z.date() });
+
+    expect(walkBody(keyedBy(key))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a z.record() key that is not a string' },
+        dateAt('{key}.placedAt'),
+      ]),
+    );
+  });
+
+  test('a nullable key that holds a date tells the nullable key, and the date', () => {
+    const key = z.union([z.string(), z.date()]).nullable();
+
+    expect(walkBody(keyedBy(key))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a nullable z.record() key' },
+        dateAt('{key}<|1>'),
+      ]),
+    );
+  });
+
+  test('a key that is refused itself tells only its own line, since its fix decides what it is', () => {
+    expect(walkBody(keyedBy(z.date()))).toEqual(refusedAll([dateAt('{key}')]));
+  });
+
+  test('a nullable key that is refused itself tells the nullable key, since every fix keeps it', () => {
+    expect(walkBody(keyedBy(z.date().nullable()))).toEqual(
+      refusedAll([
+        { kind: 'not-allowed', at: '', construct: 'a nullable z.record() key' },
+        dateAt('{key}'),
+      ]),
+    );
+  });
+
+  test('a string key beside a value that fails is a record of the value it kept', () => {
+    expect(walkBody(z.record(z.string(), z.date()))).toEqual(refusedAll([dateAt('{}')]));
+  });
+});
+
 describe('walkSchemas: a field named __proto__', () => {
   const construct = 'a field named __proto__ (zod drops it when parsing)';
 
