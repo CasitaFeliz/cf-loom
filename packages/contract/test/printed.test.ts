@@ -105,7 +105,6 @@ describe('throwingConsole', () => {
       }
     });
 
-    expect(thrown.every((error) => error === broken)).toBe(true);
-    expect(thrown).toHaveLength(2);
+    expect(thrown).toStrictEqual([broken, broken]);
   });
 });

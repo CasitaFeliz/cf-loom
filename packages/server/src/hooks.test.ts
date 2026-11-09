@@ -97,9 +97,10 @@ const contract = defineService({
   ],
 });
 
-/** The Handlers, `getOrder` answering by its param: a Success, a Rejection, a Fault or a broken body. */
+/** What `getOrder` throws for the `thrown` order, one Error so a test can expect the text the console prints for it. */
 const bug = new Error('a bug');
 
+/** The Handlers, `getOrder` answering by its param: a Success, a Rejection, a Fault or a broken body. */
 const handlers = {
   endpoints: {
     getOrder: handle(getOrder, async ({ params }) => {
@@ -171,9 +172,8 @@ describe('serve: onServiceFault', () => {
     await serve(contract, handlers, {})(get('/orders/leaky'));
 
     expect(printed).toHaveLength(1);
-    const line = String(printed[0]);
-    expect(line).toMatch(/^getOrder: success\.body\.secret too_small: /);
-    expect(line).not.toContain('short');
+    expect(printed[0]).toMatch(/^getOrder: success\.body\.secret too_small: /);
+    expect(printed[0]).not.toContain('short');
   });
 
   test('without it, a throw is logged as the Handler threw, with its cause', async () => {
