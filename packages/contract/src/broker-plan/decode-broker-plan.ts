@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type Problem, problemLineOf, readWith } from '../validation/index.ts';
+import { everyKeyRecordOf, type Problem, problemLineOf, readWith } from '../validation/index.ts';
 import type { Path } from '../walker/index.ts';
 import {
   brokerPrefixRule,
@@ -14,6 +14,10 @@ export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
 
+const notStreamName = 'is not a Stream name: a Service name after the prefix';
+const notDurableConsumerName =
+  'is not a Durable consumer name: a Service name, then a Subscription name or a Command Version';
+
 const text = z.string('is not a text');
 const stream = z.strictObject({
   service: text,
@@ -25,8 +29,8 @@ const plan = z.strictObject({
     .string('is not a text or null')
     .refine(isBrokerPrefix, `is not ${brokerPrefixRule}`)
     .nullable(),
-  streams: z.record(z.string(), stream),
-  durableConsumers: z.record(z.string(), durableConsumer),
+  streams: everyKeyRecordOf(stream, notStreamName),
+  durableConsumers: everyKeyRecordOf(durableConsumer, notDurableConsumerName),
 });
 
 /**

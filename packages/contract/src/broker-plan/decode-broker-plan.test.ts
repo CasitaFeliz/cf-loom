@@ -215,6 +215,32 @@ describe('reading a broker plan', () => {
     },
   );
 
+  test.each([
+    [
+      'Stream',
+      aPlan({
+        streams: Object.fromEntries([
+          ['__proto__', { service: 'orders-service', subjects: [orderCreated] }],
+        ]),
+      }),
+      'streams.__proto__ is not a Stream name: a Service name after the prefix',
+    ],
+    [
+      'Durable consumer',
+      aPlan({
+        durableConsumers: Object.fromEntries([
+          [
+            '__proto__',
+            { service: 'billing-service', stream: ordersStream, subject: orderCreated },
+          ],
+        ]),
+      }),
+      'durableConsumers.__proto__ is not a Durable consumer name: a Service name, then a Subscription name or a Command Version',
+    ],
+  ])('a plan with a __proto__ %s is malformed, never decoded without it', (_, plan, reason) => {
+    expect(decodeBrokerPlan(plan)).toEqual(malformed(reason));
+  });
+
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
       prefix: null,
