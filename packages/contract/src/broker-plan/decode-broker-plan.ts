@@ -5,7 +5,7 @@ import type { BrokerPlan } from './broker-plan.ts';
 import { unprintedProblemOf } from './printed-plan.ts';
 import { notDurableConsumerName, notStreamName, readPlan } from './read-plan.ts';
 
-/** A value read as a broker plan: the plan, or the first place it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
+/** A value read as a broker plan: the plan, or a place where it breaks the shape of the `plan` of the document `cf-loom broker-plan --json` prints. */
 export type DecodedBrokerPlan =
   | { readonly kind: 'decoded'; readonly plan: BrokerPlan }
   | { readonly kind: 'malformed'; readonly reason: string };
