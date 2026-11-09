@@ -806,6 +806,38 @@ describe('validateRoot: an open union or intersection beside a schema that fails
   });
 });
 
+describe('validateRoot, many unions over one def that fails on its own', () => {
+  const sizes = { small: 500, large: 4_000 };
+
+  /** The validation of a body of `count` fields, each a union over one def that holds an Open Enum and a date. */
+  function validateFan(count: number) {
+    const failing: z.ZodType = z
+      .object({
+        status: openEnum(['a']),
+        placedAt: z.date(),
+        get next() {
+          return failing.optional();
+        },
+      })
+      .meta({ id: 'failing' });
+    const fields = Array.from({ length: count }, (_, index) => [
+      `field${index}`,
+      z.union([failing, z.boolean()]),
+    ]);
+    const root = aServiceAnswering(z.object(Object.fromEntries(fields)));
+    const rootPackage = aRootPackage(root);
+    return () => validateRoot(root, rootPackage);
+  }
+
+  test('are validated in time that grows with their number, each told beside the one date', () => {
+    const validated = validateFan(sizes.large)();
+    const order = orderOf(validateFan, sizes, orders.linear);
+
+    expect(validated.kind === 'invalid' ? validated.failures.length : 0).toBe(sizes.large + 1);
+    expect(order).toBeLessThan(orders.linear);
+  });
+});
+
 describe('validateRoot, a long chain of ids', () => {
   const sizes = { small: 2_000, large: 16_000 };
 

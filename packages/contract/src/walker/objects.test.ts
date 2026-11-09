@@ -3,6 +3,7 @@ import { z } from 'zod';
 import * as zm from 'zod/mini';
 import type * as core from 'zod/v4/core';
 import { refusalsOf, summaryOf } from '../../test/failures.ts';
+import { orderOf, orders } from '../../test/growth.ts';
 import { randomAnnotations, randomSchemas, seededNext } from '../../test/random-schemas.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import {
@@ -433,6 +434,86 @@ describe('walkSchemas: a record key beside a schema that fails', () => {
 
   test('a string key beside a value that fails is a record of the value it kept', () => {
     expect(walkBody(z.record(z.string(), z.date()))).toEqual(refusedAll([dateAt('{}')]));
+  });
+});
+
+describe('walkSchemas: schemas that fail at many places are walked in time that grows with them', () => {
+  const sizes = { small: 500, large: 4_000 };
+
+  /** A walk of the schema `shape` builds for a size, built outside the time. */
+  const walkOf = (shape: (count: number) => z.ZodType) => (count: number) => {
+    const schema = shape(count);
+    return () => walkSchemas([{ at: bodyPlace, schema }], () => undefined);
+  };
+
+  /** The lines a walk tells, each once. */
+  const countOf = (walked: ReturnType<typeof walkSchemas>) => {
+    const [located] = refusalsOf(walked).located;
+    return located !== undefined && 'failures' in located ? located.failures.length : 0;
+  };
+
+  const differing = () => z.intersection(z.object({ k: z.string() }), z.object({ k: z.number() }));
+
+  test('a wide object of intersections whose shared keys differ', () => {
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(Array.from({ length: count }, (_, index) => [`f${index}`, differing()])),
+      ),
+    );
+
+    const walked = walkWide(sizes.large)();
+    const order = orderOf(walkWide, sizes, orders.linear);
+
+    expect(countOf(walked)).toBe(sizes.large);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  test('a wide object of records keyed by records that hold a date', () => {
+    const keyed = () => z.record(z.record(z.string(), z.date()) as never, z.string());
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(Array.from({ length: count }, (_, index) => [`f${index}`, keyed()])),
+      ),
+    );
+
+    const walked = walkWide(sizes.large)();
+    const order = orderOf(walkWide, sizes, orders.linear);
+
+    expect(countOf(walked)).toBe(2 * sizes.large);
+    expect(order).toBeLessThan(orders.linear);
+  });
+
+  /** An intersection that differs at every one of `depth` levels, each level holding the one below. */
+  function aTowerOf(depth: number): z.ZodType {
+    let tower: z.ZodType = z.object({ k: z.string(), at: z.date() });
+    for (let level = 0; level < depth; level++) {
+      tower = z.intersection(
+        z.object({ k: z.string(), below: tower }),
+        z.object({ k: z.number() }),
+      );
+    }
+    return tower;
+  }
+
+  test('a wide object of towers of intersections that differ at every level', () => {
+    const depth = 20;
+    const walkWide = walkOf((count) =>
+      z.object(
+        Object.fromEntries(
+          Array.from({ length: count }, (_, index) => [`f${index}`, aTowerOf(depth)]),
+        ),
+      ),
+    );
+
+    const walked = walkWide(sizes.large / 4)();
+    const order = orderOf(
+      walkWide,
+      { small: sizes.small / 4, large: sizes.large / 4 },
+      orders.linear,
+    );
+
+    expect(countOf(walked)).toBe((sizes.large / 4) * (depth + 1));
+    expect(order).toBeLessThan(orders.linear);
   });
 });
 

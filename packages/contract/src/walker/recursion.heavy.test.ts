@@ -3049,6 +3049,44 @@ describe('walkSchemas: a def that fails on its own is judged by every rule over 
   });
 });
 
+describe('walkSchemas: a nodeless cycle through many defs, one of them failing', () => {
+  const sizes = { small: 1_000, large: 8_000 };
+
+  /** `count` union ids, each leading to the next and the last back to the first, the first beside a date. */
+  function aCycleOf(count: number): z.ZodType {
+    const defs: z.ZodType[] = [];
+    for (let index = 0; index < count; index++) {
+      const next = (index + 1) % count;
+      const beside = index === 0 ? z.date() : z.string();
+      defs.push(
+        z.union([z.lazy(() => defs[next] as z.ZodType), beside]).meta({ id: `link${index}` }),
+      );
+    }
+    return defs[0] as z.ZodType;
+  }
+
+  const walkOf = (count: number) => {
+    const schema = aCycleOf(count);
+    return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
+  };
+
+  test('is walked in time that grows with the defs, and told once beside the date', () => {
+    const walked = walkOf(sizes.large)();
+    const order = orderOf(walkOf, sizes, orders.linear);
+
+    const constructs = refusalsOf(walked).located.map((located) =>
+      'failures' in located ? located.failures.map(({ construct }) => construct) : [],
+    );
+    expect(constructs).toEqual([
+      [
+        'a cycle through z.lazy(), unions and intersections alone, which zod cannot parse',
+        'z.date()',
+      ],
+    ]);
+    expect(order).toBeLessThan(orders.linear);
+  });
+});
+
 describe('defGraphOf reached', () => {
   const ref = (name: string): SchemaNode => ({ type: 'ref', name });
   const holding = (node: SchemaNode): SchemaNode => ({ type: 'array', items: node });
