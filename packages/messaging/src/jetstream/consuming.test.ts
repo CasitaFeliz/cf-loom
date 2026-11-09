@@ -925,7 +925,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
     await waitUntilSettled(names.stream, names.notifyDurable, 2);
-  }, 10_000);
+  });
 
   test('a Handler returning a retryable Fault is reported on every delivery, deliveryCounts 1, 2 and 3', async () => {
     const prefix = aPrefix();
@@ -945,7 +945,7 @@ describe('consuming over jetstream()', () => {
       ['returned', 2],
       ['returned', 3],
     ]);
-  }, 10_000);
+  });
 
   test('only the third delivery is the last attempt of a Durable consumer with max_deliver 3', async () => {
     const prefix = aPrefix();
@@ -963,7 +963,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
     expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, true]);
     expect(received.map(({ meta }) => meta.lastAttempt)).toEqual([false, false, true]);
-  }, 10_000);
+  });
 
   test('a Durable consumer without a delivery limit never marks the last attempt', async () => {
     const prefix = aPrefix();
@@ -979,7 +979,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 6_000 });
     expect(faults.map(({ lastAttempt }) => lastAttempt)).toEqual([false, false, false]);
-  }, 10_000);
+  });
 
   test('a delivery whose onServiceFault throws is left for redelivery', async () => {
     const prefix = aPrefix();
@@ -1002,7 +1002,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
-  }, 10_000);
+  });
 
   test('a delivery whose onServiceFault throws is logged with the onServiceFault threw line, and redelivered though its Fault would end it', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -1030,7 +1030,7 @@ describe('consuming over jetstream()', () => {
       'notifyOnCreated orders-service.event.OrderCreated.v1 event.OrderCreated.v1:o-1 o-1 attempt 1: onServiceFault threw',
       hook,
     );
-  }, 10_000);
+  });
 
   test('a Handler that never settles is given up at its 1 s ack wait: onServiceFault receives a thrown DeadlineError, and NATS delivers the Message again with delivery count 2', async () => {
     const prefix = aPrefix();
@@ -1051,7 +1051,7 @@ describe('consuming over jetstream()', () => {
     expect(faults[0]).toMatchObject({ kind: 'thrown', deliveryCount: 1 });
     expect(cause).toBeInstanceOf(DeadlineError);
     expect(cause).toHaveProperty('message', "The Handler ran past its delivery's wait of 1000 ms");
-  }, 10_000);
+  });
 
   test('past the wait the Durable consumer pulls its next Message while the first Handler still runs', async () => {
     const prefix = aPrefix();
@@ -1071,7 +1071,7 @@ describe('consuming over jetstream()', () => {
     const bodies = () => received.map(({ body }) => body);
     await vi.waitFor(() => expect(bodies()).toContainEqual({ orderId: 'o-2' }), { timeout: 4_000 });
     expect(received[0]?.body).toEqual({ orderId: 'o-1' });
-  }, 10_000);
+  });
 
   test('with a backoff, a delivery’s wait is its backoff entry', async () => {
     const prefix = aPrefix();
@@ -1089,7 +1089,7 @@ describe('consuming over jetstream()', () => {
     await vi.waitFor(() => expect(faults).toHaveLength(3), { timeout: 8_000 });
     const waited = faults.map((consumed) => (consumed as { cause: DeadlineError }).cause.waitMs);
     expect(waited).toEqual([500, 2_000, 2_000]);
-  }, 15_000);
+  });
 
   test('each Durable consumer hands its Handler one Message at a time: a second Message waits, unpulled, until the first is settled', async () => {
     const prefix = aPrefix();
@@ -1161,7 +1161,7 @@ describe('consuming over jetstream()', () => {
         ),
       },
     ]);
-  }, 10_000);
+  });
 
   test('the same Durable consumer created again reaches onBrokerTrouble once as recovered, and its Messages reach their Handler', async () => {
     const prefix = aPrefix();
@@ -1192,7 +1192,7 @@ describe('consuming over jetstream()', () => {
       ['notifyOnCreated', 'pull-failed'],
       ['notifyOnCreated', 'recovered'],
     ]);
-  }, 10_000);
+  });
 
   test('a connection that closes for good while consuming reaches onBrokerTrouble once per Durable consumer as pull-failed, and nothing after', async () => {
     const own = await aNatsServer();
@@ -1294,7 +1294,7 @@ describe('consuming over jetstream()', () => {
         `NATS did not answer a pull from ${names.notifyDurable} within 1000 ms`,
       ],
     ]);
-  }, 10_000);
+  });
 
   test(`pulls failing and answered in a random order are reported once per change, failing first (seed ${seed})`, async () => {
     const prefix = aPrefix();
@@ -1324,7 +1324,7 @@ describe('consuming over jetstream()', () => {
 
     await vi.waitFor(() => expect(pulled).toBeGreaterThan(steps.length + 1), { timeout: 20_000 });
     expect(troubles.map(({ kind }) => kind)).toEqual(changesOf([...steps, 'answered']));
-  }, 30_000);
+  });
   test('two fresh Messages on one Durable consumer reach the Handler with delivery count 1 each', async () => {
     const prefix = aPrefix();
     await arrangeOrders(prefix);
@@ -1425,7 +1425,7 @@ describe('closing while consuming over jetstream()', () => {
     await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(1), { timeout: 4_000 });
     expect(received[0]?.meta.deliveryCount).toBe(2);
-  }, 10_000);
+  });
 
   test('close({ signal }) with a Handler that never settles hands its Message back, so the next process gets it at once with delivery count 2', async () => {
     const prefix = aPrefix();
@@ -1444,7 +1444,7 @@ describe('closing while consuming over jetstream()', () => {
     await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 4_000 });
     expect(received[1]?.meta.deliveryCount).toBe(2);
-  }, 10_000);
+  });
 
   test('close after a wait passed leaves no timer behind', async () => {
     const prefix = aPrefix();
@@ -1462,7 +1462,7 @@ describe('closing while consuming over jetstream()', () => {
     await orders.close();
 
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
-  }, 10_000);
+  });
 
   test('close with pulls open leaves no timer or pull behind: the connection is closed and no Durable consumer has a pull open', async () => {
     const prefix = aPrefix();
@@ -1533,7 +1533,7 @@ describe('closing while consuming over jetstream()', () => {
     await next.consume(handlersOf(received), {});
     await vi.waitFor(() => expect(received).toHaveLength(2), { timeout: 5_000 });
     expect(received.map(({ meta }) => meta.deliveryCount)).toEqual([1, 2]);
-  }, 10_000);
+  });
 });
 
 describe('pulling over jetstream()', () => {
@@ -1583,7 +1583,7 @@ describe('pulling over jetstream()', () => {
       ],
       ['notifyOnCreated', 'recovered', undefined],
     ]);
-  }, 10_000);
+  });
 
   test('pulls that expire leave no subscription behind', async () => {
     const prefix = aPrefix();
@@ -1610,7 +1610,7 @@ describe('pulling over jetstream()', () => {
     expect(
       subscriptions.filter((subscription) => !subscription.isClosed()).length,
     ).toBeLessThanOrEqual(2);
-  }, 10_000);
+  });
 
   test('pulls subscribe on the inbox prefix the Service’s connection was opened with', async () => {
     const prefix = aPrefix();
@@ -1661,7 +1661,7 @@ describe('pulling over jetstream()', () => {
       });
     }
     expect(Math.max(0, ...listening.values())).toBeLessThanOrEqual(2);
-  }, 10_000);
+  });
 
   test('a pull that expired is followed at once by the next, not after the retry pause', async () => {
     const prefix = aPrefix();
@@ -1685,7 +1685,7 @@ describe('pulling over jetstream()', () => {
 
     expect(await followedBeforePauseCouldEnd.promise).toBe(true);
     expect(received).toEqual([]);
-  }, 10_000);
+  });
 
   test('a pull the Broker answers with 409 is asked again only after the retry pause', async () => {
     const prefix = aPrefix();
@@ -1704,7 +1704,7 @@ describe('pulling over jetstream()', () => {
 
     await vi.waitFor(() => expect(nextOf()).toBeDefined(), { timeout: 3_000 });
     expect(await askedBeforePauseEnds).toBe(false);
-  }, 10_000);
+  });
 
   test.each([
     ['no max_expires', {}, 30],
@@ -1733,7 +1733,7 @@ describe('pulling over jetstream()', () => {
     await orders.close();
 
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
-  }, 10_000);
+  });
 
   test('close while pulls fail reports nothing more', async () => {
     const troubles: BrokerTrouble[] = [];
@@ -1747,7 +1747,7 @@ describe('pulling over jetstream()', () => {
 
     expect(troubles.map(({ name, kind }) => [name, kind])).toEqual(reportedBefore);
     expect(reportedBefore).toHaveLength(2);
-  }, 10_000);
+  });
 
   test('the Service closing its own connection while pulls fail leaves no retry pause running', async () => {
     const timersBefore = activeTimers();
@@ -1757,5 +1757,5 @@ describe('pulling over jetstream()', () => {
     await sleep(100);
 
     expect(activeTimers()).toBeLessThanOrEqual(timersBefore);
-  }, 10_000);
+  });
 });

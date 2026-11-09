@@ -4870,7 +4870,6 @@ describe.concurrent('cf-loom check, a Change in the author’s terms', () => {
   });
 });
 
-const publishTimeout = 120_000;
 const stagingFolder = 'node_modules/.cache/cf-loom';
 
 /** The Roots of `removedSuccessField` the other way round: a Success field added. */
@@ -5574,7 +5573,7 @@ describe.concurrent('cf-loom check, the version publish would take', () => {
   });
 });
 
-describe.concurrent('cf-loom publish', { timeout: publishTimeout }, () => {
+describe.concurrent('cf-loom publish', () => {
   test('publish fails when contract.snapshot.json is out of date, before it reads the registry', async ({
     lab,
   }) => {
@@ -7226,7 +7225,7 @@ const refusedGapRoots = {
   after: aMessagingRoot({ eventVersions: [1, 3] }),
 };
 
-describe.concurrent('cf-loom publish --dry-run', { timeout: publishTimeout }, () => {
+describe.concurrent('cf-loom publish --dry-run', () => {
   /** The methods of the requests the registry got after the Baseline's tarball was read. */
   const requestsAfterBaseline = (registry: Registry) => {
     const { requests } = registry;
@@ -7367,7 +7366,7 @@ describe.concurrent('cf-loom publish --dry-run', { timeout: publishTimeout }, ()
   });
 });
 
-describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () => {
+describe.concurrent('cf-loom publish --json', () => {
   test('prints one document and no progress line: published, with the version it took', async ({
     lab,
   }) => {
@@ -7543,9 +7542,7 @@ describe.concurrent('cf-loom publish --json', { timeout: publishTimeout }, () =>
   );
 });
 
-describe.concurrent('cf-loom check and publish derive one version', {
-  timeout: publishTimeout,
-}, () => {
+describe.concurrent('cf-loom check and publish derive one version', () => {
   const zodLine = Number(zodPeerRange.slice(1).split('.')[0]);
   const rows = [
     {
@@ -7905,7 +7902,7 @@ describe('cf-loom --json prints exactly one document, whatever the exit', () => 
   });
 });
 
-describe.concurrent('cf-loom --json, check and publish', { timeout: publishTimeout }, () => {
+describe.concurrent('cf-loom --json, check and publish', () => {
   test('check on a Breaking Change, exit 2, and publish --dry-run on success', async ({ lab }) => {
     const changed = await aChangedProject(lab, removedSuccessField);
 

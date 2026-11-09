@@ -3521,9 +3521,6 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
 });
 
 describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   const sizes = { small: 1_000, large: 8_000 };
 
   function decoded(shapeOf: (count: number) => Shape) {
@@ -3533,9 +3530,7 @@ describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
     };
   }
 
-  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', () => {
     const read = decoded(baselineHoldingFormerInputs)(3)();
     const order = orderOf(decoded(baselineHoldingFormerInputs), sizes, orders.linear);
 
@@ -3543,9 +3538,7 @@ describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', () => {
     const read = decoded(formerInputsNamingAnAliasChain)(3)();
     const order = orderOf(decoded(formerInputsNamingAnAliasChain), sizes, orders.linear);
 

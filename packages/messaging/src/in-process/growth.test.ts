@@ -5,8 +5,6 @@ import { orderOf, orders } from '../../../contract/test/growth.ts';
 import type { BrokerConnection, DurableConsumer, OutgoingMessage, Settlement } from '../index.ts';
 import { type InProcessBrokerLimits, inProcess } from './index.ts';
 
-const growthTimeout = 240_000;
-
 const limits = { durableConsumerDefaults: { ackWait: '30s', maxDeliver: 3 } } as const;
 
 afterEach(() => {
@@ -78,67 +76,55 @@ function publishingAndDelivering(connection: BrokerConnection, subject: string, 
 }
 
 describe('the growth of inProcess()', () => {
-  test(
-    'lining up and delivering Messages to one Durable consumer grows linearly with their number',
-    async () => {
-      vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
-      const subject = subjectOf(0);
-      const connection = await consumingOn(subject, 0);
+  test('lining up and delivering Messages to one Durable consumer grows linearly with their number', async () => {
+    vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
+    const subject = subjectOf(0);
+    const connection = await consumingOn(subject, 0);
 
-      const order = orderOf(
-        (count) => publishingAndDelivering(connection, subject, count),
-        { small: 4_000, large: 32_000 },
-        orders.linear,
-      );
+    const order = orderOf(
+      (count) => publishingAndDelivering(connection, subject, count),
+      { small: 4_000, large: 32_000 },
+      orders.linear,
+    );
 
-      expect(order).toBeLessThan(orders.linear);
-    },
-    growthTimeout,
-  );
+    expect(order).toBeLessThan(orders.linear);
+  });
 
-  test(
-    'a publish takes as long with a thousand Durable consumers on other subjects as with ten',
-    async () => {
-      vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
-      const subject = subjectOf(0);
-      const connections = new Map([
-        [10, await consumingOn(subject, 10)],
-        [1_000, await consumingOn(subject, 1_000)],
-      ]);
+  test('a publish takes as long with a thousand Durable consumers on other subjects as with ten', async () => {
+    vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
+    const subject = subjectOf(0);
+    const connections = new Map([
+      [10, await consumingOn(subject, 10)],
+      [1_000, await consumingOn(subject, 1_000)],
+    ]);
 
-      const order = orderOf(
-        (others) =>
-          publishingAndDelivering(connections.get(others) as BrokerConnection, subject, 1_000),
-        { small: 10, large: 1_000 },
-        orders.flat,
-      );
+    const order = orderOf(
+      (others) =>
+        publishingAndDelivering(connections.get(others) as BrokerConnection, subject, 1_000),
+      { small: 10, large: 1_000 },
+      orders.flat,
+    );
 
-      expect(order).toBeLessThan(orders.flat);
-    },
-    growthTimeout,
-  );
+    expect(order).toBeLessThan(orders.flat);
+  });
 
-  test(
-    'a publish takes as long after a thousand consume and close cycles as after ten',
-    async () => {
-      vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
-      const subject = subjectOf(0);
-      const connections = new Map([
-        [10, await consumingAfter(subject, 10)],
-        [1_000, await consumingAfter(subject, 1_000)],
-      ]);
+  test('a publish takes as long after a thousand consume and close cycles as after ten', async () => {
+    vi.useFakeTimers({ toFake: ['setImmediate', 'clearImmediate'], loopLimit: 1_000_000 });
+    const subject = subjectOf(0);
+    const connections = new Map([
+      [10, await consumingAfter(subject, 10)],
+      [1_000, await consumingAfter(subject, 1_000)],
+    ]);
 
-      const order = orderOf(
-        (cycles) =>
-          publishingAndDelivering(connections.get(cycles) as BrokerConnection, subject, 1_000),
-        { small: 10, large: 1_000 },
-        orders.flat,
-      );
+    const order = orderOf(
+      (cycles) =>
+        publishingAndDelivering(connections.get(cycles) as BrokerConnection, subject, 1_000),
+      { small: 10, large: 1_000 },
+      orders.flat,
+    );
 
-      expect(order).toBeLessThan(orders.flat);
-    },
-    growthTimeout,
-  );
+    expect(order).toBeLessThan(orders.flat);
+  });
 
   test.each([
     [
@@ -161,22 +147,18 @@ describe('the growth of inProcess()', () => {
         ),
       }),
     ],
-  ] as const)(
-    'reading the limits grows linearly with %s',
-    (_, limitsOf) => {
-      const order = orderOf(
-        (size) => {
-          const given = limitsOf(size);
-          return () => inProcess(given);
-        },
-        { small: 2_500, large: 20_000 },
-        orders.linear,
-      );
+  ] as const)('reading the limits grows linearly with %s', (_, limitsOf) => {
+    const order = orderOf(
+      (size) => {
+        const given = limitsOf(size);
+        return () => inProcess(given);
+      },
+      { small: 2_500, large: 20_000 },
+      orders.linear,
+    );
 
-      expect(order).toBeLessThan(orders.linear);
-    },
-    growthTimeout,
-  );
+    expect(order).toBeLessThan(orders.linear);
+  });
 });
 
 setFlagsFromString('--expose-gc');

@@ -1454,17 +1454,13 @@ describe('validateRoot: a text part’s examples each travel in their part', () 
 });
 
 describe('validateRoot: the time it takes to judge the examples of a text part', () => {
-  const growthTimeout = 240_000;
-
   /** A header object, as the validated Root of an Endpoint taking it, for `orderOf` to time. */
   function judgingHeaders(headers: z.ZodObject) {
     const root = rootOf(defineEndpoint({ ...listing, input: { headers } }));
     return () => validateRoot(root, aRootPackage(root));
   }
 
-  test('a header with 8,000 refused examples is one line naming each, in time that grows as they do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a header with 8,000 refused examples is one line naming each, in time that grows as they do', () => {
     const examplesOf = (count: number) => Array.from({ length: count }, (_, at) => ` e${at}`);
     const told = (size: number) =>
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: examplesOf(size) }) }));
@@ -1483,9 +1479,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('800 optional headers each given a value by 20 examples of their object validate, in time that grows as they do', {
-    timeout: growthTimeout,
-  }, () => {
+  test('800 optional headers each given a value by 20 examples of their object validate, in time that grows as they do', () => {
     const headersOfWidth = (width: number) => {
       const names = Array.from({ length: width }, (_, at) => `x-f${at}`);
       const shape = Object.fromEntries(names.map((name) => [name, z.string().optional()]));
@@ -1502,9 +1496,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a header example refused for its trailing space is one line, in time that grows as its length does', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a header example refused for its trailing space is one line, in time that grows as its length does', () => {
     const exampleOf = (length: number) => `${'a'.repeat(length)} `;
     const told = (size: number) =>
       judgingHeaders(z.object({ 'x-s': z.string().meta({ examples: [exampleOf(size)] }) }));

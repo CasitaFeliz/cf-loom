@@ -16,9 +16,6 @@ const vitestNode = JSON.stringify(
 );
 const vitestBin = join(root, 'node_modules', 'vitest', 'vitest.mjs');
 
-/** The time a child that starts Vitest and writes the README Service up to three times needs on a loaded runner. */
-const writeOutsTimeout = 90_000;
-
 /** What a Node process needs to start a Vitest through its API on this checkout's configuration, and to read the folder its `tooling` project gets the README Service from. */
 const startsVitest = `
 const { createVitest } = await import(${vitestNode});
@@ -122,9 +119,7 @@ describe('the Vitest configuration', () => {
     expect(existsSync(second.folder)).toBe(false);
   });
 
-  test('a restart of Vitest writes a new README Service and removes the old one, adds no removal of its own, and its close removes the last', {
-    timeout: writeOutsTimeout,
-  }, async () => {
+  test('a restart of Vitest writes a new README Service and removes the old one, adds no removal of its own, and its close removes the last', async () => {
     const vitest = startNode('--input-type=module', '--eval', restartsThenCloses);
 
     await vitest.exited;
@@ -138,9 +133,7 @@ describe('the Vitest configuration', () => {
     });
   });
 
-  test('two Vitest instances in one process each write a README Service of their own, and closing one leaves the other', {
-    timeout: writeOutsTimeout,
-  }, async () => {
+  test('two Vitest instances in one process each write a README Service of their own, and closing one leaves the other', async () => {
     const vitest = startNode('--input-type=module', '--eval', closesOneOfTwo);
 
     await vitest.exited;

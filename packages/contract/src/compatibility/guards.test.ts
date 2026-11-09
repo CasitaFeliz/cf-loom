@@ -683,9 +683,6 @@ describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reac
    */
   const sizes = { small: 64, large: 512 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   function aRef(name: string): SchemaNode {
     return { type: 'ref', name };
   }
@@ -717,9 +714,7 @@ describe('compatibilityReportOf, the defs a Guard’s Qualifier and Context reac
     };
   }
 
-  test('many Guards whose Qualifier and Context name the head of one unchanged chain of ids are checked in time that grows with their number and the chain’s length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Guards whose Qualifier and Context name the head of one unchanged chain of ids are checked in time that grows with their number and the chain’s length', () => {
     const checkGuards = checkOfGuards('a');
 
     const report = checkGuards(sizes.large)();
