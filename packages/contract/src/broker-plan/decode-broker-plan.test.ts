@@ -389,6 +389,18 @@ describe('reading a broker plan', () => {
     },
   );
 
+  test('a Stream named after a Service named constructor decodes', () => {
+    const plan = {
+      prefix: null,
+      streams: {
+        constructor: { service: 'constructor', subjects: ['constructor.event.OrderCreated.v1'] },
+      },
+      durableConsumers: {},
+    };
+
+    expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
+  });
+
   test('a plan without a prefix asks no name or subject to carry one', () => {
     const plan = {
       prefix: null,
