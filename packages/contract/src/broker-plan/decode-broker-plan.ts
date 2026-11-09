@@ -6,6 +6,8 @@ import {
   isBrokerPrefix,
   isPrefixedName,
   isPrefixedSubject,
+  readStreamName,
+  unprefixedNameOf,
 } from '../wire/index.ts';
 import type { BrokerPlan } from './broker-plan.ts';
 
@@ -42,12 +44,20 @@ export function decodeBrokerPlan(value: unknown): DecodedBrokerPlan {
   if (structured.kind === 'refused') {
     return malformedAt(structured.problems[0]);
   }
-  const problem = uncarriedProblemOf(structured.value);
+  const problem = uncarriedProblemOf(structured.value) ?? unreadProblemOf(structured.value);
   return problem === undefined ? { kind: 'decoded', plan: structured.value } : malformedAt(problem);
 }
 
 function malformedAt(problem: Problem): DecodedBrokerPlan {
   return { kind: 'malformed', reason: problemLineOf(problem) };
+}
+
+function unreadProblemOf(brokerPlan: BrokerPlan): Problem | undefined {
+  const unread = Object.keys(brokerPlan.streams).find((name) => {
+    const unprefixed = unprefixedNameOf(brokerPlan.prefix, name);
+    return unprefixed === undefined || readStreamName(unprefixed) === undefined;
+  });
+  return unread === undefined ? undefined : { at: ['streams', unread], reason: notStreamName };
 }
 
 /** A name or subject of the plan, where it sits and whether it carries the plan's prefix. */

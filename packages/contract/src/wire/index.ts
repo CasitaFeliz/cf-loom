@@ -29,6 +29,7 @@ export {
   subjectOf,
   transportHeaderFitOf,
 } from './broker.ts';
+export { readStreamName, unprefixedNameOf } from './broker-names.ts';
 export type {
   BrokerNeeds,
   NeededDurableConsumer,

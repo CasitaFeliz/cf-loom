@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { z } from 'zod';
+import { lineBreaks } from '../../test/line-breaks.ts';
 import { aRootPackage } from '../../test/root-package.ts';
 import { defineCommand, defineEvent, defineGroup, defineService } from '../index.ts';
 import {
@@ -239,6 +240,16 @@ describe('reading a broker plan', () => {
     ],
   ])('a plan with a __proto__ %s is malformed, never decoded without it', (_, plan, reason) => {
     expect(decodeBrokerPlan(plan)).toEqual(malformed(reason));
+  });
+
+  test.for(lineBreaks)('a Stream named with %s is malformed, naming it', ([, code]) => {
+    const name = `${ordersStream}${String.fromCharCode(code)}x`;
+
+    const decoded = decodeBrokerPlan(aPlanWithStream({}, name));
+
+    expect(decoded).toEqual(
+      malformed(`streams.${name} is not a Stream name: a Service name after the prefix`),
+    );
   });
 
   test('a plan without a prefix asks no name or subject to carry one', () => {
