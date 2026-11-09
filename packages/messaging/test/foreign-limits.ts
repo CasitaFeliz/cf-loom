@@ -11,17 +11,21 @@ type Limits = object;
 type ShownAs = {
   /** A string, number, boolean, `null` or `undefined` as `util.inspect` prints it, a list held as data with its entries, anything else the words of its kind. */
   readonly shown: string;
+  /** What it shows of it past the nesting a refusal shows: a list is `[Array]`, anything else the same. */
+  readonly past: string;
   /** Whether that reading runs its code or throws, before any refusal: the reader's, not the refusal's. */
   readonly touchedByListRead: boolean;
 };
 
-function shownAs(shown: string, touchedByListRead = false): ShownAs {
-  return { shown, touchedByListRead };
+function shownAs(shown: string, others: Partial<ShownAs> = {}): ShownAs {
+  return { shown, past: shown, touchedByListRead: false, ...others };
 }
+
+const listPast = { past: '[Array]' };
 
 const shownOf: Readonly<Record<ForeignLabel, ShownAs>> = {
   'a custom inspect': shownAs('an object'),
-  'a custom inspect in a list': shownAs('[ an object ]'),
+  'a custom inspect in a list': shownAs('[ an object ]', listPast),
   'a custom inspect as a Map key': shownAs('an object'),
   'an Error whose cause has a custom inspect': shownAs('an object'),
   'a function that converts itself to text': shownAs('a function'),
@@ -30,18 +34,21 @@ const shownOf: Readonly<Record<ForeignLabel, ShownAs>> = {
   'a RegExp with a source getter': shownAs('an object'),
   'a Proxy object': shownAs('an object'),
   'a Proxy function': shownAs('a function'),
-  'a Proxy list': shownAs('a list', true),
-  'a list with an index getter': shownAs('a list', true),
+  'a Proxy list': shownAs('a list', { touchedByListRead: true }),
+  'a list with an index getter': shownAs('a list', { ...listPast, touchedByListRead: true }),
   'an object with an enumerable getter': shownAs('an object'),
-  'an Array subclass with a species getter': shownAs("[ '1s' ]", true),
+  'an Array subclass with a species getter': shownAs("[ '1s' ]", {
+    ...listPast,
+    touchedByListRead: true,
+  }),
   'an Error with a name getter': shownAs('an object'),
-  'a list with a Proxy prototype': shownAs("[ '30s' ]", true),
-  'a list with its own custom inspect': shownAs("[ '30s', '0s' ]"),
-  'a sparse list': shownAs('a list'),
+  'a list with a Proxy prototype': shownAs("[ '30s' ]", { ...listPast, touchedByListRead: true }),
+  'a list with its own custom inspect': shownAs("[ '30s', '0s' ]", listPast),
+  'a sparse list': shownAs('a list', listPast),
   'an object with no prototype': shownAs('an object'),
   'an object of seconds': shownAs('an object'),
-  'a list with an extra key': shownAs("[ '30s', '0s' ]"),
-  'a revoked Proxy': shownAs('an object', true),
+  'a list with an extra key': shownAs("[ '30s', '0s' ]", listPast),
+  'a revoked Proxy': shownAs('an object', { touchedByListRead: true }),
   'a Symbol with a line break': shownAs('a symbol'),
   'a bigint': shownAs('a bigint'),
 };
@@ -86,16 +93,21 @@ function pathOf({ group, setting }: Site): string {
   return `limits.${group}.${setting}`;
 }
 
+/** A value at the depth past which a refusal shows no more of a list: three lists in, where `util.inspect` shows a list as `[Array]`. */
+function nestedShown(past: string): string {
+  return `[ [ [ ${past} ] ] ]`;
+}
+
 /**
- * Each value of the pool at each setting of valid limits, alone and as an entry of an ack wait list;
- * alone at ackWait only a value that reading the setting as one value or a list of them leaves
- * untouched, which the reader cannot know before it reads it.
+ * Each value of the pool at each setting of valid limits, alone, as an entry of an ack wait list and
+ * three lists deep; alone at ackWait only a value that reading the setting as one value or a list of
+ * them leaves untouched, which the reader cannot know before it reads it.
  */
 export function limitsPlacesOf(valid: Limits, hooked: () => unknown): readonly LimitsPlace[] {
   const places: LimitsPlace[] = [];
   for (const site of sitesOf(valid)) {
     const path = pathOf(site);
-    for (const { label, value, shown, touchedByListRead } of shownForeignValues(hooked)) {
+    for (const { label, value, shown, past, touchedByListRead } of shownForeignValues(hooked)) {
       if (!(site.setting === 'ackWait' && touchedByListRead)) {
         places.push({
           name: `${path}, ${label}`,
@@ -108,6 +120,13 @@ export function limitsPlacesOf(valid: Limits, hooked: () => unknown): readonly L
         const limits = limitsWith(valid, site, ['30s', value]);
         places.push({ name: `${path} list, ${label}`, path, limits, shown: `[ '30s', ${shown} ]` });
       }
+      const nested = limitsWith(valid, site, [[[value]]]);
+      places.push({
+        name: `${path} nested, ${label}`,
+        path,
+        limits: nested,
+        shown: nestedShown(past),
+      });
     }
   }
   return places;
@@ -130,12 +149,13 @@ export function expectedSentenceOf(message: string, path: string): string {
   return message.slice(start.length);
 }
 
-/** Each value of the pool as an AWS account, alone and as the only entry of a list, and what a refusal shows of it. */
+/** Each value of the pool as an AWS account, alone, as the only entry of a list and three lists deep, and what a refusal shows of it. */
 export function accountPlacesOf(
   hooked: () => unknown,
 ): readonly { readonly name: string; readonly account: unknown; readonly shown: string }[] {
-  return shownForeignValues(hooked).flatMap(({ label, value, shown }) => [
+  return shownForeignValues(hooked).flatMap(({ label, value, shown, past }) => [
     { name: label, account: value, shown },
     { name: `${label} in a list`, account: [value], shown: `[ ${shown} ]` },
+    { name: `${label} nested`, account: [[[value]]], shown: nestedShown(past) },
   ]);
 }
