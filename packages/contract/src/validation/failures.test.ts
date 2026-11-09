@@ -101,7 +101,25 @@ describe('failureLineOf', () => {
         ],
         origin: undefined,
       },
-      'endpoints.GET /orders (listOrders) placedAt not allowed: z.date() (use z.iso.datetime()) (also in events.OrderCreated@1, commands.ChargeCard@1)',
+      'endpoints.GET /orders (listOrders) placedAt not allowed: z.date() (use z.iso.datetime()) (also in events.OrderCreated@1 and commands.ChargeCard@1)',
+    ],
+    [
+      'a construct that is not allowed and three other sites that reach it',
+      {
+        kind: 'not-allowed',
+        site: { kind: 'endpoint', identity: 'GET /orders', name: 'listOrders' },
+        steps: [{ kind: 'field', name: 'placedAt' }],
+        construct: 'z.date()',
+        instead: 'z.iso.datetime()',
+        declaration: undefined,
+        alsoIn: [
+          { kind: 'event', identity: 'OrderCreated@1' },
+          { kind: 'command', identity: 'ChargeCard@1' },
+          { kind: 'event', identity: 'OrderPaid@1' },
+        ],
+        origin: undefined,
+      },
+      'endpoints.GET /orders (listOrders) placedAt not allowed: z.date() (use z.iso.datetime()) (also in events.OrderCreated@1, commands.ChargeCard@1 and events.OrderPaid@1)',
     ],
     [
       'a construct that is not allowed and the package that declares it',

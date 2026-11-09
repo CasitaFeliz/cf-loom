@@ -303,6 +303,19 @@ describe('the Envelopes as they travel', () => {
     );
   });
 
+  test('a Success with two headers that cannot travel is thrown, listing them closed by and', () => {
+    const send = () =>
+      successResponseOf({
+        status: 200,
+        headers: { 'x-a': 'a\nb', 'x-b': 'c\nd' },
+        body: { id: 'o-1' },
+      });
+
+    expect(send).toThrow(
+      'A Success header that cannot travel was not checked before it was sent: x-a and x-b',
+    );
+  });
+
   test('a Fault with a Reserved code carries it, a Handler’s Fault none', async () => {
     const reserved = reservedResponseOf('RETIRED');
     const returned = faultResponseOf({ committed: 'yes', retryable: true, message: 'Lost' });

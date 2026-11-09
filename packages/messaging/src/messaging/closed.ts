@@ -1,4 +1,4 @@
-import { unbrokenLineOf } from '@cf-loom/contract/internal';
+import { joinedOf, unbrokenLineOf } from '@cf-loom/contract/internal';
 /** Thrown by `publish`, `send` and `consume` once messaging is closed, and by `consume` while it is closing. */
 export class MessagingClosedError extends Error {
   override readonly name = 'MessagingClosedError';
@@ -29,9 +29,12 @@ export class CloseAbortedError extends Error {
     const named = handedBack.map(({ name, subject, messageId, factId }) =>
       [name, subject, messageId, factId].join(' '),
     );
-    super(unbrokenLineOf(`close stopped waiting and handed back ${count}: ${named.join(', ')}`), {
-      cause: reason,
-    });
+    super(
+      unbrokenLineOf(`close stopped waiting and handed back ${count}: ${joinedOf(named, 'and')}`),
+      {
+        cause: reason,
+      },
+    );
     this.handedBack = handedBack;
   }
 }

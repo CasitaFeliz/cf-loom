@@ -1,6 +1,6 @@
 import type { GuardSnapshot } from '@cf-loom/contract/internal';
 import { loomNeeds, type Writing } from '../schema-code/index.ts';
-import { stringLiteralOf } from '../source-text/index.ts';
+import { codeListOf, stringLiteralOf } from '../source-text/index.ts';
 import { packageModuleOf, type SchemaFile } from './modules.ts';
 import { bindingOf, fileOf, type PackagedDeclaration, siblingOf } from './names.ts';
 import { declaredTextPartOf, partsLinesOf, schemaLineOf } from './schema-lines.ts';
@@ -21,7 +21,7 @@ export function guardModuleOf(
     `export const ${bindingOf(declared)} = loom.defineGuard({`,
     `  name: ${stringLiteralOf(name)},`,
     `  description: ${stringLiteralOf(guard.description)},`,
-    ...(listed.length === 0 ? [] : [`  guards: [${listed.join(', ')}],`]),
+    ...(listed.length === 0 ? [] : [`  guards: [${codeListOf(listed)}],`]),
     ...partsLinesOf(
       'demands',
       {
@@ -32,7 +32,7 @@ export function guardModuleOf(
     ),
     ...schemaLineOf('context', guard.context, writing),
     ...schemaLineOf('qualifier', guard.qualifier, writing),
-    ...(rejections.length === 0 ? [] : [`  rejections: [${rejections.join(', ')}],`]),
+    ...(rejections.length === 0 ? [] : [`  rejections: [${codeListOf(rejections)}],`]),
     '});',
   ];
   const { needs } = writing;

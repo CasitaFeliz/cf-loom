@@ -18,6 +18,7 @@ import {
   headerTextsOf,
   isQueryText,
   isSegmentText,
+  joinedOf,
   type Root,
   textOfValue,
   textPartsOf,
@@ -1467,7 +1468,7 @@ describe('validateRoot: the time it takes to judge the examples of a text part',
 
     const order = orderOf(told, { small: 1000, large: 8000 }, orders.linear);
     const named = examplesOf(8000).map((example) => JSON.stringify(example));
-    const values = `${named.slice(0, -1).join(', ')} and ${named.at(-1)}`;
+    const values = joinedOf(named, 'and');
 
     expect(summarized(told(8000)())).toEqual(
       failed(

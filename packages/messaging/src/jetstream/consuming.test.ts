@@ -570,7 +570,18 @@ describe('consuming over jetstream()', () => {
         priority_groups: ['g', 'h'],
         priority_policy: 'overflow' as const,
       }),
-      () => 'has the priority groups g, h with the policy overflow, which a pull must name',
+      () => 'has the priority groups g and h with the policy overflow, which a pull must name',
+    ],
+    [
+      'one filtered on two other subjects with priority groups',
+      (orders: Orders) => ({
+        ack_policy: 'explicit' as const,
+        filter_subjects: [`${orders.created}.other`, `${orders.created}.more`],
+        priority_groups: ['g', 'h'],
+        priority_policy: 'overflow' as const,
+      }),
+      (orders: Orders) =>
+        `filters ${orders.created}.other and ${orders.created}.more, not ${orders.created}; has the priority groups g and h with the policy overflow, which a pull must name`,
     ],
   ])(
     'consume refuses %s, naming the Durable consumer and what differs',
@@ -846,7 +857,7 @@ describe('consuming over jetstream()', () => {
       ],
       'no Cf-Loom-Fact-Id header',
     ],
-    ['either id header', [], 'no Nats-Msg-Id header, no Cf-Loom-Fact-Id header'],
+    ['either id header', [], 'no Nats-Msg-Id header and no Cf-Loom-Fact-Id header'],
   ] as const)(
     'a Message without %s is ended without running the Handler, and never comes again',
     async (_name, ids, reason) => {

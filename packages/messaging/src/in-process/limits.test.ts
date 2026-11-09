@@ -119,7 +119,7 @@ describe('inProcess() resolving its limits at consume', () => {
     const consuming = orders.consume(handlersOf(received), {});
 
     await expect(consuming).rejects.toThrow(
-      `The Durable consumer ${notifyDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${notifyDurable} has no ackWait and maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
     );
     await orders.sender.send('ChargeCard', { orderId: 'o-1' }, { factId: 'f-1' });
     await vi.advanceTimersByTimeAsync(3_600_000);
@@ -134,7 +134,7 @@ describe('inProcess() resolving its limits at consume', () => {
 
     const lines = await consuming.catch((error: Error) => error.message.split('\n').sort());
     expect(lines).toEqual([
-      `The Durable consumer ${chargeDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
+      `The Durable consumer ${chargeDurable} has no ackWait and maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
       `The Durable consumer ${notifyDurable} has no maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
     ]);
   });
@@ -146,8 +146,8 @@ describe('inProcess() resolving its limits at consume', () => {
 
     await expect(consuming).rejects.toThrow(
       [
-        `The Durable consumer ${chargeDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
-        `The Durable consumer ${notifyDurable} has no ackWait, maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${chargeDurable} has no ackWait and maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
+        `The Durable consumer ${notifyDurable} has no ackWait and maxDeliver in limits.durableConsumers or limits.durableConsumerDefaults`,
       ].join('\n'),
     );
   });

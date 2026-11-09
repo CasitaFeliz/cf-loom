@@ -683,6 +683,19 @@ describe('publisher.publish', () => {
     });
   });
 
+  test('a Broker that fails on the third Message sent rejects publish with MessageNotSentError listing the two sent, closed by and', async () => {
+    const { broker } = aBroker(3);
+    const { publisher } = await messaging(sizedService, broker);
+    const bodies = { v2: { note: 'a' }, v3: { note: 'abcdef' }, v4: { note: 'b' } };
+
+    const thrown = await rejectionOf(publisher.publish('Sized', bodies, { factId: 'o-1' }));
+
+    expect(thrown).toMatchObject({
+      message: 'Sized with Fact id o-1 was not sent whole; sent: Sized@3 and Sized@2',
+      sent: ['Sized@3', 'Sized@2'],
+    });
+  });
+
   test.for(lineBreaks.filter(([name]) => name !== 'LF' && name !== 'CR'))(
     'a Message not sent whole, whose Fact id holds %s, is told on one line, the break written escaped',
     async ([, code, visible]) => {

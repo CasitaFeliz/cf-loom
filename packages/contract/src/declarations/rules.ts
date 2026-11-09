@@ -67,12 +67,23 @@ type LastOf<Names> =
     ? Last
     : never;
 
-/** Several names in one message, comma-separated unless another separator is given. */
-export type JoinedNames<Names extends string, Separator extends string = ', '> = [
-  Exclude<Names, LastOf<Names>>,
-] extends [never]
-  ? Names
-  : `${JoinedNames<Exclude<Names, LastOf<Names>>, Separator>}${Separator}${LastOf<Names> & string}`;
+/** A list with a name appended unless it holds it already, so a name listed twice is listed once, where it is first. */
+export type ListedOnce<Listed extends readonly string[], Name extends string> = [Name] extends [
+  never,
+]
+  ? Listed
+  : Name extends Listed[number]
+    ? Listed
+    : [...Listed, Name];
+
+/** A list with every name of a union appended once each, in the order the compiler gives the union. */
+export type ListedAll<Listed extends readonly string[], Names extends string> = [Names] extends [
+  never,
+]
+  ? Listed
+  : ListedAll<Listed, Exclude<Names, LastOf<Names>>> extends infer Earlier extends readonly string[]
+    ? ListedOnce<Earlier, LastOf<Names> & string>
+    : never;
 
 /** The names a rule may judge: a name typed as plain `string` says nothing about itself. */
 export type LiteralNames<Names> = Names extends string
@@ -81,7 +92,12 @@ export type LiteralNames<Names> = Names extends string
     : Names
   : never;
 
-/** Whether a type is one value, not a union: a rule judges only what the author wrote exactly. */
+/**
+ * Whether a type is one value, not a union: a rule on a name or a path judges only what the author
+ * wrote exactly, and leaves a union of literals or a widened `string` to `generate`; a rule on a
+ * list of names judges the set of names its type may hold, and its refusal lists that same set, in
+ * the order the declaration does, a union's members in the compiler's order.
+ */
 export type IsOneLiteral<Value> = [Value] extends [never]
   ? false
   : [Value] extends [LastOf<Value>]

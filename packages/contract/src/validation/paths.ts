@@ -55,7 +55,7 @@ export function paramsFailures(
   if (names.length === 0) {
     return declared ? [failure(paramsAt, 'exact-params', noParamsSentence)] : [];
   }
-  const exact = exactParamsSentence(names.join(', '));
+  const exact = exactParamsSentence(names);
   if (params === undefined) {
     return [failure(paramsAt, 'exact-params', exact)];
   }
