@@ -10,7 +10,6 @@
     "src",
     "test",
     "cf-loom.config.ts",
-    "vitest.config.ts",
     "../../packages/messaging/test/aws-arranging.ts",
     "../../packages/messaging/test/aws-connecting.ts",
     "../../packages/messaging/test/aws-reading.ts",

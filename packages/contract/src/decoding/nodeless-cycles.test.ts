@@ -256,9 +256,6 @@ describe('decodeSnapshot, the defs that lead back to themselves with no node bet
 describe('decodeSnapshot, many defs', () => {
   const sizes = { small: 2_000, large: 16_000 };
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   const ref = (name: string): SchemaNode => ({ type: 'ref', name });
 
   /** An object that holds `name` back in an optional field, so the def `name` lies on a cycle through a node. */
@@ -286,9 +283,7 @@ describe('decodeSnapshot, many defs', () => {
     return { decoded, order };
   }
 
-  test('many union defs, each naming the head of one chain of alias defs, are decoded in time that grows with their number and the chain’s length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many union defs, each naming the head of one chain of alias defs, are decoded in time that grows with their number and the chain’s length', () => {
     const unionsNamingTheChainHead = (count: number): Defs => {
       const chain = aChainOf(count, (index) =>
         index === 0 ? holdingBack('link0') : ref(`link${index - 1}`),

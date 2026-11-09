@@ -27,7 +27,7 @@ export function checkedPrefixOf(prefix: string | undefined): string | null {
 
 /** The line refusing a Durable consumer, or what it consists of, whose shape differs from the Broker plan's, naming each difference and what to do. */
 export function shapeRefusalOf(what: string, differences: readonly string[]): string {
-  return `${what} ${differences.join(' and ')}: ${planRemedy}`;
+  return `${what} ${differences.join('; ')}: ${planRemedy}`;
 }
 
 /** How long a Durable consumer waits before it pulls again after a pull failed, as when it was deleted. */

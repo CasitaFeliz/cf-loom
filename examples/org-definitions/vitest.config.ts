@@ -1,12 +1,10 @@
 import { defineProject } from 'vitest/config';
-
-/** Each test spawns cf-loom, which takes seconds on a CI runner with shared cores. */
-const spawningTimeout = 60_000;
+import { hangTimeout } from '../../scripts/hang-timeout.ts';
 
 export default defineProject({
   test: {
     name: '@org/definitions',
-    testTimeout: spawningTimeout,
-    hookTimeout: spawningTimeout,
+    testTimeout: hangTimeout,
+    hookTimeout: hangTimeout,
   },
 });

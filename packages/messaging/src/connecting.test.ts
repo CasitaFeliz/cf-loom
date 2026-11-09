@@ -870,6 +870,7 @@ describe('close and a Handler’s wait', () => {
     const error = await close({ signal: AbortSignal.abort() }).catch((e: unknown) => e);
 
     expect(error).toMatchObject({
+      message: `close stopped waiting and handed back 2 Messages: notifyOnCreated ${created} m-1 f-1 and notifyOnCreated ${created} m-2 f-2`,
       handedBack: [
         { name: 'notifyOnCreated', subject: created, messageId: 'm-1', factId: 'f-1' },
         { name: 'notifyOnCreated', subject: created, messageId: 'm-2', factId: 'f-2' },

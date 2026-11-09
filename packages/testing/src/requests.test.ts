@@ -884,4 +884,35 @@ describe('fakeProvider: requests', () => {
       'payments-service: no Endpoint the Dependency lists is DELETE /payments/pay-1 under /payments-api/; that path takes GET',
     );
   });
+
+  test('a method a listed path with two methods does not take is a mistake naming both, closed by or', async () => {
+    const path = '/payments/tags';
+    const listTags = defineEndpoint({
+      name: 'listTags',
+      method: 'GET',
+      path,
+      visibility: 'internal',
+      description: 'Lists the tags',
+      success: { status: 200, body: z.array(z.string()) },
+    });
+    const addTag = defineEndpoint({
+      name: 'addTag',
+      method: 'POST',
+      path,
+      visibility: 'internal',
+      description: 'Adds a tag',
+      input: { body: z.object({ tag: z.string() }) },
+      success: { status: 204 },
+    });
+    const tagging = contractPackageOf({ listTags, addTag });
+    const fake = fakeProvider(
+      defineDependency({ endpoints: [tagging.endpoints.listTags, tagging.endpoints.addTag] }),
+    );
+
+    const answering = fake.fetch(new Request(`${at}${path}`, { method: 'DELETE' }));
+
+    await expect(answering).rejects.toThrow(
+      `payments-service: no Endpoint the Dependency lists is DELETE ${path} under /; that path takes GET or POST`,
+    );
+  });
 });

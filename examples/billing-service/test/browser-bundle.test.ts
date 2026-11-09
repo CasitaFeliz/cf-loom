@@ -33,5 +33,5 @@ describe('a browser bundle of an Application', () => {
     ]) {
       expect(bundle).not.toContain(unreached);
     }
-  }, 60_000);
+  });
 });

@@ -1842,10 +1842,7 @@ describe('walkSchemas: recursion', () => {
     return ring[0] ?? z.never();
   }
 
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
-  test('a ring of 255 schemas walks each once', { timeout: growthTimeout }, () => {
+  test('a ring of 255 schemas walks each once', () => {
     const walkOf = (count: number) => {
       const ring = aRingOf(count);
       return () => walkSchemas([{ at: placeAt('body'), schema: ring }], () => undefined);
@@ -2012,12 +2009,7 @@ describe('walkSchemas: recursion', () => {
    */
   const memoCpuRatio = 3;
 
-  /** Each chain is walked many times, the refused one many times longer with the memo off. */
-  const memoTimeout = 240_000;
-
-  test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', {
-    timeout: memoTimeout,
-  }, () => {
+  test('a chain of 7,000 ids on no cycle, around a refused schema 250 arrays deep, tells each id once', () => {
     const schema = aChainOf(7_000, arraysAround(250, z.bigint()));
     const looped = aLoopedChainOf(7_000, arraysAround(250, z.string()));
     const walk = () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
@@ -2093,7 +2085,7 @@ describe('walkSchemas: recursion', () => {
       return () => walkSchemas([{ at: placeAt('body'), schema }], () => undefined);
     };
 
-    test('ids on no cycle, each holding the next', { timeout: growthTimeout }, () => {
+    test('ids on no cycle, each holding the next', () => {
       const walkChain = walkOf((count) => aChainOf(count, z.string()));
 
       const walked = walkChain(sizes.large)();
@@ -2103,9 +2095,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids on no cycle, each also holding a schema all share', {
-      timeout: growthTimeout,
-    }, () => {
+    test('ids on no cycle, each also holding a schema all share', () => {
       const walkChain = walkOf(aChainSharingOneLeaf);
 
       const walked = walkChain(sizes.large)();
@@ -2115,9 +2105,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids each on a cycle of its own, around a refused schema', {
-      timeout: growthTimeout,
-    }, () => {
+    test('ids each on a cycle of its own, around a refused schema', () => {
       const walkChain = walkOf((count) => aLoopedChainOf(count, z.bigint()));
 
       const walked = walkChain(sizes.large)();
@@ -2127,9 +2115,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids each holding a date and reaching back to the first', {
-      timeout: growthTimeout,
-    }, () => {
+    test('ids each holding a date and reaching back to the first', () => {
       const walkChain = walkOf(aChainBackToItsRoot);
 
       const walked = walkChain(sizes.large)();
@@ -2139,7 +2125,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids each reaching back to a schema with no id', { timeout: growthTimeout }, () => {
+    test('ids each reaching back to a schema with no id', () => {
       const unnamedSizes = { small: 8_000, large: 64_000 };
       const walkChain = walkOf(aChainBackToAnUnnamedRoot);
 
@@ -2239,9 +2225,7 @@ describe('walkSchemas: recursion', () => {
     const unionOf = (before: z.ZodType, other: z.ZodType) => z.union([before, other]);
     const intersectionOf = (before: z.ZodType, other: z.ZodType) => z.intersection(before, other);
 
-    test('union ids in one group, each also in a cycle through an object', {
-      timeout: growthTimeout,
-    }, () => {
+    test('union ids in one group, each also in a cycle through an object', () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, unionOf));
 
       const walked = walkChain(sizes.large)();
@@ -2252,9 +2236,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('intersection ids in one group, each also in a cycle through an object', {
-      timeout: growthTimeout,
-    }, () => {
+    test('intersection ids in one group, each also in a cycle through an object', () => {
       const walkChain = walkOf((count) => aChainOfJoinedDefsInOneGroup(count, intersectionOf));
 
       const walked = walkChain(sizes.large)();
@@ -2265,9 +2247,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('union ids each holding an object whose union names it back', {
-      timeout: growthTimeout,
-    }, () => {
+    test('union ids each holding an object whose union names it back', () => {
       const walkChain = walkOf(aChainOfUnionsAndObjectsNamingThemBack);
 
       const walked = walkChain(sizes.large)();
@@ -2278,9 +2258,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('union ids in one group, each leading back to itself with no node between', {
-      timeout: growthTimeout,
-    }, () => {
+    test('union ids in one group, each leading back to itself with no node between', () => {
       const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'every link'));
 
       const walked = walkChain(sizes.large)();
@@ -2290,9 +2268,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('union ids in one group, the first leading back to itself with no node between', {
-      timeout: growthTimeout,
-    }, () => {
+    test('union ids in one group, the first leading back to itself with no node between', () => {
       const walkChain = walkOf((count) => aChainOfUnionsLeadingBack(count, 'the first'));
 
       const walked = walkChain(sizes.large)();
@@ -2302,9 +2278,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('one union id of many options, each leading back to it with no node between', {
-      timeout: growthTimeout,
-    }, () => {
+    test('one union id of many options, each leading back to it with no node between', () => {
       const walkChain = walkOf(aUnionOfAliasesLeadingBack);
 
       const walked = walkChain(sizes.large)();
@@ -2314,9 +2288,7 @@ describe('walkSchemas: recursion', () => {
       expect(order).toBeLessThan(orders.linear);
     });
 
-    test('ids each on a cycle of its own, around a refused schema, validated', {
-      timeout: growthTimeout,
-    }, () => {
+    test('ids each on a cycle of its own, around a refused schema, validated', () => {
       const validateChain = (count: number) => {
         const body = aLoopedChainOf(count, z.bigint());
         return () => validated(body);
@@ -2330,9 +2302,7 @@ describe('walkSchemas: recursion', () => {
     });
   });
 
-  test('a failing def met by many paths is reported once and walked once', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a failing def met by many paths is reported once and walked once', () => {
     const walkOf = (count: number) => {
       const steps: z.ZodType[] = [];
       const nextOf = (index: number) => steps[(index + 1) % (count + 1)];
@@ -2815,9 +2785,6 @@ describe('walkSchemas: recursion', () => {
     /** A schema 255 arrays around a `z.lazy()` back to the schema holding it: cut for its depth. */
     const cutBack = (self: () => z.ZodType) => ({ deep: arraysAround(255, z.lazy(self)) });
 
-    /** A fan walked again at every use takes seconds a run, and `orderOf` runs it many times. */
-    const fanTimeout = 240_000;
-
     function orderOfFans(
       count: number,
       extra: (self: () => z.ZodType) => Record<string, z.ZodType>,
@@ -2829,25 +2796,19 @@ describe('walkSchemas: recursion', () => {
       return orderOf(walkOf, { small: count / 2, large: count }, orders.polynomial);
     }
 
-    test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', {
-      timeout: fanTimeout,
-    }, () => {
+    test('a fan of 18 ids off a cycle, each holding the next twice, walks each once', () => {
       const order = orderOfFans(18, () => ({}));
 
       expect(order).toBeLessThan(orders.polynomial);
     });
 
-    test('a fan of 10 defs each cut for its depth, each holding the next twice, walks each once', {
-      timeout: fanTimeout,
-    }, () => {
+    test('a fan of 10 defs each cut for its depth, each holding the next twice, walks each once', () => {
       const order = orderOfFans(10, cutBack);
 
       expect(order).toBeLessThan(orders.polynomial);
     });
 
-    test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', {
-      timeout: fanTimeout,
-    }, () => {
+    test('a fan of 18 ids off a cycle, each holding a cycle no id names, walks each once in a declaration', () => {
       const order = orderOfFans(18, () => ({ unnamed: anUnnamedCycle() }));
 
       expect(order).toBeLessThan(orders.polynomial);
@@ -3020,12 +2981,6 @@ describe('defGraphOf reached', () => {
 const depth = 5_000;
 
 /**
- * A deep test walks thousands of schemas, which takes up to 8 s while the project's files run in
- * parallel, and several times that on a CI runner that several runs share.
- */
-const deepTimeout = 240_000;
-
-/**
  * A chain of `count` recursive ids, outermost first: each an object that holds itself, so it lies
  * on a cycle, and the next through `link`; the innermost holds `innermost` instead.
  */
@@ -3146,9 +3101,7 @@ function shuffledOf<Value>(values: readonly Value[], next: () => number): readon
 }
 
 describe('walkSchemas: depth', () => {
-  test('a chain of 5,000 recursive ids, each holding the next, walks to 5,000 defs', {
-    timeout: deepTimeout,
-  }, () => {
+  test('a chain of 5,000 recursive ids, each holding the next, walks to 5,000 defs', () => {
     const outermost = aChainOf(depth, (next) => next);
 
     const walked = walkSchemas([{ at: placeAt('body'), schema: outermost }], () => undefined);
@@ -3173,7 +3126,6 @@ describe('walkSchemas: depth', () => {
     ['z.lazy()', (next: z.ZodObject) => z.lazy(() => next)],
   ] as const)(
     'a chain of 5,000 recursive ids, each holding the next in %s, walks to 5,000 defs',
-    { timeout: deepTimeout },
     ([_container, link]) => {
       const outermost = aChainOf(depth, link);
 
@@ -3189,7 +3141,6 @@ describe('walkSchemas: depth', () => {
     ['.nullable()', (inner: z.ZodType) => inner.nullable()],
   ] as const)(
     '5,000 of %s around one schema are refused once, at the 257th',
-    { timeout: deepTimeout },
     ([_wrapper, wrap]) => {
       const schema = aNestOf(depth, wrap);
 
@@ -3207,7 +3158,6 @@ describe('walkSchemas: depth', () => {
     ['.pipe()', (inner: z.ZodType) => inner.pipe(z.boolean()), 2],
   ] as const)(
     '5,000 of %s around one schema are each refused down to the 256th, and what sits at the 257th as too deep',
-    { timeout: deepTimeout },
     ([_wrapper, wrap, atTheLimit]) => {
       const schema = aNestOf(depth, wrap);
 
@@ -3221,9 +3171,7 @@ describe('walkSchemas: depth', () => {
     },
   );
 
-  test('a def on a cycle holding 5,000 nested z.set() reports each z.set() it walks and the depth once', {
-    timeout: deepTimeout,
-  }, () => {
+  test('a def on a cycle holding 5,000 nested z.set() reports each z.set() it walks and the depth once', () => {
     const held = aNestOf(depth, (inner) => z.set(inner), z.date());
     const def: z.ZodType = z
       .object({ self: z.lazy(() => def).optional(), held })
@@ -3237,9 +3185,7 @@ describe('walkSchemas: depth', () => {
     expect(constructs).toEqual([...Array(255).fill('z.set()'), writtenTooDeep]);
   });
 
-  test('one cycle through 5,000 ids walks to 5,000 defs, each a ref to the next', {
-    timeout: deepTimeout,
-  }, () => {
+  test('one cycle through 5,000 ids walks to 5,000 defs, each a ref to the next', () => {
     const ring: z.ZodType[] = [];
     for (let index = 0; index < depth; index++) {
       const next = z.lazy(() => ring[(index + 1) % depth] ?? z.never());
@@ -3259,9 +3205,7 @@ describe('walkSchemas: depth', () => {
     });
   });
 
-  test('a chain of 5,000 alias defs on one chain of lazies walks to one def and its aliases', {
-    timeout: deepTimeout,
-  }, () => {
+  test('a chain of 5,000 alias defs on one chain of lazies walks to one def and its aliases', () => {
     const aliases: z.ZodType[] = [];
     const inner: z.ZodType = z
       .lazy(() => z.object({ children: z.array(aliases[0] ?? z.never()) }))
@@ -3280,7 +3224,6 @@ describe('walkSchemas: depth', () => {
 
   test.for([1, 2, 3])(
     'a random graph of 5,000 recursive ids, seed %i, goes through the Snapshot, its export and the Check',
-    { timeout: deepTimeout },
     (seed) => {
       const graph = aGraphOf({ seed, size: depth, innermost: z.boolean(), shuffled: false });
 
@@ -3293,9 +3236,7 @@ describe('walkSchemas: depth', () => {
     },
   );
 
-  test('the order an object’s fields are written in changes neither the Snapshot nor the verdict', {
-    timeout: deepTimeout,
-  }, () => {
+  test('the order an object’s fields are written in changes neither the Snapshot nor the verdict', () => {
     const draw = { seed: 4, size: 1_000, innermost: z.boolean() };
     const dated = { ...draw, innermost: z.date() };
 
@@ -3315,9 +3256,7 @@ describe('walkSchemas: depth', () => {
     });
   });
 
-  test('a refusal inside the innermost of 5,000 nested defs is told once, at its def', {
-    timeout: deepTimeout,
-  }, () => {
+  test('a refusal inside the innermost of 5,000 nested defs is told once, at its def', () => {
     const outermost = aChainOf(depth, (next) => next, z.date());
 
     const root = summarized(validated(outermost));

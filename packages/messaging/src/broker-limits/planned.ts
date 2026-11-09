@@ -3,6 +3,7 @@ import {
   type BrokerPlanDurableConsumer,
   type BrokerPlanStream,
   decodeBrokerPlan,
+  joinedOf,
 } from '@cf-loom/contract/internal';
 import {
   type Container,
@@ -147,12 +148,12 @@ export function durableConsumersResolvedOf<Reading extends Readers, Listed, Plan
 }
 
 function unsetStreamLine({ name, names }: Unset): string {
-  return `The stream ${name} has no ${names.join(', ')} in limits.streams or limits.streamDefaults`;
+  return `The stream ${name} has no ${joinedOf(names, 'and')} in limits.streams or limits.streamDefaults`;
 }
 
 function unsetDurableConsumerLine({ name, names }: Unset): string {
   const where = 'limits.durableConsumers or limits.durableConsumerDefaults';
-  return `The Durable consumer ${name} has no ${names.join(', ')} in ${where}`;
+  return `The Durable consumer ${name} has no ${joinedOf(names, 'and')} in ${where}`;
 }
 
 /**

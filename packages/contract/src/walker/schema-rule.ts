@@ -1,5 +1,5 @@
 import type * as core from 'zod/v4/core';
-import type { IsOneLiteral, JoinedNames, Refusal } from '../declarations/index.ts';
+import type { IsOneLiteral, Refusal } from '../declarations/index.ts';
 import type { checkNames } from './check-names.ts';
 import type {
   catchalls,
@@ -234,4 +234,4 @@ type RefusedIn<Schema, Depth extends number = 10> = Depth extends 0
  */
 export type SchemaRule<Schema> = [RefusedIn<Schema>] extends [never]
   ? unknown
-  : Refusal<`not allowed: ${JoinedNames<RefusedIn<Schema>, '; '>}`>;
+  : Refusal<`not allowed: ${RefusedIn<Schema>}`>;

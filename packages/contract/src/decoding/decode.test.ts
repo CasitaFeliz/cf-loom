@@ -927,6 +927,25 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(malformedAt(expectedAt));
       });
 
+      test('a params object that declares other fields than two params lists the params, closed by and', () => {
+        const identity = 'GET /orders/{}/items/{}';
+        const input = {
+          ...anEndpoint.input,
+          params: { type: 'object', fields: { id: idField } },
+        };
+
+        const result = serviceWith({
+          endpoints: { [identity]: { ...anEndpoint, params: ['orderId', 'itemId'], input } },
+        });
+
+        expect(result).toEqual(
+          malformedAt(
+            ['endpoints', identity, 'input', 'params'],
+            'declares other fields than the params: orderId and itemId',
+          ),
+        );
+      });
+
       test('a params object on a path without params is malformed at it', () => {
         const result = serviceWith({
           endpoints: {
@@ -1265,7 +1284,7 @@ describe('decodeSnapshot', () => {
       expect(result).toEqual(
         malformedAt(
           ['defs', 'tree', 'type'],
-          expect.stringMatching(/^is none of "string", "number", "boolean", .*"ref"$/),
+          expect.stringMatching(/^is not "string", "number", "boolean", .* or "ref"$/),
         ),
       );
     });
@@ -1274,7 +1293,7 @@ describe('decodeSnapshot', () => {
       const result = serviceWith({ kind: 'library' });
 
       expect(result).toEqual(
-        malformedAt(['kind'], 'is none of "service", "application", "definitions"'),
+        malformedAt(['kind'], 'is not "service", "application" or "definitions"'),
       );
     });
 
@@ -1372,7 +1391,7 @@ describe('decodeSnapshot', () => {
         expect(result).toEqual(
           malformedAt(
             ['endpoints', 'GET /orders/{}', 'visibility'],
-            'is none of "public", "internal", "private"',
+            'is not "public", "internal" or "private"',
           ),
         );
       });
@@ -1404,12 +1423,12 @@ describe('decodeSnapshot', () => {
         [
           'a lifecycle that is none of the three',
           { ...anEndpoint, lifecycle: 'archived' },
-          'is none of "active", "deprecated", "retired"',
+          'is not "active", "deprecated" or "retired"',
         ],
         [
           'a lifecycle that is no string',
           { ...anEndpoint, lifecycle: null },
-          'is none of "active", "deprecated", "retired"',
+          'is not "active", "deprecated" or "retired"',
         ],
         ['no lifecycle', { ...anEndpoint, lifecycle: undefined }, 'is missing'],
       ])('an Endpoint with %s is malformed at the lifecycle', (_, endpoint, reason) => {
@@ -3521,9 +3540,6 @@ describe('decodeSnapshot reads a wide Snapshot without throwing', () => {
 });
 
 describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   const sizes = { small: 1_000, large: 8_000 };
 
   function decoded(shapeOf: (count: number) => Shape) {
@@ -3533,9 +3549,7 @@ describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
     };
   }
 
-  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a Snapshot holding a Former Input for each of many Endpoints, beside many defs, decodes in time that grows with both', () => {
     const read = decoded(baselineHoldingFormerInputs)(3)();
     const order = orderOf(decoded(baselineHoldingFormerInputs), sizes, orders.linear);
 
@@ -3543,9 +3557,7 @@ describe('decodeSnapshot, the Former Inputs of a published Snapshot', () => {
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a Snapshot whose many Former Inputs’ Endpoints name the top of one long chain of alias defs decodes in time that grows with them', () => {
     const read = decoded(formerInputsNamingAnAliasChain)(3)();
     const order = orderOf(decoded(formerInputsNamingAnAliasChain), sizes, orders.linear);
 

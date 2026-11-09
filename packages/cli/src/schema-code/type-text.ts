@@ -1,5 +1,5 @@
 import type { EnumNode, ObjectNode, SchemaNode, TupleNode } from '@cf-loom/contract/internal';
-import { keyOf, literalOf } from '../source-text/index.ts';
+import { codeListOf, keyOf, literalOf } from '../source-text/index.ts';
 import { defTypeNameOf } from './def-names.ts';
 import { addDefUse, type Needs, noNeeds, type SchemaMode, type Writing } from './needs.ts';
 
@@ -71,5 +71,5 @@ function objectTypeOf(node: ObjectNode, writing: Writing): string {
 function tupleTypeOf(node: TupleNode, writing: Writing): string {
   const items = node.items.map((item) => typeOf(item, writing));
   const rest = node.rest === undefined ? [] : [`...Array<${typeOf(node.rest, writing)}>`];
-  return `[${[...items, ...rest].join(', ')}]`;
+  return `[${codeListOf([...items, ...rest])}]`;
 }

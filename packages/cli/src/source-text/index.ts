@@ -1,3 +1,4 @@
+export { codeListOf } from './code-lists.ts';
 export {
   camelCaseOfCode,
   kebabCaseOfCode,

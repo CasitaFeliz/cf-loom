@@ -1474,9 +1474,6 @@ describe('publishedSnapshotOf and compatibilityReportOf: former Inputs over gene
 });
 
 describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', () => {
-  /** A growth test times its shape many times over, which a CI runner that several runs share stretches several times over. */
-  const growthTimeout = 240_000;
-
   const sizes = { small: 2_000, large: 16_000 };
 
   /** The Endpoints are as many as the chain is long, so a check that reads the chain per Endpoint costs their product. */
@@ -1517,9 +1514,6 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
 
   test.each([{ naming: 'bare' }, { naming: 'in a field' }] as const)(
     'many Endpoints whose Input body names the head of one unchanged chain of ids, $naming, are checked in time that grows with their number and the chain’s length',
-    {
-      timeout: growthTimeout,
-    },
     ({ naming }) => {
       const shapeOf = (count: number) => endpointsNamingChain(count, naming);
       const { baseline, proposed } = shapeOf(3);
@@ -1532,9 +1526,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     },
   );
 
-  test('a body of many fields losing one is checked and merged in time that grows with its fields', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a body of many fields losing one is checked and merged in time that grows with its fields', () => {
     const { baseline, proposed } = wideBodyLosingField(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1544,9 +1536,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a chain of ids whose end lost a field is checked and merged in time that grows with its length', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a chain of ids whose end lost a field is checked and merged in time that grows with its length', () => {
     const { baseline, proposed } = chainLosingFieldAtEnd(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1558,9 +1548,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many defs naming the top of a long chain of alias defs whose end changed are grafted in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many defs naming the top of a long chain of alias defs whose end changed are grafted in time that grows with them', () => {
     const { baseline, proposed } = defsNamingAnAliasChain(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1570,9 +1558,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many Endpoints each losing a field beside many defs they do not reach are checked in time that grows with both', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Endpoints each losing a field beside many defs they do not reach are checked in time that grows with both', () => {
     const { baseline, proposed } = endpointsLosingFieldBesideUnreachedDefs(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1590,9 +1576,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('a Baseline holding a Former Input for each of many Endpoints is checked in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('a Baseline holding a Former Input for each of many Endpoints is checked in time that grows with them', () => {
     const { baseline, proposed } = endpointsHoldingFormerInputEach(3);
 
     const report = compatibilityReportOf(baseline, proposed);
@@ -1602,9 +1586,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many Endpoints naming the top of one long chain of alias defs whose end changed are merged in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Endpoints naming the top of one long chain of alias defs whose end changed are merged in time that grows with them', () => {
     const { baseline, proposed } = endpointsNamingAnAliasChain(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1614,9 +1596,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many defs named apart from one def’s name are merged in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many defs named apart from one def’s name are merged in time that grows with them', () => {
     const { baseline, proposed } = defsNamedApartFromOne(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1628,9 +1608,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many former defs merged into one proposed def whose field writes in place what they all name are merged in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many former defs merged into one proposed def whose field writes in place what they all name are merged in time that grows with them', () => {
     const { baseline, proposed } = defsMergedIntoOneWrittenInline(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1642,9 +1620,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many Endpoints naming the top of one long chain of alias defs whose end lost a field are merged in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Endpoints naming the top of one long chain of alias defs whose end lost a field are merged in time that grows with them', () => {
     const { baseline, proposed } = endpointsNamingAnAliasChainLosingField(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1658,9 +1634,7 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     expect(order).toBeLessThan(orders.linear);
   });
 
-  test('many Endpoints naming the top of one long chain of alias defs, each alias def’s description changed, are merged in time that grows with them', {
-    timeout: growthTimeout,
-  }, () => {
+  test('many Endpoints naming the top of one long chain of alias defs, each alias def’s description changed, are merged in time that grows with them', () => {
     const { baseline, proposed } = endpointsNamingChangedAliasDefs(3);
 
     const published = publishedSnapshotOf(baseline, proposed, mergedAt);
@@ -1678,7 +1652,6 @@ describe('compatibilityReportOf and publishedSnapshotOf: the graft’s time', ()
     'retargeted refs',
   ] as const satisfies readonly ChainEnd[])(
     'many Endpoints naming the top of one long chain of object defs whose end changed (%s) with no field to put back are merged in time that grows with them, and keep no Former Input',
-    { timeout: growthTimeout },
     (change) => {
       const shapeOf = (count: number) => endpointsNamingOneChainChangedAt(count, change);
       const { baseline, proposed } = shapeOf(3);

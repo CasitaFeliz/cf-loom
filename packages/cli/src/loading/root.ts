@@ -64,12 +64,16 @@ export type SplitRoot =
     }
   | { readonly kind: 'failed'; readonly reason: string };
 
-const { service, application, definitions } = rootPlaces;
-
-const noRoot = [
-  "exports no Root: a Service's Contract, an Application's Contract or a Definitions Package,",
-  `declared with ${service.define}, ${application.define} or ${definitions.define}`,
-].join(' ');
+const places = Object.values(rootPlaces);
+const nouns = joinedOf(
+  places.map(({ noun }) => noun),
+  'or',
+);
+const defines = joinedOf(
+  places.map(({ define }) => define),
+  'or',
+);
+const noRoot = `exports no Root: ${nouns}, declared with ${defines}`;
 
 /**
  * Splits a Root file's exports into its Root, found among them by identity under any name, and

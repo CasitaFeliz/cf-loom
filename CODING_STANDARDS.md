@@ -295,15 +295,17 @@ key set is pinned by one type test in its package's `types.test.ts`; a test neve
 (`orderOf` and `cpuRatioOf`, in `packages/contract/test/growth.ts`; a package outside `contract` widens its
 `tsconfig.test.json` to import it, as billing does `nats-server.ts`): either the order of growth between two sizes of
 each dimension the plan names, held under the one of `orders` the test claims (flat, linear or polynomial) and never
-under a bound of its own, or a ratio to a reference doing the same work without the behavior under test. A correctness
-test gets the project's timeout, never one sized on an idle machine. A test's fixtures fit the light budget
+under a bound of its own, or a ratio to a reference doing the same work without the behavior under test. A test, suite
+or hook gets the hang bound, `hangTimeout`, the one timeout of every project, which bounds no cost, and sets no timeout
+of its own **(lint)**. A test's fixtures fit the light budget
 ([CLAUDE.md](CLAUDE.md#repository)); a row that needs more goes in a `*.heavy.test.ts` file or, for a growth family, a
 `*.growth.test.ts` file, never a bigger budget for the project. A test file reads no clock: `performance.now()`,
 `Date.now()`, `process.hrtime`, `process.cpuUsage` and `process.threadCpuUsage` in a `*.test.ts` are errors
 **(lint)**, and the helpers that read one are not test files.
-*Why:* a shared runner slows a clock several times over, and absolute bounds turned CI red at least eight times; a step
-costs more at the large size beside neighbours that share the memory, which a bound near the claimed growth, written
-again in each file, could not hold.
+*Why:* a shared runner slows a clock several times over, and absolute bounds turned CI red at least eight times; Vitest
+cannot stop a synchronous test, so a timeout sized from a quiet run only reads the clock after it returns, and a runner
+shares its CPUs; a step costs more at the large size beside neighbours that share the memory, which a bound near the
+claimed growth, written again in each file, could not hold.
 
 ## Reviewing
 
@@ -338,8 +340,13 @@ console call not given `...logOf(line, cause)`, and an Error's message, of a bui
 through the one rule of [Runtime](ARCHITECTURE.md#runtime) (C1; an aliased `console` or `Error`, a `DOMException` and an
 Error subclass that inherits Error's constructor are out of reach), outside a `*.test.ts`, a `new Request` whose init
 literal has a `signal` member, outside `wire/held-request.ts` (a variable init or a copied Request is out of reach)
-(C1), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`, `process.cpuUsage`,
-`process.threadCpuUsage`) (C30).
+(C1), in any package's `src`, a list joined by `', '`, outside `joinedOf`, `codeListOf` and `fieldValueOf`, which write
+a list in a sentence, in code and in an HTTP field (C1; a list built by a template, an aliased separator and `scripts/`
+are out of reach), and, in a `*.test.ts`, a read of a clock (`performance.now()`, `Date.now()`, `process.hrtime`,
+`process.cpuUsage`, `process.threadCpuUsage`), a timeout given to a test, a suite or a hook, and any `vi.setConfig` (an
+options object passed through a variable or a spread, and a test function under another name, a `test.extend` alias or
+a renamed import, are out of reach; a test given both its options and its body by name is reported, so write one
+inline) (C30).
 `scripts/check-tsdoc.ts` fails on an exported declaration in a package's `src` with no TSDoc directly above it (C20);
 `pnpm check` and CI run it. `scripts/check-layout.ts` fails on a `src/` that breaks
 [Package layout](ARCHITECTURE.md#package-layout); `pnpm check` and CI run it. `scripts/check-expect-errors.ts`

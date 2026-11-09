@@ -1,4 +1,4 @@
-import { receivedHeadersOf } from '@cf-loom/contract/internal';
+import { joinedOf, receivedHeadersOf } from '@cf-loom/contract/internal';
 import { deliveryOf, type Settlement } from '../broker/index.ts';
 import type { FoundDurableConsumer } from './finding.ts';
 import type { PulledMessage } from './pulled-message.ts';
@@ -10,7 +10,12 @@ import type { PulledMessage } from './pulled-message.ts';
 export async function deliver(message: PulledMessage, found: FoundDurableConsumer): Promise<void> {
   const read = receivedHeadersOf(headerEntriesOf(message));
   if (read.kind === 'missing') {
-    message.term(read.names.map((name) => `no ${name} header`).join(', '));
+    message.term(
+      joinedOf(
+        read.names.map((name) => `no ${name} header`),
+        'and',
+      ),
+    );
     return;
   }
   const { messageId, factId, headers } = read;

@@ -110,7 +110,7 @@ export {
   writtenPartOf,
   writtenShapeOf,
 } from '../issues/index.ts';
-export { linesTextOf, logOf, unbrokenLineOf } from '../lines/index.ts';
+export { joinedOf, linesTextOf, logOf, unbrokenLineOf } from '../lines/index.ts';
 export type { Reading, ReadingSource } from '../reading/index.ts';
 export { readingOf } from '../reading/index.ts';
 export type {
@@ -240,7 +240,6 @@ export {
   formatConstructorOf,
   isJsonValue,
   isSchema,
-  joinedOf,
   refusalsIn,
   siteTextOf,
   snapshotPathOf,

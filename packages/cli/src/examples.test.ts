@@ -20,7 +20,6 @@ import { entriesOf } from '../test/tarball.ts';
 
 const rootDir = join(import.meta.dirname, '..', '..', '..');
 const examplesDir = join(rootDir, 'examples');
-const examplesTimeout = 120_000;
 
 /** The examples in the order the organization publishes them: Definitions first, then the Services. */
 const publishedExamples = [
@@ -130,7 +129,7 @@ const test = baseTest.extend<{ examples: Published }>({
   ],
 });
 
-describe('cf-loom publish and check on the examples', { timeout: examplesTimeout }, () => {
+describe('cf-loom publish and check on the examples', () => {
   test('org-definitions, orders-service and billing-service each publish 1.0.0, with no Approval source configured', ({
     examples,
   }) => {

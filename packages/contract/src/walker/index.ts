@@ -18,7 +18,6 @@ export { formatOptionKeysOf, isFormatOptionValue } from './format-options.ts';
 export type { StringFormat } from './format-schemas.ts';
 export { formatConstructorOf, formatSchemaOf, isStringFormat } from './format-schemas.ts';
 export { heldNodeOf, withoutNullable } from './held-node.ts';
-export { joinedOf } from './joined-names.ts';
 export type { ChangedSite, Place, Site } from './location.ts';
 export {
   belowTextOf,
