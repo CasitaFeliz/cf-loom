@@ -109,9 +109,9 @@ jobs:
       matrix:
         npm:
           - version: 11.13.0
-            sha256: PENDING
+            sha256: a4ffa1de3bf1c7f9d5e3dd24fe2921970bdb1589d647f4083eaaaab3be974b7e
           - version: 12.2.1
-            sha256: PENDING
+            sha256: 228bd64aaef23270dbdbd2cf3d5ef5c467602ef38c4066246cef1984adab9a67
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
