@@ -3,16 +3,21 @@ import {
   dottedOf,
   type Mutated,
   mutatedOf,
+  partReplacedOf,
   pick,
   placeOf,
+  subjectSitesOf,
   type TextSite,
   textSitesOf,
+  withoutEntry,
   withText,
 } from '../../test/broker-plan-edits.ts';
 import { brokerPlanOfModel, modelOfPlan, type ServiceModel } from '../../test/broker-plans.ts';
 import { drawnModel, drawnPrefix, longestName } from '../../test/random-broker-plans.ts';
 import { seededNext } from '../../test/random-schemas.ts';
 import { type BrokerPlan, decodeBrokerPlan } from '../internal/index.ts';
+
+type Next = () => number;
 
 /** A Service a draw declared, with the prefix it is printed under and the plan `cf-loom broker-plan` prints. */
 type Printed = {
@@ -151,6 +156,55 @@ describe('a printed plan with one text changed', () => {
     ).toEqual([]);
     expect(count('unprintable')).toBeGreaterThan(300);
     expect(count('refused')).toBeGreaterThan(100);
+    expect(count('matches')).toBeGreaterThan(40);
+    expect(count('excluded')).toBeLessThan(count('matches'));
+  });
+});
+
+/** One change to what a printed plan says, drawn from replacing a name a text is built from, swapping two subjects and dropping a Durable consumer. */
+function changedOf(next: Next, json: unknown, prefix: string | null): unknown {
+  const sites = textSitesOf(json);
+  if (sites.length === 0) {
+    return json;
+  }
+  const subjects = subjectSitesOf(sites);
+  const consumers = sites.filter(({ isKey, path }) => isKey && path[0] === 'durableConsumers');
+  const [first, second] = [pick(next, subjects), pick(next, subjects)];
+  const draw = next();
+  if (draw < 0.5) {
+    const site = pick(next, sites);
+    const text = partReplacedOf(next, site, prefix);
+    return text === undefined ? json : withText(json, site, text);
+  }
+  if (draw < 0.75 && first !== undefined && second !== undefined) {
+    return withText(withText(json, first, second.text), second, first.text);
+  }
+  const dropped = pick(next, consumers);
+  return dropped === undefined ? json : withoutEntry(json, dropped.path);
+}
+
+describe('a printed plan with one name replaced, two subjects swapped or a Durable consumer dropped', () => {
+  test('is refused, or is the plan its names print, by a Service declared back from them', () => {
+    const next = seededNext(5162);
+    const outcomes: { readonly outcome: string; readonly failure?: unknown }[] = [];
+    for (const { plan, prefix } of printed) {
+      const json: unknown = JSON.parse(JSON.stringify(plan));
+      const changed = changedOf(next, json, prefix);
+      if (JSON.stringify(changed) !== JSON.stringify(json)) {
+        const decoded = decodeBrokerPlan(changed);
+        const verdict = decoded.kind === 'malformed' ? 'refused' : verdictOf(decoded.plan);
+        const isRight = verdict === 'refused' || verdict === 'matches' || verdict === 'excluded';
+        outcomes.push(
+          isRight ? { outcome: verdict } : { outcome: verdict, failure: { changed, verdict } },
+        );
+      }
+    }
+    const count = (outcome: string) => outcomes.filter((one) => one.outcome === outcome).length;
+
+    expect(
+      outcomes.filter(({ failure }) => failure !== undefined).map(({ failure }) => failure),
+    ).toEqual([]);
+    expect(count('refused')).toBeGreaterThan(200);
     expect(count('matches')).toBeGreaterThan(40);
     expect(count('excluded')).toBeLessThan(count('matches'));
   });
