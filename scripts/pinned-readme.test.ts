@@ -351,10 +351,10 @@ describe('pinnedReadme', () => {
   it.each([
     ['an upper-case host', 'HTTPS://GitHub.COM/other/repo/blob/main/a.md'],
     ['a trailing-dot host', 'https://github.com./other/repo/blob/main/a.md'],
-    ['a port', 'https://github.com:443/other/repo/blob/main/a.md'],
+    ['a port', 'https://github.com:8443/other/repo/blob/main/a.md'],
     ['userinfo', 'https://user@github.com/other/repo/blob/main/a.md'],
     ['a percent-escaped host', 'https://git%68ub.com/other/repo/blob/main/a.md'],
-    ['a port on the repository', `https://github.com:443/${repository}/blob/main/a.md`],
+    ['a port on the repository', `https://github.com:8443/${repository}/blob/main/a.md`],
     ['userinfo on the repository', `https://user@github.com/${repository}/blob/main/a.md`],
   ])('refuses a GitHub link with %s, naming its line', (_form, target) => {
     const refused = refusedLinesOf(afterOnePinnedLink(`[x](${target})`));
@@ -625,7 +625,7 @@ const targets: Record<string, string> = {
   'the repository with a query': `${atMain}/x.md?plain=1`,
   'the repository in capitals': `HTTPS://GitHub.COM/${repository}/blob/main/x.md`,
   'the repository on a host with a trailing dot': `https://github.com./${repository}/blob/main/x.md`,
-  'the repository on a port': `https://github.com:443/${repository}/blob/main/x.md`,
+  'the repository on a port': `https://github.com:8443/${repository}/blob/main/x.md`,
   'the repository with userinfo': `https://user@github.com/${repository}/blob/main/x.md`,
   'the repository on a percent-escaped host': `https://git%68ub.com/${repository}/blob/main/x.md`,
   'backslashes in place of slashes': 'https:\\\\github.com\\CasitaFeliz\\cf-loom\\tree\\main',
