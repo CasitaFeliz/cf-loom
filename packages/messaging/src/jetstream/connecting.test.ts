@@ -1,4 +1,5 @@
 import { defineCommand, defineEvent, defineGroup, defineService } from '@cf-loom/contract';
+import { joinedOf } from '@cf-loom/contract/internal';
 import type { NatsConnection } from '@nats-io/nats-core';
 import { connect } from '@nats-io/transport-node';
 import { afterAll, beforeAll, describe, expect, onTestFinished, test } from 'vitest';
@@ -68,7 +69,7 @@ function aConnect() {
 }
 
 const notHeld = (stream: string, subjects: readonly string[]) =>
-  `The stream ${stream} does not hold ${subjects.join(' and ')}: apply the Service's Broker plan`;
+  `The stream ${stream} does not hold ${joinedOf(subjects, 'and')}: apply the Service's Broker plan`;
 
 const absent = (stream: string) =>
   `The stream ${stream} does not exist: apply the Service's Broker plan`;

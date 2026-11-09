@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { joinedOf } from '@cf-loom/contract/internal';
 import { handle } from '@cf-loom/handlers';
 import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { storeIn, wakeEach } from '../../test/aws-arranging.ts';
@@ -268,8 +269,9 @@ describe('close over sqs()', () => {
     expect(message.startsWith('SQS refused to settle Messages of the Durable consumers ')).toBe(
       true,
     );
-    const named = message.slice(message.indexOf('consumers ') + 'consumers '.length).split(' and ');
-    expect(named.sort()).toEqual([orders.chargeDurable, orders.notifyDurable].sort());
+    const named = message.slice(message.indexOf('consumers ') + 'consumers '.length);
+    const durables = [orders.chargeDurable, orders.notifyDurable];
+    expect([joinedOf(durables, 'and'), joinedOf([...durables].reverse(), 'and')]).toContain(named);
     expect((error as Error).cause).toBe(refusal);
   });
 

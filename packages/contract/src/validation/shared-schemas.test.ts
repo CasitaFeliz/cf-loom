@@ -13,7 +13,13 @@ import {
   type Event,
   openEnum,
 } from '../index.ts';
-import { failureLineOf, type Root, type RootPackage, validateRoot } from '../internal/index.ts';
+import {
+  failureLineOf,
+  joinedOf,
+  type Root,
+  type RootPackage,
+  validateRoot,
+} from '../internal/index.ts';
 
 /** The lines `generate` prints for a Root. */
 function linesOf(root: Root, given: Partial<RootPackage> = {}): readonly string[] {
@@ -1750,18 +1756,12 @@ function foldedBySchema(tellings: readonly Telling[]): readonly Telling[] {
   });
 }
 
-/** Sites as a sentence lists them: `a`, `a and b`, `a, b and c`. */
-function sentenceListOf(sites: readonly string[]): string {
-  const last = sites.at(-1);
-  return sites.length < 2 ? sites.join('') : `${sites.slice(0, -1).join(', ')} and ${last}`;
-}
-
 /** The line of the refusals at one place: the sites that also reach it in code point order, and the origin of the shared date when it is exported. */
 function lineOf(group: readonly Telling[], exported: boolean): string {
   const [{ at, refusal, schema }] = group as readonly [Telling];
   const sites = new Set(group.flatMap((telling) => [...telling.sites]));
   const others = [...sites].filter((site) => site !== at.site).sort(byPoints);
-  const alsoIn = others.length === 0 ? '' : ` (also in ${sentenceListOf(others)})`;
+  const alsoIn = others.length === 0 ? '' : ` (also in ${joinedOf(others, 'and')})`;
   const origin =
     exported && schema === 'shared' ? ' (declared in @org/definitions@4.2.0#stamp)' : '';
   return `${at.text} ${refusal}${alsoIn}${origin}`;
