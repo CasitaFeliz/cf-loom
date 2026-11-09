@@ -4,7 +4,7 @@ import { type RoutedSubscription, subjectOf } from '../wire/index.ts';
 import { type BrokerPlan, brokerPlanOfRoutes, type RoutedService } from './broker-plan.ts';
 import type { ReadPlan } from './read-plan.ts';
 
-/** The first place a plan differs from the one its own parts print for the Service it names first. */
+/** A place where a Broker plan differs from the one its own parts print for the Service it names first. */
 export function unprintedProblemOf(plan: BrokerPlan, read: ReadPlan): Problem | undefined {
   const service = read.streams[0]?.service ?? read.durableConsumers[0]?.service;
   if (service === undefined) {
@@ -107,7 +107,7 @@ function listDifferenceOf(
   if (lacking !== undefined) {
     return {
       at: where.at,
-      reason: `lacks ${lacking}, which the plan's names print for ${where.service}`,
+      reason: `lacks ${lacking}, which the Broker plan's names print for ${where.service}`,
     };
   }
   for (const [index, item] of given.entries()) {
@@ -119,5 +119,5 @@ function listDifferenceOf(
 }
 
 function unprintedAt(at: Path, service: string): Problem {
-  return { at, reason: `is not what the plan's names print for ${service}` };
+  return { at, reason: `is not what the Broker plan's names print for ${service}` };
 }

@@ -498,7 +498,7 @@ describe('reading a broker plan', () => {
     expect(decodeBrokerPlan(plan)).toEqual({ kind: 'decoded', plan });
   });
 
-  const reprinted = "is not what the plan's names print for orders-service";
+  const reprinted = "is not what the Broker plan's names print for orders-service";
 
   test('a plan that points a command’s Durable consumer at another Command Version’s subject is malformed, naming its subject', () => {
     const plan = withDurableConsumer(aPrintedPlan(), chargeCardDurableConsumer, {
@@ -557,7 +557,9 @@ describe('reading a broker plan', () => {
     const decoded = decodeBrokerPlan(plan);
 
     expect(decoded).toEqual(
-      malformed("streams.orders-service is not what the plan's names print for billing-service"),
+      malformed(
+        "streams.orders-service is not what the Broker plan's names print for billing-service",
+      ),
     );
   });
 
@@ -592,7 +594,7 @@ describe('reading a broker plan', () => {
 
     expect(decoded).toEqual(
       malformed(
-        `durableConsumers lacks ${refundDurableConsumer}, which the plan's names print for orders-service`,
+        `durableConsumers lacks ${refundDurableConsumer}, which the Broker plan's names print for orders-service`,
       ),
     );
   });
