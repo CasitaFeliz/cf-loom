@@ -722,6 +722,29 @@ describe('validateRoot: an open union or intersection beside a schema that fails
     });
   });
 
+  test('a union over a def that holds an Open Enum and fails on its own tells the union and the failure', () => {
+    const tree: z.ZodType = z
+      .object({
+        status: openEnum(['a']),
+        placedAt: z.date(),
+        get children() {
+          return z.array(tree);
+        },
+      })
+      .meta({ id: 'tree' });
+    const body = z.union([tree, z.string()]);
+
+    const validated = validatedWithBody(body);
+
+    expect(validated).toEqual({
+      kind: 'invalid',
+      failures: [
+        { ...unionRefusal, location: bodyAt },
+        { ...dateRefusal, location: `${bodyAt}<|0>.placedAt` },
+      ],
+    });
+  });
+
   test.each([
     ['z.set()', z.set(openEnum(['a']))],
     ['z.function()', z.function({ input: [openEnum(['a'])], output: z.string() })],

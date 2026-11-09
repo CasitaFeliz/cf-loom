@@ -16,6 +16,7 @@ import { type Recursion, startRecursion } from './recursion.ts';
 import {
   type Composition,
   failedField,
+  type JudgedDefs,
   type LocatedSchema,
   type Memo,
   type Outline,
@@ -53,6 +54,8 @@ export type WalkedSchemas = {
 export type MeetingWalk = WalkedSchemas & {
   readonly met: ReadonlyMap<core.$ZodType, Place>;
   readonly compositions: readonly Composition[];
+  /** Every def the walk wrote or was writing when it failed, by its id: what the rules over defs judge. */
+  readonly judgedDefs: JudgedDefs;
 };
 
 /** The schemas written once under a Snapshot's `defs`, by the id that names each cycle. */
@@ -111,6 +114,7 @@ export function walkMeetingSchemas(
     memoOf: recursion.memoOf,
     met: state.met,
     compositions,
+    judgedDefs: recursion.judgedDefs(),
   };
 }
 

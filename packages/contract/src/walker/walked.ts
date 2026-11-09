@@ -85,6 +85,12 @@ export type Outline =
   | AllOfOutline
   | Unbuilt;
 
+/**
+ * The defs a walk judged, by their id: every def it wrote or was writing when it failed, each as
+ * the outline it was built as, so the rules over defs judge a def that fails too.
+ */
+export type JudgedDefs = Readonly<Record<string, Outline>>;
+
 /** An outline of nothing the walk built: where a refused construct stands. */
 export const unbuilt: Unbuilt = {};
 

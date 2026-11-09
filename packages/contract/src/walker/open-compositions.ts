@@ -2,8 +2,7 @@ import { childrenOf, refsWrittenIn } from './children.ts';
 import { defGraphOf } from './def-graph.ts';
 import type { AllOfNodeOf, NotAllowed, UnionNodeOf } from './nodes.ts';
 import { type Refused, refused } from './not-allowed.ts';
-import type { Defs } from './walk.ts';
-import type { Composition, Outline, Reached } from './walked.ts';
+import type { Composition, JudgedDefs, Outline, Reached } from './walked.ts';
 
 /**
  * Every `allOf` or `union` the walk built that reaches an Open Enum, at any depth: a reader of an
@@ -14,7 +13,7 @@ import type { Composition, Outline, Reached } from './walked.ts';
  */
 export function openCompositionsOf(
   compositions: readonly Composition[],
-  defs: Defs,
+  defs: JudgedDefs,
 ): readonly NotAllowed[] {
   const holding = defGraphOf(defs).closureFacts<OpenEnumFact>((_name, def) =>
     def !== undefined && holdsOpenEnum(def) ? [openEnumFact] : [],

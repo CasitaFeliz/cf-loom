@@ -1,4 +1,4 @@
-import { writtenIdOf } from './metadata.ts';
+import { idRefusalOf, writtenIdOf } from './metadata.ts';
 import { nodelessCyclesOf } from './nodeless-cycles.ts';
 import { type RefNode, refNameOf, type SchemaNode } from './nodes.ts';
 import {
@@ -13,6 +13,11 @@ import {
   type Failed,
   type FailureTree,
   failed,
+  failuresOf,
+  isWhole,
+  type JudgedDefs,
+  type Outline,
+  outlineOf,
   refusedBeside,
   type Walked,
   walked,
@@ -36,7 +41,8 @@ export function offCycle(state: State, entered: Entered, node: Walked): Walked {
 
 /**
  * A schema with an id on a cycle is its def, a `ref` at every use, or its failure; one with a
- * taken id is that refusal. A def is never nullable, since `.nullable()` belongs to a use.
+ * taken id is that refusal. A def is never nullable, since `.nullable()` belongs to a use. A def
+ * that fails keeps the outline it was building, which the rules over defs judge.
  */
 export function writeDef(state: State, entered: Entered, node: Walked): Walked {
   const written = writtenIdOf(entered.schema);
@@ -44,20 +50,41 @@ export function writeDef(state: State, entered: Entered, node: Walked): Walked {
     return isRemembered(state, entered.schema) ? withoutOutline(node) : node;
   }
   const ref: RefNode = { type: 'ref', name: written };
-  if (node.kind === 'not-allowed') {
-    return dropOpenGroup(state, entered, failed(node.tree, ref));
-  }
+  const nullable = nullableDefRefusalsOf(entered, written, node);
   const owner = state.schemaById.get(written);
   if (owner !== undefined && owner !== entered.schema) {
-    return rememberedAs(state, entered, notAllowed(entered.at, refusedDuplicateId(written)));
+    return duplicateDef(state, entered, { node, nullable, ref });
   }
   state.schemaById.set(written, entered.schema);
-  if (node.value.nullable === true) {
-    const refusal = notAllowed(entered.at, refusedNullableDef(written), ref);
-    return dropOpenGroup(state, entered, refusal);
+  entered.def = outlineOf(node);
+  if (node.kind === 'not-allowed' || nullable.length > 0) {
+    return dropOpenGroup(state, entered, failed(failuresOf([...nullable, node]), ref));
   }
-  entered.def = node.value;
   return rememberedAs(state, entered, walked(ref));
+}
+
+/** The refusal of a def that admits null, which `.nullable()` on each use would not. */
+function nullableDefRefusalsOf(entered: Entered, id: string, node: Walked): readonly Failed[] {
+  return outlineOf(node).nullable === true ? [notAllowed(entered.at, refusedNullableDef(id))] : [];
+}
+
+/** A schema with an id another schema wrote, which is told beside what its own walk refused. */
+type Duplicate = {
+  readonly node: Walked;
+  readonly nullable: readonly Failed[];
+  readonly ref: RefNode;
+};
+
+/**
+ * A second schema with an id is that refusal, built nothing; an id the walk refuses is renamed by
+ * its fix, so it is no duplicate and the schema fails as any def does.
+ */
+function duplicateDef(state: State, entered: Entered, { node, nullable, ref }: Duplicate): Walked {
+  if (idRefusalOf(ref.name) !== undefined) {
+    return dropOpenGroup(state, entered, failed(failuresOf([...nullable, node]), ref));
+  }
+  const duplicate = notAllowed(entered.at, refusedDuplicateId(ref.name));
+  return rememberedAs(state, entered, failed(failuresOf([...nullable, duplicate, node])));
 }
 
 function rememberedAs(state: State, entered: Entered, answer: Walked): Walked {
@@ -95,8 +122,9 @@ function failOpenMembers(state: State, fromSlot: number, failure: Failed): void 
 
 /** A def still open takes the failure of one that fails inside its group, so its `ref`s report it. */
 function giveFailure(state: State, member: Entered, failure: Failed): void {
-  if (defNameOf(member.answer) !== undefined) {
-    state.remembered.remember(member, failure);
+  const name = defNameOf(member.answer);
+  if (name !== undefined) {
+    state.remembered.remember(member, failed(failure.tree, { type: 'ref', name }));
   }
 }
 
@@ -117,24 +145,36 @@ function isWalkedInPart(state: State, node: Walked): boolean {
   return node.kind === 'not-allowed' && state.remembered.holdsWrittenTooDeep(node.tree);
 }
 
-/** Every def the walk wrote that no failure took the place of, in the order written. */
+/** Every def the walk wrote whole that no failure took the place of, in the order written. */
 export function defsOf(state: State): Readonly<Record<string, SchemaNode>> {
   const defs: [string, SchemaNode][] = [];
   for (const [name, schema] of state.schemaById) {
     const entered = state.remembered.enteredOf(schema);
-    if (entered?.def !== undefined && defNameOf(entered.answer) !== undefined) {
+    if (isWhole(entered?.def) && defNameOf(entered?.answer) !== undefined) {
       defs.push([name, entered.def]);
     }
   }
   return Object.fromEntries(defs);
 }
 
+/** Every def the walk wrote or was writing, by its id, a def that failed or was failed included. */
+export function judgedDefsOf(state: State): JudgedDefs {
+  const defs: [string, Outline][] = [];
+  for (const [name, schema] of state.schemaById) {
+    const def = state.remembered.enteredOf(schema)?.def;
+    if (def !== undefined) {
+      defs.push([name, def]);
+    }
+  }
+  return Object.fromEntries(defs);
+}
+
 /** A def the walk wrote, by the id it wrote, with the entry that wrote it. */
-type WrittenDef = { readonly name: string; readonly entered: Entered; readonly def: SchemaNode };
+type WrittenDef = { readonly name: string; readonly entered: Entered; readonly def: Outline };
 
 /**
- * A group of schemas closing: each nodeless cycle among the defs it wrote, a def a failure took
- * the place of included, is refused once, at its def the walk entered first, and the group fails
+ * A group of schemas closing: each nodeless cycle among the defs it wrote, a def that failed or
+ * was failed included, is refused once, at its def the walk entered first, and the group fails
  * with them beside its root's own refusals. Read once per group, so the walk reads each def once.
  */
 export function refuseNodelessCycles(state: State, root: Entered, result: Walked): Walked {

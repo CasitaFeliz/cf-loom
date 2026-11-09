@@ -3,31 +3,33 @@ import { refsWrittenIn } from './children.ts';
 import { closureFactsFrom, type Referrers, referrersOf } from './closure-facts.ts';
 import type { RefNode, SchemaNode } from './nodes.ts';
 import type { Defs } from './walk.ts';
+import type { Outline } from './walked.ts';
 
 /**
  * The graph of the `ref`s between one Defs' defs, which answers every question about them. A Defs
  * is never changed once built, so the graph a Defs gives answers for as long as that Defs lives.
+ * The defs the walk judges, a failing def's outline included, have a graph of outlines.
  */
-export type DefGraph = {
+export type DefGraph<Node extends Outline = SchemaNode> = {
   /** The def a name stands for: none unless the Defs holds it as an own key, since a name an object inherits, such as `toString`, is no def. */
-  readonly def: (name: string) => SchemaNode | undefined;
+  readonly def: (name: string) => Node | undefined;
   /**
    * The def a `ref` stands for through any alias defs, nullable when the `ref` or an alias def on the
    * way is; none when a name on the way has no def or the aliases come back to one already followed.
    * Each alias def is followed once for the graph.
    */
-  readonly resolved: (ref: RefNode) => ResolvedRef | undefined;
+  readonly resolved: (ref: RefNode) => ResolvedRef<Node> | undefined;
   /** The defs the nodes reach through `ref`s, directly or through other defs, each read once. */
-  readonly reached: (nodes: readonly SchemaNode[]) => ReachedDefs;
+  reached(nodes: readonly Node[]): ReachedDefs<Node>;
   /**
    * Each def's facts together with those of every def it reaches, from the facts each holds in its
    * own nodes, a name some `ref` gives with no def included as a def of no node: each fact is
    * carried back along each `ref` once, so the time grows with the defs, their nodes and the facts,
    * never with how deep a def reaches.
    */
-  readonly closureFacts: <Fact>(
-    ownFactsOf: (name: string, def: SchemaNode | undefined) => Iterable<Fact>,
-  ) => ReadonlyMap<string, ReadonlySet<Fact>>;
+  closureFacts<Fact>(
+    ownFactsOf: (name: string, def: Node | undefined) => Iterable<Fact>,
+  ): ReadonlyMap<string, ReadonlySet<Fact>>;
 };
 
 /**
@@ -35,19 +37,30 @@ export type DefGraph = {
  * Snapshot keys them, and apart, each once in the order first reached, the names a `ref` gives that
  * it does not hold.
  */
-export type ReachedDefs = { readonly held: Defs; readonly unheld: readonly string[] };
+export type ReachedDefs<Node extends Outline = SchemaNode> = {
+  readonly held: Readonly<Record<string, Node>>;
+  readonly unheld: readonly string[];
+};
 
 /** The def a `ref` stands for through any alias defs, by name, nullable when a `ref` on the way is. */
-export type ResolvedRef = {
+export type ResolvedRef<Node extends Outline = SchemaNode> = {
   readonly name: string;
-  readonly def: SchemaNode;
+  readonly def: Node;
   readonly nullable: boolean;
 };
 
-const graphs = new WeakMap<Defs, DefGraph>();
+/** Some defs, by name: a Defs, or the outlines of the defs a walk judged. */
+type DefsOf<Node extends Outline> = Readonly<Record<string, Node>>;
 
-/** The Def graph of a Defs, the same one each time it is asked for that Defs, which is never changed once built. */
-export function defGraphOf(defs: Defs): DefGraph {
+const graphs = new WeakMap<DefsOf<Outline>, DefGraph<Outline>>();
+
+/**
+ * The Def graph of a Defs, the same one each time it is asked for that Defs, which is never changed
+ * once built. A graph reads nodes of the type its defs hold, so one of a Defs reads nodes alone.
+ */
+export function defGraphOf(defs: Defs): DefGraph;
+export function defGraphOf(defs: DefsOf<Outline>): DefGraph<Outline>;
+export function defGraphOf(defs: DefsOf<Outline>): DefGraph<Outline> {
   const known = graphs.get(defs);
   if (known !== undefined) {
     return known;
@@ -57,7 +70,7 @@ export function defGraphOf(defs: Defs): DefGraph {
   return built;
 }
 
-function graphOf(defs: Defs): DefGraph {
+function graphOf(defs: DefsOf<Outline>): DefGraph<Outline> {
   const known: KnownDestinations = new Map();
   let referrers: Referrers | undefined;
   const def = (name: string) => defNamed(defs, name);
@@ -74,15 +87,15 @@ function graphOf(defs: Defs): DefGraph {
 
 /** The defs the nodes' `ref`s name and those defs' `ref`s name in turn, each def read once, the names with no def apart. */
 function reachedFrom(
-  nodes: readonly SchemaNode[],
-  def: (name: string) => SchemaNode | undefined,
-): ReachedDefs {
-  const held = new Map<string, SchemaNode>();
+  nodes: readonly Outline[],
+  def: (name: string) => Outline | undefined,
+): ReachedDefs<Outline> {
+  const held = new Map<string, Outline>();
   const unheld: string[] = [];
   const entered = new Set<string>();
   const pending = nodes.toReversed();
   for (let node = pending.pop(); node !== undefined; node = pending.pop()) {
-    const entering: SchemaNode[] = [];
+    const entering: Outline[] = [];
     for (const name of refsWrittenIn(node).filter((written) => !entered.has(written))) {
       entered.add(name);
       const found = def(name);
@@ -101,12 +114,16 @@ function reachedFrom(
   return { held: Object.fromEntries(byName), unheld };
 }
 
-function defNamed(defs: Defs, name: string): SchemaNode | undefined {
+function defNamed(defs: DefsOf<Outline>, name: string): Outline | undefined {
   return Object.hasOwn(defs, name) ? defs[name] : undefined;
 }
 
 /** The def a `ref` stands for through alias defs, with the `ref`'s own nullability folded in. */
-function resolvedFrom(ref: RefNode, defs: Defs, known: KnownDestinations): ResolvedRef | undefined {
+function resolvedFrom(
+  ref: RefNode,
+  defs: DefsOf<Outline>,
+  known: KnownDestinations,
+): ResolvedRef<Outline> | undefined {
   const destination = destinationOf(ref.name, defs, known);
   if (destination === undefined || ref.nullable !== true || destination.nullable) {
     return destination;
@@ -115,14 +132,14 @@ function resolvedFrom(ref: RefNode, defs: Defs, known: KnownDestinations): Resol
 }
 
 /** What the graph has found of the defs it was asked about, by name: the def a name leads to, none when it leads to none. */
-type KnownDestinations = Map<string, ResolvedRef | undefined>;
+type KnownDestinations = Map<string, ResolvedRef<Outline> | undefined>;
 
 /** The def a name leads to through alias defs, found by following them from the name to a def known or not an alias. */
 function destinationOf(
   name: string,
-  defs: Defs,
+  defs: DefsOf<Outline>,
   known: KnownDestinations,
-): ResolvedRef | undefined {
+): ResolvedRef<Outline> | undefined {
   const aliases: string[] = [];
   let destination = followedFrom(name, { defs, known }, aliases);
   for (let alias = aliases.pop(); alias !== undefined; alias = aliases.pop()) {
@@ -138,9 +155,9 @@ function destinationOf(
 /** The alias defs from a name on, pushed on `aliases`, and the def at their end: none at a name with no def or a name already followed. */
 function followedFrom(
   name: string,
-  following: { readonly defs: Defs; readonly known: KnownDestinations },
+  following: { readonly defs: DefsOf<Outline>; readonly known: KnownDestinations },
   aliases: string[],
-): ResolvedRef | undefined {
+): ResolvedRef<Outline> | undefined {
   const onPath = new Set<string>();
   for (let current = name; ; ) {
     if (following.known.has(current)) {
