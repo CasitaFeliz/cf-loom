@@ -51,6 +51,11 @@ const inners: readonly Inner[] = [
           ),
   },
   {
+    name: 'interSharedField',
+    around: (s) =>
+      s === undefined ? null : z.intersection(z.object({ k: s }), z.object({ k: z.number() })),
+  },
+  {
     name: 'interUnion',
     around: (s) =>
       s === undefined ? null : z.intersection(s, z.union([z.object({ e: open() }), z.boolean()])),

@@ -366,6 +366,13 @@ describe('walkSchemas: an intersection beside a schema that fails', () => {
     expect(walkBody(named.and(dated))).toEqual(refusedAll([dateAt('[1].id')]));
   });
 
+  test('a shared field that is a failing object against the same object whole is not compared', () => {
+    const failing = z.object({ a: z.object({ d: z.date() }) });
+    const whole = z.object({ a: z.object({ d: z.string() }) });
+
+    expect(walkBody(failing.and(whole))).toEqual(refusedAll([dateAt('[0].a.d')]));
+  });
+
   test('a shared field that agrees is merged beside a field that fails', () => {
     const named = z.object({ id: z.string(), name: z.string() });
     const dated = z.object({ id: z.string(), placedAt: z.date() });
@@ -430,6 +437,12 @@ describe('walkSchemas: a record key beside a schema that fails', () => {
         dateAt('{key}'),
       ]),
     );
+  });
+
+  test('a key that is an intersection with a shared key that fails tells the date alone, since its fix decides whether the objects merge', () => {
+    const key = z.intersection(z.object({ k: z.date() }), z.object({ k: z.number() }));
+
+    expect(walkBody(keyedBy(key))).toEqual(refusedAll([dateAt('{key}[0].k')]));
   });
 
   test('a string key beside a value that fails is a record of the value it kept', () => {

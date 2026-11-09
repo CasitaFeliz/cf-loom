@@ -92,7 +92,7 @@ export type Outline =
 export type JudgedDefs = Readonly<Record<string, Outline>>;
 
 /** An outline of nothing the walk built: where a refused construct stands. */
-export const unbuilt: Unbuilt = {};
+const unbuilt: Unbuilt = {};
 
 /** Whether an outline is a node walked whole, which every rule, parse and Snapshot may take as a node. */
 export function isWhole(outline: Outline | undefined): outline is SchemaNode {
