@@ -453,19 +453,19 @@ describe('the types of a refusal that lists names, beyond the plain tuple', () =
     expectTypeOf<readonly [typeof zeta, typeof anything]>().toExtend<Anything['endpoints']>();
   });
 
-  test('a Guard whose guards list has an open length is refused once for each Guard it lacks', () => {
+  test('a Guard whose guards list ends in an open part is refused with one sentence, listing the Guard of that part last', () => {
     const tenant = defineGuard(guardOf('tenant'));
     const org = defineGuard(guardOf('org'));
-    const required: readonly (typeof tenant | typeof org)[] = [tenant, org];
+    const required: readonly [typeof tenant, ...(typeof org)[]] = [tenant, org];
     const member = defineGuard({ ...guardOf('member'), guards: required });
     const declaration = { ...listOrders, guards: [member] } as const;
     type Written = Parameters<typeof defineEndpoint<typeof declaration>>[0];
 
-    type Sentences = SentencesOf<NonNullable<Written['guards']>>;
+    const messages = messagesOf(serviceOf(defineEndpoint(declaration as never)));
 
-    expectTypeOf<Sentences>().toEqualTypeOf<
-      'member requires tenant earlier in guards' | 'member requires org earlier in guards'
-    >();
+    const sentence = 'member requires tenant and org earlier in guards';
+    expectTypeOf<SentencesOf<NonNullable<Written['guards']>>>().toEqualTypeOf<typeof sentence>();
+    expect(messages).toEqual([sentence]);
   });
 
   test('an Endpoint on a path with :names that declares no input is refused, listing the names', () => {

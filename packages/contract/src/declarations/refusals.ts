@@ -4,8 +4,7 @@
  * as a template type with the function `generate` writes it by, whose return type is that template,
  * so a function whose text drifts from its type does not compile; a list of names in such a
  * sentence is the tuple `Joined` writes, in the order `generate` lists them, and a sentence
- * `generate` writes once per name is refused once per name; a list whose length its type leaves
- * open is refused once per name it holds.
+ * `generate` writes once per name is refused once per name.
  */
 
 /** Why a Guard declares `params` or `body` in its demands. */

@@ -152,15 +152,13 @@ type MissingGuardNames<Listed extends Guard, Earlier extends string> = Listed ex
   ? LiteralNames<MissingGuardList<Required, Earlier>[number]>
   : never;
 
-/** One sentence naming the Guards in order, or one for each name where the length of `guards` is open. */
+/** One sentence naming the Guards `guards` lists that are not earlier, in its order. */
 type RequiresEarlierMessage<Listed extends Guard, Earlier extends string> = Listed extends {
-  readonly guards: infer Required extends readonly unknown[];
+  readonly guards: infer Required;
 }
-  ? number extends Required['length']
-    ? Refusal<RequiresEarlierSentence<Listed['name'], MissingGuardNames<Listed, Earlier>>>
-    : Refusal<
-        RequiresEarlierSentence<Listed['name'], Joined<MissingGuardList<Required, Earlier>, 'and'>>
-      >
+  ? Refusal<
+      RequiresEarlierSentence<Listed['name'], Joined<MissingGuardList<Required, Earlier>, 'and'>>
+    >
   : never;
 
 type GuardOrderRule<Guards, Earlier extends string = never> = Guards extends readonly [
